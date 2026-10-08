@@ -22,7 +22,6 @@ Use the narrowest check that can falsify the change, then widen only when the ch
 ## Sources of truth
 
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) defines sweep labels and modifiers. Its [dispatch section](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring) defines manual runs and artifact inspection.
-- [`docs/configuration-procedures.md`](configuration-procedures.md#validate) is the focused configuration validation procedure.
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) documents matrix generation, `e2e-tests.yml`, PR sweeps, and reuse.
 - [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the executable PR sweep gate, and [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) is the push-to-`main` reuse and ingest gate. [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) is the manually dispatched end-to-end path.
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) is the merge-review standard. [The verifier prompt](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) states how sweep and eval evidence is independently checked.
@@ -48,16 +47,10 @@ A green later layer does not erase missing earlier evidence. For example, a gree
 
 ## Test quality
 
-Tests protect behavior, not coverage numbers. During review, ask what plausible bug each test would catch and whether it exercises the implementation that ships.
+The mandatory test rules (forbidden test types, what a kept test looks like, and the four review questions) live in [`AGENTS.md`](../../AGENTS.md#test-quality). Two additions apply here:
 
-- Prefer a small input with a hand-worked expected result, including relevant boundary, malformed-input, or failure cases. Do not copy the implementation's calculation or call the same helper to produce the expected result.
-- Do not snapshot the current recipe count, model/hardware inventory, image pin, enum definition, or source text. Adding a valid recipe or refactoring equivalent code should not force unrelated assertion changes.
 - Preserve genuine contracts: numerical results, rejected invalid inputs, stable artifact formats, and agreement between independently consumed configurations. Assert only the parts of the contract the consumer needs.
-- Mock external services or processes when necessary, but run the actual behavior under test. A copied parser, filter, or fake implementation cannot detect a regression in the real one.
 - Control clocks and long waits in timing tests. Synchronize on observable readiness, keep process termination and artifact writes real when testing those contracts, and bound waits and cleanup so regressions cannot strand test workers.
-- Delete redundant tests without replacement. Extend existing fixtures only when there is a meaningful gap; do not build a new test framework to preserve a test count.
-
-See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that merely repeat the implementation.
 
 ## Local checks
 
@@ -146,7 +139,8 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Changelog content or PR gating | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
 | Result processing and topology | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
 | AgentX aggregation and artifact loading | `python -m pytest infx/tests/results/agentic/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest infx/tests/evals/ -v` |
+| Eval dispatch, batching, staging, or patches | `python -m pytest infx/tests/bench/test_eval_command.py infx/tests/bench/test_eval_meta.py infx/tests/bench/test_vendor_eval.py infx/tests/evals/ -v` |
+| Container-side `python3 -m infx.bench` commands | `python -m pytest infx/tests/bench/ -v` |
 | Eval collection | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
 | Sweep reuse or reusable artifacts | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
@@ -161,7 +155,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 Its contract is implemented in [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
 
-A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](configuration-procedures.md#validate).
+A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet.
 
 ### Full local suite in parallel
 

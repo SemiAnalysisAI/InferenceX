@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Source at the workflow boundary before master-config additional-settings.
-source "$(dirname "${BASH_SOURCE[0]}")/../benchmark_lib.sh" --validation-only
+source "$(dirname "${BASH_SOURCE[0]}")/../check_env.sh"
 check_env_vars FRAMEWORK
 
 case "$FRAMEWORK" in
