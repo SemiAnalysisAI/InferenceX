@@ -137,6 +137,14 @@ gh workflow run speedbench-al.yml \
 | GLM-5.3 | MTP（临时，K=3 取自 GLM-5.2） | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479)（GLM-5.2） |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 
+## 在 srt-slurm 运行中使用黄金曲线
+
+- 不要在 SRT 方案、主配置或启动器中硬编码合成接受长度，也不要手动添加 `SYNTHETIC_ACCEPTANCE_LENGTH`、vLLM `synthetic_acceptance_length`、SGLang `SGLANG_SIMULATE_ACC_LEN` 或 TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` 设置。上文的引擎示例展示的是连接器注入的内容，而不是方案应设置的内容。
+- 通过 srt 驱动（`infx/launch/drivers/srt/`）提交方案。它会运行 [`infx/srt_slurm` 连接器](../srt_slurm/synthetic_acceptance.py)，以原生 SRT `--set` / `--unset` 覆盖应用设置。直接调用上游 `srtctl` 会跳过这一选择。
+- 在方案中显式保留投机方法、draft 模型、draft token 数和相关采样设置。连接器会在调用方覆盖之后，把生成角色（decode，否则为 aggregated）的设置与 `MODEL_PREFIX` 和 `THINKING_MODE` 组合来选择曲线。Kimi DSpark 需将 `draft_sample_method` 设为 `greedy` 或 `probabilistic`。
+- 仅评测和非 AgentX 运行使用真实验证，连接器会移除陈旧的合成设置。非投机角色不会收到模拟设置。`RUN_EVAL` 不会关闭吞吐部分的模拟。
+- 缺少黄金曲线或 draft 长度未测量时，会在提交前失败。新组合应补充实测黄金数据，而不是使用猜测或硬编码的长度。
+
 ## 查询曲线
 
 本目录即 `infx.golden_al_distribution` Python 包。`golden_length(model_prefix, spec, thinking)` 返回 AgentX 合成接受所使用的数值，`curve_name` 给出某个投机解码配置对应的 YAML。也可以在 shell 中执行相同的查询：
