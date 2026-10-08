@@ -1507,8 +1507,8 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # Repinned to a nightly build that includes vllm-project/vllm#58671,
-  # #58655 and #53492 (see agentic.yaml).
+  # Repinned to a nightly build with vllm-project/vllm#58671 (paged MXFP4 sparse
+  # indexer), #58655 (mHC fused Triton seams) and #53492 (sparse MLA Gluon kernel).
   image: vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash

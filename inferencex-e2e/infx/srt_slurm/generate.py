@@ -63,9 +63,9 @@ def _bound_variants(
     if "prefill" not in point:
         selected, recipe = select_recipe(str(root / point["srt-recipe"]), environment, root=root)
         return [(selected.partition(":")[2] or None, recipe)]
-    composed = compose_recipe(root / path, multinode=True, root=root)
+    composed = compose_recipe(root / path, agentic=False, multinode=True, root=root)
     return [
-        (name, bind_workload(recipe, environment, multinode=True))
+        (name, bind_workload(recipe, environment, agentic=False, multinode=True))
         for name, recipe in selected_recipes(composed, selector or None)
     ]
 

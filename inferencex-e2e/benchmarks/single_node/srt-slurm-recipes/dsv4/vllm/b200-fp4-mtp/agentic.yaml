@@ -4,10 +4,6 @@
 base:
   schema: 2
   name: dsv4-fp4-b200-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95
-    precision: fp4
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -59,10 +55,7 @@ base:
         PYTHONNOUSERSITE: '1'
         VLLM_FLOAT32_MATMUL_PRECISION: high
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. Graphs capture every decode batch of up to
