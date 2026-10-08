@@ -127,6 +127,8 @@ env:
   DURATION: ${{ inputs.duration }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
+  # Throwaway lossy A/B: budget evals against a 16384-token context.
+  EVAL_MAX_MODEL_LEN: "16384"
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
