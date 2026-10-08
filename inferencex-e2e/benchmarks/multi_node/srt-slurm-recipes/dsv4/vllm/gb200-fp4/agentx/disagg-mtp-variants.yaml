@@ -62,7 +62,7 @@ base:
         UCX_MEMTYPE_CACHE: "n"
         UCX_NET_DEVICES: "@fabric.ucx-net-devices"
         UCX_TLS: "rc,cuda_copy"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
       args:
         kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
         kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
@@ -106,7 +106,7 @@ base:
         UCX_MEMTYPE_CACHE: "n"
         UCX_NET_DEVICES: "@fabric.ucx-net-devices"
         UCX_TLS: "rc,cuda_copy"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
       args:
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_fp4_indexer_cache":true}'
         enforce-eager: false
