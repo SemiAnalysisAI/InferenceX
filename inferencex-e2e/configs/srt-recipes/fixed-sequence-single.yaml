@@ -1,0 +1,3 @@
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
