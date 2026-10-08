@@ -199,6 +199,7 @@ def test_single_node_native_power_is_bound_and_retained(harness, require_power, 
     assert telemetry["enabled"] is True
     assert telemetry["required"] is (require_power == "1")
     assert telemetry["storage_subdir"] == "power"
+    assert telemetry["startup_timeout_seconds"] == 300.0
     assert resolved["benchmark"]["concurrencies"] == [4]
     # The job measures with the cluster's exporter, started from the image the launcher staged.
     cluster_exporter = rendered["default_gpu_exporter"]

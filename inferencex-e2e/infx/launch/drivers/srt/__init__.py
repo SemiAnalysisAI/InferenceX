@@ -36,6 +36,10 @@ if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.clusters.slurm import SrtSlurmSettings
 
+# A cold Pyxis pull of the ~900 MiB AMD exporter image took 15-24 s on mi355x and
+# over srtctl's 30 s default on mi325x (every job of run 37847888510 failed readiness).
+EXPORTER_STARTUP_TIMEOUT_S = 300.0
+
 
 def run_single_node(launch: Launch) -> int:
     """One native single-node point: bind its recipe variant, submit, follow, verify."""
@@ -65,6 +69,10 @@ def run_single_node(launch: Launch) -> int:
             "telemetry.enabled=true",
             "--set",
             'telemetry.storage_subdir="power"',
+            # Without ``squash.single-node-import`` the job hands Pyxis a registry
+            # reference, so readiness must outlast a cold pull of the exporter image.
+            "--set",
+            f"telemetry.startup_timeout_seconds={EXPORTER_STARTUP_TIMEOUT_S}",
         ]
         if github_env := request.env.get("GITHUB_ENV"):
             with Path(github_env).open("a") as handle:
