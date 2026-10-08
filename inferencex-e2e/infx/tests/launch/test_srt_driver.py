@@ -178,7 +178,8 @@ LABS = {
     ),
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
-        env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", FAKE_RESULTS="agentic"),
+        env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", KV_OFFLOADING="none", ISL="0", OSL="0", CONC="4",
+                 FAKE_RESULTS="agentic"),
         paths={"hf:org/Model": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
         dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
     ),
@@ -275,8 +276,8 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     if env["IS_AGENTIC"] == "1":
         # lab-b mounts no cache volume, so the client keeps its caches in the container.
         assert bound["benchmark"]["env"] == {
-            "RESULT_DIR": "/logs/agentic", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache",
-            "HF_HUB_CACHE": "/hf_hub_cache",
+            "KV_OFFLOADING": "none", "RESULT_DIR": "/logs/agentic",
+            "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache", "HF_HUB_CACHE": "/hf_hub_cache",
         }
 
     config = srtslurm(checkout)
@@ -290,6 +291,24 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert config["containers"][env["IMAGE"]] == env["IMAGE"] and imported == []
     outputs = Path(json.loads((workspace / "srt-submission.json").read_text())["output_dir"])
     assert outputs.exists() is not outputs.is_relative_to(checkout)
+
+
+def test_a_multinode_dram_point_sizes_host_dram_per_gpu_on_its_clusters_nodes(harness):
+    segment = "services:\n- name: mooncake-master\n  options:\n    store_config:\n"
+    segment += "      global_segment_size: '@dram.per-gpu-bytes'\n"
+    env = lane_env(
+        harness, "gb300-nv", LANE_FRAGMENT + segment, MODEL_PREFIX="kimik3", PRECISION="fp4",
+        FRAMEWORK="dynamo-vllm", MODEL="moonshotai/Kimi-K3", IS_AGENTIC="1", KV_OFFLOADING="dram",
+        TOTAL_CPU_DRAM_GB="773", PREFILL_TP="8", PREFILL_PP_SIZE="1", PREFILL_PCP_SIZE="1",
+        ISL="0", OSL="0", CONC="4", FAKE_RESULTS="agentic",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    bound = yaml.safe_load(Path(call["argv"][call["argv"].index("--file") + 1]).read_text())
+    # A TP8 prefill worker uses all four GPUs of each GB300 node it spans.
+    assert bound["services"][0]["options"]["store_config"] == {"global_segment_size": 193250000000}
+    assert bound["benchmark"]["env"]["TOTAL_CPU_DRAM_GB"] == "773"
 
 
 @pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
@@ -308,7 +327,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     env = lane_env(
         harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
         MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
-        IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
+        IS_AGENTIC="1", KV_OFFLOADING="none", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
@@ -384,8 +403,8 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
     env = {
         **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for("b300-dsxe"), "MODEL_PREFIX": "dsv41flash",
-        "PRECISION": "fp8", "IS_AGENTIC": "1", "DURATION": "600", "RUNNER_TEMP": str(runner_temp),
-        "SRT_RECIPE": "recipe.yaml:base",
+        "PRECISION": "fp8", "IS_AGENTIC": "1", "KV_OFFLOADING": "none", "DURATION": "600",
+        "RUNNER_TEMP": str(runner_temp), "SRT_RECIPE": "recipe.yaml:base",
     }  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -433,8 +452,8 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     }  # fmt: skip
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-        MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
-        EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
+        MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", KV_OFFLOADING="none", SPEC_DECODING="mtp",
+        ISL="0", OSL="0", EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))

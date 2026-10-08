@@ -93,11 +93,10 @@ base:
       # trtllm-serve exposes Prometheus text at /prometheus/metrics.
       AIPERF_SERVER_METRICS_URLS: http://localhost:8000/prometheus/metrics
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
-      KV_OFFLOADING: dram
 
 # One variant per point. The batch limit is CONC with graphs captured at every
 # size to 20 and a thinned ladder at 25 and 30. The host pool is 288 GiB at TP8
-# and about 362 GiB below.
+# and the per-GPU budget below.
 override_tp2_c20:
   roles:
     agg:
@@ -128,11 +127,10 @@ override_tp2_c20:
             - 19
             - 20
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '20'
-      TOTAL_CPU_DRAM_GB: '599'
 
 override_tp2_c25:
   roles:
@@ -164,11 +162,10 @@ override_tp2_c25:
             - 23
             - 25
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '25'
-      TOTAL_CPU_DRAM_GB: '599'
 
 override_tp2_c30:
   roles:
@@ -200,11 +197,10 @@ override_tp2_c30:
             - 27
             - 30
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '30'
-      TOTAL_CPU_DRAM_GB: '599'
 
 override_tp4_c5:
   roles:
@@ -221,11 +217,10 @@ override_tp4_c5:
             - 4
             - 5
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '5'
-      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_c10:
   roles:
@@ -247,11 +242,10 @@ override_tp4_c10:
             - 9
             - 10
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '10'
-      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_c15:
   roles:
@@ -278,11 +272,10 @@ override_tp4_c15:
             - 14
             - 15
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '15'
-      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_c20:
   roles:
@@ -314,11 +307,10 @@ override_tp4_c20:
             - 19
             - 20
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '20'
-      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_c25:
   roles:
@@ -350,11 +342,10 @@ override_tp4_c25:
             - 23
             - 25
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '25'
-      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_c30:
   roles:
@@ -386,11 +377,10 @@ override_tp4_c30:
             - 27
             - 30
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: '@dram.per-gpu-bytes'
   benchmark:
     env:
       CONC: '30'
-      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp8_c1:
   roles:
@@ -407,7 +397,6 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: '1'
-      TOTAL_CPU_DRAM_GB: '2399'
 
 override_tp8_c5:
   roles:
@@ -428,4 +417,3 @@ override_tp8_c5:
   benchmark:
     env:
       CONC: '5'
-      TOTAL_CPU_DRAM_GB: '2399'
