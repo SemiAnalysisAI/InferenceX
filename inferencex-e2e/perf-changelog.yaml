@@ -9475,3 +9475,13 @@
     - "Refresh the aggregated curve with TP4/EP4 points at concurrency 1, 4, 8, 16, 24 and 32, plus TP4/EP4/DP4 points at concurrency 48 and 128 behind sglang-router."
     - "Apply the point-specific prefill chunking, scheduling, admission, memory and SWA prefix-tail settings from the single-node recipe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3745
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5 FP8 GB300 AgentX PP4 prefill and DEP16 decode variants with MTP6, HiCache, and decode sequence-length splits 1."
+    - "Select five disaggregated configurations and three existing aggregate configurations using the SGLang nightly image and pinned Dynamo revision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
