@@ -832,6 +832,7 @@ clusters:
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
+          /dev/infiniband: /dev/infiniband
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_bash_preamble: |-
