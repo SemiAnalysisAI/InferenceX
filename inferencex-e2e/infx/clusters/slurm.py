@@ -157,10 +157,12 @@ FabricList = Annotated[
     tuple[FabricName, ...], Field(min_length=1), PlainSerializer(",".join, return_type=str)
 ]
 FabricNumber = Annotated[int, Field(ge=0), PlainSerializer(str, return_type=str)]
+FABRIC_REFERENCE = "@fabric."
 
 
 class Fabric(Record):
-    """The hosts' network facts; a recipe value ``'@fabric.<name>'`` takes one at bind time."""
+    """The hosts' network facts; a value ``'@fabric.<name>'`` takes one: a recipe's at bind
+    time, a cluster ``env`` or ``host-setup.env`` value when its record loads."""
 
     ucx_net_devices: FabricList | None = Field(default=None, alias="ucx-net-devices")
     nccl_ib_hca: FabricList | None = Field(default=None, alias="nccl-ib-hca")
@@ -174,6 +176,27 @@ class Fabric(Record):
     def rendered(self) -> dict[str, str | None]:
         """Every field as a recipe reads it, by name; None where the cluster sets none."""
         return self.model_dump(by_alias=True)
+
+    @classmethod
+    def field_name(cls, value: str, where: str) -> str:
+        """The field a whole ``'@fabric.<name>'`` ``value`` names; anything else is an error."""
+        names = [field.alias for field in cls.model_fields.values()]
+        name = value.removeprefix(FABRIC_REFERENCE)
+        if name == value or name not in names:
+            raise ValueError(
+                f"{where}: {value!r} is not a whole '@fabric.<name>' value naming one of: "
+                + ", ".join(names)
+            )
+        return name
+
+    def resolve(self, value: str, where: str) -> str:
+        """``value``, or this fabric's rendering of the field it references."""
+        if FABRIC_REFERENCE not in value:
+            return value
+        name = self.field_name(value, where)
+        if (resolved := self.rendered()[name]) is None:
+            raise ValueError(f"{where}: srt-slurm.fabric sets no {name}")
+        return resolved
 
 
 class SrtSlurmSettings(Record):
@@ -206,6 +229,22 @@ class SrtSlurmSettings(Record):
     mounts: dict[str, str] = Field(default_factory=dict)
     power_exporter_port: int | None = Field(default=None, alias="power-exporter-port", gt=0)
     extra: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _host_setup_fabric(cls, data: Any) -> Any:
+        """``host-setup.env`` values may take this profile's fabric: ``'@fabric.<name>'``."""
+        setup = data.get("host-setup") if isinstance(data, dict) else None
+        if not isinstance(setup, dict) or not isinstance(setup.get("env"), dict):
+            return data
+        fabric = Fabric.model_validate(data.get("fabric") or {})
+        env = {
+            name: fabric.resolve(value, f"host-setup.env.{name}")
+            if isinstance(value, str)
+            else value
+            for name, value in setup["env"].items()
+        }
+        return {**data, "host-setup": {**setup, "env": env}}
 
 
 class SlurmSettings(SchedulerSettings):
