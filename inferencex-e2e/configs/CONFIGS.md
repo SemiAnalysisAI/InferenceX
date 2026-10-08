@@ -239,5 +239,7 @@ schema; unknown keys fail.
   `'@fabric.<name>'` values: the lists `ucx-net-devices`, `nccl-ib-hca`, `ib-devices`
   (SGLang `disaggregation-ib-device`, `IBDEVICES`), `socket-ifname` (NCCL and Gloo) and
   `mooncake-devices`, rendered comma-joined, and the numbers `mooncake-gid-index`,
-  `mori-rdma-tc` and `mori-io-tc`. A recipe that references a field its cluster does not
-  set fails before submission.
+  `mori-rdma-tc` and `mori-io-tc`. Matrix generation fails a recipe that references an
+  undefined field, or one a cluster its runner label reaches does not set. The cluster's own
+  `env` and `srt-slurm.host-setup.env` values may take a field the same way; they resolve
+  when the record loads, and `env` still rejects the commas of a list.
