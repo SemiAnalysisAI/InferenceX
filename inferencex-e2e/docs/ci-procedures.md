@@ -59,6 +59,8 @@ gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yam
 
 The workflow and script source at the target ref wins. Do not guess that a branch-local input or fork policy is deployed.
 
+`e2e-tests.yml` and `profile.yml` measure only revisions they can launch and check. `require_launcher` rejects an `inputs.ref` older than the Python launcher (`inferencex-e2e/infx/launch`). When the generated matrix has multi-node points, the srt-slurm recipe preflight also reads that revision's `configs/runners.yaml` with the workflow revision's schema, and stops before any job is dispatched if it cannot. Older refs are not supported; choose a newer one.
+
 ## Local matrix generation
 
 The generator loads every named master config and `configs/runners.yaml`, validates the input with Pydantic, generates entries, validates the output shape, applies eval policy, and prints one JSON array. A zero exit status proves generation and schema validation, not that containers, models, or GPU runners work.

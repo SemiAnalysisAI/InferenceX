@@ -38,7 +38,7 @@ import sys
 import yaml
 
 
-def rows(config_keys, config_files, runner_config):
+def rows(config_keys, config_files, runner_config, concs=None):
     master = {}
     for path in config_files:
         with open(path) as handle:
@@ -54,7 +54,10 @@ def rows(config_keys, config_files, runner_config):
                 if space["tp"] > gpus:
                     sys.exit(f"{key}: tp {space['tp']} exceeds {gpus} GPUs per node")
                 for conc in space["conc-list"]:
-                    result.append({
+                    if concs and conc not in concs:
+                        continue
+                    recipe = {"srt-recipe": entry["srt-recipe"]} if "srt-recipe" in entry else {}
+                    result.append({**recipe,
                         "image": entry["image"], "model": entry["model"],
                         "model-prefix": entry["model-prefix"], "precision": entry["precision"],
                         "framework": entry["framework"], "runner": entry["runner"],
@@ -75,8 +78,9 @@ if __name__ == "__main__":
     parser.add_argument("--config-files", nargs="+", required=True)
     parser.add_argument("--runner-config", default="configs/runners.yaml")
     parser.add_argument("--no-evals", action="store_true")
+    parser.add_argument("--conc", type=int, nargs="+")
     args = parser.parse_args()
-    print(json.dumps(rows(args.config_keys, args.config_files, args.runner_config)))
+    print(json.dumps(rows(args.config_keys, args.config_files, args.runner_config, args.conc)))
 '''
 
 PLANNER = '''\

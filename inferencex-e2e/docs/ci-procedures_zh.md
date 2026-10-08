@@ -59,6 +59,8 @@ gh workflow view e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref main --yam
 
 以目标 Ref 的 Workflow 和脚本源码为准。不要猜测某个分支本地输入或 Fork 策略已经部署。
 
+`e2e-tests.yml` 和 `profile.yml` 只测量能够启动并检查的版本。`require_launcher` 会拒绝早于 Python 启动器（`inferencex-e2e/infx/launch`）的 `inputs.ref`。生成的矩阵包含多节点点时，srt-slurm 配方预检还会用 Workflow 所在版本的 Schema 读取该版本的 `configs/runners.yaml`；无法读取时，会在派发任何 Job 之前停止。不支持更早的 Ref，请选择更新的 Ref。
+
 ## 本地矩阵生成
 
 生成器会加载所有指定的 Master Config 与 `configs/runners.yaml`，使用 Pydantic 验证输入，生成条目，验证输出结构，应用 Eval 策略，并输出一个 JSON 数组。退出码为零只能证明生成与 Schema 验证成功，不能证明容器、模型或 GPU Runner 能工作。
