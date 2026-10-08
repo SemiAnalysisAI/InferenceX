@@ -252,14 +252,14 @@ def test_qwen_8p1d_power_keeps_the_collector_and_benchmark_on_the_reserved_head(
     monkeypatch.setattr("srtctl.core.runtime.get_slurm_nodelist", lambda: allocation)
     monkeypatch.setattr("srtctl.core.runtime.get_slurm_het_nodelists", lambda: None)
     nodes = Nodes.from_slurm(
-        frontend_dedicated_node=config.frontend.dedicated_node,
-        client_dedicated_node=config.benchmark.client_dedicated_node,
-        etcd_nats_dedicated_node=config.infra.etcd_nats_dedicated_node,
+        frontend_dedicated_node=config.frontend.placement.dedicated,
+        client_dedicated_node=config.benchmark.placement.dedicated,
+        etcd_nats_dedicated_node=False,
         colocate_dedicated_nodes=config.benchmark.colocate_with_frontend,
     )
     assert config.engine_node_count == 12
     assert not config.pool_services
     assert nodes.head == nodes.bench == nodes.infra == allocation[0]
     assert nodes.worker == nodes.compute == tuple(allocation[1:])
-    assert config.benchmark.client_placement == "head"
+    assert config.benchmark.placement.location == "head"
     assert config.telemetry.enabled and config.telemetry.cpu_power_exporter.source == "acpi"
