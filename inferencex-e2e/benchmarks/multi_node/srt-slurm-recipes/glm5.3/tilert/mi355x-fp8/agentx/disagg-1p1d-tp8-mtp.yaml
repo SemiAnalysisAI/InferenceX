@@ -7,7 +7,6 @@ resources:
   gpus_per_node: 8
 setup_script: glm5.3-tilert-rocm.sh
 environment:
-  TILERT_VERSION: "0.1.6.post3"
   RDMAV_FORK_SAFE: "1"
   PYTHONDONTWRITEBYTECODE: "1"
   NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
