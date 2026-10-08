@@ -1,4 +1,4 @@
-"""Write the bound srt-slurm recipes of master-config points for inspection."""
+"""What the launcher submits for master-config points, and ``infx generate``, which writes it."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -29,7 +29,7 @@ RANDOM_RANGE_RATIO = "0.8"
 THINKING_MODE = "thinking_on"
 
 
-def _environment(point: Mapping[str, Any]) -> dict[str, str]:
+def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
     """The workflow environment the launcher reads for ``point``."""
     agentic = point.get("scenario-type") == "agentic-coding"
     environment = {
@@ -132,26 +132,30 @@ def _binder_inputs(
     return (srt.power_exporter_port if decision.dcgm else None), client_env
 
 
-def _bound_variants(
+def bound_variants(
     point: Mapping[str, Any],
     environment: Mapping[str, str],
     root: Path,
     *,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> list[tuple[str | None, dict[str, Any]]]:
-    """Each variant the launcher would submit for ``point``, bound.
+    """Each variant the launcher submits for ``point``, composed and bound.
 
-    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client
-    paths ``client_env``, the binder inputs the launcher computes.
+    A multi-node point with ``power`` gets the DCGM telemetry block only with the cluster's
+    exporter ``power_port``; ``client_env`` holds the AgentX client paths the launcher binds.
     """
     path, _, selector = point["srt-recipe"].partition(":")
     if "prefill" not in point:
-        selected, recipe = select_recipe(str(root / point["srt-recipe"]), environment, root=root)
+        selected, recipe = select_recipe(
+            str(root / point["srt-recipe"]), environment, root=root, expand=expand
+        )
         return [(selected.partition(":")[2] or None, recipe)]
     agentic = environment["IS_AGENTIC"] == "1"
+    port = power_port if point.get("power") else None
     composed = compose_recipe(
-        root / path, agentic=agentic, multinode=True, root=root, power_port=power_port
+        root / path, agentic=agentic, multinode=True, root=root, power_port=port
     )
     return [
         (
@@ -160,7 +164,7 @@ def _bound_variants(
                 recipe, environment, agentic=agentic, multinode=True, client_env=client_env
             ),
         )
-        for name, recipe in selected_recipes(composed, selector or None)
+        for name, recipe in expand(composed, selector or None)
     ]
 
 
@@ -216,10 +220,10 @@ def generate_recipes(
         if not points:
             raise ValueError(f"{key} has no srt-slurm points")
         for point in points:
-            environment = _environment(point)
+            environment = point_environment(point)
             placement = _placement(inventory, point["runner"])
             power_port, client_env = _binder_inputs(point, environment, placement, root)
-            variants = _bound_variants(
+            variants = bound_variants(
                 point, environment, root, power_port=power_port, client_env=client_env
             )
             budget = dram_budget(
