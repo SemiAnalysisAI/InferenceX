@@ -287,92 +287,12 @@ Do not override these paths back into the workspace. Use the recovery scan below
 
 Source: [Python-cache prevention](../../.github/workflows/benchmark-tmpl.yml#L145-L146).
 
-### Recover an MI355X TW runner workspace
+### Cluster-specific recovery
 
-Canonical signature:
+These need privileged cluster access and explicit approval. Follow the maintainer playbooks rather than copying their commands:
 
-```text
-Deleting the contents of '.../actions-runner/_work/InferenceX/InferenceX'
-Error: File was unable to be removed Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
-```
-
-The jumpbox has no sudo. Use agent forwarding to the hop host that has passwordless sudo on `/it-share`.
-
-1. **Read-only scan first:**
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root 2>/dev/null'"
-   ```
-
-2. Review every result. Every path must be below `actions-runner/_work/`, normally in `InferenceX/InferenceX/benchmark_logs/`. If any path is outside `_work`, **stop**.
-3. With explicit approval, delete only the verified matches:
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root -print0 2>/dev/null \
-      | xargs -0 -r sudo rm -rf'"
-   ```
-
-4. Run the read-only scan again and require zero results.
-5. Only after cleanup, rerun diagnosed failed sweeps. `slurm_job-<id>` can be correlated with `sacct -j <id>`. `CANCELLED` supports the skipped-teardown diagnosis.
-
-Never run an unscoped `rm -rf` against `/it-share`.
-
-Canonical source: [MI355X root-owned file recovery](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/clean-amd-mi355-runner-root-files.md).
-
-## MI300X cluster debugging: enroot/pyxis user-namespace failures
-
-Canonical signature on `mi300x-amd_*` / `chi-mi300x-*`:
-
-```text
-error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied
-error: pyxis: couldn't start container
-error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
-srun: error: chi-mi300x-0XX: task 0: Exited with exit code 1
-```
-
-Known July 2026 cause: Ubuntu 24.04 provisioning drift leaves `kernel.apparmor_restrict_unprivileged_userns=1` on some nodes, blocking the actual enroot path. `unshare -U` is not a valid discriminator because its AppArmor profile may still allow it.
-
-1. Confirm the exact signature and record failing nodes from GitHub logs:
-
-   ```bash
-   gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed
-   ```
-
-2. Access compute nodes through Slurm from the root controller. Direct root SSH to compute nodes is not available:
-
-   ```bash
-   ssh amd-vultr-mi300 \
-     'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<read-only-command>"'
-   ```
-
-3. Survey every visible node without changing it:
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in $(sinfo -N -h -o "%N" | sort -u); do
-     v=$(srun -w $n -N1 --immediate=20 sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>&1 | tail -1)
-     echo "$n: $v"
-   done'
-   ```
-
-   A split of failing nodes at `1` and working nodes at `0` confirms drift. If all nodes are `0`, stop treating this as the known issue. Compare enroot versions, pyxis plugin state, and AppArmor coverage of `/usr/local/bin/enroot-nsenter` against a working node.
-
-4. **Only with explicit approval**, change drifted nodes to the working baseline and persist it:
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in <drifted-nodes>; do
-     srun -w $n -N1 --immediate=30 bash -c \
-       "sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 && \
-        echo kernel.apparmor_restrict_unprivileged_userns=0 > /etc/sysctl.d/99-enroot-userns.conf"
-   done'
-   ```
-
-   This disables a kernel security mitigation. Verify each live value is `0` and the persistent file exists. Escalate the durable fix to the node provisioning image. Otherwise, reprovisioned nodes will regress.
-
-5. Rerun only affected flaky jobs after the cluster baseline is restored.
-
-Canonical source: [MI300X enroot/pyxis recovery](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/debug-mi300-enroot-pyxis.md).
+- MI355X TW `EACCES` workspace cleanup: [`clean-amd-mi355-runner-root-files.md`](../../.claude/commands/clean-amd-mi355-runner-root-files.md). Scan read-only first, delete only verified paths under `actions-runner/_work/`, and never run an unscoped `rm -rf` against `/it-share`.
+- MI300X `enroot-nsenter: failed to create user namespace` (pyxis): [`debug-mi300-enroot-pyxis.md`](../../.claude/commands/debug-mi300-enroot-pyxis.md). Confirm the per-node AppArmor userns drift before changing any node.
 
 ## Safe workflow reruns
 

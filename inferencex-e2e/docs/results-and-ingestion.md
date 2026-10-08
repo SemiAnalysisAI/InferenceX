@@ -105,11 +105,12 @@ The serving client records `benchmark_outcome` before saving its raw result. It 
 
 For multinode fixed-sequence jobs, `python -m infx.results.fixed_sequence --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
 
-The PR changelog selects representative NVIDIA and AMD coverage, not an exhaustive list of affected recipes; shared processing changes apply to every fixed-sequence recipe.
 
 Processing and, for multinode jobs, diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
 ### SRT multinode window retention
+
+SRT samples CSV versions 1, 2 and 3 are accepted. Version 3 adds optional `temperature_c` in Celsius; temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks. Deploy this reader before a producer that emits version 3.
 
 Power audit sidecars retain independently validated measurements in `selected_window`;
 `package_integrity_valid` records shared evidence checks and `window_validations` records
