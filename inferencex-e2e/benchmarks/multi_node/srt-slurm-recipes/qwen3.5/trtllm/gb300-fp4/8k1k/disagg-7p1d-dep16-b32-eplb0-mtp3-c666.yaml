@@ -42,6 +42,7 @@ roles:
     args:
       cache_transceiver_config:
         backend: UCX
+        transceiver_runtime: CPP
         kv_transfer_timeout_ms: 600000
         max_tokens_in_buffer: 16384
       cuda_graph_config:
@@ -85,6 +86,7 @@ roles:
     args:
       cache_transceiver_config:
         backend: UCX
+        transceiver_runtime: CPP
         kv_transfer_timeout_ms: 600000
         max_tokens_in_buffer: 16384
       cuda_graph_config:
