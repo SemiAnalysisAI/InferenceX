@@ -2,58 +2,118 @@
 
 <div align="center">
 
-[English](./CONTRIBUTING.md) | **中文**
+[English](CONTRIBUTING.md) | **中文**
 
 </div>
 
 感谢你的贡献！我们欢迎 PR。本页介绍每个 PR 在合并前需要经过的审阅流程。
 
+## PR 描述
+
+开头用简短说明交代问题、变更后的行为及其意义。审阅者应当无需展开任何部分，就能理解 PR 的整体作用。重要风险、破坏性变更和尚未解决的失败应与摘要一同保持可见。仅在相关时附上 issue 链接。
+
+将 AI 模型使用说明、变更类型、作者检查清单及其他流程性内容放在摘要之后，使用标题清晰的 `<details><summary>…</summary>` 折叠块。不添加 `open` 属性，使其默认折叠，并在块内的 Markdown 前后保留空行。保留所有必需的检查项；折叠只改变展示方式，不改变审阅或合并要求。
+
+验证说明只报告实际执行的集成测试或端到端运行：简述结果，并在有运行链接时附上。支持性验证证据、冗长的检查输出和日志放入默认折叠的 `Validation details` 块，重要失败和性能回退则保持可见。用于解释变更的实质性基准测试对比（包括专用的 Klaud 报告）保持可见；这些内容不属于流程性套话。省略例行本地检查清单（单元测试数量、mock 检查、lint/格式检查、schema 检查、矩阵生成及变更日志字节检查）、空章节和等待验证的套话。仍须执行适当的检查；此规则仅约束 PR 描述和评论中的报告内容。未执行集成测试或端到端运行时，省略验证章节。
+
+每个 PR 描述都必须在默认折叠的 `<details><summary>AI model disclosure</summary>` 块内包含 **AI model disclosure（AI 模型使用说明）** 部分，列出准备该 PR 时实际使用的完整模型名称/版本及各自的工作内容，包括委派给其他 agent 的工作。不能只写 Claude Code、Cursor 或 Perplexity Computer 等工具名。模型标识应以运行环境提供的信息为准，不得猜测；如果运行环境未提供确切模型，须明确说明无法确认。完全未使用 AI 的 PR 须填写 `No AI used`。后续修改使用其他模型时，须同步更新说明。
+
 ## PR 审阅流程
 
-1. 打开你的 PR 并通过 PR 验证。添加 `full-sweep-fail-fast` 标签，强烈推荐使用此标签，因为变更有问题时每个矩阵最多浪费一个任务，而不是整个扇出。仅当需要任务在失败后继续运行时才使用 `full-sweep-enabled`。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
+1. 打开你的 PR 并通过 PR 验证。只有修改了 `inferencex-e2e/perf-changelog.yaml`（矩阵来自新追加的条目）且恰好带有一个主标签（通常为 `full-sweep-fail-fast`）的同仓库 PR 才会运行 `run-sweep.yml` sweep。标签、修饰标签、canary、fail-fast 以及由维护者批准的 fork 路径详见 [PR 主标签与修饰标签](inferencex-e2e/docs/ci-procedures_zh.md#pr-主标签与修饰标签)。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
+
+   **Fork PR：** 外部贡献者无法自行添加标签。PR 处于打开、非草稿且无合并冲突的状态后，由维护者添加标签，这只会批准当前的 head SHA。每次推送后，维护者都必须移除并重新添加主标签。
 2. 若修改的文件归属于仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER，请联系一位有资格的 [CODEOWNER](.github/CODEOWNERS) 审阅，并在批准评论中填写 **PR Review Checklist** 签署（见下文）。
 3. 在 Slack 上联系核心维护者进行最终批准；若要求清单签署，请先完成签署。
 4. 由授权维护者发布 `/use <run_id>`（见下文），然后通过 reuse 路径合并 PR。
 
-**性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
+**性能变更日志要求：** 凡是可能影响基准测试性能的变更，以及任何配方（recipe）的新增或修改，都**必须**在 `inferencex-e2e/perf-changelog.yaml` 文件的物理末尾追加一个新条目。历史条目**严禁**编辑。
+
+## Draft 模型精度
+
+规则很简单：**按发布时的默认方式运行 draft。** 投机解码提交必须使用随所服务 checkpoint 一同发布的 draft head 或 draft 模型，保持其发布时的精度，并采用锁定上游框架对该 checkpoint 的默认加载处理。此规则适用于内嵌的 MTP/NextN/EAGLE draft head 及独立 draft 模型（包括 DSpark），覆盖所有硬件厂商和框架。
+
+"按发布时的默认方式"既不是指 BF16，也不是指"未量化的原始发布版本"。它指的是默认值：checkpoint 作者为该 checkpoint 发布的内容，以及锁定上游镜像开箱即用时对它的处理方式。基线是：同一 checkpoint 由同一锁定镜像加载，且不带任何来自提交方的 draft 相关设置。提交的 draft 实际运行精度与该基线一致即为合规；使 draft 比该基线更"便宜"即为违规。
+
+允许（这是基线本身，不是例外）：
+
+- 内嵌于所服务 checkpoint 或随其一同发布的 draft head / draft 权重，保持其存储精度。若所服务的 FP8 checkpoint 内嵌 FP8 MTP head，则 FP8 head 就是正确的 draft。示例：Qwen FP8 checkpoint 以 FP8 存储其 MTP 权重，因此内嵌的 FP8 head 是合规的；换用 BF16 发布版本的 head，或强制添加 unquantized-draft 覆盖设置，才是违规，而不是"修复"。
+- 锁定上游框架对该 checkpoint 默认执行的加载时处理，包括 dtype 转换。示例：锁定的 SGLang 镜像将 DeepSeek V4.1 DSpark 以 FP8 存储的 `wo_a` 投影加载为 BF16，与 DeepSeek 参考实现一致。该转换就是发布路径；用本地补丁将其保持为 FP8 会改变 draft 计算，属于违规。
+- 框架对该 checkpoint 的默认 draft KV cache dtype，以及对 target 和 draft 一致应用的上游支持的 KV cache dtype（例如从 FP8 target 继承的 FP8 draft KV）。
+- 锁定镜像中自带、且被在意准确性的客户在生产中实际使用的真实上游优化：上游为该模型默认启用的融合或低精度 kernel、调度优化，以及任何在不降低 draft 权重或激活精度的前提下让同样的 draft 计算跑得更快的手段。
+
+禁止（提交方对 draft 精度的 hack）：
+
+- 今后明确禁止启用 `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE`（`=1` 或锁定实现认可的其他启用值），包括从环境、launcher、容器或镜像默认值继承的启用设置。上述基线允许项不能豁免此 flag。审阅者必须核实它在实际配方中已禁用；只有锁定实现确认未启用时，未设置或 `=0` 才可接受。历史运行不能作为当前待审提交的先例或例外，此要求也适用于仅更新镜像或重新启用配方的提交。本规则不追溯否定生效前的运行。
+- 通过 flag、环境变量、配置文件或转换步骤，将 draft 权重、激活或计算量化到发布精度以下，无论在线还是离线。包括对 BF16 MTP head 使用 `--speculative-draft-model-quantization quark_mxfp4`、`SGLANG_GLM_NEXTN_MOE_PTPC=1`，以及 `exclude_layer` 模式未覆盖整个 draft head 的 ATOM `--online_quant_config`。
+- 针对 draft 的 dtype 或 KV cache dtype 覆盖设置，使其精度低于框架对该 checkpoint 的默认值。
+- 替换为经过精度转换或不同量化方式的 draft checkpoint，或使用与所服务 target 不同发布版本的 draft head。
+- 给锁定镜像打补丁，使其以不同于默认的精度加载或计算 draft，无论升高还是降低。引擎补丁规则本已禁止此行为；waiver 不能豁免 draft 精度要求。
+- 以 checkpoint 作者未发布的方式减少 draft FLOPs，例如裁剪 draft 层或 expert。
+
+Target/verifier 模型仍可在满足现有 eval 要求的前提下量化。只要 target 的量化不会同时把 draft 量化到发布精度以下即可；请核查继承的量化设置和 `exclude_layer` 覆盖范围，而不是假定。
+
+匹配上游配方、通过 evals、声称接受长度（AL）未变，或重新测得的 AL 曲线，都不能豁免降低 draft 精度的提交。AgentX 的合成接受在任何方向上都不构成证据。draft 精度的改变会把准确性损失转移到接受率上，而 target 模型的 evals 无法测量这一点。
+
+审阅者必须对照发布基线核实 draft 的实际运行精度，不能只看启动参数。检查 checkpoint 元数据与量化排除项、环境变量、锁定镜像中的框架默认行为，以及从 target 模型继承的量化设置。不得仅凭 target checkpoint 的名称或精度标签推断 draft 精度。
+
+涉及投机解码的改动，CODEOWNER 必须在 Additional detail section 中注明 draft checkpoint 及其 revision（或内嵌 head）、其发布精度、锁定上游镜像对其的默认处理方式，以及实际运行精度，以便审阅者确认后两者一致。无法核实时，该条目不满足要求。参见[审阅清单](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)及[验证器检查 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped)。
+
+此要求与 [MLPerf Inference Rules 附录 C：Speculative Decoding](https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc#appendix-c-speculative-decoding) 的原则一致：参考 MTP head 使用提供时的相同精度（"at the same precision as provided"），并禁止参考 head 权重量化及其他人为操纵接受率的行为。InferenceX 不采用该版本针对特定量化边缘工作负载的例外、其允许模型列表，或其投机解码配置与接受率测试方法。
 
 ## PR Review Checklist（CODEOWNER 签署）
 
-CODEOWNER 自动验证目前仅供审阅参考。工作流会核验提交的清单并更新同一条裁定评论，不再发布提交状态。GitHub 单独设置的 Core 团队和 CODEOWNER 批准要求仍然有效，除非有权限的维护者使用绕过权限。
+CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及已编辑的清单，并为每个签署资源关联一条裁定评论，不再发布提交状态。GitHub 单独设置的 Core 团队和 CODEOWNER 批准要求仍然有效，除非有权限的维护者使用绕过权限。
 
 仅当修改的文件存在仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER 时，才要求签核。归属以 PR 目标分支当前最新提交中的 CODEOWNERS 为准：先解析该分支的 SHA，再使用同一 SHA 校验并读取 CODEOWNERS，最后匹配的规则生效；重命名同时检查旧路径和新路径。归属规则不从 PR 的 Head 或其记录中可能过期的基础提交读取。同一文件有 core 团队作为 owner，不会豁免其他 owner。个人管理员必须同时拥有仓库 `permission: admin` 和 `role_name: admin`；其他团队和邮箱 owner 均要求签核。归属信息缺失或权限查询失败不能授予豁免。不涉及此类 owner 的改动会跳过验证。
 
-由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md)（[中文说明](docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
+由一名符合条件的 CODEOWNER 审阅者在批准评论中填写最新的 [PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md)（[中文说明](inferencex-e2e/docs/PR_REVIEW_CHECKLIST_zh.md)）模板。
 
-**每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。** 发布前先检查是否已有清单；其他审阅者无需重复发布。需要更正条目、补充证据或重试验证时，原审阅者必须**编辑自己已有的清单评论**，不要另发一条。只有原评论被删除时才创建替代评论。
+**每个 PR 只需一名符合条件的 CODEOWNER 审阅者发布清单。** 发布前先检查是否已有清单；其他审阅者无需重复发布。需要更正条目或补充证据时，原审阅者必须**编辑自己已有的清单评论**，不要另发一条。只有原评论被删除时才创建替代评论。
 
 友情提醒。请**正确**遵循最新的清单模板：
 
-- 务必从 `main` 分支上**当前**的 [docs/PR_REVIEW_CHECKLIST.md](docs/PR_REVIEW_CHECKLIST.md) 复制模板。清单会不断演进，使用过期副本的签署会被标记为缺项。
+- 务必从 `main` 分支上**当前**的 [inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) 复制模板。清单会不断演进，使用过期副本的签署会被标记为缺项。
 - 保持模板的开头语句原样不变（必须保留英文原文）：
 
   > As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
   我们的 CI 验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 正是通过这句话触发的。**如果批准评论缺少这句话，工作流就不会核验该清单。**
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
-- 请在 PR 处于打开且非草稿状态时提交或编辑清单。推送、重新打开或退出草稿状态不会触发验证。如果合并冲突期间遗漏了 Review 事件，请在解决冲突后编辑已有清单或手动分发工作流来重试。
+- 请在 PR 处于打开且非草稿状态时提交新清单。编辑该清单会再次触发验证；推送、重新打开或退出草稿状态不会触发验证。如果合并冲突期间遗漏了 Review 事件，请在解决冲突后手动分发工作流来重试。
 - 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
-- 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
+- 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs/cookbook) PR，以及任何例外理由）。新的 SGLang cookbook PR 应提交到 `sgl-project/sglang` 的 `docs/cookbook/` 下，该目录是已发布网站的来源。`sgl-project/sgl-docs` 中的 cookbook 副本并非当前部署来源；`sgl-project/sgl-cookbook` 已归档。
 
-签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。随后，CI 会为整个 PR 创建或更新同一条裁定评论，并注明实际评估的 SHA。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。旧版按提交生成的裁定评论会被复用；如果评论已删除，下次验证会创建替代评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。CI 会为该签署资源创建一条裁定评论，并注明实际评估的 SHA。编辑同一清单时只更新与其关联的裁定。替代清单或新增清单会获得独立裁定；与旧签署关联的裁定保持不变。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
-裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，由原审阅者编辑已有清单，或由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。流程会更新同一条裁定评论。
+裁定只记录实际评估的提交，不会将批准延续到后续提交。需要重新评估时，先按需更正已有清单，再由有权限的协作者传入 `pr-number` 及其 `comment_url`（两者必须指向同一 PR）手动分发 `codeowner-signoff-verify.yml`。手动重新评估会更新与该签署资源关联的裁定。
 
 ## 使用 `/use` 在合并时复用 PR 的全绿 sweep
 
-完整基准测试 sweep 花费昂贵的 GPU 时间，且 runner 由所有打开的 PR 共享。如果不复用，一个已批准 PR 的 sweep 将运行**两次**，一次用于 PR 验证，另一次在合并后于 `main` 上运行。reuse 路径避免了重复运行：
+完整基准测试 sweep 花费昂贵的 GPU 时间，且 runner 由所有打开的 PR 共享，因此一个已批准 PR 的 sweep 只会为 PR 验证运行一次。合并后 `main` 不会重新运行它，而是通过 reuse 路径发布该 PR sweep：
 
 - 当你的 PR 拥有符合条件的全绿完整 sweep 后，授权维护者（`OWNER`/`MEMBER`/`COLLABORATOR`）在 PR 上评论 `/use <run_id>` 来指定该 Run。命令和 Run ID 必须放在同一行。
 - `/reuse-sweep-run <run_id>` 仍受支持，行为完全相同。不带 ID 的 `/reuse-sweep-run` 会自动选择源 Run；不带 ID 的 `/use` 会被拒绝。
-- 合并到 `main` 的运行随后会验证并摄取该 PR sweep 的 artifacts，而不是在 `main` 上重新运行整个 sweep。
-- **这为每个人减少了 CI 排队时间。** 每次复用合并都会为其他 PR 释放数小时的 GPU runner 时间，因此请优先选择 reuse 路径，而不是不带它直接合并。仅有全绿 sweep 还不够。复用命令必须在评论记录中（签署验证会检查这一点），否则 `main` 会静默地重新运行完整 sweep。
-- 复用不要求保留 sweep 标签。机器人会在命令被接受时添加 👍，拒绝时添加 👎，详情见 Actions 运行摘要；合并时仍会重新验证源产物。
-- `utils/merge_with_reuse.sh <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
+- 合并到 `main` 的运行随后会验证并摄取该 PR sweep 的产物；`main` 本身不会再重新运行 sweep。
+- **复用是必需的。** 仅有全绿 sweep 还不够。复用命令必须在评论记录中（签署验证会检查这一点），否则 `main` 上的运行会失败，该 PR 的结果也不会被摄取。
+- 复用不要求保留主标签，但 PR 带有 `evals-only` 或 `agentx-fast` 时复用会被拒绝；PR 带有多个主标签时，`merge_with_reuse` 会拒绝合并。机器人会在命令被接受时添加 👍，拒绝时添加 👎，详情见 Actions 运行摘要；合并时仍会重新验证源产物。
+- 缺少授权维护者发布的复用命令时，Check 4 会给出 **WARN**，不会因此拒绝签署。警告会在签署裁定中保持展开；要实际复用产物，仍需先发布有效的授权命令。
+- 在仓库根目录运行 `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` 是受支持的合并路径。它会发布命令、将分支与 `main` 同步、等待检查并 squash 合并。资格详情见 [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep)。
+
+## 使用 `append-only` 向最新曲线追加数据点
+
+当 PR 只向现有曲线添加生成的数据点时，请为每个新的变更日志条目标记 `append-only: true`。新增内容可以引入新的并发值或新的配方变体，例如另一个张量并行度取值。Sweep setup 会比较 base 和 head 修订版本生成的矩阵，只运行新增的数据点，并输出元数据，让 InferenceX-app 扩展最近一条匹配的曲线，而不是把这次部分运行显示为一条单独的曲线。
+
+此模式刻意限定在很窄的范围内，但并不依赖文件允许列表。只要改动的行为影响仅限于变更日志所列的新增数据点，支撑代码、基准测试脚本、launcher 和其他文件都可以修改。任何被修改的基准测试路径都不得在已有数据点上执行，也不得改变已有数据点。所选的每个配置和场景都必须已经存在，base 修订版本生成的每个数据点都必须以相同配方保留。在此范围内，head 可以包含任意新增的生成配方或数据点，包括新的拓扑或其他配方维度；sweep 会调度两次生成结果的差集。新增内容必须使用相同的非空镜像，并属于仪表盘中已有的可视化序列。每个生成的配方都带有确定性指纹，因此同一并发下的两个不同配方在数据库中仍是两个不同的数据点，而不会拆分可视化曲线。删除或修改已有数据点，或改动可能影响已有数据点的共享逻辑，都会被拒绝。Append-only 条目不能设置 `all-evals`、`evals-only` 或 `eval-min-prefill-ep` 条目字段，不能与常规条目共用一个 sweep，也不能与 `all-evals`/`evals-only` 修饰标签一起运行。矩阵验证器会强制执行"生成矩阵只能新增、不得删改"这一不变量；人工和 AI 审阅者必须检查完整 diff，并核实行为隔离。机械比对会使用每个配置修订版本自身的生成器、验证代码和 runner 元数据来渲染该版本。Launcher 和基准测试脚本的改动仍依赖完整 diff 审阅，因为仅凭矩阵一致无法证明其运行时控制流已被隔离。
+
+```yaml
+- config-keys:
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Add TP8 at concurrency 12 and 16 to the existing curve"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  append-only: true
+```
 
 ## AMD 集群：严禁在 runner 工作区留下 root 所属文件
 

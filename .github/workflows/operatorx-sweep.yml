@@ -30,7 +30,7 @@ on:
         default: ''
   pull_request:
     paths:
-      - experimental/operatorx/**
+      - operatorx/**
       - .github/workflows/operatorx-sweep.yml
 
 permissions:
@@ -40,6 +40,9 @@ permissions:
 concurrency:
   group: operatorx-${{ github.event_name }}-${{ github.run_id }}
   cancel-in-progress: false
+
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
 
 jobs:
   setup:
@@ -63,13 +66,13 @@ jobs:
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
           OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
-          PYTHONPATH: experimental
+          PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_POOL OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
           python3 -m operatorx.ci plan \
-            --platform-config experimental/operatorx/platforms.json \
+            --platform-config operatorx/platforms.json \
             --pool "$OPERATORX_POOL" --backends "$OPERATORX_BACKENDS" \
             --testlists "$OPERATORX_TESTLISTS" --world-sizes "$OPERATORX_WORLD_SIZES" \
             --chunk-size "$OPERATORX_CHUNK_SIZE" --run-id "$GITHUB_RUN_ID" \
@@ -111,7 +114,7 @@ jobs:
     env:
       OPERATORX_SHARD: ${{ matrix.id }}
       OPERATORX_OUTPUT: ${{ github.workspace }}/operatorx-output-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
-      PYTHONPATH: experimental
+      PYTHONPATH: .:inferencex-e2e
       PYTHONDONTWRITEBYTECODE: '1'
       OPERATORX_CLEANUP_SECONDS: '180'
     steps:
@@ -138,19 +141,19 @@ jobs:
           OPERATORX_POOL: ${{ matrix.pool }}
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP OPERATORX_RECOVERY_RUN OPERATORX_POOL OPERATORX_CLEANUP_SECONDS
           python3 -m operatorx.ci recover --artifacts operatorx-recovery \
             --run-id "$OPERATORX_RECOVERY_RUN" --pool "$OPERATORX_POOL" \
             --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS" \
-            --platform-config experimental/operatorx/platforms.json
+            --platform-config operatorx/platforms.json
       - name: Run one Slurm allocation
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP OPERATORX_SHARD OPERATORX_OUTPUT OPERATORX_CLEANUP_SECONDS GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA RUNNER_NAME
           python3 -m operatorx.ci execute \
-            --platform-config experimental/operatorx/platforms.json \
+            --platform-config operatorx/platforms.json \
             --manifest operatorx-control/operatorx-manifest.json --shard "$OPERATORX_SHARD" \
             --output "$OPERATORX_OUTPUT" --run-id "$GITHUB_RUN_ID" \
             --attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA" \
@@ -160,7 +163,7 @@ jobs:
         if: always()
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_OUTPUT OPERATORX_CLEANUP_SECONDS
           python3 -m operatorx.ci finalize --output "$OPERATORX_OUTPUT" \
             --cleanup-seconds "$OPERATORX_CLEANUP_SECONDS"
@@ -168,7 +171,7 @@ jobs:
         if: failure()
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_OUTPUT
           if [ -d "$OPERATORX_OUTPUT" ]; then
             timeout 15 sinfo --Node --noheader --format='%N|%P|%t' \
@@ -204,10 +207,10 @@ jobs:
           path: operatorx-artifacts
       - name: Report latest attempt for every requested shard
         env:
-          PYTHONPATH: experimental
+          PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
-          source benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars GITHUB_STEP_SUMMARY
           python3 -m operatorx.ci summarize \
             --manifest operatorx-control/operatorx-manifest.json \

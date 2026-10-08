@@ -1,0 +1,254 @@
+# DeepSeek-V4.1-Flash AgentX on MI355X with SGLang native DSpark.
+# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
+base:
+  schema: 2
+  name: dsv41flash-fp4-mi355x-sglang-agentic
+  model:
+    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261006
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        enforce-shared-experts-fusion: true
+        fp8-gemm-backend: aiter
+        cuda-graph-max-bs-decode: 64
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
+        reasoning-parser: auto
+        tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_USE_AITER: '1'
+        SGLANG_USE_ROCM700A: '0'
+        TRITON_HIP_USE_ASYNC_COPY: '0'
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        TORCH_BLAS_PREFER_HIPBLASLT: '1'
+        HSA_NO_SCRATCH_RECLAIM: '0'
+        GPU_MAX_HW_QUEUES: '2'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
+      # Full-context corpus for this 1M-context recipe.
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point; the saturation point gets a longer warmup drain.
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        max-running-requests: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        max-running-requests: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 256
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 512
+        max-running-requests: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        mem-fraction-static: 0.80
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        mem-fraction-static: 0.80
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 4
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 4096
+        prefill-decode-interval: 4
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        max-running-requests: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        max-running-requests: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 256
+        max-running-requests: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 512
+        max-running-requests: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.70
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 16
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+  benchmark:
+    env:
+      CONC: '16'
