@@ -45,7 +45,7 @@ services:
         global_segment_size: '@dram.per-gpu-bytes'
         local_buffer_size: "4GB"
         protocol: "rdma"
-        device_name: "@fabric.mooncake-devices"
+        device_name: "@fabric.rdma-devices"
         mode: "embedded"
         enable_offload: false
 frontend:

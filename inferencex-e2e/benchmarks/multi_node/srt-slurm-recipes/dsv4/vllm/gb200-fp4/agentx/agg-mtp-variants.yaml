@@ -65,7 +65,7 @@ base:
         UCX_MEMTYPE_CACHE: "n"
         UCX_NET_DEVICES: "@fabric.ucx-net-devices"
         UCX_TLS: "rc,cuda_copy"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
       args:
         kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
         served-model-name: deepseek-ai/DeepSeek-V4-Pro

@@ -33,7 +33,7 @@ base:
           global_segment_size: '@dram.per-gpu-bytes'
           local_buffer_size: "4GB"
           protocol: "rdma"
-          device_name: "@fabric.mooncake-devices"
+          device_name: "@fabric.rdma-devices"
           mode: "embedded"
           enable_offload: true
   frontend:
@@ -76,7 +76,7 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         UCX_CUDA_IPC_ENABLE_MNNVL: "y"
         UCX_MEMTYPE_CACHE: "n"
         UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
@@ -135,7 +135,7 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         UCX_CUDA_IPC_ENABLE_MNNVL: "y"
         UCX_MEMTYPE_CACHE: "n"
         UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
