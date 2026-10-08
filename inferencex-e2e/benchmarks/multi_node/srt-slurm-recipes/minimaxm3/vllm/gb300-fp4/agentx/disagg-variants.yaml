@@ -40,7 +40,7 @@ base:
           global_segment_size: "200GB"
           local_buffer_size: "4GB"
           protocol: "rdma"
-          device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+          device_name: "@fabric.mooncake-devices"
           mode: "embedded"
           enable_offload: true
   environment:
@@ -84,7 +84,7 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
-        NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
         MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
         MC_STORE_CLIENT_METRIC: "1"
         MC_STORE_CLIENT_METRIC_INTERVAL: "5"
@@ -133,7 +133,7 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
-        NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
       args:
         served-model-name: "nvidia/MiniMax-M3-NVFP4"
         kv-cache-dtype: "fp8"

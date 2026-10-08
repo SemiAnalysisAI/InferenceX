@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from infx.clusters import load_inventory
-from infx.clusters.slurm import slurm_settings
+from infx.clusters.slurm import Fabric, slurm_settings
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_workload, compose_recipe
+from infx.srt_slurm.workload import bind_workload, compose_recipe, resolve_fabric
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
@@ -139,6 +139,7 @@ def bound_variants(
 
     A multi-node point with ``power`` gets the DCGM telemetry block only with the cluster's
     exporter ``power_port``; ``client_env`` holds the AgentX client paths the launcher binds.
+    ``'@fabric.<name>'`` values stay unresolved: recipe fingerprints hash them as written.
     """
     path, _, selector = point["srt-recipe"].partition(":")
     if "prefill" not in point:
@@ -160,6 +161,12 @@ def bound_variants(
         )
         for name, recipe in expand(composed, selector or None)
     ]
+
+
+def _cluster_fabric(cluster: Cluster) -> dict[str, str | None]:
+    """``cluster``'s fabric as recipes read it."""
+    srt = slurm_settings(cluster).srt_slurm
+    return (srt.fabric if srt is not None else Fabric()).rendered()
 
 
 def _validated(recipe: dict[str, Any], environment: Mapping[str, str], source: str) -> None:
@@ -192,7 +199,9 @@ def generate_recipes(
     """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
 
     A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
-    paths; the manifest names that cluster, the one its runner label schedules on.
+    paths, and ``'@fabric.<name>'`` values take its cluster's facts; the manifest names that
+    cluster, the one its runner label schedules on. A label on several clusters leaves fabric
+    references as written and the manifest's ``cluster`` null.
     """
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
@@ -216,10 +225,13 @@ def generate_recipes(
             environment = point_environment(point)
             placement = _placement(inventory, point["runner"])
             power_port, client_env = _binder_inputs(point, environment, placement, root)
+            fabric = _cluster_fabric(placement[1]) if placement else None
             variants = bound_variants(
                 point, environment, root, power_port=power_port, client_env=client_env
             )
             for variant, recipe in variants:
+                if fabric is not None:
+                    recipe = resolve_fabric(recipe, fabric)
                 _validated(recipe, environment, point["srt-recipe"])
                 identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
                 digest = hashlib.sha256(identity.encode()).hexdigest()[:12]

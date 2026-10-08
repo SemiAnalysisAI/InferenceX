@@ -38,7 +38,7 @@ base:
         ATOM_MOE_GU_ITLV: "1"
         AITER_BF16_FP8_MOE_BOUND: "0"
         # Rail-isolated RDMA: matched rails replace dest-device affinity.
-        MC_GID_INDEX: "1"
+        MC_GID_INDEX: "@fabric.mooncake-gid-index"
         ATOM_MOONCAKE_MATCHED_RAILS: auto
         NCCL_IB_DISABLE: "1"
         ATOM_DISABLE_MMAP: "true"

@@ -45,7 +45,7 @@ services:
         global_segment_size: "160GB"
         local_buffer_size: "4GB"
         protocol: "rdma"
-        device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        device_name: "@fabric.mooncake-devices"
         mode: "embedded"
         enable_offload: false
 frontend:
