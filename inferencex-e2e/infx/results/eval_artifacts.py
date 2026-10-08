@@ -103,7 +103,6 @@ def raw_eval_artifact_dirs(artifacts_dir: Path) -> list[Path]:
         and path.name.startswith("eval_")
         and path.name != "eval_results_all"
         and not path.name.startswith("eval_server_logs_")
-        and not path.name.startswith("eval_gpu_metrics_")
     )
 
 
