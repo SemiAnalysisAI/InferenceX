@@ -5,7 +5,7 @@ file with envsubst, substituting REPO, PR_NUMBER, HEAD_SHA, SIGNOFF_AUTHOR,
 SIGNOFF_KIND and SIGNOFF_FETCH_CMD (write them as shell-style placeholders).
 It lives outside the workflow YAML because GitHub caps a workflow expression
 at 21000 characters and this prompt outgrew it. Keep the checks here in sync
-with inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md, per inferencex-e2e/docs/documentation-procedures.md.
+with inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md.
 -->
 
 REPO: ${REPO}
@@ -112,42 +112,56 @@ NOT need to list `run-sweep.yml` runs or parse reuse logs.
 For the commit that passed Check 1, confirm the eval numbers are real and meet the bar,
 not merely that the job is green:
 - Take the run id behind the passing `eval /` / `collect-evals` check-run (from its
-  `details_url`) and download its eval results:
+  `details_url`) and download its eval results, then list the JSON files with the
+  Glob tool (`evals/**/*.json`):
   ```bash
   gh run download <RUN_ID> --repo ${REPO} -p 'eval_results_*' -D ./evals || \
   gh run download <RUN_ID> --repo ${REPO} -p 'eval_*' -D ./evals
-  find ./evals -name '*.json' | head
   ```
 - Read the aggregated eval JSON / the run's "Eval Summary" step summary and confirm
   accuracy is present and meets the expected bar for the model, and that the run used
   the same inference-engine image as this PR's config. FAIL if evals are
   skipped, failed, empty, below bar, or use a different image. Say exactly which condition applies.
 
-## Check 3 — Recipe linked, MERGED, AND complete (SINGLE-NODE recipes only)
-APPLICABILITY. Read this first. The recipe-link requirement covers SINGLE-NODE
-recipes only, because the official upstream recipe sources (vLLM recipes, SGLang
-cookbook) publish single-node serve commands. Disaggregated / multi-node
-submissions have NO recipe-link requirement. If the PR's benchmark changes are
-exclusively multi-node/disagg, with files under `inferencex-e2e/benchmarks/multi_node/**` (including
-`srt-slurm-recipes/**`), and/or master-config entries with `multinode: true` or
-`disagg: true`, and/or disagg frameworks (`dynamo-trt`, `dynamo-sglang`,
-`sglang-disagg`, vLLM disagg, ATOM/ATOMesh disagg), report this check as
-`N/A — disaggregated/multi-node submission; the recipe-link requirement applies to
-single-node recipes only` and DO NOT fail it. A sign-off note like "this is a
-disagg submission, no recipe update required" is a legitimate statement of that
-fact, not a violation. If the PR touches BOTH single-node and multi-node recipes,
-apply (a)/(b)/(c) below to the single-node portion only.
+## Check 3 — Production-useful recipe linked, MERGED, AND complete
+APPLICABILITY. Read this first. The deciding factor is whether a serving setting
+is useful in a realistic production deployment. The upstream recipe requirement
+covers every affected vLLM/SGLang production serving configuration: single-node
+agg, multi-node agg, single-node disagg, and multi-node disagg. Dynamo is a
+deployment layer; `dynamo-vllm` needs vLLM recipe coverage and `dynamo-sglang`
+needs SGLang cookbook coverage, just like direct engine deployments and
+`sglang-disagg`. Node count, `multinode: true`, `disagg: true`, benchmark paths,
+or Dynamo use MUST NOT be used as an exemption. A sign-off note like "this is a
+disagg submission, no recipe update required" does not satisfy this criterion.
 
-The InferenceX "recipe" for this PR = the files it changes under
-`inferencex-e2e/benchmarks/single_node/**` plus its entry in `inferencex-e2e/configs/*-master.yaml`. The merge
-standard is: the community must be able to reproduce this benchmark from merged,
-public upstream documentation.
+Inspect the affected master-config entries under `inferencex-e2e/configs/*-master.yaml`
+and their effective recipes, scripts, and inherited settings under BOTH
+`inferencex-e2e/benchmarks/single_node/**` and
+`inferencex-e2e/benchmarks/multi_node/**`, including `srt-slurm-recipes/**`.
+In a mixed submission, assess every affected production serving variant. Several
+variants may share one upstream page/PR if it covers each; sharing a dashboard
+curve does not establish recipe coverage. An agg-only example does not cover
+disagg prefill/decode/frontend settings.
+
+Report N/A only when no vLLM/SGLang production serving configuration is affected
+(for example, documentation-only or InferenceX-only harness/collection changes).
+State the inspected scope and why it is N/A. Existing merged/published coverage
+can satisfy this check without a new upstream PR. The merge standard is that
+production users can reproduce the serving configuration from merged, public
+upstream documentation, without needing InferenceX benchmark infrastructure.
 - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
   the corresponding merged recipe PR in
   `https://github.com/vllm-project/recipes` or
-  `https://github.com/sgl-project/sglang` (cookbook under `docs_new`), or the
+  `https://github.com/sgl-project/sglang` (cookbook under `docs/cookbook/`), or the
   published recipe page (`https://recipes.vllm.ai/` or
   `https://docs.sglang.io/cookbook/...`). If no such link is present, FAIL.
+  New SGLang cookbook PRs belong in `sgl-project/sglang`, under `docs/cookbook/`;
+  the published site deploys from that repository's `main` branch and `docs/`
+  directory. The cookbook copy in `sgl-project/sgl-docs` is not the current
+  deployment source, and `sgl-project/sgl-cookbook` is archived. For legacy
+  merged PR links from those copies, require a current published cookbook page
+  covering the configuration; a historical merge alone does not establish
+  current coverage.
 - (b) UPSTREAM CHANGE MERGED: For a linked GitHub PR, query the upstream repository
   directly (for example, `gh pr view <URL> --json state,mergedAt,url`) and require
   `state: MERGED` with a non-null `mergedAt`. An open PR, draft PR, closed-unmerged
@@ -155,31 +169,39 @@ public upstream documentation.
   containing the required recipe counts as merged upstream documentation. If the
   linked artifact's merge/publication status cannot be verified, FAIL. Never infer
   that it merged from an approval, a green check, or the sign-off author's claim.
-- (c) MAJOR SERVER ARGS MATCH: Fetch the merged or published recipe with the `fetch`
+- (c) PRODUCTION-USEFUL SETTINGS AND COMMANDS MATCH: Fetch the merged or published recipe with the `fetch`
   MCP tool or WebFetch. For a merged recipe PR, read its diff via `gh pr diff` against
-  that repo if accessible. Compare it to this PR's launch command. The recipe
-  only needs to match the MAJOR, deployment-defining server args, not every flag.
-  It explicitly does not need to match knobs specific to InferenceX benchmark/harness
-  tuning.
-    MAJOR (must match because these define the model, parallelism, precision, and which
-    kernels run, determining the perf profile):
+  that repo if accessible. Compare it to this PR's effective serving configuration,
+  including flags, environment variables, and launch commands for every affected
+  role (aggregated worker, prefill, decode, and router/frontend). Upstream recipes
+  may include Dynamo installation, router/frontend commands, and engine launch
+  commands. A link to an InferenceX/srt-slurm config alone is not sufficient.
+    PRODUCTION-USEFUL (must match, including optimizations useful in realistic
+    deployments even when the submission also uses them for benchmark tuning):
       - model / model-path, hardware/SKU
       - parallelism: TP / EP / DP / PP and DP-attention flags
         (`--enable-dp-attention`, `--enable-dp-lm-head`, etc.)
       - quantization and kv-cache dtype
       - kernel-selection backends: `--attention-backend`, `--moe-runner-backend`,
         `--enable-flashinfer-allreduce-fusion` and similar
-      - other flags that materially change the served model or its throughput
-    INFERENCEX-SPECIFIC (do NOT require a match, and list as informational only, never a
-    failure): per-lane sweep tuning and harness plumbing such as
-    `--scheduler-recv-interval`, `--chunked-prefill-size`, `--disable-piecewise-cuda-graph`,
-    `SGLANG_RADIX_FORCE_MISS` and similar env toggles, concurrency / sequence-length
-    sweep ranges, ports, result filenames, and image tag/version.
-  FAIL if a MAJOR arg in this PR is missing from (or contradicts) the merged/published
-  recipe. List exactly those. Treat the InferenceX-specific diffs as expected and
-  mention them only as a brief informational note, not as blockers. If a flag's effect
-  is equivalent to a recipe default (e.g. quantization auto-detected from an FP4
-  model), say so and do not count it against the recipe.
+      - scheduling, cache/offload, chunked-prefill, and graph/eager settings when
+        useful in production, including their environment variables
+      - prefill/decode worker topology, transport settings, and router/frontend
+        settings and commands needed to run the deployment
+      - other flags or environment variables useful in production that change
+        serving behavior or performance
+    INFERENCEX-ONLY (do NOT require upstream coverage): harness plumbing, result
+    collection, synthetic benchmark controls, and concurrency/sequence-length
+    sweep ranges. Do not classify serving flags as benchmark-only by name or by
+    their presence in a benchmark file; inspect their actual effect. Require the
+    sign-off to explain exclusions in its additional detail section.
+  FAIL if a production-useful setting or required role's launch command is missing
+  from (or contradicts) the merged/published recipe. List the affected variant,
+  role, and missing setting/command. Treat justified InferenceX-only differences
+  as informational. A flag need not be repeated when equivalent behavior follows
+  from a documented setting or framework default (e.g. quantization auto-detected
+  from an FP4 model); verify that behavior against the pinned upstream version
+  and require the reviewer to record the evidence.
 - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
   link to merged/published upstream documentation does not pass this workflow's
   standard.
@@ -585,6 +607,12 @@ Pinned app references at
   percentiles or scenarios. Respect the app's hardware/framework/precision series,
   run/date selection and fixed-sequence speculative-method separation. AgentX can
   mix topology, speculative methods and KV offload within one curve.
+- A curve is one app series: model, scenario, `getHardwareKey` (base GPU +
+  framework; AgentX adds no spec suffix), precision, run/date and percentile.
+  Config keys, images, recipes and agg-vs-disagg topology that map to the same
+  series are ONE curve: put all their points in one input and count the combined
+  frontier. Do not split a series by config key or image; a point dominated by
+  another config's point is dominated. Report per-point config/image as evidence.
 - Inspect the pinned app sources linked above plus the live app revision
   used by the evidence. Its E2EL direction is `upper_right`, despite the helper's
   geometric name: x asc, y desc on ties, retain increasing y and equal-y plateaus
@@ -594,11 +622,11 @@ Pinned app references at
 - Count the entire resulting curve. For `append-only: true`, existing same-image
   points may count only when their unchanged recipes and reusable source artifacts
   are verified under Check 12; new points alone need not number five. Do not pool
-  incompatible images, historical runs, or unrelated series to reach five.
+  historical runs, other dates, or other app series to reach five.
 - Reproduce the calculation using trusted
   `inferencex-e2e/infx/workflows/pareto_coverage.py` from this workflow checkout:
   `uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage < /tmp/pareto-curves.json`.
-  Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile/image>",
+  Input is a JSON array of `{ "key": "<model/scenario/hwKey/precision/run/percentile>",
   "points": [{ "x": 1.0, "y": 100.0 }] }`. Create inputs from inspected data, not
   numbers asserted in the PR. Include every affected curve, including empty ones.
   The helper counts points; it does NOT validate provenance, grouping or omitted

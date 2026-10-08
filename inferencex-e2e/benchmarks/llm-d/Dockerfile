@@ -33,15 +33,6 @@ FROM ${ROUTING_SIDECAR_IMAGE} AS sidecar_src
 FROM ${ENVOY_FROM_IMAGE} AS envoy_src
 
 FROM ${VLLM_BASE}
-# Force-upgrade nvidia-cutlass-dsl only when explicitly requested. The
-# v0.22 base needed it because its bundled wheel lacked cute.arch.fmin
-# for the DSV4 sparse-attention code; stock v0.23.0 (what upstream
-# wide-ep-lws runs) ships a working cutlass, so we leave it untouched
-# there. Build the v0.22 base with --build-arg UPGRADE_CUTLASS_DSL=1.
-ARG UPGRADE_CUTLASS_DSL=0
-RUN if [ "$UPGRADE_CUTLASS_DSL" = "1" ]; then \
-        pip install --no-cache-dir --upgrade nvidia-cutlass-dsl; \
-    fi
 
 COPY --from=epp_src \
        /app/epp /usr/local/bin/epp
