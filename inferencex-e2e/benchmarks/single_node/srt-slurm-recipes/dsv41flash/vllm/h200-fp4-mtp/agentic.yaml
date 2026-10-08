@@ -4,10 +4,6 @@
 base:
   schema: 2
   name: dsv41flash-fp4-h200-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
-    precision: fp4
   resources:
     gpu_type: h200
     gpus_per_node: 8
@@ -52,10 +48,7 @@ base:
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. Graph capture starts at 64 tokens (DSpark5 verification

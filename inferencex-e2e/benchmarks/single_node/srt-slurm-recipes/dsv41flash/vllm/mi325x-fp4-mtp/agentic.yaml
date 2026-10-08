@@ -5,10 +5,6 @@
 base:
   schema: 2
   name: dsv41flash-fp4-mi325x-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
-    precision: fp4
   resources:
     gpu_type: mi325x
     gpus_per_node: 8
@@ -71,12 +67,7 @@ base:
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
-      # Full-context corpus for this 1M-context recipe.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. TP2 leaves ~145 GiB of offloaded weights per rank, so it

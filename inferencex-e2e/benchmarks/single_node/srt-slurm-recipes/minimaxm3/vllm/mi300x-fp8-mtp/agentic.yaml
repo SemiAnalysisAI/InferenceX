@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: minimaxm3-fp8-mi300x-vllm-agentic
-  model:
-    path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai-rocm:v0.30.0
-    precision: fp8
   resources:
     gpu_type: mi300x
     gpus_per_node: 8
@@ -63,10 +59,7 @@ base:
         NCCL_MIN_NCHANNELS: '112'
         GPU_MAX_HW_QUEUES: '2'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: MiniMaxAI/MiniMax-M3-MXFP8
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
