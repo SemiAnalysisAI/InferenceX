@@ -74,7 +74,7 @@ base:
         UCX_MEMTYPE_CACHE: "n"
         UCX_NET_DEVICES: "@fabric.ucx-net-devices"
         UCX_TLS: "rc,cuda_copy"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         NCCL_P2P_LEVEL: "NVL"
         NVIDIA_GDRCOPY: "1"
         PYTORCH_ALLOC_CONF: "expandable_segments:True"
