@@ -230,14 +230,14 @@ def main() -> None:
     parsed = parser.parse_args()
     try:
         if parsed.command == "prepare":
-            _, recipe = select_recipe(parsed.recipe, os.environ)
+            selected, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_fabric(recipe, parsed.fabric)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
-            # srtctl gets the bound variant, never the fragment.
+            # srtctl gets the bound variant, never the fragment; the launch records the selection.
             config = parsed.output.with_name("recipe.yaml")
             config.write_text(yaml.safe_dump(recipe, sort_keys=False))
-            parsed.output.write_bytes("\0".join([str(config), *arguments, ""]).encode())
+            parsed.output.write_bytes("\0".join([selected, str(config), *arguments, ""]).encode())
         else:
             print("\n".join(submission_fields(parsed.manifest)))
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
