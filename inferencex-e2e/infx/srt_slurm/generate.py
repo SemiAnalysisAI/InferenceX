@@ -23,6 +23,8 @@ from infx.srt_slurm.workload import (
     bind_workload,
     check_setup_script,
     compose_recipe,
+    dram_budget,
+    resolve_dram,
     resolve_fabric,
 )
 
@@ -59,11 +61,17 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         ),
     }
     if "prefill" in point:
+        prefill = point["prefill"]
         environment.update(
             IS_MULTINODE="true",
             SRT_RECIPE=point["srt-recipe"],
             POWER="1" if point.get("power") else "0",
             CONC_LIST=" ".join(map(str, point["conc"])),
+            PREFILL_TP=str(prefill["tp"]),
+            PREFILL_PP_SIZE=str(prefill["pp"]),
+            PREFILL_PCP_SIZE=str(prefill["pcp-size"]),
+            KV_OFFLOADING=str(point["kv-offloading"]) if agentic else "",
+            TOTAL_CPU_DRAM_GB=str(point["total-cpu-dram-gb"]) if agentic else "",
         )
         if agentic:
             # A multi-node AgentX job serves its one concurrency.
@@ -214,7 +222,8 @@ def generate_recipes(
     """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
 
     A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
-    paths, and ``'@fabric.<name>'`` values take its cluster's facts; the manifest names that
+    paths, a DRAM point's ``'@dram.<name>'`` values take its budget over the GPUs it covers
+    there, and ``'@fabric.<name>'`` values take its cluster's facts; the manifest names that
     cluster, the one its runner label schedules on. A label on several clusters leaves fabric
     references as written and the manifest's ``cluster`` null.
     """
@@ -244,7 +253,13 @@ def generate_recipes(
             variants = bound_variants(
                 point, environment, root, power_port=power_port, client_env=client_env
             )
-            for variant, recipe in variants:
+            budget = dram_budget(
+                environment,
+                multinode="prefill" in point,
+                gpus_per_node=placement[1].gpus_per_node if placement else None,
+            )
+            for variant, bound in variants:
+                recipe = resolve_dram(bound, budget)
                 if fabric is not None:
                     recipe = resolve_fabric(recipe, fabric)
                 check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)

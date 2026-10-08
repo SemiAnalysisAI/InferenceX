@@ -3,16 +3,19 @@
 A fragment holds only recipe-specific srt-slurm settings. Its lane's shared block, and the
 DCGM telemetry block for a point that measures power, is merged under it, a variant is
 selected, and the binder then writes the matrix point's and the launcher's values and
-replaces ``'@fabric.<name>'`` values with the job's cluster facts.
+replaces ``'@dram.<name>'`` values with the point's host DRAM budget and
+``'@fabric.<name>'`` values with the job's cluster facts.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import math
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -47,16 +50,31 @@ _POINT_KEYS = (
     ("telemetry", "dcgm_exporter", "port"),
 )
 _FIXED_ENV = ("MODEL", "ISL", "OSL", "CONC", "CONC_LIST", "RANDOM_RANGE_RATIO", "USE_CHAT_TEMPLATE")
-_AGENTIC_ENV = ("CONC", "CONC_LIST", "RESULT_DIR", "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE",
-                "HUGGINGFACE_HUB_CACHE")  # fmt: skip
+_AGENTIC_ENV = ("CONC", "CONC_LIST", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "RESULT_DIR",
+                "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE")  # fmt: skip
 BOUND_ENV = {
     (False, False): _FIXED_ENV,
     (False, True): _FIXED_ENV,
     (True, False): ("MODEL", *_AGENTIC_ENV),
     (True, True): (*_AGENTIC_ENV, "AIPERF_DATASET_MMAP_CACHE_DIR"),
 }
-# A single-node variant may name its point, pairing that concurrency with its tuning.
-VARIANT_CONCURRENCY = ("benchmark", "env", "CONC")
+# A single-node variant may name its point, pairing that concurrency and KV offloading with
+# its tuning.
+VARIANT_POINT_KEYS = (("benchmark", "env", "CONC"), ("benchmark", "env", "KV_OFFLOADING"))
+
+# '@dram.<name>' takes the point's TOTAL_CPU_DRAM_GB (decimal GB), in total or per GPU it
+# covers on a node.
+DRAM_REFERENCE = "@dram."
+DRAM_NAMES = ("total-gb", "total-bytes", "per-gpu-gb", "per-gpu-bytes")
+BYTES_PER_GB = 1_000_000_000
+# Host DRAM sizes that only the budget sizes. HiCache, TRT-LLM host cache and Mooncake
+# segment sizes may also be measured values.
+DRAM_SIZES = frozenset({
+    "cpu_bytes_to_use", "cpu_bytes_to_use_per_rank",  # vLLM SimpleCPUOffloadConnector
+    "LMCACHE_MAX_LOCAL_CPU_SIZE", "lmcache.max_local_cpu_size", "--l1-size-gb",  # LMCache
+})  # fmt: skip
+# srt-slurm takes env values and argument list items as strings.
+TEXT_MAPPINGS = frozenset({"env", "environment"})
 # Repo setup scripts that install a component the master config versions: its master field
 # and name. The binder writes that version as VERSION_ENV[field] wherever the script runs.
 INSTALLERS = {
@@ -102,6 +120,32 @@ def _lookup(block: Any, key: tuple[str, ...]) -> tuple[bool, Any]:
     return True, block
 
 
+def _is_dram(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith(DRAM_REFERENCE)
+
+
+def _dram_literals(node: Any, where: str) -> Iterator[str]:
+    """Each DRAM_SIZES value in ``node``, a JSON object string included, that is not a
+    ``'@dram.<name>'`` value; a size flag in an argument list sizes the next item."""
+    if isinstance(node, str) and node.startswith("{"):
+        with contextlib.suppress(ValueError):
+            node = json.loads(node)
+    if isinstance(node, Mapping):
+        for key, value in node.items():
+            path = f"{where}.{key}" if where else str(key)
+            if key in DRAM_SIZES and not _is_dram(value):
+                yield f"{path} (= {value!r})"
+            else:
+                yield from _dram_literals(value, path)
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            flag = node[index - 1] if index else None
+            if isinstance(flag, str) and flag in DRAM_SIZES and not _is_dram(item):
+                yield f"{where}[{index}] (= {item!r})"
+            else:
+                yield from _dram_literals(item, f"{where}[{index}]")
+
+
 def _fragment_versions(block: Any, path: str) -> list[str]:
     """Where ``block`` sets a bound component version, in an env mapping at any depth."""
     found = []
@@ -120,7 +164,8 @@ def _fragment_versions(block: Any, path: str) -> list[str]:
 
 
 def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
-    """Reject a fragment that sets a bound key, even to the value the binder would write."""
+    """Reject a fragment that sets a bound key, even to the value the binder would write, or
+    sizes host DRAM with a literal instead of the point's budget."""
     keys = (*_POINT_KEYS, *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]))
     blocks = [(name, block) for name, block in raw.items() if name != "schema"]
     if "base" not in raw:
@@ -130,12 +175,17 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
         variant = name not in (None, "base")
         for key in keys:
             present, value = _lookup(block, key)
-            if present and not (variant and not multinode and key == VARIANT_CONCURRENCY):
+            if present and not (variant and not multinode and key in VARIANT_POINT_KEYS):
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
         found += _fragment_versions(block, name or "")
     if found:
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher binds them"
+        )
+    if sizes := [size for name, block in blocks for size in _dram_literals(block, name or "")]:
+        raise ValueError(
+            f"{source}: set {', '.join(sizes)} to a '@dram.<name>' value; the launcher binds the"
+            " point's DRAM budget"
         )
 
 
@@ -246,12 +296,13 @@ def bind_workload(
     source: Path,
     client_env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Write the matrix point's model, image, precision, concurrency, the master versions of
-    the components repo scripts install and, for fixed sequences, lengths; ``client_env``
-    holds the launcher's benchmark client paths and ``source`` names the fragment in errors.
+    """Write the matrix point's model, image, precision, concurrency, KV offloading and DRAM
+    budget, the master versions of the components repo scripts install and, for fixed
+    sequences, lengths; ``client_env`` holds the launcher's benchmark client paths and
+    ``source`` names the fragment in errors.
 
     Call after variant selection: binding a zip group would detach its concurrency
-    from the tuning it pairs with.
+    from the tuning it pairs with. ``resolve_dram`` then sizes the recipe's host DRAM.
     """
     image, model = _required(environment, "IMAGE"), _required(environment, "MODEL")
     bound = {key: deepcopy(value) for key, value in recipe.items() if key in ("schema", "name")}
@@ -293,6 +344,16 @@ def bind_workload(
                 USE_CHAT_TEMPLATE="true" if speculates else "false",
             )
         concurrencies = [conc]
+    if agentic:
+        offloading = _required(environment, "KV_OFFLOADING")
+        if workload.get("KV_OFFLOADING", offloading) != offloading:
+            raise ValueError(
+                f"KV_OFFLOADING: recipe {workload['KV_OFFLOADING']} != point {offloading}"
+            )
+        workload["KV_OFFLOADING"] = offloading
+        if offloading == "dram":
+            total = _positive(_required(environment, "TOTAL_CPU_DRAM_GB"), "TOTAL_CPU_DRAM_GB")
+            workload["TOTAL_CPU_DRAM_GB"] = str(total)
     # A fragment that sets HF_HOME keeps its own Hugging Face cache layout.
     workload.update(
         (name, value)
@@ -304,6 +365,75 @@ def bind_workload(
         benchmark["concurrencies"] = concurrencies
     _bind_components(bound, environment, source)
     return bound
+
+
+def dram_budget(
+    environment: Mapping[str, str], *, multinode: bool, gpus_per_node: int | None = None
+) -> dict[str, int] | None:
+    """The point's ``'@dram.<name>'`` values; None unless it offloads KV to DRAM.
+
+    As the matrix sizes it, the budget covers the GPUs a single-node point serves on, or
+    those a multi-node point's prefill (or aggregated) worker uses on each of its nodes.
+    """
+    if environment.get("KV_OFFLOADING") != "dram":
+        return None
+    total = _positive(_required(environment, "TOTAL_CPU_DRAM_GB"), "TOTAL_CPU_DRAM_GB")
+    if not multinode:
+        gpus = _positive(_required(environment, "GPU_COUNT"), "GPU_COUNT")
+    elif gpus_per_node is None:
+        raise ValueError("A multi-node DRAM point needs its cluster's gpus-per-node")
+    else:
+        sizes = ("PREFILL_TP", "PREFILL_PP_SIZE", "PREFILL_PCP_SIZE")
+        gpus = min(math.prod(_positive(_required(environment, n), n) for n in sizes), gpus_per_node)
+    return {
+        "total-gb": total,
+        "total-bytes": total * BYTES_PER_GB,
+        "per-gpu-gb": total // gpus,
+        "per-gpu-bytes": total * BYTES_PER_GB // gpus,
+    }
+
+
+def resolve_dram(
+    node: Any, budget: Mapping[str, int] | None, where: str = "", *, text: bool = False
+) -> Any:
+    """``node`` with each ``'@dram.<name>'`` value replaced by its ``budget`` value.
+
+    A reference is a whole value, or a whole value in a JSON object string such as
+    ``kv-transfer-config``. It becomes an integer, or its decimal string (``text``) as an env
+    value or argument list item.
+    """
+    if isinstance(node, Mapping):
+        return {
+            key: resolve_dram(
+                value,
+                budget,
+                f"{where}.{key}" if where else str(key),
+                text=text or key in TEXT_MAPPINGS,
+            )
+            for key, value in node.items()
+        }
+    if isinstance(node, list):
+        return [
+            resolve_dram(item, budget, f"{where}[{index}]", text=not isinstance(item, Mapping))
+            for index, item in enumerate(node)
+        ]
+    if not isinstance(node, str) or DRAM_REFERENCE not in node:
+        return node
+    document = None
+    if node.startswith("{"):
+        with contextlib.suppress(ValueError):
+            document = json.loads(node)
+    if isinstance(document, Mapping):
+        return json.dumps(resolve_dram(document, budget, where), separators=(",", ":"))
+    name = node.removeprefix(DRAM_REFERENCE)
+    if name == node or name not in DRAM_NAMES:
+        raise ValueError(
+            f"{where}: {node!r} is not a whole '@dram.<name>' value naming one of: "
+            + ", ".join(DRAM_NAMES)
+        )
+    if budget is None:
+        raise ValueError(f"{where}: {node!r} sizes host DRAM on a point without a DRAM budget")
+    return str(budget[name]) if text else budget[name]
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:
@@ -366,6 +496,9 @@ def main(argv: list[str] | None = None) -> None:
         metavar="NAME=VALUE",
         help="a launcher-owned benchmark client setting",
     )
+    parser.add_argument(
+        "--gpus-per-node", type=int, help="the cluster's GPUs per node, which a DRAM budget covers"
+    )
     add_fabric_argument(parser)
     args = parser.parse_args(argv)
     path, _, selector = args.recipe.partition(":")
@@ -386,6 +519,8 @@ def main(argv: list[str] | None = None) -> None:
             client_env=dict(args.client_env),
             source=Path(path),
         )
+        budget = dram_budget(os.environ, multinode=True, gpus_per_node=args.gpus_per_node)
+        bound = resolve_dram(bound, budget)
         bound = resolve_fabric(bound, args.fabric)
         check_setup_script(bound, Path(path), root)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:

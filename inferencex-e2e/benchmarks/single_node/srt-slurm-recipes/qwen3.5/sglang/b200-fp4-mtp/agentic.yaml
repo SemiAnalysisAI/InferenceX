@@ -59,8 +59,8 @@ base:
 # capped at 64. TP4 tokenizes in parallel to keep 256k warmups within the
 # client timeout; TP2 keeps the single tokenizer, whose multi-worker startup
 # races with TP2 HiCache shared-memory initialization. HiCache sizes each of
-# the target KV and Mamba host pools per rank with a 1 GB/rank alignment
-# reserve and the 1/15 NEXTN draft pool: (DRAM - TP) * 15 / TP / 31 GB.
+# the target KV and Mamba host pools per rank at the per-GPU budget, and the
+# NEXTN draft adds 1/15 of it.
 override_tp4_c1:
   roles:
     agg:
@@ -282,7 +282,7 @@ override_tp4_hicache_c64:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -290,7 +290,6 @@ override_tp4_hicache_c64:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_hicache_c66:
   roles:
@@ -303,7 +302,7 @@ override_tp4_hicache_c66:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -311,7 +310,6 @@ override_tp4_hicache_c66:
     env:
       CONC: '66'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_hicache_c68:
   roles:
@@ -324,7 +322,7 @@ override_tp4_hicache_c68:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -332,7 +330,6 @@ override_tp4_hicache_c68:
     env:
       CONC: '68'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_hicache_c70:
   roles:
@@ -345,7 +342,7 @@ override_tp4_hicache_c70:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -353,7 +350,6 @@ override_tp4_hicache_c70:
     env:
       CONC: '70'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_hicache_c72:
   roles:
@@ -366,7 +362,7 @@ override_tp4_hicache_c72:
         cuda-graph-max-bs: 64
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -374,7 +370,6 @@ override_tp4_hicache_c72:
     env:
       CONC: '72'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp2_c1:
   roles:
@@ -451,7 +446,7 @@ override_tp2_hicache_c16:
         cuda-graph-max-bs: 16
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -459,7 +454,6 @@ override_tp2_hicache_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '429'
 
 override_tp2_hicache_c18:
   roles:
@@ -471,7 +465,7 @@ override_tp2_hicache_c18:
         cuda-graph-max-bs: 18
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -479,7 +473,6 @@ override_tp2_hicache_c18:
     env:
       CONC: '18'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '429'
 
 override_tp2_hicache_c20:
   roles:
@@ -491,7 +484,7 @@ override_tp2_hicache_c20:
         cuda-graph-max-bs: 20
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -499,7 +492,6 @@ override_tp2_hicache_c20:
     env:
       CONC: '20'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '429'
 
 override_tp2_hicache_c22:
   roles:
@@ -511,7 +503,7 @@ override_tp2_hicache_c22:
         cuda-graph-max-bs: 22
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -519,7 +511,6 @@ override_tp2_hicache_c22:
     env:
       CONC: '22'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '429'
 
 override_tp2_hicache_c24:
   roles:
@@ -531,7 +522,7 @@ override_tp2_hicache_c24:
         cuda-graph-max-bs: 24
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -539,7 +530,6 @@ override_tp2_hicache_c24:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '429'
 
 override_tp2_hicache_c28:
   roles:
@@ -551,7 +541,7 @@ override_tp2_hicache_c28:
         cuda-graph-max-bs: 28
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -559,7 +549,6 @@ override_tp2_hicache_c28:
     env:
       CONC: '28'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '429'
 
 override_tp2_hicache_c32:
   roles:
@@ -571,7 +560,7 @@ override_tp2_hicache_c32:
         cuda-graph-max-bs: 32
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 103
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
@@ -579,4 +568,3 @@ override_tp2_hicache_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '429'
