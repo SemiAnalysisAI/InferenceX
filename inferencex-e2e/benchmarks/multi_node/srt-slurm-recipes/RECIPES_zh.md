@@ -73,4 +73,4 @@ python -m infx.matrix.generate full-sweep \
 - 功耗读取器兼容两代 samples CSV，校验利用率字段，并继续根据瓦特数计算 GPU 板级能耗。
 - 评估选择通过原生 `post_eval.command` 和 `post_eval.passthrough_env` 调用 [`srt_eval.sh`](../srt_eval.sh)。TRT AgentX 配置通过 `dynamo.source.git` 声明原有的 Dynamo 分支仓库，启动器不再改写 srt-slurm 源码。
 
-每次修改配置或运行时，都必须在 `perf-changelog.yaml` 的物理末尾追加新条目，保留全部历史内容及空白。合并前使用 `full-sweep-fail-fast` 验证 PR（包括评估），再按仓库规定完成审查及产物复用合并流程。
+仅当变更需要产出新的发布结果时，才在 `perf-changelog.yaml` 的物理末尾追加新条目；结果采集由该条目触发。重构，以及并非为产出新结果而进行的配置或运行时修改，均无需添加条目。保留全部历史内容及空白。追加条目后，合并前须使用 `full-sweep-fail-fast` 验证 PR（包括评估），再按仓库规定完成审查及产物复用合并流程。
