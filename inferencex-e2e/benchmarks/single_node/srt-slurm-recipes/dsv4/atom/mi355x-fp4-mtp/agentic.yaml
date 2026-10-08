@@ -1,19 +1,22 @@
 # DeepSeek-V4-Pro-0813 AgentX on MI355X with ATOM DSpark K6 (six draft tokens,
-# a verify window of 7). Low concurrency is TP-only; the wide band runs DP
-# attention with native RCCL expert parallelism. The KV cache is GPU-resident.
+# a verify window of 7). Low concurrency is TP-only. The DP-attention band runs
+# native RCCL expert parallelism at C48 and C96 and MegaMoE (fused dispatch,
+# expert GEMMs and combine) from C64. C256 and C384 add an LMCache CPU KV tier
+# (lmcache_mp, one LMCache server per node); the other points keep the KV
+# cache GPU-resident.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-atom-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: rocm/atom-dev:nightly_202609291501
+    container: rocm/atom-dev:nightly_202610071700
     precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    container_image: rocm/atom-dev@sha256:bb3912c372dda0c82fc6831afdd76e366a372d5e9fe223373499db63b06cce65
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -58,9 +61,23 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point. Admission is 2x CONC. KV is BF16 through concurrency 16
-# and FP8 in the DEP band. DEP pins sessions to one DP-attention rank so later
-# turns reach their prefix KV, and captures every small per-rank decode batch.
+# One variant per point. Admission is 2x CONC through C96 and 128 per DP rank
+# from C128 (max-num-seqs is per rank under DP attention and sizes each rank's
+# state pool, so a larger one only shrinks the KV pool). KV is BF16 through
+# concurrency 16 and FP8 in the DEP band. DEP pins sessions to one DP-attention
+# rank so later turns reach their prefix KV, and captures every small per-rank
+# decode batch.
+#
+# MegaMoE points: ATOM_MEGA_MASK_PAD_ROWS keeps each rank's DP pad rows out of
+# dispatch and the expert GEMMs, and ATOM_MEGA_DECODE_MTPR sizes the small
+# fixed-slot MegaMoE instance that decode, verify and draft passes reuse; it
+# must cover a rank's padded decode rows (running batch x 7), with
+# AITER_MEGA_FIXED_SLOT_MAX_MTPR one below the next power of two. From C128,
+# EPLB balances experts on prefill load during the warmup and stops after
+# ATOM_EPLB_MAX_REBALANCES rebalances (the count one warmup makes at that
+# point), so no expert moves while AgentX measures. ATOM_PREFILL_DECODE_INTERVAL
+# (decode steps protected after each lockstep prefill) grows with concurrency
+# until prefill would starve.
 override_tp8_c1:
   roles:
     agg:
@@ -142,15 +159,19 @@ override_tp8_c64_dep:
         kv-cache-dtype: fp8
         enable-expert-parallel: true
         enable-dp-attention: true
-        all2all-backend: rccl
+        all2all-backend: high-throughput
         dp-load-balance: least_tokens
-        moe-backend: standard
+        moe-backend: mega
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
       env:
         ATOM_DP_SESSION_AFFINITY: '1'
         ATOM_DP_LB_REQ_EQUIV: '512'
         ATOM_ENABLE_PREFILL_DELAYER: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '10'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '256'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '511'
   benchmark:
     env:
       CONC: '64'
@@ -184,44 +205,123 @@ override_tp8_c128_dep:
   roles:
     agg:
       args:
-        max-num-seqs: 256
+        max-num-seqs: 128
         kv-cache-dtype: fp8
         enable-expert-parallel: true
         enable-dp-attention: true
-        all2all-backend: rccl
+        all2all-backend: high-throughput
         dp-load-balance: least_tokens
-        moe-backend: standard
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
       env:
         ATOM_DP_SESSION_AFFINITY: '1'
         ATOM_DP_LB_REQ_EQUIV: '512'
         ATOM_ENABLE_PREFILL_DELAYER: '1'
-        ATOM_PREFILL_DECODE_INTERVAL: '10'
+        ATOM_PREFILL_DECODE_INTERVAL: '20'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
+        ATOM_EPLB_MAX_REBALANCES: '2'
   benchmark:
     env:
       CONC: '128'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-override_tp8_c256_dep:
+# DRAM variants: ATOM's lmcache_mp tier backed by one standalone LMCache server
+# per node (LMCache 0.5.6.dev139+gf22dec28, the build in the ATOM image), which
+# dsv4-atom-lmcache-mp-server.sh starts in the worker container before ATOM. All
+# eight DP ranks share it, so a session's KV evicted on one rank's GPU is
+# restored from host memory instead of recomputed. The 1000 GB L1 allocates
+# lazily inside the 1019 GB budget (dram-utilization 0.34); its 900 s read TTL
+# outlasts the async lookups queued behind long prefills.
+override_tp8_c256_dep_lmcache:
+  setup_script: dsv4-atom-lmcache-mp-server.sh
   roles:
     agg:
       args:
-        max-num-seqs: 512
+        max-num-seqs: 128
         kv-cache-dtype: fp8
         enable-expert-parallel: true
         enable-dp-attention: true
-        all2all-backend: rccl
+        all2all-backend: high-throughput
         dp-load-balance: least_tokens
-        moe-backend: standard
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
       env:
         ATOM_DP_SESSION_AFFINITY: '1'
         ATOM_DP_LB_REQ_EQUIV: '512'
         ATOM_ENABLE_PREFILL_DELAYER: '1'
-        ATOM_PREFILL_DECODE_INTERVAL: '10'
+        ATOM_PREFILL_DECODE_INTERVAL: '40'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
+        ATOM_EPLB_MAX_REBALANCES: '4'
+        ATOM_KV_OFFLOAD: lmcache_mp
+        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 5555, "lmcache.mp.tp_rank_collapse": true, "lmcache.mp.max_pinned_state_bytes": 1000000000000}'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_MAX_PENDING_SAVES: '8'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+        OFFLOAD_MIN_SAVE_TOKENS: '8192'
+        LMCACHE_MP_PORT: '5555'
+        LMCACHE_MP_L1_SIZE_GB: '1000'
+        LMCACHE_MP_L1_READ_TTL_SECONDS: '900'
+        LMCACHE_MP_EVICTION_WATERMARK: '0.98'
   benchmark:
     env:
       CONC: '256'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1019'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+# C384 pads a rank's decode batch past 64, so it captures every eighth size up
+# to 128 and raises the fixed-slot capacity to 1024 rows.
+override_tp8_c384_dep_lmcache:
+  setup_script: dsv4-atom-lmcache-mp-server.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: high-throughput
+        dp-load-balance: least_tokens
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,72,80,88,96,104,112,120,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '20'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '1024'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '2047'
+        ATOM_EPLB_MAX_REBALANCES: '5'
+        ATOM_KV_OFFLOAD: lmcache_mp
+        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 5555, "lmcache.mp.tp_rank_collapse": true, "lmcache.mp.max_pinned_state_bytes": 1000000000000}'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_MAX_PENDING_SAVES: '8'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+        OFFLOAD_MIN_SAVE_TOKENS: '8192'
+        LMCACHE_MP_PORT: '5555'
+        LMCACHE_MP_L1_SIZE_GB: '1000'
+        LMCACHE_MP_L1_READ_TTL_SECONDS: '900'
+        LMCACHE_MP_EVICTION_WATERMARK: '0.98'
+  benchmark:
+    env:
+      CONC: '384'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1019'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'

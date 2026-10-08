@@ -9397,3 +9397,15 @@
   description:
     - "Accept native SRT power samples v3 with optional GPU temperature while preserving v1/v2 replay and existing energy validation. Temperature remains in raw telemetry for ingestion and display."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3685
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202609291501 to nightly_202610071700 (digest sha256:bb3912c372dda0c82fc6831afdd76e366a372d5e9fe223373499db63b06cce65; ATOM 0.1.7.dev65+ga526f0d55, ROCm 7.2.4). It adds ROCm/ATOM#2462 with ROCm/aiter#6126 (tuned ASM FP8 decode with split plans; HCA decode on the persistent V4-NM kernel), ROCm/ATOM#2463 with ROCm/aiter#6127 (MegaMoE DP pad-row masking, configurable fixed-slot decode capacity, MegaMoEV2 decode and prefill optimizations), ROCm/ATOM#2454 (lmcache_mp tier lookups off the DP-attention scheduler path), ROCm/ATOM#2461 (EPLB skips the DSpark drafter's MoE layer outside the placement map), ROCm/ATOM#2482 (ATOM_EPLB_MAX_REBALANCES) and ROCm/ATOM#2488 (decode block tables padded to the running batch, which the FP4 indexer's ragged scorer requires)."
+    - "Move the DEP points C64 and C128 from RCCL expert parallelism to MegaMoE (all2all-backend high-throughput, moe-backend mega) with DP pad-row masking and a fixed-slot decode instance (ATOM_MEGA_DECODE_MTPR 256 at C64, 512 at C128). C48 and C96 keep RCCL."
+    - "Run C128 with prefill-decode interval 20, max-num-seqs 128 per DP rank and prefill-only EPLB (load window 100, rebalance interval 200) that stops after 2 rebalances, inside the warmup."
+    - "Run C256 and C384 with an LMCache MP CPU KV tier: ATOM_KV_OFFLOAD=lmcache_mp against one LMCache server per node, started from the image's LMCache 0.5.6.dev139+gf22dec28 by the new dsv4-atom-lmcache-mp-server.sh setup script (1000 GB lazy L1, 900 s read TTL, eviction watermark 0.98) within a 1019 GB budget (dram-utilization 0.34). C256: interval 40, MTPR 512, EPLB stops after 4 rebalances. C384 (new point): interval 20, MTPR 1024 with cudagraph sizes every 8 from 64 to 128, EPLB stops after 5 rebalances. Both run max-num-seqs 128 per DP rank."
+    - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4-Pro-0813 runs as shipped, with the unchanged kv-cache-dtype fp8 and index-cache-dtype fp4 in the DEP band."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
