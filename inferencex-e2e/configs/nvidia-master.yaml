@@ -18,7 +18,7 @@ dsr1-fp4-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [90]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen1_dep8_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p1d-dep8-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep8_b8_mtp3
         prefill:
           num-worker: 1
           tp: 4
@@ -32,7 +32,7 @@ dsr1-fp4-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [66]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen3_tep8_batch16_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p3d-tep8-b16-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b16_mtp3
         prefill:
           num-worker: 1
           tp: 4
@@ -46,7 +46,7 @@ dsr1-fp4-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [6]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch1_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p5d-tep8-b1-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p5d_tep8_b1_mtp3
         prefill:
           num-worker: 1
           tp: 4
@@ -60,7 +60,7 @@ dsr1-fp4-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [10, 15, 30, 60]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx1_gen5_tep8_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p5d-tep8-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p5d_tep8_b8_mtp3
         prefill:
           num-worker: 1
           tp: 4
@@ -74,7 +74,7 @@ dsr1-fp4-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [548]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3.yaml
-        srt-recipe: disagg-3p1d-dep8-b64-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b64_mtp3
         prefill:
           num-worker: 3
           tp: 4
@@ -88,7 +88,7 @@ dsr1-fp4-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [1096, 1691]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen1_dep8_batch192_eplb0_mtp1.yaml
-        srt-recipe: disagg-5p1d-dep8-b192-eplb0-mtp1.yaml
+        srt-recipe: disagg-variants.yaml:override_5p1d_dep8_b192_mtp1
         prefill:
           num-worker: 5
           tp: 4
@@ -102,7 +102,7 @@ dsr1-fp4-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [658]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/mtp/ctx5_gen2_dep8_batch32_eplb0_mtp3.yaml
-        srt-recipe: disagg-5p2d-dep8-b32-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_5p2d_dep8_b32_mtp3
         prefill:
           num-worker: 5
           tp: 4
@@ -117,7 +117,7 @@ dsr1-fp4-b200-dynamo-trt:
       # Non-MTP configurations
       - conc-list: [6]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch1_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p5d-tep8-b1-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p5d_tep8_b1_mtp0
         prefill:
           num-worker: 1
           tp: 4
@@ -130,7 +130,7 @@ dsr1-fp4-b200-dynamo-trt:
           dp-attn: false
       - conc-list: [10, 15, 25, 50, 100]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx1_gen5_tep8_batch8_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p5d-tep8-b16-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p5d_tep8_b16_mtp0
         prefill:
           num-worker: 1
           tp: 4
@@ -143,7 +143,7 @@ dsr1-fp4-b200-dynamo-trt:
           dp-attn: false
       - conc-list: [370]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx2_gen5_tep8_batch64_eplb0_mtp0.yaml
-        srt-recipe: disagg-2p5d-tep8-b64-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_2p5d_tep8_b64_mtp0
         prefill:
           num-worker: 2
           tp: 4
@@ -156,7 +156,7 @@ dsr1-fp4-b200-dynamo-trt:
           dp-attn: false
       - conc-list: [1606]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen1_dep8_batch192_eplb0_mtp0.yaml
-        srt-recipe: disagg-4p1d-dep8-b192-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep8_b192_mtp0
         prefill:
           num-worker: 4
           tp: 4
@@ -169,7 +169,7 @@ dsr1-fp4-b200-dynamo-trt:
           dp-attn: true
       - conc-list: [837]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx4_gen3_dep8_batch32_eplb0_mtp0.yaml
-        srt-recipe: disagg-4p3d-dep8-b32-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_4p3d_dep8_b32_mtp0
         prefill:
           num-worker: 4
           tp: 4
@@ -182,7 +182,7 @@ dsr1-fp4-b200-dynamo-trt:
           dp-attn: true
       - conc-list: [2222]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp4/8k1k/stp/ctx7_gen2_dep8_batch128_eplb0_mtp0.yaml
-        srt-recipe: disagg-7p2d-dep8-b128-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_7p2d_dep8_b128_mtp0
         prefill:
           num-worker: 7
           tp: 4
@@ -215,7 +215,7 @@ dsr1-fp8-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_8.yaml
-        srt-recipe: disagg-1p6d-tp8-b1-eplb0-mtp3-c8.yaml
+        srt-recipe: disagg-variants.yaml:override_1p6d_tp8_b1_mtp3_c8
         prefill:
           num-worker: 1
           tp: 8
@@ -229,7 +229,7 @@ dsr1-fp8-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen2_tp8_batch32_eplb0_mtp3_8.yaml
-        srt-recipe: disagg-1p2d-tp8-b4-eplb0-mtp3-c8.yaml
+        srt-recipe: disagg-variants.yaml:override_1p2d_tp8_b4_mtp3_c8
         prefill:
           num-worker: 1
           tp: 8
@@ -243,7 +243,7 @@ dsr1-fp8-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [48]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen6_tp8_batch8_eplb0_mtp3_48.yaml
-        srt-recipe: disagg-1p6d-tp8-b8-eplb0-mtp3-c48.yaml
+        srt-recipe: disagg-variants.yaml:override_1p6d_tp8_b8_mtp3_c48
         prefill:
           num-worker: 1
           tp: 8
@@ -257,7 +257,7 @@ dsr1-fp8-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [64]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx1_gen4_tp8_batch16_eplb0_mtp3_64.yaml
-        srt-recipe: disagg-1p4d-tp8-b16-eplb0-mtp3-c64.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b16_mtp3_c64
         prefill:
           num-worker: 1
           tp: 8
@@ -272,7 +272,7 @@ dsr1-fp8-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [224]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen3_dep8_batch8_eplb0_mtp3_224.yaml
-        srt-recipe: disagg-2p3d-dep8-b8-eplb0-mtp3-c224.yaml
+        srt-recipe: disagg-variants.yaml:override_2p3d_dep8_b8_mtp3_c224
         prefill:
           num-worker: 2
           tp: 8
@@ -286,7 +286,7 @@ dsr1-fp8-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [288]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx2_gen1_dep8_batch32_eplb0_mtp3_288.yaml
-        srt-recipe: disagg-2p1d-dep8-b32-eplb0-mtp3-c288.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep8_b32_mtp3_c288
         prefill:
           num-worker: 2
           tp: 8
@@ -300,7 +300,7 @@ dsr1-fp8-b200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [1088]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/mtp/ctx4_gen1_dep8_batch128_eplb0_mtp2_1088.yaml
-        srt-recipe: disagg-4p1d-dep8-b128-eplb0-mtp2-c1088.yaml
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep8_b128_mtp2_c1088
         prefill:
           num-worker: 4
           tp: 8
@@ -315,7 +315,7 @@ dsr1-fp8-b200-dynamo-trt:
       # Non-MTP (STP) configurations - Low latency (TP attention)
       - conc-list: [1]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_tp8_batch1_eplb0_mtp0_1.yaml
-        srt-recipe: disagg-1p1d-tp8-b1-eplb0-mtp0-c1.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_tp8_b1_mtp0_c1
         prefill:
           num-worker: 1
           tp: 8
@@ -328,7 +328,7 @@ dsr1-fp8-b200-dynamo-trt:
           dp-attn: false
       - conc-list: [32]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_32.yaml
-        srt-recipe: disagg-1p4d-tp8-b8-eplb0-mtp0-c32.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b8_mtp0_c32
         prefill:
           num-worker: 1
           tp: 8
@@ -341,7 +341,7 @@ dsr1-fp8-b200-dynamo-trt:
           dp-attn: false
       - conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen4_tp8_batch32_eplb0_mtp0_128.yaml
-        srt-recipe: disagg-1p4d-tp8-b32-eplb0-mtp0-c128.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b32_mtp0_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -354,7 +354,7 @@ dsr1-fp8-b200-dynamo-trt:
           dp-attn: false
       - conc-list: [96]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen6_tp8_batch16_eplb0_mtp0_96.yaml
-        srt-recipe: disagg-1p6d-tp8-b16-eplb0-mtp0-c96.yaml
+        srt-recipe: disagg-variants.yaml:override_1p6d_tp8_b16_mtp0_c96
         prefill:
           num-worker: 1
           tp: 8
@@ -368,7 +368,7 @@ dsr1-fp8-b200-dynamo-trt:
       # Non-MTP (STP) configurations - High throughput (DP attention)
       - conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch128_eplb0_mtp0_128.yaml
-        srt-recipe: disagg-1p1d-dep8-b128-eplb0-mtp0-c128.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep8_b128_mtp0_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -381,7 +381,7 @@ dsr1-fp8-b200-dynamo-trt:
           dp-attn: true
       - conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen2_dep8_batch64_eplb0_mtp0_128.yaml
-        srt-recipe: disagg-1p2d-dep8-b64-eplb0-mtp0-c128.yaml
+        srt-recipe: disagg-variants.yaml:override_1p2d_dep8_b64_mtp0_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -394,7 +394,7 @@ dsr1-fp8-b200-dynamo-trt:
           dp-attn: true
       - conc-list: [256]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx1_gen1_dep8_batch256_eplb0_mtp0_256.yaml
-        srt-recipe: disagg-1p1d-dep8-b256-eplb0-mtp0-c256.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep8_b256_mtp0_c256
         prefill:
           num-worker: 1
           tp: 8
@@ -407,7 +407,7 @@ dsr1-fp8-b200-dynamo-trt:
           dp-attn: true
       - conc-list: [640]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b200-fp8/8k1k/stp/ctx2_gen1_dep8_batch640_eplb0_mtp0_640.yaml
-        srt-recipe: disagg-2p1d-dep8-b640-eplb0-mtp0-c640.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep8_b640_mtp0_c640
         prefill:
           num-worker: 2
           tp: 8
@@ -439,7 +439,7 @@ dsr1-fp4-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [2198]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml
-        srt-recipe: disagg-10p1d-dep8-b256-eplb0-mtp1.yaml
+        srt-recipe: disagg-variants.yaml:override_10p1d_dep8_b256_mtp1
         prefill:
           num-worker: 10
           tp: 2
@@ -453,7 +453,7 @@ dsr1-fp4-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [52]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep4_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p4d-tep4-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep4_b8_mtp3
         prefill:
           num-worker: 1
           tp: 2
@@ -467,7 +467,7 @@ dsr1-fp4-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b1_mtp3
         prefill:
           num-worker: 1
           tp: 2
@@ -481,7 +481,7 @@ dsr1-fp4-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [32]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p4d-tep8-b4-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b4_mtp3
         prefill:
           num-worker: 1
           tp: 2
@@ -495,7 +495,7 @@ dsr1-fp4-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [181]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx3_gen1_dep8_batch16_eplb0_mtp3.yaml
-        srt-recipe: disagg-3p1d-dep8-b16-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b16_mtp3
         prefill:
           num-worker: 3
           tp: 2
@@ -509,7 +509,7 @@ dsr1-fp4-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [1197]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/mtp/ctx9_gen1_dep8_batch128_eplb0_mtp1.yaml
-        srt-recipe: disagg-9p1d-dep8-b128-eplb0-mtp1.yaml
+        srt-recipe: disagg-variants.yaml:override_9p1d_dep8_b128_mtp1
         prefill:
           num-worker: 9
           tp: 2
@@ -524,7 +524,7 @@ dsr1-fp4-b300-dynamo-trt:
       # Non-MTP configurations
       - conc-list: [105]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep4_batch32_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep4-b32-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep4_b32_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -537,7 +537,7 @@ dsr1-fp4-b300-dynamo-trt:
           dp-attn: false
       - conc-list: [63]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep8-b16-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b16_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -550,7 +550,7 @@ dsr1-fp4-b300-dynamo-trt:
           dp-attn: false
       - conc-list: [4]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep8-b1-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b1_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -563,7 +563,7 @@ dsr1-fp4-b300-dynamo-trt:
           dp-attn: false
       - conc-list: [12]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx1_gen4_tep4_batch2_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p4d-tep4-b2-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep4_b2_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -576,7 +576,7 @@ dsr1-fp4-b300-dynamo-trt:
           dp-attn: false
       - conc-list: [589]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx5_gen2_dep8_batch32_eplb0_mtp0.yaml
-        srt-recipe: disagg-5p2d-dep8-b32-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_5p2d_dep8_b32_mtp0
         prefill:
           num-worker: 5
           tp: 2
@@ -589,7 +589,7 @@ dsr1-fp4-b300-dynamo-trt:
           dp-attn: true
       - conc-list: [1093]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx6_gen1_dep8_batch128_eplb0_mtp0.yaml
-        srt-recipe: disagg-6p1d-dep8-b128-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_6p1d_dep8_b128_mtp0
         prefill:
           num-worker: 6
           tp: 2
@@ -602,7 +602,7 @@ dsr1-fp4-b300-dynamo-trt:
           dp-attn: true
       - conc-list: [2048]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp4/8k1k/stp/ctx8_gen1_dep8_batch256_eplb0_mtp0.yaml
-        srt-recipe: disagg-8p1d-dep8-b256-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep8_b256_mtp0
         prefill:
           num-worker: 8
           tp: 2
@@ -633,7 +633,7 @@ dsr1-fp8-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [40]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen2_tp8_batch16_eplb0_mtp3_40.yaml
-        srt-recipe: disagg-1p2d-tp8-b16-eplb0-mtp3-c40.yaml
+        srt-recipe: disagg-variants.yaml:override_1p2d_tp8_b16_mtp3_c40
         prefill:
           num-worker: 1
           tp: 4
@@ -647,7 +647,7 @@ dsr1-fp8-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch1_eplb0_mtp3_8.yaml
-        srt-recipe: disagg-1p4d-tp8-b1-eplb0-mtp3-c8.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b1_mtp3_c8
         prefill:
           num-worker: 1
           tp: 4
@@ -661,7 +661,7 @@ dsr1-fp8-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [20]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch4_eplb0_mtp3_20.yaml
-        srt-recipe: disagg-1p4d-tp8-b4-eplb0-mtp3-c20.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b4_mtp3_c20
         prefill:
           num-worker: 1
           tp: 4
@@ -675,7 +675,7 @@ dsr1-fp8-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [72]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen1_dp8_batch8_eplb0_mtp3_72.yaml
-        srt-recipe: disagg-1p1d-dp8-b8-eplb0-mtp3-c72.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dp8_b8_mtp3_c72
         prefill:
           num-worker: 1
           tp: 4
@@ -689,7 +689,7 @@ dsr1-fp8-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [144]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx2_gen1_dp8_batch16_eplb0_mtp3_144.yaml
-        srt-recipe: disagg-2p1d-dp8-b16-eplb0-mtp3-c144.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dp8_b16_mtp3_c144
         prefill:
           num-worker: 2
           tp: 4
@@ -703,7 +703,7 @@ dsr1-fp8-b300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx4_gen1_dp8_batch64_eplb0_mtp2_512.yaml
-        srt-recipe: disagg-4p1d-dp8-b64-eplb0-mtp2-c512.yaml
+        srt-recipe: disagg-variants.yaml:override_4p1d_dp8_b64_mtp2_c512
         prefill:
           num-worker: 4
           tp: 4
@@ -720,7 +720,7 @@ dsr1-fp8-b300-dynamo-trt:
       search-space:
       - conc-list: [64]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen4_tp8_batch16_eplb0_mtp0_64.yaml
-        srt-recipe: disagg-1p4d-tp8-b16-eplb0-mtp0-c64.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b16_mtp0_c64
         prefill:
           num-worker: 1
           tp: 4
@@ -733,7 +733,7 @@ dsr1-fp8-b300-dynamo-trt:
           dp-attn: false
       - conc-list: [16]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen8_tp8_batch2_eplb0_mtp0_16.yaml
-        srt-recipe: disagg-1p8d-tp8-b1-eplb0-mtp0-c16.yaml
+        srt-recipe: disagg-variants.yaml:override_1p8d_tp8_b1_mtp0_c16
         prefill:
           num-worker: 1
           tp: 4
@@ -746,7 +746,7 @@ dsr1-fp8-b300-dynamo-trt:
           dp-attn: false
       - conc-list: [256]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx2_gen1_dp8_batch32_eplb0_mtp0_256.yaml
-        srt-recipe: disagg-2p1d-dp8-b32-eplb0-mtp0-c256.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dp8_b32_mtp0_c256
         prefill:
           num-worker: 2
           tp: 4
@@ -759,7 +759,7 @@ dsr1-fp8-b300-dynamo-trt:
           dp-attn: true
       - conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen1_dp8_batch64_eplb0_mtp0_512.yaml
-        srt-recipe: disagg-3p1d-dp8-b64-eplb0-mtp0-c512.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dp8_b64_mtp0_c512
         prefill:
           num-worker: 3
           tp: 4
@@ -772,7 +772,7 @@ dsr1-fp8-b300-dynamo-trt:
           dp-attn: true
       - conc-list: [256]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen5_tp8_batch64_eplb0_mtp0_256.yaml
-        srt-recipe: disagg-3p5d-tp8-b64-eplb0-mtp0-c256.yaml
+        srt-recipe: disagg-variants.yaml:override_3p5d_tp8_b64_mtp0_c256
         prefill:
           num-worker: 3
           tp: 4
@@ -785,7 +785,7 @@ dsr1-fp8-b300-dynamo-trt:
           dp-attn: false
       - conc-list: [1075]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx5_gen1_dp8_batch128_eplb0_mtp0_1075.yaml
-        srt-recipe: disagg-5p1d-dp8-b128-eplb0-mtp0-c1075.yaml
+        srt-recipe: disagg-variants.yaml:override_5p1d_dp8_b128_mtp0_c1075
         prefill:
           num-worker: 5
           tp: 4
@@ -798,7 +798,7 @@ dsr1-fp8-b300-dynamo-trt:
           dp-attn: true
       - conc-list: [3072]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx7_gen1_dep8_batch384_eplb0_mtp0_3072.yaml
-        srt-recipe: disagg-7p1d-dep8-b384-eplb0-mtp0-c3072.yaml
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep8_b384_mtp0_c3072
         prefill:
           num-worker: 7
           tp: 4
@@ -1782,7 +1782,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [1]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p7d-tep8-b1-eplb0-mtp3-c9.yaml
+        srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b1_mtp3_c9
         prefill:
           num-worker: 1
           tp: 8
@@ -1796,7 +1796,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [4]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p7d-tep8-b32-eplb0-mtp3-c28.yaml
+        srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b32_mtp3_c28
         prefill:
           num-worker: 1
           tp: 8
@@ -1810,7 +1810,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c8_ctx1_gen6_tep8_batch32_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p6d-tep8-b32-eplb0-mtp3-c48.yaml
+        srt-recipe: disagg-variants.yaml:override_1p6d_tep8_b32_mtp3_c48
         prefill:
           num-worker: 1
           tp: 8
@@ -1824,7 +1824,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [16]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp2.yaml
-        srt-recipe: disagg-1p3d-tep8-b32-eplb0-mtp2-c48.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b32_mtp2_c48
         prefill:
           num-worker: 1
           tp: 8
@@ -1838,7 +1838,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [32]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c32_ctx3_gen5_tep8_batch32_eplb0_mtp3.yaml
-        srt-recipe: disagg-3p5d-tep8-b32-eplb0-mtp3-c160.yaml
+        srt-recipe: disagg-variants.yaml:override_3p5d_tep8_b32_mtp3_c160
         prefill:
           num-worker: 3
           tp: 8
@@ -1852,7 +1852,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [64]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c64_ctx1_gen1_dep8_batch32_eplb0_mtp2.yaml
-        srt-recipe: disagg-1p1d-dep8-b32-eplb0-mtp2-c64.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep8_b32_mtp2_c64
         prefill:
           num-worker: 1
           tp: 8
@@ -1866,7 +1866,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c128_ctx2_gen1_dep8_batch32_eplb0_mtp2.yaml
-        srt-recipe: disagg-2p1d-dep8-b32-eplb0-mtp2-c128.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep8_b32_mtp2_c128
         prefill:
           num-worker: 2
           tp: 8
@@ -1880,7 +1880,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [256]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c256_ctx3_gen1_dep8_batch32_eplb0_mtp2.yaml
-        srt-recipe: disagg-3p1d-dep8-b32-eplb0-mtp2-c256.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b32_mtp2_c256
         prefill:
           num-worker: 3
           tp: 8
@@ -1894,7 +1894,7 @@ dsr1-fp8-h200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c512_ctx3_gen1_dep8_batch64_eplb0_mtp1.yaml
-        srt-recipe: disagg-3p1d-dep8-b64-eplb0-mtp1-c512.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b64_mtp1_c512
         prefill:
           num-worker: 3
           tp: 8
@@ -1908,7 +1908,7 @@ dsr1-fp8-h200-dynamo-trt:
       # Non-MTP configurations (STP)
       - conc-list: [1]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p7d-tep8-b1-eplb0-mtp0-c9.yaml
+        srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b1_mtp0_c9
         prefill:
           num-worker: 1
           tp: 8
@@ -1921,7 +1921,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: false
       - conc-list: [4]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p7d-tep8-b32-eplb0-mtp0-c28.yaml
+        srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b32_mtp0_c28
         prefill:
           num-worker: 1
           tp: 8
@@ -1934,7 +1934,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: false
       - conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c8_ctx1_gen6_tep8_batch16_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p6d-tep8-b16-eplb0-mtp0-c48.yaml
+        srt-recipe: disagg-variants.yaml:override_1p6d_tep8_b16_mtp0_c48
         prefill:
           num-worker: 1
           tp: 8
@@ -1947,7 +1947,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: false
       - conc-list: [16]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep8-b32-eplb0-mtp0-c48.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b32_mtp0_c48
         prefill:
           num-worker: 1
           tp: 8
@@ -1960,7 +1960,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: false
       - conc-list: [32]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c32_ctx2_gen5_tep8_batch128_eplb0_mtp0.yaml
-        srt-recipe: disagg-2p5d-tep8-b128-eplb0-mtp0-c160.yaml
+        srt-recipe: disagg-variants.yaml:override_2p5d_tep8_b128_mtp0_c160
         prefill:
           num-worker: 2
           tp: 8
@@ -1973,7 +1973,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: false
       - conc-list: [64]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c64_ctx2_gen3_dep8_batch128_eplb0_mtp0.yaml
-        srt-recipe: disagg-2p3d-dep8-b128-eplb0-mtp0-c192.yaml
+        srt-recipe: disagg-variants.yaml:override_2p3d_dep8_b128_mtp0_c192
         prefill:
           num-worker: 2
           tp: 8
@@ -1986,7 +1986,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: true
       - conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c128_ctx1_gen1_dep8_batch256_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p1d-dep8-b256-eplb0-mtp0-c128.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep8_b256_mtp0_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -1999,7 +1999,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: true
       - conc-list: [256]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c256_ctx5_gen3_dep8_batch256_eplb0_mtp0.yaml
-        srt-recipe: disagg-5p3d-dep8-b256-eplb0-mtp0-c768.yaml
+        srt-recipe: disagg-variants.yaml:override_5p3d_dep8_b256_mtp0_c768
         prefill:
           num-worker: 5
           tp: 8
@@ -2012,7 +2012,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: true
       - conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c512_ctx3_gen1_dep8_batch512_eplb0_mtp0.yaml
-        srt-recipe: disagg-3p1d-dep8-b512-eplb0-mtp0-c512.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b512_mtp0_c512
         prefill:
           num-worker: 3
           tp: 8
@@ -2045,7 +2045,7 @@ dsr1-fp8-h100-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [6]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch1_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p3d-tep16-b1-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep16_b1_mtp3
         prefill:
           num-worker: 1
           tp: 16
@@ -2059,7 +2059,7 @@ dsr1-fp8-h100-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [9]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch2_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p3d-tep16-b2-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep16_b2_mtp3
         prefill:
           num-worker: 1
           tp: 16
@@ -2073,7 +2073,7 @@ dsr1-fp8-h100-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [30]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen3_tep16_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p3d-tep16-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep16_b8_mtp3
         prefill:
           num-worker: 1
           tp: 16
@@ -2087,7 +2087,7 @@ dsr1-fp8-h100-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [77]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx1_gen1_dep16_batch4_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p1d-dep16-b4-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep16_b4_mtp3
         prefill:
           num-worker: 1
           tp: 16
@@ -2117,7 +2117,7 @@ dsr1-fp8-h100-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [154]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/mtp/ctx2_gen1_dep16_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-2p1d-dep16-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep16_b8_mtp3
         prefill:
           num-worker: 2
           tp: 16
@@ -2131,7 +2131,7 @@ dsr1-fp8-h100-dynamo-trt:
       # STP configurations (5 points)
       - conc-list: [6]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch1_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep16-b1-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep16_b1_mtp0
         prefill:
           num-worker: 1
           tp: 16
@@ -2144,7 +2144,7 @@ dsr1-fp8-h100-dynamo-trt:
           dp-attn: false
       - conc-list: [9]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch2_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep16-b2-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep16_b2_mtp0
         prefill:
           num-worker: 1
           tp: 16
@@ -2157,7 +2157,7 @@ dsr1-fp8-h100-dynamo-trt:
           dp-attn: false
       - conc-list: [30]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen3_tep16_batch8_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep16-b8-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep16_b8_mtp0
         prefill:
           num-worker: 1
           tp: 16
@@ -2170,7 +2170,7 @@ dsr1-fp8-h100-dynamo-trt:
           dp-attn: false
       - conc-list: [154]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx1_gen2_tep16_batch64_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p2d-tep16-b64-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p2d_tep16_b64_mtp0
         prefill:
           num-worker: 1
           tp: 16
@@ -2183,7 +2183,7 @@ dsr1-fp8-h100-dynamo-trt:
           dp-attn: false
       - conc-list: [308]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h100-fp8/8k1k/stp/ctx2_gen1_dep16_batch16_eplb0_mtp0.yaml
-        srt-recipe: disagg-2p1d-dep16-b16-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep16_b16_mtp0
         prefill:
           num-worker: 2
           tp: 16
@@ -2241,7 +2241,7 @@ dsr1-fp8-h100-dynamo-sglang:
       # MTP: Max throughput TEP (1 prefill, 1 decode)
       - spec-decoding: "mtp"
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
-        srt-recipe: disagg-1p1d-p-tp16-d-tp16-b128-c1x2x4x8x16x32x64x128-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_p_tp16_d_tp16_b128_c1x2x4x8x16x32x64x128
         prefill:
           num-worker: 1
           tp: 16
@@ -2255,7 +2255,7 @@ dsr1-fp8-h100-dynamo-sglang:
       # MTP: Max throughput DEP (1 prefill, 1 decode, dp-attention)
       - spec-decoding: "mtp"
         conc-list: [1, 2, 4, 8, 16, 32, 64]
-        srt-recipe: disagg-1p1d-p-tp16-d-tp16-ep16-dp16-b64-c1x2x4x8x16x32x64-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_p_tp16_d_tp16_ep16_dp16_b64_c1x2x4x8x16x32x64
         prefill:
           num-worker: 1
           tp: 16
@@ -2288,7 +2288,7 @@ dsr1-fp4-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [ 4, 8, 12, 24, 48 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx1_gen4_tep8_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p4d-tep8-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b8_eplb0_mtp3
         prefill:
           num-worker: 1
           tp: 4
@@ -2302,7 +2302,7 @@ dsr1-fp4-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [ 180 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx3_gen1_dep32_batch4_eplb0_mtp3.yaml
-        srt-recipe: disagg-3p1d-dep32-b4-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep32_b4_eplb0_mtp3
         prefill:
           num-worker: 3
           tp: 4
@@ -2316,7 +2316,7 @@ dsr1-fp4-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [ 1229 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx7_gen1_dep16_batch64_eplb256_mtp1.yaml
-        srt-recipe: disagg-7p1d-dep16-b64-eplb256-mtp1.yaml
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep16_b64_eplb256_mtp1
         prefill:
           num-worker: 7
           tp: 4
@@ -2330,7 +2330,7 @@ dsr1-fp4-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [ 666 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx8_gen1_dep32_batch16_eplb0_mtp3.yaml
-        srt-recipe: disagg-8p1d-dep32-b16-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep32_b16_eplb0_mtp3
         prefill:
           num-worker: 8
           tp: 4
@@ -2344,7 +2344,7 @@ dsr1-fp4-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [ 4301 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/mtp/ctx11_gen1_dep16_batch256_eplb256_mtp1.yaml
-        srt-recipe: disagg-11p1d-dep16-b256-eplb256-mtp1.yaml
+        srt-recipe: disagg-variants.yaml:override_11p1d_dep16_b256_eplb256_mtp1
         prefill:
           num-worker: 11
           tp: 4
@@ -2359,7 +2359,7 @@ dsr1-fp4-gb200-dynamo-trt:
       # Non-MTP configurations (default spec_decoding="none")
       - conc-list: [ 12, 44, 76 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch16_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p4d-tep8-b16-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b16_eplb0_mtp0
         prefill:
           num-worker: 1
           tp: 4
@@ -2372,7 +2372,7 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: false
       - conc-list: [ 5 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b1_eplb0_mtp0
         prefill:
           num-worker: 1
           tp: 4
@@ -2385,7 +2385,7 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: false
       - conc-list: [ 333 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0.yaml
-        srt-recipe: disagg-2p1d-dep32-b8-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep32_b8_eplb0_mtp0
         prefill:
           num-worker: 2
           tp: 4
@@ -2398,7 +2398,7 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: true
       - conc-list: [ 1229 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx7_gen1_dep32_batch32_eplb0_mtp0.yaml
-        srt-recipe: disagg-7p1d-dep32-b32-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep32_b32_eplb0_mtp0
         prefill:
           num-worker: 7
           tp: 4
@@ -2411,7 +2411,7 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: true
       - conc-list: [ 2253 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx8_gen1_dep16_batch128_eplb0_mtp0.yaml
-        srt-recipe: disagg-8p1d-dep16-b128-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep16_b128_eplb0_mtp0
         prefill:
           num-worker: 8
           tp: 4
@@ -2424,7 +2424,7 @@ dsr1-fp4-gb200-dynamo-trt:
           dp-attn: true
       - conc-list: [ 4096 ]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp4/8k1k/stp/ctx10_gen1_dep16_batch256_eplb256_mtp0.yaml
-        srt-recipe: disagg-10p1d-dep16-b256-eplb256-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_10p1d_dep16_b256_eplb256_mtp0
         prefill:
           num-worker: 10
           tp: 4
@@ -2456,7 +2456,7 @@ dsr1-fp8-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [666]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep8_batch64_eplb0_mtp3_666.yaml
-        srt-recipe: disagg-3p1d-dep8-b64-eplb0-mtp3-c666.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b64_mtp3_c666
         prefill:
           num-worker: 3
           tp: 8
@@ -2470,7 +2470,7 @@ dsr1-fp8-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [666]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx5_gen1_dep16_batch32_eplb0_mtp3_666.yaml
-        srt-recipe: disagg-5p1d-dep16-b32-eplb0-mtp3-c666.yaml
+        srt-recipe: disagg-variants.yaml:override_5p1d_dep16_b32_mtp3_c666
         prefill:
           num-worker: 5
           tp: 8
@@ -2484,7 +2484,7 @@ dsr1-fp8-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [333]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx3_gen1_dep16_batch16_eplb0_mtp3_333.yaml
-        srt-recipe: disagg-3p1d-dep16-b16-eplb0-mtp3-c333.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep16_b16_mtp3_c333
         prefill:
           num-worker: 3
           tp: 8
@@ -2498,7 +2498,7 @@ dsr1-fp8-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [333]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx4_gen1_dep32_batch8_eplb0_mtp3_333.yaml
-        srt-recipe: disagg-4p1d-dep32-b8-eplb0-mtp3-c333.yaml
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep32_b8_mtp3_c333
         prefill:
           num-worker: 4
           tp: 8
@@ -2512,7 +2512,7 @@ dsr1-fp8-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [90]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx2_gen1_dep32_batch2_eplb0_mtp3_90.yaml
-        srt-recipe: disagg-2p1d-dep32-b2-eplb0-mtp3-c90.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep32_b2_mtp3_c90
         prefill:
           num-worker: 2
           tp: 8
@@ -2526,7 +2526,7 @@ dsr1-fp8-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [15]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch4_eplb0_mtp3_15.yaml
-        srt-recipe: disagg-1p3d-tep8-b4-eplb0-mtp3-c15.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b4_mtp3_c15
         prefill:
           num-worker: 1
           tp: 8
@@ -2540,7 +2540,7 @@ dsr1-fp8-gb200-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [6]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/mtp/ctx1_gen3_tep8_batch2_eplb0_mtp3_6.yaml
-        srt-recipe: disagg-1p3d-tep8-b2-eplb0-mtp3-c6.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b2_mtp3_c6
         prefill:
           num-worker: 1
           tp: 8
@@ -2554,7 +2554,7 @@ dsr1-fp8-gb200-dynamo-trt:
     # 8k1k STP configs
       - conc-list: [1229]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx5_gen1_dep16_batch64_eplb0_mtp0_1229.yaml
-        srt-recipe: disagg-5p1d-dep16-b64-eplb0-mtp0-c1229.yaml
+        srt-recipe: disagg-variants.yaml:override_5p1d_dep16_b64_mtp0_c1229
         prefill:
           num-worker: 5
           tp: 8
@@ -2567,7 +2567,7 @@ dsr1-fp8-gb200-dynamo-trt:
           dp-attn: true
       - conc-list: [666]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx4_gen1_dep32_batch16_eplb0_mtp0_666.yaml
-        srt-recipe: disagg-4p1d-dep32-b16-eplb0-mtp0-c666.yaml
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep32_b16_mtp0_c666
         prefill:
           num-worker: 4
           tp: 8
@@ -2580,7 +2580,7 @@ dsr1-fp8-gb200-dynamo-trt:
           dp-attn: true
       - conc-list: [615]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx3_gen1_dep16_batch32_eplb0_mtp0_615.yaml
-        srt-recipe: disagg-3p1d-dep16-b32-eplb0-mtp0-c615.yaml
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep16_b32_mtp0_c615
         prefill:
           num-worker: 3
           tp: 8
@@ -2593,7 +2593,7 @@ dsr1-fp8-gb200-dynamo-trt:
           dp-attn: true
       - conc-list: [333]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx2_gen1_dep32_batch8_eplb0_mtp0_333.yaml
-        srt-recipe: disagg-2p1d-dep32-b8-eplb0-mtp0-c333.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep32_b8_mtp0_c333
         prefill:
           num-worker: 2
           tp: 8
@@ -2606,7 +2606,7 @@ dsr1-fp8-gb200-dynamo-trt:
           dp-attn: true
       - conc-list: [63]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0_63.yaml
-        srt-recipe: disagg-1p3d-tep8-b16-eplb0-mtp0-c63.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b16_mtp0_c63
         prefill:
           num-worker: 1
           tp: 8
@@ -2619,7 +2619,7 @@ dsr1-fp8-gb200-dynamo-trt:
           dp-attn: false
       - conc-list: [18]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch4_eplb0_mtp0_18.yaml
-        srt-recipe: disagg-1p3d-tep8-b4-eplb0-mtp0-c18.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b4_mtp0_c18
         prefill:
           num-worker: 1
           tp: 8
@@ -2632,7 +2632,7 @@ dsr1-fp8-gb200-dynamo-trt:
           dp-attn: false
       - conc-list: [6]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb200-fp8/8k1k/stp/ctx1_gen3_tep8_batch1_eplb0_mtp0_6.yaml
-        srt-recipe: disagg-1p3d-tep8-b1-eplb0-mtp0-c6.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b1_mtp0_c6
         prefill:
           num-worker: 1
           tp: 8
@@ -2691,7 +2691,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       # "Mid curve" (5 prefill workers at DEP8 and 1 decode worker at DEP32)
       - conc-list: [512, 1024, 2048, 6144]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/8k1k/mid-curve.yaml
-        srt-recipe: disagg-5p1d-p-tp8-ep8-dp8-d-tp32-ep32-dp32-b8192-c512x1024x2048x6144-stp.yaml
+        srt-recipe: disagg-dep-stp-variants.yaml:override_5p1d_p_tp8_ep8_dp8_d_tp32_ep32_dp32_c512x1024x2048x6144
         prefill:
           num-worker: 5
           tp: 8
@@ -2706,7 +2706,7 @@ dsr1-fp8-gb200-dynamo-sglang:
       # "Max throughput" (6 prefill workers at DEP8 and 1 decode worker at DEP24)
       - conc-list: [2048, 4096, 6144]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/gb200-fp8/8k1k/max_tpt.yaml
-        srt-recipe: disagg-6p1d-p-tp8-ep8-dp8-d-tp24-ep24-dp24-b8192-c2048x4096x6144-stp.yaml
+        srt-recipe: disagg-dep-stp-variants.yaml:override_6p1d_p_tp8_ep8_dp8_d_tp24_ep24_dp24_c2048x4096x6144
         prefill:
           num-worker: 6
           tp: 8
@@ -2863,7 +2863,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [33]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen3_tep8_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p3d-tep8-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b8_eplb0_mtp3
         prefill:
           num-worker: 1
           tp: 2
@@ -2877,7 +2877,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [5]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b1_eplb0_mtp3
         prefill:
           num-worker: 1
           tp: 2
@@ -2891,7 +2891,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [12, 24]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3.yaml
-        srt-recipe: disagg-1p4d-tep8-b4-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b4_eplb0_mtp3
         prefill:
           num-worker: 1
           tp: 2
@@ -2905,7 +2905,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [180]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx4_gen1_dep32_batch4_eplb0_mtp3.yaml
-        srt-recipe: disagg-4p1d-dep32-b4-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep32_b4_eplb0_mtp3
         prefill:
           num-worker: 4
           tp: 2
@@ -2919,7 +2919,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [308]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx8_gen1_dep32_batch8_eplb0_mtp3.yaml
-        srt-recipe: disagg-8p1d-dep32-b8-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep32_b8_eplb0_mtp3
         prefill:
           num-worker: 8
           tp: 2
@@ -2933,7 +2933,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [2253]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep8_batch256_eplb0_mtp1.yaml
-        srt-recipe: disagg-10p1d-dep8-b256-eplb0-mtp1.yaml
+        srt-recipe: disagg-variants.yaml:override_10p1d_dep8_b256_eplb0_mtp1
         prefill:
           num-worker: 10
           tp: 2
@@ -2947,7 +2947,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [666]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx10_gen1_dep16_batch32_eplb0_mtp3.yaml
-        srt-recipe: disagg-10p1d-dep16-b32-eplb0-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_10p1d_dep16_b32_eplb0_mtp3
         prefill:
           num-worker: 10
           tp: 2
@@ -2961,7 +2961,7 @@ dsr1-fp4-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [1127]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/mtp/ctx13_gen1_dep16_batch64_eplb256_mtp3.yaml
-        srt-recipe: disagg-13p1d-dep16-b64-eplb256-mtp3.yaml
+        srt-recipe: disagg-variants.yaml:override_13p1d_dep16_b64_eplb256_mtp3
         prefill:
           num-worker: 13
           tp: 2
@@ -2975,7 +2975,7 @@ dsr1-fp4-gb300-dynamo-trt:
       # Non-MTP configurations (default spec_decoding="none")
       - conc-list: [72]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen3_tep8_batch16_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p3d-tep8-b16-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b16_eplb0_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -2988,7 +2988,7 @@ dsr1-fp4-gb300-dynamo-trt:
           dp-attn: false
       - conc-list: [5]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b1_eplb0_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -3001,7 +3001,7 @@ dsr1-fp4-gb300-dynamo-trt:
           dp-attn: false
       - conc-list: [12]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen4_tep8_batch2_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p4d-tep8-b2-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b2_eplb0_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -3014,7 +3014,7 @@ dsr1-fp4-gb300-dynamo-trt:
           dp-attn: false
       - conc-list: [5, 15, 30]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx1_gen5_tep4_batch4_eplb0_mtp0.yaml
-        srt-recipe: disagg-1p5d-tep4-b4-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_1p5d_tep4_b4_eplb0_mtp0
         prefill:
           num-worker: 1
           tp: 2
@@ -3027,7 +3027,7 @@ dsr1-fp4-gb300-dynamo-trt:
           dp-attn: false
       - conc-list: [666]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx7_gen1_dep32_batch16_eplb0_mtp0.yaml
-        srt-recipe: disagg-7p1d-dep32-b16-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep32_b16_eplb0_mtp0
         prefill:
           num-worker: 7
           tp: 2
@@ -3040,7 +3040,7 @@ dsr1-fp4-gb300-dynamo-trt:
           dp-attn: true
       - conc-list: [1229]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx9_gen1_dep16_batch64_eplb0_mtp0.yaml
-        srt-recipe: disagg-9p1d-dep16-b64-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_9p1d_dep16_b64_eplb0_mtp0
         prefill:
           num-worker: 9
           tp: 2
@@ -3053,7 +3053,7 @@ dsr1-fp4-gb300-dynamo-trt:
           dp-attn: true
       - conc-list: [3228]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx11_gen3_dep4_batch256_eplb0_mtp0.yaml
-        srt-recipe: disagg-11p3d-dep4-b256-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_11p3d_dep4_b256_eplb0_mtp0
         prefill:
           num-worker: 11
           tp: 2
@@ -3066,7 +3066,7 @@ dsr1-fp4-gb300-dynamo-trt:
           dp-attn: true
       - conc-list: [2253]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp4/8k1k/stp/ctx14_gen1_dep16_batch128_eplb0_mtp0.yaml
-        srt-recipe: disagg-14p1d-dep16-b128-eplb0-mtp0.yaml
+        srt-recipe: disagg-variants.yaml:override_14p1d_dep16_b128_eplb0_mtp0
         prefill:
           num-worker: 14
           tp: 2
@@ -3160,7 +3160,7 @@ dsr1-fp8-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch1_eplb0_mtp3_8.yaml
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp3-c8.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b1_mtp3_c8
         prefill:
           num-worker: 1
           tp: 4
@@ -3174,7 +3174,7 @@ dsr1-fp8-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [24]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx1_gen4_tep8_batch4_eplb0_mtp3_24.yaml
-        srt-recipe: disagg-1p4d-tep8-b4-eplb0-mtp3-c24.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b4_mtp3_c24
         prefill:
           num-worker: 1
           tp: 4
@@ -3188,7 +3188,7 @@ dsr1-fp8-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [333]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx6_gen1_dep32_batch8_eplb0_mtp3_333.yaml
-        srt-recipe: disagg-6p1d-dep32-b8-eplb0-mtp3-c333.yaml
+        srt-recipe: disagg-variants.yaml:override_6p1d_dep32_b8_mtp3_c333
         prefill:
           num-worker: 6
           tp: 4
@@ -3202,7 +3202,7 @@ dsr1-fp8-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [666]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx8_gen1_dep16_batch32_eplb0_mtp3_666.yaml
-        srt-recipe: disagg-8p1d-dep16-b32-eplb0-mtp3-c666.yaml
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep16_b32_mtp3_c666
         prefill:
           num-worker: 8
           tp: 4
@@ -3216,7 +3216,7 @@ dsr1-fp8-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [1229]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx10_gen1_dep16_batch64_eplb0_mtp1_1229.yaml
-        srt-recipe: disagg-10p1d-dep16-b64-eplb0-mtp1-c1229.yaml
+        srt-recipe: disagg-variants.yaml:override_10p1d_dep16_b64_mtp1_c1229
         prefill:
           num-worker: 10
           tp: 4
@@ -3230,7 +3230,7 @@ dsr1-fp8-gb300-dynamo-trt:
       - spec-decoding: "mtp"
         conc-list: [1229]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/mtp/ctx7_gen1_dep8_batch128_eplb0_mtp1_1229.yaml
-        srt-recipe: disagg-7p1d-dep8-b128-eplb0-mtp1-c1229.yaml
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep8_b128_mtp1_c1229
         prefill:
           num-worker: 7
           tp: 4
@@ -3244,7 +3244,7 @@ dsr1-fp8-gb300-dynamo-trt:
       # STP configurations (no spec_decoding)
       - conc-list: [4]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch1_eplb0_mtp0_4.yaml
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp0-c4.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b1_mtp0_c4
         prefill:
           num-worker: 1
           tp: 4
@@ -3257,7 +3257,7 @@ dsr1-fp8-gb300-dynamo-trt:
           dp-attn: false
       - conc-list: [24]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch4_eplb0_mtp0_24.yaml
-        srt-recipe: disagg-1p4d-tep8-b4-eplb0-mtp0-c24.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b4_mtp0_c24
         prefill:
           num-worker: 1
           tp: 4
@@ -3270,7 +3270,7 @@ dsr1-fp8-gb300-dynamo-trt:
           dp-attn: false
       - conc-list: [36]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx1_gen4_tep8_batch8_eplb0_mtp0_36.yaml
-        srt-recipe: disagg-1p4d-tep8-b8-eplb0-mtp0-c36.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_tep8_b8_mtp0_c36
         prefill:
           num-worker: 1
           tp: 4
@@ -3283,7 +3283,7 @@ dsr1-fp8-gb300-dynamo-trt:
           dp-attn: false
       - conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx6_gen1_dep32_batch16_eplb0_mtp0_512.yaml
-        srt-recipe: disagg-6p1d-dep32-b16-eplb0-mtp0-c512.yaml
+        srt-recipe: disagg-variants.yaml:override_6p1d_dep32_b16_mtp0_c512
         prefill:
           num-worker: 6
           tp: 4
@@ -3296,7 +3296,7 @@ dsr1-fp8-gb300-dynamo-trt:
           dp-attn: true
       - conc-list: [666]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx4_gen1_dep16_batch32_eplb0_mtp0_666.yaml
-        srt-recipe: disagg-4p1d-dep16-b32-eplb0-mtp0-c666.yaml
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep16_b32_mtp0_c666
         prefill:
           num-worker: 4
           tp: 4
@@ -3309,7 +3309,7 @@ dsr1-fp8-gb300-dynamo-trt:
           dp-attn: true
       - conc-list: [1229]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep16_batch64_eplb0_mtp0_1229.yaml
-        srt-recipe: disagg-7p1d-dep16-b64-eplb0-mtp0-c1229.yaml
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep16_b64_mtp0_c1229
         prefill:
           num-worker: 7
           tp: 4
@@ -3322,7 +3322,7 @@ dsr1-fp8-gb300-dynamo-trt:
           dp-attn: true
       - conc-list: [2151]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/gb300-fp8/8k1k/stp/ctx7_gen1_dep8_batch256_eplb0_mtp0_2151.yaml
-        srt-recipe: disagg-7p1d-dep8-b256-eplb0-mtp0-c2151.yaml
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep8_b256_mtp0_c2151
         prefill:
           num-worker: 7
           tp: 4
@@ -3353,7 +3353,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # STP: Low latency TEP (1 prefill, 7 decode)
       - spec-decoding: "none"
         conc-list: [1, 4, 8]
-        srt-recipe: disagg-bs4-1p7d-stp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs4_1p7d_stp
         prefill:
           num-worker: 1
           tp: 8
@@ -3367,7 +3367,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # STP: TEP (1 prefill, 6 decode)
       - spec-decoding: "none"
         conc-list: [4, 8, 16]
-        srt-recipe: disagg-bs8-1p6d-stp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs8_1p6d_stp
         prefill:
           num-worker: 1
           tp: 8
@@ -3381,7 +3381,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # STP: TEP (1 prefill, 3 decode)
       - spec-decoding: "none"
         conc-list: [8, 16, 32]
-        srt-recipe: disagg-bs16-1p3d-stp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs16_1p3d_stp
         prefill:
           num-worker: 1
           tp: 8
@@ -3395,7 +3395,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # STP: TEP (2 prefill, 3 decode)
       - spec-decoding: "none"
         conc-list: [32, 64, 128]
-        srt-recipe: disagg-bs64-2p3d-stp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs64_2p3d_stp
         prefill:
           num-worker: 2
           tp: 8
@@ -3409,7 +3409,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # STP: High throughput DEP (1 prefill, 1 decode, dp-attention)
       - spec-decoding: "none"
         conc-list: [64, 128, 256]
-        srt-recipe: disagg-bs128-1p1d-dep-stp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs128_1p1d_dep_stp
         prefill:
           num-worker: 1
           tp: 8
@@ -3423,7 +3423,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # MTP: Low latency TEP (1 prefill, 7 decode)
       - spec-decoding: "mtp"
         conc-list: [1, 4, 8]
-        srt-recipe: disagg-bs4-1p7d-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs4_1p7d_mtp
         prefill:
           num-worker: 1
           tp: 8
@@ -3437,7 +3437,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # MTP: TEP (1 prefill, 6 decode)
       - spec-decoding: "mtp"
         conc-list: [2, 4, 8, 16, 32]
-        srt-recipe: disagg-bs8-1p6d-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs8_1p6d_mtp
         prefill:
           num-worker: 1
           tp: 8
@@ -3451,7 +3451,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # MTP: TEP (1 prefill, 3 decode)
       - spec-decoding: "mtp"
         conc-list: [4, 8, 16, 32, 64]
-        srt-recipe: disagg-bs16-1p3d-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs16_1p3d_mtp
         prefill:
           num-worker: 1
           tp: 8
@@ -3465,7 +3465,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # MTP: TEP (2 prefill, 3 decode)
       - spec-decoding: "mtp"
         conc-list: [32, 64, 128]
-        srt-recipe: disagg-bs64-2p3d-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs64_2p3d_mtp
         prefill:
           num-worker: 2
           tp: 8
@@ -3479,7 +3479,7 @@ dsr1-fp8-h200-dynamo-sglang:
       # MTP: High throughput DEP (1 prefill, 1 decode, dp-attention)
       - spec-decoding: "mtp"
         conc-list: [32, 64, 128, 256, 512]
-        srt-recipe: disagg-bs128-1p1d-dep-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_bs128_1p1d_dep_mtp
         prefill:
           num-worker: 1
           tp: 8
@@ -3587,7 +3587,7 @@ dsr1-fp8-b200-dynamo-sglang:
       # STP low-latency: resolved from 8k1k.yaml zip_override_stp_lowlat
       - conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_0.yaml
-        srt-recipe: disagg-1p3d-p-tp8-dp8-d-tp8-b32-c128-stp.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p3d_p_tp8_dp8_d_tp8_b32_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -3601,7 +3601,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: false
       - conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_1.yaml
-        srt-recipe: disagg-1p4d-p-tp8-dp8-d-tp8-b32-c128-stp.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p4d_p_tp8_dp8_d_tp8_b32_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -3615,7 +3615,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: false
       - conc-list: [8, 16, 32, 64, 128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_2.yaml
-        srt-recipe: disagg-1p6d-p-tp8-dp8-d-tp8-b22-c8x16x32x64x128-stp.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p6d_p_tp8_dp8_d_tp8_b22_c8x16x32x64x128
         prefill:
           num-worker: 1
           tp: 8
@@ -3630,7 +3630,7 @@ dsr1-fp8-b200-dynamo-sglang:
       # STP max-throughput: resolved from 8k1k.yaml zip_override_stp_maxtpt
       - conc-list: [288]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_0.yaml
-        srt-recipe: disagg-1p2d-p-tp8-dp8-d-tp8-ep8-dp8-b128-c288-stp.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p2d_p_tp8_dp8_d_tp8_ep8_dp8_b128_c288
         prefill:
           num-worker: 1
           tp: 8
@@ -3644,7 +3644,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: true
       - conc-list: [160, 288]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_1.yaml
-        srt-recipe: disagg-1p1d-p-tp8-dp8-d-tp8-ep8-dp8-b256-c160x288-stp.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p1d_p_tp8_dp8_d_tp8_ep8_dp8_b256_c160x288
         prefill:
           num-worker: 1
           tp: 8
@@ -3658,7 +3658,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: true
       - conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_2.yaml
-        srt-recipe: disagg-2p1d-p-tp8-dp8-d-tp8-ep8-dp8-b512-c512-stp.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_2p1d_p_tp8_dp8_d_tp8_ep8_dp8_b512_c512
         prefill:
           num-worker: 2
           tp: 8
@@ -3672,7 +3672,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: true
       - conc-list: [1024]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_3.yaml
-        srt-recipe: disagg-3p1d-p-tp8-dp8-d-tp8-ep8-dp8-b1024-c1024-stp.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_3p1d_p_tp8_dp8_d_tp8_ep8_dp8_b1024_c1024
         prefill:
           num-worker: 3
           tp: 8
@@ -3705,7 +3705,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_0.yaml
-        srt-recipe: disagg-1p3d-p-tp8-dp8-d-tp8-b32-c128-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p3d_p_tp8_dp8_d_tp8_b32_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -3720,7 +3720,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_1.yaml
-        srt-recipe: disagg-1p4d-p-tp8-dp8-d-tp8-b32-c128-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p4d_p_tp8_dp8_d_tp8_b32_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -3735,7 +3735,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [8, 16, 32, 64, 128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_2.yaml
-        srt-recipe: disagg-1p6d-p-tp8-dp8-d-tp8-b22-c8x16x32x64x128-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p6d_p_tp8_dp8_d_tp8_b22_c8x16x32x64x128
         prefill:
           num-worker: 1
           tp: 8
@@ -3751,7 +3751,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [288]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_0.yaml
-        srt-recipe: disagg-1p2d-p-tp8-dp8-d-tp8-ep8-dp8-b128-c288-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p2d_p_tp8_dp8_d_tp8_ep8_dp8_b128_c288
         prefill:
           num-worker: 1
           tp: 8
@@ -3766,7 +3766,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [160, 288]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_1.yaml
-        srt-recipe: disagg-1p1d-p-tp8-dp8-d-tp8-ep8-dp8-b256-c160x288-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_p_tp8_dp8_d_tp8_ep8_dp8_b256_c160x288
         prefill:
           num-worker: 1
           tp: 8
@@ -3781,7 +3781,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_2.yaml
-        srt-recipe: disagg-2p1d-p-tp8-dp8-d-tp8-ep8-dp8-b512-c512-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_2p1d_p_tp8_dp8_d_tp8_ep8_dp8_b512_c512
         prefill:
           num-worker: 2
           tp: 8
@@ -3796,7 +3796,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1024]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_3.yaml
-        srt-recipe: disagg-3p1d-p-tp8-dp8-d-tp8-ep8-dp8-b1024-c1024-mtp.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_3p1d_p_tp8_dp8_d_tp8_ep8_dp8_b1024_c1024
         prefill:
           num-worker: 3
           tp: 8
@@ -4166,7 +4166,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
       search-space:
       # 1P2D: 1 prefill (TP1/EP1/dp-attn), 2 decode (TP8/EP8/no-dp-attn), conc=42
       - conc-list: [42]
-        srt-recipe: disagg-1p2d-tep8-b16-eplb0-mtp0-c42.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p2d_tep8_b16_c42
         prefill:
           num-worker: 1
           tp: 1
@@ -4179,7 +4179,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: false
       # 1P4D: 1 prefill (TP2/EP2/dp-attn), 4 decode (TP8/EP8/no-dp-attn), conc=8
       - conc-list: [8]
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp0-c8.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p4d_tep8_b1_c8
         prefill:
           num-worker: 1
           tp: 2
@@ -4192,7 +4192,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: false
       # 1P4D: 1 prefill (TP1/EP1/dp-attn), 4 decode (TP8/EP8/no-dp-attn), conc=24
       - conc-list: [24]
-        srt-recipe: disagg-1p4d-tep8-b4-eplb0-mtp0-c24.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_1p4d_tep8_b4_c24
         prefill:
           num-worker: 1
           tp: 1
@@ -4205,7 +4205,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: false
       # 4P1D: 4 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=282
       - conc-list: [282]
-        srt-recipe: disagg-4p1d-dep16-b16-eplb0-mtp0-c282.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_4p1d_dep16_b16_c282
         prefill:
           num-worker: 4
           tp: 1
@@ -4218,7 +4218,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: true
       # 4P3D: 4 prefill (TP1/EP1/dp-attn), 3 decode (TP8/EP8/no-dp-attn), conc=210
       - conc-list: [210]
-        srt-recipe: disagg-4p3d-tep8-b64-eplb0-mtp0-c210.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_4p3d_tep8_b64_c210
         prefill:
           num-worker: 4
           tp: 1
@@ -4231,7 +4231,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: false
       # 7P1D: 7 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=563
       - conc-list: [563]
-        srt-recipe: disagg-7p1d-dep16-b32-eplb0-mtp0-c563.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_7p1d_dep16_b32_c563
         prefill:
           num-worker: 7
           tp: 1
@@ -4244,7 +4244,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: true
       # 10P1D: 10 prefill (TP1/EP1/dp-attn), 1 decode (TP8/EP8/dp-attn), conc=2150
       - conc-list: [2150]
-        srt-recipe: disagg-10p1d-dep8-b256-eplb0-mtp0-c2150.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_10p1d_dep8_b256_c2150
         prefill:
           num-worker: 10
           tp: 1
@@ -4257,7 +4257,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: true
       # 11P1D: 11 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=1076
       - conc-list: [1076]
-        srt-recipe: disagg-11p1d-dep16-b64-eplb0-mtp0-c1076.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_11p1d_dep16_b64_c1076
         prefill:
           num-worker: 11
           tp: 1
@@ -4270,7 +4270,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: true
       # 16P1D: 16 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=2253
       - conc-list: [2253]
-        srt-recipe: disagg-16p1d-dep16-b128-eplb0-mtp0-c2253.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_16p1d_dep16_b128_c2253
         prefill:
           num-worker: 16
           tp: 1
@@ -4283,7 +4283,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
           dp-attn: true
       # 24P1D: 24 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=8192
       - conc-list: [8192]
-        srt-recipe: disagg-24p1d-dep16-b512-eplb0-mtp0-c8192-stp-sweep.yaml
+        srt-recipe: disagg-stp-variants.yaml:override_24p1d_dep16_b512_c8192_stp_sweep
         prefill:
           num-worker: 24
           tp: 1
@@ -4318,7 +4318,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 1P2D: 1 prefill (TP1/EP1/dp-attn), 2 decode (TP8/EP8/no-dp-attn), conc=20
       - spec-decoding: "mtp"
         conc-list: [20]
-        srt-recipe: disagg-1p2d-tep8-b8-eplb0-mtp3-c20.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p2d_tep8_b8_mtp3_c20
         prefill:
           num-worker: 1
           tp: 1
@@ -4332,7 +4332,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 1P4D: 1 prefill (TP1/EP1/dp-attn), 4 decode (TP8/EP8/no-dp-attn), conc=12
       - spec-decoding: "mtp"
         conc-list: [12]
-        srt-recipe: disagg-1p4d-tep8-b1-eplb0-mtp3-c12.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p4d_tep8_b1_mtp3_c12
         prefill:
           num-worker: 1
           tp: 1
@@ -4346,7 +4346,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 1P4D: 1 prefill (TP1/EP1/dp-attn), 4 decode (TP8/EP8/no-dp-attn), conc=8
       - spec-decoding: "mtp"
         conc-list: [8]
-        srt-recipe: disagg-1p4d-tep8-b2-eplb0-mtp3-c8.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_1p4d_tep8_b2_mtp3_c8
         prefill:
           num-worker: 1
           tp: 1
@@ -4360,7 +4360,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 4P3D: 4 prefill (TP1/EP1/dp-attn), 3 decode (TP8/EP8/no-dp-attn), conc=126
       - spec-decoding: "mtp"
         conc-list: [126]
-        srt-recipe: disagg-4p3d-tep8-b32-eplb0-mtp3-c126.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_4p3d_tep8_b32_mtp3_c126
         prefill:
           num-worker: 4
           tp: 1
@@ -4374,7 +4374,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 5P1D: 5 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=154
       - spec-decoding: "mtp"
         conc-list: [154]
-        srt-recipe: disagg-5p1d-dep16-b8-eplb0-mtp3-c154.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_5p1d_dep16_b8_mtp3_c154
         prefill:
           num-worker: 5
           tp: 1
@@ -4388,7 +4388,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 7P1D: 7 prefill (TP2/EP2/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=666
       - spec-decoding: "mtp"
         conc-list: [666]
-        srt-recipe: disagg-7p1d-dep16-b32-eplb0-mtp3-c666.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_7p1d_dep16_b32_mtp3_c666
         prefill:
           num-worker: 7
           tp: 2
@@ -4402,7 +4402,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 11P1D: 11 prefill (TP1/EP1/dp-attn), 1 decode (TP8/EP8/dp-attn), conc=1229
       - spec-decoding: "mtp"
         conc-list: [1229]
-        srt-recipe: disagg-11p1d-dep8-b128-eplb0-mtp3-c1229.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_11p1d_dep8_b128_mtp3_c1229
         prefill:
           num-worker: 11
           tp: 1
@@ -4416,7 +4416,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 17P2D: 17 prefill (TP1/EP1/dp-attn), 2 decode (TP8/EP8/dp-attn), conc=1126
       - spec-decoding: "mtp"
         conc-list: [1126]
-        srt-recipe: disagg-17p2d-dep8-b64-eplb0-mtp3-c1126.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_17p2d_dep8_b64_mtp3_c1126
         prefill:
           num-worker: 17
           tp: 1
@@ -4430,7 +4430,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 26P1D: 26 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=4301, MTP draft-len 2
       - spec-decoding: "mtp"
         conc-list: [4301]
-        srt-recipe: disagg-26p1d-dep16-b256-eplb0-mtp2-c4301.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_26p1d_dep16_b256_mtp2_c4301
         prefill:
           num-worker: 26
           tp: 1
@@ -4444,7 +4444,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
       # 24P1D: 24 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=8192, MTP curve tail (spec decoding disabled)
       - spec-decoding: "none"
         conc-list: [8192]
-        srt-recipe: disagg-24p1d-dep16-b512-eplb0-mtp0-c8192-mtp-sweep.yaml
+        srt-recipe: disagg-mtp-variants.yaml:override_24p1d_dep16_b512_mtp0_c8192_mtp_sweep
         prefill:
           num-worker: 24
           tp: 1
@@ -4912,7 +4912,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [1000]
-        srt-recipe: disagg-gb300-5p3d-pp4-dep4-c1000-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: disagg-variants.yaml:override_5p3d_pp4_dep4_c1000
         prefill:
           num-worker: 5
           tp: 1
@@ -4929,7 +4929,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [600]
-        srt-recipe: disagg-gb300-3p2d-pp4-dep4-c600-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: disagg-variants.yaml:override_3p2d_pp4_dep4_c600
         prefill:
           num-worker: 3
           tp: 1
@@ -4946,7 +4946,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [200]
-        srt-recipe: disagg-gb300-1p1d-pp4-dep4-c200-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_pp4_dep4_c200
         prefill:
           num-worker: 1
           tp: 1
@@ -4963,7 +4963,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [100]
-        srt-recipe: disagg-gb300-1p1d-pp4-dep4-c100-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_pp4_dep4_c100
         prefill:
           num-worker: 1
           tp: 1
@@ -4996,7 +4996,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [44]
         num-nodes: 1
-        srt-recipe: agg-gb300-tp4-c44-b4-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: agg-variants.yaml:override_tp4_c44_b4
         worker:
           num-worker: 1
           tp: 4
@@ -5008,7 +5008,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [44]
         num-nodes: 1
-        srt-recipe: agg-gb300-tp4-c44-b2-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: agg-variants.yaml:override_tp4_c44_b2
         worker:
           num-worker: 1
           tp: 4
@@ -5020,7 +5020,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [44]
         num-nodes: 1
-        srt-recipe: agg-gb300-tp4-c44-b1-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: agg-variants.yaml:override_tp4_c44_b1
         worker:
           num-worker: 1
           tp: 4
@@ -5032,7 +5032,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [1]
         num-nodes: 1
-        srt-recipe: agg-gb300-tp4-c1-b1-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: agg-variants.yaml:override_tp4_c1_b1
         worker:
           num-worker: 1
           tp: 4
@@ -5044,7 +5044,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto:
         kv-offload-backend: { name: hicache }
         conc-list: [1]
         num-nodes: 2
-        srt-recipe: agg-gb300-tp8-c1-b1-mtp-hicache-nightly-20260913.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c1_b1
         worker:
           num-worker: 1
           tp: 8
@@ -6559,7 +6559,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [16]
         num-nodes: 4
-        srt-recipe: agg-tp8pp2-mooncake-c16.yaml
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c16
         power: true
         worker:
           num-worker: 1
@@ -6573,7 +6573,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [32]
         num-nodes: 4
-        srt-recipe: agg-tp8pp2-mooncake-c32.yaml
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c32
         power: true
         worker:
           num-worker: 1
@@ -6586,7 +6586,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [48]
         num-nodes: 4
-        srt-recipe: agg-tp8pp2-mooncake-c48.yaml
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c48
         power: true
         worker:
           num-worker: 1
@@ -6599,7 +6599,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [72]
         num-nodes: 4
-        srt-recipe: agg-tp8pp2-mooncake-c72.yaml
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c72
         power: true
         worker:
           num-worker: 1
@@ -6612,7 +6612,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         conc-list: [96]
         num-nodes: 4
-        srt-recipe: agg-tp8pp2-mooncake-c96.yaml
+        srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c96
         power: true
         worker:
           num-worker: 1
@@ -6641,7 +6641,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 2
-        srt-recipe: agg-gb200-tp8-c1-mtp-hicache.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c1
         worker:
           num-worker: 1
           tp: 8
@@ -6652,7 +6652,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 2
-        srt-recipe: agg-gb200-tp8-c4-mtp-hicache.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c4
         worker:
           num-worker: 1
           tp: 8
@@ -6678,7 +6678,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
         conc-list: [64]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-gb200-1p1d-dep8-dep16-c64-mtp-kvoffload.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep8_dep16_c64
         prefill:
           num-worker: 1
           tp: 8
@@ -6693,7 +6693,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
         conc-list: [128]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-gb200-1p1d-dep8-dep16-c128-mtp-kvoffload.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep8_dep16_c128
         prefill:
           num-worker: 1
           tp: 8
@@ -6708,7 +6708,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
         conc-list: [256]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-gb200-1p1d-dep16-dep32-c256-mtp-kvoffload.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dep16_dep32_c256
         prefill:
           num-worker: 1
           tp: 16
@@ -6723,7 +6723,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
         conc-list: [768]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-gb200-2p1d-dep16-dep32-c768-mtp-kvoffload.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep16_dep32_c768
         prefill:
           num-worker: 2
           tp: 16
@@ -6738,7 +6738,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
         conc-list: [1024]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-gb200-2p1d-dep16-dep32-c1024-mtp-kvoffload.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep16_dep32_c1024
         prefill:
           num-worker: 2
           tp: 16
@@ -6753,7 +6753,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
         conc-list: [1280]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-gb200-2p1d-dep16-dep32-c1280-mtp-kvoffload.yaml
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep16_dep32_c1280
         prefill:
           num-worker: 2
           tp: 16
@@ -7088,7 +7088,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-h200-tp8-mtp-c2.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c2
         power: true
         worker:
           num-worker: 1
@@ -7100,7 +7100,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-h200-tp8-mtp-c4.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c4
         power: true
         worker:
           num-worker: 1
@@ -7112,7 +7112,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-h200-tp8-mtp-c8.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c8
         power: true
         worker:
           num-worker: 1
@@ -7124,7 +7124,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-h200-tp8-mtp-c12.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c12
         power: true
         worker:
           num-worker: 1
@@ -7136,7 +7136,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 1
-        srt-recipe: agg-h200-tp8-mtp-c16.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c16
         power: true
         worker:
           num-worker: 1
@@ -7947,7 +7947,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48, 56]
-        srt-recipe: disagg-1p1d-dcp8-dcp8-dspark4-mooncake.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_dcp8_dcp8_dspark4
         power: true
         prefill:
           num-worker: 1
@@ -7960,7 +7960,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48, 64]
-        srt-recipe: disagg-1p2d-dcp8-dcp8-dspark4-mooncake.yaml
+        srt-recipe: disagg-variants.yaml:override_1p2d_dcp8_dcp8_dspark4
         power: true
         prefill:
           num-worker: 1
@@ -7973,7 +7973,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [1]
-        srt-recipe: disagg-1p3d-dcp8-dcp8-dspark7-mooncake.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark7
         power: true
         prefill:
           num-worker: 1
@@ -7986,7 +7986,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48]
-        srt-recipe: disagg-1p3d-dcp8-dcp8-dspark4-mooncake.yaml
+        srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark4
         power: true
         prefill:
           num-worker: 1
@@ -8016,7 +8016,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [1, 4]
         num-nodes: 2
-        srt-recipe: agg-dcp8-dspark7-maxseq2-mooncake.yaml
+        srt-recipe: agg-variants.yaml:override_dcp8_dspark7_maxseq2
         power: true
         worker:
           num-worker: 1
@@ -8029,7 +8029,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48, 52, 56]
         num-nodes: 2
-        srt-recipe: agg-dcp8-dspark4-mooncake.yaml
+        srt-recipe: agg-variants.yaml:override_dcp8_dspark4
         power: true
         worker:
           num-worker: 1
@@ -8070,7 +8070,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [1]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c1.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c1
         power: true
         worker:
           num-worker: 1
@@ -8083,7 +8083,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [4]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c4.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c4
         power: true
         worker:
           num-worker: 1
@@ -8096,7 +8096,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [8]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c8.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c8
         power: true
         worker:
           num-worker: 1
@@ -8109,7 +8109,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [14]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c14.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c14
         power: true
         worker:
           num-worker: 1
@@ -8122,7 +8122,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [24]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c24.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c24
         power: true
         worker:
           num-worker: 1
@@ -8135,7 +8135,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [48]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c48.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c48
         power: true
         worker:
           num-worker: 1
@@ -8147,7 +8147,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - kv-offloading: none
         conc-list: [96]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c96.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c96
         power: true
         worker:
           num-worker: 1
@@ -8160,7 +8160,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [32]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c32.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c32
         power: true
         worker:
           num-worker: 1
@@ -8173,7 +8173,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [56]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c56.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c56
         power: true
         worker:
           num-worker: 1
@@ -8186,7 +8186,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [72]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c72.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c72
         power: true
         worker:
           num-worker: 1
@@ -8199,7 +8199,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         kv-offloading: none
         conc-list: [80]
         num-nodes: 2
-        srt-recipe: agg-tp8pp2-mooncake-c80.yaml
+        srt-recipe: agg-variants.yaml:override_tp8pp2_c80
         power: true
         worker:
           num-worker: 1
@@ -8720,7 +8720,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         kv-offloading: dram
         conc-list:
         - 8
-        srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c8-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c8
         power: true
         prefill:
           num-worker: 1
@@ -8738,7 +8738,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         kv-offloading: dram
         conc-list:
         - 16
-        srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c16-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c16
         power: true
         prefill:
           num-worker: 1
@@ -8756,7 +8756,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         kv-offloading: dram
         conc-list:
         - 24
-        srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c24-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c24
         power: true
         prefill:
           num-worker: 1
@@ -8774,7 +8774,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         kv-offloading: dram
         conc-list:
         - 32
-        srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c32-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c32
         power: true
         prefill:
           num-worker: 1
@@ -8792,7 +8792,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         kv-offloading: dram
         conc-list:
         - 48
-        srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c48-write-through-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c48_write_through
         power: true
         prefill:
           num-worker: 1
@@ -8810,7 +8810,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         kv-offloading: dram
         conc-list:
         - 64
-        srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c64-write-through-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p1d_p_tp4_d_tp4_c64_write_through
         power: true
         prefill:
           num-worker: 1
