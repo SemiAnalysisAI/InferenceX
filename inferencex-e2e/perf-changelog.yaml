@@ -9492,6 +9492,7 @@
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm-agentic-nixl
     - minimaxm3-fp8-mi300x-vllm-agentic-nixl-baseline
+    - minimaxm3-fp8-mi300x-vllm-agentic-hybrid
   scenario-type:
     - agentic-coding
   description:

@@ -1121,6 +1121,31 @@ minimaxm3-fp8-mi300x-vllm-agentic-nixl-baseline:
           additional-settings:
           - CONFIG_FILE=recipes/minimaxm3/vllm/mi300x-fp8/agentx/agg-variants.yaml:override_tep8_c8
 
+minimaxm3-fp8-mi300x-vllm-agentic-hybrid:
+  image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: cluster:mi300x-amd
+  precision: fp8
+  framework: vllm
+  router: {name: vllm-router, version: "0.1.15"}
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - CONFIG_FILE=recipes/minimaxm3/vllm/mi300x-fp8/agentx/agg-hybrid.yaml
+
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.30.0
   model: MiniMaxAI/MiniMax-M3-MXFP8
