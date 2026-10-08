@@ -15,11 +15,11 @@ base:
     container:
       image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28"
     frameworks:
-      dynamo: "1.6.0.dev20260923"
+      dynamo: "1.6.0.dev20261007"
   dynamo:
     install: true
     source:
-      wheel: "1.6.0.dev20260923"
+      wheel: "1.6.0.dev20261007"
   environment:
     PYTHONHASHSEED: "0"
     WITH_NVIDIA_PEERMEM: "0"

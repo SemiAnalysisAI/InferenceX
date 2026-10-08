@@ -6166,7 +6166,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.6.0.dev20260923" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261007" }
   multinode: true
   disagg: false
   scenarios:
@@ -6221,7 +6221,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.6.0.dev20260923" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261007" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
