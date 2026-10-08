@@ -288,7 +288,7 @@ base:
       HF_HUB_CACHE: "/hf_hub_cache"
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (2P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 480.
+# (2P x DEP8 / 4D x DEP16, DSpark K=6 + Mooncake external-linker KV offload), tuned for concurrency 480 (also run at 120).
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
@@ -310,7 +310,7 @@ override_1p1d_c480:
         cuda-graph-max-bs-decode: 256
 
 # Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
-# (4P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 960.
+# (4P x DEP8 / 4D x DEP16, DSpark K=6 + Mooncake external-linker KV offload), tuned for concurrency 960.
 #
 # DEP8-prefill variant aligned with the measured Pareto point: prefill uses
 # tp/dp/ep 8, four nodes, and SGLANG_DSV4_MHC_PREWARM=1.
@@ -335,7 +335,7 @@ override_2p1d_c960:
         cuda-graph-max-bs-decode: 256
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (6P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 1440.
+# (6P x DEP8 / 4D x DEP16, DSpark K=6 + Mooncake external-linker KV offload), tuned for concurrency 1440.
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
@@ -357,7 +357,7 @@ override_3p1d_c1440:
         cuda-graph-max-bs-decode: 512
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (8P x DEP8 / 4D x DEP16, DSpark K=6 + hierarchical-cache KV offload), tuned for concurrency 2400.
+# (8P x DEP8 / 4D x DEP16, DSpark K=6 + Mooncake external-linker KV offload), tuned for concurrency 2400.
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
