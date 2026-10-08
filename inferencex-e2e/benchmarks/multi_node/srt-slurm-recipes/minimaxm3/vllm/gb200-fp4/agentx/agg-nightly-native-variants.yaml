@@ -101,7 +101,7 @@ override_tp4_vllm_simple:
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
       args:
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":777389080576,"cpu_bytes_to_use_per_rank":194347270144,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","lazy_offload":true}}'
 
 override_tp8:
   name: "minimax-m3-vllm-agg-gb200-tp8-agentic-nightly-native"

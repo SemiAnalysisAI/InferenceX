@@ -55,11 +55,22 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 
 当前启用的配置（定长序列和 AgentX，单节点和多节点）均为片段：只包含该配置特有设置的原生 srt-slurm YAML。启动时先组合片段，再绑定测试点：
 
-1. 通道的共享块（[`configs/srt-recipes/`](../../../configs/srt-recipes) 中的 `fixed-sequence-{single,multi}.yaml` 或 `agentic-{single,multi}.yaml`）合并到片段之下（配置集合则合并到 `base` 之下）。`power: true` 的多节点主配置行还会合并 [`telemetry-dcgm.yaml`](../../../configs/srt-recipes/telemetry-dcgm.yaml)，其导出器使用集群的 `srt-slurm.power-exporter-port`；该通道必须允许功耗测量（`POWER_LANES`）。片段优先：映射逐层合并，列表整体替换，因此片段可以保留 `collector_join_timeout_seconds` 等遥测调优参数。
-2. 主配置行的选择器选出变体。单节点变体可以声明自身的 `benchmark.env.CONC`，使该并发数与其调优参数保持配对。
-3. 绑定器（[`workload.py`](../../../infx/srt_slurm/workload.py)）将矩阵测试点写入选中的配置：`model.path: hf:<model>`、`model.container: <image>` 和 `model.precision`；片段声明了 `identity.container`/`identity.model` 时写入 `identity.container.image`（采用镜像仓库引用形式）和 `identity.model.repo`；启用遥测时写入 `benchmark.concurrencies`。定长序列配置还会获得 `benchmark.env.ISL`/`OSL`；单节点配置获得 `MODEL` 和 `CONC`，其中定长序列配置还获得 `RANDOM_RANGE_RATIO` 和 `USE_CHAT_TEMPLATE`（当且仅当配置启用投机解码时为 `true`）。多节点 AgentX 配置从启动器获得客户端的 `RESULT_DIR`、`AIPERF_DATASET_MMAP_CACHE_DIR` 和 `HF_HUB_CACHE`，启动器根据其挂载的卷（`volume-mounts`、`agentic-volume-mounts` 和通道挂载）推导这些路径；设置了 `HF_HOME` 的片段保留自身的缓存。多节点客户端从作业环境读取 `CONC_LIST`、`CONC`、`MODEL` 等矩阵输入，因此片段无需复制这些值；单节点 AgentX 测试点则通过运行时参数获得它们。
+1. 通道的共享块（[`configs/srt-recipes/`](../../../configs/srt-recipes) 中的 `fixed-sequence-{single,multi}.yaml` 或 `agentic-{single,multi}.yaml`）合并到片段之下（配置集合则合并到 `base` 之下）。共享块设置基准测试客户端，多节点定长序列共享块还将 `benchmark.env.TOKENIZER` 指向挂载的检查点 `/model`。`power: true` 的多节点主配置行还会合并 [`telemetry-dcgm.yaml`](../../../configs/srt-recipes/telemetry-dcgm.yaml)，其导出器使用集群的 `srt-slurm.power-exporter-port`；该通道必须允许功耗测量（`POWER_LANES`）。片段优先：映射逐层合并，列表整体替换，因此片段可以保留 `collector_join_timeout_seconds` 等遥测调优参数。
+2. 主配置行的选择器选出变体。单节点变体可以声明自身的 `benchmark.env.CONC` 和 `KV_OFFLOADING`，使该测试点与其调优参数保持配对。
+3. 绑定器（[`workload.py`](../../../infx/srt_slurm/workload.py)）将矩阵测试点写入选中的配置：`model.path: hf:<model>`、`model.container: <image>` 和 `model.precision`；片段声明了 `identity.container`/`identity.model` 时写入 `identity.container.image`（采用镜像仓库引用形式）和 `identity.model.repo`；启用遥测时写入 `benchmark.concurrencies`。定长序列配置还会获得 `benchmark.env.ISL`/`OSL`；单节点配置获得 `MODEL` 和 `CONC`，其中定长序列配置还获得 `RANDOM_RANGE_RATIO` 和 `USE_CHAT_TEMPLATE`（当且仅当配置启用投机解码时为 `true`）。AgentX 配置获得该行的 `KV_OFFLOADING`，DRAM 测试点还获得其预算 `TOTAL_CPU_DRAM_GB`。多节点 AgentX 配置从启动器获得客户端的 `RESULT_DIR`、`AIPERF_DATASET_MMAP_CACHE_DIR` 和 `HF_HUB_CACHE`，启动器根据其挂载的卷（`volume-mounts`、`agentic-volume-mounts` 和通道挂载）推导这些路径；设置了 `HF_HOME` 的片段保留自身的缓存。多节点客户端从作业环境读取 `CONC_LIST`、`CONC`、`MODEL` 等矩阵输入，因此片段无需复制这些值；单节点 AgentX 测试点则通过运行时参数获得它们。
 
-片段若设置了上述任一绑定键、`telemetry.enabled`、`benchmark.env.CONC_LIST` 或 AgentX 客户端路径（`RESULT_DIR`、`AGENTIC_OUTPUT_DIR`、`HF_HUB_CACHE`、`HUGGINGFACE_HUB_CACHE`，多节点还包括 `AIPERF_DATASET_MMAP_CACHE_DIR`），即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），除非 `models.OVERRIDES` 中的某一行改用 Hub 快照；主配置镜像解析为预置的容器。
+片段若设置了上述任一绑定键、`telemetry.enabled`、`benchmark.env.CONC_LIST`、`TOTAL_CPU_DRAM_GB`、在单节点变体之外设置 `KV_OFFLOADING`，或设置了 AgentX 客户端路径（`RESULT_DIR`、`AGENTIC_OUTPUT_DIR`、`HF_HUB_CACHE`、`HUGGINGFACE_HUB_CACHE`，多节点还包括 `AIPERF_DATASET_MMAP_CACHE_DIR`），即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），除非 `models.OVERRIDES` 中的某一行改用 Hub 快照；主配置镜像解析为预置的容器，因此配置不再引用别名。
+
+配置同样不硬编码主机内存大小。DRAM 测试点的预算即矩阵中的 `total-cpu-dram-gb`（十进制 GB），等于集群的 `available-cpu-dram-mib`（上限 3 TB）乘以该行的 `dram-utilization`，再乘以它所覆盖的 GPU 占节点 GPU 的比例：单节点为测试点使用的 GPU，多节点为 prefill（或聚合）worker 在其每个节点上使用的 GPU。绑定后，完整取值为 `'@dram.<name>'` 的值替换为：
+
+| 引用 | 取值 |
+| --- | --- |
+| `@dram.total-gb` | 预算，单位 GB |
+| `@dram.total-bytes` | 预算，单位字节 |
+| `@dram.per-gpu-gb` | 预算除以所覆盖的 GPU 数，取整 GB |
+| `@dram.per-gpu-bytes` | 预算除以所覆盖的 GPU 数，单位字节 |
+
+引用替换为整数；作为环境变量值或参数列表项（例如 `--l1-size-gb` 之后的一项）时替换为十进制字符串；也可以作为 JSON 对象字符串（例如 `kv-transfer-config`）中的完整取值。按 rank 分配的内存池使用 `per-gpu` 取值：SGLang `hicache-size`、LMCache `LMCACHE_MAX_LOCAL_CPU_SIZE`、vLLM SimpleCPU `cpu_bytes_to_use_per_rank`、TRT-LLM `host_cache_size`，以及以字节表示的 Mooncake `global_segment_size`（Mooncake 将 `GB` 视为 GiB）。没有 DRAM 预算的测试点遇到任何引用都会失败，未知名称和嵌在更长字符串中的引用同样失败。SimpleCPU、LMCache CPU 和 `--l1-size-gb` 的大小必须使用引用；实测得到的 HiCache、TRT-LLM 主机缓存或 Mooncake 段大小只要不超过节点份额，可以保留字面值。若后端从预算中分配多个内存池（例如混合模型的 HiCache KV 池和 Mamba 池），由主配置的 `dram-utilization` 确定其中一个池的大小。
 
 无需集群即可查看启动器实际提交的内容：
 
@@ -67,7 +78,7 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-该命令为每个定长序列或 AgentX 测试点写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`），以及 AgentX 客户端路径。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
+该命令为每个定长序列或 AgentX 测试点及变体写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`）、AgentX 客户端路径，以及 DRAM 预算所覆盖的每节点 GPU 数。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
 ## 迁移与验证
 

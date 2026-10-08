@@ -37,7 +37,7 @@ base:
         store_config:
           mode: embedded
           metadata_server: P2PHANDSHAKE
-          global_segment_size: 281GB
+          global_segment_size: '@dram.per-gpu-bytes'
           local_buffer_size: 4GB
           protocol: rdma
           device_name: ""
@@ -98,8 +98,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2249'
 
 # One variant per point. Admission is 2x CONC; CONC 56 and 70 keep more memory
 # headroom. Graphs capture (1 + drafts) x 1..min(2x CONC, 128) tokens, then the
