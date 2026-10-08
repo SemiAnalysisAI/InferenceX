@@ -13,6 +13,12 @@ predictions must be literals, as the prompt requires. Input predictions may be
 expressions, as in the reference (14 dataset inputs are lambdas, ``range`` or
 ``dict()`` calls), so each check runs in a separate isolated interpreter with a
 time and memory limit.
+
+Reasoning models draft and revise assertions, answer tags included, while they
+think, so only the text after the last ``</think>`` can hold the answer. A
+generation without ``</think>`` counts only when it ends with a closed answer
+block, as when the server returns the reasoning separately; otherwise it was
+cut off mid-reasoning and scores zero rather than whatever draft it last wrote.
 """
 
 from __future__ import annotations
@@ -29,6 +35,8 @@ TIMEOUT_S = 5
 MEMORY_BYTES = 2 << 30
 _ANSWER = re.compile(r"\[ANSWER\](.*?)(?:\[/ANSWER\]|$)", re.DOTALL)
 _FENCE = re.compile(r"^```[a-zA-Z]*\s*$")
+_THINK_END = "</think>"
+_ANSWER_END = "[/ANSWER]"
 
 # Runs in a fresh isolated interpreter; the program arrives on stdin.
 _RUNNER = """
@@ -42,10 +50,21 @@ exec(compile(program, "<cruxeval>", "exec"), {{"__name__": "__cruxeval__"}})
 """
 
 
+def _final_answer(generation: str) -> str | None:
+    """The part of a generation that can hold its answer; ``None`` if it was cut off."""
+    generation = generation or ""
+    if _THINK_END in generation:
+        return generation.rsplit(_THINK_END, 1)[1]
+    return generation if generation.rstrip().endswith(_ANSWER_END) else None
+
+
 def _assertion(generation: str) -> ast.Compare | None:
     """Return ``f(...) == value`` from the last answer block of a generation."""
-    blocks = _ANSWER.findall(generation or "")
-    text = blocks[-1] if blocks else (generation or "")
+    answer = _final_answer(generation)
+    if answer is None:
+        return None
+    blocks = _ANSWER.findall(answer)
+    text = blocks[-1] if blocks else answer
     for line in reversed(text.strip().splitlines()):
         line = line.strip()
         if not line or _FENCE.match(line):
