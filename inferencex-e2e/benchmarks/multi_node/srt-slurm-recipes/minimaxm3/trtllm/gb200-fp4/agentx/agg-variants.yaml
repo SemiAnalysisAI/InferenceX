@@ -78,7 +78,7 @@ base:
           use_kv_cache_manager_v2: true
           dtype: fp8
           event_buffer_max_size: 0
-          host_cache_size: 137438953472
+          host_cache_size: '@dram.per-gpu-bytes'
         speculative_config:
           decoding_type: Eagle3
           max_draft_len: 3
@@ -120,7 +120,7 @@ base:
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=5 member of the TP4 recipe set.
-# Host KV cache is set to 128 GiB per rank for the four-rank layout.
+# Host KV cache is the per-GPU DRAM budget for the four-rank layout.
 # AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 override_c5_b5:
@@ -139,7 +139,7 @@ override_c5_b5:
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=10 member of the TP4 recipe set.
-# Host KV cache is set to 128 GiB per rank for the four-rank layout.
+# Host KV cache is the per-GPU DRAM budget for the four-rank layout.
 # AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 override_c10_b10:
@@ -163,7 +163,7 @@ override_c10_b10:
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=15 member of the TP4 recipe set.
-# Host KV cache is set to 128 GiB per rank for the four-rank layout.
+# Host KV cache is the per-GPU DRAM budget for the four-rank layout.
 # AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 override_c15_b15:
@@ -192,7 +192,7 @@ override_c15_b15:
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=20 member of the TP4 recipe set.
-# Host KV cache is set to 128 GiB per rank for the four-rank layout.
+# Host KV cache is the per-GPU DRAM budget for the four-rank layout.
 # AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 override_c20_b20:
@@ -226,7 +226,7 @@ override_c20_b20:
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=25 member of the TP4 recipe set.
-# Host KV cache is set to 128 GiB per rank for the four-rank layout.
+# Host KV cache is the per-GPU DRAM budget for the four-rank layout.
 # AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 override_c25_b25:
@@ -260,7 +260,7 @@ override_c25_b25:
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=30 member of the TP4 recipe set.
-# Host KV cache is set to 128 GiB per rank for the four-rank layout.
+# Host KV cache is the per-GPU DRAM budget for the four-rank layout.
 # AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 override_c30_b30:
@@ -294,7 +294,7 @@ override_c30_b30:
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=40 member of the TP4 recipe set.
-# Host KV cache is set to 128 GiB per rank for the four-rank layout.
+# Host KV cache is the per-GPU DRAM budget for the four-rank layout.
 # AgentX acceptance is selected from the committed golden curve at submission.
 # (= AL - 1 = 1.78 for the committed golden AL 2.78) for throughput runs and leaves eval-only runs on real acceptance.
 override_c40_b40:

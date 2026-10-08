@@ -65,7 +65,7 @@ base:
           enable_block_reuse: true
           event_buffer_max_size: 0
           free_gpu_memory_fraction: 0.75
-          host_cache_size: 137438953472
+          host_cache_size: '@dram.per-gpu-bytes'
           tokens_per_block: 64
         max_batch_size: 256
         max_num_tokens: 8192

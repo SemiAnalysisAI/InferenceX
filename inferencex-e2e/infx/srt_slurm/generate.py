@@ -19,7 +19,7 @@ from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_workload, compose_recipe
+from infx.srt_slurm.workload import bind_workload, compose_recipe, dram_budget, resolve_dram
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
@@ -48,11 +48,17 @@ def _environment(point: Mapping[str, Any]) -> dict[str, str]:
         "EVAL_ONLY": "false",
     }
     if "prefill" in point:
+        prefill = point["prefill"]
         environment.update(
             IS_MULTINODE="true",
             SRT_RECIPE=point["srt-recipe"],
             POWER="1" if point.get("power") else "0",
             CONC_LIST=" ".join(map(str, point["conc"])),
+            PREFILL_TP=str(prefill["tp"]),
+            PREFILL_PP_SIZE=str(prefill["pp"]),
+            PREFILL_PCP_SIZE=str(prefill["pcp-size"]),
+            KV_OFFLOADING=str(point["kv-offloading"]) if agentic else "",
+            TOTAL_CPU_DRAM_GB=str(point["total-cpu-dram-gb"]) if agentic else "",
         )
         if agentic:
             # A multi-node AgentX job serves its one concurrency.
@@ -188,7 +194,8 @@ def generate_recipes(
     """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
 
     A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
-    paths; the manifest names that cluster, the one its runner label schedules on.
+    paths, and a DRAM point's ``'@dram.<name>'`` values take its budget over the GPUs it
+    covers there; the manifest names that cluster, the one its runner label schedules on.
     """
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
@@ -215,7 +222,13 @@ def generate_recipes(
             variants = _bound_variants(
                 point, environment, root, power_port=power_port, client_env=client_env
             )
-            for variant, recipe in variants:
+            budget = dram_budget(
+                environment,
+                multinode="prefill" in point,
+                gpus_per_node=placement[1].gpus_per_node if placement else None,
+            )
+            for variant, bound in variants:
+                recipe = resolve_dram(bound, budget)
                 _validated(recipe, environment, point["srt-recipe"])
                 identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
                 digest = hashlib.sha256(identity.encode()).hexdigest()[:12]

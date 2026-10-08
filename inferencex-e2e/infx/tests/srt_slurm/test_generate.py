@@ -51,6 +51,15 @@ MASTER = {
             "power": True,
         }]}]},
     },
+    "agentx-multi-dram": {
+        "image": "org/image:1", "model": "org/model", "model-prefix": "dsr1", "precision": "fp8",
+        "framework": "dynamo-sglang", "runner": "cluster:fixture", "multinode": True,
+        "disagg": True, "kv-p2p-transfer": "nixl", "srt-recipe-dir": "fixture",
+        "scenarios": {"agentic-coding": [{"dram-utilization": 0.5, "search-space": [{
+            "prefill": ROLE, "decode": ROLE, "conc-list": [8], "srt-recipe": "agentic-dram.yaml",
+            "kv-offloading": "dram", "kv-offload-backend": {"name": "hicache"},
+        }]}]},
+    },
 }  # fmt: skip
 SHARED = {
     "fixed-sequence-single.yaml": {"benchmark": {"type": "custom", "command": "bash client.sh"}},
@@ -78,7 +87,7 @@ def project(tmp_path):
                 "volume-mounts": {"hf-hub-cache": "/hf"},
                 "agentic-volume-mounts": {"aiperf-cache": "/aiperf"},
             },
-        }}},
+        }, "available-cpu-dram-mib": 1_000_000}},
     }))  # fmt: skip
     recipes = {
         "single_node/srt-slurm-recipes/fixture/recipe.yaml": FRAGMENT,
@@ -90,6 +99,14 @@ def project(tmp_path):
             **RECIPE, "frontend": {"type": "sglang-router"}, "roles": {
                 role: {"nodes": 1, "workers": 1, "gpus": 8, "args": {"tensor-parallel-size": 8}}
                 for role in ("prefill", "decode")
+            },
+        },
+        "multi_node/srt-slurm-recipes/fixture/agentic-dram.yaml": {
+            **RECIPE, "frontend": {"type": "sglang-router"}, "roles": {
+                "prefill": {"nodes": 1, "workers": 1, "gpus": 8, "args": {
+                    "tensor-parallel-size": 8, "hicache-size": "@dram.per-gpu-gb",
+                }},
+                "decode": {"nodes": 1, "workers": 1, "gpus": 8, "args": {"tensor-parallel-size": 8}},
             },
         },
     }  # fmt: skip
@@ -155,9 +172,9 @@ def test_a_single_node_agentx_point_gets_the_agentic_client_and_no_sequence_leng
     [(record, recipe)] = written(output)
     assert (record["variant"], record["cluster"]) == (None, "fixture")
     assert recipe["model"] == {"path": "hf:org/model", "container": "org/image:1", "precision": "fp8"}
-    assert recipe["benchmark"] == {
-        "type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "org/model", "CONC": "2"},
-    }  # fmt: skip
+    assert recipe["benchmark"] == {"type": "custom", "command": "bash srt_agentic.sh", "env": {
+        "MODEL": "org/model", "CONC": "2", "KV_OFFLOADING": "none",
+    }}  # fmt: skip
 
 
 def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_client_paths(
@@ -173,9 +190,23 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     }}  # fmt: skip
     # The lane's result directory, the AgentX-only aiperf mount and the cluster-wide Hub cache.
     assert recipe["benchmark"]["env"] == {
-        "RESULT_DIR": "/results", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf", "HF_HUB_CACHE": "/hf",
+        "KV_OFFLOADING": "none", "RESULT_DIR": "/results", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf",
+        "HF_HUB_CACHE": "/hf",
     }  # fmt: skip
     assert recipe["benchmark"]["concurrencies"] == [8]
+
+
+def test_a_multinode_dram_point_sizes_host_dram_from_its_budget_per_prefill_gpu(
+    project, power_lane, tmp_path
+):
+    output = tmp_path / "out"
+    assert generate(project, output, "agentx-multi-dram") == 0
+
+    # 1,000,000 MiB at 0.5 over all eight GPUs of a node: 524 GB, 65 GB per GPU.
+    [(record, recipe)] = written(output)
+    assert record["matrix"]["total-cpu-dram-gb"] == 524
+    assert recipe["roles"]["prefill"]["args"]["hicache-size"] == 65
+    assert recipe["benchmark"]["env"]["TOTAL_CPU_DRAM_GB"] == "524"
 
 
 def test_a_power_point_its_lane_refuses_fails_without_writing(

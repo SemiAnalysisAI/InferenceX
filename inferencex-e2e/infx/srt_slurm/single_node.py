@@ -14,7 +14,7 @@ import yaml
 
 from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
-from infx.srt_slurm.workload import bind_workload, compose_recipe
+from infx.srt_slurm.workload import bind_workload, compose_recipe, dram_budget, resolve_dram
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
 
@@ -126,10 +126,6 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    # A variant that names its point, or the host budget it sizes, must match the matrix.
-    for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
-        if name in workload:
-            expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
         # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
@@ -217,6 +213,7 @@ def main() -> None:
     try:
         if parsed.command == "prepare":
             _, recipe = select_recipe(parsed.recipe, os.environ)
+            recipe = resolve_dram(recipe, dram_budget(os.environ, multinode=False))
             arguments = runtime_arguments(parsed.recipe, os.environ)
             # srtctl gets the bound variant, never the fragment.
             config = parsed.output.with_name("recipe.yaml")
