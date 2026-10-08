@@ -9410,3 +9410,12 @@
     - "TP4 concurrency 32 sets ATOM_PREFILL_DECODE_INTERVAL=16: after each prefill, ATOM runs at least 16 decode passes and batches the prefills that arrive in the meantime (ATOM's PrefillDelayer, off by default). Prefill no longer interrupts decode as often, so P90 interactivity rises while TTFT rises. Local 3600 s replay: 108.2 -> 150.9 tok/s/user, ITL p90 9.24 -> 6.63 ms, TTFT p50 0.51 -> 1.14 s, throughput unchanged."
     - "TP2 concurrency 64 sets ATOM_PREFILL_DECODE_INTERVAL=4. At this load each batched prefill forward serves several requests, so throughput rises as well as interactivity. Local 3600 s replay: 30.3 -> 38.8 tok/s/user, 105.4k -> 115.2k tok/s/GPU, 6487 -> 6941 requests, TTFT p90 2.3 -> 6.4 s. All other points are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3603
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg-agentic-mega-mp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a single DeepSeek-V4-Pro-0813 MI355X ATOM 1P1D AgentX point at concurrency 256 following ROCm/ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md on codex/v4-pd-ep8-mega-mp-sticky-recipe-20261008, on rocm/atom-dev:nightly_202610080328."
+    - "Prefill runs DP attention with EP8, the Mega MoE backend (high-throughput all2all) and EPLB (window 100, interval 200, at most 4 rebalances), without TBO, and offloads KV to one node-wide LMCache MP server (lmcache_mp connector, tp_rank_collapse, 1000 GB lazy L1, 900 s read TTL, LRU) instead of the in-process lmcache_offload tier. Decode, dp_sticky AToMesh routing and DSpark settings match the existing c256 point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
