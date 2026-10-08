@@ -37,7 +37,6 @@ base:
         chunked-prefill-size: 16384
         # Keep active decode requests progressing while long prefixes are queued.
         prefill-decode-interval: 16
-        enable-deepseek-v4-fp4-indexer: true
         # DSpark is the checkpoint's bundled draft; the block size is its only knob.
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 5

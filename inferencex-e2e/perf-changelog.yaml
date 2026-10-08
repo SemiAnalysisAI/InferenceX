@@ -9417,6 +9417,6 @@
     - agentic-coding
   description:
     - "Repin DeepSeek-V4.1-Flash FP4 B300 SGLang AgentX from nightly-dev-cu13-20260922-582389ce to nightly-dev-cu13-20261004-295a53c9, pinned by multiarch digest, and publish nine points: TP4/EP1 at concurrency 1 and 4, TP2/EP1 at concurrency 1, 4, 16, 24, 32 and 48, and aggregated TP4/EP4/DP4 at concurrency 192."
-    - "For the TP arms, switch to EP1, enable the DeepSeek-V4 FP4 indexer, use 16K prefill chunks, and set point-specific prefill-decode scheduling."
+    - "For the TP arms, switch to EP1, use 16K prefill chunks, and set point-specific prefill-decode scheduling."
     - "Add an aggregated DP4 C192 point with four internal TP4/EP4 data-parallel ranks behind sglang-router 0.3.2, using cache-aware routing and correlation-ID affinity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3744
