@@ -79,13 +79,20 @@ def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, 
     return variants
 
 
+def _without_nulls(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _without_nulls(item) for key, item in value.items() if item is not None}
+    return value
+
+
 def expand_variants(
     raw: dict[str, Any], selector: str | None
 ) -> list[tuple[str | None, dict[str, Any]]]:
     """The variants ``selector`` picks from ``raw``, each named by its own selector.
 
     No selector picks a plain recipe, or every ``override_*`` then every ``zip_override_*``
-    variant of a bundle, in name order. Variants inherit the bundle's ``schema``.
+    variant of a bundle, in name order. Variants inherit the bundle's ``schema``, and zip
+    variants drop null-valued keys as ``srtctl apply`` does.
     """
     if "base" not in raw:
         if selector is not None:
@@ -110,4 +117,7 @@ def expand_variants(
     if "schema" in raw:
         for _, recipe in selected:
             recipe.setdefault("schema", raw["schema"])
-    return selected
+    return [
+        (name, _without_nulls(recipe) if name.startswith("zip_override_") else recipe)
+        for name, recipe in selected
+    ]
