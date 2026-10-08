@@ -9475,3 +9475,11 @@
     - "Refresh the aggregated curve with TP4/EP4 points at concurrency 1, 4, 8, 16, 24 and 32, plus TP4/EP4/DP4 points at concurrency 48 and 128 behind sglang-router."
     - "Apply the point-specific prefill chunking, scheduling, admission, memory and SWA prefix-tail settings from the single-node recipe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3745
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update B300 DSV4 DSpark performance with DP spec/prefill coordination, mixed 64K chunks and interval 32; retain TP4/TP8 low-latency coverage. Use the CUDA 13 development nightly from 2026-10-08 (7760d526)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3606

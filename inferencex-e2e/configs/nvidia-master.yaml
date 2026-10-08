@@ -1119,7 +1119,7 @@ dsr1-fp8-b300-sglang:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/b300-fp8/8k1k.yaml
 
 dsv4-fp4-b300-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang:nightly-dev-20260901-07c8f729
+  image: lmsysorg/sglang:nightly-dev-cu13-20261008-7760d526@sha256:f991a9648fc0a00410bab27d96bf96a0263be9d9b178fe01ee95cffe622fd283
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b300-dsxe
@@ -1130,20 +1130,9 @@ dsv4-fp4-b300-sglang-agentic-hicache-mtp:
     agentic-coding:
     - dram-utilization: 0.95
       search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml }
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [32, 64, 128, 256, 384, 512, 576], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml }
-
-  # DeepSeek-V4-Pro-0813 on B300 with DSpark speculative decoding. Recipe is
-  # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
-  # DP_ATTENTION:
-  #   dp-attn: false -> TP-only + flashinfer_mxfp4 + chunked-prefill 8192
-  #                     + mem-fraction 0.88 + swa-full-tokens-ratio 0.1
-  #   dp-attn: true  -> DP-attn  + megamoe + fp4 indexer
-  #                     + chunked-prefill 65536 + mem-fraction 0.90
-  #                     + swa-full-tokens-ratio 0.075
-  #                     + prefill-decode-interval 20
-  # Both paths share DSpark K=6 (1 step, 7 draft tokens) and
-  # max-running-requests 2*CONC.
 
 dsv4-fp4-b300-sglang-agentic-hicache-eagle:
   image: lmsysorg/sglang:dev-cu13-nightly-09242@sha256:c47bbe7448050608b4e08669c742df4835a45a95bf6b19f2c4e51a7f6609e9d5
