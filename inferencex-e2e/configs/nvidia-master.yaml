@@ -1229,7 +1229,7 @@ dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
   precision: fp4
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "1.5.0.dev20260914" }
-  kv-p2p-transfer: mooncake
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
