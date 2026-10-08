@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 from pydantic import AfterValidator, Field, PlainSerializer, field_validator, model_validator
 
 from infx.clusters.base import Record, SchedulerSettings, Visibility, Volume
+from infx.srt_slurm.workload import FABRIC_REFERENCE
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -157,7 +158,6 @@ FabricList = Annotated[
     tuple[FabricName, ...], Field(min_length=1), PlainSerializer(",".join, return_type=str)
 ]
 FabricNumber = Annotated[int, Field(ge=0), PlainSerializer(str, return_type=str)]
-FABRIC_REFERENCE = "@fabric."
 
 
 class Fabric(Record):
