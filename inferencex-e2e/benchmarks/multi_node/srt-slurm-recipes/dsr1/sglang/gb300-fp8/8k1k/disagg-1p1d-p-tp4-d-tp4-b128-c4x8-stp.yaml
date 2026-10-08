@@ -117,7 +117,3 @@ roles:
       tensor-parallel-size: 4
       data-parallel-size: 1
       expert-parallel-size: 1
-
-benchmark:
-  env:
-    TOKENIZER: /model
