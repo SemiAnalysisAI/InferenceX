@@ -21,13 +21,8 @@ from infx.results.power import (
     with_power_metrics,
 )
 from infx.results.power.audit import audit_summary
+from infx.results.power.common import _write_json_atomic
 from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
-from infx.results.power.single_node import (
-    _patch_power_result,
-    _write_json_atomic,
-    invalid_validation_payload,
-    run as run_power,
-)
 
 from .artifacts import load_aggregate, load_records, resolve_artifact_dir
 
@@ -140,88 +135,6 @@ def build_power_window(
             "total_output_tokens": sum(output_tokens),
         },
         [],
-    )
-
-
-def _record_adapter_failure(
-    *,
-    result_dir: Path,
-    agg_result: Path,
-    expected_num_gpus: int | None,
-    reasons: list[str],
-) -> None:
-    """Write the same invalid aggregate and audit artifacts as aggregate_power."""
-    csv_path = result_dir / "gpu_metrics.csv"
-    window_path = result_dir / "agentic_power_window.json"
-    validation_path = result_dir / "power_validation.json"
-    _patch_power_result(agg_result, power_valid=False, metrics={})
-    payload = invalid_validation_payload(
-        csv_path=csv_path,
-        bench_result=window_path,
-        expected_num_gpus=expected_num_gpus,
-        reasons=reasons,
-    )
-    payload["window_source"] = "aiperf_profile_lifecycle"
-    _write_json_atomic(validation_path, payload)
-
-
-def run_agentic_power(
-    *,
-    result_dir: Path,
-    agg_result: Path,
-    expected_num_gpus: int | None,
-    require_power: bool = False,
-) -> int:
-    """Validate AgentX power telemetry, failing only in strict mode."""
-    window, reasons = build_power_window(result_dir)
-    if window is None:
-        try:
-            _record_adapter_failure(
-                result_dir=result_dir,
-                agg_result=agg_result,
-                expected_num_gpus=expected_num_gpus,
-                reasons=reasons,
-            )
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
-            print(
-                f"[agentx_power] Failed to record adapter failure: {exc}",
-                file=sys.stderr,
-            )
-        print(
-            f"[agentx_power] Power-window adaptation failed: {', '.join(reasons)}",
-            file=sys.stderr,
-        )
-        return 1 if require_power else 0
-
-    window_path = result_dir / "agentic_power_window.json"
-    try:
-        _write_json_atomic(window_path, window)
-    except OSError:
-        reasons = ["power_window_unwritable"]
-        try:
-            _record_adapter_failure(
-                result_dir=result_dir,
-                agg_result=agg_result,
-                expected_num_gpus=expected_num_gpus,
-                reasons=reasons,
-            )
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
-            print(
-                f"[agentx_power] Failed to record adapter failure: {exc}",
-                file=sys.stderr,
-            )
-        print(
-            f"[agentx_power] Power-window adaptation failed: {', '.join(reasons)}",
-            file=sys.stderr,
-        )
-        return 1 if require_power else 0
-    return run_power(
-        result_dir / "gpu_metrics.csv",
-        window_path,
-        agg_result,
-        expected_num_gpus=expected_num_gpus,
-        validation_result=result_dir / "power_validation.json",
-        require_power=require_power,
     )
 
 
@@ -511,7 +424,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--result-dir", type=Path, required=True)
     parser.add_argument("--agg-result", type=Path)
-    parser.add_argument("--expected-num-gpus", type=int)
     parser.add_argument("--multinode-contract-missing", action="store_true")
     parser.add_argument("--write-multinode-window", choices=("running", "completed"))
     parser.add_argument("--concurrency", type=int)
@@ -562,27 +474,22 @@ def main() -> int:
             state=args.write_multinode_window,
             require_power=args.require_power,
         )
-    if args.power_dir is not None:
-        if args.agg_result is None or args.logs_root is None or args.expected_producer_sha is None:
-            parser.error(
-                "--agg-result, --logs-root, and --expected-producer-sha are required with --power-dir"
-            )
-        return run_multinode_agentic_power(
-            result_dir=args.result_dir,
-            agg_result=args.agg_result,
-            power_dir=args.power_dir,
-            logs_root=args.logs_root,
-            expected_producer_sha=args.expected_producer_sha,
-            require_power=args.require_power,
-            expected_cpu_source=args.expected_cpu_source,
+    if args.power_dir is None:
+        parser.error(
+            "one of --multinode-contract-missing, --write-multinode-window, or --power-dir is required"
         )
-    if args.agg_result is None:
-        parser.error("--agg-result is required for single-node AgentX power")
-    return run_agentic_power(
+    if args.agg_result is None or args.logs_root is None or args.expected_producer_sha is None:
+        parser.error(
+            "--agg-result, --logs-root, and --expected-producer-sha are required with --power-dir"
+        )
+    return run_multinode_agentic_power(
         result_dir=args.result_dir,
         agg_result=args.agg_result,
-        expected_num_gpus=args.expected_num_gpus,
+        power_dir=args.power_dir,
+        logs_root=args.logs_root,
+        expected_producer_sha=args.expected_producer_sha,
         require_power=args.require_power,
+        expected_cpu_source=args.expected_cpu_source,
     )
 
 

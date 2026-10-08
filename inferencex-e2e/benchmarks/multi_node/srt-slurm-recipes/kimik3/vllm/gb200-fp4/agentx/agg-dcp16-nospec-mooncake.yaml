@@ -158,7 +158,8 @@ telemetry:
 
 benchmark:
   type: custom
-  client_placement: head
+  placement:
+    node: head
   concurrencies: [8, 40, 48]
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:

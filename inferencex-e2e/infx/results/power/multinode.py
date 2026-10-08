@@ -98,6 +98,7 @@ SAMPLES_HEADER = (
 
 # srt-slurm v2 appends optional utilization fields to the power samples.
 SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
+SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
 
 # Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
 # NOT a multiple of the configured sample interval.
@@ -351,8 +352,8 @@ def _check_wire_contract(manifest: dict) -> list[str]:
 
 
 def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None:
-    """Validate the selected CSV generation, including optional utilization."""
-    header = SAMPLES_HEADER_V2 if expected_version == 2 else SAMPLES_HEADER
+    """Validate the selected CSV generation, including optional utilization and temperature."""
+    header = {1: SAMPLES_HEADER, 2: SAMPLES_HEADER_V2, 3: SAMPLES_HEADER_V3}[expected_version]
     if len(raw) != len(header):
         return None
     try:
@@ -361,12 +362,16 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
         scrape_seq = int(raw[2])
         gpu_index = int(raw[4])
         power_w = float(raw[6])
-        if expected_version == 2:
-            for cell, maximum in zip(raw[7:], (100.0, 1.0), strict=False):
+        if expected_version >= 2:
+            for cell, maximum in zip(raw[7:9], (100.0, 1.0), strict=False):
                 if cell:
                     value = float(cell)
                     if not math.isfinite(value) or not 0 <= value <= maximum:
                         return None
+        if expected_version == 3 and raw[9]:
+            temperature = float(raw[9])
+            if not math.isfinite(temperature) or not -273.15 <= temperature < 0x7FFFFFF0:
+                return None
     except ValueError:
         return None
     hostname, gpu_uuid = raw[3], raw[5]
@@ -400,6 +405,8 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
                 expected_version = 1
             elif header == list(SAMPLES_HEADER_V2):
                 expected_version = 2
+            elif header == list(SAMPLES_HEADER_V3):
+                expected_version = 3
             else:
                 return (), ("samples_csv_header_mismatch",)
             for raw in reader:

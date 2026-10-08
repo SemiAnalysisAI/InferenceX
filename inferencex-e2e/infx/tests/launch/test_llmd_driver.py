@@ -72,7 +72,8 @@ def harness(tmp_path):
         ISL="8192",
         OSL="1024",
         RANDOM_RANGE_RATIO="0.8",
-        CONC_LIST="256 512",
+        CONC="256",
+        CONC_LIST="256",
         DISAGG="true",
         IMAGE="vllm/vllm-openai:v0.21.0",
         RESULT_FILENAME="point-identity",
@@ -106,7 +107,7 @@ def test_llmd_driver_submits_the_wrapper_and_stages_artifacts(harness):
     assert submitted["CONTAINER_IMAGE"] == env["IMAGE"]
     assert (workspace / "submitted.args").read_text().split() == [
         str(workspace / "benchmarks/multi_node/llm-d"),
-        *"2 2 8192 1024 256x512 inf 0.8".split(),
+        *"2 2 8192 1024 256 inf 0.8".split(),
     ]
 
     assert json.loads((workspace / "point-identity_conc128.json").read_text()) == {"conc": 128}

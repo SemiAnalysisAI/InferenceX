@@ -126,8 +126,8 @@ def is_valid_effective_count(value: object) -> bool:
 
 
 def metric_family(name: str) -> str | None:
-    """Classify a filter name or metric key; strict/resolved takes precedence."""
-    if "strict" in name or "resolved" in name:
+    """Classify a filter name or metric key; strict takes precedence."""
+    if "strict" in name:
         return "strict"
     if "flex" in name or "extract" in name:
         return "flex"
