@@ -97,10 +97,6 @@ base:
       ETCD_LEASE_TTL: '120'
       DYN_TOKENIZER: "fastokens"
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
 override_1p2d_tep8_b8_mtp3_c20:
   name: disagg-gb300-1p2d-dep1-tep8-c20-mtp
   roles:

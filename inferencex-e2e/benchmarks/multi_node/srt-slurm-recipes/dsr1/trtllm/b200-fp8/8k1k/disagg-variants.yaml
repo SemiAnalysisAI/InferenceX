@@ -70,10 +70,6 @@ base:
         stream_interval: 20
         tensor_parallel_size: 8
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
   frontend:
     type: "dynamo"
     enable_multiple_frontends: false
