@@ -220,7 +220,7 @@ override_tp2_c20_lmcache:
       env:
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
@@ -230,7 +230,6 @@ override_tp2_c20_lmcache:
     env:
       CONC: '20'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '515'
 
 override_tp2_c25_lmcache:
   roles:
@@ -244,7 +243,7 @@ override_tp2_c25_lmcache:
       env:
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
@@ -254,7 +253,6 @@ override_tp2_c25_lmcache:
     env:
       CONC: '25'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '515'
 
 override_tp2_c30_lmcache:
   roles:
@@ -268,7 +266,7 @@ override_tp2_c30_lmcache:
       env:
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
@@ -278,7 +276,6 @@ override_tp2_c30_lmcache:
     env:
       CONC: '30'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '515'
 
 override_tp4_c40_lmcache:
   roles:
@@ -293,7 +290,7 @@ override_tp4_c40_lmcache:
         ATOM_M3_INDEXER_CP: '1'
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
@@ -303,7 +300,6 @@ override_tp4_c40_lmcache:
     env:
       CONC: '40'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c48_lmcache:
   roles:
@@ -318,7 +314,7 @@ override_tp4_c48_lmcache:
         ATOM_M3_INDEXER_CP: '1'
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
@@ -328,4 +324,3 @@ override_tp4_c48_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1030'
