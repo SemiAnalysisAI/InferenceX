@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from infx.clusters.slurm import FABRIC_REFERENCE
 from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
@@ -72,7 +73,6 @@ DRAM_SIZES = frozenset({
 })  # fmt: skip
 # srt-slurm takes env values and argument list items as strings.
 TEXT_MAPPINGS = frozenset({"env", "environment"})
-FABRIC_REFERENCE = "@fabric."
 
 
 def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict[str, Any]:
