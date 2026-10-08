@@ -12,6 +12,7 @@ Classify a failure by the first layer that did not establish its contract. Prese
 
 - [Sources of truth](#sources-of-truth)
 - [Evidence before remediation](#evidence-before-remediation)
+- [Job event records](#job-event-records)
 - [Failure-layer matrix](#failure-layer-matrix)
 - [Changelog and matrix](#changelog-and-matrix)
 - [Runner and AMD root files](#runner-and-amd-root-files)
@@ -40,6 +41,31 @@ Before rerunning or editing, record:
 5. What already succeeded. A matrix that never emitted a job, a job that never acquired a runner, and a server that never became healthy are different failures even if all end with “no result.”
 
 Do not rerun first: reruns can replace logs, change runner/node placement, or make a deterministic failure look transient.
+
+## Job event records
+
+Every `python -m infx.launch run` leaves one `job_event.json` in the job workspace when it exits, on success or failure. The benchmark templates upload it as `job_event_<RESULT_FILENAME>` (eval-only jobs append `_<framework>_<suite>`, as their server logs do). After every benchmark and eval job in the run has finished, [`collect-job-events.yml`](../../.github/workflows/collect-job-events.yml) joins the records into `events.jsonl` in the `job_events` artifact; a cancelled run has only the per-job artifacts. On GitHub Actions, a failed launch also adds one `::error` annotation titled with the failing stage. Read a job's record before its logs; [`infx/launch/event.py`](../infx/launch/event.py) is the schema.
+
+| Fields | Meaning |
+| --- | --- |
+| `run_id`, `run_attempt`, `runner`, `result_filename`, `exp_name` | Workflow attempt, physical runner, and the job identity used in artifact names |
+| `model`, `model_prefix`, `framework`, `precision`, `spec_decoding`, `scenario`, `multinode`, `conc`, `conc_list`, `isl`, `osl` | Point identity |
+| `image`, `recipe`, `recipe_fingerprint`, `cluster`, `slurm_job_id`, `batch_job_id`, `nodes` | What ran where: the selected recipe variant, the benchmark job, the batch allocation around it (batch lanes only), and its hosts |
+| `launch_path`, `power`, `golden_acceptance_length`, `eval_only`, `run_eval`, `kv_offloading`, `kv_offload_backend` | Launch decisions |
+| `started_at`, `duration_s`, `stages` | Seconds per stage: `prepare`, `submit`, `queue_wait` (until the job starts), `run`, `collect`; a batch lane's allocation adds `batch_*` stages |
+| `outcome`, `error`, `artifacts` | `success` or `failure`; for a failure, the first error's `stage`, `type`, `message`, launcher `exit_code`, `retriable`, and `evidence` (the log to read first); the workspace files the launch wrote |
+
+`retriable` marks infrastructure failures (Slurm or image errors, lost nodes, interruptions) that a rerun may clear. It is a hint, not a diagnosis.
+
+```bash
+gh run download <run-id> -n job_events
+# Failed jobs: stage, error type, job, and the log to open first
+jq -r 'select(.outcome == "failure") | [.error.stage, .error.type, .result_filename, .error.evidence] | @tsv' events.jsonl
+# Failures per cluster, and how many look like infrastructure
+jq -s 'map(select(.outcome == "failure")) | group_by(.cluster) | map({cluster: .[0].cluster, failures: length, retriable: map(select(.error.retriable)) | length})' events.jsonl
+# Ten longest queue waits
+jq -s 'sort_by(-(.stages.queue_wait // 0)) | .[:10] | map({result_filename, cluster, queue_wait: .stages.queue_wait})' events.jsonl
+```
 
 ## Failure-layer matrix
 

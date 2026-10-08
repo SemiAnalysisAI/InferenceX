@@ -10,9 +10,10 @@ import subprocess
 import sys
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from infx.bench.proc import echo
 from infx.launch import proc
 from infx.launch.backends.base import BackendError, Job, JobState, JobStatus
 
@@ -181,21 +182,23 @@ def default_account() -> str | None:
     return account.splitlines()[0] if account else None
 
 
-def _observe(job: Job) -> tuple[str, str]:
-    """One (state, exit code) reading: allocation accounting, else the controller's record."""
-    accounting = _query(["sacct", "-X", "-n", "-P", "-j", job.id, "--format=State,ExitCode"])
+def _observe(job: Job) -> tuple[str, str, str]:
+    """One (state, exit code, nodes) reading: allocation accounting, else the controller's."""
+    accounting = _query(
+        ["sacct", "-X", "-n", "-P", "-j", job.id, "--format=State,ExitCode,NodeList"]
+    )
     first = accounting.splitlines()[0] if accounting.strip() else ""
-    state, _, exit_code = first.partition("|")
+    state, exit_code, nodes = [*first.split("|"), "", ""][:3]
     if state.strip():
-        return state.strip(), exit_code.strip()
+        return state.strip(), exit_code.strip(), nodes.strip()
     fields = dict(
         item.split("=", 1)
         for item in _query(["scontrol", "show", "job", "-o", job.id]).split()
         if "=" in item
     )
     if fields.get("JobId") != job.id:
-        return "", ""
-    return fields.get("JobState", ""), fields.get("ExitCode", "")
+        return "", "", ""
+    return fields.get("JobState", ""), fields.get("ExitCode", ""), fields.get("NodeList", "")
 
 
 def job_status(state: str, exit_code: str) -> JobStatus:
@@ -223,28 +226,21 @@ def final_status(job: Job, *, attempts: int = 10, delay_s: float = 1.0) -> JobSt
     """The allocation's terminal status (``sacct -X``: never its steps); never raises.
 
     Accounting lags, so unsettled readings are retried; after ``attempts`` the last one is
-    returned. A non-success is also reported on stderr.
+    returned.
     """
-    state, exit_code = "", ""
+    state, exit_code, nodes = "", "", ""
     for attempt in range(attempts):
-        state, exit_code = _observe(job)
+        state, exit_code, nodes = _observe(job)
         if job_status(state, exit_code).state not in _UNSETTLED:
             break
         if attempt + 1 < attempts:
             time.sleep(delay_s)
-    status = job_status(state, exit_code)
-    if status.state in _UNSETTLED:
-        print(f"ERROR: could not verify terminal Slurm status for job {job.id}", file=sys.stderr)
-    elif not status.succeeded:
-        print(
-            f"ERROR: Slurm job {job.id} ended with state={state} exit_code={exit_code}",
-            file=sys.stderr,
-        )
-    return status
+    unassigned = {"", "None assigned", "(null)"}
+    return replace(job_status(state, exit_code), nodes=None if nodes in unassigned else nodes)
 
 
-def stream_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
-    """Wait for ``path``, then follow it until ``job`` leaves the queue.
+def wait_for_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
+    """Wait until ``job`` creates ``path``.
 
     Raises ``SlurmError``, after printing ``scontrol show job``, if the job ends first.
     """
@@ -256,10 +252,13 @@ def stream_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
             raise SlurmError(f"job {job.id} ended before creating {path}")
         time.sleep(wait_s)
 
+
+def follow_log(job: Job, path: Path) -> None:
+    """Print ``path`` as it grows until ``job`` leaves the queue."""
     sentinel = subprocess.Popen(["sleep", "2147483647"])
     print(f"Tailing {path}", file=sys.stderr, flush=True)
     tail_argv = ["tail", "-F", "-s", "2", "-n+1", str(path), f"--pid={sentinel.pid}"]
-    proc.echo(tail_argv)
+    echo(tail_argv)
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
     try:
         while queue_state(job, echo_command=False) is not None:

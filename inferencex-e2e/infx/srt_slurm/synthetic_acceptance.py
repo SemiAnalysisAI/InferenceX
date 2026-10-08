@@ -12,7 +12,7 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import yaml
 
@@ -97,6 +97,33 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     }
 
 
+def acceptance_length(
+    recipe: Mapping[str, Any],
+    framework: str,
+    environment: Mapping[str, str],
+    *,
+    golden_dir: Path = GOLDEN_DIR,
+) -> float | None:
+    """The golden AL a speculative AgentX throughput run of ``recipe`` simulates, else None."""
+    engine = ENGINES.get(framework)
+    if engine is None:
+        return None
+    roles = recipe.get("roles", {})
+    synthetic = (
+        environment["EVAL_ONLY"].lower() != "true"
+        and environment["IS_AGENTIC"].lower() in ("1", "true")
+        and environment["SPEC_DECODING"] != "none"
+    )
+    # Prefill may have a different MTP depth; generation defines the AL target.
+    generation = roles.get("decode", roles.get("agg", {}))
+    spec = spec_parameters(generation, engine)
+    if not (synthetic and spec):
+        return None
+    return golden_length(
+        environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir
+    )
+
+
 def build_overrides(
     recipe: Mapping[str, Any],
     framework: str,
@@ -109,19 +136,7 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
-    synthetic = (
-        environment["EVAL_ONLY"].lower() != "true"
-        and environment["IS_AGENTIC"].lower() in ("1", "true")
-        and environment["SPEC_DECODING"] != "none"
-    )
-    # Prefill may have a different MTP depth; generation defines the AL target.
-    generation = roles.get("decode", roles.get("agg", {}))
-    spec = spec_parameters(generation, engine)
-    al = None
-    if synthetic and spec:
-        al = golden_length(
-            environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir
-        )
+    al = acceptance_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
         "sglang": SGLANG_VARIABLES,
@@ -239,6 +254,13 @@ def selected_recipes(
     return result
 
 
+class Planned(NamedTuple):
+    """One ``srtctl apply`` command and the golden AL it simulates (None: real acceptance)."""
+
+    command: list[str]
+    acceptance_length: float | None
+
+
 def plan_commands(
     config: str,
     framework: str,
@@ -246,11 +268,11 @@ def plan_commands(
     environment: Mapping[str, str],
     *,
     golden_dir: Path = GOLDEN_DIR,
-) -> list[list[str]]:
+) -> list[Planned]:
     """Build native arguments for every selected variant before submitting jobs."""
     command = ["srtctl", "apply", *arguments]
     if framework not in ENGINES:
-        return [[*command, "--file", config]]
+        return [Planned([*command, "--file", config], None)]
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
     path, _, selector = config.partition(":")
@@ -263,7 +285,7 @@ def plan_commands(
     existing, _ = parser.parse_known_args(arguments)
     caller_overrides = parse_overrides(existing.set, existing.unset)
     apply_overrides_to_recipe(raw, caller_overrides)
-    commands = []
+    plans = []
     for variant, recipe in selected_recipes(raw, selector or None):
         arguments_to_add = build_overrides(recipe, framework, environment, golden_dir=golden_dir)
         parsed, _ = parser.parse_known_args(arguments_to_add)
@@ -280,24 +302,32 @@ def plan_commands(
         apply_overrides_to_recipe(materialized, generated_overrides)
         selected_recipes(materialized, variant)
         selected_file = f"{path}:{variant}" if variant is not None else path
-        commands.append([*command, "--file", selected_file, *arguments_to_add])
-    return commands
+        length = acceptance_length(recipe, framework, environment, golden_dir=golden_dir)
+        plans.append(Planned([*command, "--file", selected_file, *arguments_to_add], length))
+    return plans
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--record", type=Path, help="write the plan's golden acceptance length here as JSON"
+    )
     parser.add_argument("config")
     parser.add_argument("framework")
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
     try:
-        commands = plan_commands(args.config, args.framework, arguments, os.environ)
+        plans = plan_commands(args.config, args.framework, arguments, os.environ)
     except (OSError, KeyError, ValueError, TypeError, yaml.YAMLError) as error:
         print(f"ERROR: golden acceptance: {error}", file=sys.stderr)
         return 1
-    for command in commands:
-        result = subprocess.run(command, check=False)
+    if args.record is not None:
+        lengths = {plan.acceptance_length for plan in plans}
+        length = lengths.pop() if len(lengths) == 1 else None
+        args.record.write_text(json.dumps({"golden_acceptance_length": length}) + "\n")
+    for plan in plans:
+        result = subprocess.run(plan.command, check=False)
         if result.returncode:
             return result.returncode
     return 0

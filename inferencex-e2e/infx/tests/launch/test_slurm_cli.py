@@ -18,7 +18,7 @@ from infx.launch.backends.slurm.cli import (
     queue_state,
     salloc,
     srun_argv,
-    stream_log,
+    wait_for_log,
 )
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.request import LaunchRequest
@@ -75,18 +75,18 @@ def test_salloc_without_a_grant_fails(fake_bin, body):
         salloc(Resources(partition="p", account=None, time_min=10, job_name="n"))
 
 
-@pytest.mark.parametrize("record,state,exit_code", [
-    ("COMPLETED|0:0", JobState.SUCCEEDED, 0),
-    ("FAILED|1:0", JobState.FAILED, 1),
-    ("COMPLETED|0:15", JobState.FAILED, 0),
-    ("CANCELLED by 1001|0:0", JobState.CANCELLED, 0),
+@pytest.mark.parametrize("record,state,exit_code,nodes", [
+    ("COMPLETED|0:0|gpu[01-02]", JobState.SUCCEEDED, 0, "gpu[01-02]"),
+    ("FAILED|1:0|gpu03", JobState.FAILED, 1, "gpu03"),
+    ("COMPLETED|0:15", JobState.FAILED, 0, None),
+    ("CANCELLED by 1001|0:0|None assigned", JobState.CANCELLED, 0, None),
 ])
-def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, state, exit_code):
+def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, state, exit_code, nodes):
     log = tmp_path / "sacct.log"
     fake_bin("sacct", f"{recorder(log)}\necho '{record}'")
     status = final_status(Job("42"), delay_s=0)
-    assert (status.state, status.exit_code) == (state, exit_code)
-    assert calls(log) == [["-X", "-n", "-P", "-j", "42", "--format=State,ExitCode"]]
+    assert (status.state, status.exit_code, status.nodes) == (state, exit_code, nodes)
+    assert calls(log) == [["-X", "-n", "-P", "-j", "42", "--format=State,ExitCode,NodeList"]]
 
 
 @pytest.mark.parametrize("readings,state", [
@@ -101,14 +101,15 @@ def test_final_status_retries_unsettled_accounting_up_to_its_attempts(fake_bin, 
     assert counter.read_text().strip() == "3"
 
 
-@pytest.mark.parametrize("controller,state", [
-    ("JobId=42 JobName=x JobState=COMPLETED Reason=None ExitCode=0:0", JobState.SUCCEEDED),
-    ("JobId=42 JobName=x JobState=FAILED Reason=NonZeroExitCode ExitCode=3:0", JobState.FAILED),
-    ("JobId=420 JobName=x JobState=COMPLETED ExitCode=0:0", JobState.UNKNOWN),
+@pytest.mark.parametrize("controller,state,nodes", [
+    ("JobId=42 JobName=x JobState=COMPLETED Reason=None ExitCode=0:0 NodeList=gpu07", JobState.SUCCEEDED, "gpu07"),
+    ("JobId=42 JobName=x JobState=FAILED Reason=NonZeroExitCode ExitCode=3:0 NodeList=(null)", JobState.FAILED, None),
+    ("JobId=420 JobName=x JobState=COMPLETED ExitCode=0:0 NodeList=gpu07", JobState.UNKNOWN, None),
 ])
-def test_final_status_falls_back_to_controller_without_sacct(fake_bin, controller, state):
+def test_final_status_falls_back_to_controller_without_sacct(fake_bin, controller, state, nodes):
     fake_bin("scontrol", f"echo '{controller}'")
-    assert final_status(Job("42"), attempts=3, delay_s=0).state is state
+    status = final_status(Job("42"), attempts=3, delay_s=0)
+    assert (status.state, status.nodes) == (state, nodes)
 
 
 def test_queue_state_reads_only_the_named_job(fake_bin):
@@ -117,12 +118,12 @@ def test_queue_state_reads_only_the_named_job(fake_bin):
     assert queue_state(Job("7")) is None
 
 
-def test_stream_log_fails_when_job_dies_before_its_log(fake_bin, tmp_path):
+def test_waiting_for_a_log_fails_when_the_job_dies_before_it(fake_bin, tmp_path):
     log = tmp_path / "scontrol.log"
     fake_bin("squeue", "exit 0")
     fake_bin("scontrol", recorder(log))
     with pytest.raises(SlurmError, match="ended before creating"):
-        stream_log(Job("77"), tmp_path / "missing.log", wait_s=0)
+        wait_for_log(Job("77"), tmp_path / "missing.log", wait_s=0)
     assert calls(log) == [["show", "job", "77"]]
 
 

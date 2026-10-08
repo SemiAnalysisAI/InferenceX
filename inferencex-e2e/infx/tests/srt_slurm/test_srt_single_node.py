@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
-from infx.srt_slurm.synthetic_acceptance import plan_commands
+from infx.srt_slurm.synthetic_acceptance import Planned, plan_commands
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -113,10 +113,10 @@ def test_mtp_binding_uses_real_verification_and_the_chat_template(point, tmp_pat
     concrete = tmp_path / "bound.yaml"
     concrete.write_text(yaml.safe_dump(bound))
     argv = runtime_arguments(f"{path}:base", env)
-    assert plan_commands(str(concrete), "sglang", ["--json", *argv], env) == [[
+    assert plan_commands(str(concrete), "sglang", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", str(concrete),
         "--unset", "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
-    ]]
+    ], None)]
 
 
 def test_concurrency_selects_its_variant_before_binding(point):
@@ -189,10 +189,10 @@ def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
         "speculative_config": {"decoding_type": "MTP", "num_nextn_predict_layers": 3},
         "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
     }
-    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
         "--unset", "roles.agg.env.TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS",
-    ]]
+    ], None)]
     with pytest.raises(ValueError, match="moe_expert_parallel_size"):
         runtime_arguments(f"{path}:base", {**env, "EP_SIZE": "1"})
 
@@ -214,9 +214,9 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
         "enable-expert-parallel": True, "enable-dp-attention": True, "max-model-len": 2048,
     }
-    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
-    ]]
+    ], None)]
     for changes, error in [
         ({"EP_SIZE": "2"}, "expert parallelism"),
         ({"EP_SIZE": "1"}, "enable-expert-parallel"),

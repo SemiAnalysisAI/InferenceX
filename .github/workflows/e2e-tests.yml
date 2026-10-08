@@ -556,6 +556,14 @@ jobs:
         with:
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
+    collect-job-events:
+        name: collect-job-events
+        needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals]
+        if: ${{ !cancelled() && needs.get-jobs.result == 'success' }}
+        uses: $/.github/workflows/collect-job-events.yml
+        with:
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
+
     calc-success-rate:
         name: calc-success-rate
         needs: [get-jobs, collect-results, collect-evals]

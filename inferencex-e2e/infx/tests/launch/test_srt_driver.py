@@ -122,9 +122,14 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
 
 
+def job_event(workspace: Path) -> dict:
+    """The job record the launch left in ``workspace``."""
+    return json.loads((workspace / "job_event.json").read_text())
+
+
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
-    env = single_node_env(harness, "h200-cw")
+    env = single_node_env(harness, "h200-cw", EXP_NAME="dsr1_1k1k", RECIPE_FINGERPRINT="fp-1")
     # The binder takes the job cluster's fabric facts.
     records = yaml.safe_load(harness.config.read_text())
     records["clusters"]["h200-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
@@ -156,6 +161,20 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
     assert lines(harness.logs, "scancel") == []
 
+    event = job_event(workspace)
+    identity = {
+        "run_id": "9001", "run_attempt": 1, "result_filename": "point-identity", "exp_name": "dsr1_1k1k",
+        "runner": env["RUNNER_NAME"], "cluster": "h200-cw", "launch_path": "srt-single",
+        "model_prefix": "dsr1", "framework": "sglang", "precision": "fp8", "spec_decoding": "none",
+        "multinode": False, "conc": 2, "recipe": "recipe.yaml:zip_override_conc[0]",
+        "recipe_fingerprint": "fp-1", "slurm_job_id": "42", "outcome": "success", "error": None,
+    }  # fmt: skip
+    assert {key: event[key] for key in identity} == identity
+    assert list(event["stages"]) == ["prepare", "submit", "queue_wait", "run", "collect"]
+    assert all(seconds >= 0 for seconds in event["stages"].values())
+    assert {"point-identity.json", "srt-single-node-logs.tar.gz", "srt-setup.log"} <= set(event["artifacts"])
+    assert "recipe.yaml" not in event["artifacts"]
+
 
 def test_single_node_eval_requires_a_successful_eval(harness):
     env = single_node_env(harness, "h100-cw", RUN_EVAL="true", MAX_MODEL_LEN="1024")
@@ -171,10 +190,22 @@ def test_single_node_eval_requires_a_successful_eval(harness):
 
 
 def test_single_node_failed_allocation_fails_the_launch(harness):
-    env = single_node_env(harness, "b200-nb", FAKE_STATE="FAILED|1:0")
+    env = single_node_env(harness, "b200-nb", FAKE_STATE="FAILED|1:0|gpu-[01-02]", GITHUB_ACTIONS="true")
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 1
     assert (harness.workspace / "point-identity.json").is_file()
+
+    event = job_event(harness.workspace)
+    assert (event["outcome"], event["nodes"]) == ("failure", "gpu-[01-02]")
+    error = event["error"]
+    assert {key: error[key] for key in ("stage", "type", "message", "exit_code", "retriable")} == {
+        "stage": "run", "type": "JobFailed", "message": "Slurm job 42 ended with state=FAILED exit_code=1:0",
+        "exit_code": 1, "retriable": False,
+    }  # fmt: skip
+    assert error["evidence"].startswith("srt-single.")
+    assert error["evidence"].endswith("/outputs/42/logs/sweep_42.log")
+    annotation = "::error title=run::JobFailed: Slurm job 42 ended with state=FAILED exit_code=1:0\n"
+    assert annotation in result.stderr
 
 
 @pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
@@ -387,6 +418,8 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     assert lines(harness.logs, "scancel") == ["42"]
     if shape == "single":
         assert (harness.workspace / "point-identity.json").is_file()
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["exit_code"]) == ("submit", "SubmitFailed", 7)
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
@@ -413,17 +446,27 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     assert lines(harness.logs, "scancel") == ["42"]
     staged = "srt-single-node-logs.tar.gz" if shape == "single" else "multinode_server_logs.tar.gz"
     assert (harness.workspace / staged).stat().st_size > 0
+    error = job_event(harness.workspace)["error"]
+    assert {key: error[key] for key in ("stage", "type", "exit_code", "retriable")} == {
+        "stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True,
+    }
+    assert "::error" not in stdout + stderr
 
 
-def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
+def batch_env(harness, **overrides: str) -> dict[str, str]:
+    """Environment of a B300 DSV4.1-Flash AgentX point, which runs inside a batch allocation."""
     runner_temp = harness.tmp / "runner-temp"
     runner_temp.mkdir()
     (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
-    env = {
+    return {
         **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for("b300-dsxe"), "MODEL_PREFIX": "dsv41flash",
         "PRECISION": "fp8", "IS_AGENTIC": "1", "DURATION": "600", "RUNNER_TEMP": str(runner_temp),
-        "SRT_RECIPE": "recipe.yaml:base",
+        "SRT_RECIPE": "recipe.yaml:base", **overrides,
     }  # fmt: skip
+
+
+def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
+    env = batch_env(harness)
     assert_ok(launch(env, harness.config, harness.workspace))
 
     [submit] = lines(harness.logs, "sbatch")
@@ -432,7 +475,19 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     assert json.loads((harness.workspace / "point-identity.json").read_text()) == {"completed": 2}
     assert len(srtctl_calls(harness.logs)) == 1
     assert "4242" in lines(harness.logs, "scancel")
-    assert list(runner_temp.glob("srt-batch.*.sh")) == []
+    assert list((harness.tmp / "runner-temp").glob("srt-batch.*.sh")) == []
+    event = job_event(harness.workspace)
+    assert (event["launch_path"], event["slurm_job_id"], event["batch_job_id"]) == ("srt-batch", "42", "4242")
+    assert {"batch_submit", "batch_queue_wait", "batch_run", "submit", "run"} <= set(event["stages"])
+
+
+def test_a_failed_batch_wrapped_point_reports_the_wrapped_failure_once(harness):
+    env = batch_env(harness, FAKE_STATE="FAILED|1:0", GITHUB_ACTIONS="true")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["message"]) == ("run", "Slurm job 42 ended with state=FAILED exit_code=1:0")
+    assert (result.stdout + result.stderr).count("::error") == 1
 
 
 def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
@@ -547,6 +602,8 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     assert "make setup broke" in result.stderr
     assert len(lines(harness.logs, "make")) == 1
     assert srtctl_calls(harness.logs) == [] and lines(harness.logs, "scancel") == []
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "SetupFailed", "srt-setup.log")
 
 
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
@@ -560,6 +617,9 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
     assert result.returncode == 1
     assert message in result.stderr
     assert lines(harness.logs, "git") == []
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["retriable"]) == ("prepare", "LaunchError", False)
+    assert message in error["message"]
 
 
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [

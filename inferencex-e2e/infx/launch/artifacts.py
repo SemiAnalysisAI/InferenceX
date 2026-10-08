@@ -80,7 +80,7 @@ def copy_fixed_sequence_results(logs_dir: Path, workspace: Path, result_filename
     """Copy srt-slurm's ``results_concurrency_*.json`` points under bounded workspace names."""
     subdirs = _result_subdirs(logs_dir)
     if not subdirs:
-        _say(f"Warning: No result subdirectories found in {logs_dir}")
+        _warn(f"WARNING: no result subdirectories found in {logs_dir}")
     for subdir in subdirs:
         _say(f"Processing result subdirectory: {subdir}")
         config_name = subdir.name
