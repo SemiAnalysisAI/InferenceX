@@ -9410,3 +9410,11 @@
     - "TP4 concurrency 32 sets ATOM_PREFILL_DECODE_INTERVAL=16: after each prefill, ATOM runs at least 16 decode passes and batches the prefills that arrive in the meantime (ATOM's PrefillDelayer, off by default). Prefill no longer interrupts decode as often, so P90 interactivity rises while TTFT rises. Local 3600 s replay: 108.2 -> 150.9 tok/s/user, ITL p90 9.24 -> 6.63 ms, TTFT p50 0.51 -> 1.14 s, throughput unchanged."
     - "TP2 concurrency 64 sets ATOM_PREFILL_DECODE_INTERVAL=4. At this load each batched prefill forward serves several requests, so throughput rises as well as interactivity. Local 3600 s replay: 30.3 -> 38.8 tok/s/user, 105.4k -> 115.2k tok/s/GPU, 6487 -> 6941 requests, TTFT p90 2.3 -> 6.4 s. All other points are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3603
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune B200 vLLM AgentX DEP2/DEP4 with prefill-schedule-interval and extended piecewise CUDA graph capture."
+    - "Add TP2 c1 and DEP2 c128 host-KV (native CPU offloading) rows."
+  pr-link: XXX
