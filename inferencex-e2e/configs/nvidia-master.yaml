@@ -7903,7 +7903,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
+        kv-offload-backend: { name: native, version: "1.3.0rc28.dev202609210001" }
         prefill:
           num-worker: 1
           tp: 4
@@ -7920,7 +7920,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [30]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
+        kv-offload-backend: { name: native, version: "1.3.0rc28.dev202609210001" }
         prefill:
           num-worker: 1
           tp: 4
@@ -7937,7 +7937,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [20]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
+        kv-offload-backend: { name: native, version: "1.3.0rc28.dev202609210001" }
         prefill:
           num-worker: 1
           tp: 4
@@ -7954,7 +7954,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [60]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
+        kv-offload-backend: { name: native, version: "1.3.0rc28.dev202609210001" }
         prefill:
           num-worker: 3
           tp: 4
@@ -7971,7 +7971,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [260]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
+        kv-offload-backend: { name: native, version: "1.3.0rc28.dev202609210001" }
         prefill:
           num-worker: 5
           tp: 4
@@ -7988,7 +7988,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
       - spec-decoding: mtp
         conc-list: [227]
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.3.0rc26.dev202609040000" }
+        kv-offload-backend: { name: native, version: "1.3.0rc28.dev202609210001" }
         prefill:
           num-worker: 4
           tp: 4
