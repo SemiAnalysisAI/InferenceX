@@ -9418,4 +9418,4 @@
   description:
     - "Update the B300 TRT-LLM MiniMax-M3 AgentX recipe to the 13 scheduled TP2/TP4/TP8 profiles with NVFP4 KV cache, EAGLE3 speculative decoding, and native DRAM KV offload."
     - "Pin the recipe and master config image to nvcr.io#nvidia/tensorrt-llm/release:1.4.0rc0.dev202610070001."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3835
