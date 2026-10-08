@@ -111,7 +111,8 @@ def test_kv_offloading_selects_the_dram_variant_and_prepare_sizes_it_from_the_bu
         monkeypatch.setenv(name, value)
     output = tmp_path / "prepared"
     output.mkdir()
-    monkeypatch.setattr(sys, "argv", ["single_node", "prepare", str(path), str(output / "args")])
+    argv = ["single_node", "prepare", str(path), str(output / "args"), "--fabric", "{}"]
+    monkeypatch.setattr(sys, "argv", argv)
 
     main()
 

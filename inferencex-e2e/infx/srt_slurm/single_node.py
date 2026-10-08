@@ -16,10 +16,12 @@ from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
 from infx.srt_slurm.workload import (
     BOUND_RECIPE,
+    add_fabric_argument,
     bind_workload,
     compose_recipe,
     dram_budget,
     resolve_dram,
+    resolve_fabric,
 )
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
@@ -218,6 +220,7 @@ def main() -> None:
     prepare = commands.add_parser("prepare")
     prepare.add_argument("recipe")
     prepare.add_argument("output", type=Path)
+    add_fabric_argument(prepare)
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
@@ -225,6 +228,7 @@ def main() -> None:
         if parsed.command == "prepare":
             _, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_dram(recipe, dram_budget(os.environ, multinode=False))
+            recipe = resolve_fabric(recipe, parsed.fabric)
             arguments = runtime_arguments(parsed.recipe, os.environ)
             # srtctl gets the bound variant, never the fragment.
             config = parsed.output.with_name(BOUND_RECIPE)

@@ -235,3 +235,9 @@ schema; unknown keys fail.
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
   itself uses.
+- `slurm.srt-slurm.fabric` holds the hosts' network facts that recipes take as
+  `'@fabric.<name>'` values: the lists `ucx-net-devices`, `nccl-ib-hca`, `ib-devices`
+  (SGLang `disaggregation-ib-device`, `IBDEVICES`), `socket-ifname` (NCCL and Gloo) and
+  `mooncake-devices`, rendered comma-joined, and the numbers `mooncake-gid-index`,
+  `mori-rdma-tc` and `mori-io-tc`. A recipe that references a field its cluster does not
+  set fails before submission.
