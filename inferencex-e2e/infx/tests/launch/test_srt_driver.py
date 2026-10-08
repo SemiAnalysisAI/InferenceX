@@ -21,6 +21,7 @@ from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
+from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
 from infx.launch.policy import LaunchPath, Match
 from infx.tests.launch.fake_slurm import (
     base_env,
@@ -275,17 +276,13 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert argv[argv.index("--setup-script") + 1] == lab["setup_script"]
     assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
-    staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
-    dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
-    assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
-    # The fragment is composed and bound after the lane edits its staged copy.
+    # The lane edits the recipe the binder wrote from the composed fragment.
     assert Path(submitted).resolve() == checkout / "recipe.yaml"
     bound = yaml.safe_load(Path(submitted).read_text())
-    assert (bound["name"], bound["roles"], bound["model"]) == (
-        staged["name"], staged["roles"],
-        {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"},
-    )
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
+    dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
+    assert bound["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["model"] == {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"}
     # Fabric references take the job cluster's facts.
     assert bound.get("environment") == lab["environment"]
     if env["IS_AGENTIC"] == "1":
@@ -497,19 +494,23 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert list(workspace.glob("point-identity_*.json")) == []
 
 
-def test_srtctl_runs_the_bound_bundle_variant_staged_from_srt_recipe(harness):
+def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
+    monkeypatch.setitem(lanes.SRT_LANES, ("lab-a", LaunchPath.SRT_MULTI), LABS["lab-a"]["lane"])
     bundle = "base:\n" + "".join(f"  {line}\n" for line in LANE_FRAGMENT.splitlines())
     env = lane_env(
-        harness, "h200-dgxc", bundle + "override_x:\n  roles:\n    decode:\n      nodes: 3\n",
-        MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
-        MODEL="deepseek-ai/DeepSeek-R1-0528", SRT_RECIPE=f"{MIRROR}/test/lane.yaml:override_x",
+        harness, "lab-a", bundle + "override_x:\n  roles:\n    decode:\n      nodes: 3\n",
+        RUNNER_NAME="lab-a_00", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="org/Model", SRT_RECIPE=f"{MIRROR}/test/lane.yaml:override_x",
     )  # fmt: skip
-    assert_ok(launch(env, harness.config, harness.workspace))
+    assert launch_here(monkeypatch, env, lab_config(harness.tmp), harness.workspace) == 0
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     bound = yaml.safe_load((Path(call["cwd"]) / argv[argv.index("--file") + 1]).read_text())
-    assert (bound["name"], bound["roles"]["decode"]["nodes"]) == ("fixture_x", 3)
-    assert bound["model"]["path"] == "hf:deepseek-ai/DeepSeek-R1-0528"
+    args = {"tensor-parallel-size": 8, "watchdog-timeout": 600, "dist-timeout": 1800}
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == "inferencex-lab-a_00"
+    assert bound["roles"] == {"prefill": {"args": args}, "decode": {"nodes": 3, "args": args}}
+    assert bound["health_check"] == {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 5}
+    assert bound["model"]["path"] == "hf:org/Model"
 
 
 def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):

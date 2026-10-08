@@ -1,7 +1,7 @@
-"""The workspace recipe mirror, and the text edits multi-node lanes make to the job's copy.
+"""The workspace recipe mirror, and the text edits multi-node lanes make to the job's copies.
 
-Only the disposable copy staged in the job's srt-slurm checkout is edited; the edits keep
-its comments.
+Only disposable copies in the job's srt-slurm checkout are edited: the staged mirror and the
+recipe the binder writes.
 """
 
 from __future__ import annotations
@@ -76,15 +76,12 @@ def add_dist_timeout(text: str, seconds: int) -> str:
     return "".join(lines)
 
 
-def prepare_recipe(checkout: Path, staged: str, job_name: str, dist_timeout_s: int | None) -> None:
-    """Edit the checkout's staged copy of the recipe for this job."""
-    config_path = checkout / recipe_relpath(staged)
-    if not config_path.is_file():
-        raise LaunchError(f"{staged} does not exist after srt-slurm setup: {config_path}")
-    text = raise_health_attempts(rename_job(config_path.read_text(), job_name))
+def prepare_recipe(recipe: Path, job_name: str, dist_timeout_s: int | None) -> None:
+    """Edit the bound recipe, the variant srtctl submits, for this job."""
+    text = raise_health_attempts(rename_job(recipe.read_text(), job_name))
     if dist_timeout_s is not None:
         text = add_dist_timeout(text, dist_timeout_s)
-    config_path.write_text(text)
+    recipe.write_text(text)
 
 
 def strip_forced_acceptance(recipes: Path) -> None:
