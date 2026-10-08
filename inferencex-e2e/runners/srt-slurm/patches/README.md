@@ -8,4 +8,3 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
-| `553-cpu-exporter-submit-preflight.patch` | [NVIDIA/srt-slurm#553](https://github.com/NVIDIA/srt-slurm/pull/553) | Pass the resolved recipe into setup validation so CPU-enabled jobs reject unusable exporters before submission |
