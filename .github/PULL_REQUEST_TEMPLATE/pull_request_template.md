@@ -1,20 +1,23 @@
 <!-- Title: <English title> / <中文标题>. Keep English visible; put the Chinese translation in the collapsed section below. -->
 
-## Description
+## Summary
 
-<!-- Provide a brief description of your changes -->
+<!-- Briefly explain the problem, what changes, and why it matters. A human reviewer should understand the PR without expanding any sections. Keep material risks, breaking changes, and unresolved failures visible here. Add related issue links only when relevant; remove unused placeholders. -->
 
-## AI model disclosure
+<!-- Validation reporting: report only actual integration or end-to-end runs, with a concise outcome and a run link when available. Put supporting validation evidence, verbose check output, or logs in a <details><summary>Validation details</summary> block without the open attribute. Keep material failures and regressions visible. Omit routine local-check inventories and empty or pending validation sections; continue running appropriate checks. -->
+
+<details>
+<summary>AI model disclosure</summary>
 
 <!-- Required: name the exact model/version used to prepare this PR and its role. List every contributing model, including delegated agents; a tool name alone (Claude Code, Cursor, Perplexity Computer) is insufficient. Use the identifier exposed by the runtime, never a guessed identifier. If unavailable, explicitly state that the exact model could not be verified. For human-only PRs, write "No AI used". Update this section if later edits use another model. -->
 
 - Model/version:
 - Role:
 
-## Related Issue
+</details>
 
-<!-- Link to related issue(s) if applicable -->
-Fixes #
+<details>
+<summary>PR checklist and change type</summary>
 
 ## Type of Change
 
@@ -30,7 +33,10 @@ Fixes #
 - [ ] I have tested my changes locally
 - [ ] I have updated documentation if necessary
 - [ ] **For every change that can affect benchmark performance and every recipe addition or modification, I have appended a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml` and have not edited historical entries**
-- [ ] **Before merging via reuse, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) has commented `/use <run_id>` (or the legacy `/reuse-sweep-run`) on this PR**. Do this **only once there is a final full sweep that is all green with evals passing**, since after this comment the sweep label will no longer automatically kick off new sweeps. Remove and re-add the label to force one.
+- [ ] **If this PR can affect benchmark performance or adds or modifies a recipe, it carries exactly one primary sweep label** (a maintainer applies it on fork PRs): `full-sweep-fail-fast` (recommended), `full-sweep-enabled`, or `non-canary-full-sweep-enabled`. Optional modifiers `all-evals`, `evals-only`, and `agentx-fast` require a primary label; the last two block reuse while applied.
+- [ ] **Before merging via reuse, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) has commented `/use <run_id>` (or the legacy `/reuse-sweep-run`) on this PR**. Do this **only once there is a final full sweep that is all green with evals passing**, since after this comment the primary sweep label will no longer automatically kick off new sweeps. Remove and re-add the primary sweep label to force a new sweep.
+
+</details>
 
 <details>
 <summary>中文</summary>

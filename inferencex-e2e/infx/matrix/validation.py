@@ -12,7 +12,8 @@ from pydantic import (
     model_validator,
 )
 
-CLUSTER_LABEL_PREFIX = "cluster:"
+from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
+
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
 """
@@ -171,7 +172,6 @@ class SingleNodeMatrixEntry(BaseModel):
     runner: str
     isl: int
     osl: int
-    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int
     pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -607,7 +607,6 @@ class SingleNodeSeqLenConfig(BaseModel):
 
     isl: int
     osl: int
-    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     search_space: list[SingleNodeSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
 
 
@@ -968,32 +967,14 @@ def _validate_runner_labels(labels: dict) -> None:
             raise ValueError(f"Runner config entry '{key}' cannot be an empty list")
 
 
-class RunnerHardwareConfig(BaseModel):
-    """Per-hardware runner facts used when generating benchmark matrices."""
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    available_cpu_dram_mib: int = Field(alias=Fields.AVAILABLE_CPU_DRAM_MIB.value, gt=0)
-    gpus_per_node: int = Field(alias=Fields.GPUS_PER_NODE.value, gt=0)
-
-
-class RunnerConfig(BaseModel):
-    """Top-level runner configuration file."""
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    labels: dict[str, list[str]]
-    hardware: dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
-
-
 def validate_runner_config(runner_configs: dict) -> dict:
-    """Validate runner labels and hardware metadata."""
+    """Validate runner labels plus the ``clusters:`` records they resolve to."""
     labels = runner_configs.get("labels")
     if not isinstance(labels, dict):
         raise ValueError("Runner config must define a labels mapping")
     _validate_runner_labels(labels)
     try:
-        RunnerConfig(**runner_configs)
+        RunnerInventory.model_validate(runner_configs)
     except ValidationError as e:
         raise ValueError(f"Runner config failed validation:\n{e}") from e
     return runner_configs

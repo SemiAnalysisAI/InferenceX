@@ -17,11 +17,9 @@ from .validation import verify_sweep
 
 BOT = "Klaud-Cold"
 SWEEP_LABELS = {
-    "sweep-enabled",
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
     "full-sweep-fail-fast",
-    "full-sweep-fail-fast-no-canary",
     "all-evals",
     "evals-only",
     "agentx-fast",
@@ -57,7 +55,9 @@ class Session:
             from .reporting import baseline_for, check_baseline_coverage
 
             evidence = verify_sweep(self.repository, run, self.candidate.family)
-            check_baseline_coverage(evidence[0], baseline_for(self, self.pulls()[0]))
+            check_baseline_coverage(
+                self.repository, self.candidate, evidence[0], baseline_for(self, self.pulls()[0])
+            )
             self.validations[key] = evidence
         return self.validations[key]
 

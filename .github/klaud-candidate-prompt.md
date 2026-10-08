@@ -49,7 +49,7 @@ Never add or remove it yourself.
 Check capacity before edits/branch/PR creation, every targeted dispatch, the final label
 transition and capacity-related recovery: `check-capacity --cluster ID` (repeat for ALL
 actual targets). Require fresh, available telemetry and utilization strictly below 80%.
-Queue eligible work with normal scheduler controls; no skip_queue or priority overrides.
+Queue eligible work with normal scheduler controls; no priority overrides.
 If the check fails, report capacity-deferred and call finish. A utilization increase after
 dispatch never justifies cancelling healthy work. A benchmark capacity error alone is
 insufficient: recheck capacity before deciding to defer.
@@ -61,13 +61,16 @@ candidate.json provides the planner-verified exact `baseline-model`; use that va
 The planner supplies `baseline-preflight.json` beside candidate.json. It contains the verified
 benchmark roster bound to the selected candidate, base SHA, source observation and model.
 After resolving the exact old/new image goal, prepare-baseline checks this binding and uses
-that roster without refetching it. If candidate.json requires the preflight and it is absent
-or invalid, stop with `baseline-preflight-mismatch`; only legacy candidates may reconstruct.
+that roster without refetching it. If the preflight is absent or invalid, stop with
+`baseline-preflight-mismatch`.
 The preflight is not a published or final baseline. Supplement verified public
 eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
 Never reduce the baseline to overlapping points, displayed rows or a smaller current family. Never dispatch the old
 image. Unproven deltas are N/A with a reason; N/A never excuses missing updated-image results.
-The baseline remains fixed across attempts.
+The baseline remains fixed across attempts. Keep the preflight's `retirements` exactly as given:
+only the planner records points that a dated MODELS.md scenario deprecation retired after the
+baseline date. Retired points stay in the roster; never add, edit or remove a retirement, and
+never treat a point's absence from the current family as its retirement.
 
 Keep targeted work draft with no sweep labels. Dispatch ONLY updated-image e2e-tests.yml
 from main, with ref=exact measured SHA, fail-fast=true, klaud-run=true,
@@ -103,9 +106,10 @@ Classify the first failure, not the resulting cancellations. Retry cancelled poi
 for an infrastructure retry of a cancelled run, rerun the whole attempt on the same head.
 Wait for complete run-sweep.yml coverage on the exact head, all points/default evals and
 reusable artifacts. Check BOTH the final matrix before dispatch and completed final artifacts
-against EVERY frozen baseline point by identity, not count alone; extra points cannot replace
-missing ones. check-final and finish enforce this roster as well as the current family.
-If any baseline point is omitted, or lacks a successful verified updated-image result at final validation, report
+against EVERY frozen baseline point that the baseline does not record as retired, by identity,
+not count alone; extra points cannot replace missing ones. check-final and finish enforce this
+roster as well as the current family. If any unretired baseline point is omitted, or lacks a
+successful verified updated-image result at final validation, report
 the affected points and finish with outcome=failed: clean up owned runs and close the PR,
 never mark ready/validated. Smoke subsets remain allowed only for targeted attempts.
 For a failed-job retry, reuse the same run's surviving successful

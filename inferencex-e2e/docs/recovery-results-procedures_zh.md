@@ -10,7 +10,7 @@
 
 ## 安全关卡
 
-1. **在做任何更改前，先确定准确的 run、attempt、job、event、branch、head SHA 和 runner。** `trigger-ingest` 任务绿色并不能证明有效基准结果行已经进入数据库。
+1. **在做任何更改前，先确定准确的 run、attempt、job、event、branch、head SHA 和 runner。** dispatch 任务绿色（`merge-ingest.yml` 中的 `ingest`，或旧版 `run-sweep.yml` push run 中的 `trigger-ingest`）并不能证明有效基准结果行已经进入数据库。
 2. **先检查，后变更。** 读取 GitHub 日志、`sinfo`、`squeue`、sysctl、文件所有者和制品是安全的。删除共享文件、更改 sysctl、drain 节点、重启服务或修改集群状态，都需要运维者明确批准。
 3. **绝不要仅为修复正式摄取而重跑失败的 push-to-`main` 目标。** 应使用经过验证的制品复用恢复路径；它既能避免 GPU 工作，也能保留源 run 的来源信息。
 4. **只重跑已经确诊的偶发故障。** 重试不会修复错误的镜像、recipe、模型、launcher、配置、缺失或过期的制品，也不会修复执行语义变化。
@@ -52,7 +52,7 @@ DECODE_GPUS="$decode_gpus" \
 
 ### 评测结果
 
-评测任务上传以 `eval_${EXP_NAME}_${RESULT_FILENAME}` 命名的逐配置制品。制品包含该评测器实际生成的文件，例如 `meta_env.json`、`results*.json`、`sample*.jsonl`；对于受支持的 agentic 评测器，还可能包含 predictions、reports 或 trajectories。工作流的以下行为都是有意设计的：
+评测任务上传以 `eval_${EXP_NAME}_${RESULT_FILENAME}` 命名的逐配置制品。制品包含评估命令按 [`infx/bench/eval/stage.py`](../infx/bench/eval/stage.py) 中的允许列表为该评测器暂存的文件，即 `meta_env.json`、`results*.json`、`sample*.jsonl`，以及厂商评估的原生报告（`*_report.json`）、详细结果（`*_results.jsonl`）和归档（`*_artifacts.tar.gz`）。工作流的以下行为都是有意设计的：
 
 - eval-only 任务没有任何评测文件时会报错；
 - 评测文件在 `always()` 条件下上传，以保留失败任务的部分证据；
@@ -92,7 +92,7 @@ jq 'length' /tmp/infx-evals-$RUN_ID/agg_eval_all.json
 
 ## InferenceX-app 交接与摄取验证
 
-push 到 `main` 时，`run-sweep.yml` 只会在 setup 和适用的收集路径完成后 dispatch `ingest-results`。负载为：
+push 到 `main` 时，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 的 `ingest` 任务只会在验证已合并 PR 的复用授权和 source run，并上传合并时的 `changelog-metadata` 之后才 dispatch。changelog 增量包含 agentic 条目时，会以相同 ID 加上 `database-target: production` dispatch `ingest-agentic-results`；否则负载为：
 
 ```json
 {
@@ -104,11 +104,11 @@ push 到 `main` 时，`run-sweep.yml` 只会在 setup 和适用的收集路径�
 }
 ```
 
-普通 run 的两个 ID 都指向当前 run。复用时，`source-run-id` 指向经过验证的 PR sweep，而 `merge-run-id` 仍指向新的 push-to-main 恢复 run。InferenceX-app 会从 source run 中为每个准确制品名称选择最新、未过期的上传；复用时，则用 merge run 的 `changelog-metadata` 替换 source 的 changelog 元数据。如果 source 没有未过期制品，或 merge run 没有 changelog 制品，准备步骤会失败。
+`source-run-id` 始终指向经过验证并被复用的 PR sweep，`merge-run-id` 指向 `main` 上新的 Merge Ingest run（恢复时即恢复 PR 合并产生的 run）。由于 `main` 从不运行 sweep，正式摄取不再让两个 ID 指向同一个 run。InferenceX-app 会从 source run 中为每个准确制品名称选择最新、未过期的上传，并用 merge run 的 `changelog-metadata` 替换 source 的 changelog 元数据。如果 source 没有未过期制品，或 merge run 没有 changelog 制品，准备步骤会失败。
 
 之后，应用工作流依次运行：制品准备、迁移、数据库摄取、run overrides、数据库验证、缓存失效和 unmapped entity 检查。数据库写入具有幂等性（`ON CONFLICT DO UPDATE` 或 `DO NOTHING`），因此指向正确目标的摄取在部分失败后可以安全恢复。
 
-来源：[dispatch 负载与关卡](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021)、[制品选择](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48)、[应用摄取阶段](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124)、[幂等性设计理由](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34)。
+来源：[当前 dispatch](../../.github/workflows/merge-ingest.yml)、[历史 `run-sweep.yml` dispatch 负载与关卡](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021)（`merge-ingest.yml` 启用前）、[制品选择](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48)、[应用摄取阶段](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124)、[幂等性设计理由](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34)。
 
 ### 验证准确的下游摄取
 
@@ -143,7 +143,7 @@ gh run watch "$INGEST_RUN_ID" \
 
 准备脚本输出的 `Source run:` 和 `Merge run:` 是权威匹配行。复用摄取的 source run 已经完成，所以不会等待五分钟。
 
-来源：[权威准备日志](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152)、[正式验证顺序](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429)。
+来源：[权威准备日志](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152)、[正式验证顺序](../../.claude/commands/recover-failed-ingest.md#8-merge-and-verify-official-ingest)（[历史快照](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429)，`merge-ingest.yml` 启用前）。
 
 ## 失败摄取恢复
 
@@ -192,7 +192,7 @@ python3 -m infx.workflows.recover_failed_ingest audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 ```
 
-**目标关卡：** 必须是 `main` 上 `.github/workflows/run-sweep.yml` 的已完成 push 事件。目标即使结论为 `success` 或 `cancelled`，仍可能包含无有效数据的摄取：忘记启用复用时，GPU 任务可能被取消，但 `trigger-ingest` 仍针对目标自己的 run ID 成功。不要删除该行；正确恢复后的发布会使用新的 run ID。
+**目标关卡：** 必须是 `main` 上 `.github/workflows/merge-ingest.yml` 的已完成 push run；若为 `merge-ingest.yml` 启用前的旧合并，则为 `.github/workflows/run-sweep.yml` 的已完成 push run。忘记复用命令时，Merge Ingest run 会在复用检查处失败，此时尚未上传元数据或 dispatch，因此不会留下无有效数据的摄取。旧版 `run-sweep.yml` 目标即使结论为 `success` 或 `cancelled`，仍可能包含无有效数据的摄取：忘记启用复用时，GPU 任务可能被取消，但 `trigger-ingest` 仍针对目标自己的 run ID 成功。不要删除该行；正确恢复后的发布会使用新的 run ID。
 
 #### 2. 验证 source、祖先关系和制品
 
@@ -267,111 +267,31 @@ test "$(git diff --name-only origin/main...HEAD)" = "inferencex-e2e/perf-changel
 git diff --check origin/main...HEAD
 ```
 
-推送后，绝不要对这个 carrier commit 执行 rebase、本地 squash、amend 或 force-push。必须确认 source SHA 出现在 PR commit 列表中、Files 中只有 `perf-changelog.yaml`、`check-changelog` 与 `reuse-sweep-gate` 通过，并且 PR GPU 任务被跳过。只有获得明确授权后才能合并，且绝不能绕过失败或等待中的检查。随后使用上文交接流程验证新的 push run 和下游应用 run。
+推送后，绝不要对这个 carrier commit 执行 rebase、本地 squash、amend 或 force-push。必须确认 source SHA 出现在 PR commit 列表中、Files 中只有 `perf-changelog.yaml`、`check-changelog` 与 `reuse-sweep-gate` 通过，并且 PR GPU 任务被跳过。只有获得明确授权后才能合并，且绝不能绕过失败或等待中的检查。随后使用上文交接流程验证新的 Merge Ingest push run 和下游应用 run。
 
-权威来源：[完整失败摄取恢复命令](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md)。
+权威来源：[完整失败摄取恢复命令](../../.claude/commands/recover-failed-ingest.md)（[历史快照](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md)，`merge-ingest.yml` 启用前）。
 
 ## AMD root-owned 工作区的预防与恢复
 
 ### 防止复发
 
-容器可能以 root 身份运行，同时 GitHub 工作区被 bind mount。共享基准库通过以下设置防止工作区中出现 root-owned Python 缓存目录：
+容器可能以 root 身份运行，同时 GitHub 工作区被 bind mount。基准测试工作流为每个作业设置以下变量，使 Python 字节码缓存不写入工作区：
 
-```bash
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+```yaml
+PYTHONDONTWRITEBYTECODE: '1'
+PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 ```
 
-不要把这些路径重新覆盖到工作区。MI355X launcher 还会在启动前删除旧基准日志，并安装 EXIT trap：复制 Slurm stdout/stderr 证据、打印错误尾部，然后执行有范围限制的 `sudo rm -rf "$BENCHMARK_LOGS_DIR"`。`KEEP_LOGS=1` 只应在刻意进行本地调试时使用；它会禁用清理 trap。取消任务仍可能绕过 teardown，因此在出现 `EACCES` 清理错误后，应执行下述恢复扫描。
+不要把这些路径重新覆盖到工作区。出现 `EACCES` 清理错误后，应执行下述恢复扫描，包括由已退役启动器遗留的日志导致的错误。
 
-来源：[Python 缓存预防](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10)、[MI355X 清理 trap](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/runners/launch_mi355x-amds.sh#L49-L76)。
+来源：[Python 缓存预防](../../.github/workflows/benchmark-tmpl.yml#L145-L146)。
 
-### 恢复 MI355X TW runner 工作区
+### 集群特定恢复
 
-典型特征：
+这些操作需要集群特权访问并须获得明确批准。请遵循维护者 playbook，而不是复制其中的命令：
 
-```text
-Deleting the contents of '.../actions-runner/_work/InferenceX/InferenceX'
-Error: File was unable to be removed Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
-```
-
-jumpbox 没有 sudo；需要使用 agent forwarding 连接到在 `/it-share` 上拥有免密码 sudo 的 hop host。
-
-1. **先进行只读扫描：**
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root 2>/dev/null'"
-   ```
-
-2. 检查每一个结果。每条路径都必须位于 `actions-runner/_work/` 下，通常在 `InferenceX/InferenceX/benchmark_logs/` 中。如果任何路径位于 `_work` 外，必须**停止**。
-3. 获得明确批准后，只删除已经验证的匹配项：
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root -print0 2>/dev/null \
-      | xargs -0 -r sudo rm -rf'"
-   ```
-
-4. 再次运行只读扫描，并要求结果为零。
-5. 只有清理完成后，才能重跑已确诊的失败 sweep。可使用 `sacct -j <id>` 关联 `slurm_job-<id>`；`CANCELLED` 状态支持“跳过了 teardown”的诊断。
-
-绝不要对 `/it-share` 运行没有范围限制的 `rm -rf`。
-
-权威来源：[MI355X root-owned 文件恢复](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/clean-amd-mi355-runner-root-files.md)。
-
-## MI300X 集群调试：enroot/pyxis 用户命名空间故障
-
-`mi300x-amd_*` / `chi-mi300x-*` 上的典型特征：
-
-```text
-error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied
-error: pyxis: couldn't start container
-error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
-srun: error: chi-mi300x-0XX: task 0: Exited with exit code 1
-```
-
-2026 年 7 月已知原因：Ubuntu 24.04 provisioning drift 使部分节点保留 `kernel.apparmor_restrict_unprivileged_userns=1`，阻止实际的 enroot 路径。`unshare -U` 不是有效判据，因为它自己的 AppArmor profile 仍可能允许该操作。
-
-1. 在 GitHub 日志中确认准确特征并记录失败节点：
-
-   ```bash
-   gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed
-   ```
-
-2. 从 root controller 通过 Slurm 访问计算节点；计算节点不接受直接 root SSH：
-
-   ```bash
-   ssh amd-vultr-mi300 \
-     'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<read-only-command>"'
-   ```
-
-3. 在不做更改的情况下调查所有可见节点：
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in $(sinfo -N -h -o "%N" | sort -u); do
-     v=$(srun -w $n -N1 --immediate=20 sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>&1 | tail -1)
-     echo "$n: $v"
-   done'
-   ```
-
-   失败节点为 `1`、工作节点为 `0` 的分裂结果可以确认 drift。如果所有节点都是 `0`，停止把它当成这个已知问题；应与工作节点比较 enroot 版本、pyxis plugin 状态，以及 `/usr/local/bin/enroot-nsenter` 的 AppArmor 覆盖范围。
-
-4. **只有获得明确批准后**，才能把 drift 节点改成工作基线并持久化：
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in <drifted-nodes>; do
-     srun -w $n -N1 --immediate=30 bash -c \
-       "sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 && \
-        echo kernel.apparmor_restrict_unprivileged_userns=0 > /etc/sysctl.d/99-enroot-userns.conf"
-   done'
-   ```
-
-   此操作会禁用一项内核安全缓解措施。验证每个节点的实时值为 `0`，且持久化文件存在。必须把长期修复升级到节点 provisioning image；否则重新 provision 的节点还会复发。
-
-5. 集群基线恢复后，只重跑受影响的偶发失败任务。
-
-权威来源：[MI300X enroot/pyxis 恢复](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/debug-mi300-enroot-pyxis.md)。
+- MI355X TW `EACCES` 工作区清理：[`clean-amd-mi355-runner-root-files.md`](../../.claude/commands/clean-amd-mi355-runner-root-files.md)。先只读扫描，只删除 `actions-runner/_work/` 下已核实的路径，绝不对 `/it-share` 运行无范围限制的 `rm -rf`。
+- MI300X `enroot-nsenter: failed to create user namespace`（pyxis）：[`debug-mi300-enroot-pyxis.md`](../../.claude/commands/debug-mi300-enroot-pyxis.md)。修改任何节点前，先确认各节点的 AppArmor userns 配置漂移。
 
 ## 安全地重跑工作流
 
@@ -389,7 +309,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 | PR sweep 上的临时 runner pickup、网络问题或已确认基础设施偶发故障 | `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX --failed` | dispatch 新 sweep 并丢失原始 run 上下文 |
 | MI355X 工作区清理或 MI300X 修复后的 cancelled run | 先尝试仅重跑失败任务；如果 GitHub 因 run 被取消而拒绝，运行 `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX` | 在修复共享状态前完整重跑；它可能以相同方式失败并消耗 GPU 时间 |
 | 可复现 OOM、HIP/CUDA/RCCL/NCCL 错误、无效结果、错误分数、镜像/recipe/配置缺陷 | 先修复或验证根因，再重跑最窄的受影响路径 | 仅因为某次重试通过就把事件标记为偶发故障 |
-| 正确的 InferenceX-app 摄取发生部分 DB/迁移/验证失败 | 重跑该应用 run 的失败任务；如有需要，完整应用重跑在数据层面具有幂等性 | 重跑生成 GPU 结果的 InferenceX 目标 |
+| 正确的 InferenceX-app 摄取发生部分 DB/迁移/验证失败 | 重跑该应用 run 的失败任务；如有需要，完整应用重跑在数据层面具有幂等性 | 重跑 InferenceX 目标或其生成 GPU 结果的 source sweep |
 | source 制品错误/缺失/过期，或 source/merge 对错误 | 修复制品选择，或使用恢复 PR 流程 | 反复重跑同一个错误摄取 |
 | 正式 push-to-main 摄取缺失、被跳过、无有效数据或失败 | 创建经过验证的恢复 PR，并复用原始 PR 制品 | 重跑失败目标工作流/任务，或创建一次性摄取工作流 |
 
@@ -408,7 +328,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 | **处理/收集** | 原始 JSON 存在但缺少 `agg_*.json`；收集器无法解析；缺少 `results_bmk` 或 `eval_results_all` | 检查 `infx.results.fixed_sequence`/收集器日志和制品布局；理解格式问题后才重跑失败工作流任务 |
 | **Runner 工作区** | checkout 清理在 `_work/.../benchmark_logs/logs/slurm_job-*` 下报 `EACCES` | 只读所有者扫描、批准后的有范围删除、零结果验证，然后重跑 |
 | **MI300X provisioning** | pyxis/enroot 命名空间特征；失败节点 sysctl 为 `1`，工作节点为 `0` | 获批后修复节点并升级 provisioning image，然后重跑受影响任务 |
-| **Dispatch/交接** | `trigger-ingest` 后没有应用 run；curl/auth 失败；应用准备日志显示错误 ID 或制品缺失/过期 | 修复 dispatch 凭据/选择，或使用恢复流程；不要重跑 GPU 工作 |
+| **Dispatch/交接** | `merge-ingest.yml` 的 `ingest` dispatch（旧版为 `trigger-ingest`）后没有应用 run；curl/auth 失败；应用准备日志显示错误 ID 或制品缺失/过期 | 修复 dispatch 凭据/选择，或使用恢复流程；不要重跑 GPU 工作 |
 | **ETL/数据库** | 正确 source/merge 对和制品已准备，随后迁移/摄取/验证失败 | 诊断数据库/服务原因后重跑同一应用摄取；依靠幂等性，而非手动删除 |
 | **映射/数据质量** | 应用报告跳过失败行、unmapped model/hardware/precision、评测行缺失或数量不合理 | 新增/修复实体映射或源元数据；存在 unmapped 数据时，工作流绿色也不代表完成验证 |
 | **发布/来源** | changelog、source-run 来源、merge-run 身份错误，或无有效基准数据的伪造 run | 使用 append-only 恢复 PR；保留 source 祖先关系，并验证准确的下游摄取 |
@@ -430,17 +350,6 @@ Remaining durable fix:
 ```
 
 这些证据就是完成关卡。如果没有制品身份、source/merge 身份和摄取数量，仅仅“工作流绿色”并不代表结果恢复已经验证。
-
-### AMD 多节点 SGLang 清理
-
-退出时（包括启动或就绪检查失败），AMD SGLang 启动器仅向其记录的 `setsid`
-进程组发送 TERM，等待最多 30 秒。正常完成时，先暂存结果再进行清理。随后向仍存活的进程组发送 KILL，再等待最多
-5 秒并检查退出状态。这可以清理已成为孤儿进程或忽略 TERM 的工作进程，避免其
-持续占用日志管道。这些清理期限不会改变性能采集、评估或服务器就绪检查的期限。
-客户端失败时保留原退出码；若客户端成功但清理仍未完成，则节点任务失败。
-内核阻塞的进程仍可能需要另行授权的节点修复。不要为绕过清理失败而修改或丢弃
-已完成的指标。单一 EXIT 处理器统一负责进程组清理和现有 UMBP 独立进程 PID
-清理；即使进程组清理失败，后者仍会执行。
 
 ### AMD 多节点 GPU 预检协调
 

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import inspect
 import json
 import math
 import os
+import re
+import subprocess
 import sys
 import urllib.parse
+import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from importlib.metadata import distribution
+from importlib.metadata import distribution, distributions
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -31,6 +35,13 @@ KIMI_MAXIMUM_STEP_LIMIT = 10
 BFCL_PACKAGE = "bfcl-eval"
 BFCL_PACKAGE_VERSION = "2026.3.23"
 BFCL_WHEEL_SHA256 = "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
+BFCL_WHEEL_URL = (
+    "https://files.pythonhosted.org/packages/ba/41/"
+    "ed458527c770c50225b60bae3b0c3444b26804ee455fa2d8f187018d2cb2/"
+    "bfcl_eval-2026.3.23-py3-none-any.whl"
+)
+BFCL_WHEEL_MAX_BYTES = 512 * 1024 * 1024
+RUNTIME_REQUIREMENTS = ("soundfile==0.13.1",)
 UPSTREAM_REPOSITORY = "https://github.com/ShishirPatil/gorilla"
 UPSTREAM_SOURCE = "https://pypi.org/project/bfcl-eval/2026.3.23/"
 UPSTREAM_REF = f"{BFCL_PACKAGE}=={BFCL_PACKAGE_VERSION}"
@@ -907,12 +918,62 @@ def run_evaluation(
     return True
 
 
+def install_runtime(download_dir: Path, uv: str) -> None:
+    """Install the pinned BFCL wheel into this interpreter with ``uv``, refusing any other bytes."""
+    download_dir.mkdir(parents=True, exist_ok=True)
+    wheel_path = download_dir / BFCL_WHEEL_URL.rsplit("/", 1)[1]
+    request = urllib.request.Request(
+        BFCL_WHEEL_URL,
+        headers={"User-Agent": "InferenceX-BFCL-Smoke"},
+    )
+    digest = hashlib.sha256()
+    downloaded = 0
+    try:
+        with (
+            urllib.request.urlopen(request, timeout=180) as response,  # noqa: S310
+            wheel_path.open("xb") as output,
+        ):
+            while chunk := response.read(1024 * 1024):
+                downloaded += len(chunk)
+                if downloaded > BFCL_WHEEL_MAX_BYTES:
+                    raise ValueError("BFCL wheel exceeds the 512 MiB safety limit")
+                digest.update(chunk)
+                output.write(chunk)
+        if downloaded == 0:
+            raise ValueError("downloaded BFCL wheel is empty")
+        if digest.hexdigest() != BFCL_WHEEL_SHA256:
+            raise ValueError(
+                f"BFCL wheel SHA256 mismatch: expected {BFCL_WHEEL_SHA256}, "
+                f"got {digest.hexdigest()}"
+            )
+    except BaseException:
+        wheel_path.unlink(missing_ok=True)
+        raise
+    # uv ignores system site packages (astral-sh/uv#4466); excluding what this interpreter
+    # already has reuses the image's stack, so image versions win over BFCL's pins.
+    names = {re.sub(r"[-_.]+", "-", d.metadata.get("Name") or "").lower() for d in distributions()}
+    provided = download_dir / "provided-packages.txt"
+    provided.write_text("".join(f"{name}\n" for name in sorted(names - {"", BFCL_PACKAGE})))
+    install = [uv, "pip", "install", "-q", "--no-cache", "--python", sys.executable]
+    subprocess.run(
+        [*install, "--excludes", str(provided), str(wheel_path), *RUNTIME_REQUIREMENTS],
+        check=True,
+    )
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a pinned BFCL V4 OpenAI completions suite.")
+    parser.add_argument(
+        "--install-runtime",
+        type=Path,
+        metavar="DOWNLOAD_DIR",
+        help="Install the verified pinned BFCL wheel into this interpreter with --uv, then exit.",
+    )
+    parser.add_argument("--uv", help="uv executable that --install-runtime installs with")
     parser.add_argument("--base-url", type=_absolute_http_url)
     parser.add_argument("--api-key", type=_nonempty_string, default="EMPTY")
-    parser.add_argument("--model", type=_nonempty_string, required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--model", type=_nonempty_string)
+    parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--bfcl-project-root", type=Path)
     parser.add_argument(
         "--suite",
@@ -922,21 +983,32 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--num-threads", type=_positive_int)
     parser.add_argument("--integration-error")
     args = parser.parse_args(argv)
+    if args.install_runtime is None:
+        required = {"--model": args.model, "--output-dir": args.output_dir}
+        if args.integration_error is None:
+            required |= {"--base-url": args.base_url, "--bfcl-project-root": args.bfcl_project_root}
+        missing = [option for option, value in required.items() if value is None]
+        if missing:
+            parser.error(f"the following arguments are required: {', '.join(missing)}")
+    elif args.uv is None:
+        parser.error("--install-runtime requires --uv")
     args.num_threads = (
         SUITE_SPECS[args.suite].default_num_threads
         if args.num_threads is None
         else args.num_threads
     )
-    if args.integration_error is None:
-        if args.base_url is None:
-            parser.error("--base-url required unless --integration-error is provided")
-        if args.bfcl_project_root is None:
-            parser.error("--bfcl-project-root required unless --integration-error is provided")
     return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.install_runtime is not None:
+        try:
+            install_runtime(args.install_runtime, args.uv)
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            print(f"ERROR: failed to install the pinned BFCL runtime: {error}", file=sys.stderr)
+            return 1
+        return 0
     suite = SUITE_SPECS[args.suite]
     if args.integration_error is not None:
         publish_integration_error(

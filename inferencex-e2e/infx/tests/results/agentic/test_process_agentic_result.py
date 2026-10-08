@@ -661,35 +661,11 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     assert per_gpu["output_tput_tps"] == pytest.approx(4.19207)
 
 
-def test_processor_serializes_shared_expert_gpus_without_changing_power(tmp_path: Path):
-    from infx.results.agentic.power_adapter import run_agentic_power
-
+def test_processor_serializes_shared_expert_gpus(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
-    output_dir = tmp_path / "out"
-    agg = _run_processor(result_dir, output_dir, env_overrides={"TP": "4", "EP_SIZE": "4"})
+    agg = _run_processor(result_dir, tmp_path / "out", env_overrides={"TP": "4", "EP_SIZE": "4"})
+    # EP shares devices with TP.
     assert agg["num_gpus"] == 4
-
-    profile_path = result_dir / "aiperf_artifacts/profile_export_aiperf.json"
-    profile = json.loads(profile_path.read_text())
-    profile.update(start_time="1970-01-01T00:00:01+00:00", end_time="1970-01-01T00:00:05.1+00:00")
-    profile_path.write_text(json.dumps(profile))
-    (result_dir / "gpu_metrics.csv").write_text(
-        "timestamp, index, power.draw [W]\n"
-        + "".join(f"{t}, {gpu}, 100 W\n" for t in range(1, 7) for gpu in range(4))
-    )
-    output_path = output_dir / "agg_test.json"
-    assert run_agentic_power(
-        result_dir=result_dir,
-        agg_result=output_path,
-        expected_num_gpus=4,
-        require_power=True,
-    ) == 0
-    powered = json.loads(output_path.read_text())
-    assert powered["num_gpus"] == 4
-    assert powered["power_valid"] == 1
-    # Four 100 W GPUs over 4.1 seconds: EP shares devices with TP.
-    assert powered["avg_total_gpu_power_w"] == 400
-    assert powered["total_gpu_energy_j"] == 1640
 
 
 def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path):

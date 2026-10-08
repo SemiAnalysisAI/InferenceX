@@ -10,7 +10,7 @@ Use this page after a throughput or eval job starts producing output, or when a 
 
 ## Safety gates
 
-1. **Identify the exact run, attempt, job, event, branch, head SHA, and runner before changing anything.** A green `trigger-ingest` job is not proof that valid benchmark rows reached the database.
+1. **Identify the exact run, attempt, job, event, branch, head SHA, and runner before changing anything.** A green dispatch job (`ingest` in `merge-ingest.yml`, or `trigger-ingest` on a legacy `run-sweep.yml` push run) is not proof that valid benchmark rows reached the database.
 2. **Inspect first, then mutate.** Reading GitHub logs, `sinfo`, `squeue`, sysctls, ownership, and artifacts is safe. Deleting shared files, changing a sysctl, draining nodes, restarting services, or editing cluster state requires explicit operator approval.
 3. **Never rerun a failed push-to-`main` target merely to repair official ingest.** Use the validated artifact-reuse recovery path. It avoids GPU work and preserves source-run provenance.
 4. **Rerun only diagnosed flakes.** A retry does not repair a bad image, recipe, model, launcher, config, missing artifact, expired artifact, or changed execution semantics.
@@ -53,7 +53,7 @@ Sources: [single-node process/upload](https://github.com/SemiAnalysisAI/Inferenc
 
 ### Eval results
 
-Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}`. They contain the files that exist for that evaluator, including `meta_env.json`, `results*.json`, `sample*.jsonl`, and, for supported agentic evaluators, predictions, reports, or trajectories. The workflow behavior is deliberate:
+Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}`. They contain the files the eval command staged for that evaluator under the allow-list in [`infx/bench/eval/stage.py`](../infx/bench/eval/stage.py), namely `meta_env.json`, `results*.json`, `sample*.jsonl`, and native vendor-eval reports (`*_report.json`), detailed results (`*_results.jsonl`), and archives (`*_artifacts.tar.gz`). The workflow behavior is deliberate:
 
 - an eval-only job errors when no eval files are found.
 - eval files upload under `always()`, preserving partial evidence from a failed job.
@@ -93,7 +93,7 @@ Sources: [failed-row guard](https://github.com/SemiAnalysisAI/InferenceX-app/blo
 
 ## InferenceX-app handoff and ingest verification
 
-On a push to `main`, `run-sweep.yml` dispatches `ingest-results` only after setup and the applicable collection paths have resolved. Its payload is:
+On a push to `main`, the `ingest` job of [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) dispatches only after it validates the merged PR's reuse authorization and source run and uploads merge-time `changelog-metadata`. A changelog delta with agentic entries dispatches `ingest-agentic-results` with the same IDs plus `database-target: production`; otherwise the payload is:
 
 ```json
 {
@@ -105,11 +105,11 @@ On a push to `main`, `run-sweep.yml` dispatches `ingest-results` only after setu
 }
 ```
 
-A normal run uses the current run for both IDs. Reuse points `source-run-id` to the validated PR sweep and keeps `merge-run-id` on the new push-to-main recovery run. InferenceX-app selects the newest unexpired upload for each exact artifact name from the source run. For reuse, it replaces source changelog metadata with `changelog-metadata` from the merge run. Preparation fails if the source has no unexpired artifacts or the merge run has no changelog artifact.
+`source-run-id` is always the validated, reused PR sweep, and `merge-run-id` is the new Merge Ingest run on `main` (for a recovery, the run for the recovery PR's merge). Because `main` never runs a sweep, official ingests no longer use one run for both IDs. InferenceX-app selects the newest unexpired upload for each exact artifact name from the source run. It replaces source changelog metadata with `changelog-metadata` from the merge run. Preparation fails if the source has no unexpired artifacts or the merge run has no changelog artifact.
 
 The app workflow then runs, in order: artifact preparation, migrations, database ingest, run overrides, database verification, cache invalidation, and unmapped-entity inspection. Database writes are idempotent (`ON CONFLICT DO UPDATE` or `DO NOTHING`), so a correctly targeted ingest can safely resume after a partial failure.
 
-Sources: [dispatch payload and gates](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021), [artifact selection](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48), [app ingest stages](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124), [idempotency rationale](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34).
+Sources: [current dispatch](../../.github/workflows/merge-ingest.yml), [historical `run-sweep.yml` dispatch payload and gates](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021) (before `merge-ingest.yml`), [artifact selection](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48), [app ingest stages](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124), [idempotency rationale](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34).
 
 ### Verify the exact downstream ingest
 
@@ -144,7 +144,7 @@ Require all of the following, not merely a green conclusion:
 
 The preparation script emits the authoritative `Source run:` and `Merge run:` lines. Reused ingests do not wait five minutes because their source run is already complete.
 
-Sources: [authoritative preparation logs](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152), [official verification sequence](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429).
+Sources: [authoritative preparation logs](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts#L99-L152), [official verification sequence](../../.claude/commands/recover-failed-ingest.md#8-merge-and-verify-official-ingest) ([historical snapshot](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md#L391-L429) from before `merge-ingest.yml`).
 
 ## Failed ingest recovery
 
@@ -193,7 +193,7 @@ python3 -m infx.workflows.recover_failed_ingest audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 ```
 
-**Target gate:** require a completed push event for `.github/workflows/run-sweep.yml` on `main`. A target can conclude `success` or `cancelled` and still have a bogus ingest: if reuse was forgotten, GPU jobs may be cancelled while `trigger-ingest` still succeeds against the target's own run ID. Leave that row alone. The correctly recovered publication uses a new run ID.
+**Target gate:** require a completed push run on `main` of `.github/workflows/merge-ingest.yml`, or of `.github/workflows/run-sweep.yml` for a legacy merge from before `merge-ingest.yml` existed. A forgotten reuse command makes a Merge Ingest run fail at its reuse check, before any metadata upload or dispatch, so it leaves no bogus ingest. A legacy `run-sweep.yml` target can conclude `success` or `cancelled` and still have a bogus ingest: if reuse was forgotten, GPU jobs may be cancelled while `trigger-ingest` still succeeds against the target's own run ID. Leave that row alone. The correctly recovered publication uses a new run ID.
 
 #### 2. Validate the source, ancestry, and artifacts
 
@@ -268,111 +268,31 @@ test "$(git diff --name-only origin/main...HEAD)" = "inferencex-e2e/perf-changel
 git diff --check origin/main...HEAD
 ```
 
-After pushing, never rebase, locally squash, amend, or force-push this carrier commit. Require the source SHA in the PR commit list, only `perf-changelog.yaml` in Files, passing `check-changelog` and `reuse-sweep-gate`, and skipped PR GPU jobs. Merge only with explicit authorization and never bypass failing or pending checks. Then verify the new push run and downstream app run with the handoff procedure above.
+After pushing, never rebase, locally squash, amend, or force-push this carrier commit. Require the source SHA in the PR commit list, only `perf-changelog.yaml` in Files, passing `check-changelog` and `reuse-sweep-gate`, and skipped PR GPU jobs. Merge only with explicit authorization and never bypass failing or pending checks. Then verify the new Merge Ingest push run and downstream app run with the handoff procedure above.
 
-Canonical source: [complete failed-ingest recovery command](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md).
+Canonical source: [complete failed-ingest recovery command](../../.claude/commands/recover-failed-ingest.md) ([historical snapshot](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/recover-failed-ingest.md) from before `merge-ingest.yml`).
 
 ## AMD root-owned workspace prevention and recovery
 
 ### Prevent recurrence
 
-Containers can run as root while the GitHub workspace is bind-mounted. The shared benchmark library prevents root-owned Python cache directories by setting:
+Containers can run as root while the GitHub workspace is bind-mounted. The benchmark workflows keep Python bytecode caches out of the workspace by setting these variables for every job:
 
-```bash
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+```yaml
+PYTHONDONTWRITEBYTECODE: '1'
+PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 ```
 
-Do not override these paths back into the workspace. The MI355X launcher also deletes stale benchmark logs before launch and installs an EXIT trap that copies Slurm output/error evidence, prints the error tail, then runs scoped `sudo rm -rf "$BENCHMARK_LOGS_DIR"`. Keep `KEEP_LOGS=1` for deliberate local debugging only. It disables the cleanup trap. Cancellation can still bypass teardown, so use the recovery scan below after an `EACCES` cleanup failure.
+Do not override these paths back into the workspace. Use the recovery scan below after an `EACCES` cleanup failure, including failures caused by logs left by retired launchers.
 
-Sources: [Python-cache prevention](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10), [MI355X cleanup trap](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/runners/launch_mi355x-amds.sh#L49-L76).
+Source: [Python-cache prevention](../../.github/workflows/benchmark-tmpl.yml#L145-L146).
 
-### Recover an MI355X TW runner workspace
+### Cluster-specific recovery
 
-Canonical signature:
+These need privileged cluster access and explicit approval. Follow the maintainer playbooks rather than copying their commands:
 
-```text
-Deleting the contents of '.../actions-runner/_work/InferenceX/InferenceX'
-Error: File was unable to be removed Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
-```
-
-The jumpbox has no sudo. Use agent forwarding to the hop host that has passwordless sudo on `/it-share`.
-
-1. **Read-only scan first:**
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root 2>/dev/null'"
-   ```
-
-2. Review every result. Every path must be below `actions-runner/_work/`, normally in `InferenceX/InferenceX/benchmark_logs/`. If any path is outside `_work`, **stop**.
-3. With explicit approval, delete only the verified matches:
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root -print0 2>/dev/null \
-      | xargs -0 -r sudo rm -rf'"
-   ```
-
-4. Run the read-only scan again and require zero results.
-5. Only after cleanup, rerun diagnosed failed sweeps. `slurm_job-<id>` can be correlated with `sacct -j <id>`. `CANCELLED` supports the skipped-teardown diagnosis.
-
-Never run an unscoped `rm -rf` against `/it-share`.
-
-Canonical source: [MI355X root-owned file recovery](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/clean-amd-mi355-runner-root-files.md).
-
-## MI300X cluster debugging: enroot/pyxis user-namespace failures
-
-Canonical signature on `mi300x-amd_*` / `chi-mi300x-*`:
-
-```text
-error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied
-error: pyxis: couldn't start container
-error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
-srun: error: chi-mi300x-0XX: task 0: Exited with exit code 1
-```
-
-Known July 2026 cause: Ubuntu 24.04 provisioning drift leaves `kernel.apparmor_restrict_unprivileged_userns=1` on some nodes, blocking the actual enroot path. `unshare -U` is not a valid discriminator because its AppArmor profile may still allow it.
-
-1. Confirm the exact signature and record failing nodes from GitHub logs:
-
-   ```bash
-   gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed
-   ```
-
-2. Access compute nodes through Slurm from the root controller. Direct root SSH to compute nodes is not available:
-
-   ```bash
-   ssh amd-vultr-mi300 \
-     'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<read-only-command>"'
-   ```
-
-3. Survey every visible node without changing it:
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in $(sinfo -N -h -o "%N" | sort -u); do
-     v=$(srun -w $n -N1 --immediate=20 sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>&1 | tail -1)
-     echo "$n: $v"
-   done'
-   ```
-
-   A split of failing nodes at `1` and working nodes at `0` confirms drift. If all nodes are `0`, stop treating this as the known issue. Compare enroot versions, pyxis plugin state, and AppArmor coverage of `/usr/local/bin/enroot-nsenter` against a working node.
-
-4. **Only with explicit approval**, change drifted nodes to the working baseline and persist it:
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in <drifted-nodes>; do
-     srun -w $n -N1 --immediate=30 bash -c \
-       "sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 && \
-        echo kernel.apparmor_restrict_unprivileged_userns=0 > /etc/sysctl.d/99-enroot-userns.conf"
-   done'
-   ```
-
-   This disables a kernel security mitigation. Verify each live value is `0` and the persistent file exists. Escalate the durable fix to the node provisioning image. Otherwise, reprovisioned nodes will regress.
-
-5. Rerun only affected flaky jobs after the cluster baseline is restored.
-
-Canonical source: [MI300X enroot/pyxis recovery](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/debug-mi300-enroot-pyxis.md).
+- MI355X TW `EACCES` workspace cleanup: [`clean-amd-mi355-runner-root-files.md`](../../.claude/commands/clean-amd-mi355-runner-root-files.md). Scan read-only first, delete only verified paths under `actions-runner/_work/`, and never run an unscoped `rm -rf` against `/it-share`.
+- MI300X `enroot-nsenter: failed to create user namespace` (pyxis): [`debug-mi300-enroot-pyxis.md`](../../.claude/commands/debug-mi300-enroot-pyxis.md). Confirm the per-node AppArmor userns drift before changing any node.
 
 ## Safe workflow reruns
 
@@ -390,7 +310,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 | Transient runner pickup, network, or confirmed infrastructure flake on a PR sweep | `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX --failed` | Dispatch a fresh sweep and lose the original run context |
 | Cancelled run after MI355X workspace cleanup or MI300X repair | Try failed-only rerun. If GitHub refuses because the run was cancelled, `gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX` | Full-rerun before fixing shared state can fail identically and spend GPU time |
 | Reproducible OOM, HIP/CUDA/RCCL/NCCL error, invalid result, bad score, image/recipe/config bug | Fix or validate the root cause first, then rerun the narrowest affected path | Label the incident a flake because a retry happens to pass once |
-| Correct InferenceX-app ingest, partial DB/migration/verification failure | Rerun failed jobs on that app run. A full app rerun is data-idempotent if needed | Rerun the GPU-producing InferenceX target |
+| Correct InferenceX-app ingest, partial DB/migration/verification failure | Rerun failed jobs on that app run. A full app rerun is data-idempotent if needed | Rerun the InferenceX target or its GPU-producing source sweep |
 | Wrong/missing/expired source artifacts or wrong source/merge pair | Repair selection or use the recovery PR procedure | Repeatedly rerun the same wrong ingest |
 | Missing, skipped, bogus, or failed official push-to-main ingest | Create the validated recovery PR and reuse the original PR artifacts | Rerun the failed target workflow/job or create a one-off ingest workflow |
 
@@ -409,7 +329,7 @@ Classify by the earliest broken boundary, not the final red job.
 | **Processing/collection** | raw JSON exists but `agg_*.json` is missing, collector cannot parse, or `results_bmk` or `eval_results_all` is absent | Inspect `infx.results.fixed_sequence`/collector logs and artifact layout. Rerun failed workflow jobs only after the format problem is understood |
 | **Runner workspace** | checkout cleanup `EACCES` under `_work/.../benchmark_logs/logs/slurm_job-*` | Read-only ownership scan, approved scoped deletion, zero-result verification, then rerun |
 | **MI300X provisioning** | pyxis/enroot namespace signature, with failing nodes reading sysctl `1` and working nodes reading `0` | Apply the approved node repair and escalate the provisioning-image fix, then rerun affected jobs |
-| **Dispatch/handoff** | no app run after `trigger-ingest`, curl/auth failure, or app preparation logs showing wrong IDs or missing/expired artifacts | Repair dispatch credentials/selection or use recovery. Do not rerun GPU work |
+| **Dispatch/handoff** | no app run after the `merge-ingest.yml` `ingest` dispatch (legacy `trigger-ingest`), curl/auth failure, or app preparation logs showing wrong IDs or missing/expired artifacts | Repair dispatch credentials/selection or use recovery. Do not rerun GPU work |
 | **ETL/database** | correct pair and artifacts prepared, followed by migration/ingest/verification failure | Rerun the same app ingest after diagnosing the database/service cause. Rely on idempotency, not manual deletes |
 | **Mapping/data quality** | app reports skipped failed rows, unmapped model/hardware/precision, missing eval rows, or implausible counts | Add or fix entity mapping or source metadata. A green workflow with unmapped data is not complete verification |
 | **Publication/provenance** | wrong changelog, source-run provenance, merge-run identity, or bogus run with no valid benchmark data | Use the append-only recovery PR. Preserve source ancestry and verify the exact downstream ingest |
@@ -431,20 +351,6 @@ Remaining durable fix:
 ```
 
 This evidence is the completion gate. “Workflow green” without artifact identity, source/merge identity, and ingest counts is not a verified result recovery.
-
-### AMD multi-node SGLang teardown
-
-On exit, including a failed startup/readiness check, the AMD SGLang launcher sends
-TERM only to its recorded `setsid` process groups. Normal completion stages results
-before this cleanup. It allows 30 seconds for graceful
-exit, then sends KILL to surviving groups and checks for exit for another five
-seconds. This handles orphaned or TERM-resistant workers that otherwise hold log
-pipes open. These cleanup deadlines do not change profiling, evaluation, or server
-readiness deadlines. A failed client retains its exit status; unresolved cleanup
-fails an otherwise successful node. Kernel-blocked processes may still require
-separately authorized node repair. Do not change or discard completed metrics to
-work around teardown failures. A single EXIT handler owns group cleanup and the
-existing UMBP standalone PID cleanup; the latter still runs if group cleanup fails.
 
 ### AMD multi-node GPU preflight coordination
 

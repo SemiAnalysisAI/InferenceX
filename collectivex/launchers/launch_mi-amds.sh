@@ -11,7 +11,10 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
-  mi300x|mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  # mi300x's nodes refuse the 256-CPU ask ("Requested node configuration is not
+  # available"), so that pool takes the whole node instead.
+  mi300x) CPUS_PER_NODE=""; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi355x) CPUS_PER_NODE=128; DEVICE_MOUNTS="" ;;
   *) collx_die "COLLX_SHARD_SKU is not a registered AMD SKU" ;;
 esac
@@ -25,8 +28,8 @@ EXCLUDE_NODES="${COLLX_EXCLUDE_NODES:-}"
 NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
 case "$COLLX_BENCH" in
-  mori | uccl-ep) ;;
-  *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
+  mori | uccl-ep | swap-blocks) ;;
+  *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
 
 export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
@@ -53,11 +56,11 @@ collx_select_image "$IMAGE"
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
-  --time="$TIME_MIN" --ntasks-per-node="$GPN"
-  --cpus-per-task="$((CPUS_PER_NODE / GPN))")
-if [ "$RUNNER" = mi355x ]; then
-  allocation+=(--exclusive)
-fi
+  --time="$TIME_MIN" --ntasks-per-node="$GPN")
+[ -z "$CPUS_PER_NODE" ] || allocation+=(--cpus-per-task="$((CPUS_PER_NODE / GPN))")
+case "$RUNNER" in
+  mi300x|mi355x) allocation+=(--exclusive) ;;
+esac
 excluded_nodes="$EXCLUDE_NODES"
 for allocation_attempt in 1 2 3; do
   attempt_allocation=("${allocation[@]}")

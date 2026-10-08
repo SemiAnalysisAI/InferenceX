@@ -19,7 +19,7 @@ Use this page to identify benchmark artifacts, inspect their contracts, and deci
 | [`infx/results/evals.py`](../infx/results/evals.py), [`eval_artifacts.py`](../infx/results/eval_artifacts.py) | Shared eval reading, result selection, reuse consistency checks, and rerun deduplication for collection and Klaud |
 | [`infx.results.agentic`](../infx/results/agentic/__init__.py), [`request_metrics.py`](../infx/results/agentic/request_metrics.py), [`artifacts.py`](../infx/results/agentic/artifacts.py) | AgentX aggregate schema, raw-record filtering, request accounting, and derived metrics |
 | [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) | AgentX pre-upload error-rate gate |
-| [`run-sweep.yml`](../../.github/workflows/run-sweep.yml), [`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) | App dispatch payload and source/merge run identities |
+| [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml), [`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) | App dispatch payload and source/merge run identities |
 | [InferenceX-app `prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/prepare-ci-artifacts.ts), [`ci-artifact-preparation.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts) | Cross-run artifact selection, attempts, and reuse provenance |
 | [InferenceX-app `ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts) | End-to-end ingest ordering, pairing, skips, summaries, and refresh |
 | [InferenceX-app `benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/benchmark-mapper.ts), [`eval-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/eval-mapper.ts), [`agentic-v3-flatten.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/etl/agentic-v3-flatten.ts) | Artifact-to-database schemas and normalization |
@@ -55,7 +55,7 @@ Do not use one identifier as a substitute for another.
 | Eval sample | `(eval_result_id, doc_id)` | Per-document sample identity. |
 | AgentX raw sidecar | `benchmark_results.trace_replay_id` | Link from a normalized AgentX point to retained and precomputed trace data. |
 
-The distinction matters during reuse. Artifact bytes can come from a PR sweep while changelog metadata and the ingest trigger come from a later main run. The stored benchmark row still belongs to the source run and source attempt.
+The distinction matters because every official ingest reuses a PR sweep. Artifact bytes come from the PR sweep while changelog metadata and the ingest trigger come from the later Merge Ingest run on `main`. The stored benchmark row still belongs to the source run and source attempt.
 
 ## Throughput artifacts
 
@@ -91,9 +91,9 @@ The fixed-sequence transformer requires runner, framework, precision, speculativ
 | Multinode topology | `prefill_tp`, `prefill_pp`, `prefill_dcp_size`, `prefill_pcp_size`, `prefill_ep`, `prefill_dp_attention`, `prefill_num_workers`, matching `decode_*` fields, `num_prefill_gpu`, `num_decode_gpu`, and optional `prefill_hw`/`decode_hw` |
 | Primary derived metrics | `tput_per_gpu`, `input_tput_per_gpu`, `output_tput_per_gpu` |
 | Latency and interactivity | Each benchmark input key ending in `ms` is converted from milliseconds to seconds with `_ms` removed. Keys containing `tpot` also produce an `intvty` reciprocal. |
-| Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and measured power patched from `gpu_metrics.csv` when available |
+| Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and, for multinode results, measured power from the srt-slurm telemetry package |
 
-Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
+Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Only multinode results are power-aggregated; single-node results carry no power fields or verdict. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
 
@@ -101,15 +101,16 @@ InferenceX-app treats routing fields as columns or config dimensions and stores 
 
 The serving client records `benchmark_outcome` before saving its raw result. It retains the existing maximum request-failure rate of 5%, including the requested/completed/failed counts. The processor verifies this record, copies it to the aggregate, and returns failure even when telemetry is valid. Zero successful requests retain a diagnostic aggregate without fabricated reciprocal latency. Invalid request counts retain a failed diagnostic outcome with the raw `requested`/`completed` values and an `error`, without a fabricated failed count or rate; the client saves the raw JSON before exiting and the processor still rejects it. Legacy results without outcome metadata remain distinguishable; power validity alone never establishes benchmark success or answer quality.
 
-`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics; local SMI indices are not physical UUID proof.
+`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics.
 
 For multinode fixed-sequence jobs, `python -m infx.results.fixed_sequence --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
 
-The PR changelog selects representative NVIDIA and AMD coverage, not an exhaustive list of affected recipes; shared processing changes apply to every fixed-sequence recipe.
 
-Processing and diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
+Processing and, for multinode jobs, diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
 ### SRT multinode window retention
+
+SRT samples CSV versions 1, 2 and 3 are accepted. Version 3 adds optional `temperature_c` in Celsius; temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks. Deploy this reader before a producer that emits version 3.
 
 Power audit sidecars retain independently validated measurements in `selected_window`;
 `package_integrity_valid` records shared evidence checks and `window_validations` records
@@ -119,17 +120,11 @@ stays empty, aggregate power metrics are omitted, and `REQUIRE_POWER=1` fails. T
 metrics and top-level `per_gpu_energy_j` / `per_gpu_max_sample_gap_s` diagnostics;
 these do not authorize publication. Replay never rewrites inputs or repairs inconsistent evidence.
 
-### Native multinode telemetry
-
-`native_power_collect.sh` and `native_power_lifecycle.sh` provide per-node collection and bounded ready/stop receipts. Launchers opt into the native package under `LOGS/native_power`; this prerequisite enables no new recipe. The adapter validates serving GPU identity, synchronized clocks, collector completion, and complete formal-window coverage. It preserves per-node failures, sample counts, and collector revision in the audit.
-
-The native collector sets UTC and records context beside its CSV for portable replay; existing benchmark monitors keep their current behavior. Its launcher integration requires separate hardware qualification. The offline adapter accepts this context without changing producers. Unusable samples outside the formal window do not establish coverage; `boundary_degenerate_rows` retains their per-GPU counts.
-
 ## Eval artifacts
 
 ### Per-config identity and collection
 
-Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, predictions, SWE-bench reports, and trajectory files. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
+Each eval upload is named `eval_<EXP_NAME>_<RESULT_FILENAME>`. Its current allowed payload includes `meta_env.json`, `results*.json`, sample JSONL, and native vendor-eval reports, detailed results, and archives. The collector uses only the metadata and lm-eval result JSON for aggregate rows.
 
 Collection and reuse share result reading and selection, but retain different validation policies. Collection can report completed points from a failed batch; reuse rejects failed or incomplete batches. Each phase uses its loaded JSON for selection and validation. After deduplication rewrites or removes artifacts, validation reads the resulting files afresh.
 
@@ -190,13 +185,13 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
-Ordinary single-node AgentX runs enable the shared GPU power monitor by default.
-Their `power_audit_<RESULT_FILENAME>` artifact retains the raw telemetry, GPU
-identity, formal measurement window, timezone offset, and validation verdict
-from `results/`. Multinode runs retain the deployment telemetry under
-`LOGS/power/` and per-concurrency window/validation files under `LOGS/agentic/`
-in the same audit artifact. Available audits and AgentX aggregates upload even
-when a benchmark fails. Missing files do not establish power support: a
+AgentX power applies only to replays with `IS_MULTINODE=true`. Single-node
+replays, including aggregated srt-slurm recipes that set `IS_MULTINODE: false`,
+publish no power fields or verdict, whatever `ENABLE_AGENTX_POWER` says.
+Multinode runs retain the deployment telemetry under `LOGS/power/` and
+per-concurrency window/validation files under `LOGS/agentic/` in their
+`power_audit_<RESULT_FILENAME>` artifact. Available audits and AgentX aggregates
+upload even when a benchmark fails. Missing files do not establish power support: a
 multinode recipe also needs `telemetry` enabled so the pinned srt-slurm exports
 `SRT_MEASUREMENT_WINDOW_DIR` to its custom benchmark command; InferenceX derives
 the result root and concurrency from that directory and the replay itself.
@@ -269,12 +264,11 @@ Before normal upload, the single-node workflow runs [`validate_agentic_result.py
 
 ## App handoff and reused runs
 
-[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) dispatches either `ingest-results` or `ingest-agentic-results` to InferenceX-app.
+[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) dispatches exactly one of `ingest-results` or `ingest-agentic-results` to InferenceX-app per merge. It chooses `ingest-agentic-results`, with `database-target: production`, when the changelog delta has agentic entries. `run-sweep.yml` never dispatches ingest.
 
-- `source-run-id` identifies the workflow run whose benchmark, eval, AgentX, log, and stats artifacts supply measured data.
-- `merge-run-id` identifies the main-branch workflow run that authorized the ingest and supplies current changelog metadata.
-- For an ordinary main run, both IDs equal `github.run_id`.
-- For a reused PR sweep, `source-run-id` is the selected PR run and `merge-run-id` is the current main run.
+- `source-run-id` identifies the reused PR `run-sweep.yml` run whose benchmark, eval, AgentX, log, and stats artifacts supply measured data.
+- `merge-run-id` identifies the Merge Ingest run on `main` that authorized the ingest and supplies current changelog metadata.
+- The two IDs always differ: `main` never runs a sweep, so no run supplies both the measured artifacts and the merge metadata.
 
 InferenceX-app's artifact preparation keeps the newest unexpired upload for each exact artifact name from the source run. In reuse mode it excludes source-run `changelog-metadata`, requires an unexpired changelog artifact from the merge run, and adds that merge-run artifact to the plan. No unexpired source artifacts, or no merge-run changelog during reuse, is a hard failure.
 
@@ -435,7 +429,7 @@ rm -rf -- "$tmp"
 
 ## P75 and P90 measured GPU power
 
-Validated single-node SMI and multinode DCGM results also emit `p75_total_gpu_power_w`,
+Validated multinode DCGM results also emit `p75_total_gpu_power_w`,
 `p75_power_w`, `p90_total_gpu_power_w`, and `p90_power_w`. The total fields are
 the time-weighted 75th and 90th percentiles of the sum of
 all participating GPU-board power curves during the same formal benchmark window

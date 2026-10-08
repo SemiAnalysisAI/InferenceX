@@ -16,8 +16,6 @@ from infx.results.collect_eval_results import (
     detect_lm_eval_jsons,
     result_concurrency,
 )
-from infx.evals.kimi_vendor_eval import RESULT_FORMAT as KIMI_VENDOR_RESULT_FORMAT
-from infx.evals.minimax_provider_eval import RESULT_FORMAT as MINIMAX_RESULT_FORMAT
 from infx.results.evals import (
     build_rows, extract_metrics, select_latest_result, select_latest_results,
 )
@@ -100,8 +98,6 @@ def test_extract_metrics_keeps_raw_values_for_other_callers() -> None:
     ({"exact_match,strict-first": 0.25, "exact_match,extract": 0.5},
      {"filter_list": [{"name": "strict-first"}, {"name": "strict-missing"},
                       {"name": "extract"}]}, (0.5, "em_flexible", None)),
-    ({"exact_match,resolved": 1.0, "exact_match_stderr,resolved": 0.03},
-     {"filter_list": [{"name": "resolved"}]}, (1.0, "em_strict", 0.03)),
     ({"exact_match,extract": 0.75, "exact_match_stderr,extract": 0.04},
      {"filter_list": [{"name": "extract"}]}, (0.75, "em_flexible", 0.04)),
 ])
@@ -273,15 +269,6 @@ def test_build_row_preserves_sequence_lengths() -> None:
     assert "eval_suite" not in row
 
 
-def test_build_row_preserves_explicit_eval_suite() -> None:
-    row = build_row(
-        {"eval_suite": "kimi_tool_call_schema"},
-        {"task": "kimi_tool_call_schema"},
-    )
-
-    assert row["eval_suite"] == "kimi_tool_call_schema"
-
-
 def _write_lm_eval_result(
     path: Path,
     score: float,
@@ -434,31 +421,6 @@ def test_collect_eval_rows_ignores_failed_batch_points(
 
     assert [row["conc"] for row in rows] == [4]
 
-
-
-@pytest.mark.parametrize("result_format", [KIMI_VENDOR_RESULT_FORMAT, MINIMAX_RESULT_FORMAT])
-def test_collect_eval_rows_accepts_provider_compatibility_result(
-    tmp_path: Path, result_format: str,
-) -> None:
-    artifact_dir = tmp_path / "eval_minimax"
-    artifact_dir.mkdir()
-    (artifact_dir / "meta_env.json").write_text(
-        json.dumps({"eval_suite": "minimax_m3_smoke"})
-    )
-    result_path = artifact_dir / "results_minimax_vendor.json"
-    _write_lm_eval_result(result_path, 1.0, task="minimax_m3_smoke")
-    result = json.loads(result_path.read_text())
-    result.pop("lm_eval_version")
-    result["result_format"] = result_format
-    result["eval_adapter"] = "minimax-provider-verifier"
-    result_path.write_text(json.dumps(result))
-
-    rows = collect_eval_rows(tmp_path)
-
-    assert len(rows) == 1
-    assert rows[0]["task"] == "minimax_m3_smoke"
-    assert rows[0]["score"] == 1.0
-    assert rows[0]["eval_suite"] == "minimax_m3_smoke"
 
 
 def test_collect_eval_rows_retains_integration_and_sample_failures(
@@ -637,26 +599,6 @@ def test_collect_eval_rows_retains_missing_or_out_of_range_scores(
     assert {
         row["integration_error"]["type"] for row in rows
     } == {"InvalidPrimaryScore"}
-
-
-def test_collect_eval_rows_falls_back_for_invalid_filename_timestamp(
-    tmp_path: Path,
-) -> None:
-    artifact_dir = tmp_path / "eval_invalid_timestamp"
-    artifact_dir.mkdir()
-    (artifact_dir / "meta_env.json").write_text(
-        json.dumps({"eval_suite": "kimi_tool_call_schema"})
-    )
-    _write_lm_eval_result(
-        artifact_dir / "results_2026-99-99T99-99-99.json",
-        1.0,
-        task="kimi_tool_call_schema",
-    )
-
-    rows = collect_eval_rows(tmp_path)
-
-    assert len(rows) == 1
-    assert rows[0]["score"] == 1.0
 
 
 def test_collect_eval_rows_uses_extract_filter_as_primary_score(

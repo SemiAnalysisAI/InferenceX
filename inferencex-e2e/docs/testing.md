@@ -22,9 +22,8 @@ Use the narrowest check that can falsify the change, then widen only when the ch
 ## Sources of truth
 
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) defines sweep labels and modifiers. Its [dispatch section](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring) defines manual runs and artifact inspection.
-- [`docs/configuration-procedures.md`](configuration-procedures.md#validate) is the focused configuration validation procedure.
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) documents matrix generation, `e2e-tests.yml`, PR sweeps, and reuse.
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the executable PR/push gate. [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) is the manually dispatched end-to-end path.
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the executable PR sweep gate, and [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) is the push-to-`main` reuse and ingest gate. [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) is the manually dispatched end-to-end path.
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) is the merge-review standard. [The verifier prompt](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) states how sweep and eval evidence is independently checked.
 
 These sources outrank this guide when behavior changes. Update the English page first, then translate the same structure and evidence into this page's Chinese counterpart.
@@ -41,23 +40,17 @@ Tests runs suites under `infx/tests/`, `utils/`, `runners/`, `../collectivex/tes
 | Schema and matrix | A config key validates and emits the intended matrix fields | Runner availability, server startup, or performance |
 | Focused Python tests | Changed generator, changelog, result, eval, collection, or reuse contracts behave on covered inputs | Container, accelerator, network, or Slurm behavior |
 | Smoke run | One tightly filtered path allocates, starts a server, runs a workload, and emits artifacts | The complete concurrency/search space or merge eligibility |
-| Trimmed PR sweep | Each selected single-node group runs its lowest concurrency (`sweep-enabled`) | Intermediate concurrency points required by a full sweep |
+| Manual trimmed run | Each selected single-node and multi-node deployment shape runs its lowest concurrency (`e2e-tests.yml` with `trim-conc: true`; in changelog-ref mode only throughput rows are trimmed, and evals keep their selected concurrency). No PR label trims concurrency | Intermediate concurrency points required by a full sweep |
 | Full sweep and eval | The selected untrimmed matrix and eval jobs execute on the reviewed commit | Correctness of evidence that was not inspected, or unrelated configurations |
 
 A green later layer does not erase missing earlier evidence. For example, a green collector can aggregate an empty set, so review must inspect the underlying executed jobs and artifacts.
 
 ## Test quality
 
-Tests protect behavior, not coverage numbers. During review, ask what plausible bug each test would catch and whether it exercises the implementation that ships.
+The mandatory test rules (forbidden test types, what a kept test looks like, and the four review questions) live in [`AGENTS.md`](../../AGENTS.md#test-quality). Two additions apply here:
 
-- Prefer a small input with a hand-worked expected result, including relevant boundary, malformed-input, or failure cases. Do not copy the implementation's calculation or call the same helper to produce the expected result.
-- Do not snapshot the current recipe count, model/hardware inventory, image pin, enum definition, or source text. Adding a valid recipe or refactoring equivalent code should not force unrelated assertion changes.
 - Preserve genuine contracts: numerical results, rejected invalid inputs, stable artifact formats, and agreement between independently consumed configurations. Assert only the parts of the contract the consumer needs.
-- Mock external services or processes when necessary, but run the actual behavior under test. A copied parser, filter, or fake implementation cannot detect a regression in the real one.
 - Control clocks and long waits in timing tests. Synchronize on observable readiness, keep process termination and artifact writes real when testing those contracts, and bound waits and cleanup so regressions cannot strand test workers.
-- Delete redundant tests without replacement. Extend existing fixtures only when there is a meaningful gap; do not build a new test framework to preserve a test count.
-
-See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that merely repeat the implementation.
 
 ## Local checks
 
@@ -111,7 +104,7 @@ Add `--no-ignores` to review all of these exceptions. Keep new findings blocking
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('configs/runners.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 bash -n benchmarks/<path>/<script>.sh
-bash -n runners/launch_<cluster>.sh
+uv run python -c 'from infx.clusters import load_clusters; load_clusters()'
 ```
 
 Parsing is only the first gate. Do not report a YAML parse as matrix validation.
@@ -136,8 +129,6 @@ uv run --locked \
   --seq-lens 8k1k
 ```
 
-Use `--seq-lens 1k1k` only when explicitly selecting the retained `glm5.1-fp8-b200-tilert` configuration; other 1k1k coverage is retired.
-
 Inspect the emitted values, not only the exit code or row count: config key, model, image, runner, scenario, concurrency, `max-model-len`, TP/PP/EP/DCP/PCP, prefill/decode workers, hardware, router, KV transfer, eval flags, `additional-settings`, and `spec-decoding`. The schema lives in [`validation.py`](../infx/matrix/validation.py), and the generator is [`generate.py`](../infx/matrix/generate.py).
 
 ### Focused suites by changed contract
@@ -148,7 +139,8 @@ Inspect the emitted values, not only the exit code or row count: config key, mod
 | Changelog content or PR gating | `python -m pytest infx/tests/matrix/test_process_changelog.py infx/tests/workflows/test_validate_perf_changelog.py infx/tests/workflows/test_prepare_perf_changelog_merge.py -v` |
 | Result processing and topology | `python -m pytest infx/tests/results/power/test_process_result.py infx/tests/results/agentic/test_process_agentic_result.py infx/tests/results/power/test_aggregate_power.py infx/tests/workflows/test_calc_success_rate.py -v` |
 | AgentX aggregation and artifact loading | `python -m pytest infx/tests/results/agentic/ -v` |
-| Eval dispatch, batching, or patches | `python -m pytest infx/tests/evals/ -v` |
+| Eval dispatch, batching, staging, or patches | `python -m pytest infx/tests/bench/test_eval_command.py infx/tests/bench/test_eval_meta.py infx/tests/bench/test_vendor_eval.py infx/tests/evals/ -v` |
+| Container-side `python3 -m infx.bench` commands | `python -m pytest infx/tests/bench/ -v` |
 | Eval collection | `python -m pytest infx/tests/results/test_collect_eval_results.py -v` |
 | Sweep reuse or reusable artifacts | `python -m pytest infx/tests/test_github.py infx/tests/workflows/test_find_reusable_sweep_run.py infx/tests/workflows/test_acknowledge_sweep_reuse.py infx/tests/workflows/test_validate_reusable_sweep_artifacts.py -v` |
 
@@ -163,7 +155,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 Its contract is implemented in [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py). This check validates the generated matrix and rejects prohibited content changes, but whitespace-only historical deletions can be invisible to its diff reader. Inspect the exact byte diff as a separate evidence gate. Do not rewrite or normalize historical `perf-changelog.yaml` bytes.
 
-A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet, as described in [configuration validation](configuration-procedures.md#validate).
+A local matrix cannot prove Slurm allocation or llm-d endpoint discovery. Multi-node recipe changes still require the upstream recipe checker and an execution on the intended fleet.
 
 ### Full local suite in parallel
 
@@ -188,16 +180,16 @@ A smoke run is not merge evidence: it intentionally omits configurations and con
 
 ### Trimmed and full sweeps
 
-- `sweep-enabled` trims each parallelism group to its lowest concurrency and is the default for most PR feedback.
-- `full-sweep-fail-fast` is the recommended full-sweep label. It uses the sequential single-node canary and stops each matrix after that matrix's first failure while preserving completed results.
-- Use a no-canary full-sweep label only when the canary is known to be flaky or unrepresentative. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
+- `full-sweep-fail-fast` is the recommended full-sweep label. Unless the sweep has only multi-node fixed-sequence or eval entries, it first runs a canary (the lowest-concurrency non-eval single-node entry, or a multi-node AgentX entry when no single-node entry qualifies). It then stops each matrix after that matrix's first failure while preserving completed results.
+- Use `non-canary-full-sweep-enabled` only when the canary is known to be flaky or unrepresentative. It also runs without fail-fast. Use `full-sweep-enabled` instead of fail-fast only when every matrix job must continue despite a failure.
 - Apply exactly one primary sweep label. Modifier-only or conflicting primary labels do not constitute a valid sweep.
+- A trimmed sweep (lowest concurrency only) can be run manually via `e2e-tests.yml` with the `trim-conc` input.
 
-The current meanings and eligibility rules are defined in the [sweep-label reference](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) and implemented by [`run-sweep.yml`](../../.github/workflows/run-sweep.yml).
+The current meanings and eligibility rules are in [PR primary and modifier labels](ci-procedures.md#pr-primary-and-modifier-labels) and implemented by [`run-sweep.yml`](../../.github/workflows/run-sweep.yml).
 
 ### Eval
 
-Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
+Throughput and evals are separate jobs. The default sweep evaluates the selected 8k1k subset and the AgentX GSM8K subset. `all-evals` expands eval selection, and `evals-only` suppresses throughput. Choose modifiers from the changed scope, but do not substitute an eval-only or preflight run for the required full sweep.
 
 Eval completion is not just a green job. Preserve and inspect `meta_env.json`, the `results*.json` files, the score-validation output, the inference image, and the aggregated eval artifact. [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) owns task and artifact behavior. [`validate_scores.py`](../infx/evals/validate_scores.py) rejects missing result files, below-threshold scores, and runs with no checked metrics. When expected concurrency metadata is available, it also rejects invalid/incomplete/failed batches. The single-node workflow invokes it without `--expected-concs`, so reviewers must verify `meta_env.json` independently for single-concurrency artifacts.
 

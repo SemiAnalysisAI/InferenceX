@@ -6,25 +6,17 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
+      suites:
+        description: "Comma-list of suites: ep (expert-parallel dispatch/combine), swap-blocks (vLLM block copies, one GPU per pool)"
+        type: string
+        default: ep
       backend:
-        description: "Benchmark to run — swap-blocks runs only vLLM memory copies on one GPU per selected pool; all runs EP backends"
+        description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep, swap-blocks]
-      swap_image:
-        description: Official CUDA vLLM image for swap-blocks
-        type: string
-        default: vllm/vllm-openai:v0.25.1
-      swap_rocm_image:
-        description: Official ROCm vLLM image for AMD swap-blocks
-        type: string
-        default: vllm/vllm-openai-rocm:v0.27.1
-      swap_h100_image:
-        description: Official CUDA vLLM image staged in the H100 serving cache
-        type: string
-        default: vllm/vllm-openai:v0.27.1
+        options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep]
       swap_profile:
-        description: swap-blocks workload size (both profiles cover all directions and layouts)
+        description: swap-blocks grid from configs/swap_sweep.json (every profile covers all directions and layouts)
         type: choice
         default: smoke
         options: [smoke, standard, large-blocks]
@@ -37,11 +29,11 @@ on:
         type: string
         default: ''
       ep_sizes:
-        description: Keep only shards whose expert-parallel degree is in this comma-list (8 keeps EP8 only, dropping EP16 so GB SKUs co-schedule with 8-GPU SKUs; blank = all)
+        description: EP only. Keep only shards whose expert-parallel degree is in this comma-list (8 keeps EP8 only, dropping EP16 so GB SKUs co-schedule with 8-GPU SKUs; blank = all)
         type: string
         default: ''
       modes:
-        description: "Keep only shards in this comma-list of modes (normal, low-latency); low-latency is a decode-only EP8 addition; blank = all"
+        description: "EP only. Keep only shards in this comma-list of modes (normal, low-latency); low-latency is a decode-only EP8 addition; blank = all"
         type: string
         default: ''
       refresh_image:
@@ -54,7 +46,7 @@ on:
         default: native
         options: [native, dequant]
 concurrency:
-  group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
+  group: cx-${{ github.ref }}-${{ inputs.suites }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
 
 env:
@@ -81,6 +73,8 @@ jobs:
       - id: gen
         working-directory: collectivex
         env:
+          INPUT_SUITES: ${{ inputs.suites }}
+          INPUT_SWAP_PROFILE: ${{ inputs.swap_profile }}
           INPUT_BACKEND: ${{ inputs.backend }}
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
@@ -90,23 +84,14 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -eo pipefail
-          source ../inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
-          check_env_vars INPUT_BACKEND RUN_ID RUN_ATTEMPT GITHUB_OUTPUT
-          args=(--backend "$INPUT_BACKEND")
+          source ../inferencex-e2e/benchmarks/check_env.sh
+          check_env_vars INPUT_SUITES INPUT_SWAP_PROFILE INPUT_BACKEND RUN_ID RUN_ATTEMPT GITHUB_OUTPUT
+          args=(--suites "$INPUT_SUITES" --swap-profile "$INPUT_SWAP_PROFILE" --backend "$INPUT_BACKEND")
           [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
           [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
           [ -n "$INPUT_MODES" ] && args+=(--modes "$INPUT_MODES")
-          if [ "$INPUT_BACKEND" = swap-blocks ]; then
-            if [ -n "$INPUT_EP_SIZES$INPUT_MODES" ]; then
-              echo "swap-blocks does not accept EP filters" >&2
-              exit 1
-            fi
-            python3 swap_matrix.py --only-sku "$INPUT_ONLY_SKU" \
-              --exclude-skus "$INPUT_EXCLUDE_SKUS" --out matrix_full.json
-          else
-            python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
-          fi
+          python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           python3 - "$GITHUB_OUTPUT" <<'PY'
           import hashlib
           import json
@@ -167,18 +152,10 @@ jobs:
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}
-      COLLX_SWAP_IMAGE: ${{ matrix.vendor == 'amd' && inputs.swap_rocm_image || matrix.sku == 'h100-dgxc' && inputs.swap_h100_image || inputs.swap_image }}
-      COLLX_VENDOR: ${{ matrix.vendor }}
-      COLLX_SWAP_BLOCK_BYTES: ${{ inputs.swap_profile == 'large-blocks' && '257 4096 65536 262144 1048576 4194304 16777216 67108864 268435456 1073741824' || inputs.swap_profile == 'standard' && '4096 65536 1048576' || '257 4096 65536 262144' }}
-      COLLX_SWAP_MAX_PAYLOAD_BYTES: ${{ inputs.swap_profile == 'large-blocks' && '1073741824' || '2147483648' }}
-      COLLX_SWAP_NUM_BLOCKS: '1 4 16 64 256 1024 2048'
-      COLLX_SWAP_WARMUP: ${{ inputs.swap_profile == 'standard' && '32' || '4' }}
-      COLLX_SWAP_ITERATIONS: ${{ inputs.swap_profile == 'standard' && '100' || '20' }}
-      COLLX_SWAP_SEED: '0'
-      COLLX_SWAP_DEVICE: '0'
-      COLLX_SWAP_TIME: '45'
+      # Set only on shards whose suite ships its own image (swap-blocks); blank keeps the pool's.
+      COLLX_IMAGE_OVERRIDE: ${{ matrix.image || '' }}
+      COLLX_STAGED_IMAGE_DIR: ${{ matrix.staged_image_dir || '' }}
       COLLX_IMPORT_TMPDIR: ${{ matrix.sku == 'h100-dgxc' && '/var/tmp' || '/tmp' }}
-      COLLX_SWAP_STAGED_DIR: ${{ matrix.sku == 'h100-dgxc' && '/mnt/nfs/lustre/containers' || '' }}
       COLLX_NODES: ${{ matrix.nodes }}
       COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
       COLLX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}
@@ -197,8 +174,8 @@ jobs:
       COLLX_IMAGE_REFRESH: ${{ inputs.refresh_image && '1' || '0' }}
       # Consolidated shards run one bounded build-group in one Slurm allocation;
       # every production pool accepts 300 minutes. Allocations release as soon as
-      # the shard finishes.
-      COLLX_TIME: '300'
+      # the shard finishes. A suite with a short fixed grid asks less so it backfills.
+      COLLX_TIME: ${{ matrix.allocation_minutes || '300' }}
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
       COLLX_JOB_PARENT: ${{ (matrix.launcher == 'mi-amds' || startsWith(matrix.sku, 'mi3')) && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
       COLLX_JOB_ROOT: ${{ (matrix.launcher == 'mi-amds' || startsWith(matrix.sku, 'mi3')) && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
@@ -254,7 +231,6 @@ jobs:
           path: ${{ env.COLLX_JOB_ROOT }}/control
       # Materialize this shard's .shards/<id>.json case control from the run-scoped matrix artifact downloaded above.
       - name: Extract execution control
-        if: matrix.backend != 'swap-blocks'
         env:
           MATRIX_ID: ${{ matrix.id }}
         run: |

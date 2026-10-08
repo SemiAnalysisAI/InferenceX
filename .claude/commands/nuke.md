@@ -173,7 +173,7 @@ git add inferencex-e2e/perf-changelog.yaml && git commit -q --amend --no-edit &&
 Conventions:
 - `<PHRASE>` = `vLLM image` / `vLLM ROCm image` / `SGLang image` / `SGLang ROCm image`.
 - Title gets `(+mtp)` only when the family has an mtp sibling.
-- Every PR carries the **`full-sweep-fail-fast`** label (strongly recommended over `full-sweep-enabled` - a broken image bump burns one job per matrix, not the full fan-out) so CI kicks off.
+- Every PR carries the **`full-sweep-fail-fast`** label so CI kicks off. It is strongly recommended over `full-sweep-enabled`: both labels are gated by the same canary, so an image bump that fails the canary skips every other matrix either way. Fail-fast matters once the canary passes: a later failure then cancels the rest of its matrix instead of letting the whole fan-out run.
 - `<DESC>` = `Update <PHRASE> from <old-tag> to <TAG>` (note both tags when the
   base/mtp differ, e.g. base already on target).
 - PR body:
@@ -183,11 +183,9 @@ Conventions:
 
   Recipes touched: `key1`, `key2`
 
-  ## Test plan
-  - [ ] full-sweep-fail-fast sweep passes.
-
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
+
+  Follow [PR descriptions](../../CONTRIBUTING.md#pr-descriptions): keep administrative sections collapsed by default, omit pending-validation boilerplate, and add validation evidence only after an actual integration or end-to-end run.
 
 ## Step 5 — finish
 

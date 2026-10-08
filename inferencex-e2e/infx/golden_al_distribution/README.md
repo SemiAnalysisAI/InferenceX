@@ -137,6 +137,14 @@ Before accepting an updated curve, reviewers should verify:
 | GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
 
+## Using golden curves in srt-slurm runs
+
+- Do not hard-code synthetic acceptance lengths in SRT recipes, master configs, or launchers. Do not add manual `SYNTHETIC_ACCEPTANCE_LENGTH`, vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, or TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` settings. The engine examples above show what the connector injects, not what a recipe should set.
+- Submit recipes through the srt driver (`infx/launch/drivers/srt/`). It runs the [`infx/srt_slurm` connector](../srt_slurm/synthetic_acceptance.py), which applies native SRT `--set` / `--unset` overrides. Calling upstream `srtctl` directly skips this selection.
+- Keep the speculative method, draft model, draft-token count, and relevant sampling settings explicit in the recipe. The connector combines the generation role's settings (decode, otherwise aggregated), after caller overrides, with `MODEL_PREFIX` and `THINKING_MODE` to select the curve. For Kimi DSpark, set `draft_sample_method` to `greedy` or `probabilistic`.
+- Eval-only and non-AgentX runs use real verification, and the connector removes stale synthetic settings. Non-speculative roles receive no simulation settings. `RUN_EVAL` does not disable simulation for the throughput portion.
+- Missing golden curves or unmeasured draft lengths fail before submission. Add measured golden data for a new combination instead of a guessed or hard-coded length.
+
 ## Querying the curves
 
 This directory is the `infx.golden_al_distribution` Python package. `golden_length(model_prefix, spec, thinking)` returns the value AgentX synthetic acceptance applies, and `curve_name` shows which YAML a speculative config resolves to. The same lookup runs from a shell:

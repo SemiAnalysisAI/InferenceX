@@ -18,13 +18,12 @@
 - [服务器](#服务器)
 - [评测与收集](#评测与收集)
 - [摄取](#摄取)
-- [已知 KLAUD 案例](#已知-klaud-案例)
+- [已知故障特征](#已知故障特征)
 - [验证与停止条件](#验证与停止条件)
 
 ## 事实来源
 
-- [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) 记录反复出现的 Klaud-Cold/镜像升级事故及其已观测特征。它是事故知识，不替代当前工作流或评审政策。
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml)、[`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml) 和 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) 定义编排、制品上传、服务器就绪、基准测试和评测行为。
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml)、[`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml) 以及 [`infx/bench/`](../infx/bench) 中在容器内运行的 `python3 -m infx.bench` 命令，共同定义编排、产物上传、就绪等待、基准测试和评估行为。
 - [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py)、[`generate.py`](../infx/matrix/generate.py) 和 [`validation.py`](../infx/matrix/validation.py) 分别负责 changelog、矩阵和模式失败。
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) 与 [`runners/`](../runners) 负责预置和启动器路由。[`CONTRIBUTING.md`](../../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) 负责 AMD 工作区安全规则。
 - [`infx/evals/EVALS.md`](../infx/evals/EVALS.md)、[`validate_scores.py`](../infx/evals/validate_scores.py) 和 [`collect_eval_results.py`](../infx/results/collect_eval_results.py) 分别负责评测执行、验证和收集。
@@ -52,13 +51,13 @@
 | 服务器 | 进程退出、日志未出现、健康检查未通过、OOM/内核/端口错误 | 服务器日志、PID 退出、`/health`、镜像 digest/tag、GPU/Slurm 日志 | 匹配精确特征；只修改一个有证据支持的运行时/镜像设置，或回退 |
 | 评测 | `eval /` 失败、批次不完整、分数低于阈值、结果缺失 | `meta_env.json`、每个 `results*.json`、验证器输出、镜像与任务 | 修复评测/服务器/任务根因，重跑精确评测配置 |
 | 收集 | “No eval results found”、聚合为空、评测被跳过但收集器绿色 | 底层 `eval /` 结论；制品树与元数据；收集器输出 | 恢复/修复上游制品契约；不要只依据收集器输出诊断服务层 |
-| 摄取 | 面板行缺失/错误；目标 `trigger-ingest` 绿色但无有效数据 | 目标与来源运行元数据；未过期制品；应用工作流/ETL 日志；changelog 范围 | 使用带防护的恢复流程；绝不重跑失败的目标工作流 |
+| 摄取 | 面板行缺失/错误；`merge-ingest.yml` 目标失败，或分发任务绿色但无有效数据 | 目标与来源运行元数据；未过期制品；应用工作流/ETL 日志；changelog 范围 | 使用带防护的恢复流程；绝不重跑失败的目标工作流 |
 
 ## Changelog 与矩阵
 
 ### Changelog
 
-Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并使历史字节看起来被删除。遵循 [`KLAUD_DEBUG.md` §1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed) 的规范修复：逐字采用当前 main 版本，然后只在末尾追加本 PR 条目。使用 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 对真实 base 与 head 进行验证。
+Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并使历史字节看起来被删除。遵循[变更日志冲突恢复](ci-procedures_zh.md#changelog-冲突恢复)的规范修复：逐字采用当前 main 版本，然后只在末尾追加本 PR 条目。使用 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 对真实 base 与 head 进行验证。
 
 不要对 `perf-changelog.yaml` 做三方合并或格式规范化。如果预期配置键、评测标志、场景范围或历史差异不明确，请停止。Changelog 新增内容和允许的 `pr-link` 修正行为由验证器强制执行，不能只依据目视有效的 YAML 解析结果。
 
@@ -66,7 +65,7 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 在本地重跑与工作流完全相同的 `generate-cli-command`。先运行精确键 `test-config`，再运行同样过滤的 `full-sweep` 命令；检查发出的镜像、运行器、场景、拓扑、并发、评测标志和附加设置。命令与检查清单位于 [`testing_zh.md`](testing_zh.md#先精确配置再过滤配置族)。
 
-如果没有 GPU 任务启动，先检查 setup，再调查运行器。[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 会拒绝冲突主标签，不会仅凭评测修饰标签运行，只在 PR head 上接受 `[skip-sweep]`，并等待合并冲突解决。修复输入或标签状态；不要手动分发不同矩阵并把它称为等价证据。
+如果没有 GPU 任务启动，先检查 setup，再调查运行器。[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 会拒绝冲突主标签，不会仅凭修饰标签（`all-evals`、`evals-only`、`agentx-fast`）运行，只在 PR head 上接受 `[skip-sweep]`，并等待合并冲突解决。修复输入或标签状态；不要手动分发不同矩阵并把它称为等价证据。
 
 当本地矩阵与预期 PR 范围不完全一致时停止。生成器成功但配置错误并不是恢复成功。
 
@@ -78,8 +77,6 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 - 使用工作流任务的运行器名称和分配时间戳关联 `squeue`/`sacct` 与节点状态。节点 drained、Pyxis 损坏、Docker socket 权限、磁盘耗尽或运行器 checkout 失败都属于基础设施证据。
 - 仅在运行器恢复健康后重跑。不要仅为了避开坏节点而修改模型并行度、内存标志或镜像。
 - 将访问权限、drained 节点、socket、存储和永久 Slurm 配置变更升级给集群运维人员。
-
-[`KLAUD_DEBUG.md` §5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) 列出了已知 AMD 节点、Docker socket、磁盘和端口事故。除非当前节点证据再次确认，否则应把其中点名的节点状态视为历史记录。
 
 ### AMD root 属主工作区文件
 
@@ -93,19 +90,17 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 ## 服务器
 
-[`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) 会区分“服务器在日志出现前死亡”“服务器在健康前死亡”和进程存活但 `/health` 尚未通过。保留服务器日志和 PID 状态；仅有工作流最终超时不能构成诊断。
-
-就绪后，共享 helper 会记录服务器及已识别的持久 engine worker。Benchmark、AgentX 和 eval 客户端通过 `infx.bench_serving.server_watch` 监控：进程消失、成为 zombie 或 PID 被复用时，仅停止所属客户端进程组。健康但缓慢的工作没有新增时限。使用其他就绪路径的 recipe 需要显式监控服务器；wrapper 存活不能单独证明 worker 健康。
+在 srt-slurm 配方中，服务器由 srt-slurm 启动并等待其健康，因此应先阅读其 sweep 日志和 worker 日志。SPEED-Bench 采集脚本自行启动服务器，并使用 `python3 -m infx.bench wait --url <health URL> --pid <server PID> --log <server log>` 等待（[`wait_ready`](../infx/bench/server.py#L61-L79)）。它在轮询时持续输出服务器日志，服务器退出时以 `process <PID> died before <URL> became ready` 失败，否则一直等到该 URL 返回低于 400 的状态码。时间预算由调度器负责。保留服务器日志和 PID 状态；仅有工作流最终超时不能构成诊断。
 
 客户端依赖安装使用 uv 有限次 HTTP 重试和 120 秒读取超时，并保留下载缓存。网络或下载失败属于基础设施证据，不应据此更改 engine 参数。H100 srt-slurm 将请求镜像解析到其独立 squash 路径并检查已暂存的模型/镜像资源；B300 在分配到的计算节点上检查节点本地模型配置，再启动容器。资源缺失属于就绪性阻塞，不能替换为旧镜像或其他权重。
 
 使用最早出现的具体特征：
 
-- **镜像拉取/tag 失败：**修改运行时标志前验证精确 registry tag 或 digest 是否存在。[`KLAUD_DEBUG.md` §6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas) 警告不要从带日期的 nightly 推导 release tag。
+- **镜像拉取/tag 失败：**修改运行时标志前验证精确 registry tag 或 digest 是否存在。不要从带日期的 nightly 推导 release tag。
 - **权重/KV/CUDA graph OOM：**记录空闲显存、配置利用率、每 rank 并发、graph 限制和启动失败位置。只应用与匹配案例一致的设置；之后同时确认服务器启动和工作负载完成。
 - **内核/架构断言或非法地址：**保留完整堆栈和 GPU 架构。优先使用已修复/固定的上游镜像或受支持后端，而不是未经评审的本地引擎补丁。
 - **地址被占用：**终止进程前确认占用者及其集群所有者。不要杀死未经验证的 PID 或无关服务。
-- **健康服务器在基准测试中死亡：**[`run_benchmark_serving`](../benchmarks/benchmark_lib.sh) 会监控服务器 PID。同时保留客户端与服务器日志，并按服务器的第一个错误分类，而不是按客户端后续连接错误分类。
+- **健康服务器在基准测试中死亡：**基准测试和评估客户端不监控服务器 PID。同时保留客户端与服务器日志，并按服务器的第一个错误分类，而不是按客户端后续连接错误分类。
 
 如果拟议 workaround 会改变模型语义、减少模型 FLOPs、修补服务栈，或没有精确源代码 guard，请停止。当前 [PR 清单](PR_REVIEW_CHECKLIST.md) 禁止推理引擎补丁，除非满足规定的豁免流程。
 
@@ -132,32 +127,32 @@ Setup 阶段的删除错误通常意味着陈旧分支或改变空白的合并�
 
 ## 摄取
 
-`trigger-ingest` 成功不能证明存在有效基准结果行：[`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 可以在收集之后触发下游处理，而取消/无结果目标仍可能到达该任务。验证目标运行的 event、workflow、branch、head SHA、changelog 差异、结果制品和下游 InferenceX-app 日志。
+分发成功不能证明存在有效基准结果行。[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 中的 `ingest` 任务只会在验证被复用的 PR 来源运行及其未过期结果制品后分发，不会验证完整覆盖或结果行有效性；没有复用授权时，它会在分发前失败。在旧版 [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) push 运行中，即使目标已取消或无结果，`trigger-ingest` 也可能在收集之后触发。验证目标运行的 event、workflow、branch、head SHA、changelog 差异、来源运行的结果制品和下游 InferenceX-app 日志。
 
 应用工作流在 [`ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) 中准备、迁移、摄取、应用覆盖并验证数据。[`prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts) 负责选择和下载来源/合并制品并写入复用元数据；[`ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) 负责数据库摄取。[`benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts) 中的失败行 guard 仅在 `num_requests_successful` 为数值零且 `num_requests_total` 为数值时跳过该行。
 
-使用带防护的[失败摄取恢复流程](../../.claude/commands/recover-failed-ingest.md)，不要重跑失败目标。它要求来源是已完成的 pull-request `run-sweep.yml`，结果制品未过期，来源提交属于原 PR，执行语义未变化，changelog 范围明确，并保留恢复 ancestry。
+使用带防护的[失败摄取恢复流程](../../.claude/commands/recover-failed-ingest.md)，不要重跑失败目标。其目标是失败的 push-to-`main` `merge-ingest.yml` 运行（也接受旧版 `run-sweep.yml` push 运行）。它要求来源是已完成的 pull-request `run-sweep.yml`，结果制品未过期，来源提交属于原 PR，执行语义未变化，changelog 范围明确，并保留恢复 ancestry。
 
 如果来源运行或制品不合格、无法证明来源 ancestry、来源 SHA 后配置/配方/镜像语义发生变化，或预期 changelog 范围不明确，请停止恢复。绝不要绕过 pending/失败检查，不要在挂接来源 ancestry 后重写恢复分支，也不要在未检查数据时相信目标的绿色 trigger。
 
-## 已知 KLAUD 案例
+## 已知故障特征
 
-使用 [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) 识别精确特征，然后依据当前镜像、配方、硬件和政策验证，再应用其修复。
+以下是反复出现的 Klaud-Cold 与镜像升级故障。先匹配精确特征，再依据当前镜像、配方、硬件和政策验证，然后应用修复。
 
 | 特征 | 已知案例与安全边界 |
 | --- | --- |
-| Setup 表示 changelog 历史被删除 | [§1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed)：恢复 main 字节并只追加 PR 条目；绝不三方合并历史 |
-| vLLM 权重加载/KV 分配 OOM | [§2](KLAUD_DEBUG.md#2-vllm-v021x--v020x-gpu-oom-at-model-load)：降低利用率或使用记录的 profiler 设置前，先确认 memory-profiler 特征 |
-| DEP decoder 在大型 CUDA graph capture 中失败 | [§2.1](KLAUD_DEBUG.md#21-dep-cuda-graph-capture-oom-on-gb300)：按每个 DP rank 的负载而不是全局并发设置 sequence/graph 限制 |
-| DSV4 在自定义 digest 上可用但在通用 SGLang 上 OOM | [§3](KLAUD_DEBUG.md#3-custom-dsv4-image--generic-v0512-ooms)：通用 release 不是可直接替换项；保留/回退到已验证兼容镜像 |
-| B300 DeepGemm 非法地址、EAGLE trtllm GEMM 失败或 flash-attn 架构断言 | [§4](KLAUD_DEBUG.md#4-upstream-sglang-v0512-b300-regressions)：区分三种堆栈；使用受支持后端/上限或已修复/固定的上游镜像 |
-| AMD drained/Pyxis、Docker socket、磁盘满或端口被占用 | [§5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x)：确认当前节点状态并升级基础设施问题；不健康基础设施没有配方级修复 |
-| `dpkg-deb` 或 `tar` 拒绝刚下载的 srt-slurm 依赖归档 | [§1.2](KLAUD_DEBUG.md#12-truncated-natsetcd-dependency-archives)：保留首个 setup 错误。H200 仅在 NATS/etcd 归档未通过完整性检查时重试，只删除无效归档，并对无关的 setup 失败立即停止 |
-| 猜测的 Docker tag 返回 404 | [§6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas)：在 registry 验证精确 tag；不要推断命名规律 |
-| `gh run rerun --failed` 被拒绝 | [§7](KLAUD_DEBUG.md#7-ci-rerun-mechanics)：检查运行状态/结论；仅已完成的失败支持只重跑失败任务，取消运行需要完整重跑 |
-| MiniMax M3 B300 MSA 报告 `q2k_indices` 不连续 | [§11](KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous)：识别 TP1/data-parallel-attention 暴露条件；优先使用上游已修复镜像。提交记录中的引擎补丁须符合当前清单/豁免要求 |
+| Setup 表示 changelog 历史被删除 | 恢复 main 字节并只追加 PR 条目；绝不三方合并历史 |
+| vLLM 权重加载/KV 分配 OOM | 降低利用率或使用记录的 profiler 设置前，先确认 memory-profiler 特征 |
+| DEP decoder 在大型 CUDA graph capture 中失败 | 按每个 DP rank 的负载而不是全局并发设置 sequence/graph 限制 |
+| DSV4 在自定义 digest 上可用但在通用 SGLang 上 OOM | 通用 release 不是可直接替换项；保留/回退到已验证兼容镜像 |
+| B300 DeepGemm 非法地址、EAGLE trtllm GEMM 失败或 flash-attn 架构断言 | 区分三种堆栈；使用受支持后端/上限或已修复/固定的上游镜像 |
+| AMD drained/Pyxis、Docker socket、磁盘满或端口被占用 | 确认当前节点状态并升级基础设施问题；不健康基础设施没有配方级修复 |
+| `dpkg-deb` 或 `tar` 拒绝刚下载的 srt-slurm 依赖归档 | 保留首个 setup 错误。H200 仅在 NATS/etcd 归档未通过完整性检查时重试，只删除无效归档，并对无关的 setup 失败立即停止 |
+| 猜测的 Docker tag 返回 404 | 在 registry 验证精确 tag；不要推断命名规律 |
+| `gh run rerun --failed` 被拒绝 | 检查运行状态/结论；仅已完成的失败支持只重跑失败任务，取消运行需要完整重跑 |
+| MiniMax M3 B300 MSA 报告 `q2k_indices` 不连续 | 识别 TP1/data-parallel-attention 暴露条件；优先使用上游已修复镜像。提交记录中的引擎补丁须符合当前清单/豁免要求 |
 
-历史 KLAUD 标签或合并建议不能覆盖当前[扫描标签政策](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse)、[`CONTRIBUTING.md`](../../CONTRIBUTING.md) 或 [PR 清单](PR_REVIEW_CHECKLIST.md)。
+历史 KLAUD 标签或合并建议不能覆盖当前[扫描标签政策](ci-procedures_zh.md#pr-主标签与修饰标签)、[`CONTRIBUTING_zh.md`](../../CONTRIBUTING_zh.md) 或 [PR 清单](PR_REVIEW_CHECKLIST_zh.md)。
 
 ## 验证与停止条件
 

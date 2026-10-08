@@ -27,7 +27,7 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="dlarch1"
+COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
@@ -128,6 +128,7 @@ collx_load_operator_config() {
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
+  unset COLLX_RDMA_RELAXED_ORDERING
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -156,6 +157,9 @@ collx_load_operator_config() {
   done < "$parsed_path"
   rm -f -- "$parsed_path"
   unset COLLECTIVEX_OPERATOR_CONFIG
+  # A suite whose benchmark ships in its own image (swap-blocks runs official vLLM images) names
+  # it on the matrix shard; the pool's platform, storage and network settings still apply.
+  [ -z "${COLLX_IMAGE_OVERRIDE:-}" ] || export COLLX_IMAGE="$COLLX_IMAGE_OVERRIDE"
   COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
 }
 
@@ -304,6 +308,9 @@ collx_apply_network_profile() {
     # black-hole at QP RTR.
     [ "$COLLX_RAIL_ISOLATED" != 1 ] || export NCCL_CROSS_NIC=0
   fi
+  # Opts the patched DeepEP GIN window out of strict ordering (deepep_install).
+  unset EP_WIN_RELAXED_ORDERING
+  [ "${COLLX_RDMA_RELAXED_ORDERING:-0}" != 1 ] || export EP_WIN_RELAXED_ORDERING=1
   if [ -n "${COLLX_IB_GID_INDEX:-}" ]; then
     [[ "$COLLX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$COLLX_IB_GID_INDEX" -le 255 ] \
       || collx_die "invalid private IB GID index"
@@ -476,7 +483,11 @@ if [ "${COLLX_NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ]; then
 fi
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
-exec python3 bench/run_ep.py "$@"
+# config.py case-args leads every argv with the suite's entrypoint.
+[ "${1:-}" = --entrypoint ] || exit 67
+case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
+entry="$2"; shift 2
+exec python3 "bench/$entry.py" "$@"
 BASH
 }
 
@@ -699,10 +710,27 @@ collx_squash_verdict() {
   printf 'reuse'
 }
 
+# A shard may name an operator-staged image cache (COLLX_STAGED_IMAGE_DIR) for a pool that cannot
+# import its image itself. The file name is the serving launchers' image-tag convention. Echoes the
+# staged path, or fails when there is none or a refresh was requested.
+collx_staged_squash() {
+  local image="$1" staged
+  [ "${COLLX_IMAGE_REFRESH:-0}" = 0 ] && [ -n "${COLLX_STAGED_IMAGE_DIR:-}" ] || return 1
+  staged="$COLLX_STAGED_IMAGE_DIR/$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh"
+  if unsquashfs -l "$staged" >/dev/null 2>&1; then
+    collx_log "using operator-staged image: $staged"
+    printf '%s' "$staged"
+    return 0
+  fi
+  collx_log "requested image is not staged: $staged"
+  return 1
+}
+
 # Echoes the squash file path.
 collx_ensure_squash() {
   local squash_dir="$1" image="$2" key sq locks lock_fd log verdict refresh_epoch=""
   local enroot_local="" import_rc=0 machine
+  collx_staged_squash "$image" && return 0
   if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
     refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
   fi
@@ -775,6 +803,7 @@ collx_ensure_squash() {
 collx_ensure_squash_on_job() {
   local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock
   local log_label log attempt rc refresh_epoch=""
+  collx_staged_squash "$image" && return 0
   if [ "${COLLX_IMAGE_REFRESH:-0}" = 1 ]; then
     refresh_epoch="${COLLX_LAUNCH_EPOCH:-$(date +%s)}"
   fi
@@ -977,7 +1006,7 @@ collx_cleanup_stage() {
   collx_log "removed generated per-execution stage directory"
 }
 
-# Per-case benchmark inputs travel as run_ep.py argv decoded from the shard control (config.py
+# Per-case benchmark inputs travel as benchmark argv decoded from the shard control (config.py
 # case-args), never as env; launchers supply only allocation/container policy.
 # shellcheck disable=SC2153
 collx_run_shard() {
@@ -1028,11 +1057,11 @@ collx_run_shard() {
     mapfile -d '' -t ep_args < "$argv_file"
     [ "${#ep_args[@]}" -gt 0 ] \
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
-    collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
+    collx_log "case[$((ci + 1))/$expected_cases] $COLLX_BENCH ranks=$NGPUS"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, not a work budget: FP8 prefill and multi-node EP16 prefill on pools with
-    # degraded GPU-NIC p2p (~34 GB/s per node; see docs/methodology.md) legitimately run past 30
-    # minutes. 5400 stays inside the 300-minute allocation.
+    # slow GPU-NIC p2p (see docs/methodology.md) legitimately run past 30 minutes. 5400 stays
+    # inside the 300-minute allocation.
     if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \

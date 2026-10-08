@@ -12,11 +12,20 @@ import json
 import os
 import re
 import zlib
-from datetime import UTC, datetime
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
-from pydantic import AfterValidator, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from . import github
 from .github import VerificationError
@@ -29,6 +38,7 @@ if TYPE_CHECKING:
 
 Number = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 SHA = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+SCENARIO_NAME = r"[A-Za-z0-9][A-Za-z0-9 ._/-]{0,59}"
 
 
 def public_prose(value: str) -> str:
@@ -84,6 +94,24 @@ class Evaluation(Contract):
     run_attempt: Annotated[int, Field(gt=0)] | None = None
 
 
+class Retirement(Contract):
+    """Frozen points of one workload that a dated MODELS.md scenario deprecation retired.
+
+    The planner records the deprecation's scenario name, date and PR with the family's model
+    prefix and the workload's ISL/OSL, only for points the current family no longer generates.
+    """
+
+    scenario: str = Field(pattern=f"^{SCENARIO_NAME}$")
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    pr_link: str = Field(
+        pattern=r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[1-9]\d*$"
+    )
+    model_prefix: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+    isl: int = Field(gt=0)
+    osl: int = Field(gt=0)
+    points: list[Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(min_length=1)
+
+
 class Baseline(Contract):
     family: str = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
@@ -92,6 +120,7 @@ class Baseline(Contract):
     sources: list[str]
     points: list[Point]
     evals: list[Evaluation] = Field(default_factory=list)
+    retirements: list[Retirement] = Field(default_factory=list)
 
     @field_validator("sources")
     @classmethod
@@ -113,7 +142,24 @@ class Baseline(Contract):
     def distinct(self) -> Self:
         unique_points(self.points)
         unique_evals(self.evals)
+        retired = [key for retirement in self.retirements for key in retirement.points]
+        if len(set(retired)) != len(retired) or not set(retired) <= {p.key for p in self.points}:
+            raise ValueError("Retirements must name distinct frozen baseline points")
+        if not set(retired) <= {p.key for p in self.points if p.scenario == "fixed-seq-len"}:
+            raise ValueError("Only fixed-seq-len points can be retired")
+        if any(day(retirement.date) <= day(self.date) for retirement in self.retirements):
+            raise ValueError("Only a retirement after the baseline date can exempt a point")
+        if self.points and len(retired) == len(self.points):
+            raise ValueError("A baseline needs at least one point that is not retired")
         return self
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Records without retirements keep the earlier format, which older code still reads.
+        data = handler(self)
+        if not self.retirements:
+            data.pop("retirements", None)
+        return data
 
 
 class BaselinePreflight(Contract):
@@ -175,6 +221,13 @@ def unique_evals(rows: list[Evaluation]) -> None:
         raise ValueError("Duplicate comparison eval")
 
 
+def day(value: str) -> date:
+    """Parse a YYYY-MM-DD date, so timestamps or other spellings never compare as text."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError("Dates must be YYYY-MM-DD")
+    return date.fromisoformat(value)
+
+
 def point_key(entry: dict) -> str:
     return identity(
         {
@@ -202,6 +255,12 @@ def point_label(entry: dict) -> str:
         shape = f"TP{entry['tp']} EP{entry.get('ep', 1)}"
     workload = f"{entry['isl']}/{entry['osl']}" if "isl" in entry else "AgentX"
     return f"{workload} c{entry['conc']} {shape} {point_key(entry)[:6]}"
+
+
+def label_workload(label: str) -> tuple[int, int] | None:
+    """The single-turn ISL/OSL that ``point_label`` writes first; None for an AgentX label."""
+    match = re.match(r"([1-9]\d*)/([1-9]\d*) c", label)
+    return (int(match[1]), int(match[2])) if match else None
 
 
 def values(row: dict) -> Values:
@@ -423,7 +482,20 @@ def eval_table(rows: list[Evaluation], baseline: Baseline | None, *, compare: bo
     )
 
 
-def baseline_table(points: list[Point], *, context: bool = True) -> str:
+def retirement_reasons(baseline: Baseline) -> dict[str, str]:
+    """Each retired frozen point's key and the evidence that retired it."""
+    return {
+        key: f"{retirement.scenario} retired {retirement.date} in "
+        f"[#{retirement.pr_link.rsplit('/', 1)[1]}]({retirement.pr_link}) "
+        "after this baseline; excluded from coverage"
+        for retirement in baseline.retirements
+        for key in retirement.points
+    }
+
+
+def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
+    points = baseline.points
+    retired = retirement_reasons(baseline)
     heading, labels, settings = point_layout(points)
     rows = [
         [
@@ -437,10 +509,11 @@ def baseline_table(points: list[Point], *, context: bool = True) -> str:
     ]
     issues = {}
     for label, point in zip(labels, points, strict=False):
+        shown = f"c{label}" if heading == "Concurrency" else label
         if point.result != "passed":
-            issues.setdefault(point.result, []).append(
-                f"c{label}" if heading == "Concurrency" else label
-            )
+            issues.setdefault(point.result, []).append(shown)
+        if point.key in retired:
+            issues.setdefault(retired[point.key], []).append(shown)
         if point.values.request_errors:
             reason = f"{number(point.values.request_errors)} request error" + (
                 "s" if point.values.request_errors != 1 else ""
@@ -472,7 +545,7 @@ def render_body(baseline: Baseline) -> str:
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
     english = (
         f"**Goal:** {baseline.goal.en}  \n**Baseline:** {baseline.date} · `{baseline.image}`  \n{meta}\n\n"
-        + baseline_table(baseline.points, context=False)
+        + baseline_table(baseline, context=False)
         + "\n\n"
         + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
     )
@@ -509,11 +582,19 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
     link = f"[Run {record.run_id} / attempt {record.run_attempt}](https://github.com/{repository}/actions/runs/{record.run_id}/attempts/{record.run_attempt})"
     _, _, settings = point_layout(record.points)
     meta = f"`{record.image}` · `{record.head[:12]}`" + (f" · {settings}" if settings else "")
+    # The final sweep omits retired baseline points, so name them with their evidence.
+    notes: dict[str, list[str]] = {}
+    if baseline and record.kind == "final":
+        retired = retirement_reasons(baseline)
+        for point in baseline.points:
+            if point.key in retired:
+                notes.setdefault(retired[point.key], []).append(short_label(point.label))
     results = "\n\n".join(
         part
         for part in (
             point_table(record.points, baseline, context=False),
             eval_table(record.evals, baseline),
+            note_lines(notes, len(baseline.points)) if notes else "",
         )
         if part
     )
@@ -837,65 +918,80 @@ def matrix_points(matrix: dict) -> list[dict]:
     ]
 
 
-def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
-    """Current-family completeness cannot replace the frozen original point roster."""
+def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
+    """Frozen baseline points that ``matrix`` cannot reproduce and the baseline did not retire."""
+    covered = {point_key(point) for point in matrix_points(matrix)}
+    covered.update(key for retirement in baseline.retirements for key in retirement.points)
+    return [point for point in baseline.points if point.key not in covered]
+
+
+def check_baseline_coverage(
+    repository: str, candidate: OwnedCandidate, matrix: dict, baseline: Baseline | None
+) -> None:
+    """Current-family completeness cannot replace the frozen original point roster.
+
+    The agent can rewrite the recorded baseline, so its retirements exempt points only when
+    the planner's rule, re-run on the family and MODELS.md at the candidate base (never the PR
+    head), derives exactly the same retirements.
+    """
+    from .validation import canonical_matrix
+
     if baseline is None or not baseline.points:
         raise VerificationError("Missing frozen baseline point roster")
-    if {point.key for point in baseline.points} - {point_key(p) for p in matrix_points(matrix)}:
+    family = canonical_matrix(repository, candidate.base, candidate.family)
+    current = {point_key(entry): public_point(entry) for entry in matrix_points(family)}
+    if baseline.retirements != retirements(
+        repository, candidate.base, baseline.date, baseline.points, current
+    ):
+        raise VerificationError(
+            "Recorded baseline retirements do not match MODELS.md at the candidate base"
+        )
+    if missing_baseline_points(matrix, baseline):
         raise VerificationError("Final matrix omits or changes frozen baseline points")
 
 
-def resolve_baseline(
-    repository: str,
-    candidate: OwnedCandidate,
-    context: dict,
-    model: str,
-    goal: Prose,
-) -> Baseline:
-    """Freeze source-date rows against their own producer's complete family.
+@dataclass(frozen=True)
+class Publication:
+    """A candidate's source-date public rows, each with its producer run ID, attempt and head.
 
-    Legacy fingerprints may be absent, but exact producer provenance and a unique
-    workload/topology/concurrency match are required. Raw API data stays private.
+    The head is None unless ``workflow-info`` proves which revision produced the row.
     """
-    from fnmatch import fnmatchcase
 
+    sources: list[str]
+    changelogs: list[dict]
+    rows: list[tuple[dict, int | None, int | None, str | None]]
+
+    @property
+    def heads(self) -> list[str]:
+        """The proven producer heads, in feed order."""
+        return list(dict.fromkeys(head for *_, head in self.rows if head is not None))
+
+
+def publication(repository: str, context: dict, model: str) -> Publication:
+    """Fetch the source-date rows of ``context``'s source workload for display ``model``.
+
+    ISL/OSL are not filtered: that would erase other curves of the original family.
+    """
     from .api import fetch
-    from .models import normalized_image
-    from .validation import canonical_matrix
 
-    matrix = canonical_matrix(repository, candidate.base, candidate.family)
-    feed = fetch("benchmarks", model=model, date=context["source"]["date"])
-    info = fetch("workflow-info", date=context["source"]["date"])
+    source = context["source"]
+    feed = fetch("benchmarks", model=model, date=source["date"])
+    info = fetch("workflow-info", date=source["date"])
     # Public database bigint IDs are serialized as strings; URLs use decimal IDs.
     producers = {int(row["github_run_id"]): row for row in info.payload["runs"]}
-    heads = {}
+    heads: dict[int, set[str]] = {}
     for row in info.payload["runConfigs"]:
         if row.get("head_sha"):
             heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
-    old_image = context["source"]["image"]
-    entries = {point_key(entry): entry for entry in matrix_points(matrix)}
-    if not entries or any(
-        normalized_image(entry["image"]) != normalized_image(old_image)
-        for entry in entries.values()
-    ):
-        raise VerificationError("Baseline source image no longer matches the selected base")
-    historical: dict[str, list[dict]] = {}
-    published: dict[str, Point] = {}
-    unverified: list[dict] = []
-    family_runs = {
-        int(change["workflow_run_id"])
-        for change in info.payload["changelogs"]
-        if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
-    }
+    rows: list[tuple[dict, int | None, int | None, str | None]] = []
     for row in feed.payload:
         if not isinstance(row, dict) or not isinstance(row.get("image"), str):
             continue
-        # Do not filter ISL/OSL here: that would erase other curves in the original family.
         if any(
             (
-                normalized_image(row[key]) != normalized_image(context["source"][key])
+                normalized_image(row[key]) != normalized_image(source[key])
                 if key == "image"
-                else row.get(key) != context["source"][key]
+                else row.get(key) != source[key]
             )
             for key in (
                 "model",
@@ -916,20 +1012,226 @@ def resolve_baseline(
         )
         run_id = int(producer[1]) if producer else None
         run_attempt = int(producer[2]) if producer and producer[2] else None
+        proven = (
+            run_id in producers
+            and len(heads.get(run_id, ())) == 1
+            and (run_attempt is None or run_attempt <= int(producers[run_id]["run_attempt"]))
+        )
+        head = next(iter(heads[run_id])) if proven else None
+        if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
+            head = None
+        rows.append((row, run_id, run_attempt, head))
+    return Publication([feed.url, info.url], info.payload["changelogs"], rows)
+
+
+MODEL_COLUMNS = (
+    "Model architecture class",
+    "Prefix",
+    "Date added",
+    "Active scenarios",
+    "Deprecated scenarios",
+)
+SCENARIO_COLUMNS = ("Scenario", "ISL/OSL", "Status")
+DEPRECATED_SINCE = re.compile(
+    r"(?:\*\*)?Deprecated(?: for all models)?(?:\*\*)? since (\d{4}-\d{2}-\d{2}) "
+    r"\(\[#([1-9]\d*)\]\((https://github\.com/([^/()\s]+/[^/()\s]+)/pull/([1-9]\d*))\)\)"
+)
+
+
+def markdown_table(markdown: str, header: tuple[str, ...]) -> list[dict[str, str]]:
+    """Rows of the one Markdown table headed exactly by ``header``.
+
+    None if the table is absent or repeated, or if any of its rows has another cell count.
+    """
+
+    def cells(line: str) -> list[str] | None:
+        line = line.strip()
+        if len(line) < 2 or line[0] != "|" or line[-1] != "|":
+            return None
+        return [cell.strip() for cell in line[1:-1].split("|")]
+
+    lines = markdown.splitlines()
+    starts = [index for index, line in enumerate(lines) if cells(line) == list(header)]
+    if len(starts) != 1:
+        return []
+    rows = []
+    for line in lines[starts[0] + 2 :]:
+        if (values := cells(line)) is None:
+            break
+        if len(values) != len(header):
+            return []
+        rows.append(dict(zip(header, values, strict=True)))
+    return rows
+
+
+def calendar_date(value: str) -> bool:
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def deprecated_workloads(
+    markdown: str, repository: str, model_prefix: str
+) -> dict[tuple[int, int], tuple[str, str, str]]:
+    """MODELS.md single-turn workloads explicitly deprecated for ``model_prefix``.
+
+    Maps (ISL, OSL) to the scenario name, date and PR link of its deprecation. The workload's
+    only Scenarios row must start ``Deprecated since DATE ([#N](PR))``, or the bold
+    ``Deprecated for all models`` form, linking a PR of ``repository``. The model's only
+    support-matrix row must list that scenario as deprecated and not as active. Other
+    wording, a malformed table or any ambiguity retires nothing.
+    """
+    models = [
+        row
+        for row in markdown_table(markdown, MODEL_COLUMNS)
+        if model_prefix in re.findall(r"`([^`]+)`", row["Prefix"])
+    ]
+    if len(models) != 1:
+        return {}
+
+    def lists(cell: str, scenario: str) -> bool:
+        return re.search(rf"(?<![\w-]){re.escape(scenario)}(?![\w-])", cell) is not None
+
+    rows: dict[tuple[int, int], list[dict[str, str]]] = {}
+    for row in markdown_table(markdown, SCENARIO_COLUMNS):
+        if workload := re.fullmatch(r"([1-9]\d*)\s*/\s*([1-9]\d*)", row["ISL/OSL"]):
+            rows.setdefault((int(workload[1]), int(workload[2])), []).append(row)
+    deprecated = {}
+    for workload, matches in rows.items():
+        scenario = matches[0]["Scenario"]
+        statement = DEPRECATED_SINCE.match(matches[0]["Status"])
         if (
-            run_id not in producers
-            or len(heads.get(run_id, ())) != 1
-            or (run_attempt is not None and run_attempt > int(producers[run_id]["run_attempt"]))
+            len(matches) == 1
+            and statement
+            and statement[2] == statement[5]
+            and statement[4] == repository
+            and calendar_date(statement[1])
+            and re.fullmatch(SCENARIO_NAME, scenario)
+            and lists(models[0]["Deprecated scenarios"], scenario)
+            and not lists(models[0]["Active scenarios"], scenario)
         ):
+            deprecated[workload] = (scenario, statement[1], statement[3])
+    return deprecated
+
+
+def retirements(
+    repository: str,
+    base: str,
+    baseline_date: str,
+    points: list[Point],
+    current: Mapping[str, dict],
+) -> list[Retirement]:
+    """Group frozen points the family dropped under MODELS.md deprecations after the baseline.
+
+    ``current`` maps each point the family generates at ``base`` to its public identity. A
+    frozen fixed-seq-len point is retired only when no current single-turn point has the
+    ISL/OSL of its label and MODELS.md at ``base`` deprecated that workload for the family's
+    model after ``baseline_date``. Absence alone never retires a point. The planner and every
+    later check of the recorded baseline derive retirements from the same inputs here.
+    """
+    from .validation import project_prefix
+
+    active = {
+        (point["isl"], point["osl"])
+        for point in current.values()
+        if point["benchmark_type"] == "single_turn"
+    }
+    dropped = {
+        point.key: workload
+        for point in points
+        if point.key not in current
+        and point.scenario == "fixed-seq-len"
+        and (workload := label_workload(point.label)) is not None
+        and workload not in active
+    }
+    if not dropped:
+        return []
+    [model] = {point["model"] for point in current.values()}  # A family key has one model.
+    path = project_prefix(repository, base) + "docs/MODELS.md"
+    markdown = github.file_at(repository, base, path).decode()
+    deprecated = deprecated_workloads(markdown, repository, model)
+    retired: dict[tuple[str, str, str, int, int], list[str]] = {}
+    for key, workload in dropped.items():
+        evidence = deprecated.get(workload)
+        if evidence and day(evidence[1]) > day(baseline_date):
+            retired.setdefault((*evidence, *workload), []).append(key)
+    return [
+        Retirement(
+            scenario=scenario,
+            date=when,
+            pr_link=link,
+            model_prefix=model,
+            isl=isl,
+            osl=osl,
+            points=keys,
+        )
+        for (scenario, when, link, isl, osl), keys in retired.items()
+    ]
+
+
+def resolve_baseline(
+    repository: str,
+    candidate: OwnedCandidate,
+    context: dict,
+    model: str,
+    goal: Prose,
+    producers: Mapping[str, dict],
+) -> Baseline:
+    """Freeze source-date rows against their own producer's complete family.
+
+    ``producers`` holds the families producer revisions regenerated themselves, so nothing
+    here runs a revision's code. Legacy fingerprints may be absent, but exact producer
+    provenance and a unique workload/topology/concurrency match are required. Raw API data
+    stays private.
+    """
+    from fnmatch import fnmatchcase
+
+    from .validation import PRODUCER_UNAVAILABLE, canonical_matrix
+
+    matrix = canonical_matrix(repository, candidate.base, candidate.family)
+    public = publication(repository, context, model)
+    old_image = context["source"]["image"]
+    entries = {point_key(entry): entry for entry in matrix_points(matrix)}
+    if not entries or any(
+        normalized_image(entry["image"]) != normalized_image(old_image)
+        for entry in entries.values()
+    ):
+        raise VerificationError("Baseline source image no longer matches the selected base")
+    # Routing and generator metadata (runner labels, recipe paths, fingerprints) can change
+    # after a producer ran. Key a historical point by the current point with the same public
+    # identity, so the frozen roster names points the current generator can reproduce.
+    current = {key: public_point(entry) for key, entry in entries.items()}
+
+    def current_key(entry: dict) -> str | None:
+        key = point_key(entry)
+        if key in current:
+            return key
+        wanted = public_point(entry)
+        keys = [key for key, point in current.items() if point == wanted]
+        if len(keys) > 1:
+            raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
+        return keys[0] if keys else None
+
+    historical: dict[str, list[dict]] = {}
+    published: dict[str, Point] = {}
+    unverified: list[dict] = []
+    family_runs = {
+        int(change["workflow_run_id"])
+        for change in public.changelogs
+        if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
+    }
+    for row, run_id, run_attempt, head in public.rows:
+        if head is None:
             # Classify after reconstructing the complete historical family, so an
             # unrelated sibling cannot block it and feed ordering cannot hide points.
             unverified.append(row)
             continue
-        head = next(iter(heads[run_id]))
         if head not in historical:
-            historical[head] = matrix_points(
-                canonical_matrix(repository, head, candidate.family, historical=True)
-            )
+            if head not in producers:
+                raise VerificationError(PRODUCER_UNAVAILABLE)
+            historical[head] = matrix_points(producers[head])
         matches = [
             entry for entry in historical[head] if _matches_public_point(row, public_point(entry))
         ]
@@ -945,8 +1247,7 @@ def resolve_baseline(
             raise VerificationError("Legacy baseline producer does not select the candidate family")
         if len(matches) != 1:
             raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
-        entry = matches[0]
-        key = point_key(entry)
+        key = current_key(matches[0]) or point_key(matches[0])
         if key in published:
             raise VerificationError("Duplicate public baseline point")
         # Retain all original points, even if a current family or API response is smaller.
@@ -954,7 +1255,9 @@ def resolve_baseline(
             (point_key(point), point)
             for point in historical[head]
             if normalized_image(point["image"]) == normalized_image(old_image)
+            and current_key(point) is None
         )
+        entry = entries[key]
         published[key] = Point(
             key=key,
             label=point_label(entry),
@@ -972,57 +1275,55 @@ def resolve_baseline(
         raise VerificationError("Public baseline producer provenance is unavailable")
     if not published:
         raise VerificationError("No verified public baseline points for the selected family")
-    points = [
-        published.get(key)
-        or Point(
-            key=key,
-            label=point_label(entry),
-            conc=entry["conc"],
-            scenario=entry.get("scenario-type", "fixed-seq-len"),
-            values=Values(),
-            result="unavailable",
-        )
-        for key, entry in entries.items()
-    ]
+    points = sorted(
+        (
+            published.get(key)
+            or Point(
+                key=key,
+                label=point_label(entry),
+                conc=entry["conc"],
+                scenario=entry.get("scenario-type", "fixed-seq-len"),
+                values=Values(),
+                result="unavailable",
+            )
+            for key, entry in entries.items()
+        ),
+        key=lambda point: (point.label.split(" c")[0], point.conc, point.label),
+    )
     return Baseline(
         family=candidate.family,
         date=context["source"]["date"],
         image=old_image,
         goal=goal,
-        sources=[feed.url, info.url],
-        points=sorted(
-            points, key=lambda point: (point.label.split(" c")[0], point.conc, point.label)
+        sources=public.sources,
+        points=points,
+        retirements=retirements(
+            repository, candidate.base, context["source"]["date"], points, current
         ),
     )
 
 
 def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
-    """Resolve a baseline for the current owned session."""
-    evidence = Path(os.environ["KLAUD_EVIDENCE"])
-    preflight_file = evidence / "baseline-preflight.json"
-    if preflight_file.exists():
-        try:
-            preflight = BaselinePreflight.model_validate_json(preflight_file.read_text())
-        except (OSError, ValueError):
-            raise VerificationError("Baseline preflight is unavailable or invalid") from None
-        if (
-            preflight.candidate_id != session.candidate.id
-            or preflight.base != session.candidate.base
-            or preflight.baseline_model != model
-            or preflight.source_identity != identity(context["source"])
-            or preflight.baseline.family != session.candidate.family
-            or preflight.baseline.date != context["source"]["date"]
-            or normalized_image(preflight.baseline.image)
-            != normalized_image(context["source"]["image"])
-        ):
-            raise VerificationError("Baseline preflight does not match this candidate")
-        return preflight.baseline.model_copy(update={"goal": goal})
-    if context.get("baseline-preflight-required") is True:
+    """The baseline preflight selection froze for this session's candidate, with ``goal``.
+
+    It must be bound to the candidate, its base, its source observation and ``model``.
+    """
+    preflight_file = Path(os.environ["KLAUD_EVIDENCE"]) / "baseline-preflight.json"
+    if not preflight_file.exists():
         raise VerificationError("Required baseline preflight artifact is missing")
-    return resolve_baseline(
-        session.repository,
-        session.candidate,
-        context,
-        model,
-        goal,
-    )
+    try:
+        preflight = BaselinePreflight.model_validate_json(preflight_file.read_text())
+    except (OSError, ValueError):
+        raise VerificationError("Baseline preflight is unavailable or invalid") from None
+    if (
+        preflight.candidate_id != session.candidate.id
+        or preflight.base != session.candidate.base
+        or preflight.baseline_model != model
+        or preflight.source_identity != identity(context["source"])
+        or preflight.baseline.family != session.candidate.family
+        or preflight.baseline.date != context["source"]["date"]
+        or normalized_image(preflight.baseline.image)
+        != normalized_image(context["source"]["image"])
+    ):
+        raise VerificationError("Baseline preflight does not match this candidate")
+    return preflight.baseline.model_copy(update={"goal": goal})

@@ -38,7 +38,8 @@ These files are the contract. Follow the target ref's source rather than copying
 | Strict master-config and matrix schemas | [`infx.matrix.validation`](../infx/matrix/validation.py) |
 | Generator examples and reuse policy | [`.github/workflows/README.md`](../../.github/workflows/README.md) |
 | Manual end-to-end inputs and matrix fan-out | [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) |
-| PR/main sweep gates, canary, collection, and ingest dispatch | [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) |
+| PR sweep gates, canary, and collection | [`.github/workflows/run-sweep.yml`](../../.github/workflows/run-sweep.yml) |
+| Merge-time reuse check, changelog metadata, and ingest dispatch | [`.github/workflows/merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) |
 | Single- and multi-node artifact uploads | [`.github/workflows/benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), [`.github/workflows/benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) |
 | Throughput and eval aggregation | [`.github/workflows/collect-results.yml`](../../.github/workflows/collect-results.yml), [`.github/workflows/collect-evals.yml`](../../.github/workflows/collect-evals.yml), [`infx/results/collect_results.py`](../infx/results/collect_results.py), [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py) |
 | Changelog byte/diff/matrix gate | [`infx/workflows/validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`infx.matrix.plan`](../infx/matrix/plan.py) |
@@ -135,6 +136,13 @@ Direct priority-scheduled workflows that do not use the master-config generator
 must publish their own exact demand (for example, CollectiveX uses each shard's
 generated `nodes` value).
 
+For checked-in disaggregated srt-slurm recipes, demand includes worker nodes,
+enabled service pools, and dedicated frontend, discovery, or benchmark nodes.
+Dedicated components share one additional node by default; setting
+`benchmark.colocate_with_frontend: false` reserves one per dedicated component
+(etcd and NATS share the discovery node). Named recipe overrides are resolved
+before counting. This changes the lease size, not the benchmark topology.
+
 Eval switches are exact:
 
 - Default: throughput entries plus the selected default fixed-sequence eval subset.
@@ -216,16 +224,6 @@ RUN_ID=$(gh run list \
 
 Do not continue if `RUN_ID` is empty. Run metadata describes the dispatch workflow ref, which may not equal input `ref`. Verify the unique title, generator command, and checkout ref in `get-jobs` before interpreting GPU results.
 
-## Kimi-K3 AgentX power backfills
-
-The Kimi-K3 B200, GB200 and GB300 multi-node recipes enable required DCGM telemetry and run the custom AgentX client on the serving head. Their launchers select the immutable AgentX power runtime, stamp its commit, wait for Slurm completion and telemetry drain, then validate each requested concurrency before staging results. The shared result collector preserves failed native jobs and stages available power diagnostics before returning a failure. H200 routing and AMD measurement-tail fixes are separate changes pending their own integration and validation. Required telemetry configuration alone does not establish hardware qualification.
-
-GB300 Kimi-K3 aggregate and disaggregated recipes use exporter port `19401` because the node system service occupies `9401`. The shared telemetry stage forwards this port to both prefill and decode Slurm groups. The retained two-node exporter lifecycle evidence covers port ownership and cleanup; it does not replace disaggregated request, power-window, or eval qualification.
-
-For a missing-power backfill, generate only the missing recipe/concurrency combinations, set `require-power: true`, and leave `agentx-fast: false` and the duration override empty. The normal AgentX profile is one hour. Verify a first missing point on each newly enabled runtime/cluster before scheduling its remaining points. A rendered recipe or an online GitHub runner does not establish live collector readiness or Slurm capacity. Preserve the existing validated points, and keep new performance and power values paired with their own run; never attach a new run's energy to an older performance row. Manual `e2e-tests.yml` artifacts still require the normal reviewed ingestion path before they appear in the dashboard.
-
-B200 Kimi recipes use DCP8 with Mooncake offload disabled. The master config records `dcp-size: 8` and `kv-offloading: none` to match those commands; this metadata correction does not enable offload.
-
 ## PR primary and modifier labels
 
 Sweep labels authorize GPU work for same-repository PRs whether draft or ready. Draft status controls review readiness, not sweep eligibility; fork PRs retain their trusted-dispatch path. Adding a sweep label or pushing with one present can start a sweep. Marking ready does not dispatch or repeat one. To start an already-labeled draft that has no run, remove and reapply its sweep label.
@@ -236,30 +234,34 @@ The same-repository check applies before checking out PR code in changelog valid
 
 | Primary label | Matrix scope | Canary | Matrix fail-fast |
 | --- | --- | --- | --- |
-| `sweep-enabled` | Changelog matrix trimmed to the minimum concurrency per configuration | No | No |
 | `full-sweep-fail-fast` | Full changelog matrix | Yes | Yes. Recommended full-sweep default |
 | `full-sweep-enabled` | Full changelog matrix | Yes | No. Use when every matrix point must continue |
-| `full-sweep-fail-fast-no-canary` | Full changelog matrix | No | Yes |
 | `non-canary-full-sweep-enabled` | Full changelog matrix | No | No |
 
 Optional modifiers do not replace a primary label:
 
 | Modifier | Effect | Reusable after merge? |
 | --- | --- | --- |
-| `all-evals` | Expand eval selection to every generated fixed-sequence configuration. Alone, it is an eval-only shorthand | Yes, if the run otherwise satisfies full-sweep reuse rules |
+| `all-evals` | Expand eval selection to every eligible eval. Throughput still runs. Combine with `evals-only` for all evals only | Yes, if the run otherwise satisfies full-sweep reuse rules |
 | `evals-only` | Suppress throughput and run only the selected eval entries. Combine with `all-evals` for all evals only | No |
 | `agentx-fast` | For AgentX throughput lanes, use one additional warmup request after mandatory primers and a 20-minute profile. Fixed-sequence and eval settings stay canonical | No |
 
-Changing a recognized primary or modifier label shares the active sweep concurrency group and normally cancels/restarts the active run. `skip_queue`, patchwork, waiver, and checklist labels are gating/priority inputs, not primary sweep modes. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and pushes to `main` ignore it.
+Modifiers alone start no GPU sweep, although `check-changelog` still runs. `all-evals` and `evals-only` fail `check-changelog` when the changelog additions include `append-only: true` or `no-evals: true` entries.
+
+Every primary label runs the full concurrency sweep, and no label trims concurrency. For a lowest-concurrency smoke, [dispatch `e2e-tests.yml` manually](#manual-end-to-end-dispatch) with `trim-conc: true`.
+
+Changing a recognized primary or modifier label shares the active sweep concurrency group and cancels the active run. A new sweep starts only while a primary label remains. A head commit containing `[skip-sweep]` skips PR benchmark setup only. Changelog/reuse checks still run, and the push-to-`main` `merge-ingest.yml` run ignores it.
+
+Queue priority comes from the PR diff. There are no priority labels. When the priority scheduler is enabled, `run-sweep.yml` setup classifies the diff, and [`ci_priority.py`](../infx/workflows/ci_priority.py) scores each job from those criteria with [`configs/ci-priority.yaml`](../configs/ci-priority.yaml). A satisfied PR checklist (`checklist-complete`) raises the score. A diff that modifies upstream engine or runtime source (`patchwork`) gets the lowest score, and a failed classification counts as `patchwork`. Manual priority overrides go through the InferenceX Dash priority scheduler.
 
 ## Canary and fail-fast semantics
 
 Canary and fail-fast solve different problems:
 
-1. A canary is created only for `full-sweep-enabled` or `full-sweep-fail-fast` PRs. No-canary labels and `sweep-enabled` skip it.
+1. A canary is created only for same-repository `full-sweep-enabled` or `full-sweep-fail-fast` PRs. `non-canary-full-sweep-enabled` skips it. For fork PRs, [`trusted-external-sweep.yml`](../../.github/workflows/trusted-external-sweep.yml) dispatches `e2e-tests.yml` instead, which runs no canary for any label. There, only `full-sweep-fail-fast` sets fail-fast.
 2. Canary selection first considers single-node fixed-sequence `1k1k` and `8k1k` entries and single-node AgentX entries. If none are eligible, it considers multi-node AgentX entries. It excludes eval entries, chooses the lowest-concurrency candidate, runs it with the matching single-node or multi-node workflow, and removes it from the later matrix.
 3. If there is no eligible candidate, the canary is skipped. Otherwise all benchmark/eval matrices require the canary to succeed. A failed canary prevents their fan-out.
-4. `full-sweep-fail-fast` and `full-sweep-fail-fast-no-canary` set `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
+4. `full-sweep-fail-fast` sets `strategy.fail-fast: true` separately on each matrix job family. The first failing point cancels queued/in-progress siblings in that matrix family. It is not one global kill switch for every independent family.
 5. Non-fail-fast labels leave matrix fail-fast false so other points continue and preserve broader diagnostic coverage.
 6. A fail-fast run can conclude `cancelled` because sibling points were cancelled after a failure. Classify the first real failure before treating cancellation as an infrastructure event.
 
@@ -285,7 +287,7 @@ Watch the first canary or matrix failure, then classify it before rerunning:
 - **Policy/gate failure:** conflicting labels, invalid changelog, missing authorization, merge conflict, or ineligible artifacts. Correct the gate. GPU reruns will not fix it.
 - **Superseded run:** a later commit or recognized label change cancelled it through workflow concurrency. Monitor the replacement run rather than reviving stale evidence.
 
-The [`Claude Code` workflow](../../.github/workflows/claude.yml) has separate review and coding jobs. Review keeps its existing `ready_for_review` and authorized `@pr-claude` triggers, read-only repository contents, and PR feedback permissions; the coding job handles `@claude` and `@Klaud-Cold` with its existing write permissions. Review requests serialize per PR without cancelling active reviews; coding requests remain independent. Both jobs use the pinned official action to install its supported Claude Code CLI. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the action installation logs before retrying.
+The [`Claude Code` workflow](../../.github/workflows/claude.yml) has separate review and coding jobs. Review keeps its existing `ready_for_review` and authorized `@pr-claude` triggers, read-only repository contents, and PR feedback permissions; the coding job handles `@claude` and `@Klaud-Cold` with its existing write permissions. The coding job starts only when the comment or issue author's `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`, and it accepts no bot actors (`allowed_bots: ''`), so App bots such as `github-actions[bot]` or `claude[bot]` cannot start it even when their comments mention `@claude` or `@Klaud-Cold`. Review requests serialize per PR without cancelling active reviews; coding requests remain independent. Both jobs use the pinned official action to install its supported Claude Code CLI. An installation or startup failure means the review did not run; it is not a review finding or a successful review. Check the action installation logs before retrying.
 
 ### Rerun safely
 
@@ -332,6 +334,14 @@ Standard-library-only helpers continue using the runner's Python. Benchmark
 containers and their framework environments remain managed by their existing
 launchers; this CI dependency migration does not change those environments.
 
+Self-hosted launch steps run `python -m infx.launch` with `INFERENCEX_LAUNCH_PYTHON`,
+an unactivated venv the "Prepare launcher Python" step builds in `$RUNNER_TEMP` from
+the tooling checkout's `inferencex-e2e/pyproject.toml`
+(`uv pip install --exclude-newer PT12H`). It is not `uv run`: its `VIRTUAL_ENV` and
+`PATH` changes would leak into `srun --export=ALL` jobs. The Python setup steps keep
+uv's cache and managed Pythons per runner, beside its workspace (`.infx-uv-cache`,
+`.infx-uv-python`), because some runner homes cannot host uv's defaults.
+
 ## Repository-role authorization
 
 Staging and trusted external sweep dispatch check repository permissions with
@@ -373,7 +383,7 @@ Each request, including all its pages, has a 60-second timeout.
 A request is stageable only when all of the following hold:
 
 - The commenter has `write`, `maintain`, or `admin` repository permission.
-- The PR currently has one of the four full-sweep labels. `sweep-enabled` is not enough.
+- The PR currently has one of the three full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`).
 - The candidate is a completed `pull_request` run of `run-sweep.yml`, created while a full-sweep label was active, with conclusion `success`, `failure`, or `cancelled`.
 - The candidate is associated with the PR under the workflow's current-head/historical-pin rules.
 - Unexpired `changelog-metadata` and at least one of `results_bmk`, `eval_results_all`, or `bmk_agentic_*` exist. Failed/cancelled runs may therefore stage useful partial data, but empty or metadata-only runs cannot.
@@ -387,29 +397,31 @@ An authorized maintainer comments exactly one of:
 
 Without an ID, the workflow selects the latest stageable completed run on the PR branch whose head SHA remains in the PR commit list. A pinned ID permits an explicitly associated historical run. The workflow acknowledges the run, dispatches the `stage-results` event to InferenceX-app, and [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) replaces the acknowledgement with a success chart or failure link.
 
+A well-formed `/use <run-id>` reuse request also triggers this workflow and stages that pinned run under the same rules, in addition to the normal reuse handling. Malformed `/use` comments are left to the reuse workflow and do not stage.
+
 Staging preserves earlier staged runs. Staging the same run ID again updates that run's staged data. Always keep the source run ID and downstream app workflow link. A staging success does not prove production reuse eligibility or post-merge ingestion.
 
 ## Artifact reuse and merge-with-reuse
 
-Reuse prevents an approved full PR sweep from being rerun on `main`. It is not a way to bypass changelog validation.
+Reuse is the only path from an approved PR sweep to official ingest: `main` never reruns the sweep, and [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) publishes only a validly reused source run. It is not a way to bypass changelog validation.
 
 ### Eligibility and authorization
 
 `infx.github` provides repository-scoped REST calls, pagination, and comment-reaction primitives. It contains no sweep policy. `infx.workflows.sweep_runs` shares PR commit lookup, completed-run listing, and unexpired result-artifact discovery between staging and reuse. Each caller keeps its own eligibility rules. `infx.workflows.reuse` owns command parsing, authorization lookup, and source-run selection/validation. `infx.workflows.reuse_comment` uses those same rules for reaction feedback. Workflows run these modules with `python3 -m`. These helpers use Python’s standard library and the GitHub CLI; no Python package installation is needed when running them from a checkout.
 
 1. Reuse does not require a sweep label. Labels select new GPU work; removing a primary label does not invalidate an existing source run. Conflicting primary labels remain rejected by changelog validation and the merge helper.
-2. `evals-only` and `agentx-fast` make the run ineligible. A default full sweep and a full sweep with `all-evals` remain eligible.
+2. Reuse is rejected while the PR currently carries `evals-only` or `agentx-fast`. The check reads current PR labels when `/use` is acknowledged, in the merge helper, and at merge, not the source run's label history, so pin only runs produced without them. On a push, these labels skip the reuse gate, so a primary label starts a fresh sweep. A default full sweep and a full sweep with `all-evals` remain eligible.
 3. The source must be a completed PR `run-sweep.yml` run whose head SHA is still in the PR commit list and which has an unexpired `results_bmk`, `eval_results_all`, or `bmk_agentic_*` result artifact.
 4. An `OWNER`, `MEMBER`, or `COLLABORATOR` authorizes reuse with `/use <run_id>`. Keep the command and required run ID on one line. The legacy `/reuse-sweep-run <run_id>` remains equivalent; bare `/reuse-sweep-run` selects automatically. Both names share authorization, validation, and reactions. The newest authorized matching command across both names wins.
 5. Unpinned selection requires the latest eligible source run to be successful. A pinned run is an explicit maintainer decision and may have conclusion `success`, `failure`, or `cancelled`. Downstream ingestion keeps only available/valid rows, so report it as partial rather than green.
 
-Reuse validation checks source identity and available artifacts, not full-matrix coverage. A successful `sweep-enabled` (trimmed) source is eligible, including for automatic selection, and publishes only its recorded points on `main`. Acceptance does not certify a green full sweep or satisfy that review requirement. To reuse a full sweep specifically, verify its coverage and pin its run ID.
+Reuse validation checks source identity and available artifacts, not full-matrix coverage. Acceptance does not certify a green full sweep or satisfy that review requirement. To reuse a full sweep specifically, verify its coverage and pin its run ID.
 
 The comment starts a lightweight validation workflow using default-branch code and `GITHUB_TOKEN`. It adds 👍 to the original comment when accepted, or 👎 when rejected; the Actions run summary explains a rejection. It posts no separate comment and starts no GPU work. Editing the command clears the bot's old reaction and checks the new request. Human reactions are preserved; the newest authorized command still takes precedence.
 
 Acceptance means the request has an eligible source at validation time. Reactions do not authorize reuse themselves. The source is revalidated on PR synchronization and merge, so missing/expired artifacts or invalid source commits still fail closed. An unpinned request retains its existing latest-successful-run selection; pin a run ID to select a particular run.
 
-On a later PR `synchronize` event, the reuse gate skips another PR sweep only after changelog and source-run validation. On `main`, authorization that maps ambiguously, points to an invalid run, or conflicts with labels fails closed. With no authorization, `main` performs the normal sweep.
+On a later PR `synchronize` event, the reuse gate skips another PR sweep only after changelog and source-run validation. At merge, `merge-ingest.yml` fails closed on authorization that maps ambiguously, points to an invalid run, or conflicts with labels. With no authorization, the Merge Ingest run fails; nothing is benchmarked or ingested.
 
 ### Supported merge path
 
@@ -423,10 +435,10 @@ uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>
 
 Do not manually reproduce only half of this sequence. In particular, posting the comment and squash-merging without the synchronization/check phase can leave the merge run unable to select the intended source.
 
-On the `main` run, [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) sends two distinct IDs to InferenceX-app:
+At merge, the `ingest` job of [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) sends two distinct IDs to InferenceX-app:
 
-- `source-run-id`: the PR run containing benchmark/eval artifacts.
-- `merge-run-id`: the `main` run containing merge-time `changelog-metadata`.
+- `source-run-id`: the reused PR `run-sweep.yml` run containing benchmark/eval artifacts.
+- `merge-run-id`: the Merge Ingest run on `main` containing merge-time `changelog-metadata`.
 
 Public rows and links retain source-run provenance. Source artifact coverage is authoritative. Later matrix-policy changes do not manufacture missing points.
 
@@ -502,7 +514,7 @@ Do not assume every run has every artifact. Important contracts are:
 | `run-stats` | `run_stats.json` | Hardware success counts across all attempts |
 | `changelog-metadata` | `changelog_metadata.json` | Search-space metadata from sweep setup |
 | `bmk_agentic_*` | Per-job JSON | Raw AgentX result upload used by agentic ingestion/staging |
-| `server_logs_*`, `multinode_server_logs_*`, `gpu_metrics_*`, `agentic_*` | Logs, metrics, or diagnostic payloads | `always()`/diagnostic uploads. Names vary by template and mode |
+| `server_logs_*`, `multinode_server_logs_*`, `agentic_*` | Logs, metrics, or diagnostic payloads | `always()`/diagnostic uploads. Names vary by template and mode |
 
 ### Parse bounded fields
 
@@ -543,12 +555,12 @@ For an unfamiliar or raw agentic artifact, start with `jq 'type, keys'` and read
 
 A merge is not complete operationally until the `main` publication path and downstream ingest are verified.
 
-1. A push to `main` triggers [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) only when `perf-changelog.yaml` changed. Confirm the merge commit produced that run. Do not assume an unrelated merge invokes it.
-2. Without valid reuse authorization, the `main` run processes the changelog delta and runs its normal matrix. PR canary logic does not run on `push`, and PR label-driven fail-fast is not available on that event.
-3. With reuse, benchmark jobs are skipped and the run uses source artifacts plus merge-run changelog metadata. Confirm the setup outputs selected the intended source run rather than inferring reuse from skipped jobs alone.
-4. `upload-changelog-metadata` must produce `changelog-metadata`. For search spaces without agentic entries, `trigger-ingest` dispatches `ingest-results`. Agentic search spaces follow the separate `trigger-agentic-ingest` conditions and dispatch `ingest-agentic-results` with `database-target: production`.
+1. A push to `main` triggers [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) (Merge Ingest) only when `perf-changelog.yaml` changed. [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is PR-only and never runs on `main`. Confirm the merge commit produced a Merge Ingest run. Do not assume an unrelated merge invokes it.
+2. Without valid reuse authorization, the Merge Ingest run fails at its reuse check. `main` never runs a sweep, so no GPU job starts, no changelog metadata is uploaded, and nothing is dispatched. `[skip-sweep]` in the merge message changes nothing.
+3. With reuse, the `ingest` job resolves the merged PR and its source run with `infx.workflows.reuse`. Confirm the step output and run summary identify the intended PR and source run.
+4. The `ingest` job must upload `changelog-metadata` before it dispatches. It sends exactly one event: `ingest-results` when the changelog delta has no agentic entries, or `ingest-agentic-results` with `database-target: production` when it does.
 5. A green dispatch step proves only that GitHub accepted the InferenceX-app repository dispatch. Follow the downstream InferenceX-app run and verify the expected rows/links and source-run provenance. Its ingest implementation is outside this checkout.
-6. Check the final `main` run conclusion, every rerun attempt, aggregate artifacts, metadata, and publication result. The PR author remains responsible for all post-merge Actions jobs passing, including flakes that require a justified rerun.
+6. Check the final Merge Ingest run conclusion, every rerun attempt, the source run's aggregate artifacts, the merge-time metadata, and the publication result. The PR author remains responsible for all post-merge Actions jobs passing, including flakes that require a justified rerun.
 7. Do not rerun GPU benchmarks merely because downstream ingestion failed while valid artifacts exist. For a failed reused **agentic** ingest, an authorized maintainer can use [`recover-reused-ingest.yml`](../../.github/workflows/recover-reused-ingest.yml) with the original source and merge IDs. That workflow dispatches only `ingest-agentic-results`, so it is not a generic fixed-sequence recovery tool:
 
    ```bash
@@ -561,7 +573,6 @@ A merge is not complete operationally until the `main` publication path and down
 
 Stop and escalate when the source run, merge run, artifact coverage, changelog metadata, or downstream event is ambiguous. Never substitute a convenient run ID or claim publication from an Actions dispatch alone.
 
-The former `kimik3-fp4-h200-vllm-agentic` key is split into `-latency`, `-balanced`, and `-simple` keys. Together they preserve all 35 original points (10/12/13), recipe fingerprints, and dashboard series. Each key selects one complete recipe and its default evals; power rollout follows that recipe's `telemetry.enabled` setting. Use `kimik3-fp4-h200-vllm-agentic-*` to select all three. A partial recipe run does not qualify the other keys.
 
 ## OperatorX microbenchmarks
 
@@ -572,4 +583,3 @@ use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../../operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
 
-For H200 DeepSeek-V4.1 Flash SGLang AgentX performance at concurrency 64 or above, the launcher allows a 1440-minute Slurm allocation and the reusable workflow allows 1470 minutes. This accommodates normal warmup and the unchanged 3600-second profile; lower concurrencies and eval-only jobs retain the standard deadlines. Run `35775895782` exhausted the previous eight-hour allocation during progressing, error-free warmup. The matching GB200 jobs get a 720-minute allocation and a 750-minute workflow deadline. A failed-only retry retains the original workflow deadline, so deadline changes require a new workflow run.
