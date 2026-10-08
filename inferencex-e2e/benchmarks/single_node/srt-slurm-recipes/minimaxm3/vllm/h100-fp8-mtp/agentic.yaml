@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: minimaxm3-fp8-h100-vllm-agentic
-  model:
-    path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
-    precision: fp8
   resources:
     gpu_type: h100
     gpus_per_node: 8
@@ -56,12 +52,8 @@ base:
         PYTHONNOUSERSITE: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: MiniMaxAI/MiniMax-M3-MXFP8
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
 
 # One variant per point. The scheduler batch is 2x CONC and graph capture covers
 # it at four tokens per sequence (three drafts).

@@ -41,19 +41,14 @@ class SrtLane:
     time_limit: str | None = None
     long_time_limit: str | None = None
     long_time: Match | None = None
+    # Where the AgentX client writes its per-concurrency artifacts in the container.
+    agentic_result_dir: str = "/logs/agentic"
 
 
 _DYNAMO = any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm")
-_AGENTIC = Match(agentic=True)
-_AGENTIC_CACHES = (
-    LaneMount(_AGENTIC, "aiperf-cache", "/aiperf_mmap_cache", world_writable=True),
-    LaneMount(_AGENTIC, "hf-hub-cache", "/hf_hub_cache", world_writable=True),
-)
 
 SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
-    ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(
-        mounts=_AGENTIC_CACHES,
-    ),
+    ("b200-nscale", LaunchPath.SRT_NATIVE): SrtLane(),
     ("b200-nscale", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
         rejects=(
@@ -62,14 +57,12 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
                 "multinode dsv4 supports only dynamo-vllm",
             ),
         ),
-        mounts=_AGENTIC_CACHES,
     ),
     ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
         mounts=(
-            *_AGENTIC_CACHES,
             LaneMount(
                 Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
                 "dynamo-wheels",
@@ -110,6 +103,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
             "roles.decode.args.ep-dispatch-algorithm",
         ),
         time_limit="01:00:00",
+        agentic_result_dir="/infmax-workspace/LOGS/agentic",
     ),
 }
 

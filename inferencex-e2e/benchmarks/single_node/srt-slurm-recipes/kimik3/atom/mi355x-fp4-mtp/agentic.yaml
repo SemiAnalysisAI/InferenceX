@@ -8,10 +8,6 @@
 base:
   schema: 2
   name: kimik3-fp4-mi355x-atom-agentic
-  model:
-    path: hf:moonshotai/Kimi-K3
-    container: rocm/atom-dev:nightly_202609251613
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -73,10 +69,7 @@ base:
         # FlyDSL FP8 prefill attention; ATOM defaults it off.
         ATOM_USE_FLYDSL_FP8_PREFILL_ATTN: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: moonshotai/Kimi-K3
       HTTP_PROXY: ''
       HTTPS_PROXY: ''
       http_proxy: ''
