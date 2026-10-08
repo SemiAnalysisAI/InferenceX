@@ -80,6 +80,18 @@ uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir
 
 该命令为每个定长序列或 AgentX 测试点及变体写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`）、AgentX 客户端路径，以及 DRAM 预算所覆盖的每节点 GPU 数。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
+## 配置指纹
+
+规划器为每个基准测试行计算 `recipe-fingerprint`：对该行的矩阵字段（`conc`、`exp-name` 和指纹本身除外）连同启动器为其提交的具体配置计算 SHA-256。该配置是与共享块组合后的片段（`power: true` 的行还包括遥测块）、该行选中的变体，以及绑定的模型、镜像、精度和定长序列的序列长度。并发值（`benchmark.env.CONC`、`CONC_LIST`、`benchmark.concurrencies`）和作业 `name` 不计入指纹，启动器为集群添加的内容（预置检查点和容器路径、挂载、AgentX 客户端缓存路径、导出器端口、网络 fabric 设置）也不计入，因此同一配置在其服务的各个并发数以及运行它的各个集群上保持同一个指纹。`eval-srt-recipe` 只贡献其路径，因为仅评估运行不产生基准测试结果。没有 srt-slurm 配置的行只对其矩阵字段计算哈希。
+
+规划器与启动器一样选择变体，但不依赖 srtctl（[`variants.py`](../../../infx/srt_slurm/variants.py)），因此没有任何变体能服务的行会在规划阶段失败，而不是在启动时失败。编写 `perf-changelog.yaml` 条目前，先列出该变更使其结果失效的配置键：
+
+```bash
+uv run python -m infx.matrix.changed --base origin/main
+```
+
+基准侧矩阵由基准修订版自身的生成器生成，两侧均按各自的配置计算指纹。每个列出的配置键会显示其测试点数量，以及新增或移除的测试点（指纹和并发数）。`--config-files` 限定比较范围，`--json` 输出机器可读的报告。
+
 ## 迁移与验证
 
 在隔离环境中安装统一版本，然后使用其 CLI：
