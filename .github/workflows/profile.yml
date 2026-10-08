@@ -40,13 +40,10 @@ env:
   MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
   SALLOC_TIME_LIMIT: '480'
-  GPU_MONITOR_INTERVAL: '1'
-  GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
   EVAL_ONLY: 'false'
   RUN_EVAL: 'false'
   IS_AGENTIC: '0'
-  REQUIRE_POWER: '0'
   IS_MULTINODE: 'false'
   SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -91,7 +88,7 @@ jobs:
             PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
           fi
           env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
-          source "$PRIORITY_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PRIORITY_ROOT/benchmarks/check_env.sh"
           check_env_vars INPUTS_CONFIG_FILE INPUTS_CONFIG_KEY INPUTS_CONC
           GENERATOR_PATH="${MEASURED_ROOT}"
           if [ -f "${MEASURED_ROOT}/infx/matrix/generate.py" ]; then
@@ -350,7 +347,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
-          source "$PYTHONPATH/benchmarks/benchmark_lib.sh" --validation-only
+          source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 

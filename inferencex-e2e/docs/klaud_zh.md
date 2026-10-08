@@ -8,7 +8,7 @@
 
 [`klaud-plan.yml`](../../.github/workflows/klaud-plan.yml) 先收尾有记录的中断会话，再用 Python 准备候选，经只读 Claude 检查排除重叠 PR 后调用 [`klaud-candidate.yml`](../../.github/workflows/klaud-candidate.yml)。每个候选仍由一个自主 Klaud Cold 会话负责修改、诊断和修复。`finish` 命令验证结果或执行清理，并发布完成记录；只读 Stop hook 和诊断步骤对照 GitHub 验证该记录。恢复工作放在下一次现有 autosweep 中，不增加第二个 agent 或工作流。
 
-PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: false`），最多运行 500 轮，为有界候选批次解析重复工作、目标集群及公开基线模型名。候选执行使用 `claude-fable-5-1`（Fable 5.1），关闭 fast mode，并负责上游镜像调查。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及运行时环境变量统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度前须配置 `DASH_API_KEY`；工作流仍将其传给现有的 `KLAUD_DASHBOARD_API_KEY` 运行时变量。
+PR 检查为有界候选批次解析重复工作、目标集群及公开基线模型名。候选执行负责上游镜像调查。模型与轮数上限在 `klaud-plan.yml` 和 `klaud-candidate.yml` 中设置。Agent 的显示名称为 **Klaud Cold**；工作流文件名、CLI、产物、分支及运行时环境变量统一使用 `klaud` / `KLAUD`。旧拼写的候选分支仍会阻止重复选择。调度前须配置 `DASH_API_KEY`；工作流仍将其传给现有的 `KLAUD_DASHBOARD_API_KEY` 运行时变量。
 
 ## 候选选择
 
@@ -19,7 +19,7 @@ PR 检查使用 `claude-opus-5`（Opus 5），关闭 fast mode（`fastMode: fals
 - 公开 API/CDN 负责 HTTP 缓存的新鲜度；Klaud 校验响应内容和本地获取时间。网络故障及 HTTP 408、429、5xx 响应会进行两次短暂且有界的重试；无效 JSON、schema 错误及其他语义错误立即失败。准备失败时，Actions 日志和摘要会报告具体错误码。
 - `plan` 使用现有矩阵生成器和 runner 元数据，从当前端到端项目目录的 `configs/*-master.yaml` 生成配置身份。按模型前缀、硬件、框架、精度、投机解码、分离部署、场景、ISL/OSL 和当前镜像与已发布基线求交集；比较镜像时将 registry 的 `/` 与 enroot 的 `#` 写法视为相同。已归档工作负载不会挤掉有效匹配。无法生成矩阵的配置族单独告警并排除。每个有效配置族选取最新匹配观测作为 benchmark 证据，再对不同配置族随机打乱一次。分支身份包含精确主配置文件/键及规范化当前镜像。现有配置族认领和开放 PR 仍用于去重；失败会话完成清理后删除分支，使配置族回到候选池。分页读取全部打开的 PR 及修改文件，包括草稿和重命名；失败或不完整的读取留给检查阶段处理。工作流每次最多向检查步骤发送 64 个候选。同一基准 SHA 的候选产物形成 24 小时软冷却：候选仍在池中，但排在近期未获得 agent 的候选之后。
 - Claude 根据 runner 和现有配置，对照私有 `capacity.json` 路由线索验证**全部实际目标集群**，检查与开放 PR 的语义重叠，并解析公开 API 基线查询所需的精确展示模型名。每个目标都必须符合条件；同类硬件的健康兄弟集群不能替代另一个集群。映射、重叠或容量无法证实时标记为 `uncertain`。重复或不确定的候选不占调度名额。结构化 schema 要求每个候选恰有一个决策，使后续符合条件的配置族能够补位容量变化、基线缺失或并发认领导致的空缺。Claude 检查开放 PR 的变更文件，再按需阅读正文和 diff。已有镜像更新、重叠修改或共享依赖会阻止候选，即使目标镜像 tag 不同；不同配置族仅模型或镜像相同不足以判为重复。结构化决策包含 `candidate-id`、`decision`、`family`、`baseline-model`、精确的 `telemetry-clusters`、`pull-requests` 和不含私有资格数据的简短 `reason`。上游源码、版本和镜像兼容性调查由候选 agent 负责。
-- `select` 仅接受通过校验且保留已提供配置族的 `proceed` 决策，刷新私有容量数据，要求检查结果中的每个目标仍符合条件，并在创建认领或启动 agent 前重建完整公开基线。基线不完整、有歧义或暂时不可用的候选记录在 `baseline-deferred-candidates` 中，后续已检查配置族可以补位。随后按配置族去重，并按随机顺序应用总数量上限。`capacity-deferred-candidates` 记录最终容量检查未通过的候选。某个配置族被标记为重复或不确定时，即使另一条观测允许继续，也会排除整个配置族。检查不完整时延后本次选择，不将其报告为候选池已耗尽。检查 action 失败、输出格式错误、未知/重复 ID 或共享容量状态不可用会停止后续选择；重叠和基线检查绝不绕过。
+- `select` 仅接受通过校验且保留已提供配置族的 `proceed` 决策，刷新私有容量数据，要求检查结果中的每个目标仍符合条件，并在创建认领或启动 agent 前重建完整公开基线。基线不完整、有歧义或暂时不可用的候选记录在 `baseline-deferred-candidates` 中，后续已检查配置族可以补位。`select` 还会将冻结的基线点名单与当前规范配置族做最终覆盖检查。`MODELS.md` 中晚于基线日期、带日期的场景弃用声明所退役的冻结点，会作为退役记录写入基线并获得豁免（见[报告指南](klaud-reporting_zh.md)）。如果配置族已不再生成其他冻结点（例如某个拓扑已被移除），则延后该候选，不创建认领、PR 或 agent 运行，并在 `baseline-mismatch-candidates` 中记录其 ID、原因 `baseline-point-mismatch` 和缺失点数量。随后按配置族去重，并按随机顺序应用总数量上限。`capacity-deferred-candidates` 记录最终容量检查未通过的候选。某个配置族被标记为重复或不确定时，即使另一条观测允许继续，也会排除整个配置族。检查不完整时延后本次选择，不将其报告为候选池已耗尽。检查 action 失败、输出格式错误、未知/重复 ID 或共享容量状态不可用会停止后续选择；重叠和基线检查绝不绕过。
 
 两个 agent 都明确获得证据目录的访问权限。重叠检查 agent 使用 Read/Glob/Grep，并在每次 Bash 调用中只执行一个允许的只读 gh/git 命令；它在检查不受信任的 PR 内容时不使用 shell 包装、管道或不受限制的外部请求。两个 Klaud 工作流均不设置作业/步骤超时或 Bash 超时覆盖，使用 GitHub Actions 默认限制。预取也不设置整体截止时间。`selection.json` 记录容量与基线延后原因，作业摘要报告所选/延后数量。`review-diagnostics.json` 仅保留时长、轮数、费用等数值指标、按工具汇总的拒绝次数及固定的 Bash 分类（例如 shell 包装或文件过滤）；不包含原始命令、路径、消息、结果或凭据。检查阶段诊断文件缺失不阻止选择收尾。检查步骤之外的基础设施故障或整个作业被取消仍可能导致无法完成。
 
@@ -114,21 +114,15 @@ smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追�
 
 恢复和最终选择步骤使用 `AGENT_PAT` 执行已确认归属的清理及配置族认领；只读重叠检查 agent 不获得该凭据。在审查与选择之间，`regenerate-producers` 步骤在不含任何凭据的环境中运行基线产出修订版自身的生成器，并将数据行写入 `producers.json`；选择步骤只读取该文件，不运行其他修订版的代码。planner 的 Python 准备和最终容量检查步骤使用 dashboard key；准备步骤还使用只读工作流 token。限轮数的 Claude PR 检查使用 `ANTHROPIC_API_KEY` 和具有 `pull-requests: read` 权限的只读工作流 token。它接收私有资格线索，但不接收 `AGENT_PAT` 或 dashboard key，也不执行 GitHub 写操作。candidate 获得用于分支/PR 写入及 e2e 调度/取消的 `AGENT_PAT`、用于 Klaud Cold 的 `ANTHROPIC_API_KEY`，以及覆盖 clusters 的限期 `status:read` `DASH_API_KEY`。Klaud Cold 不得发布凭据或私有 API 响应。共享 HTTP 读取器固定来源，同时限制压缩和解码后的 GET 响应大小，支持明确的 gzip/identity JSON 响应，并拒绝重定向或不支持的编码。非有限 JSON 数值（包括 `1e400` 这样的指数溢出）会在校验或哈希计算前被拒绝。不需要部署额外服务、数据库或新增 environment 配置。
 
-所有外部 action 均固定完整提交 SHA；下表与当前工作流中的固定版本一致。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
+重叠检查在独立的 `review` 作业中运行，与持有凭据的 `recover` 和 `select` 作业分离。它可用的 gh/git 命令仅限 `gh pr list/view/diff`、`gh api --method GET`、`git status` 和 `git ls-tree`；`git show`、`git diff` 和 `git log` 可通过 `--output` 写入任意文件，因此不在允许列表中。`select` 作业重新 checkout 恢复阶段的提交，只读取数据：planner 生成的 `candidates.json` 和 `open-prs.json`（在 agent 启动前作为短期 `klaud-review-input` 产物上传）、检查的结构化输出与结果状态，以及执行日志最终结果的脱敏子集。检查 agent 在其工作区、runner 临时目录或工具缓存中写入的任何内容都不会进入持有 `AGENT_PAT` 的步骤。
 
-| Action | 版本 | 提交 |
-| --- | --- | --- |
-| `anthropics/claude-code-action` | `v1.0.218` | [`0d0e0876d3ea`](https://github.com/anthropics/claude-code-action/commit/0d0e0876d3eaa933f45dc692f7a4312c83caf36f) |
-| `actions/checkout` | `v7.0.1` | [`3d3c42e5aac5`](https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1) |
-| `actions/upload-artifact` | `v7.0.1` | [`043fb46d1a93`](https://github.com/actions/upload-artifact/commit/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a) |
-| `actions/download-artifact` | `v8.0.1` | [`3e5f45b2cfb9`](https://github.com/actions/download-artifact/commit/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c) |
-| `astral-sh/setup-uv` | `v10.0.1` | [`20cfd1bf945f`](https://github.com/astral-sh/setup-uv/commit/20cfd1bf945f4377ade1205e4dbc17946fc9a30d) |
+所有外部 action 均在工作流 YAML 中固定完整提交 SHA。内部调用使用 `./.github/workflows/klaud-candidate.yml` 解析调用者的精确提交，并显式传递三个必需 secret。
+
 
 ## 本地验证
 
 ```bash
 uv run --no-project --exclude-newer PT12H --python 3.12 --with "pydantic>=2.10,<3" python -m infx.klaud --help
-uvx --exclude-newer PT12H zizmor@latest --offline --no-config --no-ignores .github/workflows/klaud-plan.yml .github/workflows/klaud-candidate.yml
 ```
 
 CLI 和工作流检查不能证明 GPU 实际可运行。Klaud Cold 使用现有 InferenceX 校验和 e2e 工作流验证候选修改。本地验证不调用真实模型、不调度 benchmark、不创建 PR、不部署。

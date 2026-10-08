@@ -50,8 +50,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--model",
         type=model_name,
         choices=tuple(MODELS),
-        default="advanced",
-        help="Power model (default: advanced)",
+        default="oss",
+        help="Power model (default: oss)",
     )
     parser.add_argument(
         "--workload",
@@ -66,7 +66,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="store_true",
         help="Use active NIC and switch power (default: off)",
     )
-    common = parser.add_argument_group("advanced systems")
+    common = parser.add_argument_group("oss systems")
     common.add_argument("--systems", type=int, default=1, help="Quantity of the selected system")
     common.add_argument(
         "--power-breakdown-per-chassis",

@@ -17,12 +17,12 @@ set -eo pipefail
 # invoking this script).
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
-source "$REPO_ROOT/benchmarks/benchmark_lib.sh" --validation-only
+source "$REPO_ROOT/benchmarks/check_env.sh"
 check_env_vars \
     SLURM_ACCOUNT SLURM_PARTITION TIME_LIMIT MODEL_PATH MODEL_NAME \
     CONTAINER_IMAGE RUNNER_NAME BENCHMARK_LOGS_DIR GPUS_PER_NODE PREFILL_WORKERS \
     DECODE_WORKERS BENCH_NUM_PROMPTS_MULTIPLIER RUN_EVAL EVAL_ONLY EVAL_FRAMEWORK \
-    SWEBENCH_USE_MODAL IS_AGENTIC FRAMEWORK SPEC_DECODING IS_MULTINODE
+    IS_AGENTIC FRAMEWORK SPEC_DECODING IS_MULTINODE
 if [[ $# -ne 7 ]]; then
     echo "Usage: submit.sh prefill_nodes decode_nodes isl osl concurrencies request_rate random_range_ratio" >&2
     exit 1
@@ -73,10 +73,6 @@ export EVAL_CONC="${EVAL_CONC:-}"
 export EVAL_FRAMEWORK
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
 export EVAL_SUITE="${EVAL_SUITE:-}"
-export SWEBENCH_GEN_MODE="${SWEBENCH_GEN_MODE:-}"
-export SWEBENCH_USE_MODAL
-export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
-export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export IS_AGENTIC
 export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export FRAMEWORK
