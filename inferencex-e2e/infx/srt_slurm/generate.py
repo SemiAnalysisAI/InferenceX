@@ -21,6 +21,7 @@ from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
 from infx.srt_slurm.workload import (
     bind_workload,
+    check_setup_script,
     compose_recipe,
     dram_budget,
     resolve_dram,
@@ -52,6 +53,12 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         "THINKING_MODE": THINKING_MODE,
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
+        "ROUTER_METADATA": json.dumps(point["router"]) if point.get("router") else "",
+        "KV_OFFLOAD_BACKEND_METADATA": (
+            json.dumps(point["kv-offload-backend"])
+            if agentic and point.get("kv-offload-backend")
+            else ""
+        ),
     }
     if "prefill" in point:
         prefill = point["prefill"]
@@ -161,14 +168,18 @@ def bound_variants(
         return [(selected.partition(":")[2] or None, recipe)]
     agentic = environment["IS_AGENTIC"] == "1"
     port = power_port if point.get("power") else None
-    composed = compose_recipe(
-        root / path, agentic=agentic, multinode=True, root=root, power_port=port
-    )
+    source = root / path
+    composed = compose_recipe(source, agentic=agentic, multinode=True, root=root, power_port=port)
     return [
         (
             name,
             bind_workload(
-                recipe, environment, agentic=agentic, multinode=True, client_env=client_env
+                recipe,
+                environment,
+                agentic=agentic,
+                multinode=True,
+                client_env=client_env,
+                source=source,
             ),
         )
         for name, recipe in expand(composed, selector or None)
@@ -251,6 +262,7 @@ def generate_recipes(
                 recipe = resolve_dram(bound, budget)
                 if fabric is not None:
                     recipe = resolve_fabric(recipe, fabric)
+                check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
                 _validated(recipe, environment, point["srt-recipe"])
                 identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
                 digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
