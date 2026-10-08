@@ -41,6 +41,7 @@ base:
         attention-backend: TRITON_ATTN
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         enable-prefix-caching: true
+        enable-prompt-tokens-details: true
         enable-chunked-prefill: true
         max-num-batched-tokens: 32768
         # Three-token EAGLE3; throughput runs replace verification with the

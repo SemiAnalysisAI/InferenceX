@@ -48,6 +48,7 @@ base:
         attention-backend: TRITON_ATTN
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         enable-prefix-caching: true
+        enable-prompt-tokens-details: true
         enable-chunked-prefill: true
         max-num-batched-tokens: 32768
         max-num-seqs: 8
@@ -110,6 +111,26 @@ override_1p1d_tep8_c16:
         max-num-seqs: 32
     decode:
       args:
+        enable-expert-parallel: true
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_1p1d_tp4dp2ep8_c16:
+  engine:
+    dp_launch_mode: per_node
+  roles:
+    prefill:
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 2
+        enable-expert-parallel: true
+        max-num-seqs: 32
+    decode:
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 2
         enable-expert-parallel: true
         max-num-seqs: 32
   benchmark:
