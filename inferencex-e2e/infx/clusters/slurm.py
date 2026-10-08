@@ -165,10 +165,8 @@ class Fabric(Record):
     time, a cluster ``env`` or ``host-setup.env`` value when its record loads."""
 
     ucx_net_devices: FabricList | None = Field(default=None, alias="ucx-net-devices")
-    nccl_ib_hca: FabricList | None = Field(default=None, alias="nccl-ib-hca")
-    ib_devices: FabricList | None = Field(default=None, alias="ib-devices")
+    rdma_devices: FabricList | None = Field(default=None, alias="rdma-devices")
     socket_ifname: FabricList | None = Field(default=None, alias="socket-ifname")
-    mooncake_devices: FabricList | None = Field(default=None, alias="mooncake-devices")
     mooncake_gid_index: FabricNumber | None = Field(default=None, alias="mooncake-gid-index")
     mori_rdma_tc: FabricNumber | None = Field(default=None, alias="mori-rdma-tc")
     mori_io_tc: FabricNumber | None = Field(default=None, alias="mori-io-tc")

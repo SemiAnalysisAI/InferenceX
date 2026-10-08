@@ -315,7 +315,7 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
            "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
 
     def bind(*arguments: str) -> subprocess.CompletedProcess[str]:
-        fabric = json.dumps({"ucx-net-devices": "mlx5_0:1,mlx5_1:1", "nccl-ib-hca": None})
+        fabric = json.dumps({"ucx-net-devices": "mlx5_0:1,mlx5_1:1", "rdma-devices": None})
         return subprocess.run(
             [sys.executable, "-m", "infx.srt_slurm.workload", *arguments, "--fabric", fabric],
             env=env, capture_output=True, text=True, check=False,
@@ -351,8 +351,8 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
 
 def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services():
     fabric = Fabric.model_validate({
-        "ucx-net-devices": ["mlx5_0:1", "mlx5_1:1"], "ib-devices": ["rdma0", "rdma1"],
-        "mooncake-devices": ["mlx5_0"], "mooncake-gid-index": 3,
+        "ucx-net-devices": ["mlx5_0:1", "mlx5_1:1"], "rdma-devices": ["rdma0", "rdma1"],
+        "mooncake-gid-index": 3,
     })  # fmt: skip
     recipe = {
         "roles": {"prefill": {
@@ -361,10 +361,10 @@ def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services(
                 "MC_GID_INDEX": "@fabric.mooncake-gid-index",
                 "OWN": "mlx5_9:1",
             },
-            "args": {"disaggregation-ib-device": "@fabric.ib-devices", "tp-size": 8},
+            "args": {"disaggregation-ib-device": "@fabric.rdma-devices", "tp-size": 8},
         }},
         "services": [{"name": "etcd"}, {"name": "mooncake-master", "options": {"store_config": {
-            "device_name": "@fabric.mooncake-devices", "protocol": "rdma",
+            "device_name": "@fabric.rdma-devices", "protocol": "rdma",
         }}}],
     }  # fmt: skip
 
@@ -374,12 +374,12 @@ def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services(
             "args": {"disaggregation-ib-device": "rdma0,rdma1", "tp-size": 8},
         }},
         "services": [{"name": "etcd"}, {"name": "mooncake-master", "options": {"store_config": {
-            "device_name": "mlx5_0", "protocol": "rdma",
+            "device_name": "rdma0,rdma1", "protocol": "rdma",
         }}}],
     }  # fmt: skip
 
 
-@pytest.mark.parametrize("value", ["@fabric.ucx-net-device", "IBDEVICES=@fabric.ib-devices bash setup.sh"])
+@pytest.mark.parametrize("value", ["@fabric.ucx-net-device", "IBDEVICES=@fabric.rdma-devices bash setup.sh"])
 def test_an_unknown_or_embedded_fabric_reference_fails(value):
     recipe = {"services": [{"command": [value]}]}
     with pytest.raises(ValueError) as error:
