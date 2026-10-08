@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -64,19 +64,24 @@ def parallelism_constraints(
 
 
 def select_recipe(
-    config: str, environment: Mapping[str, str], *, root: Path | None = None
+    config: str,
+    environment: Mapping[str, str],
+    *,
+    root: Path | None = None,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve a matrix point to one native variant, never submit an entire sweep.
 
     Variants are composed with the shared block under ``root`` (default: this
-    repository) and bound before they are validated.
+    repository) and bound before they are validated. ``expand`` lists the selected
+    variants: srtctl at launch, ``variants.expand_variants`` in the planner.
     """
     path, _, selector = config.partition(":")
     agentic = environment["IS_AGENTIC"] == "1"
     raw = compose_recipe(
         Path(path), agentic=agentic, multinode=False, root=root or repository_root()
     )
-    recipes = selected_recipes(raw, selector or None)
+    recipes = expand(raw, selector or None)
     matches = []
     errors = []
     for name, recipe in recipes:
