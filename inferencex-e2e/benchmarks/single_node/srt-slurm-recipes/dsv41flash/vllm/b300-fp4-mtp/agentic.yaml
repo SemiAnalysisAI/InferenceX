@@ -88,7 +88,7 @@ zip_override_dep2:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 2
