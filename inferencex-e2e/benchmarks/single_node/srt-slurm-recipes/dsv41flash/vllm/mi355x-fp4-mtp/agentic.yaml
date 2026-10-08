@@ -4,13 +4,6 @@
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # Repinned to a nightly build that includes vllm-project/vllm#58671
-    # (paged MXFP4 sparse indexer), #58655 (mHC fused Triton seams) and
-    # #53492 (sparse MLA Gluon kernel).
-    container: vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -72,12 +65,7 @@ base:
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
-      # Full-context corpus for this 1M-context recipe.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point (c128 excluded for both TP2 and TP4). Engram tables

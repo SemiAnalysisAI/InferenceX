@@ -1,16 +1,10 @@
 schema: 2
 base:
   name: gb200-fp4-glm5.2-agentx
-  model:
-    path: glm-5.2-fp4
-    container: lmsysorg/sglang:v0.5.18-cu130@sha256:db37df8aded8fa169f7264404f3c893672f8046609a4a43d15bedcb4f63d692a
-    precision: fp4
   identity:
     model:
-      repo: nvidia/GLM-5.2-NVFP4
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
-    container:
-      image: lmsysorg/sglang:v0.5.18-cu130@sha256:db37df8aded8fa169f7264404f3c893672f8046609a4a43d15bedcb4f63d692a
+    container: {}
     frameworks:
       dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
       sglang: 0.5.18
@@ -181,19 +175,11 @@ base:
     max_attempts: 1440
     interval_seconds: 10
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-      RESULT_DIR: /logs/agentic
-      PORT: '8000'
-      IS_MULTINODE: 'true'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
-      HF_HUB_CACHE: /hf_hub_cache
   services:
     - name: etcd
       type: etcd

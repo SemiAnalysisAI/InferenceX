@@ -144,7 +144,8 @@ jobs to 3600 seconds. Reusable workflow callers may override the `duration`
 input.
 
 Notes:
-- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
+- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
+- A multinode search-space entry with `power: true` measures DCGM power: its rows carry `power: true`, the launcher merges the shared telemetry block into the recipe and rejects lanes without a power rule.
 - Every srt-slurm entry sets `srt-recipe-dir`, and every search-space entry sets `srt-recipe: <file>[:<selector>]` relative to it, where the selector is `base`, `override_<name>`, or `zip_override_<name>[<index>]`. Multinode entries may add `eval-srt-recipe` for eval-only real verification. Validation rejects a missing file or variant, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` in `additional-settings`; only `llmd-vllm` entries still select their recipe with `CONFIG_FILE`. The generated row carries the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
@@ -226,7 +227,9 @@ schema; unknown keys fail.
   import step. Without `slurm.squash`, every job starts from the registry image, which
   Pyxis imports inside the job.
 - `slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
-  volumes every job mounts to container paths, `mounts` does the same for host
+  volumes every job mounts to container paths, `agentic-volume-mounts` those multi-node
+  AgentX jobs add (world-writable), `power-exporter-port` is the DCGM exporter port of
+  power points, `mounts` does the same for host
   paths outside the volumes (devices), `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,

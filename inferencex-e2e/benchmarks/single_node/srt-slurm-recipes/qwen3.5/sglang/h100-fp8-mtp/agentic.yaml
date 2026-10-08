@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: qwen3.5-fp8-h100-sglang-agentic-mtp
-  model:
-    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
-    precision: fp8
   resources:
     gpu_type: h100
     gpus_per_node: 8
@@ -47,14 +43,6 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         SGLANG_ENABLE_SPEC_V2: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
-    env:
-      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-      # H100 caps max_model_len at 131k; the 256k-capped with-subagents corpus
-      # keeps the rejection rate far below the unfiltered ~1M-token corpus.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
 
 override_gpu_kv:
   benchmark:

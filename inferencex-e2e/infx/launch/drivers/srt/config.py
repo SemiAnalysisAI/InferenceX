@@ -184,17 +184,47 @@ def create_volume_mounts(run: SrtRun) -> None:
         _create_dir(volume_path(run.cluster, name))
 
 
+def _lane_volumes(run: SrtRun, lane: SrtLane) -> list[tuple[str, str | None, bool]]:
+    """(volume, container target, world-writable) of each volume a multi-node job adds."""
+    request = run.request
+    volumes = (
+        [(name, target, True) for name, target in run.srt.agentic_volume_mounts.items()]
+        if request.is_agentic
+        else []
+    )
+    volumes += [(m.volume, m.target, m.world_writable) for m in lane.mounts if m.when(request)]
+    return volumes
+
+
 def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
-    """The (host, container) mounts the lane adds for this request; their hosts are created."""
+    """The (host, container) mounts a multi-node job adds for this request; hosts are created."""
     mounts: list[tuple[str, str]] = []
-    for mount in lane.mounts:
-        if mount.when(run.request):
-            host = volume_path(run.cluster, mount.volume)
-            _create_dir(host, world_writable=mount.world_writable)
-            mounts.append((str(host), mount.target or str(host)))
+    for volume, target, world_writable in _lane_volumes(run, lane):
+        host = volume_path(run.cluster, volume)
+        _create_dir(host, world_writable=world_writable)
+        mounts.append((str(host), target or str(host)))
     if run.request.framework == "tilert":
         mounts.append((str(run.workspace), "/infmax-workspace"))
     return mounts
+
+
+# Each AgentX client cache is where the job mounts one of its volumes, else a directory
+# inside the container.
+_CLIENT_CACHES = {
+    "AIPERF_DATASET_MMAP_CACHE_DIR": (("aiperf-cache",), "/aiperf_mmap_cache"),
+    "HF_HUB_CACHE": (("hf-hub-cache", "shared-hf-hub-cache"), "/hf_hub_cache"),
+}
+
+
+def agentic_client_env(run: SrtRun, lane: SrtLane) -> dict[str, str]:
+    """The result and cache paths a multi-node AgentX job hands its benchmark client."""
+    targets = dict(run.srt.volume_mounts)
+    for volume, target, _ in _lane_volumes(run, lane):
+        targets[volume] = target or str(volume_path(run.cluster, volume))
+    env = {"RESULT_DIR": lane.agentic_result_dir}
+    for name, (volumes, unmounted) in _CLIENT_CACHES.items():
+        env[name] = next((targets[volume] for volume in volumes if volume in targets), unmounted)
+    return env
 
 
 def write_lane_config(

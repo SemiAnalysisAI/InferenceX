@@ -6,16 +6,9 @@ name: "disagg-gb200-1p1d-dep8-dep16-c64-mtp-kvoffload"
 # concurrency 64.
 # The DEP8 prefill worker spans two nodes; the DEP16 decode worker spans four.
 
-model:
-  path: "deepseek-v4-pro-0813"
-  container: "dynamo-sglang"
-  precision: "fp4"
-
 identity:
-  model:
-    repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
-  container:
-    image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
+  model: {}
+  container: {}
   frameworks:
     dynamo: "1.5.0.dev20260910"
 
@@ -213,15 +206,7 @@ srun_options:
   container-remap-root: ""
 
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
-    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-    RESULT_DIR: /logs/agentic
-    PORT: "8000"
-    IS_MULTINODE: "true"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
-    HF_HUB_CACHE: "/hf_hub_cache"

@@ -41,12 +41,6 @@ POINT_RECIPE = {
         "args": {"tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32},
     }},
 }  # fmt: skip
-AGENTX_RECIPE = {
-    **POINT_RECIPE,
-    "model": {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"},
-    "benchmark": {"type": "custom", "command": "bash /infmax-workspace/benchmarks/srt_agentic.sh",
-                  "env": {"MODEL": "test/model"}},
-}  # fmt: skip
 
 POINT_ENV = {
     "FRAMEWORK": "sglang", "MODEL": "test/model", "IMAGE": "test:tag", "PRECISION": "fp8",
@@ -70,15 +64,7 @@ health_check:
   max_attempts: 100
   interval_seconds: 5
 """
-LANE_RECIPE = LANE_FRAGMENT + """model:
-  path: "alias"
-  container: "test:tag"
-  precision: "fp8"
-benchmark:
-  type: sa-bench
-  concurrencies: [4]
-"""
-POWER_TELEMETRY = "telemetry:\n  dcgm_exporter:\n    image: dcgm\n  enabled: true\n"
+POWER_TELEMETRY = "telemetry:\n  collector_join_timeout_seconds: 12\n"
 MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
 
 
@@ -194,7 +180,7 @@ LABS = {
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
         env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", FAKE_RESULTS="agentic"),
-        recipe=LANE_RECIPE, paths={"alias": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
+        paths={"hf:org/Model": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
         dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
     ),
 }  # fmt: skip
@@ -281,16 +267,19 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert staged["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
     dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
     assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
-    if "recipe" in lab:
-        assert submitted == "recipes/test/lane.yaml"
-    else:
-        # The fixed-sequence fragment is bound after the lane edits its staged copy.
-        assert Path(submitted).resolve() == checkout / "recipe.yaml"
-        bound = yaml.safe_load(Path(submitted).read_text())
-        assert (bound["name"], bound["roles"], bound["model"]) == (
-            staged["name"], staged["roles"],
-            {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"},
-        )
+    # The fragment is composed and bound after the lane edits its staged copy.
+    assert Path(submitted).resolve() == checkout / "recipe.yaml"
+    bound = yaml.safe_load(Path(submitted).read_text())
+    assert (bound["name"], bound["roles"], bound["model"]) == (
+        staged["name"], staged["roles"],
+        {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"},
+    )
+    if env["IS_AGENTIC"] == "1":
+        # lab-b mounts no cache volume, so the client keeps its caches in the container.
+        assert bound["benchmark"]["env"] == {
+            "RESULT_DIR": "/logs/agentic", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache",
+            "HF_HUB_CACHE": "/hf_hub_cache",
+        }
 
     config = srtslurm(checkout)
     assert config["model_paths"] == {name: str(tmp / path) for name, path in lab["paths"].items()}
@@ -319,10 +308,10 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     )
     adapter.chmod(0o755)
     env = lane_env(
-        harness, "h200-dgxc", LANE_RECIPE + POWER_TELEMETRY,
+        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
         MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
-        REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter),
+        REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -335,8 +324,10 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert provenance.endswith(f"  {exporter}\n")
     assert (workspace / "LOGS/power/exporter-image.sha256").read_text() == provenance
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == commit + "\n"
-    staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["benchmark"]["concurrencies"] == [4]
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["benchmark"]["concurrencies"] == [4]
+    assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
+    assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
@@ -392,7 +383,7 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
 def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     runner_temp = harness.tmp / "runner-temp"
     runner_temp.mkdir()
-    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": AGENTX_RECIPE}))
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
     env = {
         **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for("b300-dsxe"), "MODEL_PREFIX": "dsv41flash",
         "PRECISION": "fp8", "IS_AGENTIC": "1", "DURATION": "600", "RUNNER_TEMP": str(runner_temp),
@@ -435,7 +426,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_RECIPE)
+    (mirror / "eval.yaml").write_text(LANE_FRAGMENT)
     # What the in-container eval staged: its own batch record, but not every workflow input.
     staged = {
         "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
@@ -452,7 +443,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
 
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/eval.yaml"
+    assert Path(argv[argv.index("--file") + 1]).name == "recipe.yaml"
     assert "frontend.placement.node=head" in argv
     checkout = Path(call["cwd"])
     assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
@@ -522,13 +513,11 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
     ("h100-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
-    # Only complete (AgentX) recipes name model aliases; fragments are bound to hf:<MODEL>.
-    ("gb300-nv", dict(MODEL_PREFIX="llama", PRECISION="fp8", FRAMEWORK="dynamo-sglang", IS_AGENTIC="1",
-                      CONC="4"), "stages no checkpoint"),
+    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+                       SRT_RECIPE=f"{MIRROR}/test/missing.yaml"), "is not in the recipe mirror"),
 ])  # fmt: skip
 def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_id, env, message):
-    recipe = LANE_RECIPE if env.get("IS_AGENTIC") == "1" else LANE_FRAGMENT
-    result = launch(lane_env(harness, cluster_id, recipe, MODEL="m", **env), harness.config, harness.workspace)
+    result = launch(lane_env(harness, cluster_id, MODEL="m", **env), harness.config, harness.workspace)
     assert result.returncode == 1
     assert message in result.stderr
     assert lines(harness.logs, "git") == []
