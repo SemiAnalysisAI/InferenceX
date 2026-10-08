@@ -1,11 +1,6 @@
 schema: 2
 name: "gb300-8k1k-fp8-low-latency"
 
-model:
-  path: "dsr1-fp8"
-  container: "dynamo-sglang"
-  precision: "fp8"
-
 frontend:
   nginx_container: nginx
 
@@ -124,9 +119,5 @@ roles:
       expert-parallel-size: 1
 
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
