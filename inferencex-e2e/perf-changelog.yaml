@@ -9484,4 +9484,4 @@
   description:
     - "Add Qwen3.5 FP8 GB300 AgentX PP4 prefill and DEP16 decode variants with MTP6, HiCache, and decode sequence-length splits 1."
     - "Select five disaggregated configurations and three existing aggregate configurations using the SGLang nightly image and pinned Dynamo revision."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3840
