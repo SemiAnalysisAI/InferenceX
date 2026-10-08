@@ -36,10 +36,10 @@ roles:
 
     env:
       CUDA_LAUNCH_BLOCKING: "1"
-      GLOO_SOCKET_IFNAME: "eth0"
+      GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
       HF_HUB_CACHE: "/hf_hub_cache"
       HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
-      NCCL_SOCKET_IFNAME: "eth0"
+      NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
       NCCL_CUMEM_ENABLE: "1"
       PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
       PYTHONNOUSERSITE: "1"

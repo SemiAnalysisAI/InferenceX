@@ -59,13 +59,15 @@ Active recipes, fixed-sequence and AgentX, single- and multi-node, are fragments
 
 A fragment that sets a key the binder or launcher writes, or that the workflow exports from the matrix point (`_POINT_KEYS`, `BOUND_ENV` in `workload.py`; single-node variants may still name `CONC`), fails before submission, even with the bound value. Values `benchmarks/runtime_settings.sh` and the multi-node `FRAMEWORK` settings export reach every process through the job environment, so a fragment sets one only to override it (an AgentX client `TOKENIZER` names a local checkpoint while `MODEL` stays the published Hugging Face id). `hf:<model>` resolves to the cluster's staged checkpoint (`models.entries`) unless a `models.OVERRIDES` row serves the Hub snapshot, and the master image to its staged container. A multi-node fixed-sequence point with neither checkpoint nor Hub row fails before submission.
 
+Recipes do not hardcode cluster hardware facts: a value `'@fabric.<name>'`, anywhere in the recipe, becomes the job cluster's `srt-slurm.fabric` field after binding (lists comma-joined; fields in [CONFIGS.md](../../../configs/CONFIGS.md#runners)). A name the schema does not define, a reference inside a longer string, or a field the cluster does not set fails before submission; matrix generation already fails the variant a row selects when any cluster its runner label reaches lacks the field. Nothing resolves references before launch: the recipe fingerprint hashes them as written, so it stays cluster-independent. A value a recipe chooses on purpose, such as a permuted rail order or a subset of the devices, stays literal.
+
 Inspect what the launcher submits without a cluster:
 
 ```bash
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client env); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
+It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client env); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Fabric references take that cluster's facts; when the label spans several clusters they stay references. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
 
 ## Recipe fingerprints
 

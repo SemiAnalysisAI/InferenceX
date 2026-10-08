@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
-from pydantic import AfterValidator, Field, field_validator, model_validator
+from pydantic import AfterValidator, Field, PlainSerializer, field_validator, model_validator
 
 from infx.clusters.base import Record, SchedulerSettings, Visibility, Volume
 
@@ -150,10 +150,37 @@ class HostSetup(Record):
         return script
 
 
+# Each field's type is how a recipe reads it: every list consumer (UCX, NCCL, Gloo, SGLang,
+# Mooncake, IBDEVICES) parses one comma-separated string, and env values are strings.
+FabricName = Annotated[str, Field(pattern=r"^[^,\s]+$")]
+FabricList = Annotated[
+    tuple[FabricName, ...], Field(min_length=1), PlainSerializer(",".join, return_type=str)
+]
+FabricNumber = Annotated[int, Field(ge=0), PlainSerializer(str, return_type=str)]
+
+
+class Fabric(Record):
+    """The hosts' network facts; a recipe value ``'@fabric.<name>'`` takes one at bind time."""
+
+    ucx_net_devices: FabricList | None = Field(default=None, alias="ucx-net-devices")
+    nccl_ib_hca: FabricList | None = Field(default=None, alias="nccl-ib-hca")
+    ib_devices: FabricList | None = Field(default=None, alias="ib-devices")
+    socket_ifname: FabricList | None = Field(default=None, alias="socket-ifname")
+    mooncake_devices: FabricList | None = Field(default=None, alias="mooncake-devices")
+    mooncake_gid_index: FabricNumber | None = Field(default=None, alias="mooncake-gid-index")
+    mori_rdma_tc: FabricNumber | None = Field(default=None, alias="mori-rdma-tc")
+    mori_io_tc: FabricNumber | None = Field(default=None, alias="mori-io-tc")
+
+    def rendered(self) -> dict[str, str | None]:
+        """Every field as a recipe reads it, by name; None where the cluster sets none."""
+        return self.model_dump(by_alias=True)
+
+
 class SrtSlurmSettings(Record):
     """Cluster-owned srtslurm.yaml facts; job-specific values are added by the driver."""
 
     network_interface: str = Field(alias="network-interface")
+    fabric: Fabric = Field(default_factory=Fabric)
     job_tag: str | None = Field(default=None, alias="job-tag")
     default_time_limit: str | None = Field(
         default=None, alias="default-time-limit", pattern=r"^\d+:\d{2}:\d{2}$"

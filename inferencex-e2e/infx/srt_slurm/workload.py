@@ -2,12 +2,14 @@
 
 A fragment holds only recipe-specific srt-slurm settings. Its lane's shared block, and the
 DCGM telemetry block for a point that measures power, is merged under it, a variant is
-selected, and the binder then writes the matrix point's and the launcher's values.
+selected, and the binder then writes the matrix point's and the launcher's values and
+replaces ``'@fabric.<name>'`` values with the job's cluster facts.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from collections.abc import Callable, Mapping
 from copy import deepcopy
@@ -73,6 +75,7 @@ BOUND_ENV = {
         "ENABLE_AGENTX_POWER",
     ),
 }
+FABRIC_REFERENCE = "@fabric."
 
 
 def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict[str, Any]:
@@ -262,6 +265,44 @@ def bind_multinode(
     )
 
 
+def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:
+    """``node`` with each ``'@fabric.<name>'`` value replaced by the cluster's rendering.
+
+    ``fabric`` maps every field name to its rendering, None where the cluster sets none.
+    """
+    if isinstance(node, Mapping):
+        return {
+            key: resolve_fabric(value, fabric, f"{where}.{key}" if where else str(key))
+            for key, value in node.items()
+        }
+    if isinstance(node, list):
+        return [
+            resolve_fabric(item, fabric, f"{where}[{index}]") for index, item in enumerate(node)
+        ]
+    if not isinstance(node, str) or FABRIC_REFERENCE not in node:
+        return node
+    name = node.removeprefix(FABRIC_REFERENCE)
+    if name == node or name not in fabric:
+        raise ValueError(
+            f"{where}: {node!r} is not a whole '@fabric.<name>' value naming one of: "
+            + ", ".join(fabric)
+        )
+    if (value := fabric[name]) is None:
+        raise ValueError(f"{where}: this cluster sets no srt-slurm.fabric.{name}")
+    return value
+
+
+def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
+    """``--fabric``: the job cluster's ``Fabric.rendered()`` as JSON."""
+    parser.add_argument(
+        "--fabric",
+        type=json.loads,
+        required=True,
+        metavar="JSON",
+        help="the cluster's fabric fields as recipes read them, null where unset",
+    )
+
+
 def _assignment(text: str) -> tuple[str, str]:
     name, separator, value = text.partition("=")
     if not separator or not name:
@@ -284,6 +325,7 @@ def main(argv: list[str] | None = None) -> None:
         metavar="NAME=VALUE",
         help="a launcher-owned benchmark client setting",
     )
+    add_fabric_argument(parser)
     args = parser.parse_args(argv)
     try:
         _, bound = bind_multinode(
@@ -293,6 +335,7 @@ def main(argv: list[str] | None = None) -> None:
             power_port=args.power_port,
             client_env=dict(args.client_env),
         )
+        bound = resolve_fabric(bound, args.fabric)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))
     args.output.write_text(yaml.safe_dump(bound, sort_keys=False))
