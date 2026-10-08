@@ -17,6 +17,7 @@ from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_
 from infx.srt_slurm.workload import (
     add_fabric_argument,
     bind_workload,
+    check_setup_script,
     compose_recipe,
     dram_budget,
     resolve_dram,
@@ -230,6 +231,7 @@ def main() -> None:
             _, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_dram(recipe, dram_budget(os.environ, multinode=False))
             recipe = resolve_fabric(recipe, parsed.fabric)
+            check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
             # srtctl gets the bound variant, never the fragment.
             config = parsed.output.with_name("recipe.yaml")

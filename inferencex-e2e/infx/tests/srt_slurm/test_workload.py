@@ -365,21 +365,31 @@ def test_a_router_pinned_in_setup_pip_packages_must_be_the_master_router():
     assert (bound["frontend"], bound["roles"]) == (recipe["frontend"], recipe["roles"])
 
 
-def test_a_setup_script_must_be_one_srtctl_stages(project):
+def test_the_launcher_binder_fails_on_a_setup_script_srtctl_would_not_find(project, tmp_path):
     patches = project / "utils/srt-slurm/configs/patches"
     patches.mkdir(parents=True)
     (patches / "upstream.sh").write_text("true\n")
     path = fragment(project, {
         "base": {"setup_script": "upstream.sh"}, "override_own": {"setup_script": "own.sh"},
     })  # fmt: skip
+    env = {**os.environ, **MULTI_ENV, "INFERENCEX_REPOSITORY_ROOT": str(project),
+           "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
 
-    with pytest.raises(ValueError, match="setup_script own.sh is in none of"):
-        compose_recipe(path, agentic=False, multinode=True, root=project)
+    def bind(variant: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "infx.srt_slurm.workload", f"{path}:{variant}",
+             str(tmp_path / "bound.yaml"), "--fabric", "{}"],
+            env=env, capture_output=True, text=True, check=False,
+        )  # fmt: skip
+
+    assert bind("base").returncode == 0
+    missing = bind("override_own")
+    assert missing.returncode == 2
+    assert f"{path}: setup_script own.sh is in none of" in missing.stderr
     configs = project / "benchmarks/multi_node/srt-slurm-recipes/configs"
     configs.mkdir(parents=True)
     (configs / "own.sh").write_text("true\n")
-    composed = compose_recipe(path, agentic=False, multinode=True, root=project)
-    assert composed["override_own"] == {"setup_script": "own.sh"}
+    assert bind("override_own").returncode == 0
 
 
 def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path):
