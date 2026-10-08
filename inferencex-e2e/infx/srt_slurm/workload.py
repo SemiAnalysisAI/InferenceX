@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -243,6 +243,7 @@ def bind_multinode(
     environment: Mapping[str, str],
     *,
     root: Path,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
@@ -252,7 +253,7 @@ def bind_multinode(
     composed = compose_recipe(
         Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
     )
-    variants = selected_recipes(composed, selector or None)
+    variants = expand(composed, selector or None)
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]

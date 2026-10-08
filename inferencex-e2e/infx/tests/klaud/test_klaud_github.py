@@ -19,6 +19,7 @@ from infx.tests.historical_revision import (
     commit_history,
     forbid_current_config_parsing,
 )
+from infx.tests.srt_recipes import shared_blocks, single_node_fragment
 
 
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
@@ -541,30 +542,40 @@ def write_fixture_recipe(root: Path) -> None:
 @pytest.mark.parametrize("prefix", ["", "inferencex-e2e/"])
 def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_configs, prefix):
     master, runners = family_configs
-    # The candidate's recipe exists only at the candidate head, not in this checkout.
+    # The candidate's recipe and shared blocks exist only at the candidate head, not here.
     files = {
         prefix + "configs/nvidia-master.yaml": yaml.safe_dump(master),
         prefix + "configs/runners.yaml": yaml.safe_dump(runners),
-        prefix + "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml": b"{}\n",
-    }
+        prefix + "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml":
+            yaml.safe_dump(single_node_fragment(1)).encode(),
+        **{prefix + path: text.encode() for path, text in shared_blocks().items()},
+    }  # fmt: skip
     monkeypatch.setattr(
         github, "read",
         lambda *_: {"tree": [{"path": prefix.rstrip("/") or "configs"}]},
     )
     monkeypatch.setattr(github, "file_at", lambda _repo, _head, path: files[path])
 
-    matrix = validation.canonical_matrix(
-        "example/project", "a" * 40, "configs/nvidia-master.yaml:fixture",
-    )
+    def family() -> list[dict]:
+        matrix = validation.canonical_matrix(
+            "example/project", "a" * 40, "configs/nvidia-master.yaml:fixture",
+        )
+        assert matrix["evals"] == []
+        return matrix["single_node"]["all"]
 
-    assert [
-        (row["model"], row["conc"], row["image"])
-        for row in matrix["single_node"]["all"]
-    ] == [
+    rows = family()
+    assert [(row["model"], row["conc"], row["image"]) for row in rows] == [
         ("example/model", 2, "example/image:stable"),
         ("example/model", 6, "example/image:stable"),
     ]
-    assert matrix["evals"] == []
+    # The head's shared block is part of every fixed-sequence recipe it fingerprints.
+    block = prefix + "configs/srt-recipes/fixed-sequence-single.yaml"
+    files[block] = files[block] + b"  env: {EXTRA: '1'}\n"
+    changed = family()
+    assert [row["conc"] for row in changed] == [2, 6]
+    assert {row["recipe-fingerprint"] for row in changed}.isdisjoint(
+        row["recipe-fingerprint"] for row in rows
+    )
 
 
 CANDIDATE_ID = "1" * 16 + "-" + "2" * 16

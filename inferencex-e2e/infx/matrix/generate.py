@@ -12,6 +12,7 @@ from typing import Any, Literal
 import yaml
 
 from infx.clusters import CLUSTER_LABEL_PREFIX
+from infx.srt_slurm.variants import deep_merge
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -238,19 +239,6 @@ def _worker_node_override(worker: dict, setting_name: str) -> int | None:
     return values[0]
 
 
-def _merge_recipe(base: dict, override: dict) -> dict:
-    """Deep-merge an srt-slurm override variant over its base, as srtctl does."""
-    merged = dict(base)
-    for key, value in override.items():
-        if value is None:
-            merged.pop(key, None)
-        elif isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _merge_recipe(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
-
-
 def recipe_auxiliary_node_count(recipe: dict) -> int:
     """Count service pools and dedicated nodes, matching srtctl's placement policy."""
     services = [service for service in recipe.get("services", []) if service.get("enabled", True)]
@@ -290,7 +278,7 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
         if not (selector == "base" or selector.startswith("override_")):
             return None
         schema = recipe.get("schema")
-        recipe = _merge_recipe(recipe["base"], recipe[selector] or {})
+        recipe = deep_merge(recipe["base"], recipe[selector] or {})
         recipe.setdefault("schema", schema)
         if recipe.get("schema") != 2:
             return None

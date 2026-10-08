@@ -15,6 +15,7 @@ from infx.tests.historical_revision import (
     commit_history,
     forbid_current_config_parsing,
 )
+from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
 from infx.workflows.recover_failed_ingest import (
     RecoveryError,
     audit_changelog_bytes,
@@ -416,7 +417,8 @@ def test_build_recovery_config_from_current_and_historical_projects(
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     recipe = project / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
     recipe.parent.mkdir(parents=True)
-    recipe.write_text("{}\n")
+    recipe.write_text(yaml.safe_dump(single_node_fragment(1)))
+    write_shared_blocks(project)
     base_bytes = block("fixture", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
     (project / "perf-changelog.yaml").write_bytes(base_bytes)
     git("add", ".")
