@@ -4,10 +4,6 @@
 base:
   schema: 2
   name: dsv4-fp4-mi355x-atom-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: rocm/atom-dev:nightly_202609291501
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -49,10 +45,7 @@ base:
         ATOM_PROFILER_MORE: '0'
         ATOM_PROFILER_TIMEOUT: '1200'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
       # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'

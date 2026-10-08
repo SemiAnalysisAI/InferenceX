@@ -88,6 +88,7 @@ class Fields(Enum):
     NODE_COUNT = "node-count"
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
+    POWER = "power"
 
     # Matrix entry fields
     CONC = "conc"
@@ -283,6 +284,7 @@ class MultiNodeMatrixEntry(BaseModel):
     isl: int
     osl: int
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
+    power: bool = Field(default=False, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -385,6 +387,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
     )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
+    power: bool = Field(default=False, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -620,6 +623,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
+    power: bool = Field(default=False, strict=True)
     num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
@@ -681,6 +685,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
     )
+    power: bool = Field(default=False, strict=True)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -738,6 +743,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 raise ValueError(
                     f"Single-node agentic search-space entries must specify "
                     f"{Fields.KV_OFFLOADING.value}"
+                )
+            if self.power:
+                raise ValueError(
+                    f"Only multinode entries measure DCGM power; remove {Fields.POWER.value}"
                 )
             _validate_tp_context_topology(self)
         if has_aggregate_worker or has_complete_multinode:
