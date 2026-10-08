@@ -161,7 +161,9 @@ def run_multinode(launch: Launch) -> int:
     job_name = srtctl_job_name(request.runner_name)
     prepare_recipe(checkout.root, staged, job_name, run.srt.dist_timeout_s)
     recipe = str(checkout.root / submit.BOUND_RECIPE)
-    client_env = config.agentic_client_env(run, lane) if request.is_agentic else {}
+    client_env = (
+        config.agentic_client_env(run.cluster, run.srt, lane, request) if request.is_agentic else {}
+    )
     power_port = run.srt.power_exporter_port if decision.dcgm else None
     if rc := submit.bind_recipe(run, checkout, staged, recipe, power_port, client_env):
         return rc
