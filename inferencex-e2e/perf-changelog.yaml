@@ -9410,3 +9410,16 @@
     - "TP4 concurrency 32 sets ATOM_PREFILL_DECODE_INTERVAL=16: after each prefill, ATOM runs at least 16 decode passes and batches the prefills that arrive in the meantime (ATOM's PrefillDelayer, off by default). Prefill no longer interrupts decode as often, so P90 interactivity rises while TTFT rises. Local 3600 s replay: 108.2 -> 150.9 tok/s/user, ITL p90 9.24 -> 6.63 ms, TTFT p50 0.51 -> 1.14 s, throughput unchanged."
     - "TP2 concurrency 64 sets ATOM_PREFILL_DECODE_INTERVAL=4. At this load each batched prefill forward serves several requests, so throughput rises as well as interactivity. Local 3600 s replay: 30.3 -> 38.8 tok/s/user, 105.4k -> 115.2k tok/s/GPU, 6487 -> 6941 requests, TTFT p90 2.3 -> 6.4 s. All other points are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3603
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use vllm/vllm-openai:nightly-ac9126e58aa7bbab1856ba6593ba4d5003fea516 for the GB200 aggregated TP8 PP2 DCP8 Kimi-K3 configuration."
+    - "Configure DSpark depth 7 at concurrency 1, 4, 8 and 14, and depth 4 at concurrency 24, 32, 48 and 56; enable bfloat16 mamba SSM cache and keep Mooncake DRAM KV offload."
+    - "Replace the prior concurrency 16, 72 and 96 recipes and update the concurrency 32 and 48 recipes to match the new search space."
+    - "Add GB200 Kimi-K3 FP4 Dynamo and vLLM AgentX disaggregated serving with one TP16 DCP16 prefill role and one TP16 DCP16 decode role."
+    - "Use NIXL for prefill-to-decode KV transfer, Mooncake DRAM KV offload and DSpark depth 4 with probabilistic draft sampling. Add concurrency 16, 32 and 48 recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3748

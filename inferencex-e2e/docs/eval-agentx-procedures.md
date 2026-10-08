@@ -112,6 +112,9 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
 
 Run these with Python 3.10 or newer, normally inside the serving container, because lm-eval installs its pinned harness into that `python3` with `uv pip`. The command copies the allow-listed artifacts into `--stage-to` and writes `meta_env.json` there. It takes the concurrency from `--concurrency`, which lm-eval receives as `num_concurrent` in `--model_args`. `EVAL_CONCURRENT_REQUESTS` is no longer read. The exact invocation is in [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L121-L150).
 
+The lm-eval dependency install constrains `huggingface-hub` to `>=1.5,<2` for
+compatibility with the serving image's `transformers` version.
+
 ## 3. `EVAL_ONLY` is a launcher contract
 
 Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside the eval command:

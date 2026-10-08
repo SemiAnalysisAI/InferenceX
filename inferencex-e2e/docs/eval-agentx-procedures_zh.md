@@ -109,6 +109,9 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
 
 请使用 Python 3.10 或更高版本运行这些命令，通常在服务容器内执行，因为 lm-eval 会通过 `uv pip` 把固定版本的 harness 安装到该 `python3` 中。该命令会把允许列表中的产物复制到 `--stage-to`，并在该目录写入 `meta_env.json`。并发取自 `--concurrency`，lm-eval 通过 `--model_args` 中的 `num_concurrent` 接收该值。命令不再读取 `EVAL_CONCURRENT_REQUESTS`。准确调用见 [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L121-L150)。
 
+安装 lm-eval 依赖时，`huggingface-hub` 限定为 `>=1.5,<2`，以兼容镜像中的
+`transformers` 版本。
+
 ## 3. `EVAL_ONLY` 是 launcher 约定
 
 必须在**启动服务前**设置 `EVAL_ONLY=true`。它不仅是评估命令内部的开关：

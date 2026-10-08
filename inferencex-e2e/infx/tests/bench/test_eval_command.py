@@ -405,6 +405,10 @@ def uv_step(argv: list[str]) -> str:
     assert argv[0] == "pip" and argv[-2:] == ["--python", sys.executable]
     assert "--break-system-packages" in argv
     spec = argv[-3]
+    if argv[1] == "install" and "--no-deps" not in argv:
+        assert argv[-4] == "lm-eval[api]"
+        assert spec == "huggingface-hub>=1.5,<2"
+        return "install lm-eval[api]"
     if argv[1] == "uninstall":
         return f"uninstall {spec}"
     if {"--no-deps", "--reinstall"} <= set(argv):
