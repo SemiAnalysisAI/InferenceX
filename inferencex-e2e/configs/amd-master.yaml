@@ -1539,11 +1539,12 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
   precision: fp4
   framework: atom
   multinode: false
+  srt-recipe-dir: dsv41flash/atom/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 5, 6, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 5, 6, 8, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/atom/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 5, 6, 8, 16, 32, 64, 128], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 5, 6, 8, 32], srt-recipe: agentic.yaml }
 
 # The golden acceptance curve remains the provisional GLM-5.2-derived curve
 # documented in infx/golden_al_distribution/glm5.3_mtp.yaml.
