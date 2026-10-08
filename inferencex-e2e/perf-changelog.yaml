@@ -9418,4 +9418,4 @@
   description:
     - "Add a single DeepSeek-V4-Pro-0813 MI355X ATOM 1P1D AgentX point at concurrency 256 following ROCm/ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md on codex/v4-pd-ep8-mega-mp-sticky-recipe-20261008, on rocm/atom-dev:nightly_202610080328."
     - "Prefill runs DP attention with EP8, the Mega MoE backend (high-throughput all2all) and EPLB (window 100, interval 200, at most 4 rebalances), without TBO, and offloads KV to one node-wide LMCache MP server (lmcache_mp connector, tp_rank_collapse, 1000 GB lazy L1, 900 s read TTL, LRU) instead of the in-process lmcache_offload tier. Decode, dp_sticky AToMesh routing and DSpark settings match the existing c256 point."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3831
