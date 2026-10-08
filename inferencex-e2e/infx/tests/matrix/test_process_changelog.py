@@ -16,7 +16,7 @@ from infx.matrix import plan as process_changelog
 from infx.matrix import revision
 from infx.matrix.generate import generate_test_config_sweep
 from infx.matrix.validation import validate_master_config
-from infx.tests.srt_recipes import agentic_recipe, single_node_fragment, write_shared_blocks
+from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
 from infx.workflows import benchmark_schema
 
 
@@ -385,7 +385,7 @@ def planning_inputs() -> tuple[dict, dict]:
                     {**shape, "conc-list": [16, 32, 64], "srt-recipe": "recipe.yaml"},
                 ]}],
                 "agentic-coding": [{"search-space": [
-                    {**shape, "conc-list": [16, 32], "srt-recipe": "agentic.yaml",
+                    {**shape, "conc-list": [16, 32], "srt-recipe": "recipe.yaml",
                      **({} if multinode else {"kv-offloading": "none"})},
                 ]}],
             },
@@ -404,16 +404,12 @@ def planning_repo(tmp_path, monkeypatch):
     (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
     (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     write_shared_blocks(tmp_path)
-    single = tmp_path / "benchmarks/single_node/srt-slurm-recipes/fixture"
-    single.mkdir(parents=True)
-    (single / "recipe.yaml").write_text(yaml.safe_dump(single_node_fragment(8)))
-    (single / "agentic.yaml").write_text(yaml.safe_dump(
-        agentic_recipe(8, model="single", image="example/image:stable", precision="fp8")
-    ))
-    multi = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture"
-    multi.mkdir(parents=True)
-    for name in ("recipe.yaml", "agentic.yaml"):
-        (multi / name).write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\n")
+    single = tmp_path / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+    single.parent.mkdir(parents=True)
+    single.write_text(yaml.safe_dump(single_node_fragment(8)))
+    multi = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture/recipe.yaml"
+    multi.parent.mkdir(parents=True)
+    multi.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\n")
     monkeypatch.chdir(tmp_path)
     return tmp_path, master, runners
 
