@@ -12,6 +12,7 @@
 
 - [事实来源](#事实来源)
 - [修复前的证据](#修复前的证据)
+- [任务事件记录](#任务事件记录)
 - [失败层级矩阵](#失败层级矩阵)
 - [Changelog 与矩阵](#changelog-与矩阵)
 - [运行器与 AMD root 文件](#运行器与-amd-root-文件)
@@ -40,6 +41,31 @@
 5. 已经成功的环节。矩阵从未发出任务、任务从未获得运行器，以及服务器从未健康是不同失败，即使它们最后都显示“无结果”。
 
 不要先重跑：重跑可能替换日志、改变运行器/节点分配，或让确定性失败看起来像瞬时故障。
+
+## 任务事件记录
+
+每次 `python -m infx.launch run` 退出时，无论成功还是失败，都会在任务工作区留下一个 `job_event.json`。基准测试模板将其上传为 `job_event_<RESULT_FILENAME>`（eval-only 任务与其服务器日志一样，追加 `_<framework>_<suite>` 后缀）。运行中的全部基准测试和评测任务结束后，[`collect-job-events.yml`](../../.github/workflows/collect-job-events.yml) 将这些记录合并为 `job_events` 制品中的 `events.jsonl`；已取消的运行只有逐任务制品。在 GitHub Actions 上，启动失败还会添加一条以失败阶段为标题的 `::error` 注解。先读任务的事件记录，再看日志；记录模式由 [`infx/launch/event.py`](../infx/launch/event.py) 定义。
+
+| 字段 | 含义 |
+| --- | --- |
+| `run_id`、`run_attempt`、`runner`、`result_filename`、`exp_name` | 工作流 attempt、物理运行器，以及制品名称中使用的任务身份 |
+| `model`、`model_prefix`、`framework`、`precision`、`spec_decoding`、`scenario`、`multinode`、`conc`、`conc_list`、`isl`、`osl` | 测试点身份 |
+| `image`、`recipe`、`recipe_fingerprint`、`cluster`、`slurm_job_id`、`batch_job_id`、`nodes` | 在何处运行了什么：选中的配方变体、基准测试作业、包含该作业的批量分配（仅限 batch 通道）及其主机 |
+| `launch_path`、`power`、`golden_acceptance_length`、`eval_only`、`run_eval`、`kv_offloading`、`kv_offload_backend` | 启动决策 |
+| `started_at`、`duration_s`、`stages` | 各阶段耗时（秒）：`prepare`、`submit`、`queue_wait`（直到作业开始运行）、`run`、`collect`；batch 通道的分配还会增加 `batch_*` 阶段 |
+| `outcome`、`error`、`artifacts` | `success` 或 `failure`；失败时记录首个错误的 `stage`、`type`、`message`、启动器 `exit_code`、`retriable` 和 `evidence`（应首先阅读的日志）；以及本次启动写入的工作区文件 |
+
+`retriable` 标记重跑可能消除的基础设施失败（Slurm 或镜像错误、节点丢失、中断）。它只是提示，不是诊断结论。
+
+```bash
+gh run download <run-id> -n job_events
+# Failed jobs: stage, error type, job, and the log to open first
+jq -r 'select(.outcome == "failure") | [.error.stage, .error.type, .result_filename, .error.evidence] | @tsv' events.jsonl
+# Failures per cluster, and how many look like infrastructure
+jq -s 'map(select(.outcome == "failure")) | group_by(.cluster) | map({cluster: .[0].cluster, failures: length, retriable: map(select(.error.retriable)) | length})' events.jsonl
+# Ten longest queue waits
+jq -s 'sort_by(-(.stages.queue_wait // 0)) | .[:10] | map({result_filename, cluster, queue_wait: .stages.queue_wait})' events.jsonl
+```
 
 ## 失败层级矩阵
 

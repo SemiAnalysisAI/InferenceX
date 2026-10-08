@@ -44,7 +44,7 @@ Do not rerun first: reruns can replace logs, change runner/node placement, or ma
 
 ## Job event records
 
-Every `python -m infx.launch run` leaves one `job_event.json` in the job workspace when it exits, on success or failure. The benchmark templates upload it as `job_event_<RESULT_FILENAME>` (eval-only jobs append `_<framework>_<suite>`, as their server logs do), and [`collect-results.yml`](../../.github/workflows/collect-results.yml) joins the records it can download into `events.jsonl` in the `job_events` artifact. Eval-only jobs still running at that point are not in it. On GitHub Actions, a failed launch also adds one `::error` annotation titled with the failing stage. Read a job's record before its logs; [`infx/launch/event.py`](../infx/launch/event.py) is the schema.
+Every `python -m infx.launch run` leaves one `job_event.json` in the job workspace when it exits, on success or failure. The benchmark templates upload it as `job_event_<RESULT_FILENAME>` (eval-only jobs append `_<framework>_<suite>`, as their server logs do). After every benchmark and eval job in the run has finished, [`collect-job-events.yml`](../../.github/workflows/collect-job-events.yml) joins the records into `events.jsonl` in the `job_events` artifact; a cancelled run has only the per-job artifacts. On GitHub Actions, a failed launch also adds one `::error` annotation titled with the failing stage. Read a job's record before its logs; [`infx/launch/event.py`](../infx/launch/event.py) is the schema.
 
 | Fields | Meaning |
 | --- | --- |
