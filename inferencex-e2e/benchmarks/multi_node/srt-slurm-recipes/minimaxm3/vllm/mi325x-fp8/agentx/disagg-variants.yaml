@@ -49,6 +49,7 @@ base:
         max-num-batched-tokens: 32768
         max-num-seqs: 8
         speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN"}'
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail"}'
         tool-call-parser: minimax_m3
         reasoning-parser: minimax_m3
         enable-auto-tool-choice: true
@@ -59,7 +60,9 @@ base:
       nodes: 1
       workers: 1
       gpus: 8
-      args: *engine_args
+      args:
+        <<: *engine_args
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail"}'
   srun_options:
     container-remap-root: ''
     container-writable: ''
