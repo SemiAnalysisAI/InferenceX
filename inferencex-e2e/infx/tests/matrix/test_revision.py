@@ -133,6 +133,29 @@ def test_historical_generation_supports_legacy_script_layout(generation_repo, mo
         assert inputs.generate(["fixture"], ["--no-evals"]) == [{"model": "legacy snapshot", "conc": 2}]
 
 
+@pytest.mark.parametrize("own", [True, False])
+def test_rows_are_fingerprinted_with_the_revisions_own_rule(generation_repo, own):
+    root, git = generation_repo
+    if own:
+        (root / "infx/matrix/fingerprint.py").write_text(
+            "import json, sys\n"
+            "print(json.dumps(['own ' + row['model'] for row in json.load(sys.stdin)]))\n"
+        )
+        git("add", "infx/matrix/fingerprint.py")
+    else:
+        git("rm", "-qf", "infx/matrix/fingerprint.py")
+    git("commit", "-qm", "fingerprints")
+    rows = [{"image": "img", "model": "m", "conc": 4, "exp-name": "x"}]
+
+    with revision.snapshot("HEAD") as producer:
+        fingerprints = producer.fingerprints(rows)
+
+    # Revisions without a fingerprinter hashed the row alone: {"image":"img","model":"m"}.
+    assert fingerprints == (
+        ["own m"] if own else ["adfebb88b80b867b258d2e9f972eb51f9f8c8bb2ae2bef10ab80ca8226913878"]
+    )
+
+
 @pytest.mark.parametrize("ref,expected", [("HEAD", ("newer", 6)), ("older", ("older", 2))])
 def test_historical_generation_from_nested_project(generation_repo, monkeypatch, ref, expected):
     root, git = generation_repo
