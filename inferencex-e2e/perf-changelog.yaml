@@ -9488,3 +9488,14 @@
     - "No data-type or precision change to the EAGLE3 draft model (Inferact/MiniMax-M3-EAGLE3-GQA): online_quant_config (ptpc_fp8), kv_cache_dtype fp8 and index-cache-dtype fp8 are unchanged; mono decode changes the target model's decode kernels, not draft precision."
     - "更新镜像至 rocm/atom-dev:nightly_202610070333（ATOM 0.1.7.dev60+g7fc0926c6，含 ROCm/ATOM#2483 的 mono step fence 修复）；去掉 TP4 C15/C20/C24/C28 的 ATOM_MONO_ENABLE=0，所有 TP4 点位启用 MiniMax-M3 mono decode（每步最多 16 个 token，即 EAGLE3 K3 下 4 个请求，覆盖 C1/C2/C4）；ATOM 只为 TP4 构建 mono，TP2 走非融合路径。新增 TP2 C4，LMCache 版本记录为 0.5.6.dev139+gf22dec28。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-nixl
+    - minimaxm3-fp8-mi300x-vllm-agentic-nixl-baseline
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Compare MiniMax-M3 MXFP8 AgentX on MI300X using vLLM NIXL prefill/decode disaggregation and a matched aggregated baseline on the October 8 ROCm nightly."
+    - "Use native srt-slurm orchestration, full-context replay, EAGLE3 with golden acceptance, and a fresh server deployment per concurrency."
+  no-evals: true
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
