@@ -9393,6 +9393,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3692
 
 - config-keys:
+    - "*"
+  description:
+    - "Accept native SRT power samples v3 with optional GPU temperature while preserving v1/v2 replay and existing energy validation. Temperature remains in raw telemetry for ingestion and display."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3685
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
