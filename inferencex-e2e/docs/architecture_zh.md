@@ -218,7 +218,7 @@ flowchart LR
 
 | 驱动 | 运行内容 |
 | --- | --- |
-| [`drivers/srt/`](../infx/launch/drivers/srt) | 单节点和多节点 srt-slurm 方案（`SRT_RECIPE`、`CONFIG_FILE`），包括集群维护的 B200 Nscale 通道；仅限 Slurm |
+| [`drivers/srt/`](../infx/launch/drivers/srt) | 单节点和多节点 srt-slurm 方案（`SRT_RECIPE`，多节点仅评估运行另加 `EVAL_SRT_RECIPE`），包括集群维护的 B200 Nscale 通道；仅限 Slurm |
 | [`drivers/script.py`](../infx/launch/drivers/script.py) | 带显式 `BENCH_SCRIPT_OVERRIDE` 的单节点运行，例如 SPEED-Bench 采集脚本：通过后端接口运行一个容器，适用于任何后端；其他调度器上的集群只运行这个驱动 |
 
 根据驱动不同，启动器可能会：
