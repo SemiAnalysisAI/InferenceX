@@ -801,6 +801,8 @@ clusters:
           script: runners/srt-slurm/hooks/mi300x-amd/setup.sh
         shared-run-root: /home/ext-cjquilici/inferencex-mi300x-amd/srt-slurm-runs
         mounts:
+          /raid/inferencex/models/hub: /hf_hub_cache
+          /raid/inferencex/aiperf-mmap-cache: /aiperf_mmap_cache
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
           /dev/infiniband: /dev/infiniband

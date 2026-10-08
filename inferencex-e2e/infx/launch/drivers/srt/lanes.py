@@ -102,7 +102,6 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ),
     ("mi300x-amd", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=any_of("vllm"),
-        mounts=_AGENTIC_CACHES,
         shared_run_root=(Match(),),
         time_limit="03:00:00",
     ),
