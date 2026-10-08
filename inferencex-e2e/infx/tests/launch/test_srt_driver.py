@@ -123,6 +123,13 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
     env = single_node_env(harness, "h200-cw")
+    # The binder takes the job cluster's fabric facts.
+    records = yaml.safe_load(harness.config.read_text())
+    records["clusters"]["h200-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
+    harness.config.write_text(yaml.safe_dump(records))
+    fragment = yaml.safe_load((workspace / "recipe.yaml").read_text())
+    fragment["base"]["roles"]["agg"]["env"] = {"NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}
+    (workspace / "recipe.yaml").write_text(yaml.safe_dump(fragment))
     assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
@@ -137,6 +144,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert {k: recipe["benchmark"]["env"][k] for k in ("MODEL", "CONC", "USE_CHAT_TEMPLATE")} == {
         "MODEL": "test/model", "CONC": "2", "USE_CHAT_TEMPLATE": "false",
     }
+    assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth9"}
     assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
@@ -175,13 +183,15 @@ LABS = {
         env=dict(FRAMEWORK="dynamo-sglang"),
         paths={"hf:org/Model": "nvme/model"}, preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
         served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
+        recipe=LANE_FRAGMENT + 'environment:\n  UCX_NET_DEVICES: "@fabric.ucx-net-devices"\n',
+        environment={"UCX_NET_DEVICES": "mlx5_0:1,mlx5_1:1"},
     ),
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
         env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", KV_OFFLOADING="none", ISL="0", OSL="0", CONC="4",
                  FAKE_RESULTS="agentic"),
         paths={"hf:org/Model": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
-        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
+        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True, environment=None,
     ),
 }  # fmt: skip
 
@@ -195,7 +205,8 @@ def lab_config(tmp: Path) -> Path:
             "volumes": {"nvme": {"path": str(tmp / "nvme"), "visibility": "node-local"},
                         "cache": {"path": str(tmp / "cache")}},
             "squash": {"dir": str(tmp / "squash"), "import": "submit-host"},
-            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800},
+            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800,
+                          "fabric": {"ucx-net-devices": ["mlx5_0:1", "mlx5_1:1"]}},
         }},
         "lab-b": {**common, "models": {"entries": {"Model": {"root": "models", "dir": "model"}}}, "slurm": {
             "partition": "p", "exclusive": False,
@@ -273,6 +284,8 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         staged["name"], staged["roles"],
         {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"},
     )
+    # Fabric references take the job cluster's facts.
+    assert bound.get("environment") == lab["environment"]
     if env["IS_AGENTIC"] == "1":
         # lab-b mounts no cache volume, so the client keeps its caches in the container.
         assert bound["benchmark"]["env"] == {
