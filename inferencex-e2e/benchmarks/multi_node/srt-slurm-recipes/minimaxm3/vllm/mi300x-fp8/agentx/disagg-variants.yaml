@@ -39,7 +39,6 @@ base:
       workers: 1
       gpus: 8
       env: &worker_env
-        HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
         PYTHONNOUSERSITE: "1"
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -96,4 +95,32 @@ override_1p1d_tp8_c4:
   benchmark:
     env:
       CONC: "4"
+      KV_OFFLOADING: none
+
+override_1p1d_tp8_c8:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 16
+    decode:
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: "8"
+      KV_OFFLOADING: none
+
+override_1p1d_tep8_c8:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 16
+        enable-expert-parallel: true
+    decode:
+      args:
+        max-num-seqs: 16
+        enable-expert-parallel: true
+  benchmark:
+    env:
+      CONC: "8"
       KV_OFFLOADING: none
