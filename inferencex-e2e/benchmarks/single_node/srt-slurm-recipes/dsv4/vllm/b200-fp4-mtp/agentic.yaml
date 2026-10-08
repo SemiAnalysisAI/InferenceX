@@ -171,7 +171,7 @@ override_dep8_c32:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 8
@@ -206,7 +206,7 @@ override_dep8_c64:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 8
@@ -241,7 +241,7 @@ override_dep8_c96:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 8
@@ -276,7 +276,7 @@ override_dep8_c128:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 8
@@ -311,7 +311,7 @@ override_dep8_c160:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 8
@@ -346,7 +346,7 @@ override_dep8_c192:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 8
