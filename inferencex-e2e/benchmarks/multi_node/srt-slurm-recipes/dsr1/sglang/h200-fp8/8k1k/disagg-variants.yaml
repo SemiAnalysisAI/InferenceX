@@ -1,0 +1,309 @@
+schema: 2
+
+base:
+  frontend:
+    nginx_container: nginx
+
+  resources:
+    gpu_type: "h200"
+    gpus_per_node: 8
+
+  dynamo:
+    # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
+    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+    request_plane: "nats"
+    source:
+      pypi: "0.8.0"
+
+  engine: sglang
+
+  roles:
+    prefill:
+      env:
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      args:
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        model-path: "/model/"
+        skip-tokenizer-init: true
+        trust-remote-code: true
+        tp-size: 8
+        dp-size: 1
+        ep-size: 1
+        attention-backend: "flashinfer"
+        disable-radix-cache: true
+        watchdog-timeout: 1000000
+        max-running-requests: 16
+        disaggregation-bootstrap-port: 30001
+        disaggregation-mode: "prefill"
+        disaggregation-transfer-backend: nixl
+        load-balance-method: "round_robin"
+    decode:
+      env:
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+      args:
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        model-path: "/model/"
+        skip-tokenizer-init: true
+        trust-remote-code: true
+        tp-size: 8
+        attention-backend: "flashinfer"
+        disable-radix-cache: true
+        stream-interval: 10
+        watchdog-timeout: 1000000
+        disaggregation-bootstrap-port: 30001
+        disaggregation-mode: "decode"
+        disaggregation-transfer-backend: nixl
+
+  benchmark:
+    env:
+      TOKENIZER: /model
+
+override_bs4_1p7d_stp:
+  name: "bs4-1p7d-h200-fp8"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 7
+      workers: 7
+      args:
+        dp-size: 1
+        ep-size: 1
+        mem-fraction-static: 0.82
+        max-running-requests: 8
+        cuda-graph-max-bs: 8
+
+override_bs8_1p6d_stp:
+  name: "bs8-1p6d-h200-fp8"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 6
+      workers: 6
+      args:
+        dp-size: 1
+        ep-size: 1
+        mem-fraction-static: 0.82
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+
+override_bs16_1p3d_stp:
+  name: "bs16-1p3d-h200-fp8"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 3
+      workers: 3
+      args:
+        dp-size: 1
+        ep-size: 1
+        mem-fraction-static: 0.82
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+
+override_bs64_2p3d_stp:
+  name: "bs64-2p3d-h200-fp8"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 3
+      workers: 3
+      args:
+        dp-size: 1
+        ep-size: 1
+        mem-fraction-static: 0.82
+        max-running-requests: 128
+        cuda-graph-max-bs: 128
+
+override_bs128_1p1d_dep_stp:
+  name: "bs128-1p1d-dep-h200-fp8"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        mem-fraction-static: 0.75
+        max-prefill-tokens: 163840
+        chunked-prefill-size: 163840
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        dp-size: 8
+        ep-size: 8
+        enable-dp-attention: true
+        mem-fraction-static: 0.88
+        max-running-requests: 256
+        cuda-graph-max-bs: 256
+
+override_bs4_1p7d_mtp:
+  name: "bs4-1p7d-h200-fp8-mtp"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 7
+      workers: 7
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        dp-size: 1
+        ep-size: 1
+        mem-fraction-static: 0.75
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+
+override_bs8_1p6d_mtp:
+  name: "bs8-1p6d-h200-fp8-mtp"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 6
+      workers: 6
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        dp-size: 1
+        ep-size: 1
+        mem-fraction-static: 0.82
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+
+override_bs16_1p3d_mtp:
+  name: "bs16-1p3d-h200-fp8-mtp"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 3
+      workers: 3
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        dp-size: 1
+        ep-size: 1
+        mem-fraction-static: 0.82
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+
+override_bs64_2p3d_mtp:
+  name: "bs64-2p3d-h200-fp8-mtp"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        mem-fraction-static: 0.82
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+    decode:
+      nodes: 3
+      workers: 3
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        dp-size: 1
+        ep-size: 1
+        context-length: 72000
+        max-total-tokens: 128000
+        mem-fraction-static: 0.75
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
+
+override_bs128_1p1d_dep_mtp:
+  name: "bs128-1p1d-dep-h200-fp8-mtp"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        mem-fraction-static: 0.75
+        max-prefill-tokens: 163840
+        chunked-prefill-size: 163840
+    decode:
+      nodes: 1
+      workers: 1
+      env:
+        SGLANG_ENABLE_SPEC_V2: "1"
+      args:
+        dp-size: 8
+        ep-size: 8
+        enable-dp-attention: true
+        mem-fraction-static: 0.85
+        max-running-requests: 192
+        cuda-graph-max-bs: 192
+        speculative-algorithm: "EAGLE"
+        speculative-num-steps: 2
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 3
