@@ -127,17 +127,20 @@ zip_override_y:
 """
 
 
-@pytest.mark.parametrize(("recipe", "model", "paths"), [
-    (BUNDLE, "org/M", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
-    ("model: {path: /abs/m}\n", "org/Unstaged", {}),
-    ("model: {path: alias-a}\n", "org/Unstaged", LaunchError),
+@pytest.mark.parametrize(("recipe", "model", "agentic", "paths"), [
+    (BUNDLE, "org/M", "1", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
+    ("model: {path: /abs/m}\n", "org/Unstaged", "1", {}),
+    ("model: {path: alias-a}\n", "org/Unstaged", "1", LaunchError),
+    # A fixed-sequence fragment is bound to hf:<MODEL>, which serves the staged checkpoint.
+    ("roles: {}\n", "org/M", "0", {"hf:org/M": "nvme/m"}),
+    ("roles: {}\n", "org/Unstaged", "0", {}),
 ])  # fmt: skip
-def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, recipe, model, paths):
+def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, recipe, model, agentic, paths):
     mirror = tmp_path / "ws/benchmarks/multi_node/srt-slurm-recipes/r.yaml"
     mirror.parent.mkdir(parents=True)
     mirror.write_text(recipe)
     c = cluster(tmp_path)
-    point = request(MODEL=model, GITHUB_WORKSPACE=str(tmp_path / "ws"))
+    point = request(MODEL=model, IS_AGENTIC=agentic, GITHUB_WORKSPACE=str(tmp_path / "ws"))
     if paths is LaunchError:
         with pytest.raises(LaunchError, match="stages no checkpoint"):
             model_paths(c, point, f"{MIRROR}/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))

@@ -1,11 +1,6 @@
 schema: 2
 name: "ctx10_gen1_dep16_batch256_eplb256_mtp0"
 
-model:
-  path: "dsr1"
-  container: "dynamo-trtllm"
-  precision: "fp4"
-
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
@@ -133,12 +128,8 @@ roles:
       num_postprocess_workers: 4
 
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
 
 frontend:
   type: "dynamo"

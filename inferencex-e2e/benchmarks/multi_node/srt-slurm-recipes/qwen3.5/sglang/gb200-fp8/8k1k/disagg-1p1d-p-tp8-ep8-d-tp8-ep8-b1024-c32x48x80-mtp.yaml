@@ -17,11 +17,6 @@ frontend:
   num_additional_frontends: 1
   nginx_container: nginx
 
-model:
-  path: "qwen3.5-fp8"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85"
-  precision: "fp8"
-
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
@@ -148,13 +143,8 @@ roles:
       disaggregation-transfer-backend: "mooncake"
 
 benchmark:
-  type: custom
-  concurrencies: "32x48x80"
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
 
 telemetry:
   enabled: true

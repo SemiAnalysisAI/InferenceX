@@ -13,11 +13,6 @@ frontend:
   num_additional_frontends: 9
   nginx_container: nginx-sqsh
 
-model:
-  path: "dsr1-fp4"
-  container: "dynamo-sglang"
-  precision: "fp4"
-
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
@@ -176,9 +171,5 @@ roles:
       ep-size: 32
 
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
   env:
     TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
