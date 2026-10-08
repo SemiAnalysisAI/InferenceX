@@ -116,9 +116,10 @@ def test_power_collection_records_the_job_status_and_stages_results_either_way(t
     assert (workspace / "point_conc4.json").exists()
 
 
+@pytest.mark.parametrize("require_power", [False, True])
 @pytest.mark.parametrize("has_cpu", [False, True])
 @pytest.mark.parametrize("disagg", [False, True])
-def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path, has_cpu, disagg):
+def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path, has_cpu, disagg, require_power):
     from infx.tests.results.power.test_aggregate_power_multinode import (
         PRODUCER_SHA,
         _cpu_rows,
@@ -173,7 +174,8 @@ def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path, 
         [4],
         results_python=sys.executable,
         expected_cpu_source="acpi",
-    ) == int(not has_cpu)
+        require_power=require_power,
+    ) == int(require_power and not has_cpu)
     result = json.loads((workspace / "point_conc4.json").read_text())
     assert result["power_valid"] == 1
     assert result["cpu_power_valid"] == int(has_cpu)

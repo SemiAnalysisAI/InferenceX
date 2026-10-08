@@ -75,6 +75,7 @@ class LaunchRequest(BaseModel):
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
     conc: int | None = Field(None, alias="CONC")
+    require_power: PowerFlag = Field(False, alias="REQUIRE_POWER")
     run_eval: TrueFlag = Field(False, alias="RUN_EVAL")
     eval_only: TrueFlag = Field(False, alias="EVAL_ONLY")
     salloc_time_limit: int | None = Field(None, alias="SALLOC_TIME_LIMIT")
@@ -115,7 +116,6 @@ class SrtRequest(LaunchRequest):
     eval_only: TrueFlag = Field(alias="EVAL_ONLY")
     thinking_mode: str | None = Field(None, alias="THINKING_MODE")
     conc_list: IntList = Field(default_factory=list, alias="CONC_LIST")
-    require_power: PowerFlag = Field(False, alias="REQUIRE_POWER")
     inferencex_results_python: str | None = Field(None, alias="INFERENCEX_RESULTS_PYTHON")
     eval_conc: str | None = Field(None, alias="EVAL_CONC")
 

@@ -154,6 +154,7 @@ def collect_agentic_power_results(
     *,
     results_python: str | None,
     expected_cpu_source: str | None = None,
+    require_power: bool = True,
 ) -> int:
     """Stage the AgentX power audit inputs and validate each concurrency's power window.
 
@@ -176,7 +177,8 @@ def collect_agentic_power_results(
 
     if step := validate_agentic_power(
         logs_dir, workspace, result_filename, producer_sha, concurrencies,
-        results_python=results_python, require_power=True, expected_cpu_source=expected_cpu_source,
+        results_python=results_python, require_power=require_power,
+        expected_cpu_source=expected_cpu_source,
     ):  # fmt: skip
         rc = step
     return rc

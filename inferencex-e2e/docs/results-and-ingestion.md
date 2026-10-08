@@ -456,6 +456,8 @@ supply P75 or P90. The validation sidecar records `power_percentile_method`.
 
 ## Measured Grace CPU-side power (NVL72)
 
+GB200/GB300 cluster defaults enable GPU and ACPI CPU collection for ordinary fixed-sequence and AgentX submissions, including native single-node recipes; eval-only jobs have no benchmark power window. The Grace socket total includes CPU/SoC, LPDDR5X and regulator losses, not a separate RAM measurement; validated totals supply the measured part of system-power estimates, while unmeasured rack components remain modeled.
+
 GB200 and GB300 NVL72 recipes that enable srt-slurm's `telemetry.cpu_power_exporter` leg write
 `LOGS/power/cpu/samples.csv` and a non-authoritative `cpu_manifest.json` beside the GPU DCGM
 package. The multinode validator accepts the historical v2.2.1 long format (one row per sensor
@@ -492,7 +494,11 @@ The CPU verdict is independent of `power_valid`: it borrows only the bound
 formal window and the worker-host topology from the GPU package, and no GPU verdict reaches it, so
 an unpinned producer or failed GPU coverage withholds GPU energy while `cpu_power_valid` still
 judges the CPU samples on their own. Any CPU-leg failure records `cpu_power_valid: 0` with no CPU
-keys and leaves every GPU field unchanged. With `REQUIRE_POWER=1`, a recipe-declared CPU source must be valid; ACPI requires complete Grace socket or module totals, and missing CPU artifacts produce an independent invalid CPU audit. GPU-only recipes retain their existing behavior. Reason codes:
+keys and leaves every GPU field unchanged. When power is required by `REQUIRE_POWER=1` or a strict
+lane policy, a configured CPU source must be valid; ACPI requires complete Grace socket or module
+totals, and missing CPU artifacts produce an independent invalid CPU audit. On `gb200-nv` and
+`gb300-nv`, the cluster declares `acpi`, so every strict point requires a valid CPU audit.
+GPU-only recipes on other clusters retain their existing behavior. Reason codes:
 `cpu_artifacts_missing`, `cpu_sensor_source_mismatch`,
 `cpu_samples_missing`, `cpu_samples_header_mismatch`, `cpu_samples_malformed`,
 `cpu_manifest_invalid`, `cpu_socket_count_mismatch`, `cpu_sensor_kind_mixed`,

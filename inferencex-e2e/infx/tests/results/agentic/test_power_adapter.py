@@ -87,6 +87,36 @@ def _record(
     }
 
 
+def test_native_srt_package_rejects_aggregate_gpu_count_mismatch(tmp_path):
+    from infx.results.agentic.power_adapter import run_multinode_agentic_power
+
+    result_dir = tmp_path / "agentic"
+    result_dir.mkdir()
+    (result_dir / "agentic_power_concurrency_4.json").write_text("{}")
+    aggregate = tmp_path / "point.json"
+    aggregate.write_text(json.dumps({
+        "is_multinode": False, "disagg": False, "num_gpus": 2,
+        "power_valid": 1, "avg_power_w": 900,
+    }))
+
+    assert run_multinode_agentic_power(
+        result_dir=result_dir,
+        agg_result=aggregate,
+        power_dir=tmp_path / "power",
+        logs_root=tmp_path,
+        expected_producer_sha="a" * 40,
+        expected_num_gpus=4,
+        require_power=True,
+        expected_cpu_source="acpi",
+    ) == 1
+    assert json.loads((result_dir / "power_validation.json").read_text())["reasons"] == [
+        "agentic_gpu_topology_invalid"
+    ]
+    verdict = json.loads(aggregate.read_text())
+    assert verdict["power_valid"] == 0
+    assert "avg_power_w" not in verdict
+
+
 def _write_artifacts(
     tmp_path: Path,
     *,

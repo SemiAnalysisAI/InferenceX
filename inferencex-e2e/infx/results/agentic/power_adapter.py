@@ -422,6 +422,8 @@ def run_multinode_agentic_power(
     expected_producer_sha: str,
     require_power: bool = False,
     expected_cpu_source: str | None = None,
+    expected_num_gpus: int | None = None,
+    audit_source: str | None = None,
 ) -> int:
     """Join one AgentX aggregate to the finalized central multinode package."""
     validation_result = result_dir / "power_validation.json"
@@ -439,6 +441,15 @@ def run_multinode_agentic_power(
     prefill_gpus = _gpu_count(aggregate.get("num_prefill_gpu"))
     decode_gpus = _gpu_count(aggregate.get("num_decode_gpu"))
     disagg = aggregate.get("disagg")
+    if expected_num_gpus is not None:
+        if (
+            expected_num_gpus <= 0
+            or aggregate.get("is_multinode") is not False
+            or disagg is not False
+            or _gpu_count(aggregate.get("num_gpus")) != expected_num_gpus
+        ):
+            reasons.append("agentic_gpu_topology_invalid")
+        prefill_gpus, decode_gpus = expected_num_gpus, 0
     if (
         not isinstance(disagg, bool)
         or prefill_gpus is None
@@ -498,7 +509,9 @@ def run_multinode_agentic_power(
     try:
         result = json.loads(agg_result.read_text())
         validation = json.loads(validation_result.read_text())
-        source = "LOGS/" + validation_result.resolve().relative_to(logs_root.resolve()).as_posix()
+        source = audit_source or (
+            "LOGS/" + validation_result.resolve().relative_to(logs_root.resolve()).as_posix()
+        )
         result.update(audit_summary(validation, source))
         _write_json_atomic(agg_result, result)
     except (OSError, ValueError, TypeError) as exc:
@@ -518,6 +531,7 @@ def main() -> int:
     parser.add_argument("--power-dir", type=Path)
     parser.add_argument("--logs-root", type=Path)
     parser.add_argument("--expected-producer-sha")
+    parser.add_argument("--audit-source")
     parser.add_argument(
         "--require-power",
         action="store_true",
@@ -575,6 +589,8 @@ def main() -> int:
             expected_producer_sha=args.expected_producer_sha,
             require_power=args.require_power,
             expected_cpu_source=args.expected_cpu_source,
+            expected_num_gpus=args.expected_num_gpus,
+            audit_source=args.audit_source,
         )
     if args.agg_result is None:
         parser.error("--agg-result is required for single-node AgentX power")

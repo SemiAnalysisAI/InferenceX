@@ -112,6 +112,7 @@ benchmark:
     OSL: '1024'
 
 frontend:
+  dedicated_node: true
   type: "dynamo"
   nginx_container: "nginx-sqsh"
 
@@ -129,8 +130,8 @@ services:
   - name: etcd
     type: etcd
     placement:
-      node: dedicated
+      node: head
   - name: nats
     type: nats
     placement:
-      node: dedicated
+      node: head

@@ -3411,12 +3411,10 @@ run_agentic_replay_and_write_outputs() (
 
     case "${ENABLE_AGENTX_POWER}" in
         1|true|TRUE|yes|YES)
-            if [ "${IS_MULTINODE}" = "true" ]; then
-                if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
-                    agentx_multinode_power_enabled=1
-                else
-                    agentx_multinode_contract_missing=1
-                fi
+            if [ -n "${SRT_MEASUREMENT_WINDOW_DIR:-}" ]; then
+                agentx_multinode_power_enabled=1
+            elif [ "${IS_MULTINODE}" = "true" ]; then
+                agentx_multinode_contract_missing=1
             else
                 check_env_vars TP PP_SIZE PCP_SIZE
                 agentx_power_enabled=1
