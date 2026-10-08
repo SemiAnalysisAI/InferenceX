@@ -14,9 +14,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+# The failure path runs under the serving image's python3, which may be 3.10.
+UTC = timezone.utc  # noqa: UP017
 
 TASK_NAME = "minimax_m3_full"
 RESULT_FORMAT = "inferencex-eval-v1"

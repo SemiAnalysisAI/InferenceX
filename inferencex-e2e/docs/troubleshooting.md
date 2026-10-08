@@ -18,13 +18,12 @@ Classify a failure by the first layer that did not establish its contract. Prese
 - [Server](#server)
 - [Eval and collection](#eval-and-collection)
 - [Ingest](#ingest)
-- [Known KLAUD cases](#known-klaud-cases)
+- [Known failure signatures](#known-failure-signatures)
 - [Verification and stop conditions](#verification-and-stop-conditions)
 
 ## Sources of truth
 
-- [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) records recurring Klaud-Cold/image-bump incidents and their observed signatures. It is incident knowledge, not a substitute for current workflow or review policy.
-- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml), [`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), and [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) define orchestration, artifact upload, server readiness, benchmark, and eval behavior.
+- [`run-sweep.yml`](../../.github/workflows/run-sweep.yml), [`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml), and the container-side `python3 -m infx.bench` commands in [`infx/bench/`](../infx/bench) define orchestration, artifact upload, readiness waits, benchmark, and eval behavior.
 - [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py), [`generate.py`](../infx/matrix/generate.py), and [`validation.py`](../infx/matrix/validation.py) own changelog, matrix, and schema failures.
 - [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) and [`runners/`](../runners) own provisioning and launcher routing. [`CONTRIBUTING.md`](../../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) owns AMD workspace safety.
 - [`infx/evals/EVALS.md`](../infx/evals/EVALS.md), [`validate_scores.py`](../infx/evals/validate_scores.py), and [`collect_eval_results.py`](../infx/results/collect_eval_results.py) own eval execution, validation, and collection.
@@ -58,7 +57,7 @@ Do not rerun first: reruns can replace logs, change runner/node placement, or ma
 
 ### Changelog
 
-A setup-stage deletion error usually means a stale branch or whitespace-changing merge made historical bytes appear deleted. Follow the canonical repair in [`KLAUD_DEBUG.md` §1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): take the current main version verbatim, then append only this PR's entry at the tail. Validate against the real base and head with [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py).
+A setup-stage deletion error usually means a stale branch or whitespace-changing merge made historical bytes appear deleted. Follow the canonical [changelog conflict recovery](ci-procedures.md#changelog-conflict-recovery): take the current main version verbatim, then append only this PR's entry at the tail. Validate against the real base and head with [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py).
 
 Do not 3-way merge or normalize `perf-changelog.yaml`. Stop if the intended config keys, eval flags, scenario scope, or historical delta is ambiguous. Changelog additions and permitted `pr-link` correction behavior are enforced by the validator, not by a visually valid YAML parse.
 
@@ -79,8 +78,6 @@ Classify queue/allocation failures before reading server logs:
 - Rerun only after the runner is healthy. Do not change model parallelism, memory flags, or image merely to escape a bad node.
 - Escalate access, drained-node, socket, storage, and permanent Slurm configuration changes to cluster operators.
 
-[`KLAUD_DEBUG.md` §5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x) lists known AMD node, Docker socket, disk, and port incidents. Treat named-node state as historical until current node evidence confirms it.
-
 ### AMD root-owned workspace files
 
 The signature is checkout cleanup failing with `EACCES` on `benchmark_logs/logs/slurm_job-*`. Root-running Slurm containers may leave root-owned directories when cancellation skips teardown, blocking every later job on that runner. The prevention contract in [`CONTRIBUTING.md`](../../CONTRIBUTING.md#amd-cluster-never-leave-root-owned-files-in-runner-workspaces) is:
@@ -93,19 +90,17 @@ For recovery, follow [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.
 
 ## Server
 
-[`wait_for_server_ready`](../benchmarks/benchmark_lib.sh) distinguishes “server died before log,” “server died before healthy,” and a live process whose `/health` endpoint has not passed. Preserve the server log and PID status. The workflow's final timeout alone is not a diagnosis.
-
-After readiness, the shared helper snapshots the server and recognized persistent engine workers. Benchmark, AgentX and eval clients use `infx.bench_serving.server_watch`: a missing process, zombie or reused PID stops only the owned client process group. Healthy slow work has no new time cutoff. Recipes using a different readiness path need explicit server monitoring; a live wrapper alone is insufficient proof that its workers are alive.
+On srt-slurm recipes, srt-slurm starts the servers and waits for them to become healthy, so read its sweep log and worker logs first. The SPEED-Bench collectors start their own server and wait with `python3 -m infx.bench wait --url <health URL> --pid <server PID> --log <server log>` ([`wait_ready`](../infx/bench/server.py#L61-L79)). It streams the server log while it polls, fails with `process <PID> died before <URL> became ready` once the server exits, and otherwise waits until the URL answers below 400. The scheduler owns the time budget. Preserve the server log and PID status. The workflow's final timeout alone is not a diagnosis.
 
 Client dependency setup uses uv's bounded HTTP retries and a 120-second read timeout, retaining its download cache. A network/download failure is infrastructure evidence, not a reason to change engine flags. H100 srt-slurm resolves the requested image to its own squash path and checks staged model/image assets; B300 checks node-local staged model configuration on the allocated compute node before launching its container. Missing assets are readiness blockers, never grounds to substitute an old image or different weights.
 
 Use the earliest specific signature:
 
-- **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. [`KLAUD_DEBUG.md` §6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas) warns against deriving release tags from dated nightlies.
+- **Image pull/tag failure:** verify the exact registry tag or digest exists before touching runtime flags. Do not derive release tags from dated nightlies.
 - **Weight/KV/CUDA-graph OOM:** capture free memory, configured utilization, per-rank concurrency, graph limits, and where startup failed. Apply only the setting supported by the matching known case. Confirm startup and workload afterward.
 - **Kernel/architecture assertion or illegal address:** preserve the complete stack and GPU architecture. Prefer a fixed/pinned upstream image or supported backend over an unreviewed local engine patch.
 - **Address in use:** identify the owning process and cluster owner before terminating it. Do not kill an unverified PID or unrelated service.
-- **Healthy server dies during benchmark:** [`run_benchmark_serving`](../benchmarks/benchmark_lib.sh) monitors the server PID. Preserve both client and server logs and classify the server's first error, not the client's downstream connection failure.
+- **Healthy server dies during benchmark:** benchmark and eval clients do not watch the server PID. Preserve both client and server logs and classify the server's first error, not the client's downstream connection failure.
 
 Stop if the proposed workaround changes model semantics, reduces model FLOPs, patches the serving stack, or lacks an exact-source guard. The current [PR checklist](PR_REVIEW_CHECKLIST.md) prohibits inference-engine patches unless the documented waiver path is satisfied.
 
@@ -140,24 +135,24 @@ Use the guarded [failed-ingest recovery procedure](../../.claude/commands/recove
 
 Stop recovery if the source run or artifacts are ineligible, source ancestry cannot be proved, config/recipe/image semantics changed after the source SHA, or the intended changelog scope is ambiguous. Never bypass pending/failing checks, rewrite the recovery branch after attaching source ancestry, or trust the target's green trigger without inspecting data.
 
-## Known KLAUD cases
+## Known failure signatures
 
-Use [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) to recognize an exact signature, then verify it against the current image, recipe, hardware, and policy before applying its remediation.
+These are recurring Klaud-Cold and image-bump failures. Match the exact signature, then verify it against the current image, recipe, hardware, and policy before applying the remediation.
 
 | Signature | Known case and safe boundary |
 | --- | --- |
-| Setup says changelog history was deleted | [§1.1](KLAUD_DEBUG.md#11-perf-changelogyaml-deletion-not-allowed): restore main bytes and append only the PR entry. Never 3-way merge history |
-| vLLM weight load/KV allocation OOM | [§2](KLAUD_DEBUG.md#2-vllm-v021x--v020x-gpu-oom-at-model-load): confirm the memory-profiler signature before reducing utilization or using the recorded profiler setting |
-| DEP decoder fails during large CUDA-graph capture | [§2.1](KLAUD_DEBUG.md#21-dep-cuda-graph-capture-oom-on-gb300): size sequence/graph limits from per-DP-rank load, not global concurrency |
-| DSV4 works on custom digest but OOMs on generic SGLang | [§3](KLAUD_DEBUG.md#3-custom-dsv4-image--generic-v0512-ooms): generic release was not a drop-in. Retain or return to a proven compatible image |
-| B300 DeepGemm illegal address, EAGLE trtllm GEMM failure, or flash-attn architecture assertion | [§4](KLAUD_DEBUG.md#4-upstream-sglang-v0512-b300-regressions): distinguish the three stacks. Use a supported backend/cap or fixed/pinned upstream image |
-| AMD drained/Pyxis, Docker socket, disk-full, or occupied port | [§5](KLAUD_DEBUG.md#5-cluster-infrastructure-amd-mi355x--mi300x--mi325x): confirm current node state and escalate infrastructure. There is no recipe-level fix for unhealthy infrastructure |
-| `dpkg-deb` or `tar` rejects a freshly downloaded srt-slurm dependency archive | [§1.2](KLAUD_DEBUG.md#12-truncated-natsetcd-dependency-archives): preserve the first setup error. H200 retries only when a NATS/etcd archive fails an integrity check, deletes only that invalid archive, and stops immediately for unrelated setup failures |
-| Guessed Docker tag returns 404 | [§6](KLAUD_DEBUG.md#6-docker-image-tag-gotchas): verify the exact tag at the registry. Do not infer naming patterns |
-| `gh run rerun --failed` is refused | [§7](KLAUD_DEBUG.md#7-ci-rerun-mechanics): inspect run status/conclusion. Only completed failures support failed-only rerun, while cancelled runs require a full rerun |
-| MiniMax M3 B300 MSA says `q2k_indices` is non-contiguous | [§11](KLAUD_DEBUG.md#11-minimax-m3-b300-msa-top-k-slice-is-non-contiguous): recognize TP1/data-parallel-attention exposure and prefer an upstream-fixed image. Shipping the recorded engine patch requires current checklist/waiver compliance |
+| Setup says changelog history was deleted | Restore main bytes and append only the PR entry. Never 3-way merge history |
+| vLLM weight load/KV allocation OOM | Confirm the memory-profiler signature before reducing utilization or using the recorded profiler setting |
+| DEP decoder fails during large CUDA-graph capture | Size sequence/graph limits from per-DP-rank load, not global concurrency |
+| DSV4 works on custom digest but OOMs on generic SGLang | Generic release was not a drop-in. Retain or return to a proven compatible image |
+| B300 DeepGemm illegal address, EAGLE trtllm GEMM failure, or flash-attn architecture assertion | Distinguish the three stacks. Use a supported backend/cap or fixed/pinned upstream image |
+| AMD drained/Pyxis, Docker socket, disk-full, or occupied port | Confirm current node state and escalate infrastructure. There is no recipe-level fix for unhealthy infrastructure |
+| `dpkg-deb` or `tar` rejects a freshly downloaded srt-slurm dependency archive | Preserve the first setup error. H200 retries only when a NATS/etcd archive fails an integrity check, deletes only that invalid archive, and stops immediately for unrelated setup failures |
+| Guessed Docker tag returns 404 | Verify the exact tag at the registry. Do not infer naming patterns |
+| `gh run rerun --failed` is refused | Inspect run status/conclusion. Only completed failures support failed-only rerun, while cancelled runs require a full rerun |
+| MiniMax M3 B300 MSA says `q2k_indices` is non-contiguous | Recognize TP1/data-parallel-attention exposure and prefer an upstream-fixed image. Shipping the recorded engine patch requires current checklist/waiver compliance |
 
-Historical KLAUD label or merge advice does not override the current [sweep-label policy](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), or the [PR checklist](PR_REVIEW_CHECKLIST.md).
+Historical Klaud label or merge advice does not override the current [sweep-label policy](ci-procedures.md#pr-primary-and-modifier-labels), [`CONTRIBUTING.md`](../../CONTRIBUTING.md), or the [PR checklist](PR_REVIEW_CHECKLIST.md).
 
 ## Verification and stop conditions
 

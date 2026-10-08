@@ -10,15 +10,32 @@ This is the mandatory low-context router for InferenceX work. Pick the one page 
 
 Paths and shell commands in these guides are relative to `inferencex-e2e/` unless stated otherwise. The Python manifest, lockfile, and `.python-version` live in that project directory. Repository-wide policy and GitHub workflows remain at the repository root.
 
+## Task routing
+
+| Task | Open first | Then inspect |
+| --- | --- | --- |
+| Add a model or GPU benchmark | [Config reference](../configs/CONFIGS.md) | closest benchmark script, launcher, master YAML, changelog |
+| Modify an existing config | [Config reference](../configs/CONFIGS.md) | validation schema, generator, runtime consumer |
+| Add a runner | [Runner setup](../utils/runner_setup/RUNNER_SETUP.md) | `configs/runners.yaml`, launcher |
+| Change srt-slurm or llm-d | [Recipe reference](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | Recipe YAML, master config, `srtctl` mapping, launcher |
+| Change MTP | [Draft-model precision](../../CONTRIBUTING.md#draft-model-precision) | MTP sibling, draft model, chat-template path |
+| Validate a matrix | [CI procedures](ci-procedures.md#local-matrix-generation) | generator CLI and Pydantic validation |
+| Dispatch or monitor a run | [CI procedures](ci-procedures.md#manual-end-to-end-dispatch) | `e2e-tests.yml`, run logs, artifacts |
+| Prepare a PR sweep | [CI procedures](ci-procedures.md#pr-primary-and-modifier-labels) | `run-sweep.yml`, labels, changelog delta |
+| Reuse a green sweep | [CI procedures](ci-procedures.md#artifact-reuse-and-merge-with-reuse) | reuse gate, source artifacts, merge helper |
+| Add or debug evals | [Eval and AgentX procedures](eval-agentx-procedures.md#2-add-a-graded-eval) | `EVALS.md`, eval templates, score validator |
+| Run AgentX | [Eval and AgentX procedures](eval-agentx-procedures.md#7-run-agentx-fast-feedback-versus-canonical-evidence) | agentic config, trace source, live-run skill |
+| Inspect a result or ingest | [Recovery and results procedures](recovery-results-procedures.md#result-pipeline-know-what-should-exist) | artifact schema, collector, app ingest workflow |
+| Recover failed ingest | [Recovery and results procedures](recovery-results-procedures.md#failed-ingest-recovery) | recovery tool, source-run artifacts, ancestry rules |
+| Debug a runner or workspace | [Recovery and results procedures](recovery-results-procedures.md#amd-root-owned-workspace-prevention-and-recovery) | launcher cleanup, `.claude/commands/` cluster playbooks, cluster logs |
+
 ## Task and page index
 
 | Page | Open it for |
 | --- | --- |
 | [`index.md`](index.md) / [`index_zh.md`](index_zh.md) | This task router and its Chinese counterpart |
-| [`agent-guide.md`](agent-guide.md) / [`agent-guide_zh.md`](agent-guide_zh.md) | Agent onboarding, safe start, invariants, and verification |
-| [`procedures.md`](procedures.md) / [`procedures_zh.md`](procedures_zh.md) | Routing from a recurring task to one focused operational checklist |
 | [`architecture.md`](architecture.md) / [`architecture_zh.md`](architecture_zh.md) | Config-to-result flow, ownership boundaries, artifacts, and InferenceX-app handoff |
-| [`configuration-procedures.md`](configuration-procedures.md) / [`configuration-procedures_zh.md`](configuration-procedures_zh.md) | Config, runner, image, recipe, llm-d, srt-slurm, and MTP changes |
+| [`power_model` README](../../power_model/README.md) | Installation, CLI usage, supported systems, and power-model assumptions |
 | [`ci-procedures.md`](ci-procedures.md) / [`ci-procedures_zh.md`](ci-procedures_zh.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
 | [`eval-agentx-procedures.md`](eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](eval-agentx-procedures_zh.md) | Eval and AgentX selection, execution, scoring, evidence, and live-run diagnosis |
 | [`agentx-standalone.md`](agentx-standalone.md) / [`agentx-standalone_zh.md`](agentx-standalone_zh.md) | Install the pinned AgentX client and replay traces against an existing server without CI or Slurm |
@@ -26,9 +43,7 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`recovery-results-procedures.md`](recovery-results-procedures.md) / [`recovery-results-procedures_zh.md`](recovery-results-procedures_zh.md) | Result processing, ingest verification and recovery, runner cleanup, and failure classification |
 | [`testing.md`](testing.md) / [`testing_zh.md`](testing_zh.md) | Local checks, smoke runs, evidence standards, and review gates |
 | [`troubleshooting.md`](troubleshooting.md) / [`troubleshooting_zh.md`](troubleshooting_zh.md) | Failure-layer diagnosis, known cases, safe remediation, and stop conditions |
-| [`documentation-procedures.md`](documentation-procedures.md) / [`documentation-procedures_zh.md`](documentation-procedures_zh.md) | Adding, translating, indexing, reviewing, and maintaining documentation |
 | [`PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER review and exact sign-off requirements |
-| [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) / [`DOCUMENTATION_PLAN_zh.md`](DOCUMENTATION_PLAN_zh.md) | Remaining documentation gaps, target information architecture, and rollout |
 
 ## Authoritative references
 
@@ -39,11 +54,10 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md) | Translation terms, sweep labels, dispatch, eval selection, power, metrics, and artifacts |
 | [`configs/CONFIGS.md`](../configs/CONFIGS.md) | Master-config schema, search spaces, runners, and topology fields |
 | [`.github/workflows/README.md`](../../.github/workflows/README.md) | Generator examples, workflow operation, and reuse policy |
-| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval task, execution, collection, validation, and SWE-bench contracts |
+| [`infx/evals/EVALS.md`](../infx/evals/EVALS.md) | Eval task, execution, collection, and validation contracts |
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | Disaggregated recipe registration and master-config coupling |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner provisioning and setup |
 | [`MODELS.md`](MODELS.md) | Supported models, hardware coverage, and naming |
-| [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md) | Historical Klaud-Cold, CI, image, cluster, and GitHub CLI failure signatures |
 | [`klaud.md`](klaud.md) / [`klaud_zh.md`](klaud_zh.md) | Klaud Cold selection, ownership, validation and recovery |
 | [`klaud-reporting.md`](klaud-reporting.md) / [`klaud-reporting_zh.md`](klaud-reporting_zh.md) | Klaud PR body, progress comments, numeric comparisons and final preflight |
 | [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) | AgentX trace replay client shared by single- and multi-node srt-slurm recipes |
