@@ -9,26 +9,23 @@
 #SBATCH --mem=256G
 
 # Persistent vLLM server for Kimi K2 Thinking
-set -euo pipefail
+set -eo pipefail
 
 MODEL="moonshotai/Kimi-K2-Thinking"
 PORT=8000
 SERVER_INFO_FILE=/logs/server_info.txt
 
-# Write server address to shared file for client jobs
 HOSTNAME=$(hostname)
 echo "http://${HOSTNAME}:${PORT}" > "$SERVER_INFO_FILE"
 echo "Server will be available at: http://${HOSTNAME}:${PORT}"
 echo "Server info written to: $SERVER_INFO_FILE"
 
-# Trap to clean up on exit
 cleanup() {
     echo "Cleaning up..."
     rm -f "$SERVER_INFO_FILE"
 }
 trap cleanup EXIT
 
-# Start vLLM server (foreground - keeps job alive)
 echo "Starting vLLM server..."
 
 exec vllm serve $MODEL \

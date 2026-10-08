@@ -1,0 +1,92 @@
+base:
+  schema: 2
+  name: dsr1-fp8-b200-trt-mtp-8k1k
+  model:
+    path: hf:deepseek-ai/DeepSeek-R1-0528
+    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+    precision: fp8
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: trtllm_serve
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: trtllm
+    served_model_name: deepseek-ai/DeepSeek-R1-0528
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        cuda_graph_config:
+          enable_padding: true
+        enable_attention_dp: false
+        print_iter_log: true
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+          enable_block_reuse: false
+        stream_interval: 10
+        moe_config:
+          backend: TRTLLM
+        speculative_config:
+          decoding_type: MTP
+          num_nextn_predict_layers: 3
+        trust_remote_code: true
+        backend: pytorch
+        max_seq_len: 9472
+        tensor_parallel_size: 8
+        moe_expert_parallel_size: 1
+        pipeline_parallel_size: 1
+        enable_iter_perf_stats: false
+        return_perf_metrics: false
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
+    env:
+      MODEL: deepseek-ai/DeepSeek-R1-0528
+      ISL: '8192'
+      OSL: '1024'
+      RANDOM_RANGE_RATIO: '0.8'
+      USE_CHAT_TEMPLATE: 'true'
+zip_override_tp8_ep1:
+  roles:
+    agg:
+      args:
+        cuda_graph_config:
+          max_batch_size: [4, 8, 16]
+        max_batch_size: [4, 8, 16]
+        max_num_tokens: 8320
+  benchmark:
+    env:
+      CONC: ['4', '8', '16']
+zip_override_tp8_ep1_graphs:
+  roles:
+    agg:
+      args:
+        cuda_graph_config:
+          max_batch_size: [32, 64, 128, 256]
+        torch_compile_config:
+          capture_num_tokens: [[1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048,
+              2304, 2560, 2816, 3072, 3328, 3584, 3840, 4096, 4352, 4608, 4864, 5120, 5376, 5632, 5888,
+              6144, 6400, 6656, 6912, 7168, 7424, 7680, 7936, 8192, 8384], [1, 2, 4, 8, 16, 32, 64, 128,
+              256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560, 2816, 3072, 3328, 3584, 3840, 4096,
+              4352, 4608, 4864, 5120, 5376, 5632, 5888, 6144, 6400, 6656, 6912, 7168, 7424, 7680, 7936,
+              8192, 8448, 8512], [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792,
+              2048, 2304, 2560, 2816, 3072, 3328, 3584, 3840, 4096, 4352, 4608, 4864, 5120, 5376, 5632,
+              5888, 6144, 6400, 6656, 6912, 7168, 7424, 7680, 7936, 8192, 8448, 8704, 8768], [1, 2, 4,
+              8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560, 2816, 3072,
+              3328, 3584, 3840, 4096, 4352, 4608, 4864, 5120, 5376, 5632, 5888, 6144, 6400, 6656, 6912,
+              7168, 7424, 7680, 7936, 8192, 8448, 8704, 8960, 9216, 9280]]
+          enable_piecewise_cuda_graph: true
+        max_batch_size: [32, 64, 128, 256]
+        max_num_tokens: [8384, 8512, 8768, 9280]
+  benchmark:
+    env:
+      CONC: ['32', '64', '128', '256']

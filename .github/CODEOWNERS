@@ -1,14 +1,31 @@
-* @InferenceX/core
+* @SemiAnalysisAI/core
 
 # AMD master config
-configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
+inferencex-e2e/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
 
 # NVIDIA master config
-configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @InferenceX/core
+inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+
+# NVIDIA srt-slurm recipes in the single-node and multi-node trees
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/b200-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/b300-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/gb200-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/gb300-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/h100-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
+/inferencex-e2e/benchmarks/*_node/srt-slurm-recipes/**/h200-*/ @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core
 
 # PoR for Models & general direction
-MODELS.md @ankur-singh @chunfangamd @InferenceX/core
-MODELS_zh.md @ankur-singh @chunfangamd @InferenceX/core
+inferencex-e2e/docs/MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
+inferencex-e2e/docs/MODELS_zh.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
 
-# OperatorX experimental
-experimental/operatorx/ @hbarclay
+# CollectiveX
+collectivex/ @Oseltamivir @functionstackx
+
+# OperatorX
+operatorx/ @hbarclay
+
+# Experimental
+experimental/ @functionstackx
+
+# SRT Slurm patches
+/inferencex-e2e/runners/srt-slurm/patches/ @cquil11 @SemiAnalysisAI/core

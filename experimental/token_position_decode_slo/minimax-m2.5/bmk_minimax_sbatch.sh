@@ -7,13 +7,12 @@
 #SBATCH --job-name=bmk-minimax-m25
 #SBATCH --output=/mnt/home/kimbo/inferperf/minimax-m2.5/logs/bmk-client.log
 
-set -euo pipefail
+set -eo pipefail
 
 MODEL="MiniMaxAI/MiniMax-M2.5"
 PARALLEL_TAG="${PARALLEL_TAG:-tep8}"
 
 wait_for_server() {
-    # Wait for server_info.txt to appear (server may still be starting)
     echo "Waiting for server_info.txt..."
     while [ ! -f /workspace/logs/server_info.txt ]; do
         echo "server_info.txt not found, retrying in 60s..."
@@ -22,7 +21,6 @@ wait_for_server() {
     SERVER_URL=$(cat /workspace/logs/server_info.txt)
     echo "Waiting for vLLM server at $SERVER_URL..."
     while ! curl -sf "${SERVER_URL}/health" > /dev/null; do
-        # Re-read in case server_info.txt was updated
         SERVER_URL=$(cat /workspace/logs/server_info.txt 2>/dev/null || echo "$SERVER_URL")
         echo "Server not ready, retrying in 60s..."
         sleep 60
@@ -32,11 +30,10 @@ wait_for_server() {
 
 wait_for_server
 
-# === Sweep Configuration ===
 INPUT_LENS=(1024 2048 4096 6144 8192 10240 12288 14336 16384 18432 20480 22528 24576 26624 28672 30720 32768)
 OUTPUT_LEN=128
 
-# Concurrency caps based on ISL to avoid KV cache pressure
+# Concurrency is capped by ISL to avoid KV cache pressure.
 get_concurrency_levels() {
     local isl=$1
     if [ "$isl" -ge 18432 ]; then
@@ -48,7 +45,6 @@ get_concurrency_levels() {
     fi
 }
 
-# === Run Sweep ===
 for INPUT_LEN in "${INPUT_LENS[@]}"; do
     CONCURRENCY_LEVELS=($(get_concurrency_levels $INPUT_LEN))
     for MAX_CONC in "${CONCURRENCY_LEVELS[@]}"; do
@@ -56,13 +52,11 @@ for INPUT_LEN in "${INPUT_LENS[@]}"; do
         NUM_PROMPTS=$((MAX_CONC * 10))
         RESULT_FILENAME="minimax_m25_vllm_${PARALLEL_TAG}_isl${INPUT_LEN}_osl${OUTPUT_LEN}_conc${MAX_CONC}.json"
 
-        # Skip if result already exists
         if [ -f /workspace/results/$RESULT_FILENAME ]; then
             echo "Skipping (exists): $RESULT_FILENAME"
             continue
         fi
 
-        # Check server health before each run
         if ! curl -sf "${SERVER_URL}/health" > /dev/null; then
             echo "Server went down, waiting for restart..."
             wait_for_server
@@ -82,14 +76,12 @@ for INPUT_LEN in "${INPUT_LENS[@]}"; do
             --ignore-eos \
             --result-filepath /workspace/results/$RESULT_FILENAME
 
-        # Validate result - remove if not 100% completion
         if [ -f /workspace/results/$RESULT_FILENAME ]; then
             COMPLETED=$(python3 -c "import json; print(json.load(open('/workspace/results/$RESULT_FILENAME'))['completed'])")
             if [ "$COMPLETED" -ne "$NUM_PROMPTS" ]; then
                 echo "Incomplete: $COMPLETED/$NUM_PROMPTS completed, removing result and retrying after server restart..."
                 rm -f /workspace/results/$RESULT_FILENAME
                 wait_for_server
-                # Retry this configuration
                 python3 /workspace/benchmark_serving_random.py \
                     --model $MODEL \
                     --base-url "$SERVER_URL" \

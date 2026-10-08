@@ -1,67 +1,55 @@
 name: "Run Sweep"
-run-name: Run Sweep - ${{ github.event.pull_request.title || github.event.head_commit.message }}
+run-name: Run Sweep - ${{ github.event.pull_request.title }}
 
 concurrency:
     group: >-
-        sweep-${{ github.event.pull_request.number || github.sha }}-${{
-          github.event_name == 'pull_request' &&
+        sweep-${{ github.event.pull_request.number }}-${{
           (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
-          github.event.label.name != 'sweep-enabled' &&
           github.event.label.name != 'full-sweep-enabled' &&
           github.event.label.name != 'non-canary-full-sweep-enabled' &&
           github.event.label.name != 'full-sweep-fail-fast' &&
-          github.event.label.name != 'full-sweep-fail-fast-no-canary' &&
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
           github.event.label.name != 'agentx-fast' &&
-          github.event.label.name != 'skip_queue' &&
-          github.event.label.name != 'ci-patchwork' &&
-          github.event.label.name != 'engine-patch' &&
-          github.event.label.name != 'ci-patchwork-waived' &&
-          github.event.label.name != 'ci-checklist-complete' &&
           github.run_id ||
           'active'
         }}
     cancel-in-progress: true
 
 on:
-    push:
-        branches:
-            - main
-        paths:
-            - "perf-changelog.yaml"
     pull_request:
         branches:
             - main
         types:
-            - ready_for_review
             - synchronize
             - labeled
             - unlabeled
         paths:
-            - "perf-changelog.yaml"
+            - "inferencex-e2e/perf-changelog.yaml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
 
 jobs:
     check-changelog:
+        name: check-changelog
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        # Labels opt into sweeps regardless of draft status; readiness only starts reviews.
         if: >-
-            github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-              github.event.label.name == 'sweep-enabled' ||
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast' ||
-              github.event.label.name == 'skip_queue' ||
-              github.event.label.name == 'ci-patchwork' ||
-              github.event.label.name == 'engine-patch' ||
-              github.event.label.name == 'ci-patchwork-waived' ||
-              github.event.label.name == 'ci-checklist-complete'
+              github.event.label.name == 'agentx-fast'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
@@ -74,11 +62,9 @@ jobs:
                     [
                       .[] |
                       select(
-                        . == "sweep-enabled" or
                         . == "full-sweep-enabled" or
                         . == "non-canary-full-sweep-enabled" or
-                        . == "full-sweep-fail-fast" or
-                        . == "full-sweep-fail-fast-no-canary"
+                        . == "full-sweep-fail-fast"
                       )
                     ] |
                     length
@@ -92,6 +78,7 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
+                  persist-credentials: false
 
             - name: Read PR sweep policy
               id: sweep_policy
@@ -104,17 +91,22 @@ jobs:
                       echo "skip-pr-sweep=false" >> "$GITHUB_OUTPUT"
                   fi
 
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
             - name: Validate perf-changelog matrix
               env:
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
-                  pip install "pydantic>=2" pyyaml
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
                   CMD=(
-                      python3 utils/validate_perf_changelog.py
+                      uv run --no-project --exclude-newer PT12H --python 3.12
+                      --with "pydantic>=2" --with pyyaml python -m infx.workflows.validate_perf_changelog
                       --changelog-file perf-changelog.yaml
-                      --base-ref "origin/${{ github.base_ref }}"
-                      --head-ref "${{ github.event.pull_request.head.sha }}"
+                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then
                       CMD+=(--all-evals)
@@ -125,60 +117,57 @@ jobs:
                   "${CMD[@]}"
 
     reuse-sweep-gate:
+        name: reuse-sweep-gate
         needs: check-changelog
         runs-on: ubuntu-latest
         permissions:
+            actions: read # Read workflow runs and artifacts.
             contents: read
-            issues: read
-            pull-requests: read
+            issues: read # Read issue comments.
+            pull-requests: read # Read PR metadata.
         if: >-
             always() &&
             needs.check-changelog.result == 'success' &&
-            github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
-            !github.event.pull_request.draft &&
             !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
-            !contains(github.event.pull_request.labels.*.name, 'agentx-fast') &&
-            (
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
-            )
+            !contains(github.event.pull_request.labels.*.name, 'agentx-fast')
         outputs:
             skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
         steps:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                persist-credentials: false
 
             - name: Check for reusable sweep authorization
               id: gate
               env:
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
                   GH_TOKEN: ${{ github.token }}
+                  EVENT_ACTION: ${{ github.event.action }}
               run: |
-                  python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
-                    --repo "${{ github.repository }}" \
-                    --commit-sha "${{ github.event.pull_request.head.sha }}" \
-                    --event-name "${{ github.event_name }}" \
-                    --event-action "${{ github.event.action }}" \
-                    --pr-number "${{ github.event.pull_request.number }}" \
-                    --ref "${{ github.ref }}" \
+                  python3 -m infx.workflows.reuse \
+                    --repo "${GITHUB_REPOSITORY}" \
+                    --commit-sha "${PR_HEAD_SHA}" \
+                    --event-name "${GITHUB_EVENT_NAME}" \
+                    --event-action "${EVENT_ACTION}" \
+                    --pr-number "${PR_NUMBER}" \
+                    --ref "${GITHUB_REF}" \
                     --workflow-id "run-sweep.yml"
 
     setup:
+        name: setup
         needs: [check-changelog, reuse-sweep-gate]
         runs-on: ubuntu-latest
         permissions:
-            actions: read
+            actions: read # Read workflow runs and artifacts.
             contents: read
-            issues: read
-            pull-requests: read
+            issues: read # Read issue comments.
+            pull-requests: read # Read PR metadata.
         if: >-
             always() &&
-            (
-              needs.check-changelog.result == 'success' ||
-              needs.check-changelog.result == 'skipped'
-            ) &&
+            needs.check-changelog.result == 'success' &&
             (
               needs.reuse-sweep-gate.result == 'skipped' ||
               (
@@ -186,73 +175,77 @@ jobs:
                 needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
               )
             ) &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
             (
-              (
-                github.event_name == 'pull_request' &&
-                !github.event.pull_request.draft &&
-                github.event.pull_request.head.repo.full_name == github.repository &&
-                needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
-                (
-                  contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
-                  contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-                  contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-                  contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-                  contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
-                ) &&
-                (
-                  (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-                  github.event.label.name == 'sweep-enabled' ||
-                  github.event.label.name == 'full-sweep-enabled' ||
-                  github.event.label.name == 'non-canary-full-sweep-enabled' ||
-                  github.event.label.name == 'full-sweep-fail-fast' ||
-                  github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
-                  github.event.label.name == 'all-evals' ||
-                  github.event.label.name == 'evals-only' ||
-                  github.event.label.name == 'agentx-fast' ||
-                  github.event.label.name == 'skip_queue' ||
-                  github.event.label.name == 'ci-patchwork' ||
-                  github.event.label.name == 'engine-patch' ||
-                  github.event.label.name == 'ci-patchwork-waived' ||
-                  github.event.label.name == 'ci-checklist-complete'
-                )
-              ) ||
-              (
-                github.event_name == 'push'
-              )
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
+            ) &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'full-sweep-enabled' ||
+              github.event.label.name == 'non-canary-full-sweep-enabled' ||
+              github.event.label.name == 'full-sweep-fail-fast' ||
+              github.event.label.name == 'all-evals' ||
+              github.event.label.name == 'evals-only' ||
+              github.event.label.name == 'agentx-fast'
             )
         outputs:
+            tooling-ref: ${{ steps.tooling.outputs.result }}
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
-            reuse-enabled: ${{ steps.setup.outputs.reuse-enabled }}
-            reuse-source-run-id: ${{ steps.setup.outputs.reuse-source-run-id }}
-            reuse-source-run-attempt: ${{ steps.setup.outputs.reuse-source-run-attempt }}
-            reuse-source-run-url: ${{ steps.setup.outputs.reuse-source-run-url }}
-            reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
-            reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
             - name: Checkout code
+              id: checkout
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
+                  persist-credentials: false
 
+            - name: Resolve workflow tooling
+              id: tooling
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  CHECKOUT_SHA: ${{ steps.checkout.outputs.commit }}
+              with:
+                  result-encoding: string
+                  script: |
+                      const { data } = await github.rest.repos.getCommit({
+                        ...context.repo, ref: context.payload.repository.default_branch,
+                      });
+                      await core.summary.addHeading('Revisions', 2).addTable([
+                        ['Setup checkout', process.env.CHECKOUT_SHA],
+                        ['infx tooling', data.sha],
+                      ]).write();
+                      return data.sha;
             - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - name: Install Claude Code 2.1.282
+              id: claude_cli
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
+                npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
+                claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
+                test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+                echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
             - name: Classify priority criteria
               id: classify
-              if: >-
-                  vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-                  github.event_name == 'pull_request'
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
               continue-on-error: true
-              uses: anthropics/claude-code-action@0d0e0876d3eaa933f45dc692f7a4312c83caf36f # v1.0.218
+              uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
               with:
+                  path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
                   github_token: ${{ github.token }}
-                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  # Repository integration credential for the scoped sweep/ingest job.
+                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
                   track_progress: false
                   settings: |
                       {"fastMode": true}
                   claude_args: |
-                      --model 'claude-fable-5'
+                      --model 'claude-opus-5-5'
+                      --effort low
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","kimik3","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
                       Inspect this pull request's diff against its base branch.
 
@@ -291,44 +284,20 @@ jobs:
 
             - id: setup
               env:
-                  GH_TOKEN: ${{ github.token }}
-                  PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
                   PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
-                  TRIM_CONC: >-
-                      ${{
-                        github.event_name == 'pull_request' &&
-                        contains(github.event.pull_request.labels.*.name, 'sweep-enabled')
-                      }}
-                  ALL_EVALS: >-
-                      ${{
-                        github.event_name == 'pull_request' &&
-                        contains(github.event.pull_request.labels.*.name, 'all-evals')
-                      }}
-                  EVALS_ONLY: >-
-                      ${{
-                        github.event_name == 'pull_request' &&
-                        contains(github.event.pull_request.labels.*.name, 'evals-only')
-                      }}
+                  ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
+                  EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
-
-                  if [ "${{ github.event_name }}" == "pull_request" ]; then
-                      BASE_REF="origin/${{ github.base_ref }}"
-                      HEAD_REF="${{ github.event.pull_request.head.sha }}"
-                  else
-                      BASE_REF="${{ github.event.before }}"
-                      HEAD_REF="${{ github.event.after }}"
-                  fi
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
 
                   CMD=(
-                      uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-                      "${GITHUB_WORKSPACE}/utils/process_changelog.py"
-                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
-                      --base-ref "$BASE_REF"
-                      --head-ref "$HEAD_REF"
+                      uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                      python -m infx.matrix.plan
+                      --changelog-file "${GITHUB_WORKSPACE}/inferencex-e2e/perf-changelog.yaml"
+                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --head-ref "${PR_HEAD_SHA}"
                   )
-                  if [ "$TRIM_CONC" = "true" ]; then
-                      CMD+=(--trim-conc)
-                  fi
                   if [ "$ALL_EVALS" = "true" ]; then
                       CMD+=(--all-evals)
                   fi
@@ -337,27 +306,20 @@ jobs:
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
-                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --with pyyaml --python 3.12 \
-                    "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
-                    --event-name "${{ github.event_name }}" \
-                    --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
-                    --labels-json "$PR_LABELS" \
-                    --pr-number "${{ github.event.pull_request.number || 0 }}" \
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -m infx.workflows.benchmark_schema --plan)
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+                    python -m infx.workflows.ci_priority \
+                    --event-name "${GITHUB_EVENT_NAME}" \
+                    --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
-                  python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
-                    --repo "${{ github.repository }}" \
-                    --commit-sha "${{ github.sha }}" \
-                    --event-name "${{ github.event_name }}" \
-                    --ref "${{ github.ref }}" \
-                    --workflow-id "run-sweep.yml"
 
     canary-select:
+        name: canary-select
         needs: setup
         if: >-
-            needs.setup.outputs.reuse-enabled != 'true' &&
-            github.event_name == 'pull_request' &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
@@ -365,6 +327,7 @@ jobs:
         runs-on: ubuntu-latest
         outputs:
             canary-config: ${{ steps.pick.outputs.canary-config }}
+            multi-node-canary-config: ${{ steps.pick.outputs.multi-node-canary-config }}
             remaining-search-space-config: ${{ steps.pick.outputs.remaining-search-space-config }}
         steps:
             - id: pick
@@ -382,317 +345,239 @@ jobs:
                     # Canary is a benchmark-only smoke test — exclude entries
                     # whose primary purpose is eval (run-eval == true) so the
                     # picked canary never runs an eval pass.
-                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []))
-                      | map(select(.["run-eval"] != true))) as $candidates
-                    | (if ($candidates | length) == 0 then null else ($candidates | min_by(.conc)) end) as $canary
+                    (((.single_node["1k1k"] // []) + (.single_node["8k1k"] // []) + (.single_node.agentic // []))
+                      | map(select(.["run-eval"] != true))) as $single_candidates
+                    | ((.multi_node.agentic // []) | map(select(.["run-eval"] != true))) as $multi_candidates
+                    | (if ($single_candidates | length) == 0 then null else ($single_candidates | min_by(.conc)) end) as $canary
+                    | (if $canary != null or ($multi_candidates | length) == 0 then null
+                       else ($multi_candidates | min_by(.conc[0])) end) as $multi_canary
                     | {
                         canary: (if $canary == null then [] else [$canary] end),
+                        multi_node_canary: (if $multi_canary == null then [] else [$multi_canary] end),
                         remaining: (
                           .
                           | .single_node = (.single_node // {})
                           | .single_node["1k1k"] = ((.single_node["1k1k"] // []) | remove_one($canary))
                           | .single_node["8k1k"] = ((.single_node["8k1k"] // []) | remove_one($canary))
+                          | .single_node.agentic = ((.single_node.agentic // []) | remove_one($canary))
+                          | .multi_node = (.multi_node // {})
+                          | .multi_node.agentic = ((.multi_node.agentic // []) | remove_one($multi_canary))
                         )
                       }
                   ' <<<"$SEARCH_SPACE")
-                  echo "canary-config=$(jq -c '.canary' <<<"$selection")" >> "$GITHUB_OUTPUT"
-                  echo "remaining-search-space-config=$(jq -c '.remaining' <<<"$selection")" >> "$GITHUB_OUTPUT"
+                  {
+                    echo "canary-config=$(jq -c '.canary' <<<"$selection")"
+                    echo "multi-node-canary-config=$(jq -c '.multi_node_canary' <<<"$selection")"
+                    echo "remaining-search-space-config=$(jq -c '.remaining' <<<"$selection")"
+                  } >> "$GITHUB_OUTPUT"
 
     canary-sweep:
         needs: canary-select
         if: ${{ needs.canary-select.outputs.canary-config != '' && needs.canary-select.outputs.canary-config != '[]' }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
+        uses: $/.github/workflows/benchmark-tmpl.yml
         name: canary /
         strategy:
             fail-fast: false
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
+            config: ${{ toJSON(matrix.config) }}
+            # Only same-repository PRs owned by Klaud receive background priority.
+            klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
             run-eval: false
+            scenario-type: ${{ matrix.config['scenario-type'] || 'fixed-seq-len' }}
+            duration: ${{ matrix.config.duration || '3600' }}
+            agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
-    sweep-multi-node-1k1k:
-        needs: [setup, canary-select, canary-sweep]
-        if: >-
-            ${{
-              !cancelled() &&
-              needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
-              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
-              toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null'
-            }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node 1k1k /
+    canary-multi-node-sweep:
+        needs: canary-select
+        if: ${{ needs.canary-select.outputs.multi-node-canary-config != '' && needs.canary-select.outputs.multi-node-canary-config != '[]' }}
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node canary /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: false
             matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
-        secrets: inherit
-        with: &multi-node-inputs
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
+                config: ${{ fromJson(needs.canary-select.outputs.multi-node-canary-config) }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
+            conc: ${{ matrix.config.conc[0] }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
+            duration: ${{ matrix.config.duration }}
+            run-eval: false
+            scenario-type: agentic-coding
+            agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+    sweep-multi-node-1k1k:
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k']) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node 1k1k /
+        strategy:
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
+            matrix:
+                config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with: &multi-node-inputs
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
+            runner: ${{ matrix.config.runner }}
+            node-count: ${{ matrix.config.node-count }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
+            conc-list: ${{ toJson(matrix.config.conc) }}
             run-eval: false
 
     sweep-multi-node-8k1k:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k']) != 'null'
             }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 8k1k /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with: *multi-node-inputs
 
     sweep-single-node-1k1k:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k']) != '[]'
             }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
+        uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with: &single-node-inputs
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
             run-eval: ${{ matrix.config.run-eval }}
 
     sweep-single-node-8k1k:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != 'null' &&
               toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k']) != '[]'
             }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
+        uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with: *single-node-inputs
 
     sweep-agentic:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
-              toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null'
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
+              toJson(fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
             }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
+        uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
-        secrets: inherit
+                config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic'] }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
-            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-multi-node-agentic:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
-              toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null'
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
+              toJson(fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
             }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
-        secrets: inherit
+                config: ${{ fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic'] }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config.conc[0] }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
@@ -700,49 +585,33 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null'
             }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
+        uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
 
@@ -750,118 +619,70 @@ jobs:
     # dispatched with sweep-agentic's inputs rather than sweep-evals' fixed-seq-len
     # inputs (isl/osl/max-model-len, which agentic rows don't have).
     sweep-agentic-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null'
             }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
+        uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            tp: ${{ matrix.config.tp }}
-            pp: ${{ matrix.config.pp }}
-            dcp-size: ${{ matrix.config.dcp-size }}
-            pcp-size: ${{ matrix.config.pcp-size }}
-            ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
-            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ 'false' }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
             scenario-type: agentic-coding
 
     sweep-multi-node-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null'
             }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-conc: ${{ (matrix.config['eval-framework'] || 'lm-eval') == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     # Multi-node agentic GSM8K eval rows carry the agentic input shape, so
     # they are dispatched with sweep-multi-node-agentic's inputs rather than
@@ -870,77 +691,48 @@ jobs:
     # eval-conc per topology; fixed-sequence --all-evals rows may instead pass
     # a joined concurrency list to lm-eval.
     sweep-multi-node-agentic-evals:
-        needs: [setup, canary-select, canary-sweep]
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
               needs.setup.result == 'success' &&
-              needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != '[]' &&
               toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != 'null'
             }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
-        secrets: inherit
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
-            exp-name: ${{ matrix.config.exp-name }}
-            recipe-fingerprint: ${{ matrix.config['recipe-fingerprint'] || '' }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
-            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-hardware: ${{ matrix.config.prefill.hardware }}
-            decode-hardware: ${{ matrix.config.decode.hardware }}
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-pp: ${{ matrix.config.prefill.pp }}
-            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
-            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-pp: ${{ matrix.config.decode.pp }}
-            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
-            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config['eval-conc'] }}
-            kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
-            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config['eval-conc'] }}
             scenario-type: agentic-coding
 
     collect-results:
+        name: collect-results
         needs:
             [
                 canary-sweep,
+                canary-multi-node-sweep,
                 sweep-single-node-1k1k,
                 sweep-single-node-8k1k,
                 sweep-agentic,
@@ -955,35 +747,58 @@ jobs:
               needs.setup.result == 'success' &&
               (
                 needs.canary-sweep.result == 'success' ||
+                needs.canary-multi-node-sweep.result == 'success' ||
                 needs.sweep-single-node-1k1k.result != 'skipped' ||
                 needs.sweep-single-node-8k1k.result != 'skipped' ||
                 needs.sweep-multi-node-1k1k.result != 'skipped' ||
                 needs.sweep-multi-node-8k1k.result != 'skipped'
               )
             }}
-        uses: ./.github/workflows/collect-results.yml
-        secrets: inherit
+        uses: $/.github/workflows/collect-results.yml
         with:
             result-prefix: "bmk"
+            tooling-ref: ${{ needs.setup.outputs.tooling-ref }}
 
     collect-evals:
+        name: collect-evals
         needs: [sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, sweep-multi-node-agentic-evals, setup]
         if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-agentic-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped' || needs.sweep-multi-node-agentic-evals.result != 'skipped') }}
-        uses: ./.github/workflows/collect-evals.yml
-        secrets: inherit
+        uses: $/.github/workflows/collect-evals.yml
+        with:
+            tooling-ref: ${{ needs.setup.outputs.tooling-ref }}
 
     upload-changelog-metadata:
+        name: upload-changelog-metadata
         needs: [setup, collect-results]
         if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:
             - name: Extract and save changelog metadata
+              env:
+                  SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
+                  SWEEP_HEAD: ${{ github.event.pull_request.head.sha }}
+                  SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
               run: |
-                  cat <<'CONFIGEOF' > _full_config.json
-                  ${{ needs.setup.outputs.search-space-config }}
-                  CONFIGEOF
-                  jq '.changelog_metadata' _full_config.json > changelog_metadata.json
-                  rm -f _full_config.json
+                  python3 - <<'PY'
+                  import json, os
+                  from pathlib import Path
+                  matrix = json.loads(os.environ['SWEEP_MATRIX'])
+                  labels = set(json.loads(os.environ['SWEEP_LABELS']) or [])
+                  sweep_labels = labels & {
+                      'full-sweep-enabled', 'non-canary-full-sweep-enabled',
+                      'full-sweep-fail-fast',
+                      'all-evals', 'evals-only', 'agentx-fast',
+                  }
+                  Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
+                  Path('sweep_manifest.json').write_text(json.dumps({
+                      'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
+                      'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+                      'full-sweep': sweep_labels in (
+                          {'full-sweep-fail-fast'}, {'full-sweep-enabled'},
+                      ),
+                      'matrix': matrix,
+                  }))
+                  PY
 
             - name: Upload changelog artifact
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -991,21 +806,34 @@ jobs:
                   name: changelog-metadata
                   path: changelog_metadata.json
 
+            - name: Upload Klaud validation manifest
+              if: *klaud-run
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: klaud-sweep-manifest
+                  path: sweep_manifest.json
+                  if-no-files-found: error
+
     calc-success-rate:
-        needs: collect-results
+        name: calc-success-rate
+        needs: [setup, collect-results]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
+        permissions:
+            actions: read # Read job timings for run statistics.
+            contents: read
 
         env:
             RESULTS_DIR: "results/"
             STATS_FILENAME: "run_stats"
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+            GITHUB_TOKEN: ${{ github.token }}
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  token: ${{ secrets.REPO_PAT }}
-                  fetch-depth: 0
+                  ref: ${{ needs.setup.outputs.tooling-ref }}
+                  fetch-depth: 1
+                  persist-credentials: false
 
             - name: Download results artifacts
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1013,11 +841,28 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
-            - name: Install python dependencies
-              run: pip install PyGithub
+            - name: Select Python project
+              run: |
+                python_project="$GITHUB_WORKSPACE"
+                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+                  python_project="$python_project/inferencex-e2e"
+                fi
+                test -f "$python_project/pyproject.toml"
+                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              with:
+                  cache-dependency-glob: |
+                      pyproject.toml
+                      uv.lock
+                      inferencex-e2e/pyproject.toml
+                      inferencex-e2e/uv.lock
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
+              run: >-
+                  uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows
+                  python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -1025,6 +870,7 @@ jobs:
                   path: ${{ env.STATS_FILENAME }}.json
 
     compare-results:
+        name: compare-results
         needs:
             [
                 collect-results,
@@ -1032,15 +878,18 @@ jobs:
             ]
         if: >-
             always() &&
-            github.event_name == 'pull_request' &&
             needs.collect-results.result == 'success'
         runs-on: ubuntu-latest
 
         env:
-            DATABASE_URL: ${{ secrets.NEON_PROD_RO_URL }}
+            # Repository integration credential for the scoped sweep/ingest job.
+            DATABASE_URL: ${{ secrets.DB_RO_URL }} # zizmor: ignore[secrets-outside-env]
 
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                ref: ${{ needs.setup.outputs.tooling-ref }}
+                persist-credentials: false
 
             - name: Download results artifacts
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1048,118 +897,31 @@ jobs:
                   path: results/
                   pattern: results_bmk
 
-            - name: Install dependencies
-              run: pip install psycopg2-binary tabulate
+            - name: Select Python project
+              run: |
+                python_project="$GITHUB_WORKSPACE"
+                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+                  python_project="$python_project/inferencex-e2e"
+                fi
+                test -f "$python_project/pyproject.toml"
+                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
+            - name: Set up uv
+              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+              with:
+                  cache-dependency-glob: |
+                      pyproject.toml
+                      uv.lock
+                      inferencex-e2e/pyproject.toml
+                      inferencex-e2e/uv.lock
 
             - name: Compare results against main
-              run: python3 utils/compare_results.py results/ >> "$GITHUB_STEP_SUMMARY"
-
-    trigger-ingest:
-        needs:
-            [
-                collect-results,
-                collect-evals,
-                calc-success-rate,
-                setup,
-                upload-changelog-metadata,
-            ]
-        if: >-
-            always() &&
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/main' &&
-            needs.setup.result == 'success' &&
-            (
-              (
-                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||
-                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == '[]'
-              ) &&
-              (
-                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == 'null' ||
-                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == '[]'
-              )
-            ) &&
-            (
-              needs.collect-results.result != 'skipped' ||
-              needs.collect-evals.result != 'skipped' ||
-              needs.setup.outputs.reuse-enabled == 'true'
-            )
-        runs-on: ubuntu-latest
-        steps:
-            - name: Trigger database ingest
-              run: |
-                  curl -sSf -X POST \
-                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
-                    -H "Accept: application/vnd.github+v3+json" \
-                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
-                    -d '{
-                      "event_type": "ingest-results",
-                      "client_payload": {
-                        "source-run-id": "${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}",
-                        "merge-run-id": "${{ github.run_id }}"
-                      }
-                    }'
-
-    trigger-agentic-ingest:
-        needs:
-            [
-                setup,
-                sweep-agentic,
-                sweep-multi-node-agentic,
-                upload-changelog-metadata,
-            ]
-        if: >-
-            always() &&
-            github.event_name == 'push' &&
-            github.ref == 'refs/heads/main' &&
-            needs.setup.result == 'success' &&
-            needs.upload-changelog-metadata.result == 'success' &&
-            (
-              (
-                needs.setup.outputs.reuse-enabled == 'true' &&
-                (
-                  (
-                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
-                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
-                  ) ||
-                  (
-                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
-                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
-                  )
-                )
-              ) ||
-              (
-                (
-                  needs.sweep-agentic.result == 'success' ||
-                  needs.sweep-multi-node-agentic.result == 'success'
-                ) &&
-                (
-                  needs.sweep-agentic.result == 'success' ||
-                  needs.sweep-agentic.result == 'skipped'
-                ) &&
-                (
-                  needs.sweep-multi-node-agentic.result == 'success' ||
-                  needs.sweep-multi-node-agentic.result == 'skipped'
-                )
-              )
-            )
-        runs-on: ubuntu-latest
-        steps:
-            - name: Trigger agentic database ingest
-              run: |
-                  curl -sSf -X POST \
-                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
-                    -H "Accept: application/vnd.github+v3+json" \
-                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
-                    -d '{
-                      "event_type": "ingest-agentic-results",
-                      "client_payload": {
-                        "source-run-id": "${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}",
-                        "merge-run-id": "${{ github.run_id }}",
-                        "database-target": "production"
-                      }
-                    }'
+              run: >-
+                  uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra results
+                  python -m infx.results.compare_results results/ >> "$GITHUB_STEP_SUMMARY"
 
     comment-unofficial-run-visualizer:
+        name: comment-unofficial-run-visualizer
         needs:
             [
                 collect-results,
@@ -1171,44 +933,65 @@ jobs:
         if: >-
             always() &&
             needs.setup.result == 'success' &&
-            github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
             (
-              contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
             ) &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-              github.event.label.name == 'sweep-enabled' ||
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
               github.event.label.name == 'agentx-fast'
             )
         runs-on: ubuntu-latest
+        concurrency:
+            group: unofficial-run-visualizer-${{ github.event.pull_request.number }}
+            cancel-in-progress: false
         permissions:
-            pull-requests: write
+            pull-requests: write # Publish PR feedback.
         steps:
-            - name: Comment unofficial run visualizer link on PR
+            - name: Update unofficial run visualizer links on PR
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               with:
                   github-token: ${{ github.token }}
                   script: |
+                      const marker = '<!-- inferencex-unofficial-run-visualizer -->';
                       const inferenceUrl = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
                       const evaluationUrl = `https://inferencex.semianalysis.com/evaluation?unofficialRun=${context.runId}`;
                       const body = [
-                          `see unofficial run visualizer at ${inferenceUrl}`,
-                          `see unofficial run visualizer at ${evaluationUrl}`,
-                      ].join('\n');
-                      await github.rest.issues.createComment({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
+                          marker,
+                          `View unofficial run (performance): ${inferenceUrl}`,
+                          `View unofficial run (accuracy): ${evaluationUrl}`,
+                      ].join('\n\n');
+                      const comments = await github.paginate(github.rest.issues.listComments, {
+                          ...context.repo,
                           issue_number: context.issue.number,
-                          body,
+                          per_page: 100,
                       });
+                      const botComments = comments.filter(comment => comment.user?.login === 'github-actions[bot]');
+                      const existing = botComments.find(comment => comment.body?.includes(marker))
+                          ?? botComments.reverse().find(comment => comment.body?.startsWith(
+                              'see unofficial run visualizer at https://inferencex.semianalysis.com/inference?unofficialRun='
+                          ));
+                      if (existing) {
+                          const previousRunId = existing.body.match(/unofficialRun=(\d+)/)?.[1];
+                          if (previousRunId && Number(previousRunId) > context.runId) {
+                              core.info('Keeping visualizer links for the newer run.');
+                              return;
+                          }
+                          await github.rest.issues.updateComment({
+                              ...context.repo,
+                              comment_id: existing.id,
+                              body,
+                          });
+                      } else {
+                          await github.rest.issues.createComment({
+                              ...context.repo,
+                              issue_number: context.issue.number,
+                              body,
+                          });
+                      }

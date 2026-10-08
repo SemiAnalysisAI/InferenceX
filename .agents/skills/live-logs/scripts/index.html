@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Job Logs</title>
+<style>
+:root{--bg:#0f1115;--panel:#161a21;--line:#232a35;--fg:#d6dbe3;--dim:#7c8696;--err:#ff6b6b;--warn:#f5c04a;--ok:#5fd38d;--acc:#6aa7ff;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+:root[data-theme="light"]{--bg:#f6f7f9;--panel:#fff;--line:#e2e5ea;--fg:#1d232c;--dim:#6b7482;--err:#c62828;--warn:#9a6a00;--ok:#1b7f45;--acc:#1f5fbf}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+h1{font-size:15px;margin:0;font-weight:600}
+.pill{padding:2px 8px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-family:var(--mono);font-size:12px}
+.mem{display:flex;gap:6px;align-items:center;font-family:var(--mono);font-size:12px}
+.bar{width:90px;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--acc)}
+.bar.low>i{background:var(--err)}
+.ctl{display:flex;gap:10px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.ctl input[type=text]{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 8px;width:180px}
+.ctl label{display:flex;gap:4px;align-items:center;color:var(--dim);cursor:pointer}
+.ctl select{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+button{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 9px;cursor:pointer}
+main{flex:1;min-height:0;display:flex;flex-direction:column;padding:8px}
+.row{display:flex;min-height:60px;flex-basis:0}
+.row>.pane{flex-basis:0;min-width:120px}
+.hg{flex:0 0 8px;cursor:row-resize;position:relative}
+.vg{flex:0 0 8px;cursor:col-resize;position:relative}
+.hg::after,.vg::after{content:"";position:absolute;background:var(--line);border-radius:2px}
+.hg::after{left:45%;right:45%;top:3px;height:2px}
+.vg::after{top:45%;bottom:45%;left:3px;width:2px}
+.hg:hover::after,.vg:hover::after,.dragging::after{background:var(--acc);left:0;right:0;top:0;bottom:0}
+body.resizing{user-select:none}
+body.resizing.col{cursor:col-resize}body.resizing.rowc{cursor:row-resize}
+.pane.max{position:fixed;inset:8px;z-index:10;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;min-height:0}
+.pane.hidden{display:none}
+.ph{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line)}
+.ph b{font-size:13px}
+.ph .phase{font-family:var(--mono);font-size:11px;color:var(--ok);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1}
+.ph .cnt{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.ph .ec{font-family:var(--mono);font-size:11px;color:var(--err)}
+.log{flex:1;overflow:auto;font-family:var(--mono);font-size:11.5px;padding:4px 8px;white-space:pre-wrap;word-break:break-all}
+.log div{padding:0 2px}
+.e{color:var(--err);background:color-mix(in srgb,var(--err) 10%,transparent)}
+.w{color:var(--warn)}
+.m{color:var(--ok);font-weight:600}
+.paused{outline:2px solid var(--warn)}
+@media (max-width:800px){main{overflow:auto}.row{flex-direction:column;flex:none!important}.row>.pane{flex:none!important;height:420px;margin-bottom:8px}.hg,.vg{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>__TITLE__</h1>
+  <span class="pill" id="ssh">ssh: …</span>
+  <span class="pill" id="sq">slurm: …</span>
+  <span id="mems"></span>
+  <div class="ctl">
+    <input type="text" id="q" placeholder="filter (regex)">
+    <label><input type="checkbox" id="noise" checked> hide Mooncake metrics noise</label>
+    <label><input type="checkbox" id="erronly"> errors only</label>
+    <label>show <select id="hist"><option value="4000">last 4000 lines</option><option value="all">entire log</option></select></label>
+    <button id="dl" title="zip of every log file (.out / .log / .txt) under the job's logs/ directory, fetched fresh from the cluster in full; ignores the show / filter settings; no tachometer metrics">download all logs</button>
+    <button id="resetlayout" title="reset pane sizes">reset layout</button>
+    <button id="theme">theme</button>
+  </div>
+</header>
+<main id="main"></main>
+<script>
+const JOB = __JOB__;
+const MAXDOM = 200000;
+const HIST = document.getElementById("hist");
+try { HIST.value = localStorage.getItem("lw-hist") || "4000"; } catch { HIST.value = "4000"; }
+function domLimit(){ return HIST.value === "all" ? MAXDOM : +HIST.value; }
+const NOISE = /client_metric\.cpp|master_admin_service|topology\.cpp:127|No available shared memory broadcast|http response sent|^\(\S+ pid=\d+\)\s*$|^\s*(\(\S+ pid=\d+\)\s*)?(Client Metrics (Summary|Report)|=== .* ===|Total (Read|Write):|(Batch )?(Get|Put): |No RPC calls recorded|(Read|Write) Interfaces:|No data\s*$|SSD (Read|Write|Total):|(Read|Write|Total): No data|(Average |Interval )?(Read|Write) Throughput:|MountSegment: count=|[A-Za-z]+: count=\d+, p\d+<)/;
+const ERR = /\bERROR\b|Traceback|fi_mr_reg failed|Cannot allocate memory|RuntimeError|^E\d{4} |^F\d{4} |CUDA out of memory|Killed|exit code [1-9]/;
+const WARN = /\bWARN(ING)?\b|^W\d{4} /;
+const MILE = [
+  [/Loading weights took|Model loading took/, "weights loaded"],
+  [/kv lcm block sizes/, "KV cache sized"],
+  [/EfaTransport: Initialized EFA device/, "EFA devices up"],
+  [/Mounting segment/, "Mooncake segment mount / EFA MR registration"],
+  [/fi_mr_reg failed/, "❌ EFA MR registration failed"],
+  [/Initialize MooncakeDistributedStore failed/, "❌ Mooncake store init failed"],
+  [/FlashInfer autotune/, "FlashInfer autotune"],
+  [/Capturing CUDA graphs|Graph capturing finished/, "CUDA graph capture"],
+  [/Model is ready|Server is healthy/, "✅ healthy"],
+  [/Model is not ready/, "waiting for workers"],
+  [/Starting vLLM|vllm serve|Initializing a V1 LLM engine/, "engine starting"],
+];
+const panes = {};
+const main = document.getElementById("main");
+let files = [], rowEls = [], layout = null, layoutKey = "";
+const DEFAULT_ROW = [2, 1, 1];
+
+function saveLayout(){ try { localStorage.setItem(layoutKey, JSON.stringify(layout)); } catch {} }
+function captureLayout(){
+  layout.rows = rowEls.map(r => +r.style.flexGrow || 1);
+  layout.cols = rowEls.map(r => [...r.querySelectorAll(":scope > .pane")].map(p => +p.style.flexGrow || 1));
+  saveLayout();
+}
+function paneState(k){
+  if (panes[k]) return panes[k];
+  const p = document.createElement("section"); p.className = "pane";
+  p.innerHTML = `<div class="ph"><b></b><span class="phase"></span><span class="ec"></span><span class="cnt"></span><button class="top" title="jump to start">⤒</button><button class="bot" title="jump to end">⤓</button><button class="dlf" title="download this full log from the cluster (ignores show / filter settings)">⬇</button><button class="cp" title="copy visible">⧉</button><button class="mx" title="maximize / restore (Esc)">⛶</button></div><div class="log"></div>`;
+  const log = p.querySelector(".log");
+  const st = {key:k, el:p, log, phase:p.querySelector(".phase"), cnt:p.querySelector(".cnt"), ec:p.querySelector(".ec"), lines:[], errs:0, follow:true};
+  log.addEventListener("scroll", () => { st.follow = log.scrollTop + log.clientHeight >= log.scrollHeight - 30; p.classList.toggle("paused", !st.follow); });
+  p.querySelector(".top").onclick = () => { log.scrollTop = 0; };
+  p.querySelector(".bot").onclick = () => { log.scrollTop = log.scrollHeight; };
+  p.querySelector(".dlf").onclick = () => { const a = document.createElement("a"); a.href = "/file?f=" + encodeURIComponent(k); a.download = ""; document.body.appendChild(a); a.click(); a.remove(); };
+  p.querySelector(".cp").onclick = () => navigator.clipboard.writeText([...log.children].map(d => d.textContent).join("\n"));
+  p.querySelector(".mx").onclick = () => { const on = !p.classList.contains("max"); document.querySelectorAll(".pane.max").forEach(x => x.classList.remove("max")); p.classList.toggle("max", on); if (st.follow) log.scrollTop = log.scrollHeight; };
+  return panes[k] = st;
+}
+function buildLayout(list){
+  files = list;
+  const groups = [0, 1, 2].map(g => files.filter(f => f[2] === g).map(f => f[0])).filter(g => g.length);
+  layoutKey = "lw-layout-" + groups.map(g => g.length).join("-");
+  try { layout = JSON.parse(localStorage.getItem(layoutKey) || "null"); } catch { layout = null; }
+  if (!layout || layout.rows?.length !== groups.length) layout = {rows: groups.map((_, i) => DEFAULT_ROW[i] || 1), cols: groups.map(g => g.map(() => 1))};
+  main.textContent = ""; rowEls = [];
+  groups.forEach((keys, ri) => {
+    if (ri) { const g = document.createElement("div"); g.className = "hg"; main.appendChild(g); }
+    const row = document.createElement("div"); row.className = "row"; row.style.flexGrow = layout.rows[ri]; main.appendChild(row); rowEls.push(row);
+    keys.forEach((k, ci) => {
+      if (ci) { const g = document.createElement("div"); g.className = "vg"; row.appendChild(g); }
+      const st = paneState(k);
+      st.el.querySelector("b").textContent = (files.find(f => f[0] === k) || [k, k])[1];
+      st.el.title = k;
+      st.el.style.flexGrow = layout.cols[ri]?.[ci] ?? 1;
+      row.appendChild(st.el);
+    });
+  });
+}
+
+// drag gutters: redistribute flex-grow between the two neighbours by pixel delta
+function startDrag(e, g, horizontal){
+  e.preventDefault();
+  const a = g.previousElementSibling, b = g.nextElementSibling;
+  const size = el => horizontal ? el.getBoundingClientRect().height : el.getBoundingClientRect().width;
+  const pa = size(a), pb = size(b), ga = +a.style.flexGrow || 1, gb = +b.style.flexGrow || 1, start = horizontal ? e.clientY : e.clientX;
+  g.classList.add("dragging"); document.body.classList.add("resizing", horizontal ? "rowc" : "col");
+  const move = ev => {
+    const d = (horizontal ? ev.clientY : ev.clientX) - start, min = 60;
+    const na = Math.max(min, Math.min(pa + pb - min, pa + d));
+    a.style.flexGrow = (na / (pa + pb) * (ga + gb)).toFixed(4);
+    b.style.flexGrow = ((pa + pb - na) / (pa + pb) * (ga + gb)).toFixed(4);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+    g.classList.remove("dragging"); document.body.classList.remove("resizing", "rowc", "col");
+    captureLayout();
+    Object.values(panes).forEach(st => { if (st.follow) st.log.scrollTop = st.log.scrollHeight; });
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+}
+main.addEventListener("pointerdown", e => { const g = e.target.closest(".hg,.vg"); if (g) startDrag(e, g, g.classList.contains("hg")); });
+main.addEventListener("dblclick", e => {  // double-click a gutter to even out its neighbours
+  const g = e.target.closest(".hg,.vg"); if (!g) return;
+  const a = g.previousElementSibling, b = g.nextElementSibling, t = (+a.style.flexGrow || 1) + (+b.style.flexGrow || 1);
+  a.style.flexGrow = b.style.flexGrow = (t / 2).toFixed(4);
+  captureLayout();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".pane.max").forEach(x => x.classList.remove("max")); });
+document.getElementById("dl").onclick = () => {
+  const b = document.getElementById("dl"); b.disabled = true; b.textContent = "zipping…";
+  const a = document.createElement("a"); a.href = "/download.zip?t=" + Date.now(); a.download = ""; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => { b.disabled = false; b.textContent = "download all logs"; }, 8000);
+};
+document.getElementById("resetlayout").onclick = () => { try { localStorage.removeItem(layoutKey); } catch {} buildLayout(files); rerender(); };
+
+function cls(l){ return ERR.test(l) ? "e" : MILE.some(([r]) => r.test(l)) ? "m" : WARN.test(l) ? "w" : ""; }
+function visible(l){
+  const f = document.getElementById("q").value;
+  if (document.getElementById("noise").checked && NOISE.test(l) && !ERR.test(l)) return false;
+  if (document.getElementById("erronly").checked && !ERR.test(l)) return false;
+  if (f) { try { if (!new RegExp(f, "i").test(l)) return false; } catch { if (!l.includes(f)) return false; } }
+  return true;
+}
+function track(st, l){
+  st.lines.push(l);
+  if (HIST.value !== "all" && st.lines.length > 3 * domLimit()) st.lines.splice(0, st.lines.length - domLimit());
+  if (ERR.test(l) && !/ibv_query_port_speed|pip's dependency|GDRCopy|TaskProlog/.test(l)) st.errs++;
+  for (const [r, name] of MILE) if (r.test(l)) { const ts = (l.match(/\d\d:\d\d:\d\d/)||[""])[0]; st.phase.textContent = `${name} ${ts}`; break; }
+}
+function add(st, l){
+  if (!visible(l)) return;
+  const d = document.createElement("div"); d.textContent = l; const c = cls(l); if (c) d.className = c;
+  st.log.appendChild(d);
+  while (st.log.childElementCount > domLimit()) st.log.firstChild.remove();
+}
+let totals = {};
+function refresh(st){ const t = totals[st.key]; st.cnt.textContent = t ? `${st.lines.length.toLocaleString()} shown / ${t.toLocaleString()} total` : `${st.lines.length.toLocaleString()} lines`; st.ec.textContent = st.errs ? `${st.errs} err` : ""; if (st.follow) st.log.scrollTop = st.log.scrollHeight; }
+function rerender(){
+  for (const st of Object.values(panes)) {
+    const frag = document.createDocumentFragment(); let n = 0;
+    const keep = st.lines.filter(visible);
+    const start = Math.max(0, keep.length - domLimit());
+    if (start) { const d = document.createElement("div"); d.className = "w"; d.textContent = HIST.value === "all" ? `… ${start} older matching lines not shown; narrow with the filter` : `… ${start} older lines hidden; choose "entire log" to see them`; frag.appendChild(d); }
+    for (let i = start; i < keep.length; i++) { const l = keep[i]; const d = document.createElement("div"); d.textContent = l; const c = cls(l); if (c) d.className = c; frag.appendChild(d); }
+    st.log.textContent = ""; st.log.appendChild(frag); refresh(st);
+  }
+}
+document.getElementById("q").addEventListener("input", rerender);
+// history depth, noise and errors-only are applied on the server, so changing them re-subscribes
+["noise","erronly"].forEach(id => document.getElementById(id).addEventListener("change", connect));
+HIST.addEventListener("change", () => {
+  if (HIST.value === "all" && !confirm("Load every line of every log? Very large logs (hundreds of MB) can take a while and use a lot of browser memory. Keeping \"hide Mooncake metrics noise\" on makes this much smaller.")) { HIST.value = "4000"; return; }
+  try { localStorage.setItem("lw-hist", HIST.value); } catch {}
+  connect();
+});
+
+function setStatus(s){
+  document.getElementById("ssh").textContent = "ssh: " + s.ssh;
+  document.getElementById("sq").textContent = "slurm: " + (s.squeue || "…");
+  document.getElementById("mems").innerHTML = Object.entries(s.mem||{}).map(([n,kv]) => {
+    const free = +kv.FreeMem/1024, tot = +kv.RealMemory/1024, used = tot ? (1-free/tot)*100 : 0;
+    return `<span class="mem">${n.replace(/^.*-(gpu-\d+)$/, "$1")} <span class="bar ${free<200?"low":""}"><i style="width:${used.toFixed(0)}%"></i></span> ${free.toFixed(0)} GiB free · load ${kv.CPULoad}</span>`;
+  }).join(" ");
+}
+
+let es;
+function connect(){
+  if (es) es.close();
+  const qs = new URLSearchParams({n: HIST.value, noise: document.getElementById("noise").checked ? "1" : "0", err: document.getElementById("erronly").checked ? "1" : "0"});
+  es = new EventSource("/events?" + qs);
+  es.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.t === "snapshot") {
+      totals = m.s.totals || {};
+      buildLayout(m.f);
+      for (const [k, arr] of Object.entries(m.b)) { const st = paneState(k); st.lines = []; st.errs = 0; arr.forEach(l => track(st, l)); }
+      rerender(); setStatus(m.s); return;
+    }
+    const touched = new Set();
+    for (const e of m.e) {
+      if (e.t === "line") { const st = panes[e.k]; if (!st) continue; track(st, e.l); add(st, e.l); touched.add(st); }
+      else if (e.t === "status") { setStatus(e.s); if (e.s.totals) { totals = e.s.totals; Object.values(panes).forEach(refresh); } }
+      else if (e.t === "files") { buildLayout(e.f); files.forEach(f => refresh(paneState(f[0]))); }
+      else if (e.t === "reset") e.k.forEach(k => { const st = panes[k]; if (st) { st.lines = []; st.errs = 0; st.log.textContent = ""; } });
+    }
+    touched.forEach(refresh);
+  };
+  es.onerror = () => { document.getElementById("ssh").textContent = "viewer: reconnecting…"; };
+}
+connect();
+
+const root = document.documentElement;
+try { const t = localStorage.getItem("lw-theme"); if (t) root.dataset.theme = t; } catch {}
+document.getElementById("theme").onclick = () => { root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light"; try { localStorage.setItem("lw-theme", root.dataset.theme); } catch {} };
+</script>
+</body>
+</html>

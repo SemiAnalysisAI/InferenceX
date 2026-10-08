@@ -1,3 +1,6 @@
 **/__pycache__/**
 **/.coverage
+.venv/
+.infx-tooling/
+dist/
 experimental/multiturn/vllm_benchmark/results/

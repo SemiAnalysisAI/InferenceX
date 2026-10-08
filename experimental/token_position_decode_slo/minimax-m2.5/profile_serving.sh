@@ -3,7 +3,7 @@
 # Usage: ./profile_serving.sh <server_url>
 # Example: ./profile_serving.sh http://slurm-h200-205-057:8000
 
-set -euo pipefail
+set -eo pipefail
 
 SERVER_URL="${1:?Usage: $0 <server_url>}"
 MODEL="MiniMaxAI/MiniMax-M2.5"
@@ -22,7 +22,6 @@ echo "Warmups:   $NUM_WARMUPS"
 echo "Profiled:  $NUM_PROFILE requests"
 echo ""
 
-# Wait for server health
 echo "Checking server health..."
 while ! curl -sf "${SERVER_URL}/health" > /dev/null; do
     echo "Server not ready, retrying in 10s..."
@@ -30,7 +29,7 @@ while ! curl -sf "${SERVER_URL}/health" > /dev/null; do
 done
 echo "Server is healthy."
 
-# Single run: warmup happens before profiler starts (handled by benchmark script)
+# Warmup runs before the profiler starts (handled by benchmark_serving_random.py).
 echo ""
 echo "=== Running warmup ($NUM_WARMUPS) + profiled ($NUM_PROFILE) requests ==="
 python3 benchmark_serving_random.py \

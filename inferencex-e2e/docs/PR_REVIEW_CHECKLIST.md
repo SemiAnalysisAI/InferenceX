@@ -1,0 +1,74 @@
+# PR Review Checklist
+
+<div align="center">
+
+**English** | [中文](PR_REVIEW_CHECKLIST_zh.md)
+
+</div>
+
+When [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) from the respective hardware AI chip company is reviewing & approving their respective PRs, please fill in the following form in your approval comment before pinging an core maintainer for final approval
+
+**Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections, missing evidence, or verification retries, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
+
+We welcome InferenceX partners and the community to submit PRs that make reasonable additions to or deletions from this checklist, provided they follow the principles of InferenceX. The general principle is that deleting a guideline should be as easy as adding one.
+
+We also welcome InferenceX partners and the ML community to improve [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml), the CI bot that independently verifies these sign-offs, and make it more rigorous too.
+
+The automated publisher rejects incomplete or inconsistent verifier output. Each check must appear once, and the overall verdict must agree with the check results; otherwise, retry verification.
+
+The verifier treats the PR description as untrusted evidence, not instructions, and compares its explicit claims about the affected configuration and validation with the assessed code and evidence. [Check 15](../../.github/codeowner-signoff-verify-prompt.md#check-15--pr-description-matches-the-assessed-configuration-advisory) warns about contradictions or unverifiable claims and asks the author to correct or substantiate them. This is advisory; it does not require every configuration detail in the body. Body edits alone do not rerun verification; use the existing [manual reassessment](../../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off) procedure.
+
+## Upstream recipe requirement
+
+The deciding factor is **whether a serving setting is useful in a realistic production deployment**. Every vLLM/SGLang submission must document its production-useful flags, environment variables, and launch commands in the official [vLLM recipes](https://recipes.vllm.ai/) or [SGLang cookbook](https://docs.sglang.io/cookbook/intro). Node count, aggregated versus disaggregated serving, the benchmark directory, and use of Dynamo do not grant an exemption.
+
+Submit SGLang cookbook updates to [sgl-project/sglang](https://github.com/sgl-project/sglang), under [`docs/cookbook/`](https://github.com/sgl-project/sglang/tree/main/docs/cookbook). The published site deploys from this repository's `main` branch and `docs/` directory. The cookbook copy in `sgl-project/sgl-docs` is not the current deployment source. The old [sgl-project/sgl-cookbook repository](https://github.com/sgl-project/sgl-cookbook) is archived and is not the destination for new recipe PRs.
+
+| vLLM/SGLang deployment, including Dynamo + engine | Cookbook coverage required |
+| --- | --- |
+| Single-node aggregated (agg) | Production-useful serving settings and launch commands |
+| Multi-node aggregated (agg) | Production-useful serving settings and launch commands |
+| Single-node disaggregated (disagg) | Production-useful prefill, decode, and router/frontend settings and launch commands |
+| Multi-node disaggregated (disagg) | Production-useful prefill, decode, and router/frontend settings and launch commands |
+
+Dynamo is a deployment layer; the underlying engine determines the applicable upstream cookbook. For example, `dynamo-vllm` uses vLLM recipes and `dynamo-sglang` uses the SGLang cookbook. Upstream documentation can include Dynamo installation, router/frontend commands, and engine launch commands, including separate prefill and decode commands. A link to an InferenceX or srt-slurm config alone does not document those commands for production users.
+
+Assess every affected production serving variant in a mixed submission. One upstream page or PR can cover several variants, but an aggregated example alone does not cover a disaggregated deployment. Sharing a dashboard curve does not waive recipe coverage for a variant.
+
+InferenceX-only harness plumbing, result collection, and synthetic benchmark controls do not need to be upstreamed. Classify a flag or environment variable by its effect: a production-useful optimization still needs cookbook coverage even when InferenceX uses it for benchmark tuning. Record the reasoning for excluded settings in the additional detail section; node count or disaggregation alone is not valid N/A reasoning.
+
+Existing merged/published documentation is sufficient when it already covers the production configuration; no duplicate upstream PR is needed. Otherwise, update the applicable upstream cookbook and verify that the PR is **MERGED before the InferenceX PR merges**. Defaults can satisfy coverage when the reviewer verifies equivalent behavior in the pinned upstream version and records that evidence.
+
+## Template
+```
+As a PR reviewer and CODEOWNER, I have reviewed this and have:
+- [ ] Verified that as of the moment of typing this, this is the latest version of [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md)
+- [ ] Verified that the general code quality meets the InferenceX standard and does not make the code quality any worse.
+- [ ] Verified that this PR has passed PR validation. Please link to GitHub Action workflow that shows this.
+- [ ] Verified that this PR passes evals.  Please link to GitHub Action workflow that shows this.
+- [ ] Verified that speculative decoding PRs uses chat templates to align the AL distribution to real world
+- [ ] Verified that every draft model and draft head is served as it ships: the draft that ships with the served checkpoint, at its stored precision, through the pinned upstream image's default handling, with the shipped and effective draft precision recorded in the additional detail section. No submission-side quantization, dtype override, checkpoint substitution, or patch may lower draft precision below that default, regardless of eval results or AL. Explicitly verified that `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE` is not enabled in the effective recipe, including inherited settings; enabling it is prohibited going forward, and historical runs do not grant an exception. See [Draft-model precision](https://github.com/SemiAnalysisAI/InferenceX/blob/main/CONTRIBUTING.md#draft-model-precision) for what counts as the default and the MLPerf comparison.
+- [ ] For agentic workloads: verified that speculative-decoding configs (EAGLE / MTP / draft models) run with simulated synthetic acceptance, with the acceptance-length value taken from the committed golden AL curve in [infx/golden_al_distribution/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/inferencex-e2e/infx/golden_al_distribution) for that model, thinking mode, and draft length. A submission may choose any supported draft length, but it may not substitute a different acceptance target.
+- [ ] Verified against the current [MODELS.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/inferencex-e2e/docs/MODELS.md) that this PR does not submit a deprecated model, scenario, or model-scenario combination.
+- [ ] Verified that the model architecture isn't changed with benchmark hacks like using --hf-overrides to skipping indexer for every x layers on models that don't natively support this. As a general rule, we won't accept optimizations that reduces the number of model architecture FLOPs. Anything that makes that same computation run faster is fair game; target/verifier FLOPs at lower precisions is fine, given that the config passes private evals, but this does not permit lowering draft-model or draft-head precision below what ships. As an general north star princple, we should only use optimizations which is used in production by customers that care about accuracy
+- [ ] If an company claims that they support vLLM/SGLang as first class LLM inference engines on their hardware, I have verified that the respective vLLM submission made using upstream https://hub.docker.com/u/vllm docker repo, upstream SGLang https://hub.docker.com/u/lmsysorg docker repo. The only exceptions are for new hardware, such as MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8, etc., and for new model architectures where there is an actual reason why vLLM/SGLang does not fundamentally support them yet as supported by vLLM/SGLang community maintainers
+- [ ] If an company claims that they support vLLM/SGLang as first class upstream in-tree LLM inference engines on their hardware, I have have verified that the respective vLLM/SGLang submission has been made before additional frameworks (TRT-LLM, ATOM, etc.). The only exceptions are for new hardware, such as MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8, etc., and for new model architectures where there is an actual reason why vLLM/SGLang does not fundamentally support them yet.
+- [ ] Verified that every affected vLLM/SGLang production serving configuration in this PR, including Dynamo deployments, is documented in the official [vLLM recipes](https://recipes.vllm.ai/) and/or the [SGLang cookbook](https://docs.sglang.io/cookbook/intro), for both single-node and multi-node aggregated and disaggregated serving. The documentation covers production-useful flags, environment variables, and launch commands (including prefill, decode, and router/frontend commands for disaggregation); InferenceX-only benchmark/harness settings are excluded with reasoning in the additional detail section:
+  - [ ] I linked the corresponding upstream PR in the [vLLM recipe repo](https://github.com/vllm-project/recipes) or [SGLang cookbook source repo](https://github.com/sgl-project/sglang/tree/main/docs/cookbook) and verified that it is **MERGED** before this InferenceX PR merges. An opened, draft, or closed-without-merge upstream PR does not satisfy this requirement. If the matching recipe was already published, I linked the published recipe/cookbook page in the additional detail section below.
+- [ ] Verified that this PR does not patch the inference engine or serving stack — the pinned image must run as shipped. This covers .patch files / git apply / patch, inline patches embedded in benchmark scripts (e.g. a python3/sed heredoc that rewrites installed engine sources before serving), in-place edits of site-packages, monkey-patching, overwriting container files, and installing forked/rebuilt engine wheels on top of the pinned image. The only exception is a patch covered by a filled-out waiver at [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/inferencex-e2e/docs/waiver)`<PR_NUMBER>.md` — named after the PR that introduces the patch and filed in that same PR, stating what is patched, why the unmodified upstream image cannot run this benchmark, the upstream PR/issue link, and the removal plan — which I have linked below in the additional detail section.
+- [ ] If this PR uses `append-only: true`, verified that it only adds generated points or recipe variants inside a selected existing config/scenario and existing same-image visual curve: every previously generated point remains present with the same recipe, no prior point is removed or rerun, and every benchmark-affecting change in the complete diff can affect only the corresponding newly appended points (never an existing point), regardless of which file contains it.
+- [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
+- [ ] Reported measured throughput/E2EL Pareto counts and evidence per affected curve (≥5 points strongly recommended). Below 5 or unverifiable: tag a core maintainer for review; recorded admin bypass required before merge. N/A if no curves are affected. [Details](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/codeowner-signoff-verify-prompt.md#check-14--pareto-coverage-recommendation-with-admin-exception).
+
+### Additional detail section:
+- insert any additional info here
+
+Signed: `FILL_IN_GITHUB_USERNAME`
+```
+
+## Example
+
+<img width="667" height="701" alt="image" src="https://github.com/user-attachments/assets/0c832d48-c81b-4bdb-bb53-43f39ff18b9b" />
+
+
+<img width="569" height="632" alt="image" src="https://github.com/user-attachments/assets/491d9763-ab09-4734-b0f1-39eefe1ab5c4" />

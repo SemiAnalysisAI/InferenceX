@@ -8,18 +8,16 @@
 #SBATCH --output=/home/kimbo/inferperf_kimi-k2/logs/bmk-client.log
 #SBATCH --mem=16G
 
-set -euo pipefail
+set -eo pipefail
 
 MODEL="moonshotai/Kimi-K2-Thinking"
 SERVER_URL=$(cat /logs/server_info.txt)
 echo "Server URL: $SERVER_URL"
 
-# === Sweep Configuration ===
 INPUT_LENS=(1024 2048 4096 6144 8192 10240 12288 14336 16384)
 OUTPUT_LEN=128
 CONCURRENCY_LEVELS=(4 8 16 32 48 64)
 
-# === Run Sweep ===
 for INPUT_LEN in "${INPUT_LENS[@]}"; do
     for MAX_CONC in "${CONCURRENCY_LEVELS[@]}"; do
         NUM_WARMUPS=$((MAX_CONC * 2))

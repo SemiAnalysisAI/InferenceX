@@ -2,27 +2,31 @@ name: Trusted External Sweep Dispatch
 run-name: Trusted external sweep - PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}
 
 # This workflow is intentionally control-plane only. It never checks out or
-# executes pull-request code. A write-authorized maintainer applies one primary
+# executes pull-request code. A write-authorized collaborator applies one primary
 # sweep label to approve the exact external head SHA, then this trusted event
 # dispatches the existing e2e workflow from main with repository secrets.
-on:
-    pull_request_target:
+# Each authorized label event approves an exact PR head; no event may cancel another.
+on: # zizmor: ignore[concurrency-limits]
+    # Control plane only: verifies writer permission and the exact labeled head, never executes PR code.
+    pull_request_target: # zizmor: ignore[dangerous-triggers]
         branches:
             - main
         types:
             - labeled
 
-permissions:
-    actions: write
-    contents: read
-    pull-requests: write
+permissions: {}
 
 jobs:
     dispatch:
+        name: dispatch
+        permissions:
+            actions: write # Dispatch authorized sweeps.
+            contents: read
+            pull-requests: write # Publish PR feedback.
         if: >-
             github.event.pull_request.head.repo.full_name != github.repository &&
             contains(
-              fromJson('["sweep-enabled","full-sweep-enabled","non-canary-full-sweep-enabled","full-sweep-fail-fast","full-sweep-fail-fast-no-canary"]'),
+              fromJson('["full-sweep-enabled","non-canary-full-sweep-enabled","full-sweep-fail-fast"]'),
               github.event.label.name
             )
         runs-on: ubuntu-latest
@@ -32,24 +36,27 @@ jobs:
               with:
                   github-token: ${{ github.token }}
                   script: |
-                      const trustedPermissions = new Set(['admin', 'maintain', 'write']);
                       const primaryLabels = new Set([
-                        'sweep-enabled',
                         'full-sweep-enabled',
                         'non-canary-full-sweep-enabled',
                         'full-sweep-fail-fast',
-                        'full-sweep-fail-fast-no-canary',
                       ]);
 
-                      const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+                      const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
                         owner: context.repo.owner,
                         repo: context.repo.repo,
                         username: context.actor,
                       });
-                      if (!trustedPermissions.has(permission.data.permission)) {
+                      if (typeof access?.permission !== 'string' || !access.permission ||
+                          typeof access?.role_name !== 'string' || !access.role_name) {
+                        throw new Error('Invalid repository permission response.');
+                      }
+                      const {permission, role_name: role} = access;
+                      const trustedPermissions = ['admin', 'maintain', 'write'];
+                      if (!trustedPermissions.includes(permission) || !trustedPermissions.includes(role)) {
                         core.setFailed(
-                          `@${context.actor} has ${permission.data.permission} permission; ` +
-                          'write, maintain, or admin permission is required to authorize external code.',
+                          `@${context.actor} has repository permission "${permission}" and role "${role}"; ` +
+                          'both must be write, maintain, or admin to authorize external code.',
                         );
                         return;
                       }
@@ -82,8 +89,49 @@ jobs:
                         core.setFailed(`Expected exactly the newly applied primary sweep label; found ${primary}.`);
                         return;
                       }
-                      if (!pull.merge_commit_sha) {
+                      // GitHub recomputes the test merge commit asynchronously, so merge_commit_sha
+                      // can still describe an older head. Wait for a settled mergeable state and
+                      // require the merge commit to be built from the exact approved head.
+                      let mergePull = pull;
+                      for (let attempt = 0; attempt < 10 && mergePull.mergeable === null; attempt += 1) {
+                        await new Promise((resolve) => setTimeout(resolve, 3000));
+                        ({data: mergePull} = await github.rest.pulls.get({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          pull_number: pull.number,
+                        }));
+                      }
+                      if (mergePull.head.sha !== pull.head.sha) {
+                        core.setFailed(
+                          `The PR advanced from ${pull.head.sha} to ${mergePull.head.sha}; ` +
+                          'remove and re-add the sweep label to approve the new revision.',
+                        );
+                        return;
+                      }
+                      if (mergePull.mergeable !== true) {
+                        core.setFailed(
+                          mergePull.mergeable === null
+                            ? 'GitHub has not finished computing mergeability; re-add the label shortly.'
+                            : 'The PR does not merge cleanly into main; resolve conflicts and re-add the label.',
+                        );
+                        return;
+                      }
+                      const mergeSha = mergePull.merge_commit_sha;
+                      if (!mergeSha) {
                         core.setFailed('GitHub has not produced a merge commit; resolve conflicts and re-add the label.');
+                        return;
+                      }
+                      const {data: mergeCommit} = await github.rest.git.getCommit({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        commit_sha: mergeSha,
+                      });
+                      const mergeParents = mergeCommit.parents.map((parent) => parent.sha);
+                      if (mergeParents.length !== 2 || mergeParents[1] !== pull.head.sha) {
+                        core.setFailed(
+                          `Merge commit ${mergeSha} has parents [${mergeParents.join(', ')}], not the approved ` +
+                          `head ${pull.head.sha}; GitHub may still be recomputing it. Re-add the label shortly.`,
+                        );
                         return;
                       }
 
@@ -96,15 +144,14 @@ jobs:
                         ref: context.payload.repository.default_branch,
                         inputs: {
                           'test-name': marker,
-                          'ref': pull.merge_commit_sha,
+                          'ref': mergeSha,
                           'changelog-base-ref': pull.base.sha,
                           'changelog-head-ref': pull.head.sha,
-                          'trim-conc': String(primary[0] === 'sweep-enabled'),
+                          'trim-conc': 'false',
                           'all-evals': String(labels.includes('all-evals')),
                           'evals-only': String(labels.includes('evals-only')),
                           'fail-fast': String(primary[0].includes('fail-fast')),
                           'agentx-fast': String(labels.includes('agentx-fast')),
-                          'pr-labels-json': JSON.stringify(labels),
                         },
                       });
 

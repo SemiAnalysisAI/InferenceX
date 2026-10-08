@@ -1,0 +1,242 @@
+# Kimi-K3 MXFP4 AgentX on MI355X with ATOM DSpark, tracking ROCm/ATOM
+# recipes/Agentic-Kimi-K3.md. TP8 only: the 1.56 TB checkpoint is ~195 GB/GPU.
+#   interactive (1, 4)        DCP1, DSpark 7, GPU-resident KV.
+#   mid         (14, 16)      DCP8, DSpark 3, ReplaySSM, LMCache 128 GB/rank.
+#   throughput  (48, 56, 72)  DCP8, no draft, LMCache 128 or 192 GB/rank.
+# LMCache is ATOM's in-process lmcache_offload connector
+# (runners/srt-slurm/patches/507-lmcache-server-atom-sglang.patch).
+base:
+  schema: 2
+  name: kimik3-fp4-mi355x-atom-agentic
+  model:
+    path: hf:moonshotai/Kimi-K3
+    container: rocm/atom-dev:nightly_202609251613
+    precision: fp4
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  setup_script: kimik3-atom-dspark-draft.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3
+        trust-remote-code: true
+        # Fails closed if the chat template stops rendering a tools payload.
+        tool-call-parser: kimi_k3
+        decode-context-parallel-size: 1
+        kv_cache_dtype: fp8
+        block-size: 128
+        max-num-seqs: 32
+        max-num-batched-tokens: 8192
+        gpu-memory-utilization: 0.9
+        enable_prefix_caching: true
+        # -1 keeps the prompt-end checkpoint anchor without the fixed-interval grid.
+        state-checkpoint-interval-tokens: -1
+        level: 3
+        cudagraph-mode: FULL
+        # Global ptpc_fp8 online quantization; the trailing entries keep the BF16
+        # draft (unprefixed layers.* and context_proj) unquantized.
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj"]}'
+        method: dspark
+        draft-model: Inferact/Kimi-K3-DSpark
+        num-speculative-tokens: 7
+      env:
+        # The image bakes in a build-host proxy that nothing serves on a node.
+        HTTP_PROXY: ''
+        HTTPS_PROXY: ''
+        http_proxy: ''
+        https_proxy: ''
+        NO_PROXY: localhost,127.0.0.1,::1
+        no_proxy: localhost,127.0.0.1,::1
+        PYTHONNOUSERSITE: '1'
+        ATOM_ENABLE_REPLAYSSM: '0'
+        AITER_REUSE_IDENTICAL_COMM_GROUPS: '0'
+        AITER_LOG_LEVEL: WARNING
+        AITER_SITUV2_A4W4: '1'
+        AITER_QUICK_REDUCE_QUANTIZATION: INT4
+        AITER_FLYDSL_STAGE2_FP8: '1'
+        # Anchor-only state checkpointing.
+        ATOM_STATE_CHECKPOINT_DEMAND: '0'
+        ATOM_GDN_SSM_DTYPE: fp16
+        # FlyDSL FP8 prefill attention; ATOM defaults it off.
+        ATOM_USE_FLYDSL_FP8_PREFILL_ATTN: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: moonshotai/Kimi-K3
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      http_proxy: ''
+      https_proxy: ''
+      NO_PROXY: localhost,127.0.0.1,::1
+      no_proxy: localhost,127.0.0.1,::1
+      # Long agentic turns against a 1M context are prefill-bound on the server.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+      AIPERF_APPLY_CHAT_TEMPLATE: 'true'
+
+# One variant per point. Full graphs cover every verify batch up to 2x CONC
+# times the verify window (1 + draft tokens).
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'
+  benchmark:
+    env:
+      CONC: '4'
+
+# Mid band: DCP8 shards the KV read across all eight GPUs, ReplaySSM rebuilds
+# KDA state from the checkpoint ring, and the paged KV rides the LMCache CPU
+# tier. From concurrency 16 up, a ready prefill waits four decode passes.
+override_tp8_dcp8_c14_lmcache:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        num-speculative-tokens: 3
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112]'
+        extra-kv-connectors: &lmcache_offload
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        <<: &lmcache_env
+          PYTHONHASHSEED: '0'
+          LMCACHE_LOCAL_CPU: 'True'
+          # The offload hash block is block-size 128 x DCP 8, so the KV and the
+          # state-checkpoint grids coincide.
+          LMCACHE_CHUNK_SIZE: '1024'
+          # K3 is a hybrid; without this the paged KV never reaches the CPU tier.
+          OFFLOAD_KV_FOR_HYBRID: '1'
+          # Pin the eight ranks to the two sockets explicitly.
+          LMCACHE_NUMA_MODE: auto
+          ATOM_NUMA_BIND: '1'
+          ATOM_NUMA_NODE: 0,0,0,0,1,1,1,1
+          ATOM_AUTO_NUMA_BIND: '0'
+          OFFLOAD_PROFILE: '1'
+          # One K3 state entry is 54.78 MiB; the default 8 MiB staging buffer
+          # cannot hold it.
+          OFFLOAD_GPU_STAGING_CHUNKS: '32'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        ATOM_ENABLE_REPLAYSSM: '1'
+  benchmark:
+    env:
+      CONC: '14'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1028'
+
+override_tp8_dcp8_c16_lmcache:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        num-speculative-tokens: 3
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128]'
+        extra-kv-connectors: *lmcache_offload
+      env:
+        <<: *lmcache_env
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        ATOM_ENABLE_REPLAYSSM: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '4'
+        ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1028'
+
+# Throughput band: past the knee the draft no longer pays for itself, and
+# max-num-seqs tracks 2x CONC. 56 and 72 need the 192 GB/rank pool and reuse
+# identical AITER communicator groups.
+override_tp8_dcp8_c48_lmcache:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        method: null
+        draft-model: null
+        num-speculative-tokens: null
+        max-num-seqs: 96
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96]'
+        extra-kv-connectors: *lmcache_offload
+      env:
+        <<: *lmcache_env
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        ATOM_PREFILL_DECODE_INTERVAL: '4'
+        ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
+  benchmark:
+    env:
+      CONC: '48'
+      SPEC_DECODING: mtp
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1028'
+
+override_tp8_dcp8_c56_lmcache:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        method: null
+        draft-model: null
+        num-speculative-tokens: null
+        max-num-seqs: 112
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112]'
+        extra-kv-connectors: *lmcache_offload
+      env:
+        <<: *lmcache_env
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '4'
+        ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
+  benchmark:
+    env:
+      CONC: '56'
+      SPEC_DECODING: mtp
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1538'
+
+override_tp8_dcp8_c72_lmcache:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        method: null
+        draft-model: null
+        num-speculative-tokens: null
+        max-num-seqs: 144
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144]'
+        extra-kv-connectors: *lmcache_offload
+      env:
+        <<: *lmcache_env
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '4'
+        ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
+  benchmark:
+    env:
+      CONC: '72'
+      SPEC_DECODING: mtp
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1538'

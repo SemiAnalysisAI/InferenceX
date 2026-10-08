@@ -1,0 +1,146 @@
+[
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 1,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  },
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 16,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  },
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 128,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  },
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  },
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 1,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  },
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 16,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  },
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 128,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  },
+  {
+    "type": "moe_gemm",
+    "name": "Kimi K3 (vLLM benchmark profile)",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 3072,
+      "num_experts": 896,
+      "top_k": 16,
+      "dtype_act": "bf16",
+      "dtype_weight": "bf16",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    }
+  }
+]
