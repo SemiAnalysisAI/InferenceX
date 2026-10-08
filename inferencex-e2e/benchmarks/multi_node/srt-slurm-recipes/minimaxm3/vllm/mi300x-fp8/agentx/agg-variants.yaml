@@ -57,6 +57,7 @@ base:
         max-model-len: 1048576
         language-model-only: true
         enable-prefix-caching: true
+        enable-prompt-tokens-details: true
         attention-backend: TRITON_ATTN
         kv-cache-dtype: fp8
         tool-call-parser: minimax_m3

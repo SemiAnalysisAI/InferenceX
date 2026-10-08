@@ -12,7 +12,7 @@ frontend:
   container_image: vllm/vllm-router@sha256:9321abfa55f5d75d1bfce51a4a9835824ef6a5c73731d6ea65b3fc5402d85354
   enable_multiple_frontends: false
   args:
-    policy: cache_aware
+    policy: consistent_hash
 engine:
   type: vllm
   connector: null
@@ -52,6 +52,7 @@ roles:
       attention-backend: TRITON_ATTN
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
       enable-prefix-caching: true
+      enable-prompt-tokens-details: true
       enable-chunked-prefill: true
       max-model-len: 1048576
       max-num-batched-tokens: 16384
@@ -79,5 +80,6 @@ benchmark:
     KV_OFFLOADING: none
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     AIPERF_APPLY_CHAT_TEMPLATE: "true"
+    AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
