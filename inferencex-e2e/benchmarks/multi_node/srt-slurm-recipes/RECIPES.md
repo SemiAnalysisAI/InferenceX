@@ -72,13 +72,15 @@ Recipes do not hardcode host DRAM sizes either. A DRAM point's budget, the matri
 
 References resolve to integers, or to decimal strings in env values and argument lists (e.g. after `--l1-size-gb`), including whole values inside JSON object strings such as `kv-transfer-config`. Per-rank pools take the `per-gpu` sizes, and Mooncake `global_segment_size` takes bytes because it reads `GB` as GiB. Unknown names, embedded references and references on a point without a DRAM budget fail. SimpleCPU, LMCache CPU and `--l1-size-gb` sizes must be references; measured HiCache, TRT-LLM host-cache and Mooncake sizes may stay literal if they fit the node's share. When a backend allocates several pools from the budget, such as the KV and Mamba HiCache pools of a hybrid model, the master's `dram-utilization` sizes one of them.
 
+Recipes do not hardcode cluster hardware facts: a value `'@fabric.<name>'`, anywhere in the recipe, becomes the job cluster's `srt-slurm.fabric` field after binding (lists comma-joined; fields in [CONFIGS.md](../../../configs/CONFIGS.md#runners)). A name the schema does not define, a reference inside a longer string, or a field the cluster does not set fails before submission; matrix generation already fails the variant a row selects when any cluster its runner label reaches lacks the field. Nothing resolves references before launch: the recipe fingerprint hashes them as written, so it stays cluster-independent. A value a recipe chooses on purpose, such as a permuted rail order or a subset of the devices, stays literal.
+
 Inspect what the launcher submits without a cluster:
 
 ```bash
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client paths, GPUs per node); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
+It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client paths, GPUs per node); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Fabric references take that cluster's facts; when the label spans several clusters they stay references. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
 
 ## Recipe fingerprints
 
