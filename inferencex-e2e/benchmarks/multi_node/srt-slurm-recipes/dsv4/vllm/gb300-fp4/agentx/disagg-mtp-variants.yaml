@@ -39,7 +39,7 @@ base:
       options:
         store_config:
           metadata_server: "P2PHANDSHAKE"
-          global_segment_size: "180GB"
+          global_segment_size: '@dram.per-gpu-bytes'
           local_buffer_size: "4GB"
           protocol: "rdma"
           device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
