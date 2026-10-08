@@ -21,9 +21,11 @@ from typing import Any
 
 import yaml
 
-from infx.clusters.slurm import FABRIC_REFERENCE
 from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
+
+# Defined here: srtctl's venv runs this module on Python 3.10, so it cannot import infx.clusters.
+FABRIC_REFERENCE = "@fabric."
 
 # Keyed by (agentic, multinode).
 SHARED_BLOCKS = {
