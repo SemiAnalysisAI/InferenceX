@@ -78,6 +78,12 @@ uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir
 
 It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client paths, GPUs per node); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
 
+## Recipe fingerprints
+
+The planner gives every benchmark row a `recipe-fingerprint`, a SHA-256 of the row's matrix fields (all but `conc`, `exp-name` and the fingerprint) together with the concrete recipe the launcher submits for it. That recipe is the fragment composed with its shared block (and the telemetry block for a `power: true` row), the row's variant, and the bound model, image, precision and, for fixed sequences, lengths. Concurrency values (`benchmark.env.CONC`, `CONC_LIST`, `benchmark.concurrencies`) and the job `name` stay out, as does everything the launcher adds for a cluster (staged checkpoint and container paths, mounts, AgentX client cache paths, the exporter port, fabric settings), so a recipe keeps one fingerprint across the concurrencies it serves and the clusters that run it. An `eval-srt-recipe` only contributes its path, because eval-only runs produce no benchmark results. Rows without an srt-slurm recipe hash their matrix fields alone.
+
+The planner selects variants without srtctl ([`variants.py`](../../../infx/srt_slurm/variants.py)), the way the launcher does, so a row that no variant serves fails planning instead of its launch.
+
 ## Migration and validation
 
 Install the shared pin in an isolated environment, then use its CLI:
