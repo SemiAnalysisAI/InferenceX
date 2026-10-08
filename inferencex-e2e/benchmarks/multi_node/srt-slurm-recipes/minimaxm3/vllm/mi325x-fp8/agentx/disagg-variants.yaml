@@ -32,6 +32,7 @@ base:
     VLLM_ENGINE_READY_TIMEOUT_S: '3600'
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
     VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+    UCX_LOG_LEVEL: info
   roles:
     prefill:
       nodes: 1
@@ -85,6 +86,15 @@ base:
       HF_HUB_CACHE: /hf_hub_cache
 
 override_1p1d_tp8_c4:
+  benchmark:
+    env:
+      CONC: '4'
+
+override_1p1d_ptep8_dtp8_c4:
+  roles:
+    prefill:
+      args:
+        enable-expert-parallel: true
   benchmark:
     env:
       CONC: '4'
