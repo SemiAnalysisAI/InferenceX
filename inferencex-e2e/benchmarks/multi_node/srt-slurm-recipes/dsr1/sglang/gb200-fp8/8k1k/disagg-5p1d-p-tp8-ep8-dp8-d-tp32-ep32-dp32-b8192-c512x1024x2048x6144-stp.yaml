@@ -160,7 +160,3 @@ roles:
       cuda-graph-max-bs: 256
       disaggregation-bootstrap-port: 30001
       disaggregation-transfer-backend: nixl
-
-benchmark:
-  env:
-    TOKENIZER: /model

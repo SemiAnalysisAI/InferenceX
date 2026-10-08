@@ -131,7 +131,3 @@ roles:
 health_check:
   max_attempts: 720
   interval_seconds: 10
-
-benchmark:
-  env:
-    TOKENIZER: /model
