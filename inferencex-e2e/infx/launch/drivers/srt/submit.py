@@ -86,8 +86,14 @@ def bind_recipe(
     power_port: int | None,
     client_env: Mapping[str, str],
 ) -> int:
-    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``."""
-    bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
+    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``.
+
+    The cluster's GPUs per node size a DRAM point's budget per GPU.
+    """
+    bind = [
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output,
+        "--gpus-per-node", str(run.cluster.gpus_per_node),
+    ]  # fmt: skip
     if power_port is not None:
         bind += ["--power-port", str(power_port)]
     for name, value in client_env.items():

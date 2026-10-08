@@ -63,7 +63,7 @@ base:
 # One variant per point. Admission is 2x CONC and the decode graph batch follows
 # it up to 128. HiCache skips non-reusable blocks and is sized in tiers: CONC 16
 # to 28 keep the 1.5x ratio, CONC 32 to 56 pin a 253 GB host pool, and CONC 64 to
-# 80 pin 400 GB. hicache-size overrides hicache-ratio where it is set.
+# 80 take the per-GPU budget. hicache-size overrides hicache-ratio where it is set.
 
 override_tp4_c1:
   roles:
@@ -343,7 +343,7 @@ override_tp4_hicache_c64:
         cuda-graph-max-bs-decode: 128
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: '@dram.per-gpu-gb'
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -362,7 +362,7 @@ override_tp4_hicache_c72:
         cuda-graph-max-bs-decode: 128
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: '@dram.per-gpu-gb'
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -381,7 +381,7 @@ override_tp4_hicache_c80:
         cuda-graph-max-bs-decode: 128
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
-        hicache-size: 400
+        hicache-size: '@dram.per-gpu-gb'
         hicache-write-policy: write_through_selective
         hicache-io-backend: kernel
         hicache-mem-layout: page_first

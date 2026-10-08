@@ -141,14 +141,13 @@ override_tp4_c30_dram:
         tensor-parallel-size: 4
         max-num-seqs: 45
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '30'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp2_c24_dram:
   roles:
@@ -159,14 +158,13 @@ override_tp2_c24_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 36
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp4_c40_dram:
   roles:
@@ -176,14 +174,13 @@ override_tp4_c40_dram:
         tensor-parallel-size: 4
         max-num-seqs: 60
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '40'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c48_dram:
   roles:
@@ -193,14 +190,13 @@ override_tp4_c48_dram:
         tensor-parallel-size: 4
         max-num-seqs: 72
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c64_dram:
   roles:
@@ -210,14 +206,13 @@ override_tp4_c64_dram:
         tensor-parallel-size: 4
         max-num-seqs: 96
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,260,264,268,272,276,280,284,288,292,296,300,304,308,312,316,320,324,328,332,336,340,344,348,352,356,360,364,368,372,376,380,384,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp2_c32_dram:
   roles:
@@ -228,14 +223,13 @@ override_tp2_c32_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 48
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '749'
 override_tp2_c40_dram:
   roles:
     agg:
@@ -245,11 +239,10 @@ override_tp2_c40_dram:
         gpu-memory-utilization: 0.92
         max-num-seqs: 60
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,256,512,1024,2048]}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":804232626176,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes","lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '40'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '749'
