@@ -42,13 +42,31 @@ Recipes use `schema: 2`, `engine`, and `roles`. Each worker role owns its node c
 | `roles.prefill.args.tp-size` (SGLang) | `prefill.tp` |
 | `roles.prefill.args.ep-size` (SGLang) | `prefill.ep` |
 | `roles.prefill.args.enable-dp-attention` | `prefill.dp-attn` |
-| `benchmark.concurrencies` | `conc-list` |
+| `benchmark.concurrencies` | `conc-list` (AgentX recipes; fixed-sequence recipes are bound) |
 | Recipe directory, relative to this tree | entry-level `srt-recipe-dir` |
 | Recipe file, optionally with a `base`, `override_<name>`, or `zip_override_<name>[<index>]` selector | search-space `srt-recipe`; `eval-srt-recipe` for eval-only real verification |
 
 Keep the recipe and master configuration synchronized. The launcher executes the recipe; the master configuration supplies result labels and scheduling metadata. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` shares prefill nodes and contributes no additional worker nodes to scheduling.
 
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
+
+## Fixed-sequence fragments
+
+Fixed-sequence recipes, single- and multi-node, are fragments: native srt-slurm YAML holding only recipe-specific settings. At launch the fragment is composed and bound:
+
+1. The workload's shared block, [`configs/srt-recipes/fixed-sequence-single.yaml`](../../../configs/srt-recipes/fixed-sequence-single.yaml) or [`fixed-sequence-multi.yaml`](../../../configs/srt-recipes/fixed-sequence-multi.yaml), is merged under the fragment (under `base` for bundles). The fragment wins: mappings merge and lists replace.
+2. The row's selector picks the variant. A single-node variant may name its `benchmark.env.CONC`, which keeps that concurrency paired with its tuning.
+3. The binder ([`workload.py`](../../../infx/srt_slurm/workload.py)) writes the matrix point into the selected recipe: `model.path: hf:<model>`, `model.container: <image>`, `model.precision`, `benchmark.env.ISL`/`OSL`, `identity.container.image` and `identity.model.repo` when the fragment declares `identity.container`/`identity.model`, and `benchmark.concurrencies` when telemetry is enabled. Single-node recipes also get `MODEL`, `CONC`, `RANDOM_RANGE_RATIO` and `USE_CHAT_TEMPLATE` (`true` exactly when the recipe speculates). The multi-node client reads `CONC_LIST` from the job environment.
+
+A fragment that sets any of these bound keys, or `benchmark.env.CONC_LIST`, fails before submission, even when the value matches. `hf:<model>` resolves to the cluster's staged checkpoint (`models.entries`), and the master image to its staged container, so recipes no longer name aliases. AgentX recipes are not composed yet and stay complete.
+
+Inspect what the launcher submits without a cluster:
+
+```bash
+uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
+```
+
+It writes one bound recipe per fixed-sequence point and variant, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
 
 ## Migration and validation
 
