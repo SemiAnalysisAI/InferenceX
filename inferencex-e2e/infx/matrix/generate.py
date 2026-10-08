@@ -12,8 +12,9 @@ from typing import Any, Literal
 import yaml
 
 from infx.clusters import CLUSTER_LABEL_PREFIX
-from infx.clusters.slurm import FABRIC_REFERENCE, Fabric
+from infx.clusters.slurm import Fabric
 from infx.srt_slurm.variants import deep_merge, expand_variants
+from infx.srt_slurm.workload import FABRIC_REFERENCE
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
