@@ -125,3 +125,16 @@ override_1p1d_tep8_c8:
     env:
       CONC: "8"
       KV_OFFLOADING: none
+
+override_1p1d_tp8_c16:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 32
+    decode:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: "16"
+      KV_OFFLOADING: none

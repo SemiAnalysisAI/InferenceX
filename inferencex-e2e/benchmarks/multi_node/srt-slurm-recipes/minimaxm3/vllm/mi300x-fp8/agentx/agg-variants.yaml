@@ -103,3 +103,13 @@ override_tep8_c8:
     env:
       CONC: "8"
       KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: "16"
+      KV_OFFLOADING: none
