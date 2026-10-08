@@ -9475,3 +9475,14 @@
     - "Refresh the aggregated curve with TP4/EP4 points at concurrency 1, 4, 8, 16, 24 and 32, plus TP4/EP4/DP4 points at concurrency 48 and 128 behind sglang-router."
     - "Apply the point-specific prefill chunking, scheduling, admission, memory and SWA prefix-tail settings from the single-node recipe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3745
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use vLLM nightly-1a001d584244bd21829a5e5bd4a376ea141c0ce3 with the native FP8 Triton indexer cache; set CPU weight offload to 5 GiB, GPU memory utilization to 0.93, and disable the CUDA graph memory estimate."
+    - "Route the config to cluster:h100-dsxe with the staged checkpoint and its Slurm runner profile."
+    - "Configure the concurrency 6 and 8 Mooncake TCP DRAM variants with 134GB store segments, Mooncake 0.3.13.post1, GPU memory utilization of 0.85, matching 655360-token service and replay limits, and bounded connection lanes and admission settings."
+    - "Use 8 MiB transfer slices and a separate live replay error threshold while retaining final result validation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3620
