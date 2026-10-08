@@ -1054,8 +1054,8 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
   srt-recipe-dir: minimaxm3/vllm/mi300x-fp8-mtp
   scenarios:
     agentic-coding:
-    # Sizes the LMCache server's 1296 GB L1.
-    - dram-utilization: 0.7988
+    # Sizes the LMCache server's 1280 GB L1.
+    - dram-utilization: 0.7972
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 6, 8, 10], srt-recipe: agentic.yaml }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [16], srt-recipe: agentic.yaml }
