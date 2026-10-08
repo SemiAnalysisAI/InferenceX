@@ -64,8 +64,8 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC. The DRAM point runs one
-# lmcache-server service on the node with the 8 x 162 GB L1 the per-rank
-# servers used to split between them.
+# lmcache-server service on the node with an L1 of one 160 GB share of the
+# 1284 GB budget per TP rank (8 x 160 GB).
 override_tp8_c2:
   roles:
     agg:
@@ -131,7 +131,7 @@ override_tp8_c16_lmcache:
         timeout_seconds: 900
       args:
         - --l1-size-gb
-        - '1296'
+        - '1280'
         - --l1-init-size-gb
         - '10'
         - --l1-read-ttl-seconds
@@ -155,4 +155,4 @@ override_tp8_c16_lmcache:
     env:
       CONC: '16'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1298'
+      TOTAL_CPU_DRAM_GB: '1284'

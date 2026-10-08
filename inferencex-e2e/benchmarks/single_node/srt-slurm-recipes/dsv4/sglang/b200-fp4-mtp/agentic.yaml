@@ -163,7 +163,7 @@ override_tp8_hicache_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_tp8_hicache_c10:
   roles:
@@ -184,7 +184,7 @@ override_tp8_hicache_c10:
     env:
       CONC: '10'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_tp8_hicache_c16:
   roles:
@@ -205,7 +205,7 @@ override_tp8_hicache_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_dep8_hicache_c64:
   frontend:
@@ -251,7 +251,7 @@ override_dep8_hicache_c64:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
 
@@ -299,7 +299,7 @@ override_dep8_hicache_c96:
     env:
       CONC: '96'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
 
@@ -347,7 +347,7 @@ override_dep8_hicache_c128:
     env:
       CONC: '128'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
 
@@ -396,6 +396,6 @@ override_dep8_hicache_c160:
     env:
       CONC: '160'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'

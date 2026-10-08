@@ -118,7 +118,7 @@ override_tp4_c5:
   benchmark:
     env:
       CONC: '5'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c10:
   roles:
@@ -144,7 +144,7 @@ override_tp4_c10:
   benchmark:
     env:
       CONC: '10'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c15:
   roles:
@@ -175,7 +175,7 @@ override_tp4_c15:
   benchmark:
     env:
       CONC: '15'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c20:
   roles:
@@ -211,7 +211,7 @@ override_tp4_c20:
   benchmark:
     env:
       CONC: '20'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c25:
   roles:
@@ -247,7 +247,7 @@ override_tp4_c25:
   benchmark:
     env:
       CONC: '25'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c30:
   roles:
@@ -283,7 +283,7 @@ override_tp4_c30:
   benchmark:
     env:
       CONC: '30'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c35:
   roles:
@@ -318,7 +318,7 @@ override_tp4_c35:
   benchmark:
     env:
       CONC: '35'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c40:
   roles:
@@ -354,7 +354,7 @@ override_tp4_c40:
   benchmark:
     env:
       CONC: '40'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c45:
   roles:
@@ -388,7 +388,7 @@ override_tp4_c45:
   benchmark:
     env:
       CONC: '45'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp8_c1:
   roles:
@@ -405,7 +405,7 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: '1'
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_tp8_c5:
   roles:
@@ -426,4 +426,4 @@ override_tp8_c5:
   benchmark:
     env:
       CONC: '5'
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
