@@ -146,3 +146,13 @@ override_tp8_c18:
   benchmark:
     env:
       CONC: '18'
+
+override_tep8_c16:
+  roles:
+    agg:
+      args:
+        enable-expert-parallel: true
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'

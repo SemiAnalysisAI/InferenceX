@@ -9496,6 +9496,6 @@
     - agentic-coding
   description:
     - "Compare MiniMax-M3 MXFP8 AgentX aggregation and NIXL disaggregation on MI325X using the same pinned October 8 vLLM ROCm nightly."
-    - "Compare TP8 and TP8/EP8 prefill workers with TP8 decode behind the cache-aware vLLM Router, with three-token EAGLE3 and automatically selected golden acceptance."
+    - "Compare TP8 and TP8/EP8 aggregation and disaggregation, using the cache-aware vLLM Router for prefill/decode workers, three-token EAGLE3, and automatically selected golden acceptance."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3843

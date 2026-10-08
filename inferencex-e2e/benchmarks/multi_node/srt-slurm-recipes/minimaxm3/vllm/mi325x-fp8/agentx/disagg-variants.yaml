@@ -90,11 +90,28 @@ override_1p1d_tp8_c4:
     env:
       CONC: '4'
 
-override_1p1d_ptep8_dtp8_c4:
+override_1p1d_tp8_c16:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 32
+    decode:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_1p1d_tep8_c16:
   roles:
     prefill:
       args:
         enable-expert-parallel: true
+        max-num-seqs: 32
+    decode:
+      args:
+        enable-expert-parallel: true
+        max-num-seqs: 32
   benchmark:
     env:
-      CONC: '4'
+      CONC: '16'
