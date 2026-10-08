@@ -7,7 +7,7 @@ base:
   name: glm5.2-fp8-b300-sglang-agentic
   model:
     path: hf:zai-org/GLM-5.2-FP8
-    container: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
+    container: lmsysorg/sglang@sha256:2d53500cb72184020c59fe16aab3512d53b1aa8ee6195bfb2aaf5855d58099df
     precision: fp8
   resources:
     gpu_type: b300
@@ -70,14 +70,15 @@ base:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2399'
 
-# One variant per point: admission is 2x CONC and the graph batch matches it,
-# capped at 64.
+# Tune admission and MTP depth per point; keep graph maxima at 2x CONC.
 override_c1:
   roles:
     agg:
       args:
         max-running-requests: 2
         cuda-graph-max-bs: 2
+        speculative-num-steps: 6
+        speculative-num-draft-tokens: 7
   benchmark:
     env:
       CONC: '1'
@@ -86,8 +87,10 @@ override_c4:
   roles:
     agg:
       args:
-        max-running-requests: 8
+        max-running-requests: 3
         cuda-graph-max-bs: 8
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
   benchmark:
     env:
       CONC: '4'
@@ -106,8 +109,10 @@ override_c12:
   roles:
     agg:
       args:
-        max-running-requests: 24
+        max-running-requests: 5
         cuda-graph-max-bs: 24
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '12'
@@ -116,8 +121,12 @@ override_c16:
   roles:
     agg:
       args:
-        max-running-requests: 32
+        max-running-requests: 7
         cuda-graph-max-bs: 32
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+        prefill-decode-interval: 8
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '16'
