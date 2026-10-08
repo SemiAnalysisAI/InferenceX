@@ -9397,5 +9397,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update B200 MiniMax-M3 to latest vLLM nightly with CUTLASS MSA decode."
+    - "Enable CUTLASS MSA decode for B200 MiniMax-M3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3800
