@@ -36,8 +36,8 @@ if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.clusters.slurm import SrtSlurmSettings
 
-# A cold Pyxis pull of the ~900 MiB AMD exporter image took 15-24 s on mi355x and
-# over srtctl's 30 s default on mi325x (every job of run 37847888510 failed readiness).
+# A cold Pyxis pull of the ~900 MiB AMD exporter image took 15-24 s on mi355x
+# (first HTTP 200 in runs 37787939175/37787944521), close to srtctl's 30 s default.
 EXPORTER_STARTUP_TIMEOUT_S = 300.0
 
 
