@@ -9418,4 +9418,4 @@
   description:
     - "Tune GLM-5.2 FP8 B300 SGLang MTP depth, admission caps, and HiCache scheduling per concurrency."
     - "Pin the SGLang image by digest."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3836
