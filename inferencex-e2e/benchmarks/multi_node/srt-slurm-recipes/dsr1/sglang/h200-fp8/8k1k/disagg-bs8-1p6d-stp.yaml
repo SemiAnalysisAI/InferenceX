@@ -102,7 +102,3 @@ roles:
       mem-fraction-static: 0.82
       max-running-requests: 16
       cuda-graph-max-bs: 16
-
-benchmark:
-  env:
-    TOKENIZER: /model
