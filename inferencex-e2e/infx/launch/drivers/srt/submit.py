@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
+BOUND_RECIPE = "recipe.yaml"
 MULTINODE_EVAL_COMMAND = (
     '["env", "HF_HUB_OFFLINE=0", "HF_DATASETS_OFFLINE=0", "TRANSFORMERS_OFFLINE=0", '
     '"MODEL_PATH=/model", "bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", '
@@ -75,6 +76,12 @@ def bound_arguments(arguments: Path) -> tuple[str, list[str]]:
     """The selected recipe and srtctl runtime arguments the binder wrote (NUL-separated)."""
     selected, *runtime_args = arguments.read_bytes().decode().split("\0")[:-1]
     return selected, runtime_args
+
+
+def bind_recipe(run: SrtRun, checkout: Checkout, staged: str, output: str) -> int:
+    """Compose and bind the staged fixed-sequence fragment into ``output``."""
+    bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
+    return proc.run(bind, env=run.env, cwd=checkout.root).returncode
 
 
 def apply(
