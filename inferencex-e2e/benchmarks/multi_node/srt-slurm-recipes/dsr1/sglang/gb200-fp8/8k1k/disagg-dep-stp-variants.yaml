@@ -115,10 +115,6 @@ base:
         disaggregation-bootstrap-port: 30001
         disaggregation-transfer-backend: nixl
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
 override_5p1d_p_tp8_ep8_dp8_d_tp32_ep32_dp32_c512x1024x2048x6144:
   name: "gb200-8k1k-fp8-mid-tpt"
   roles:

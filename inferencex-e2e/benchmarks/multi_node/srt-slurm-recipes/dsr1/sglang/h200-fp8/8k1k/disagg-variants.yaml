@@ -60,10 +60,6 @@ base:
         disaggregation-mode: "decode"
         disaggregation-transfer-backend: nixl
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
 override_bs4_1p7d_stp:
   name: "bs4-1p7d-h200-fp8"
   roles:

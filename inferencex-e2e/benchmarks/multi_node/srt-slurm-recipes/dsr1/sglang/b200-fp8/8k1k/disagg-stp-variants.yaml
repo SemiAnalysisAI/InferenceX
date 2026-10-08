@@ -94,10 +94,6 @@ base:
     max_attempts: 360
     interval_seconds: 10
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
 override_1p3d_p_tp8_dp8_d_tp8_b32_c128:
   name: b200-fp8-stp-low-latency-tp8-1p-3d
   roles:
