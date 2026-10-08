@@ -116,8 +116,8 @@ override_tp8_c5:
 # per rank. The master leaves the 414 GiB checkpoint page cache, the 26 GiB CPU
 # weight offload and the 4 GiB local buffer per GPU outside the budget.
 override_tp8_c6_dram:
-  # The worker's Mooncake client and the master run the same pinned release.
-  setup_script: vllm-mooncake-0.3.11.sh
+  # The worker's Mooncake client and the master install the master config's release.
+  setup_script: vllm-mooncake.sh
   services:
     - name: mooncake-master
       type: mooncake-master
@@ -125,10 +125,7 @@ override_tp8_c6_dram:
       readiness:
         port: 8700
         timeout_seconds: 900
-      preamble: >-
-        pip_install=(python3 -m pip install);
-        python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
-        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+      preamble: bash /configs/vllm-mooncake.sh
       args:
         - '--eviction_high_watermark_ratio=0.80'
         - '--eviction_ratio=0.10'
@@ -158,8 +155,8 @@ override_tp8_c6_dram:
       KV_OFFLOADING: dram
 
 override_tp8_c8_dram:
-  # The worker's Mooncake client and the master run the same pinned release.
-  setup_script: vllm-mooncake-0.3.11.sh
+  # The worker's Mooncake client and the master install the master config's release.
+  setup_script: vllm-mooncake.sh
   services:
     - name: mooncake-master
       type: mooncake-master
@@ -167,10 +164,7 @@ override_tp8_c8_dram:
       readiness:
         port: 8700
         timeout_seconds: 900
-      preamble: >-
-        pip_install=(python3 -m pip install);
-        python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages && pip_install+=(--break-system-packages);
-        "${pip_install[@]}" --no-cache-dir --no-deps --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+      preamble: bash /configs/vllm-mooncake.sh
       args:
         - '--eviction_high_watermark_ratio=0.80'
         - '--eviction_ratio=0.10'

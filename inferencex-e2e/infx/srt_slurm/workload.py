@@ -14,6 +14,7 @@ import contextlib
 import json
 import math
 import os
+import re
 from collections.abc import Callable, Iterator, Mapping
 from copy import deepcopy
 from pathlib import Path
@@ -22,6 +23,7 @@ from typing import Any
 import yaml
 
 from infx.config import repository_root
+from infx.results.metadata import parse_component_metadata
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
 # Defined here: srtctl's venv runs this module on Python 3.10, so it cannot import infx.clusters.
@@ -75,6 +77,26 @@ DRAM_SIZES = frozenset({
 })  # fmt: skip
 # srt-slurm takes env values and argument list items as strings.
 TEXT_MAPPINGS = frozenset({"env", "environment"})
+# Repo setup scripts that install a component the master config versions: its master field
+# and name. The binder writes that version as VERSION_ENV[field] wherever the script runs.
+INSTALLERS = {
+    "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
+    "kimik3-b300-mooncake.sh": ("kv-offload-backend", "mooncake"),
+    "lmcache-mp-rocm.sh": ("kv-offload-backend", "lmcache"),
+    "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
+    "vllm-router.sh": ("router", "vllm-router"),
+}
+VERSION_ENV = {"router": "ROUTER_VERSION", "kv-offload-backend": "KV_OFFLOAD_BACKEND_VERSION"}
+# The workflow exports each master field as JSON.
+_METADATA_ENV = {"router": "ROUTER_METADATA", "kv-offload-backend": "KV_OFFLOAD_BACKEND_METADATA"}
+# A pin of these packages in pip-runtime-deps.sh's SETUP_PIP_PACKAGES must be the master's.
+PIP_COMPONENTS = {"vllm-router": ("router", "vllm-router")}
+# srtctl runs setup_script from its checkout's configs/ (these trees staged together) or
+# configs/patches/, and only warns when it finds neither.
+SETUP_SCRIPT_DIRS = (
+    Path("benchmarks/multi_node/srt-slurm-recipes/configs"),
+    Path("utils/srt-slurm/configs"),
+)
 
 
 def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict[str, Any]:
@@ -126,6 +148,23 @@ def _dram_literals(node: Any, where: str) -> Iterator[str]:
                 yield from _dram_literals(item, f"{where}[{index}]")
 
 
+def _fragment_versions(block: Any, path: str) -> list[str]:
+    """Where ``block`` sets a bound component version, in an env mapping at any depth."""
+    found = []
+    if isinstance(block, list):
+        for index, item in enumerate(block):
+            found += _fragment_versions(item, f"{path}[{index}]")
+    elif isinstance(block, Mapping):
+        for key, value in block.items():
+            where = f"{path}.{key}" if path else str(key)
+            if key in ("env", "environment") and isinstance(value, Mapping):
+                names = [name for name in VERSION_ENV.values() if name in value]
+                found += [f"{where}.{name} (= {value[name]!r})" for name in names]
+            else:
+                found += _fragment_versions(value, where)
+    return found
+
+
 def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
     """Reject a fragment that sets a bound key, even to the value the binder would write, or
     sizes host DRAM with a literal instead of the point's budget."""
@@ -141,6 +180,7 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
             present, value = _lookup(block, key)
             if present and not (single_node_variant and key in VARIANT_POINT_KEYS):
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
+        found += _fragment_versions(block, name or "")
     if found:
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher binds them"
@@ -157,6 +197,22 @@ def _block(path: Path) -> dict[str, Any]:
     if not isinstance(block, dict):
         raise ValueError(f"{path}: shared block must be a mapping")
     return block
+
+
+def check_setup_script(recipe: Mapping[str, Any], source: Path, root: Path) -> None:
+    """Fail where srtctl would only warn: a bound recipe's setup_script in none of the
+    configs/ it stages. Launch and ``infx generate`` only: planner snapshots lack the
+    srt-slurm submodule."""
+    script = recipe.get("setup_script")
+    if isinstance(script, str) and not any(
+        (root / directory / sub / script).is_file()
+        for directory in SETUP_SCRIPT_DIRS
+        for sub in ("", "patches")
+    ):
+        raise ValueError(
+            f"{source}: setup_script {script} is in none of "
+            f"{', '.join(map(str, SETUP_SCRIPT_DIRS))} or their patches/"
+        )
 
 
 def compose_recipe(
@@ -204,17 +260,61 @@ def parse_concurrencies(conc_list: str) -> list[int]:
     return values
 
 
+def _master_version(
+    environment: Mapping[str, str], component: tuple[str, str], source: Path, installer: str
+) -> str:
+    """The master version of the component ``installer`` installs; the point must declare it."""
+    field, name = component
+    variable = _METADATA_ENV[field]
+    metadata = parse_component_metadata(environment.get(variable), variable, version_optional=True)
+    if metadata is None or metadata["name"] != name or "version" not in metadata:
+        raise ValueError(
+            f"{source}: {installer} installs {name}, so the master config must declare "
+            f"{field} {{name: {name}, version: ...}}; the point has {metadata or 'none'}"
+        )
+    return metadata["version"]
+
+
+def _bind_components(bound: dict[str, Any], environment: Mapping[str, str], source: Path) -> None:
+    """Write the master version of each component a repo script installs where the script
+    runs: the top-level environment for setup_script, a service's env for its preamble
+    (services do not inherit environment). A master component that SETUP_PIP_PACKAGES pins
+    must carry the master version."""
+    if (script := bound.get("setup_script")) in INSTALLERS:
+        version = _master_version(environment, INSTALLERS[script], source, script)
+        bound.setdefault("environment", {})[VERSION_ENV[INSTALLERS[script][0]]] = version
+    for service in bound.get("services") or []:
+        for script, component in INSTALLERS.items():
+            if f"/configs/{script}" in str(service.get("preamble") or ""):
+                version = _master_version(environment, component, source, script)
+                service.setdefault("env", {})[VERSION_ENV[component[0]]] = version
+    envs = [bound.get("environment"), (bound.get("frontend") or {}).get("env")]
+    envs += [(role or {}).get("env") for role in (bound.get("roles") or {}).values()]
+    for env in envs:
+        for spec in str((env or {}).get("SETUP_PIP_PACKAGES", "")).split():
+            package = re.split(r"[^\w.-]", spec, maxsplit=1)[0]
+            component = PIP_COMPONENTS.get(re.sub(r"[-_.]+", "-", package).lower())
+            if component is None:
+                continue
+            pin = f"SETUP_PIP_PACKAGES {spec}"
+            version = _master_version(environment, component, source, pin)
+            if spec != f"{package}=={version}":
+                raise ValueError(f"{source}: {pin} is not the master {component[0]} {version}")
+
+
 def bind_workload(
     recipe: Mapping[str, Any],
     environment: Mapping[str, str],
     *,
     agentic: bool,
     multinode: bool,
+    source: Path,
     client_env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Write the matrix point's model, image, precision, concurrency, KV offloading and DRAM
-    budget and, for fixed sequences, lengths; ``client_env`` holds the launcher's benchmark
-    client paths.
+    budget, the master versions of the components repo scripts install and, for fixed
+    sequences, lengths; ``client_env`` holds the launcher's benchmark client paths and
+    ``source`` names the fragment in errors.
 
     Call after variant selection: binding a zip group would detach its concurrency
     from the tuning it pairs with. ``resolve_dram`` then sizes the recipe's host DRAM.
@@ -278,6 +378,7 @@ def bind_workload(
     # srtctl derives power-telemetry windows from benchmark.concurrencies.
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
+    _bind_components(bound, environment, source)
     return bound
 
 
@@ -301,7 +402,12 @@ def bind_multinode(
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]
     return name, bind_workload(
-        selected, environment, agentic=agentic, multinode=True, client_env=client_env
+        selected,
+        environment,
+        agentic=agentic,
+        multinode=True,
+        client_env=client_env,
+        source=Path(path),
     )
 
 
@@ -440,16 +546,18 @@ def main(argv: list[str] | None = None) -> None:
     add_fabric_argument(parser)
     args = parser.parse_args(argv)
     try:
+        root = repository_root()
         _, bound = bind_multinode(
             args.recipe,
             os.environ,
-            root=repository_root(),
+            root=root,
             power_port=args.power_port,
             client_env=dict(args.client_env),
         )
         budget = dram_budget(os.environ, multinode=True, gpus_per_node=args.gpus_per_node)
         bound = resolve_dram(bound, budget)
         bound = resolve_fabric(bound, args.fabric)
+        check_setup_script(bound, Path(args.recipe.partition(":")[0]), root)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))
     args.output.write_text(yaml.safe_dump(bound, sort_keys=False))

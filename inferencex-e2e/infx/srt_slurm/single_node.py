@@ -18,6 +18,7 @@ from infx.srt_slurm.workload import (
     BOUND_RECIPE,
     add_fabric_argument,
     bind_workload,
+    check_setup_script,
     compose_recipe,
     dram_budget,
     resolve_dram,
@@ -88,7 +89,9 @@ def select_recipe(
     errors = []
     for name, recipe in recipes:
         try:
-            recipe = bind_workload(recipe, environment, agentic=agentic, multinode=False)
+            recipe = bind_workload(
+                recipe, environment, agentic=agentic, multinode=False, source=Path(path)
+            )
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
@@ -229,6 +232,7 @@ def main() -> None:
             _, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_dram(recipe, dram_budget(os.environ, multinode=False))
             recipe = resolve_fabric(recipe, parsed.fabric)
+            check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
             # srtctl gets the bound variant, never the fragment.
             config = parsed.output.with_name(BOUND_RECIPE)
