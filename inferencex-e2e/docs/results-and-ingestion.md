@@ -476,6 +476,8 @@ are:
 | `avg_total_cpu_power_w` | Sum over sockets of window-mean Grace-side watts |
 | `total_cpu_energy_j` | Grace-side energy over the window, all sockets |
 | `avg_total_module_power_w`, `total_module_energy_j` | Module watts and energy; only when a module series exists for every socket |
+| `avg_total_cpu_rail_power_w`, `total_cpu_rail_energy_j` | ACPI `CPU Power Socket N` (cores, no SysIO) watts and energy; only when every Grace socket reports a gap-free rail |
+| `avg_total_cpu_sysio_power_w`, `total_cpu_sysio_energy_j` | ACPI `SysIO Power Socket N` watts and energy; same condition |
 
 The Grace-side keys come from the Grace socket total (or, without ACPI, the DCGM CPU rail) even
 when the module sensor is preferred, so a module reading is never published as a Grace-side one.
@@ -495,14 +497,15 @@ keys and leaves every GPU field unchanged. With `REQUIRE_POWER=1`, a recipe-decl
 window binds to the result, or the window's own contract checks failed). An overflowed CPU
 integration reuses the GPU leg's `non_finite_power_metric`, and `aggregate_result_missing` or
 `aggregate_result_unwritable` appears in both audits when the aggregate itself cannot be patched.
-The srt-slurm source pin (`098e15ac`) writes the wide format and does not classify the
-Module label, so these packages yield the Grace socket total; module keys require a producer
-that classifies that label. The selected Qwen3.5 and Kimi-K3 CPU-telemetry recipes pass
-`CPU_POWER_EXPORTER_RELEASE=v2.40.2` from their master-config `additional-settings` to
+The srt-slurm source pin (`9d65c0ae`, v2.47.2) writes the wide format and does not classify the
+Module label, so these packages yield the Grace socket total plus its CPU-only and SysIO rails;
+module keys require a producer that classifies that label. A rail gap drops only that rail's keys
+and never changes `cpu_power_valid`. The selected Qwen3.5 and Kimi-K3 CPU-telemetry recipes pass
+`CPU_POWER_EXPORTER_RELEASE=v2.47.2` from their master-config `additional-settings` to
 `make setup`. Qwen3.5 8P1D keeps its frontend, benchmark client, and infra on the reserved head so their timestamps share the collector clock; its 13-node allocation still contains 12 GPU-worker nodes. This release includes legacy ACPI hwmon discovery. Setup verifies the downloaded
 asset checksum, replaces a cached binary with a different release marker, and fails on a pinned
-download error. The local srt-slurm submission patch passes the resolved recipe to setup
-validation, which rejects a missing, non-executable, or wrong-architecture binary.
+download error. The pinned srt-slurm submit preflight (NVIDIA/srt-slurm#553) rejects a missing,
+non-executable, or wrong-architecture binary before `sbatch`.
 Qualification still needs the setup log and actual exporter identity, complete same-window
 samples, and verified firmware sensor boundaries. A source pin or successful setup alone does
 not establish valid measurements. Without an expected CPU source, a package without `cpu/` adds no CPU metrics or CPU verdict.

@@ -458,6 +458,8 @@ HBM、LPDDR5X 及稳压损耗）；`Grace Power Socket N` 或 `CPU<n>:cpuSidePow
 | `avg_total_cpu_power_w` | 各 socket 窗口平均 Grace 侧功耗之和 |
 | `total_cpu_energy_j` | 窗口内所有 socket 的 Grace 侧能耗 |
 | `avg_total_module_power_w`、`total_module_energy_j` | 模块功耗与能耗；仅当每个 socket 都有模块序列时输出 |
+| `avg_total_cpu_rail_power_w`、`total_cpu_rail_energy_j` | ACPI `CPU Power Socket N`（仅 CPU 核心，不含 SysIO）的功耗与能耗；仅当每个 Grace socket 都有无断档的该供电轨时输出 |
+| `avg_total_cpu_sysio_power_w`、`total_cpu_sysio_energy_j` | ACPI `SysIO Power Socket N` 的功耗与能耗；输出条件相同 |
 
 即使优先选用模块传感器，Grace 侧字段仍来自 Grace socket 总功耗（没有 ACPI 时来自 DCGM CPU 供电轨），
 因此模块读数永远不会被当作 Grace 侧读数发布。sidecar 的 `cpu` 块和聚合结果的 `power_audit.cpu`
@@ -473,12 +475,13 @@ worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 produ
 `cpu_sample_gap_exceeded`、`cpu_window_not_bracketed` 以及 `cpu_window_unavailable`（没有已完成的窗口
 与该结果绑定，或窗口自身的契约检查失败）。CPU 积分溢出沿用 GPU 侧的 `non_finite_power_metric`；聚合
 结果本身无法写入时，`aggregate_result_missing` 或 `aggregate_result_unwritable` 会同时出现在两侧的审计
-中。固定的 srt-slurm 源码版本（`098e15ac`）写出宽格式；采集与写出链路尚不识别 Module 标签，因此
-这些产物包只会得到 Grace socket 总功耗；需要 producer 支持该标签后才会出现模块字段。
+中。固定的 srt-slurm 源码版本（`9d65c0ae`，v2.47.2）写出宽格式；采集与写出链路尚不识别 Module 标签，因此
+这些产物包只会得到 Grace socket 总功耗及其 CPU 核心与 SysIO 供电轨；需要 producer 支持该标签后才会出现模块字段。
+某条供电轨出现断档时只会去掉该供电轨的字段，不影响 `cpu_power_valid`。
 选中的 Qwen3.5 与 Kimi-K3 CPU 采集配方通过主配置的 `additional-settings`，向 `make setup`
-传入 `CPU_POWER_EXPORTER_RELEASE=v2.40.2`。Qwen3.5 8P1D 将前端、压测客户端和基础服务放在预留的 head 节点，与采集器共用时钟；仍分配 13 个节点，其中 12 个为 GPU worker。该版本包含旧版 ACPI hwmon 传感器发现修复。
+传入 `CPU_POWER_EXPORTER_RELEASE=v2.47.2`。Qwen3.5 8P1D 将前端、压测客户端和基础服务放在预留的 head 节点，与采集器共用时钟；仍分配 13 个节点，其中 12 个为 GPU worker。该版本包含旧版 ACPI hwmon 传感器发现修复。
 安装过程校验下载工件的校验和，替换版本标记不匹配的缓存二进制，并在固定版本下载失败时退出。
-本地 srt-slurm 提交补丁将已解析的配方传入安装检查，从而在提交前拒绝缺失、不可执行或架构
+固定的 srt-slurm 已包含提交前检查（NVIDIA/srt-slurm#553），会在 `sbatch` 前拒绝缺失、不可执行或架构
 不匹配的二进制。验收仍需保留安装日志与实际 exporter
 身份，检查完整的同窗口样本，并核实固件传感器的测量范围。源码版本或安装成功均不能证明
 测量有效。未声明 CPU 来源时，没有 `cpu/` 的产物包不新增 CPU 指标或 CPU 有效性结论；通过 GPU 校验的产物包

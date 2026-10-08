@@ -785,7 +785,7 @@ GRACE_W = {"node-d": 500.0, "node-p": 700.0}
 MODULE_W = 1500.0
 DCGM_W = 300.0
 # Component rails never feed a headline metric; the values are chosen so any
-# leak into a published key is visible against the Grace/module constants.
+# leak into a headline key is visible against the Grace/module constants.
 RAILS_W = {"cpu_rail": 200.0, "soc": 50.0, "dram": 30.0}
 GRACE_KINDS = {"grace": None, **RAILS_W}
 
@@ -883,6 +883,13 @@ class TestCpuSidePower:
         assert_grace_keys(agg)
         assert "avg_total_module_power_w" not in agg
         assert "total_module_energy_j" not in agg
+        rails = {
+            "avg_total_cpu_rail_power_w": 800.0,
+            "total_cpu_rail_energy_j": 48000.0,
+            "avg_total_cpu_sysio_power_w": 200.0,
+            "total_cpu_sysio_energy_j": 12000.0,
+        }
+        assert {k: agg[k] for k in rails if k in agg} == (rails if fmt == "v2" else {})
         assert _gpu_fields(agg) == _reference_agg(tmp_path)
 
         cpu = pkg.sidecar()["cpu"]
@@ -893,8 +900,12 @@ class TestCpuSidePower:
         assert cpu["expected_sockets"] == 4
         assert cpu["observed_sockets"] == 4
         assert cpu["sample_row_count"] == len(rows)
+        series_kinds = ("grace_socket", "cpu_rail", "cpu_sysio") if fmt == "v2" else ("grace_socket",)
         assert set(cpu["per_series_energy_j"]) == {
-            f"{host}/socket{socket}/grace_socket" for host in CPU_HOSTS for socket in (0, 1)
+            f"{host}/socket{socket}/{kind}"
+            for host in CPU_HOSTS
+            for socket in (0, 1)
+            for kind in series_kinds
         }
         assert audit_summary(pkg.sidecar(), "power_validation.json")["power_audit"]["cpu"] == {
             "sensor_kind": "grace_socket",
@@ -904,6 +915,19 @@ class TestCpuSidePower:
             "sample_row_count": len(rows),
             "reason_codes": [],
         }
+
+    def test_rail_gap_drops_only_that_rail(self, tmp_path):
+        pkg = build_package(tmp_path)
+        rows = _cpu_rows({host: {"grace": None} for host in CPU_HOSTS}, "v2")
+        for row in rows:
+            if row[2] == "node-d" and row[5] == 0 and 1020.0 <= float(row[1]) <= 1030.0:
+                row[7] = ""
+        add_cpu_package(pkg, rows, CPU_HEADER_V2)
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert_grace_keys(agg)
+        assert "avg_total_cpu_rail_power_w" not in agg
+        assert agg["avg_total_cpu_sysio_power_w"] == 200.0
 
     def test_dcgm_only_package_uses_cpu_rail_kind(self, tmp_path):
         pkg = build_package(tmp_path)

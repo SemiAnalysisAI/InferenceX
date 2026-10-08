@@ -9,7 +9,9 @@ the ACPI component rails as reference columns. Both are accepted here.
 
 Each (hostname, socket) headline series is integrated over the GPU leg's
 bound formal window with the shared trapezoid and boundary interpolation and
-published as additive metrics next to the GPU-board numbers. The leg is
+published as additive metrics next to the GPU-board numbers. The v2 ACPI
+CPU-only and SysIO rails are integrated the same way when every socket reports
+them; a rail with gaps drops only its own metrics. The leg is
 best-effort by contract: any failure records ``cpu_power_valid=0`` with
 reason codes and leaves every GPU field untouched. Strict qualification also
 requires a recipe-declared CPU source; GPU-only callers keep best-effort CPU
@@ -63,9 +65,12 @@ MAX_SAMPLE_GAP_SECONDS = 3.0
 SENSOR_MODULE = "module"
 SENSOR_GRACE = "grace_socket"
 SENSOR_DCGM = "dcgm_cpu_rail"
-# Headline preference per socket. Component rails (cpu_rail, soc, dram) are
-# reference breakdowns and never feed a published metric.
+# Headline preference per socket. ACPI component rails ride on the Grace row
+# and never select the headline or its verdict.
 HEADLINE_PREFERENCE = (SENSOR_MODULE, SENSOR_GRACE, SENSOR_DCGM)
+# v2 Grace-row column -> published rail family: "CPU Power Socket N" (cores,
+# no SysIO) and "SysIO Power Socket N". dram_w stays blank on NVL72 firmware.
+_RAIL_COLUMNS = {"cpu_rail_w": "cpu_rail", "soc_w": "cpu_sysio"}
 # Grace-side kinds, in fallback order, that feed the ``*_cpu_*`` keys.
 _GRACE_SIDE_PREFERENCE = (SENSOR_GRACE, SENSOR_DCGM)
 
@@ -95,6 +100,7 @@ class CpuSampleRow:
     sensor: str
     socket_id: int
     power_w: float
+    rails: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass
@@ -166,6 +172,18 @@ def _parse_row(raw: list[str], version: int) -> CpuSampleRow | None:
         return None
     if socket_id < 0:
         return None
+    rails = []
+    for column, family in _RAIL_COLUMNS.items():
+        cell = raw[_HEADERS[version].index(column)] if column in _HEADERS[version] else ""
+        if not cell:
+            continue
+        try:
+            watts = float(cell)
+        except ValueError:
+            return None
+        if not math.isfinite(watts) or watts < 0:
+            return None
+        rails.append((family, watts))
     return CpuSampleRow(
         timestamp_unix=timestamp_unix,
         hostname=hostname,
@@ -173,6 +191,7 @@ def _parse_row(raw: list[str], version: int) -> CpuSampleRow | None:
         sensor=sensor,
         socket_id=socket_id,
         power_w=power_w,
+        rails=tuple(rails),
     )
 
 
@@ -221,11 +240,15 @@ def _headline_series(
         kind = classify_sensor(row.sensor)
         if kind is None:
             continue
-        points = series.setdefault((row.hostname, row.socket_id), {}).setdefault(kind, {})
+        by_kind = series.setdefault((row.hostname, row.socket_id), {})
+        points = by_kind.setdefault(kind, {})
         if row.timestamp_unix in points:
             duplicate = True
         points[row.timestamp_unix] = row.power_w
         sources.setdefault(kind, set()).add(row.source)
+        if kind == SENSOR_GRACE:
+            for family, watts in row.rails:
+                by_kind.setdefault(family, {})[row.timestamp_unix] = watts
     return series, sources, duplicate
 
 
@@ -293,23 +316,33 @@ def validate_cpu_leg(
         audit.invalidate("cpu_sensor_source_mismatch")
         return audit
 
+    if SENSOR_GRACE in feeds:
+        feeds.update({rail: rail for rail in _RAIL_COLUMNS.values() if rail in common_kinds})
     start, end = window
     energy: dict[str, float] = {}
+    dropped_rails: set[str] = set()
     for (host, socket), by_kind in sorted(series.items()):
         for kind, family in feeds.items():
             label = f"{host}/socket{socket}/{kind}"
             samples = sorted(by_kind[kind].items())
             sequence = _bracketing_sequence(tuple(t for t, _ in samples), start, end)
-            if sequence is None:
-                audit.invalidate("cpu_window_not_bracketed")
-                continue
-            gap = max(
-                (later - earlier for earlier, later in itertools.pairwise(sequence)),
-                default=0.0,
+            gap = (
+                None
+                if sequence is None
+                else max(
+                    (later - earlier for earlier, later in itertools.pairwise(sequence)),
+                    default=0.0,
+                )
             )
-            audit.per_series_max_sample_gap_s[label] = gap
-            if gap > MAX_SAMPLE_GAP_SECONDS:
-                audit.invalidate("cpu_sample_gap_exceeded")
+            if gap is not None:
+                audit.per_series_max_sample_gap_s[label] = gap
+            if gap is None or gap > MAX_SAMPLE_GAP_SECONDS:
+                if family in _RAIL_COLUMNS.values():
+                    dropped_rails.add(family)
+                elif gap is None:
+                    audit.invalidate("cpu_window_not_bracketed")
+                else:
+                    audit.invalidate("cpu_sample_gap_exceeded")
                 continue
             joules = _integrate_device(samples, start_unix=start, end_unix=end)
             audit.per_series_energy_j[label] = joules
@@ -317,6 +350,8 @@ def validate_cpu_leg(
     if audit.reason_codes:
         audit.per_series_energy_j = {}
         return audit
+    for family in dropped_rails:
+        energy.pop(family, None)
 
     duration = end - start
     metrics: dict[str, float] = {}
@@ -324,9 +359,10 @@ def validate_cpu_leg(
         metrics["avg_cpu_socket_power_w"] = energy["cpu"] / duration / len(expected_keys)
         metrics["avg_total_cpu_power_w"] = energy["cpu"] / duration
         metrics["total_cpu_energy_j"] = energy["cpu"]
-    if "module" in energy:
-        metrics["avg_total_module_power_w"] = energy["module"] / duration
-        metrics["total_module_energy_j"] = energy["module"]
+    for family in ("module", *_RAIL_COLUMNS.values()):
+        if family in energy:
+            metrics[f"avg_total_{family}_power_w"] = energy[family] / duration
+            metrics[f"total_{family}_energy_j"] = energy[family]
     if any(not math.isfinite(value) for value in metrics.values()):
         audit.invalidate("non_finite_power_metric")
         return audit
