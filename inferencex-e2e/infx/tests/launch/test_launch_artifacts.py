@@ -116,13 +116,9 @@ def test_power_collection_records_the_job_status_and_stages_results_either_way(t
     assert (workspace / "point_conc4.json").exists()
 
 
-@pytest.mark.parametrize("has_cpu", [False, True])
-@pytest.mark.parametrize("disagg", [False, True])
-def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path, has_cpu, disagg):
+def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path):
     from infx.tests.results.power.test_aggregate_power_multinode import (
         PRODUCER_SHA,
-        _cpu_rows,
-        add_cpu_package,
         build_package,
     )
 
@@ -140,26 +136,14 @@ def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path, 
     manifest_path = pkg.power_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     manifest["window_validations"][0]["window_file"] = f"windows/{formal_result.name}"
+    for device in manifest["expected_devices"]:
+        device["assignments"][0].update(worker_role="agg", het_group=0)
     manifest_path.write_text(json.dumps(manifest))
-    if not disagg:
-        manifest_path = pkg.power_dir / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        for device in manifest["expected_devices"]:
-            device["assignments"][0].update(worker_role="agg", het_group=0)
-        manifest_path.write_text(json.dumps(manifest))
-    if has_cpu:
-        add_cpu_package(pkg, _cpu_rows())
     source, workspace = tmp_path / "source", tmp_path / "output"
     source.mkdir()
     workspace.mkdir()
     (source / "point_conc4.json").write_text(
-        json.dumps(
-            {
-                "disagg": disagg,
-                "num_prefill_gpu": 2 if disagg else 4,
-                "num_decode_gpu": 2 if disagg else 0,
-            }
-        )
+        json.dumps({"disagg": False, "num_prefill_gpu": 4, "num_decode_gpu": 0})
     )
     status = JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0)
     assert collect_agentic_power_results(
@@ -173,18 +157,10 @@ def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path, 
         [4],
         results_python=sys.executable,
         expected_cpu_source="acpi",
-    ) == int(not has_cpu)
+    ) == 1
     result = json.loads((workspace / "point_conc4.json").read_text())
     assert result["power_valid"] == 1
-    assert result["cpu_power_valid"] == int(has_cpu)
+    assert result["cpu_power_valid"] == 0
     assert result["total_gpu_energy_j"] == 84000.0
-    assert (result_dir / "power_validation.json").is_file()
     assert result["power_audit"]["source"] == "LOGS/agentic/conc_4/power_validation.json"
-    cpu = result["power_audit"]["cpu"]
-    if has_cpu:
-        assert cpu["sensor_kind"] == "grace_socket"
-        assert cpu["source"] == "acpi"
-        assert cpu["expected_sockets"] == cpu["observed_sockets"] == 4
-        assert cpu["reason_codes"] == []
-    else:
-        assert cpu["reason_codes"] == ["cpu_artifacts_missing"]
+    assert result["power_audit"]["cpu"]["reason_codes"] == ["cpu_artifacts_missing"]

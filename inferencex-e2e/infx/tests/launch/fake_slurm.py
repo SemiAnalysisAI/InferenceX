@@ -38,7 +38,6 @@ fi
 """,
     "make": r"""
 printf '%s\n' "$*" >> "$FAKE_LOG_DIR/make.log"
-printf '%s\n' "${CPU_POWER_EXPORTER_RELEASE-}" >> "$FAKE_LOG_DIR/cpu-exporter-release.log"
 if [[ -n "${FAKE_MAKE_RC:-}" ]]; then echo "make setup broke"; exit "$FAKE_MAKE_RC"; fi
 # First run leaves a truncated NATS download behind, as flaky GitHub releases do.
 if [[ -n "${FAKE_TRUNCATED_NATS:-}" && ! -e configs/.downloaded ]]; then

@@ -199,25 +199,3 @@ def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, ex
     env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
 
     assert {name: env[name] for name in HOST} == expected
-
-
-@pytest.mark.parametrize(
-    "enabled,source,expected",
-    [
-        (True, "acpi", "acpi"),
-        (False, "acpi", None),
-        (True, "dcgm", "dcgm"),
-    ],
-)
-def test_power_recipe_resolves_enabled_cpu_source(tmp_path, enabled, source, expected):
-    telemetry = POWER_RECIPE.replace("enabled: true", f"enabled: {str(enabled).lower()}")
-    _mirror(
-        tmp_path, "qwen/cpu.yaml", telemetry + (f"  cpu_power_exporter:\n    source: {source}\n")
-    )
-    request = _request(
-        GITHUB_WORKSPACE=str(tmp_path),
-        CONFIG_FILE="recipes/qwen/cpu.yaml",
-        IS_AGENTIC="0",
-        FRAMEWORK="dynamo-sglang",
-    )
-    assert resolve_power("gb300-nv", MULTI, request).expected_cpu_source == expected

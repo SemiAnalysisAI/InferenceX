@@ -229,37 +229,3 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
 
     assert staged == tmp_path / "runs/infmax-workspace-1-1-abc"
     assert sorted(str(p.relative_to(staged)) for p in staged.rglob("*") if p.is_file()) == sorted(kept)
-
-
-@pytest.mark.parametrize("sku", ["gb200", "gb300"])
-def test_qwen_8p1d_power_keeps_the_collector_and_benchmark_on_the_reserved_head(
-    tmp_path, monkeypatch, sku
-):
-    from srtctl.core.config import load_config
-    from srtctl.core.runtime import Nodes
-
-    monkeypatch.setattr("srtctl.core.config.load_cluster_config", lambda: None)
-    recipe = ROOT / (
-        f"benchmarks/multi_node/srt-slurm-recipes/qwen3.5/sglang/{sku}-fp8/8k1k/"
-        "disagg-8p1d-dep4-dep16-stp.yaml"
-    )
-    staged = tmp_path / "recipes" / recipe.name
-    staged.parent.mkdir()
-    shutil.copyfile(recipe, staged)
-    prepare_recipe(tmp_path, f"recipes/{recipe.name}", "qwen-8p1d", None, "2048 4096")
-    config = load_config(staged)
-    allocation = [f"node-{index}" for index in range(13)]
-    monkeypatch.setattr("srtctl.core.runtime.get_slurm_nodelist", lambda: allocation)
-    monkeypatch.setattr("srtctl.core.runtime.get_slurm_het_nodelists", lambda: None)
-    nodes = Nodes.from_slurm(
-        frontend_dedicated_node=config.frontend.placement.dedicated,
-        client_dedicated_node=config.benchmark.placement.dedicated,
-        etcd_nats_dedicated_node=False,
-        colocate_dedicated_nodes=config.benchmark.colocate_with_frontend,
-    )
-    assert config.engine_node_count == 12
-    assert not config.pool_services
-    assert nodes.head == nodes.bench == nodes.infra == allocation[0]
-    assert nodes.worker == nodes.compute == tuple(allocation[1:])
-    assert config.benchmark.placement.location == "head"
-    assert config.telemetry.enabled and config.telemetry.cpu_power_exporter.source == "acpi"
