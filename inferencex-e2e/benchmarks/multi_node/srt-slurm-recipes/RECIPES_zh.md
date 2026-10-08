@@ -42,13 +42,31 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 | `roles.prefill.args.tp-size`（SGLang） | `prefill.tp` |
 | `roles.prefill.args.ep-size`（SGLang） | `prefill.ep` |
 | `roles.prefill.args.enable-dp-attention` | `prefill.dp-attn` |
-| `benchmark.concurrencies` | `conc-list` |
+| `benchmark.concurrencies` | `conc-list`（AgentX 配置；定长序列配置由绑定器写入） |
 | 配置目录，相对于本目录 | 条目级 `srt-recipe-dir` |
 | 配置文件，可附带 `base`、`override_<name>` 或 `zip_override_<name>[<index>]` 选择器 | 搜索空间条目的 `srt-recipe`；仅评估的真实验证使用 `eval-srt-recipe` |
 
 配置文件和主配置必须同步更新。启动器执行配置文件；主配置提供结果标签和调度元数据。聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充角色共享节点，不增加调度所需的工作节点数。
 
 所有被引用的配置都必须纳入版本控制：srt-slurm 2 提供精选示例，不再携带历史 `recipes/` 目录。本次迁移补齐了 204 个此前依赖外部仓库的配置，并从 InferenceX 历史记录恢复了两个仍被引用的 AgentX 配置。主配置路径遵循上述目录结构，原有覆盖项选择器保持不变。
+
+## 定长序列配置片段
+
+定长序列配置（单节点和多节点）均为片段：只包含该配置特有设置的原生 srt-slurm YAML。启动时先组合片段，再绑定测试点：
+
+1. 工作负载的共享块 [`configs/srt-recipes/fixed-sequence-single.yaml`](../../../configs/srt-recipes/fixed-sequence-single.yaml) 或 [`fixed-sequence-multi.yaml`](../../../configs/srt-recipes/fixed-sequence-multi.yaml) 合并到片段之下（配置集合则合并到 `base` 之下）。片段优先：映射逐层合并，列表整体替换。共享块设置基准测试客户端；多节点共享块还将 `benchmark.env.TOKENIZER` 指向挂载的检查点 `/model`。
+2. 主配置行的选择器选出变体。单节点变体可以声明自身的 `benchmark.env.CONC`，使该并发数与其调优参数保持配对。
+3. 绑定器（[`workload.py`](../../../infx/srt_slurm/workload.py)）将矩阵测试点写入选中的配置：`model.path: hf:<model>`、`model.container: <image>`、`model.precision` 和 `benchmark.env.ISL`/`OSL`；片段声明了 `identity.container`/`identity.model` 时写入 `identity.container.image` 和 `identity.model.repo`；启用遥测时写入 `benchmark.concurrencies`。单节点配置还会获得 `MODEL`、`CONC`、`RANDOM_RANGE_RATIO` 和 `USE_CHAT_TEMPLATE`（当且仅当配置启用投机解码时为 `true`）。多节点客户端从作业环境读取 `CONC_LIST`。
+
+片段若设置了上述任一绑定键或 `benchmark.env.CONC_LIST`，即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），主配置镜像解析为预置的容器，因此配置不再引用别名。AgentX 配置尚未采用组合方式，仍保持完整。
+
+无需集群即可查看启动器实际提交的内容：
+
+```bash
+uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
+```
+
+该命令为每个定长序列测试点及变体写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
 ## 迁移与验证
 
