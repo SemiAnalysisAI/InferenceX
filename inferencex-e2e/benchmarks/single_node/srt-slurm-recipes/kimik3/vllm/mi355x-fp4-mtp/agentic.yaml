@@ -98,7 +98,7 @@ override_tp8_c1:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         quantization-config: '{"linear":"fp8_per_channel","ignore":["*kv_b_proj","*vision_tower*","*mm_projector*","*in_proj_qkvgfab","*f_b_proj","*fused_qkv_a_proj","*self_attn.g_proj","*.layers.0.mlp.down_proj"]}'
       env:
-        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   benchmark:
     env:
       CONC: '1'
@@ -117,7 +117,7 @@ override_tp8_c1_dcp8:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         quantization-config: '{"linear":"fp8_per_channel","ignore":["*kv_b_proj","*vision_tower*","*mm_projector*","*in_proj_qkvgfab","*f_b_proj","*fused_qkv_a_proj","*self_attn.g_proj","*.layers.0.mlp.down_proj"]}'
       env:
-        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   benchmark:
     env:
       CONC: '1'
@@ -132,7 +132,7 @@ override_tp8_c4:
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":48,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48]}'
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":5,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       env:
-        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   benchmark:
     env:
       CONC: '4'
@@ -151,7 +151,7 @@ override_tp8_c4_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":5,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
       env:
-        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
   benchmark:
     env:
