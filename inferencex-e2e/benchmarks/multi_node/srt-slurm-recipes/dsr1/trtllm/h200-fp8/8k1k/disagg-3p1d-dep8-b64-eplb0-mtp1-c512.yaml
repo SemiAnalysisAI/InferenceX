@@ -101,10 +101,6 @@ roles:
         decoding_type: MTP
         num_nextn_predict_layers: 1
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 frontend:
   type: "dynamo"
   enable_multiple_frontends: false # For some reason, the H200 cluster doesn't like nginx.

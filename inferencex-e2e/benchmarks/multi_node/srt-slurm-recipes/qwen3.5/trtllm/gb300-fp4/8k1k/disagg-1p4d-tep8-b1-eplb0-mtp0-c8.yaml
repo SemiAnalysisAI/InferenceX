@@ -115,7 +115,3 @@ frontend:
   env:
     ETCD_LEASE_TTL: '120'
     DYN_TOKENIZER: "fastokens"
-
-benchmark:
-  env:
-    TOKENIZER: /model

@@ -113,10 +113,6 @@ roles:
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 3
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 # benchmark:
 #   type: "gpqa"
 #   num_examples: 198
