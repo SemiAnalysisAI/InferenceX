@@ -9410,3 +9410,12 @@
     - "TP4 concurrency 32 sets ATOM_PREFILL_DECODE_INTERVAL=16: after each prefill, ATOM runs at least 16 decode passes and batches the prefills that arrive in the meantime (ATOM's PrefillDelayer, off by default). Prefill no longer interrupts decode as often, so P90 interactivity rises while TTFT rises. Local 3600 s replay: 108.2 -> 150.9 tok/s/user, ITL p90 9.24 -> 6.63 ms, TTFT p50 0.51 -> 1.14 s, throughput unchanged."
     - "TP2 concurrency 64 sets ATOM_PREFILL_DECODE_INTERVAL=4. At this load each batched prefill forward serves several requests, so throughput rises as well as interactivity. Local 3600 s replay: 30.3 -> 38.8 tok/s/user, 105.4k -> 115.2k tok/s/GPU, 6487 -> 6941 requests, TTFT p90 2.3 -> 6.4 s. All other points are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3603
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Qwen3.5-397B-A17B FP8 MI355X SGLang AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261008 on qwen3.5-fp8-mi355x-sglang-agentic-mtp only. Serving flags and the existing TP4 grid are unchanged."
+    - "Add GPU-resident TP8 points at concurrency 8 and 12 (override_tp8_c8, override_tp8_c12). Admission stays 2x concurrency, so max-running-requests and cuda-graph-max-bs-decode are 16 and 24. EP stays 1 and KV stays on GPU."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3830
