@@ -92,8 +92,8 @@ base:
         TORCH_NCCL_BLOCKING_WAIT: "1"
         NCCL_BLOCKING_WAIT: "1"
         NCCL_IB_HCA: rdma3,rdma0,rdma2,rdma1,rdma7,rdma4,rdma6,rdma5
-        GLOO_SOCKET_IFNAME: eno0
-        NCCL_SOCKET_IFNAME: eno0
+        GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+        NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
         AITER_LOG_LEVEL: ERROR
         HSA_NO_SCRATCH_RECLAIM: "0"
         GPU_MAX_HW_QUEUES: "2"
@@ -114,8 +114,8 @@ base:
         AITER_BF16_FP8_MOE_BOUND: "0"
         TORCH_BLAS_PREFER_HIPBLASLT: "1"
         IBDEVICES: rdma3,rdma0,rdma2,rdma1,rdma7,rdma4,rdma6,rdma5
-        MORI_RDMA_TC: "104"
-        MORI_IO_TC: "104"
+        MORI_RDMA_TC: "@fabric.mori-rdma-tc"
+        MORI_IO_TC: "@fabric.mori-io-tc"
         MORI_IO_SQ_BACKOFF_TIMEOUT_US: "500000"
         MORI_IO_QP_MAX_SEND_WR: "32767"
         MORI_IO_QP_MAX_CQE: "32768"
