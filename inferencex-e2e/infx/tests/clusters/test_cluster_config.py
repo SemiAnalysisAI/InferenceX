@@ -159,6 +159,11 @@ def test_inventory_rejects_inconsistent_labels(runner_config, message):
         ("slurm.srt-slurm.fabric", {"nccl-ib-hca": "mlx5_0,mlx5_1"}, "valid tuple"),
         ("slurm.srt-slurm.fabric", {"nccl-ib-hca": ["mlx5_0,mlx5_1"]}, "should match pattern"),
         ("slurm.srt-slurm.volume-mounts", {"hf-hub-cache": "/hf_hub_cache"}, "unknown volumes"),
+        # Env values may only reference a field the cluster's own fabric sets.
+        ("env", {"MORI_RDMA_TC": "@fabric.mori-rdma-tc"}, "env.MORI_RDMA_TC: srt-slurm.fabric sets no"),
+        ("env", {"MORI_RDMA_TC": "@fabric.mori-rdma"}, "is not a whole '@fabric.<name>' value"),
+        ("slurm.srt-slurm.host-setup", {"script": "setup.sh", "env": {"IBDEVICES": "@fabric.ib-devices"}},
+         "host-setup.env.IBDEVICES: srt-slurm.fabric sets no ib-devices"),
         ("slurm.srt-slurm.host-setup", {"script": "/opt/setup.sh"}, "repository-relative"),
         ("partition", "batch", "Extra inputs"),
     ],
@@ -166,3 +171,23 @@ def test_inventory_rejects_inconsistent_labels(runner_config, message):
 def test_invalid_cluster_is_rejected(path, value, message):
     with pytest.raises(ValidationError, match=message):
         load_inventory(inventory(alpha=with_change(path, value)))
+
+
+def test_env_and_host_setup_env_take_the_clusters_fabric_by_reference():
+    record = with_change("slurm.srt-slurm", {
+        "network-interface": "",
+        "fabric": {"ib-devices": ["rdma0", "rdma1"], "mori-rdma-tc": 104},
+        "host-setup": {"script": "setup.sh", "env": {"IBDEVICES": "@fabric.ib-devices"}},
+    })  # fmt: skip
+    record["env"] = {"MORI_RDMA_TC": "@fabric.mori-rdma-tc", "KEEP": "literal"}
+
+    cluster = load_inventory(inventory(alpha=record)).clusters["alpha"]
+    assert cluster.env == {"MORI_RDMA_TC": "104", "KEEP": "literal"}
+    assert cluster.scheduler_settings.srt_slurm.host_setup.env == {"IBDEVICES": "rdma0,rdma1"}
+
+
+def test_a_list_fabric_field_cannot_become_a_cluster_env_value():
+    record = with_change("slurm.srt-slurm.fabric", {"nccl-ib-hca": ["mlx5_0", "mlx5_1"]})
+    record["env"] = {"NCCL_IB_HCA": "@fabric.nccl-ib-hca"}
+    with pytest.raises(ValidationError, match="cannot contain ','"):
+        load_inventory(inventory(alpha=record))

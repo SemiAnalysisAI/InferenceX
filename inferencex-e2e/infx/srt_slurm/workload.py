@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from infx.clusters.slurm import FABRIC_REFERENCE
 from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
@@ -75,7 +76,6 @@ BOUND_ENV = {
         "ENABLE_AGENTX_POWER",
     ),
 }
-FABRIC_REFERENCE = "@fabric."
 
 
 def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict[str, Any]:

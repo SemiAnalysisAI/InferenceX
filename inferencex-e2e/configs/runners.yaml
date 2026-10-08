@@ -873,7 +873,7 @@ clusters:
     available-cpu-dram-mib: 3_095_781
     arch: x86_64
     env:
-      MORI_RDMA_TC: "104"
+      MORI_RDMA_TC: '@fabric.mori-rdma-tc'
     models:
       entries:
         DeepSeek-R1-0528-MXFP4-v2: {root: it-share-data, dir: DeepSeek-R1-0528-MXFP4-v2}
@@ -913,7 +913,7 @@ clusters:
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
-            IBDEVICES: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+            IBDEVICES: '@fabric.ib-devices'
           timeout-s: 1200
           nodes: all
         volume-mounts:
