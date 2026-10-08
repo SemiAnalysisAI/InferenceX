@@ -151,10 +151,6 @@ base:
     max_attempts: 360
     interval_seconds: 10
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
 
 # STP TP4 prefill mode: TP4 (DP=1, EP=1) instead of dep4 — low-latency single-node
 override_stp_tp4:

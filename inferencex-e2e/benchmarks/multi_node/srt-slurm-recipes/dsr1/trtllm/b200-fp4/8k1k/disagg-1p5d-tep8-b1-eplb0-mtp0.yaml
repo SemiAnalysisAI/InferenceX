@@ -91,10 +91,6 @@ roles:
       allreduce_strategy: MNNVL
 
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 frontend:
   nginx_container: "nginx-sqsh"
   type: "dynamo"
