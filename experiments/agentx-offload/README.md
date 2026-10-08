@@ -27,10 +27,10 @@ allocation layouts cannot silently change the common budget. All thresholds are
 conditional on these budgets; this is not a universal concurrency threshold.
 
 The completed expanded-capacity NVMe-only cohort used a 4 TiB bounded cache.
-The next adaptive control halves only this bounded SimpleCPU disk capacity to
-2 TiB at c488, where the 4 TiB NVMe and HBM-only arms both completed canonical
-profiling. Earlier 1 TiB, 4 TiB, and new 2 TiB runs remain distinct in the
-ledger; a cross-capacity difference is local evidence, not a matched repeat.
+The capacity control halved only this bounded SimpleCPU disk capacity to
+2 TiB at c488, where the 4 TiB NVMe and HBM-only arms had completed canonical
+profiling. Earlier 1 TiB, 4 TiB, and 2 TiB runs remain distinct in the
+ledger; cross-capacity differences are local evidence.
 The first 2 TiB c488 capacity probe (`37552057241`) passed storage preflight and
 sent all 5,401 canonical warmup requests, but GitHub cancelled the job during
 warmup drain before profiling. The last archived sample had 5,351 completed,
@@ -65,12 +65,33 @@ c488 run, this 2 TiB replicate was 1.428% lower in total tok/s/GPU, 4.317%
 lower in output tok/s/GPU, 3.551% lower in P90 interactivity, and 2.423% higher
 in J/successful query. The two valid 2 TiB runs averaged 8,398.727 total
 tok/s/GPU and 11,495.896 J/successful query, respectively 1.667% below and
-2.915% above the single 4 TiB run. This repeated direction is local evidence;
-the 4 TiB cohort still needs a repeat to estimate run variation before any
-capacity effect can be claimed.
-The next control therefore repeats 4 TiB NVMe-only at c488 with the same
-protocol and extended execution envelope. This changes only the bounded disk
-capacity; the 2 TiB results and prior 4 TiB run remain distinct cohorts.
+2.915% above the single 4 TiB run. This repeated direction was local evidence and prompted an exact-config
+4 TiB replication to estimate run variation.
+
+The 4 TiB c488 replication (`37719973737`) completed all 5,401 warmup requests
+without error and the full 3,600-second profile. It retained 1,163 successful
+responses with 100% TTFT/inter-token coverage. Strict four-GPU power validation
+and independent `TZ=UTC` replay passed at 895.575 W/GPU and 11,212.022
+J/successful query; the largest power-sample gap was 1.016 seconds. The benchmark
+job succeeded, while downstream collectors failed because the tooling checkout
+lacked `infx`. Five artifact ZIPs passed integrity checks and were hashed;
+`offload_cleanup.json` records deletion and an independent host check found the
+exact scratch absent. The aggregate dropped six `InvalidInferenceResultError`
+records; the profile phase itself reported zero request errors. Its 8,512.634
+total tok/s/GPU was 0.333% below the first 4 TiB result, and its energy per
+successful query was 0.373% higher.
+
+Across two valid runs per capacity at c488, the 4 TiB mean was 8,526.860 total
+tok/s/GPU and 11,191.174 J/successful query, versus 8,398.727 tok/s/GPU and
+11,495.896 J/query at 2 TiB: 4 TiB was 1.526% higher in throughput and 2.651%
+lower in energy per success. Output throughput was 3.678% higher, P90
+interactivity 3.761% higher, and successful completions 2.552% higher. The
+4 TiB pair also had 0.452% fewer computed prompt tokens, which limits causal
+attribution of the throughput difference. Both capacities show a consistent
+local direction, but two runs per arm do not establish a general capacity
+response or isolate cache capacity from run-level variation. No further B200
+job is dispatched from this comparison; the next experimental step is a
+capacity-controlled design with more repetitions if a general claim is needed.
 
 The connector preallocates its configured disk files, so concurrency does not
 determine disk footprint: admission now requires 2,199,023,255,552 bytes plus

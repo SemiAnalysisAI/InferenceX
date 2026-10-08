@@ -6240,12 +6240,12 @@
       "repeat": 2,
       "capacity_repeat": 2,
       "head_sha": "b3aa274cbc4b758c3186b5935bc9636fd6e85892",
-      "status": "in_progress",
+      "status": "failure",
       "workflow_name": "offload-v1-nvme4tib-c488-r2-capacity-20261008",
       "dispatched_at": "2026-10-08T02:52:12Z",
-      "phase": "full 3,600-second profiling after complete zero-error canonical warmup",
-      "performance_result": false,
-      "energy_result": false,
+      "phase": "terminal: full benchmark and strict power valid; downstream collectors failed",
+      "performance_result": true,
+      "energy_result": true,
       "nvme_bytes_per_node": 4398046511104,
       "capacity_cohort": "4 TiB bounded SimpleCPU disk cache; exact-config replication of prior valid c488 4 TiB run after two valid 2 TiB c488 controls",
       "execution_budget": {
@@ -6260,7 +6260,7 @@
       "runner": "b200-nscale-slurm_00",
       "started_at": "2026-10-08T02:53:56Z",
       "slurm_job_id": 19886,
-      "slurm_state": "RUNNING",
+      "slurm_state": "CANCELLED after benchmark job success",
       "slurm_time_limit": "08:30:00",
       "node": "im-b200-c001",
       "scratch": "/offload-scratch/inferencex-offload-37719973737-1-19886-c53ebe3a101c",
@@ -6285,7 +6285,7 @@
         "errors": 0,
         "elapsed_seconds": 23974.3
       },
-      "runtime_evidence": "Slurm 19886 runs on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,022,418,558,976 bytes free before scratch (>4,535,485,464,576 threshold), O_DIRECT, zero DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37719973737, attempt 1, Slurm 19886. Canonical warmup began 03:03:08Z; sample at 03:13:08Z returned 139/5,401, sent 521, retained 382 in flight, zero errors. The 521-request primer completed and zero-idle cache-pressure replay began at 03:46:13Z. Latest sample at 04:12:39Z returned 997/5,401, sent 1,669, retained 672 in flight, zero errors after 4,170.8s. All 5,401 warmup requests were sent by 09:22:59Z; at 09:42:42Z 5,289 had returned, 112 remained in flight, zero errors after 23,974.3s. Canonical warmup completed all 5,401 requests at 09:52:52Z with zero cancellations and errors after 24,584.47s. Full 3,600-second profiling began immediately; 10:12:18Z realtime snapshot retained 642 successful responses and zero errors. Aggregate export pending.",
+      "runtime_evidence": "Slurm 19886 runs on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,022,418,558,976 bytes free before scratch (>4,535,485,464,576 threshold), O_DIRECT, zero DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37719973737, attempt 1, Slurm 19886. Canonical warmup began 03:03:08Z; sample at 03:13:08Z returned 139/5,401, sent 521, retained 382 in flight, zero errors. The 521-request primer completed and zero-idle cache-pressure replay began at 03:46:13Z. Latest sample at 04:12:39Z returned 997/5,401, sent 1,669, retained 672 in flight, zero errors after 4,170.8s. All 5,401 warmup requests were sent by 09:22:59Z; at 09:42:42Z 5,289 had returned, 112 remained in flight, zero errors after 23,974.3s. Canonical warmup completed all 5,401 requests at 09:52:52Z with zero cancellations and errors after 24,584.47s. Full 3,600-second profiling began immediately; 10:12:18Z realtime snapshot retained 642 successful responses and zero errors. Aggregate export completed after the full profile and retained 1,163 successful responses with six InvalidInferenceResultError records dropped by aggregation.",
       "warmup_replay_started_at": "2026-10-08T03:46:13Z",
       "warmup_all_sent_at": "2026-10-08T09:22:59Z",
       "warmup_completed_at": "2026-10-08T09:52:52Z",
@@ -6300,11 +6300,155 @@
         "elapsed": "19:25",
         "successes": 642,
         "errors": 0
+      },
+      "workflow_conclusion": "failure",
+      "benchmark_job_conclusion": "success",
+      "completed_at": "2026-10-08T10:57:27Z",
+      "failure_stage": "downstream collect-results and calc-success-rate missing infx module on tooling checkout",
+      "performance": {
+        "num_requests_total": 6564,
+        "num_requests_successful": 1163,
+        "num_requests_warmup_dropped": 5401,
+        "num_requests_error_dropped": 6,
+        "request_error_categories": {
+          "InvalidInferenceResultError": 6
+        },
+        "duration_seconds": 3628.50237,
+        "output_tokens_per_second": 320.1522,
+        "output_tokens_per_second_per_gpu": 80.03805,
+        "input_tokens_per_second": 33730.3853,
+        "total_tokens_per_second": 34050.5375,
+        "total_tokens_per_second_per_gpu": 8512.63438,
+        "p90_e2e_latency_seconds": 2919.77111,
+        "p90_ttft_seconds": 2895.04038,
+        "p90_tpot_seconds": 0.11759,
+        "p90_interactivity_tokens_per_second_per_user": 8.50448,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 0.08433,
+        "mean_e2e_latency_seconds": 1229.67354,
+        "avg_power_w_per_gpu": 895.574851,
+        "joules_per_successful_query": 11212.021709
+      },
+      "warmup_result": {
+        "completed": 5401,
+        "cancelled": 0,
+        "errors": 0,
+        "elapsed_seconds": 24584.47
+      },
+      "profiling_result": {
+        "completed": 1163,
+        "cancelled_after_profile_grace": 691,
+        "errors": 0,
+        "elapsed_seconds": 3640.0,
+        "target_seconds": 3600
+      },
+      "latency_coverage": {
+        "successful_records": 1163,
+        "ttft_records": 1163,
+        "inter_token_records": 1163,
+        "ttft_fraction": 1.0,
+        "inter_token_fraction": 1.0
+      },
+      "power_validation": {
+        "power_valid": true,
+        "integration_method": "per_device_trapezoidal_with_linear_boundary_interpolation",
+        "power_percentile_method": "time_weighted_synchronized_total_piecewise_linear",
+        "expected_gpu_count": 4,
+        "observed_gpu_count": 4,
+        "per_gpu_max_sample_gap_s": {
+          "0": 1.0160000324249268,
+          "1": 1.0160000324249268,
+          "2": 1.0160000324249268,
+          "3": 1.0160000324249268
+        },
+        "metrics": {
+          "avg_power_w": 895.574851,
+          "p75_power_w": 962.820711,
+          "p75_total_gpu_power_w": 3851.282845,
+          "p90_power_w": 966.956741,
+          "p90_total_gpu_power_w": 3867.826965,
+          "avg_total_gpu_power_w": 3582.299405,
+          "total_gpu_energy_j": 13039581.248104,
+          "joules_per_successful_query": 11212.021709,
+          "joules_per_input_token": 0.106541,
+          "joules_per_output_token": 11.224829,
+          "joules_per_total_token": 0.105539
+        }
+      },
+      "cache_evidence": {
+        "gpu_cache_hit_rate": 0.01191,
+        "external_cache_hit_rate": 0.01361,
+        "overall_cache_hit_rate": 0.02551,
+        "theoretical_cache_hit_rate": 0.93749,
+        "gpu_cache_hit_prompt_tokens": 13008768,
+        "external_cache_hit_prompt_tokens": 14870656,
+        "computed_prompt_tokens": 1064805258,
+        "prompt_tokens_total": 1092684682,
+        "generation_tokens_total": 1298745,
+        "gpu_cache_usage_pct": 1
+      },
+      "artifacts": [
+        {
+          "id": 11544129593,
+          "name": "agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 36893037,
+          "sha256": "c7b8be910c2529c15a6ed8ac83c3c33335daf8b09ec7def37681fb2137913fd4"
+        },
+        {
+          "id": 11544772226,
+          "name": "bmk_agentic_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 2271,
+          "sha256": "15f6b009c0223d0bd257d1eecbe7f43264420c4e445628b8c200fb19d46e204b"
+        },
+        {
+          "id": 11545620370,
+          "name": "server_logs_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 238117,
+          "sha256": "380eca550d4852848d6920e8d625788a941f34568dc3c28611e2e4fbfebff8cc"
+        },
+        {
+          "id": 11545865243,
+          "name": "power_audit_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 1160053,
+          "sha256": "99cc119d47491f09ffce930013aaddcb04141e549d89b7fd3fbe46d066019366"
+        },
+        {
+          "id": 11546055126,
+          "name": "gpu_metrics_minimaxm3_tp4_conc488_kvnvme-vllm-simple_spec-mtp_fp4_vllm_tp4-pp1-dcp1-pcp1-ep1-dpafalse_disagg-fa-362d1dbeebcccde8a4f7",
+          "size_bytes": 1156450,
+          "sha256": "b691ab05496e86afe629ca2fe4e210264078e847d1f52bf05bcb66efc0165252"
+        }
+      ],
+      "evidence_sha256": {
+        "benchmark.log": "17ccba62946ea8afe0c5c3ebb808f8ad73cdd3fedc621ffa83216d25160059b6",
+        "aiperf_artifacts/profile_export.jsonl": "9e34760143ccb0b8a5cd1ca043c083a6a8732c5a965cd8ba85610f057f4b631d",
+        "aiperf_artifacts/profile_export_aiperf.json": "564e7694f6353f9c260d61309841d6866699663ef3e50f8f2244382c3c565386",
+        "aiperf_artifacts/server_metrics_export.json": "52fb76a6735cc12794628458645413eb353b28009dacfd0fda822b71bddff1f3",
+        "server.log": "544742b4bf58d23c5775775998ba1be08192e5217fb09447fdaf40c2901b2da9",
+        "offload-telemetry.jsonl": "3df1beb2cda5cd0b3ca0a6b069b16d50d9c812af35e51009ccfee76adf3af92b",
+        "offload_config.json": "2f378834647d7dae99180db9611eb4d8002c69e7ca75b5389865b26e3afc9ec6",
+        "gpu_metrics.csv": "35f578a24cb268cda182633c8fd2037dbcb6496a4dbf141f585119a791170b70",
+        "offload_cleanup.json": "abdfc29b6137b2b7286f08f66c018180bb19611911277800f1245fe3fe5a8282",
+        "power_validation.json": "6ed77e40131d451477075dcf61feb69c8274bd2a0eed283a6f8eea839fe3cb4c"
+      },
+      "power_evidence": "Uploaded strict four-GPU power_validation.json passed; maximum per-GPU sample gap 1.016 seconds. Average 895.574851 W/GPU and 11,212.021709 J/successful query. Independent repository adapter replay with TZ=UTC against uploaded raw trace and timezone offset passed --require-power; validation window and all metrics exactly matched uploaded receipt.",
+      "storage_evidence": "offload_cleanup.json records deleted=true for exact owned scratch after 4,398,044,086,272 logical bytes across 4 files. Slurm 19886 is terminal (CANCELLED after benchmark), and independent read-only check on im-b200-c001 confirmed exact host /scratch/inferencex-offload-37719973737-1-19886-c53ebe3a101c absent.",
+      "artifact_evidence": "All five GitHub artifact ZIPs downloaded, ZIP integrity verified, SHA-256 recorded. Temporary downloads are deleted after this evidence is committed and pushed.",
+      "strict_utc_replay_valid": true,
+      "delta_vs_prior_4tib_c488_percent": {
+        "num_requests_successful": -0.42808,
+        "total_tokens_per_second_per_gpu": -0.33311,
+        "output_tokens_per_second_per_gpu": -2.14743,
+        "p90_interactivity_tokens_per_second_per_user": -4.48515,
+        "p90_e2e_normalized_interactivity_tokens_per_second_per_user": 4.51109,
+        "p90_ttft_seconds": -0.30959,
+        "p90_e2e_latency_seconds": -0.77552,
+        "avg_power_w_per_gpu": -0.05637,
+        "joules_per_successful_query": 0.37328
       }
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639",
-  "status": "Two valid 2 TiB c488 results documented; 4 TiB c488 replication in canonical warmup drain.",
+  "status": "Two valid c488 runs each at 2 TiB and 4 TiB NVMe have completed full profiling and strict independent UTC power replay; all exact host scratch cleaned. Four-run capacity comparison documented; no further B200 job dispatched.",
   "last_capacity_check": {
     "checked_at": "2026-10-08T02:52:09Z",
     "active_study_run_ids": [],
@@ -6318,7 +6462,7 @@
   "next_dispatch": {
     "arm": null,
     "concurrency": null,
-    "requires": "Do not dispatch while 4 TiB NVMe c488 replication 37719973737 is active or queued. On allocation verify allowlisted im-b200-c001, >4,535,485,464,576 free bytes, O_DIRECT, zero DRAM, 4,398,046,511,104 NVMe bytes, exact owned scratch and SimpleCPU disk backend. Then canonical warmup, full profile, strict power, artifacts, exact host cleanup and temporary download deletion."
+    "requires": "No further B200 dispatch is planned from the two-by-two local capacity comparison. If a general capacity claim is required, first design a capacity-controlled experiment with additional repetitions, then refresh full cluster-wide queued/in-progress B200 job-label and active study workflow inventory before any dispatch."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",
@@ -6356,5 +6500,27 @@
     "exact_paths_absent_after": true,
     "free_bytes_after_unrelated_job_ended": 17677224632320,
     "note": "Prior absence reports were contradicted by the host /scratch inventory. Current retry created no scratch. No unrelated scratch was deleted."
+  },
+  "capacity_comparison_c488": {
+    "scope": "local exact-config c488 NVMe-only capacity control, two valid runs at each 2 TiB and 4 TiB bounded SimpleCPU disk cache",
+    "two_tib_run_ids": [
+      37602969372,
+      37666309639
+    ],
+    "four_tib_run_ids": [
+      36796500128,
+      37719973737
+    ],
+    "mean_two_tib_total_tokens_per_second_per_gpu": 8398.727065,
+    "mean_four_tib_total_tokens_per_second_per_gpu": 8526.85992,
+    "four_vs_two_tib_total_throughput_percent": 1.525622,
+    "mean_two_tib_joules_per_successful_query": 11495.896297,
+    "mean_four_tib_joules_per_successful_query": 11191.1736815,
+    "four_vs_two_tib_joules_per_successful_query_percent": -2.650708,
+    "four_vs_two_tib_output_throughput_percent": 3.678202,
+    "four_vs_two_tib_p90_interactivity_percent": 3.760785,
+    "four_vs_two_tib_successful_completions_percent": 2.551694,
+    "four_vs_two_tib_computed_prompt_tokens_percent": -0.452401,
+    "interpretation": "Directional local evidence only: both 4 TiB runs exceed both 2 TiB runs in total throughput and have lower J/successful query. Two runs per arm and a small computed-prompt-token difference do not establish a general causal capacity response."
   }
 }

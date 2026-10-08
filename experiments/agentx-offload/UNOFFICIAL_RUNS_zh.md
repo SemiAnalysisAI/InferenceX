@@ -22,25 +22,25 @@ python3 experiments/agentx-offload/update_unofficial_runs.py --write
 结果。它不代表该运行在科学上有效。API 不可用时，新运行标为 `unknown`。
 有效性和研究结论应以 [`runs.json`](./runs.json) 为准。
 
-生成时间：`2026-10-08T02:47:07.348059Z`
+生成时间：`2026-10-08T11:19:47.395456Z`
 
 ## URL
 
 全部可由 API 渲染的 benchmark 点
-（32 个运行）：
+（33 个运行）：
 
-<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639>
+<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639,37719973737>
 
 纯 NVMe 且可由 API 渲染的点
-（10 个运行）：
+（11 个运行）：
 
-<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35524019140,35565538871,35646317491,35727274307,35832083322,35934408414,36796500128,37602969372,37666309639>
+<https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35524019140,35565538871,35646317491,35727274307,35832083322,35934408414,36796500128,37602969372,37666309639,37719973737>
 
 ## 完整分支工作流列表
 
-分支工作流：**79**
+分支工作流：**80**
 
-GitHub 单独 job：**948**
+GitHub 单独 job：**960**
 
 | Workflow run ID | 结论 | 图表 benchmark 数 | GitHub job 数 | 工作流 |
 | ---: | --- | ---: | ---: | --- |
@@ -123,3 +123,4 @@ GitHub 单独 job：**948**
 | [37552057241](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37552057241) | cancelled | 0 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r1-capacity-20261007` |
 | [37602969372](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37602969372) | failure | 1 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r2-capacity-20261007` |
 | [37666309639](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37666309639) | failure | 1 | 12 | `e2e Test - offload-v1-nvme2tib-c488-r3-capacity-20261007` |
+| [37719973737](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37719973737) | failure | 1 | 12 | `e2e Test - offload-v1-nvme4tib-c488-r2-capacity-20261008` |
