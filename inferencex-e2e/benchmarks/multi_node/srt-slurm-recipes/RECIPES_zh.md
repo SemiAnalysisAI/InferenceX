@@ -61,13 +61,15 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 
 片段若设置了上述任一绑定键、`telemetry.enabled`、`benchmark.env.CONC_LIST` 或 AgentX 客户端路径（`RESULT_DIR`、`AGENTIC_OUTPUT_DIR`、`HF_HUB_CACHE`、`HUGGINGFACE_HUB_CACHE`，多节点还包括 `AIPERF_DATASET_MMAP_CACHE_DIR`），即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），除非 `models.OVERRIDES` 中的某一行改用 Hub 快照；主配置镜像解析为预置的容器，因此配置不再引用别名。
 
+配置不硬编码集群硬件信息：配置中任意位置的 `'@fabric.<name>'` 值在绑定后替换为作业所在集群的 `srt-slurm.fabric` 字段（列表以逗号连接；字段见 [CONFIGS.md](../../../configs/CONFIGS.md#runners)）。schema 未定义的名称、嵌在更长字符串中的引用，或集群未设置的字段，都会在提交前失败；生成矩阵时，若某行选中的变体所引用的字段在其运行器标签可达的任一集群上未设置，也已失败。启动前不会解析引用：配置指纹按原样对引用计算哈希，因此与集群无关。配置有意选择的值（例如重新排列的 rail 顺序或设备子集）保持字面值。
+
 无需集群即可查看启动器实际提交的内容：
 
 ```bash
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-该命令为每个定长序列或 AgentX 测试点及变体写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`），以及 AgentX 客户端路径。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
+该命令为每个定长序列或 AgentX 测试点及变体写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`），以及 AgentX 客户端路径。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。fabric 引用取该集群的值；标签跨多个集群时保持引用原样。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
 ## 配置指纹
 
