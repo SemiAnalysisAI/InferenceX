@@ -50,6 +50,7 @@ base:
         TORCH_BLAS_PREFER_HIPBLASLT: "1"
         NCCL_MIN_NCHANNELS: "112"
         GPU_MAX_HW_QUEUES: "2"
+        UCX_LOG_LEVEL: info
       args: &worker_args
         kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail"}'
         served-model-name: MiniMaxAI/MiniMax-M3-MXFP8

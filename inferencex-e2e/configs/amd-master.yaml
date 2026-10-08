@@ -1034,6 +1034,7 @@ minimaxm3-fp8-mi300x-vllm-agentic-nixl:
   runner: cluster:mi300x-amd
   precision: fp8
   framework: vllm
+  router: {name: vllm-router, version: "0.1.15"}
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
