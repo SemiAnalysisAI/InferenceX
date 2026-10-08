@@ -9242,3 +9242,27 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 32, 64, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/gb300-fp4-mtp/agentic.yaml }
+
+# One serving GPU, stock ARM64 release, native AgentX client and proportional host cache.
+qwen3.8next-fp4-gb300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
+  model: nvidia/Qwen3.8-Flash-Next-NVFP4
+  model-prefix: qwen3.8next
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    # Use the GB300 profile's proportional per-worker host DRAM allowance.
+    # Generated allowance: 225 GB. Recipe H224 reserves alignment headroom.
+    - dram-utilization: 1.0
+      search-space:
+      - tp: 1
+        ep: 1
+        dp-attn: false
+        spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [1, 2, 4, 8, 16, 32, 48, 64]
+        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/gb300-fp4-mtp/agentic.yaml
