@@ -22,8 +22,8 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 - 工作负载目录为 `1k1k`、`8k1k` 或 `agentx`。已有的跨序列长度配置集合放在 `fixed-seq-len` 下，保留其覆盖项选择器。
 - 文件名使用小写字母和连字符，以 `agg` 或 `disagg` 开头。包含拓扑及用于区分同目录配置的关键参数，例如并行方式、批大小、并发数、MTP、卸载或缓存设置。避免日期、带序号的延迟/吞吐量标签，以及重复目录中已有的模型或硬件信息。
 - 拓扑名中的 `1p4d` 表示预填充/解码 worker 数，不一定等于物理节点数。`p-tp4` 和 `d-tp8` 分别标识预填充和解码 TP；`b` 表示批大小，`c` 表示并发数。运行参数以 YAML 为准。
-- 覆盖项集合使用 `*-variants.yaml` 命名。仅在各配置间存在差异的多节点 AgentX 配置，按主配置条目合并为一个集合，通常为 `agg-variants.yaml` 或 `disagg-variants.yaml`：`base` 保存共享设置，每个原配置成为一个具名 `override_<name>` 块，只包含其差异（使用普通覆盖项，而非 `zip_override_*`）。主配置通过 `CONFIG_FILE=recipes/<dir>/<bundle>.yaml:override_<name>` 选择其一。启动器以文本方式读取的配置（例如带顶层 `telemetry:` 的功耗配置）保持独立文件。即使内容相同，也保留独立扫描入口：配置路径参与评估分组。Qwen3.5 的 `*-stp-sweep.yaml` 和 `*-mtp-sweep.yaml` 保留了这一既有区别。
-- 移动文件时，同步更新当前及已弃用主配置中的 `CONFIG_FILE`、`EVAL_CONFIG_FILE`，以及启动器路径规则、工作流过滤器和本地文档。保留上游来源 URL，并保持历史性能变更日志不变。不为旧目录结构提供别名。
+- 覆盖项集合使用 `*-variants.yaml` 命名。仅在各配置间存在差异的多节点 AgentX 配置，按主配置条目合并为一个集合，通常为 `agg-variants.yaml` 或 `disagg-variants.yaml`：`base` 保存共享设置，每个原配置成为一个具名 `override_<name>` 块，只包含其差异（使用普通覆盖项，而非 `zip_override_*`）。主配置行通过 `srt-recipe: <bundle>.yaml:override_<name>` 选择其一，路径相对于条目的 `srt-recipe-dir`。启动器以文本方式读取的配置（例如带顶层 `telemetry:` 的功耗配置）保持独立文件。即使内容相同，也保留独立扫描入口：配置路径参与评估分组。Qwen3.5 的 `*-stp-sweep.yaml` 和 `*-mtp-sweep.yaml` 保留了这一既有区别。
+- 移动文件时，同步更新主配置中的 `srt-recipe-dir`、`srt-recipe` 和 `eval-srt-recipe` 引用，以及启动器路径规则、工作流过滤器和本地文档。保留上游来源 URL，并保持历史性能变更日志不变。不为旧目录结构提供别名。
 
 共享运行时资源保留在模型目录旁的 `configs/` 中，不属于独立基准测试配置。`configs/dsv4-moe-load-balancer-configs/` 中的四个文件原样取自 NVIDIA/srt-slurm 提交 `deb1dfd9934398664f92d194169c183e009da83b`，保留了此前 DSV4 TRT 配置使用的 EPLB 初始专家分配；目前没有已提交的配置引用这些文件。srt driver（[`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)）将这些文件复制到作业仓库的 `configs/` 目录，供配置中的绑定挂载使用。将配置文件放入本目录不会启用该配置；实际基准测试矩阵由主配置决定。
 
@@ -43,7 +43,8 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 | `roles.prefill.args.ep-size`（SGLang） | `prefill.ep` |
 | `roles.prefill.args.enable-dp-attention` | `prefill.dp-attn` |
 | `benchmark.concurrencies` | `conc-list` |
-| 配置路径，可附带覆盖项选择器 | `additional-settings: CONFIG_FILE=recipes/...yaml` |
+| 配置目录，相对于本目录 | 条目级 `srt-recipe-dir` |
+| 配置文件，可附带 `base`、`override_<name>` 或 `zip_override_<name>[<index>]` 选择器 | 搜索空间条目的 `srt-recipe`；仅评估的真实验证使用 `eval-srt-recipe` |
 
 配置文件和主配置必须同步更新。启动器执行配置文件；主配置提供结果标签和调度元数据。聚合式配置使用 `roles.agg`；`roles.decode.nodes: colocate` 表示解码角色与预填充角色共享节点，不增加调度所需的工作节点数。
 

@@ -113,7 +113,7 @@ python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
 
 必须在**启动服务前**设置 `EVAL_ONLY=true`。它不仅是评估命令内部的开关：
 
-1. 对单节点定长序列作业，srt binder 会把服务上下文设为矩阵中的 `MAX_MODEL_LEN`（`isl + osl + 256`），SGLang 使用 `context-length`，TRT-LLM 使用 `max_seq_len` 和 `max_num_tokens`，vLLM 与 ATOM 使用 `max-model-len`。AgentX 测试点和多节点作业保留配方自身的上下文，多节点作业还可选择用于真实验证的 `EVAL_CONFIG_FILE`。
+1. 对单节点定长序列作业，srt binder 会把服务上下文设为矩阵中的 `MAX_MODEL_LEN`（`isl + osl + 256`），SGLang 使用 `context-length`，TRT-LLM 使用 `max_seq_len` 和 `max_num_tokens`，vLLM 与 ATOM 使用 `max-model-len`。AgentX 测试点和多节点作业保留配方自身的上下文，多节点作业还可选择用于真实验证的 `eval-srt-recipe`。
 2. 仍会运行健康检查。在仅评估作业中，厂商评估框架还会在 `EVAL_ENDPOINT_READY_TIMEOUT_SECONDS` 内等待服务模型出现在 OpenAI chat 路由上。
 3. 跳过吞吐量测试。
 4. `python3 -m infx.bench eval` 按 `EVAL_MAX_MODEL_LEN` 确定每个 lm-eval 请求的预算。未设置时使用 `MAX_MODEL_LEN`，并以模型原生上限为界。
