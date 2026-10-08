@@ -1,8 +1,7 @@
 # DeepSeek-V4-Pro-0813 AgentX on MI355X with ATOM DSpark K6 (six draft tokens,
 # a verify window of 7). Low concurrency is TP-only. The DP-attention band runs
-# native RCCL expert parallelism at C48 and C96 and MegaMoE (fused dispatch,
-# expert GEMMs and combine) from C64. C256 and C384 add an LMCache CPU KV tier
-# (lmcache_mp, one LMCache server per node); the other points keep the KV
+# native RCCL expert parallelism at C48 and C96 and MegaMoE from C64. C256 and
+# C384 add an LMCache CPU KV tier (lmcache_mp); the other points keep the KV
 # cache GPU-resident.
 base:
   schema: 2
@@ -61,23 +60,9 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point. Admission is 2x CONC through C96 and 128 per DP rank
-# from C128 (max-num-seqs is per rank under DP attention and sizes each rank's
-# state pool, so a larger one only shrinks the KV pool). KV is BF16 through
-# concurrency 16 and FP8 in the DEP band. DEP pins sessions to one DP-attention
-# rank so later turns reach their prefix KV, and captures every small per-rank
-# decode batch.
-#
-# MegaMoE points: ATOM_MEGA_MASK_PAD_ROWS keeps each rank's DP pad rows out of
-# dispatch and the expert GEMMs, and ATOM_MEGA_DECODE_MTPR sizes the small
-# fixed-slot MegaMoE instance that decode, verify and draft passes reuse; it
-# must cover a rank's padded decode rows (running batch x 7), with
-# AITER_MEGA_FIXED_SLOT_MAX_MTPR one below the next power of two. From C128,
-# EPLB balances experts on prefill load during the warmup and stops after
-# ATOM_EPLB_MAX_REBALANCES rebalances (the count one warmup makes at that
-# point), so no expert moves while AgentX measures. ATOM_PREFILL_DECODE_INTERVAL
-# (decode steps protected after each lockstep prefill) grows with concurrency
-# until prefill would starve.
+# One variant per point. KV is BF16 through concurrency 16 and FP8 in the DEP
+# band. DEP pins sessions to one DP-attention rank so later turns reach their
+# prefix KV, and captures every small per-rank decode batch.
 override_tp8_c1:
   roles:
     agg:
@@ -231,13 +216,9 @@ override_tp8_c128_dep:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-# DRAM variants: ATOM's lmcache_mp tier backed by one standalone LMCache server
-# per node (LMCache 0.5.6.dev139+gf22dec28, the build in the ATOM image), which
-# dsv4-atom-lmcache-mp-server.sh starts in the worker container before ATOM. All
-# eight DP ranks share it, so a session's KV evicted on one rank's GPU is
-# restored from host memory instead of recomputed. The 1000 GB L1 allocates
-# lazily inside the 1019 GB budget (dram-utilization 0.34); its 900 s read TTL
-# outlasts the async lookups queued behind long prefills.
+# DRAM variants: ATOM's lmcache_mp tier backed by one LMCache server per node,
+# which dsv4-atom-lmcache-mp-server.sh starts from the LMCache build in the ATOM
+# image within the 1019 GB budget (dram-utilization 0.34).
 override_tp8_c256_dep_lmcache:
   setup_script: dsv4-atom-lmcache-mp-server.sh
   roles:
@@ -282,8 +263,6 @@ override_tp8_c256_dep_lmcache:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-# C384 pads a rank's decode batch past 64, so it captures every eighth size up
-# to 128 and raises the fixed-slot capacity to 1024 rows.
 override_tp8_c384_dep_lmcache:
   setup_script: dsv4-atom-lmcache-mp-server.sh
   roles:
