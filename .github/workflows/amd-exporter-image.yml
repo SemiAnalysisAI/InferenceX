@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 30
     env:
       SOURCE_SHA: 9d0eb8c88af99f1dbe2914d803382092671456d9
-      PATCH_SHA256: 66dbfab64d2ba4d04b762612fa1b3cbf6a54e5422c1c9e88eb02523eea2e0261
+      PATCH_SHA256: b0bb7d3477be7ff5b3b455d17f83c454d3aae96ac8bf2e289306d3fd3df0e7a5
       GPU_AGENT_SHA: bcae57f9b395363f3340ad0b7393659b7df13f37
       ARCHIVE_NAME: device-metrics-exporter-v1.5.4-10.2.0a20261001.tar.gz
       ARCHIVE_SHA256: 0ba397bc31abc1c538e24f8d7264fb421cc5fb8dd59b2e1c493a8efec404c2ba
@@ -69,7 +69,8 @@ jobs:
           git -C exporter-source apply "$GITHUB_WORKSPACE/tools/amd-exporter/cache.patch"
           python3 -m unittest discover -s tools/amd-exporter -p 'test_*.py' -v
           cd exporter-source
-          go test -race ./pkg/amdgpu/gpuagent -run 'Test(ParseGPUGetCacheTTL|GPUGetCache|DefaultGPUGet)' -count=1
+          go test -race ./pkg/amdgpu/gpuagent -run 'Test(ParseGPUGetCacheTTL|CacheRead(HonorsGPUGetCacheTTL|ErrorClearsSlot|ConcurrentTTL)|NewAgentGPUGetCacheTTL)' -count=1
+          go test ./pkg/exporter -run TestExporterOptions -count=1
           go test ./pkg/exporter/utils
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -C cmd/exporter -trimpath \
             -ldflags "-X main.Version=1.5.4-powerx-cache -X main.GitCommit=$SOURCE_SHA+patch.$PATCH_SHA256 -X main.ROCmCommit=unknown" \

@@ -1,5 +1,21 @@
+From b49c383de9177c1773720d71719c501c62bea8ad Mon Sep 17 00:00:00 2001
+From: Wenyao Gao <wenyao.gao28@gmail.com>
+Date: Wed, 7 Oct 2026 17:12:40 -0700
+Subject: [PATCH] feat: make the GPUGet response cache TTL configurable
+
+AMD_GPU_GET_CACHE_TTL is parsed once in cmd/exporter and carried through the existing exporter and gpuagent options; unset keeps the 15 s cache and 0s issues a new GPUGet on every read. A zero-value GPUAgentClient literal now gets no cache instead of 15 s; no upstream test relies on that.
+---
+ cmd/exporter/main.go                          |  10 +
+ pkg/amdgpu/gpuagent/gpuagent.go               |  32 +++
+ .../gpuagent/gpuagent_cache_ttl_test.go       | 185 ++++++++++++++++++
+ pkg/amdgpu/gpuagent/gpuagent_gpu.go           |   8 +-
+ pkg/exporter/exporter.go                      |  10 +
+ pkg/exporter/exporter_test.go                 |  16 ++
+ 6 files changed, 258 insertions(+), 3 deletions(-)
+ create mode 100644 pkg/amdgpu/gpuagent/gpuagent_cache_ttl_test.go
+
 diff --git a/cmd/exporter/main.go b/cmd/exporter/main.go
-index edfbf05..5be535f 100644
+index edfbf05..28ee4b4 100644
 --- a/cmd/exporter/main.go
 +++ b/cmd/exporter/main.go
 @@ -25,6 +25,7 @@ import (
@@ -10,125 +26,139 @@ index edfbf05..5be535f 100644
  	"github.com/ROCm/device-metrics-exporter/pkg/exporter"
  	"github.com/ROCm/device-metrics-exporter/pkg/exporter/globals"
  	"github.com/ROCm/device-metrics-exporter/pkg/exporter/logger"
-@@ -106,6 +107,13 @@ func main() {
+@@ -38,6 +39,8 @@ var (
+ 	ROCmCommit string
+ )
+ 
++const gpuGetCacheTTLEnv = "AMD_GPU_GET_CACHE_TTL"
++
+ func main() {
+ 	// Check environment variable to determine error handling behavior
+ 	relaxedMode := os.Getenv("AMD_EXPORTER_RELAXED_FLAGS_PARSING") != ""
+@@ -106,6 +109,12 @@ func main() {
  		os.Exit(1)
  	}
  
-+	if *enableGPUMonitoring {
-+		if _, err := gpuagent.GPUGetCacheTTLFromEnv(); err != nil {
-+			fmt.Fprintf(os.Stderr, "invalid GPUGet cache configuration: %v\n", err)
-+			os.Exit(1)
-+		}
++	gpuGetCacheTTL, err := gpuagent.ParseGPUGetCacheTTL(os.Getenv(gpuGetCacheTTLEnv))
++	if err != nil {
++		fmt.Printf("invalid GPUGet cache configuration: %s: %v, exiting\n", gpuGetCacheTTLEnv, err)
++		os.Exit(1)
 +	}
 +
  	if !*enableNICMonitoring && !*enableGPUMonitoring && !*enableIFOEMonitoring {
  		fmt.Printf("NIC Agent, GPU Agent and IFOE Agent are all disabled, exiting")
  		os.Exit(1)
-diff --git a/pkg/amdgpu/gpuagent/gpuagent_cache.go b/pkg/amdgpu/gpuagent/gpuagent_cache.go
-new file mode 100644
-index 0000000..f7b0b30
---- /dev/null
-+++ b/pkg/amdgpu/gpuagent/gpuagent_cache.go
-@@ -0,0 +1,35 @@
-+// Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
-+// SPDX-License-Identifier: Apache-2.0
+@@ -128,6 +137,7 @@ func main() {
+ 		exporter.WithSRIOV(*sriov),
+ 		exporter.WithExitOnAgentDown(*exitOnAgentDown),
+ 		exporter.WithExitOnRocpctlError(*exitOnRocpctlError),
++		exporter.WithGPUGetCacheTTL(gpuGetCacheTTL),
+ 		exporter.WithBindAddr(*bindAddr),
+ 		exporter.WithSlurmClient(*enableSlumrScl),
+ 		exporter.WithenableIFOEMonitoring(*enableIFOEMonitoring),
+diff --git a/pkg/amdgpu/gpuagent/gpuagent.go b/pkg/amdgpu/gpuagent/gpuagent.go
+index a408de3..c9ff711 100644
+--- a/pkg/amdgpu/gpuagent/gpuagent.go
++++ b/pkg/amdgpu/gpuagent/gpuagent.go
+@@ -21,6 +21,7 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"strconv"
++	"strings"
+ 	"sync"
+ 	"time"
+ 
+@@ -50,6 +51,7 @@ type GPUAgentClient struct {
+ 	enableSriov          bool
+ 	exitOnAgentDown      bool // exit DME process when agent is unreachable
+ 	exitOnRocpctlError   bool // exit DME process when rocpctl auto-disables on failure
++	gpuGetCacheTTL       time.Duration
+ 	useSocket            bool // use socket connection instead of IP:port
+ 	socketPath           string
+ 
+@@ -144,6 +146,35 @@ func WithExitOnRocpctlError(exit bool) GPUAgentClientOptions {
+ 	}
+ }
+ 
++// DefaultGPUGetCacheTTL is the GPUGet response reuse window when no option is passed.
++const DefaultGPUGetCacheTTL = cacheTimer
 +
-+package gpuagent
-+
-+import (
-+	"fmt"
-+	"os"
-+	"time"
-+)
-+
-+const (
-+	gpuGetCacheTTLEnv     = "AMD_GPU_GET_CACHE_TTL"
-+	defaultGPUGetCacheTTL = time.Second
-+)
-+
-+// GPUGetCacheTTLFromEnv resolves the startup setting shared by the exporter
-+// entrypoint and GPU client construction. It does not cache the environment.
-+func GPUGetCacheTTLFromEnv() (time.Duration, error) {
-+	return parseGPUGetCacheTTL(os.Getenv(gpuGetCacheTTLEnv))
++// WithGPUGetCacheTTL sets how long a GPUGet response is reused; a non-positive
++// value issues a new RPC on every read.
++func WithGPUGetCacheTTL(ttl time.Duration) GPUAgentClientOptions {
++	return func(ga *GPUAgentClient) {
++		logger.Log.Printf("GPUGet cache TTL set to %v", ttl)
++		ga.gpuGetCacheTTL = ttl
++	}
 +}
 +
-+func parseGPUGetCacheTTL(value string) (time.Duration, error) {
++// ParseGPUGetCacheTTL parses a cache TTL; empty means DefaultGPUGetCacheTTL and
++// negative values are rejected.
++func ParseGPUGetCacheTTL(value string) (time.Duration, error) {
++	value = strings.TrimSpace(value)
 +	if value == "" {
-+		return defaultGPUGetCacheTTL, nil
++		return DefaultGPUGetCacheTTL, nil
 +	}
 +	ttl, err := time.ParseDuration(value)
 +	if err != nil {
-+		return 0, fmt.Errorf("%s=%q: expected a non-negative duration: %w", gpuGetCacheTTLEnv, value, err)
++		return 0, err
 +	}
 +	if ttl < 0 {
-+		return 0, fmt.Errorf("%s=%q: duration must not be negative", gpuGetCacheTTLEnv, value)
++		return 0, fmt.Errorf("%v must not be negative", ttl)
 +	}
 +	return ttl, nil
 +}
-diff --git a/pkg/amdgpu/gpuagent/gpuagent_cache_regression_test.go b/pkg/amdgpu/gpuagent/gpuagent_cache_regression_test.go
++
+ func (ga *GPUAgentClient) GetGRPCConnection() *grpc.ClientConn {
+ 	return ga.conn
+ }
+@@ -174,6 +205,7 @@ func NewAgent(mh *metricsutil.MetricsHandler, opts ...GPUAgentClientOptions) *GP
+ 		computeNodeHealthState: true,
+ 		enableGPUMonitoring:    true,
+ 		enableIFOEMonitoring:   false,
++		gpuGetCacheTTL:         DefaultGPUGetCacheTTL,
+ 	}
+ 	for _, o := range opts {
+ 		o(ga)
+diff --git a/pkg/amdgpu/gpuagent/gpuagent_cache_ttl_test.go b/pkg/amdgpu/gpuagent/gpuagent_cache_ttl_test.go
 new file mode 100644
-index 0000000..4bd0d56
+index 0000000..776b330
 --- /dev/null
-+++ b/pkg/amdgpu/gpuagent/gpuagent_cache_regression_test.go
-@@ -0,0 +1,35 @@
-+// Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
-+// SPDX-License-Identifier: Apache-2.0
-+
-+package gpuagent
-+
-+import (
-+	"context"
-+	"testing"
-+	"time"
-+
-+	"github.com/ROCm/device-metrics-exporter/pkg/amdgpu/gen/amdgpu"
-+	"github.com/ROCm/device-metrics-exporter/pkg/amdgpu/mock_gen"
-+	"github.com/ROCm/device-metrics-exporter/pkg/exporter/logger"
-+	"go.uber.org/mock/gomock"
-+)
-+
-+func TestDefaultGPUGetDoesNotReuseTwoSecondOldReading(t *testing.T) {
-+	logger.Init(true)
-+	t.Setenv("AMD_GPU_GET_CACHE_TTL", "")
-+	ga, err := NewGPUAgentGPUClient(&GPUAgentClient{ctx: context.Background()})
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	defer ga.Close()
-+	client := mock_gen.NewMockGPUSvcClient(gomock.NewController(t))
-+	ga.gpuclient = client
-+	old, fresh := &amdgpu.GPUGetResponse{}, &amdgpu.GPUGetResponse{}
-+	slot := &ga.gCache.metricsCache
-+	slot.resp, slot.ts = old, time.Now().Add(-2*time.Second)
-+	client.EXPECT().GPUGet(gomock.Any(), gomock.Any()).Return(fresh, nil).Times(1)
-+	got, err := ga.cacheRead(nil, slot)
-+	if err != nil || got != fresh {
-+		t.Fatalf("read = %p, %v; want fresh %p", got, err, fresh)
-+	}
-+}
-diff --git a/pkg/amdgpu/gpuagent/gpuagent_cache_test.go b/pkg/amdgpu/gpuagent/gpuagent_cache_test.go
-new file mode 100644
-index 0000000..9bb54b6
---- /dev/null
-+++ b/pkg/amdgpu/gpuagent/gpuagent_cache_test.go
-@@ -0,0 +1,186 @@
-+// Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
-+// SPDX-License-Identifier: Apache-2.0
-+
++++ b/pkg/amdgpu/gpuagent/gpuagent_cache_ttl_test.go
+@@ -0,0 +1,185 @@
++/*
++*
++# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the \"License\");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an \"AS IS\" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++*
++*/
 +package gpuagent
 +
 +import (
 +	"context"
 +	"errors"
-+	"strings"
 +	"sync"
 +	"testing"
 +	"time"
 +
 +	"github.com/ROCm/device-metrics-exporter/pkg/amdgpu/gen/amdgpu"
 +	"github.com/ROCm/device-metrics-exporter/pkg/amdgpu/mock_gen"
++	"github.com/ROCm/device-metrics-exporter/pkg/exporter/config"
 +	"github.com/ROCm/device-metrics-exporter/pkg/exporter/logger"
++	"github.com/ROCm/device-metrics-exporter/pkg/exporter/metricsutil"
 +	"go.uber.org/mock/gomock"
++	"google.golang.org/grpc"
 +)
 +
 +func TestParseGPUGetCacheTTL(t *testing.T) {
@@ -137,87 +167,57 @@ index 0000000..9bb54b6
 +		want  time.Duration
 +		bad   bool
 +	}{
-+		{"", time.Second, false},
++		{"", DefaultGPUGetCacheTTL, false},
 +		{"15s", 15 * time.Second, false},
-+		{"1s", time.Second, false},
 +		{"500ms", 500 * time.Millisecond, false},
-+		{"0s", 0, false},
++		{" 0s ", 0, false},
 +		{"0", 0, false},
 +		{"-1s", 0, true},
 +		{"1", 0, true},
-+		{"invalid", 0, true},
++		{"abc", 0, true},
 +		{"999999999999999999999s", 0, true},
 +	} {
 +		t.Run(tc.value, func(t *testing.T) {
-+			got, err := parseGPUGetCacheTTL(tc.value)
++			got, err := ParseGPUGetCacheTTL(tc.value)
 +			if (err != nil) != tc.bad || got != tc.want {
-+				t.Fatalf("parse(%q) = %v, %v; want %v, error=%v", tc.value, got, err, tc.want, tc.bad)
-+			}
-+			if err != nil && !strings.Contains(err.Error(), gpuGetCacheTTLEnv) {
-+				t.Fatalf("error does not identify the setting: %v", err)
++				t.Fatalf("%q: got %v, %v; want %v, error=%v", tc.value, got, err, tc.want, tc.bad)
 +			}
 +		})
 +	}
 +}
 +
-+func TestGPUGetCacheTTLFromEnvironment(t *testing.T) {
-+	logger.Init(true)
-+	for _, value := range []string{"", "1s", "0s", "bad", "-1s"} {
-+		t.Run(value, func(t *testing.T) {
-+			t.Setenv(gpuGetCacheTTLEnv, value)
-+			want, wantErr := parseGPUGetCacheTTL(value)
-+			ga, err := NewGPUAgentGPUClient(&GPUAgentClient{})
-+			if wantErr != nil {
-+				if err == nil || ga != nil {
-+					t.Fatal("invalid TTL must reject client construction")
-+				}
-+				return
-+			}
-+			if err != nil {
-+				t.Fatal(err)
-+			}
-+			defer ga.Close()
-+			if ga.gpuGetCacheTTL != want {
-+				t.Fatalf("client TTL = %v, want %v", ga.gpuGetCacheTTL, want)
-+			}
-+		})
-+	}
-+}
-+
-+func newCacheTestClient(t *testing.T, ttl time.Duration) (*GPUAgentGPUClient, *mock_gen.MockGPUSvcClient) {
++func newCacheTTLClient(t *testing.T, ttl time.Duration) (*GPUAgentGPUClient, *mock_gen.MockGPUSvcClient) {
 +	t.Helper()
 +	logger.Init(true)
++	ga, err := NewGPUAgentGPUClient(&GPUAgentClient{ctx: context.Background(), gpuGetCacheTTL: ttl})
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(ga.Close)
 +	client := mock_gen.NewMockGPUSvcClient(gomock.NewController(t))
-+	return &GPUAgentGPUClient{
-+		gpuclient:      client,
-+		gpuHandler:     &GPUAgentClient{ctx: context.Background()},
-+		gCache:         &gpuCache{},
-+		gpuGetCacheTTL: ttl,
-+	}, client
++	ga.gpuclient = client
++	return ga, client
 +}
 +
-+func TestGPUGetCacheReadTTL(t *testing.T) {
++func TestCacheReadHonorsGPUGetCacheTTL(t *testing.T) {
 +	for _, tc := range []struct {
-+		name string
-+		ttl  time.Duration
-+		age  time.Duration
-+		hit  bool
++		name    string
++		ttl     time.Duration
++		age     time.Duration
++		refresh bool
 +	}{
-+		{"legacy TTL retains two-second-old response", 15 * time.Second, 2 * time.Second, true},
-+		{"default expires two-second-old response", defaultGPUGetCacheTTL, 2 * time.Second, false},
-+		{"one second expires two-second-old response", time.Second, 2 * time.Second, false},
-+		{"fresh response", time.Second, 0, true},
-+		{"zero bypasses fresh response", 0, 0, false},
++		{"default keeps a 2s-old response", DefaultGPUGetCacheTTL, 2 * time.Second, false},
++		{"1s TTL refreshes a 2s-old response", time.Second, 2 * time.Second, true},
++		{"0 refreshes even a fresh response", 0, 0, true},
 +	} {
 +		t.Run(tc.name, func(t *testing.T) {
-+			ga, client := newCacheTestClient(t, tc.ttl)
-+			old := &amdgpu.GPUGetResponse{ApiStatus: amdgpu.ApiStatus_API_STATUS_OK}
-+			fresh := &amdgpu.GPUGetResponse{}
++			ga, client := newCacheTTLClient(t, tc.ttl)
++			cached, fresh := &amdgpu.GPUGetResponse{}, &amdgpu.GPUGetResponse{}
 +			slot := &ga.gCache.metricsCache
-+			slot.resp, slot.ts = old, time.Now().Add(-tc.age)
++			slot.resp, slot.ts = cached, time.Now().Add(-tc.age)
 +			filter := &amdgpu.GPUGetFilter{SkipProcessStatus: true}
-+			want := old
-+			if !tc.hit {
++			want := cached
++			if tc.refresh {
 +				client.EXPECT().GPUGet(gomock.Any(), &amdgpu.GPUGetRequest{Filter: filter}).Return(fresh, nil).Times(1)
 +				want = fresh
 +			}
@@ -229,8 +229,8 @@ index 0000000..9bb54b6
 +	}
 +}
 +
-+func TestGPUGetCacheReadErrorClearsResponse(t *testing.T) {
-+	ga, client := newCacheTestClient(t, time.Second)
++func TestCacheReadErrorClearsSlot(t *testing.T) {
++	ga, client := newCacheTTLClient(t, time.Second)
 +	slot := &ga.gCache.metricsCache
 +	slot.resp, slot.ts = &amdgpu.GPUGetResponse{}, time.Now().Add(-2*time.Second)
 +	readErr := errors.New("GPUGet failed")
@@ -239,29 +239,30 @@ index 0000000..9bb54b6
 +		client.EXPECT().GPUGet(gomock.Any(), gomock.Any()).Return(nil, readErr),
 +		client.EXPECT().GPUGet(gomock.Any(), gomock.Any()).Return(fresh, nil),
 +	)
-+	got, err := ga.cacheRead(nil, slot)
-+	if !errors.Is(err, readErr) || got != nil || slot.resp != nil {
++	if got, err := ga.cacheRead(nil, slot); !errors.Is(err, readErr) || got != nil || slot.resp != nil {
 +		t.Fatalf("failed read retained a response: %v, %v", got, err)
 +	}
-+	got, err = ga.cacheRead(nil, slot)
-+	if err != nil || got != fresh {
++	if got, err := ga.cacheRead(nil, slot); err != nil || got != fresh {
 +		t.Fatalf("retry = %v, %v", got, err)
 +	}
 +}
 +
-+func TestGPUGetCacheReadConcurrent(t *testing.T) {
++func TestCacheReadConcurrentTTL(t *testing.T) {
 +	for _, tc := range []struct {
 +		name  string
 +		ttl   time.Duration
 +		calls int
 +	}{
-+		{"reuse", 15 * time.Second, 1},
-+		{"bypass", 0, 16},
++		{"default reuses one read", DefaultGPUGetCacheTTL, 1},
++		{"0 reads once per caller", 0, 16},
 +	} {
 +		t.Run(tc.name, func(t *testing.T) {
-+			ga, client := newCacheTestClient(t, tc.ttl)
++			ga, client := newCacheTTLClient(t, tc.ttl)
 +			fresh := &amdgpu.GPUGetResponse{}
-+			client.EXPECT().GPUGet(gomock.Any(), gomock.Any()).Return(fresh, nil).Times(tc.calls)
++			client.EXPECT().GPUGet(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *amdgpu.GPUGetRequest, ...grpc.CallOption) (*amdgpu.GPUGetResponse, error) {
++				time.Sleep(10 * time.Millisecond)
++				return fresh, nil
++			}).Times(tc.calls)
 +			start := make(chan struct{})
 +			var wg sync.WaitGroup
 +			for i := 0; i < 16; i++ {
@@ -269,8 +270,7 @@ index 0000000..9bb54b6
 +				go func() {
 +					defer wg.Done()
 +					<-start
-+					got, err := ga.cacheRead(nil, &ga.gCache.metricsCache)
-+					if err != nil || got != fresh {
++					if got, err := ga.cacheRead(nil, &ga.gCache.metricsCache); err != nil || got != fresh {
 +						t.Errorf("concurrent read = %v, %v", got, err)
 +					}
 +				}()
@@ -281,40 +281,41 @@ index 0000000..9bb54b6
 +	}
 +}
 +
-+func TestGPUGetCacheReadSeparateSlots(t *testing.T) {
-+	ga, client := newCacheTestClient(t, time.Second)
-+	metrics, npd := &amdgpu.GPUGetResponse{}, &amdgpu.GPUGetResponse{}
-+	filter := &amdgpu.GPUGetFilter{SkipProcessStatus: true}
-+	gomock.InOrder(
-+		client.EXPECT().GPUGet(gomock.Any(), &amdgpu.GPUGetRequest{}).Return(metrics, nil),
-+		client.EXPECT().GPUGet(gomock.Any(), &amdgpu.GPUGetRequest{Filter: filter}).Return(npd, nil),
-+	)
-+	for i := 0; i < 2; i++ {
-+		if got, err := ga.cacheRead(nil, &ga.gCache.metricsCache); err != nil || got != metrics {
-+			t.Fatalf("metrics slot = %v, %v", got, err)
-+		}
-+		if got, err := ga.cacheRead(filter, &ga.gCache.npdCache); err != nil || got != npd {
-+			t.Fatalf("NPD slot = %v, %v", got, err)
-+		}
++func TestNewAgentGPUGetCacheTTL(t *testing.T) {
++	logger.Init(true)
++	handler, err := metricsutil.NewMetrics(config.NewConfigHandler("config.json", config.GPUAgentConfig{}))
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, tc := range []struct {
++		name string
++		opts []GPUAgentClientOptions
++		want time.Duration
++	}{
++		{"no option keeps the upstream default", nil, DefaultGPUGetCacheTTL},
++		{"option disables reuse", []GPUAgentClientOptions{WithGPUGetCacheTTL(0)}, 0},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			ga := NewAgent(handler, tc.opts...)
++			if ga == nil || len(ga.clients) == 0 {
++				t.Fatal("NewAgent returned no GPU client")
++			}
++			gpu, ok := ga.clients[0].(*GPUAgentGPUClient)
++			if !ok {
++				t.Fatalf("first client is %T, want *GPUAgentGPUClient", ga.clients[0])
++			}
++			defer gpu.Close()
++			if gpu.gpuGetCacheTTL != tc.want {
++				t.Fatalf("GPU client TTL = %v, want %v", gpu.gpuGetCacheTTL, tc.want)
++			}
++		})
 +	}
 +}
 diff --git a/pkg/amdgpu/gpuagent/gpuagent_gpu.go b/pkg/amdgpu/gpuagent/gpuagent_gpu.go
-index 3e5d0f3..0e258ce 100644
+index 3e5d0f3..a19d644 100644
 --- a/pkg/amdgpu/gpuagent/gpuagent_gpu.go
 +++ b/pkg/amdgpu/gpuagent/gpuagent_gpu.go
-@@ -38,10 +38,7 @@ import (
- )
- 
- const (
--	// cachgpuid are updated after this many pull request
--	refreshInterval = 30 * time.Second
--	queryTimeout    = 15 * time.Second
--	cacheTimer      = 15 * time.Second
-+	queryTimeout = 15 * time.Second
- 
- 	cperQueryTimeout    = 60 * time.Second // higher than queryTimeout to handle 128-entry payloads
- 	cperTimestampLayout = "2006-01-02 15:04:05"
-@@ -154,6 +151,7 @@ type GPUAgentGPUClient struct {
+@@ -154,6 +154,7 @@ type GPUAgentGPUClient struct {
  	healthState           map[string]*metricssvc.GPUState
  	mockEccField          map[string]map[string]uint32 // gpuid->fields->count
  	gCache                *gpuCache
@@ -322,31 +323,21 @@ index 3e5d0f3..0e258ce 100644
  	exportLabels          map[string]bool
  	exportFieldMap        map[string]bool // all upper case keys
  	fieldMetricsMap       map[string]FieldMeta
-@@ -171,6 +169,10 @@ type GPUAgentGPUClient struct {
- }
- 
- func NewGPUAgentGPUClient(gpuHandler *GPUAgentClient) (*GPUAgentGPUClient, error) {
-+	cacheTTL, err := GPUGetCacheTTLFromEnv()
-+	if err != nil {
-+		return nil, err
-+	}
- 	gpuClient := &GPUAgentGPUClient{
- 		nodeHealthLabellerCfg: &utils.NodeHealthLabellerConfig{
- 			LabelPrefix: globals.GPUHealthLabelPrefix,
-@@ -183,6 +185,7 @@ func NewGPUAgentGPUClient(gpuHandler *GPUAgentClient) (*GPUAgentGPUClient, error
+@@ -183,6 +184,7 @@ func NewGPUAgentGPUClient(gpuHandler *GPUAgentClient) (*GPUAgentGPUClient, error
  		fieldMetricsMap: make(map[string]FieldMeta),
  		gpuSelectorMap:  make(map[int]bool),
  		gCache:          &gpuCache{},
-+		gpuGetCacheTTL:  cacheTTL,
++		gpuGetCacheTTL:  gpuHandler.gpuGetCacheTTL,
  		gpuHandler:      gpuHandler,
  		fl:              gpuHandler.fl,
  		gpuIDMap:        make(map[string]GPUIDMeta),
-@@ -418,14 +421,12 @@ func (ga *GPUAgentGPUClient) GetContext() context.Context {
+@@ -418,14 +420,14 @@ func (ga *GPUAgentGPUClient) GetContext() context.Context {
  	return ctx
  }
  
 -// cacheRead serves the given slot within cacheTimer, else issues a GPUGet with
--// the given filter and refreshes that slot.
++// cacheRead serves the given slot within gpuGetCacheTTL, else issues a GPUGet with
+ // the given filter and refreshes that slot.
  func (ga *GPUAgentGPUClient) cacheRead(filter *amdgpu.GPUGetFilter, c *responseCache) (*amdgpu.GPUGetResponse, error) {
  	now := time.Now()
  
@@ -357,7 +348,7 @@ index 3e5d0f3..0e258ce 100644
  		res := c.resp
  		ga.gCache.RUnlock()
  		logger.Debug("returning metrics from cache")
-@@ -438,7 +439,7 @@ func (ga *GPUAgentGPUClient) cacheRead(filter *amdgpu.GPUGetFilter, c *responseC
+@@ -438,7 +440,7 @@ func (ga *GPUAgentGPUClient) cacheRead(filter *amdgpu.GPUGetFilter, c *responseC
  	defer ga.gCache.Unlock()
  
  	// Check again after acquiring Lock to handle the case where another goroutine has already updated the cache
@@ -366,3 +357,79 @@ index 3e5d0f3..0e258ce 100644
  		logger.Debug("returning metrics from cache (after double-check)")
  		return c.resp, nil
  	}
+diff --git a/pkg/exporter/exporter.go b/pkg/exporter/exporter.go
+index f4261bf..0d5b57d 100644
+--- a/pkg/exporter/exporter.go
++++ b/pkg/exporter/exporter.go
+@@ -73,6 +73,7 @@ type Exporter struct {
+ 	enableCRI            bool
+ 	exitOnAgentDown      bool
+ 	exitOnRocpctlError   bool
++	gpuGetTTL            time.Duration
+ 	bindAddr             string
+ 	k8sApiClient         *k8sclient.K8sClient
+ 	svcHandler           *metricsserver.SvcHandler
+@@ -300,6 +301,7 @@ func NewExporter(agentGrpcport int, configFile string, opts ...ExporterOption) *
+ 		disableK8sApi: false, // by default k8s api is enabled
+ 		disableK8sScl: false, // by default k8s scheduler client is enabled
+ 		enableCRI:     true,  // by default CRI client is enabled
++		gpuGetTTL:     gpuagent.DefaultGPUGetCacheTTL,
+ 	}
+ 
+ 	for _, o := range opts {
+@@ -477,6 +479,13 @@ func WithExitOnRocpctlError(exit bool) ExporterOption {
+ 	}
+ }
+ 
++func WithGPUGetCacheTTL(ttl time.Duration) ExporterOption {
++	return func(e *Exporter) {
++		logger.Log.Printf("GPUGet cache TTL set to %v", ttl)
++		e.gpuGetTTL = ttl
++	}
++}
++
+ // StartMain - doesn't return it exits only on failure
+ func (e *Exporter) StartMain() {
+ 	defer e.Close()
+@@ -514,6 +523,7 @@ func (e *Exporter) StartMain() {
+ 			gpuagent.WithIFOEMonitoring(e.enableIFOEMonitoring),
+ 			gpuagent.WithExitOnAgentDown(e.exitOnAgentDown),
+ 			gpuagent.WithExitOnRocpctlError(e.exitOnRocpctlError),
++			gpuagent.WithGPUGetCacheTTL(e.gpuGetTTL),
+ 		}
+ 		if e.agentConfig.UseSocket {
+ 			opts = append(opts, gpuagent.WithSocketConnection(e.agentConfig.SocketPath))
+diff --git a/pkg/exporter/exporter_test.go b/pkg/exporter/exporter_test.go
+index d02b6c0..6a6e46a 100644
+--- a/pkg/exporter/exporter_test.go
++++ b/pkg/exporter/exporter_test.go
+@@ -29,6 +29,7 @@ import (
+ 	"testing"
+ 	"time"
+ 
++	"github.com/ROCm/device-metrics-exporter/pkg/amdgpu/gpuagent"
+ 	"github.com/ROCm/device-metrics-exporter/pkg/exporter/config"
+ 	"github.com/ROCm/device-metrics-exporter/pkg/exporter/globals"
+ 	"github.com/ROCm/device-metrics-exporter/pkg/exporter/logger"
+@@ -523,6 +524,21 @@ func TestExporterOptions(t *testing.T) {
+ 				assert.Assert(t, e.exitOnAgentDown, "exitOnAgentDown should be enabled")
+ 			},
+ 		},
++		{
++			name: "GPUGet cache TTL defaults to the gpuagent value",
++			verify: func(e *Exporter) {
++				assert.Equal(t, e.gpuGetTTL, gpuagent.DefaultGPUGetCacheTTL, "default GPUGet cache TTL should match gpuagent")
++			},
++		},
++		{
++			name: "GPUGet cache TTL disabled",
++			options: []ExporterOption{
++				WithGPUGetCacheTTL(0),
++			},
++			verify: func(e *Exporter) {
++				assert.Equal(t, e.gpuGetTTL, time.Duration(0), "GPUGet cache TTL should be zero")
++			},
++		},
+ 	}
+ 
+ 	for _, tc := range tests {
