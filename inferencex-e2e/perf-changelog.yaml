@@ -9415,6 +9415,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update the GLM-5.2 NVFP4 GB300 Dynamo + SGLang AgentX aggregated config to lmsysorg/sglang:nightly-dev-cu13-20260924-ffac53d7"
+    - "Update the GLM-5.2 NVFP4 GB300 Dynamo + SGLang AgentX aggregated config to lmsysorg/sglang:v0.5.21-cu130"
     - "Aggregated points: TP8 on two nodes at concurrency 1 and TP4 on one node at concurrency 4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3838
