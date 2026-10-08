@@ -1,9 +1,9 @@
 # Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
 # (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
-# is ~195 GB per GPU. The KV cache is GPU-resident through c4 and backed by
-# vLLM's SimpleCPUOffloadConnector (dram) from c10. Three bands, driven by
-# kimik3-fp4-mi355x-vllm-agentic-mtp: interactive dcp1 c1/c4 (GPU-resident),
-# mid dcp8 c10-c16 and throughput dcp8 c44/c48/c50 (KV read sharded across all
+# is ~195 GB per GPU. The KV cache is GPU-resident at c1 and backed by
+# vLLM's SimpleCPUOffloadConnector (dram) from dcp8 c4. Three bands, driven by
+# kimik3-fp4-mi355x-vllm-agentic-mtp: interactive dcp1/dcp8 c1 (GPU-resident),
+# mid dcp8 c4-c16 and throughput dcp8 c44/c48/c50 (KV read sharded across all
 # 8 GPUs, DRAM offload, DSpark draft with synthetic acceptance). The 1799 GB
 # DRAM budget splits evenly across the eight ranks.
 base:
@@ -11,7 +11,7 @@ base:
   name: kimik3-fp4-mi355x-vllm-agentic
   model:
     path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
+    container: vllm/vllm-openai-rocm:nightly-rocm100-81198e97ba7eee2a22540caaa756b7fdddcb4d93
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -81,7 +81,7 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. The DSpark draft length descends with concurrency
-# (7, 5, 4, 3, 3, 3) and returns to 4 for the throughput band; agentic runs
+# (7, 5, 4, 3, 4, 4) and stays at 4 for the throughput band; agentic runs
 # replace block rejection with the golden acceptance length for that draft
 # length. Admission is 2x CONC and graph
 # capture covers every even size up to 2x CONC x (1 + drafts). Breakable
@@ -138,6 +138,27 @@ override_tp8_c4:
       CONC: '4'
       KV_OFFLOADING: 'none'
 
+# c4 with dcp8: the KV read sharded across all 8 GPUs, backed by the DRAM tier.
+override_tp8_c4_dcp8_simple:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 8
+        max-num-batched-tokens: 8192
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":48,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48]}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":5,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
+
 # Mid band: dcp-size 8 shards the KV read across all 8 GPUs, backed by
 # vLLM's SimpleCPUOffloadConnector DRAM tier, with the DSpark draft.
 override_tp8_c10_dcp8_simple:
@@ -191,8 +212,8 @@ override_tp8_c14_dcp8_simple:
         max-num-seqs: 28
         max-num-batched-tokens: 8192
         gpu-memory-utilization: 0.9
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL","max_cudagraph_capture_size":112,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112]}'
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL","max_cudagraph_capture_size":140,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,140]}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
@@ -212,8 +233,8 @@ override_tp8_c16_dcp8_simple:
         max-num-seqs: 32
         max-num-batched-tokens: 8192
         gpu-memory-utilization: 0.9
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL","max_cudagraph_capture_size":128,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126,128]}'
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL","max_cudagraph_capture_size":160,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160]}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
