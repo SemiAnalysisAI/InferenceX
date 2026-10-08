@@ -8,6 +8,8 @@ import yaml
 from infx.matrix.fingerprint import recipe_fingerprint
 from infx.matrix.generate import generate_config_matrix
 from infx.matrix.validation import load_config_files, load_runner_file
+from infx.srt_slurm.generate import bound_variant, point_environment
+from infx.srt_slurm.variants import expand_variants
 from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
 
 SINGLE = "benchmarks/single_node/srt-slurm-recipes/fixture"
@@ -225,3 +227,17 @@ def test_rows_without_an_srt_recipe_hash_the_row_alone():
     assert recipe_fingerprint(row, Path("/nonexistent")) == (
         "adfebb88b80b867b258d2e9f972eb51f9f8c8bb2ae2bef10ab80ca8226913878"
     )
+
+
+def test_the_planner_binds_a_script_installed_version_from_the_row(project):
+    edit(project, f"{MULTI}/disagg.yaml", lambda recipe: recipe["base"].update(
+        setup_script="vllm-router.sh"))  # fmt: skip
+    edit(project, "configs/master.yaml", lambda master: master["multi"].update(
+        router={"name": "vllm-router", "version": "0.1.14"}))  # fmt: skip
+    master = load_config_files([str(project / "configs/master.yaml")])
+    runners = load_runner_file(str(project / "configs/runners.yaml"))
+    [row, *_] = generate_config_matrix(["multi"], master, runners, eval_mode="none", root=project)
+
+    # The checkout's setup scripts are not needed to plan.
+    _, recipe = bound_variant(row, point_environment(row), project, expand=expand_variants)
+    assert recipe["environment"] == {"ROUTER_VERSION": "0.1.14"}
