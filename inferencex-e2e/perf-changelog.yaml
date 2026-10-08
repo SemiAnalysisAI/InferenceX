@@ -9475,3 +9475,12 @@
     - "Refresh the aggregated curve with TP4/EP4 points at concurrency 1, 4, 8, 16, 24 and 32, plus TP4/EP4/DP4 points at concurrency 48 and 128 behind sglang-router."
     - "Apply the point-specific prefill chunking, scheduling, admission, memory and SWA prefix-tail settings from the single-node recipe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3745
+
+- config-keys:
+    - qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a Qwen3.5 NVFP4 B300 Dynamo-SGLang AgentX configuration with aggregate MTP recipes for TP2/EP2, TP2, and TP4 worker layouts."
+    - "Use the pinned lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729 image and validate each recipe's MTP step count against the committed Qwen3.5 thinking-on golden acceptance-length curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2978
