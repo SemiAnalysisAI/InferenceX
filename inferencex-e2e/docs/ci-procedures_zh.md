@@ -128,6 +128,10 @@ jq -r '
 
 确认预期的镜像、模型、硬件/Cluster 标签、单节点或多节点拓扑、输入/输出长度、并发、TP/EP、解码模式与 Eval 标记。空输出不算成功的预检。
 
+每个生成的多节点行都必须包含严格校验的正整数 `node-count`。启用节点槽位调度时，可复用 Workflow 会将该值发布为 `nodes:N` 请求标签；需求缺失或无效会导致矩阵验证失败，而不会静默进入单节点队列。不使用 Master Config 生成器、直接接入优先级调度的 Workflow 必须自行发布准确需求（例如 CollectiveX 使用每个分片生成的 `nodes` 值）。
+
+对于仓库内的解耦式 srt-slurm Recipe，节点需求包括 Worker 节点、已启用的 Service Pool，以及 Frontend、服务发现或 Benchmark 的专用节点。专用组件默认共用一个额外节点；设置 `benchmark.colocate_with_frontend: false` 后，每个专用组件分别占用一个节点（etcd 和 NATS 仍共用服务发现节点）。计数前先解析命名 Override。此变更只修正租约大小，不改变 Benchmark 拓扑。
+
 Eval 开关语义是明确的：
 
 - 默认：吞吐量条目加选定的默认固定序列 Eval 子集。
@@ -209,16 +213,6 @@ RUN_ID=$(gh run list \
 
 如果 `RUN_ID` 为空，不得继续。Run Metadata 描述派发 Workflow 的 Ref，可能不等于输入 `ref`。解释 GPU 结果前，必须在 `get-jobs` 中确认唯一标题、生成器命令与 Checkout Ref。
 
-## Kimi-K3 AgentX 功耗补测
-
-Kimi-K3 的 B200、GB200 和 GB300 多节点配方启用必需的 DCGM 遥测，并在服务头节点运行自定义 AgentX 客户端。Launcher 选择固定提交的 AgentX 功耗运行时、记录提交 SHA，等待 Slurm 结束和遥测收尾，然后逐一验证所请求的并发点并保存结果。共享结果收集器会保留原生任务的失败状态，先保存可用的功耗诊断文件，再返回失败。H200 路由和 AMD 测量尾部修复属于独立变更，仍待各自集成与验证。启用必需遥测配置本身不代表硬件验证通过。
-
-GB300 Kimi-K3 聚合与分离部署 recipe 使用 exporter 端口 `19401`，因为节点系统服务占用了 `9401`。共享遥测阶段会将此端口传入 prefill 和 decode 两个 Slurm 分组。已有双节点 exporter 生命周期证据验证了端口归属与清理行为，但不能替代分离部署的请求账目、功耗窗口或 eval 验证。
-
-补测缺失功耗时，只生成缺失的配方与并发组合，设置 `require-power: true`，保持 `agentx-fast: false`，并留空时长覆盖。标准 AgentX Profile 为一小时。对新启用的运行时或集群，先验证一个缺失点，再调度其余点。配方渲染通过或 GitHub Runner 在线并不能证明实时采集已就绪，也不能证明 Slurm 有空闲资源。保留现有有效点，新性能与功耗必须来自同一次运行；不得把新运行的能耗附加到旧性能点上。手动 `e2e-tests.yml` 产物仍须经过正常审查和入库流程，才会显示在 Dashboard 中。
-
-B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 `dcp-size: 8` 和 `kv-offloading: none` 以匹配实际命令；这项元数据修正不会启用 Offload。
-
 ## PR 主标签与修饰标签
 
 同仓库 PR 无论处于草稿还是 ready 状态，都由 sweep 标签授权 GPU 运行。草稿状态控制是否开始审阅，不决定 sweep 资格；fork PR 仍使用受信任调度路径。添加 sweep 标签或在保留标签时推送提交可以启动 sweep。标记为 ready 不会调度或重复运行。已带标签但尚无运行的草稿，可先移除再重新添加对应 sweep 标签来启动。
@@ -237,17 +231,23 @@ B200 Kimi 配方采用 DCP8，且关闭 Mooncake Offload。Master Config 记录 
 
 | 修饰标签 | 效果 | 合并后可复用？ |
 | --- | --- | --- |
-| `all-evals` | 将 Eval 选择扩展至每个已生成的固定序列配置；单独使用时是 Eval-only 简写 | 可以，前提是 Run 满足其他完整扫描复用规则 |
+| `all-evals` | 将 Eval 选择扩展至所有符合条件的 Eval，吞吐量仍会运行。与 `evals-only` 组合即只运行所有 Eval | 可以，前提是 Run 满足其他完整扫描复用规则 |
 | `evals-only` | 禁用吞吐量，仅运行选定 Eval 条目；与 `all-evals` 组合即只运行所有 Eval | 不可以 |
 | `agentx-fast` | 对 AgentX 吞吐量 Lane，在强制 Primer 后只加一次额外 Warmup Request，并使用 20 分钟 Profile；固定序列与 Eval 设置仍为规范值 | 不可以 |
 
-修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，通常会取消并重启当前 Run。`skip_queue`、Patchwork、Waiver 与 Checklist 标签是 Gate/优先级输入，不是主扫描模式。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时运行的 `merge-ingest.yml` 会忽略该标记。
+仅有修饰标签不会启动 GPU 扫描，但仍会运行 `check-changelog`。当变更日志新增条目包含 `append-only: true` 或 `no-evals: true` 时，`all-evals` 和 `evals-only` 会使 `check-changelog` 失败。
+
+每个主标签都会运行完整的并发扫描，任何标签都不会裁剪并发。需要最低并发冒烟测试时，请按[手动端到端派发](#手动端到端派发)运行 `e2e-tests.yml`，并设置 `trim-conc: true`。
+
+修改被识别的主标签或修饰标签会共享活动扫描的 Concurrency Group，并取消当前 Run。只有仍保留主标签时才会启动新的扫描。Head Commit 含 `[skip-sweep]` 只会跳过 PR 基准 Setup；Changelog/复用检查仍会运行，推送到 `main` 时运行的 `merge-ingest.yml` 会忽略该标记。
+
+队列优先级来自 PR Diff，不存在优先级标签。启用优先级调度器时，`run-sweep.yml` 的 Setup 会对 Diff 分类，再由 [`ci_priority.py`](../infx/workflows/ci_priority.py) 依据 [`configs/ci-priority.yaml`](../configs/ci-priority.yaml) 按这些条件为每个 Job 评分。PR 清单已满足（`checklist-complete`）会提高分数。修改上游引擎或运行时源码（`patchwork`）的 Diff 获得最低分，分类失败时同样按 `patchwork` 处理。人工优先级调整通过 InferenceX Dash 优先级调度器进行。
 
 ## Canary 与 Fail-fast 语义
 
 Canary 和 Fail-fast 解决不同问题：
 
-1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的 PR 才创建 Canary。`non-canary-full-sweep-enabled` 会跳过它。
+1. 只有使用 `full-sweep-enabled` 或 `full-sweep-fail-fast` 的同仓库 PR 才创建 Canary。`non-canary-full-sweep-enabled` 会跳过它。对于 fork PR，[`trusted-external-sweep.yml`](../../.github/workflows/trusted-external-sweep.yml) 改为派发 `e2e-tests.yml`，任何标签都不运行 Canary；在该路径下，只有 `full-sweep-fail-fast` 会启用 Fail-fast。
 2. Canary 首先检查单节点固定序列 `1k1k`、`8k1k` 和单节点 AgentX 条目；若没有合格条目，再检查多节点 AgentX 条目。它排除 Eval 条目，选取最低并发候选，使用对应的单节点或多节点工作流运行，并从后续矩阵移除该条目。
 3. 如果没有合格候选，Canary 会被跳过。否则所有 Benchmark/Eval 矩阵都要求 Canary 成功；Canary 失败会阻止其扇出。
 4. `full-sweep-fail-fast` 会分别为每个矩阵 Job Family 设置 `strategy.fail-fast: true`。首个失败点会取消同一矩阵 Family 中排队或运行中的兄弟项；它不是跨所有独立 Family 的全局 Kill Switch。
@@ -276,7 +276,7 @@ gh api "/repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID" \
 - **策略/Gate 失败：** 标签冲突、Changelog 无效、缺少授权、合并冲突或产物不合格。修正 Gate；重跑 GPU 无法解决。
 - **已被取代的 Run：** 后续 Commit 或被识别的标签变更通过 Workflow Concurrency 将其取消。应监控替代 Run，不要复活过期证据。
 
-[`Claude Code` 工作流](../../.github/workflows/claude.yml) 包含审阅和编码两个独立任务。审阅任务保留原有的 `ready_for_review` 及授权 `@pr-claude` 触发条件，只读访问仓库内容，并具有发布 PR 反馈的权限；编码任务使用原有写权限处理 `@claude` 和 `@Klaud-Cold` 请求。同一 PR 的审阅请求串行执行，不取消正在运行的审阅；编码请求仍独立运行。两个任务均通过固定到提交 SHA 的官方 action 安装其支持的 Claude Code CLI。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查 action 的安装日志。
+[`Claude Code` 工作流](../../.github/workflows/claude.yml) 包含审阅和编码两个独立任务。审阅任务保留原有的 `ready_for_review` 及授权 `@pr-claude` 触发条件，只读访问仓库内容，并具有发布 PR 反馈的权限；编码任务使用原有写权限处理 `@claude` 和 `@Klaud-Cold` 请求。只有评论或 Issue 作者的 `author_association` 为 `OWNER`、`MEMBER` 或 `COLLABORATOR` 时，编码任务才会启动；它不接受任何机器人触发者（`allowed_bots: ''`），因此即使 `github-actions[bot]`、`claude[bot]` 等 App 机器人的评论提及 `@claude` 或 `@Klaud-Cold`，也无法启动该任务。同一 PR 的审阅请求串行执行，不取消正在运行的审阅；编码请求仍独立运行。两个任务均通过固定到提交 SHA 的官方 action 安装其支持的 Claude Code CLI。安装或启动失败表示审阅没有执行，既不是代码审阅发现的问题，也不代表审阅通过。重试前应先检查 action 的安装日志。
 
 ### 安全重跑
 
@@ -375,6 +375,8 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 
 不提供 ID 时，Workflow 会选择 PR Branch 上最新的可暂存已结束 Run，并要求其 Head SHA 仍在 PR Commit 列表中。指定 ID 时允许使用明确关联的历史 Run。Workflow 会确认所选 Run，向 InferenceX-app 派发 `stage-results` 事件，并由 [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) 用成功图表或失败链接替换确认评论。
 
+格式正确的 `/use <run-id>` 复用请求也会触发此 Workflow，并按相同规则暂存所指定的 Run，同时保留正常的复用处理。格式错误的 `/use` 评论交由复用 Workflow 处理，不会触发暂存。
+
 预发布会保留之前已暂存的 Run。再次暂存同一个 Run ID 会更新该 Run 的预发布数据。必须保留源 Run ID 与下游 App Workflow 链接；预发布成功不证明生产复用资格或合并后入库成功。
 
 ## 产物复用与 merge-with-reuse
@@ -386,7 +388,7 @@ Klaud 和恢复工具继续使用现有的 `gh` 认证。GitHub CLI 跟随分页
 `infx.github` 提供仓库范围的 REST 调用、分页及评论表态基础操作，不包含扫描策略。`infx.workflows.sweep_runs` 为暂存和复用共享 PR 提交查询、已完成 Run 列表及未过期结果工件查找；各调用方保留自身的资格规则。`infx.workflows.reuse` 负责命令解析、授权查找及源 Run 的选择和验证。`infx.workflows.reuse_comment` 使用相同规则提供表态反馈。工作流通过 `python3 -m` 调用这些模块。这些辅助程序使用 Python 标准库和 GitHub CLI；从检出目录运行时无需安装 Python 包。
 
 1. 复用不要求扫描标签。标签用于选择新的 GPU 工作；移除主标签不会使已有源 Run 失效。Changelog 验证和合并辅助脚本仍会拒绝冲突的主标签。
-2. `evals-only` 与 `agentx-fast` 会令 Run 不可复用。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
+2. PR 当前带有 `evals-only` 或 `agentx-fast` 时，复用会被拒绝。验证 `/use` 评论时、合并辅助脚本中以及合并时检查的是 PR 当前标签，而不是源 Run 的标签历史，因此只能指定在没有这些标签时产生的 Run。向 PR 推送时，带有这些标签会跳过复用 Gate，因此只要存在主标签就会启动新的扫描。默认完整扫描以及带 `all-evals` 的完整扫描仍可复用。
 3. 源 Run 必须是已结束的 PR `run-sweep.yml` Run，其 Head SHA 仍在 PR Commit 列表中，并拥有未过期的 `results_bmk`、`eval_results_all` 或 `bmk_agentic_*` 结果产物。
 4. `OWNER`、`MEMBER` 或 `COLLABORATOR` 通过 `/use <run_id>` 授权复用。必须提供 Run ID，并与命令放在同一行。原有的 `/reuse-sweep-run <run_id>` 仍然等效；不带 ID 的 `/reuse-sweep-run` 会自动选择源 Run。两种命令使用相同的授权、验证和表态规则，并以两者中最新的合格授权命令为准。
 5. 不指定 ID 时，自动选择要求最新的合格源 Run 成功。指定 Run 是维护者的明确决定，允许结论为 `success`、`failure` 或 `cancelled`；下游入库只保留存在且有效的行，因此应将其报告为部分数据，而不是绿色 Run。
@@ -490,7 +492,7 @@ gh run download "$RUN_ID" --repo "$REPO" -n changelog-metadata -D "$OUT/changelo
 | `run-stats` | `run_stats.json` | 跨所有 Attempt 的硬件成功计数 |
 | `changelog-metadata` | `changelog_metadata.json` | 扫描 Setup 的 Search-space Metadata |
 | `bmk_agentic_*` | 单 Job JSON | Agentic 入库/预发布使用的原始 AgentX Result Upload |
-| `server_logs_*`、`multinode_server_logs_*`、`gpu_metrics_*`、`agentic_*` | Log、Metric 或诊断 Payload | `always()`/诊断上传；名称随 Template 与模式变化 |
+| `server_logs_*`、`multinode_server_logs_*`、`agentic_*` | Log、Metric 或诊断 Payload | `always()`/诊断上传；名称随 Template 与模式变化 |
 
 ### 解析有限字段
 
@@ -549,7 +551,6 @@ jq -r 'to_entries[] | [.key, .value.n_success, .value.total] | @tsv' \
 
 当源 Run、Merge Run、Artifact 覆盖、Changelog Metadata 或下游 Event 含糊不清时，应停止并升级处理。绝不能替换成方便的 Run ID，也不能仅凭 Actions Dispatch 就宣称发布成功。
 
-原 `kimik3-fp4-h200-vllm-agentic` key 拆为 `-latency`、`-balanced` 和 `-simple` 三个 key，合计保留原来的全部 35 个点（10/12/13）、配方指纹及图表序列。每个 key 选择一份完整配方及其默认评估；功耗启用范围由该配方的 `telemetry.enabled` 决定。使用 `kimik3-fp4-h200-vllm-agentic-*` 可选择三份配方。局部配方运行不能证明其他 key 已通过资格验证。
 
 ## OperatorX 微基准
 
@@ -560,4 +561,3 @@ attention 支持 torch 和 AITER。
 触发方式、覆盖范围、产物、取消及验证说明见
 [OperatorX GitHub Actions](../../operatorx/CI_zh.md)。
 
-H200 DeepSeek-V4.1 Flash SGLang AgentX 在并发 64 及以上的性能任务由启动策略（`infx/launch/policy.py` 中的 `SALLOC_TIME_BUMPS`）允许 1440 分钟 Slurm 分配，并允许 1470 分钟 GitHub 任务，以容纳正常预热及保持不变的 3600 秒正式测试；更低并发和 eval-only 任务仍使用标准期限。运行 `35775895782` 在持续推进、请求无错误的预热期间耗尽了原有八小时分配。仅重试失败任务会保留原工作流期限，因此修改期限后必须启动新运行。

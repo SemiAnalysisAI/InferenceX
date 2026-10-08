@@ -75,12 +75,32 @@ class LaunchRequest(BaseModel):
     bench_script_override: str | None = Field(None, alias="BENCH_SCRIPT_OVERRIDE")
     batch_reentry: OneFlag = Field(False, alias=BATCH_REENTRY_ENV)
     conc: int | None = Field(None, alias="CONC")
+    conc_list: IntList = Field(default_factory=list, alias="CONC_LIST")
     run_eval: TrueFlag = Field(False, alias="RUN_EVAL")
     eval_only: TrueFlag = Field(False, alias="EVAL_ONLY")
     salloc_time_limit: int | None = Field(None, alias="SALLOC_TIME_LIMIT")
     enroot_import_time_limit: int | None = Field(None, alias="ENROOT_IMPORT_TIME_LIMIT")
 
     env: dict[str, str] = Field(default_factory=dict, exclude=True, repr=False)
+
+    @model_validator(mode="after")
+    def _one_agentx_concurrency(self) -> Self:
+        """A multi-node AgentX throughput point owns a fresh server for its one concurrency."""
+        if not self.is_multinode or not self.is_agentic or self.eval_only:
+            return self
+        unset = {"CONC": self.conc is None, "CONC_LIST": not self.conc_list}
+        if missing := [name for name, is_unset in unset.items() if is_unset]:
+            raise ValueError(
+                "required environment variables are not set for AgentX throughput: "
+                + ", ".join(missing)
+            )
+        if self.conc < 1 or self.conc_list != [self.conc]:
+            raise ValueError(
+                "AgentX requires exactly one positive concurrency per server deployment; launch a "
+                f"fresh server for each concurrency (CONC={self.conc}, "
+                f"CONC_LIST={' '.join(map(str, self.conc_list))})"
+            )
+        return self
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Self:
@@ -114,10 +134,8 @@ class SrtRequest(LaunchRequest):
     run_eval: TrueFlag = Field(alias="RUN_EVAL")
     eval_only: TrueFlag = Field(alias="EVAL_ONLY")
     thinking_mode: str | None = Field(None, alias="THINKING_MODE")
-    conc_list: IntList = Field(default_factory=list, alias="CONC_LIST")
     require_power: PowerFlag = Field(False, alias="REQUIRE_POWER")
     inferencex_results_python: str | None = Field(None, alias="INFERENCEX_RESULTS_PYTHON")
-    eval_conc: str | None = Field(None, alias="EVAL_CONC")
 
     @model_validator(mode="after")
     def _golden_curve_key(self) -> Self:
@@ -144,7 +162,6 @@ class SingleNodeRequest(SrtRequest):
     isl: int = Field(alias="ISL")
     osl: int = Field(alias="OSL")
     random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")
-    gpu_monitor_interval: str = Field(alias="GPU_MONITOR_INTERVAL")
     hf_hub_cache: str = Field(alias="HF_HUB_CACHE")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 
@@ -160,19 +177,15 @@ class ScriptRequest(LaunchRequest):
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
 
 
-class LegacyRequest(LaunchRequest):
-    """A pre-srt-slurm lane; its script path is built from these inputs."""
-
-    github_workspace: Path = Field(alias="GITHUB_WORKSPACE")
-    exp_name: str = Field(alias="EXP_NAME")
-    precision: str = Field(alias="PRECISION")
-    framework: str = Field(alias="FRAMEWORK")
-    scenario_subdir: str | None = Field(None, alias="SCENARIO_SUBDIR")
-
-
-class AmdUtilsRequest(LegacyRequest):
-    """An MI355X AgentX job submitted through amd_utils, which serves ``MODEL``'s basename."""
+class LlmdRequest(SrtRequest):
+    """An llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
 
     model: str = Field(alias="MODEL")
-    user: str | None = Field(None, alias="USER")
-    keep_logs: OneFlag = Field(False, alias="KEEP_LOGS")
+    disagg: TrueFlag = Field(alias="DISAGG")
+    prefill_nodes: int = Field(alias="PREFILL_NODES")
+    decode_nodes: int = Field(alias="DECODE_NODES")
+    prefill_num_workers: int = Field(1, alias="PREFILL_NUM_WORKERS")
+    decode_num_workers: int = Field(1, alias="DECODE_NUM_WORKERS")
+    isl: int = Field(alias="ISL")
+    osl: int = Field(alias="OSL")
+    random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")

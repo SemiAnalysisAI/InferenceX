@@ -51,7 +51,7 @@ base:
       MODEL: Qwen/Qwen3.5-397B-A17B-FP8
       # H100 caps max_model_len at 131k; the 256k-capped with-subagents corpus
       # keeps the rejection rate far below the unfiltered ~1M-token corpus.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_with_subagents_256k
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
 
 override_gpu_kv:
   benchmark:

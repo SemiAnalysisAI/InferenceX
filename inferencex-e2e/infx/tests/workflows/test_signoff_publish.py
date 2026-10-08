@@ -17,7 +17,7 @@ KEY = "pullrequestreview-42"
 
 
 def verdict(
-    header=PASS, *, failure=False, warning=False, reuse_warning=False, prefix=""
+    header=PASS, *, failure=False, warning=False, reuse_warning=False, body_warning=False, prefix=""
 ):
     rows = [
         f"✅ Check {number} (Requirement): PASS — Verified." for number in range(14)
@@ -39,6 +39,12 @@ def verdict(
         )
     else:
         rows.append("✅ Check 14 (Pareto coverage): PASS — curve-a: 5/5.")
+    if body_warning:
+        expanded.append(
+            "⚠️ Check 15 (PR description): WARN — Body claims 16 GiB; recipe sets 8 GiB."
+        )
+    else:
+        rows.append("✅ Check 15 (PR description): PASS — Claims match the assessed commit.")
     return (
         header
         + "\n\n"
@@ -210,7 +216,19 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
             True,
         ),
         (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
-        (verdict() + "\n✅ Check 15 (Unknown): PASS — extra", True),
+        (verdict() + "\n✅ Check 16 (Unknown): PASS — extra", True),
+        (
+            verdict().replace(
+                "✅ Check 15 (PR description): PASS — Claims match the assessed commit.\n", ""
+            ),
+            True,
+        ),
+        (
+            verdict().replace(
+                "✅ Check 15 (PR description): PASS", "❌ Check 15 (PR description): FAIL"
+            ),
+            True,
+        ),
         (
             verdict().replace("✅ Check 1 (Requirement)", "❌ Check 1 (Requirement)"),
             True,
@@ -271,16 +289,22 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(
     "failure,coverage_warning",
     [(False, False), (True, False), (False, True), (True, True)],
 )
-def test_reuse_warning_preserves_verdict_and_only_coverage_escalates(
-    publish, failure, coverage_warning
+@pytest.mark.parametrize("advisory_warning", ["reuse_warning", "body_warning"])
+def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
+    publish, failure, coverage_warning, advisory_warning
 ):
     header = REJECT if failure else WARN
     result = publish(
-        verdict(header, failure=failure, warning=coverage_warning, reuse_warning=True)
+        verdict(header, failure=failure, warning=coverage_warning, **{advisory_warning: True})
     )
     body = result["comments"][0]["body"]
     assert body.startswith(marker() + "\n" + header)
-    assert "⚠️ Check 4 (Reuse command): WARN — No authorized reuse command." in body
+    expected_warning = (
+        "⚠️ Check 4 (Reuse command): WARN — No authorized reuse command."
+        if advisory_warning == "reuse_warning"
+        else "⚠️ Check 15 (PR description): WARN — Body claims 16 GiB; recipe sets 8 GiB."
+    )
+    assert expected_warning in body.split("<details>")[0]
     assert ("Pareto coverage needs additional review" in body) == coverage_warning
     assert ("@functionstackx" in body) == coverage_warning
     assert ("❌ Check 1 (Sweep): FAIL" in body) == failure

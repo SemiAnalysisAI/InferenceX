@@ -11,11 +11,6 @@ concurrency:
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
           github.event.label.name != 'agentx-fast' &&
-          github.event.label.name != 'skip_queue' &&
-          github.event.label.name != 'ci-patchwork' &&
-          github.event.label.name != 'engine-patch' &&
-          github.event.label.name != 'ci-patchwork-waived' &&
-          github.event.label.name != 'ci-checklist-complete' &&
           github.run_id ||
           'active'
         }}
@@ -54,12 +49,7 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast' ||
-              github.event.label.name == 'skip_queue' ||
-              github.event.label.name == 'ci-patchwork' ||
-              github.event.label.name == 'engine-patch' ||
-              github.event.label.name == 'ci-patchwork-waived' ||
-              github.event.label.name == 'ci-checklist-complete'
+              github.event.label.name == 'agentx-fast'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
@@ -199,12 +189,7 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast' ||
-              github.event.label.name == 'skip_queue' ||
-              github.event.label.name == 'ci-patchwork' ||
-              github.event.label.name == 'engine-patch' ||
-              github.event.label.name == 'ci-patchwork-waived' ||
-              github.event.label.name == 'ci-checklist-complete'
+              github.event.label.name == 'agentx-fast'
             )
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
@@ -300,8 +285,6 @@ jobs:
             - id: setup
               env:
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-                  PR_NUMBER: ${{ github.event.pull_request.number }}
-                  PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
                   PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -329,8 +312,6 @@ jobs:
                     python -m infx.workflows.ci_priority \
                     --event-name "${GITHUB_EVENT_NAME}" \
                     --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-                    --labels-json "$PR_LABELS" \
-                    --pr-number "${PR_NUMBER}" \
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
@@ -401,17 +382,13 @@ jobs:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             # Only same-repository PRs owned by Klaud receive background priority.
             klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
-            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
             scenario-type: ${{ matrix.config['scenario-type'] || 'fixed-seq-len' }}
@@ -429,8 +406,6 @@ jobs:
                 config: ${{ fromJson(needs.canary-select.outputs.multi-node-canary-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
@@ -438,7 +413,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
@@ -465,8 +439,6 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &multi-node-inputs
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
@@ -474,7 +446,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             run-eval: false
@@ -497,8 +468,6 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *multi-node-inputs
 
     sweep-single-node-1k1k:
@@ -520,16 +489,12 @@ jobs:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: &single-node-inputs
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
-            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: ${{ matrix.config.run-eval }}
 
@@ -552,8 +517,6 @@ jobs:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with: *single-node-inputs
 
     sweep-agentic:
@@ -575,15 +538,12 @@ jobs:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
@@ -609,8 +569,6 @@ jobs:
                 config: ${{ fromJson((needs.canary-multi-node-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
@@ -618,7 +576,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
@@ -646,15 +603,12 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
             eval-suite: ${{ matrix.config['eval-suite'] || '' }}
@@ -683,15 +637,12 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -719,8 +670,6 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
@@ -728,7 +677,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
             eval-suite: ${{ matrix.config['eval-suite'] || '' }}
@@ -761,8 +709,6 @@ jobs:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: *klaud-run
@@ -770,7 +716,6 @@ jobs:
             node-count: ${{ matrix.config.node-count }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
-            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             conc: ${{ matrix.config['eval-conc'] }}
             total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
@@ -887,7 +832,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.setup.outputs.tooling-ref }}
-                  fetch-depth: 0
+                  fetch-depth: 1
                   persist-credentials: false
 
             - name: Download results artifacts

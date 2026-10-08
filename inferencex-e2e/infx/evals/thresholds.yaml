@@ -25,8 +25,7 @@
     "bfcl_vllm_kimi_multi_turn_miss_func": 0.0,
     "bfcl_vllm_kimi_multi_turn_miss_param": 0.0,
     "bfcl_vllm_kimi_multi_turn_long_context": 0.0,
-    "gpqa_diamond_cot_n_shot": 0.30,
-    "swebench_lite": 0.50
+    "gpqa_diamond_cot_n_shot": 0.30
   },
   "models": {
     "dsr1": {
@@ -37,9 +36,6 @@
     },
     "glm5": {
       "gsm8k": 0.94
-    },
-    "glm5.1": {
-      "gsm8k": 0.93
     },
     "gptoss": {
       "gsm8k": 0.91

@@ -25,9 +25,8 @@
 9. [阶段 6：工件收集与交接](#阶段-6工件收集与交接)
 10. [阶段 7：InferenceX-app 摄取](#阶段-7inferencex-app-摄取)
 11. [权威来源决策](#权威来源决策)
-12. [不明显的设计理由](#不明显的设计理由)
-13. [追踪并验证一项结果](#追踪并验证一项结果)
-14. [停止条件](#停止条件)
+12. [追踪并验证一项结果](#追踪并验证一项结果)
+13. [停止条件](#停止条件)
 
 ## 源码映射
 
@@ -48,7 +47,7 @@
 | [`infx/launch/`](../infx/launch) | `python -m infx.launch run`：根据运行器名称解析集群、选择启动路径（驱动）、工作负载策略、信号安全的清理以及工件暂存 |
 | [`infx/clusters/`](../infx/clusters)、[`infx/launch/backends/`](../infx/launch/backends) | 类型化集群记录（每个调度器一个设置模型），以及运行容器、跟踪作业的调度器后端（目前为使用 Pyxis squash 镜像的 Slurm） |
 | [`runners/srt-slurm/`](../runners/srt-slurm) | srt-slurm 主机设置 hook 和临时上游补丁 |
-| [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh) | 共享的服务器就绪检查、基准测试客户端、评测、AgentX 重放和输出行为 |
+| [`infx/bench/`](../infx/bench) | 在容器内运行的 `python3 -m infx.bench` 命令（`wait`、`fixed-seq`、`agentic`、`eval`），负责服务器就绪检查、基准测试客户端、AgentX 重放和评估 |
 | [`benchmarks/`](../benchmarks) | 特定于框架和拓扑的服务器与客户端命令 |
 | [`infx/github.py`](../infx/github.py) | 工作流操作共用的 GitHub REST、分页和评论表态基础操作 |
 | [`infx/workflows/`](../infx/workflows) | 复用命令解析、授权查找、源 Run 验证及表态反馈；现有复用 CLI 保持兼容 |
@@ -61,8 +60,7 @@
 
 | 权威来源 | 职责 |
 | --- | --- |
-| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | 接收 `ingest-results`，准备工件、执行迁移、摄取、验证并使缓存失效 |
-| [`.github/workflows/ingest-agentic-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-agentic-results.yml) | 面向包含大量 blob 的 AgentX 工件的独立长超时摄取路径 |
+| [`.github/workflows/ingest-results.yml`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/.github/workflows/ingest-results.yml) | 接收 `ingest-results` 和 `ingest-agentic-results`，准备工件、执行迁移、摄取、验证并使缓存失效。智能体摄取使用更大的运行器和更长的超时时间 |
 | [`packages/db/src/prepare-ci-artifacts.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/prepare-ci-artifacts.ts) | 选择并下载源运行工件，包括复用扫描元数据 |
 | [`packages/db/src/ingest-ci-run.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/ingest-ci-run.ts) | 编排工作流运行、基准测试、评测、样本、追踪、统计、可用性和变更日志的摄取 |
 | [`packages/db/src/etl/benchmark-mapper.ts`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/main/packages/db/src/etl/benchmark-mapper.ts) | 将基准测试工件行映射为面向数据库的规范形态 |
@@ -85,7 +83,7 @@ flowchart LR
   E --> F[run-sweep.yml 扇出]
   F --> G[可复用基准测试工作流]
   G --> H[infx.launch 驱动]
-  H --> I[基准测试脚本和 benchmark_lib]
+  H --> I[配方或脚本与 infx.bench 命令]
   I --> J[基准测试、评测、日志、指标、追踪]
   J --> K[单作业 GitHub 工件]
   K --> L[运行级聚合工件]
@@ -222,7 +220,6 @@ flowchart LR
 | --- | --- |
 | [`drivers/srt/`](../infx/launch/drivers/srt) | 单节点和多节点 srt-slurm 方案（`SRT_RECIPE`、`CONFIG_FILE`），包括集群维护的 B200 Nscale 通道；仅限 Slurm |
 | [`drivers/script.py`](../infx/launch/drivers/script.py) | 带显式 `BENCH_SCRIPT_OVERRIDE` 的单节点运行，例如 SPEED-Bench 采集脚本：通过后端接口运行一个容器，适用于任何后端；其他调度器上的集群只运行这个驱动 |
-| [`drivers/legacy.py`](../infx/launch/drivers/legacy.py) | 剩余的 srt-slurm 之前的通道（B200 TileRT 解聚脚本、MI355X `amd_utils` AgentX），计划删除；仅限 Slurm |
 
 根据驱动不同，启动器可能会：
 
@@ -233,7 +230,7 @@ flowchart LR
 - 将工作流环境传入运行时容器或分配环境；
 - 跟踪作业日志、核验分配的最终状态并暂存结果。
 
-[`benchmarks/`](../benchmarks) 下的基准测试脚本负责实际的引擎和客户端命令。大多数脚本会引入 [`benchmarks/benchmark_lib.sh`](../benchmarks/benchmark_lib.sh)，后者集中处理服务器就绪检查、服务基准测试客户端、GPU 监控、lm-eval、SWE-bench、AgentX 重放和稳定输出辅助函数。
+srt-slurm 配方和 [`benchmarks/`](../benchmarks) 下的脚本负责实际的引擎命令。各通道共用的客户端逻辑以 `python3 -m infx.bench <command>` 的形式在服务容器内运行，代码位于 [`infx/bench/`](../infx/bench)。其命令包括 `wait`（服务器就绪检查）、`fixed-seq`（服务基准测试客户端）、`agentic`（AgentX 重放）和 `eval`（lm-eval 与厂商评估运行器）。这些命令只依赖标准库并兼容 Python 3.10，从环境变量或命令行参数读取输入，并写出收集器读取的产物文件名。配方通过薄封装脚本调用它们，例如 [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh)，以及 `benchmarks/single_node/` 和 `benchmarks/multi_node/` 下的 `srt_fixed_sequence.sh` 与 `srt_eval.sh`。Bash 调用方使用 [`benchmarks/check_env.sh`](../benchmarks/check_env.sh) 中的 `check_env_vars` 校验必需输入。
 
 这一边界是有意设计的：主配置保持可移植且便于审查，启动机制保存在集群记录中（见[下文](#启动机制保存在集群记录中)），框架标志保持靠近基准测试方案，以便针对相应引擎进行测试。收到 `SIGINT`、`SIGTERM` 或 `SIGHUP` 时，启动器会先运行已注册的清理（例如取消分配），再以 128 加信号编号退出；第一个非零的工作负载退出码优先于清理失败。
 
@@ -247,7 +244,7 @@ flowchart LR
 
 ### 复用与扩展结果处理
 
-[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) 接收已加载的基准测试映射和显式传入的环境变量映射，返回聚合结果字典，不读取进程环境，也不执行文件 I/O。库调用方无需提供 `RESULT_FILENAME`。现有 CLI 会验证环境变量、读取原始工件、调用构建函数、写入聚合结果，并对多节点结果按照原有的尽力处理或 `REQUIRE_POWER` 策略执行功耗聚合。
 
 ```python
 from infx.results.fixed_sequence import build_result
@@ -274,15 +271,15 @@ result = build_result(records, profile, server_metrics, runtime_env,
 - [`Parallelism`](../infx/results/topology.py) 共享 GPU 数量计算、并行度结果字段，以及没有独立解码 GPU 时的字段规范化。固定序列结果继续使用显式分配的 GPU 数量，AgentX 则根据 worker 拓扑推导数量。各调用方保留自己的环境默认值、验证顺序、错误处理和吞吐量分母。
 - [`with_power_metrics`](../infx/results/power/__init__.py) 返回替换了指定指标族的副本，移除旧的有效性原因，并验证、舍入新指标。调用方提供指标键和模式版本，再自行写入工件及验证附属文件。其他指标族因此可以直接复用该转换，无需修改其实现。
 
-功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power)：`single_node.run` 读取 GPU 监控 CSV，`multinode.run` 验证 srt-slurm 工件包。两者通过 `common.py` 共享基准窗口解析、单设备能量积分、聚合结果替换及审计序列化，同时保留各自的遥测校验和失败策略。固定序列及 AgentX 适配器直接导入这些引擎；新结果格式可以将其基准窗口和 token 计数提供给匹配的引擎。
+功耗遥测处理引擎也位于 [`infx.results.power`](../infx/results/power)：`multinode.run` 验证 srt-slurm 工件包。其基准窗口解析、单设备能量积分、聚合结果替换及审计序列化位于 `common.py`。固定序列及 AgentX 适配器直接导入该引擎；新结果格式可以将其基准窗口和 token 计数提供给它。在 srt-slurm 遥测覆盖单节点任务之前，单节点结果不包含功耗。
 
-`infx` 包无需安装步骤或新增运行时依赖。从 `inferencex-e2e/` 运行 `python -m infx.results.power.single_node` 和 `python -m infx.results.power.multinode` 来调用引擎。
+`infx` 包无需安装步骤或新增运行时依赖。从 `inferencex-e2e/` 运行 `python -m infx.results.power.multinode` 来调用引擎。
 
 构建函数测试应使用独立计算预期结果的小样例和只读输入。修改现有适配器时，还应与旧实现比较 CLI 退出状态、诊断信息和生成工件，覆盖无效输入以及严格模式和尽力处理模式下的功耗失败。
 
 ### 评测与 AgentX 输出
 
-对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`、SWE-bench 预测和报告以及轨迹文件。[`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) 会检查生成的评测分数。
+对于仅评测作业，不要求吞吐量输出。工作流改为要求至少存在一个 `results*.json`。对于标记为运行评测的作业，上传内容可能包含 `meta_env.json`、`results*.json`、`sample*.jsonl`，以及厂商评估的原生报告、详细结果和归档。[`infx/evals/validate_scores.py`](../infx/evals/validate_scores.py) 会检查生成的评测分数。
 
 [`infx.results.evals`](../infx/results/evals.py) 提供 `extract_metrics`，用于解析已加载的评测 JSON，并提供 `build_rows`，用于构建收集器输出。两者均接收显式输入，不执行文件 I/O，也不修改输入。构建函数应用元数据默认值和主分数优先级，并将失败评测保留为诊断行。CLI 负责文件查找、并发数资格筛选、报告输出和工件写入。
 
@@ -296,7 +293,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 智能体吞吐量作业采用不同的契约。它们使用 [`infx/results/agentic/validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py) 验证 AIPerf 输出，上传聚合的 `bmk_agentic_<suffix>` 工件，并上传包含追踪重放材料的原始 `agentic_<suffix>` 同级工件。InferenceX-app 通过它们共享的后缀对这些同级工件进行配对。智能体仅评测作业改为遵循评测输出契约，不要求吞吐量结果。
 
-服务器日志和 GPU 指标是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。在 AMD Slurm 机群上，`/run_logs` 是节点本地目录；服务器步骤结束后，`job.slurm` 会把每个已分配节点上已经关闭的日志树合并到共享存储中，使诊断工件包含整个部署的 Prefill 和 Decode 日志。
+服务器日志是诊断辅助工件。它们通过 `always()` 上传，因此失败的运行仍可供调查。它们的存在不会将失败的基准测试转变为有效结果。srt 驱动的 [`collect.py`](../infx/launch/drivers/srt/collect.py) 通过调度器后端获取作业输出，并在清理输出前暂存多节点日志树和 `multinode_server_logs.tar.gz`。
 
 ## 阶段 6：工件收集与交接
 
@@ -311,7 +308,7 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 对于符合条件的 `main` 推送，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 的 `ingest` 作业会验证已合并 PR 的复用授权，并向 `SemiAnalysisAI/InferenceX-app` 发送且仅发送一次 GitHub `repository_dispatch`。没有有效授权时，该作业会失败，不发送任何分派。`run-sweep.yml` 从不分派摄取。
 
 - 不含智能体条目的变更日志增量使用 `event_type: ingest-results`。
-- 包含智能体条目的增量使用 `event_type: ingest-agentic-results` 并携带 `database-target: production`，由具有更长超时时间的独立工作流处理。
+- 包含智能体条目的增量使用 `event_type: ingest-agentic-results` 并携带 `database-target: production`，由同一个工作流在更大的运行器上以更长的超时时间处理。
 - 负载携带 `source-run-id` 和 `merge-run-id`。源运行始终是提供工件的被复用 PR `run-sweep.yml` 运行，Merge Ingest 运行则提供当前变更日志上下文。
 
 成功上传基准测试工件并不等同于成功摄取。仓库分派、工件准备、ETL、数据库验证和缓存失效都属于后续边界。
@@ -359,6 +356,21 @@ rows = build_rows(raw_eval, metadata, source="eval_job/results.json")
 
 模型根目录、Slurm 分区、squash 缓存和挂载属于 `configs/runners.yaml` 中该集群的 `clusters:` 记录（[模式](../configs/CONFIGS.md#runners)）；与模型、框架或方案相关的启动规则属于 `infx/launch/policy.py` 和 `infx/launch/drivers/srt/` 中的具名表。框架服务器和客户端标志属于基准测试脚本或外部方案。驱动中不出现按集群的分支。
 
+- 集群事实（节点形态、工作负载 `env`、已暂存模型以及调度器自身设置；Slurm 下为 `slurm:` 中的分区、账户、卷、squash 缓存和 srt-slurm profile）属于集群记录，不属于驱动代码。
+- 按模型、框架、精度或方案区分的工作负载规则（模型别名、`/ix` 工作区、功耗资格、时间延长、TileRT UCX 设置）属于具名表：共享规则位于 `infx/launch/policy.py`，单个驱动使用的规则放在该驱动旁边（srt-slurm 为 `drivers/srt/lanes.py`、`models.py`、`power.py`）。
+- 永远不要在驱动中按集群 ID 分支。驱动只能通过集群的后端（`infx/launch/backends/`）访问调度器。
+- 新调度器由新文件加两个注册项组成：其设置模型（带自身的卷类型）放在 `infx/clusters/` 下并注册到 `infx.clusters.SCHEDULERS`，其后端放在 `infx/launch/backends/` 下并注册到 `BACKENDS`。该调度器上的集群只运行 script 驱动点（`BENCH_SCRIPT_OVERRIDE`，例如 SPEED-Bench）；srt-slurm 点需要 Slurm，会在开始任何工作前失败。
+- 每个版本都通过 `python -m infx.launch` 启动，不存在 shell 启动器回退；不要新增 shell 启动器。
+- 退役集群时，在同一 PR 中删除其 `cluster:<id>` 标签、`clusters:` 记录以及按其 ID 键控的所有策略行。
+
+#### srt-slurm 主机初始化钩子
+
+- 可复用的主机检查函数放在 `runners/srt-slurm/hooks/common.sh`。source 该文件只定义函数，不得运行检查、修改环境变量或初始化基准测试。仅供单个集群使用的辅助函数放在其 setup 脚本旁边。
+- 集群特定的主机前置条件放在 `runners/srt-slurm/hooks/<cluster>/setup.sh`，由 `configs/runners.yaml` 中该集群的 `srt-slurm.host-setup` 记录显式调用，在分配之后、服务和 worker 启动之前运行。
+- 钩子只用于该集群主机或网络所需的检查与初始化。保持小巧、与工作负载无关、可重复运行。只要原生 srt-slurm 配置能表达需求，就优先使用原生配置。
+- 钩子中不得包含基准测试执行、模型选择、引擎标志、并发调优、评测、结果收集或作业编排，也不得给引擎或容器打补丁、绕过失败的检查，或用重试掩盖运行时缺陷。应在负责该问题的组件中修复。
+- 设置通过 `srt-slurm.host-setup.env` 显式传入。变更范围限定在已分配节点，保留其他作业的资源，并为需要恢复的临时状态注册 teardown。
+
 ### 工件 JSON 是仓库边界
 
 InferenceX 负责生成标识正确的工件。InferenceX-app 负责将这些工件解释为规范数据库记录。绝不要让 InferenceX-app 抓取工作流日志来恢复本应在 JSON 中发出的字段。
@@ -366,48 +378,6 @@ InferenceX 负责生成标识正确的工件。InferenceX-app 负责将这些工
 ### 应用数据库是公共数据源
 
 GitHub 工件是传输和恢复输入，而不是实时仪表板数据库。InferenceX-app 负责规范化、幂等持久化、读取模型、缓存失效和展示转换。
-
-## 不明显的设计理由
-
-### 为什么在展开前验证
-
-展开会将一项声明成倍增加为多个作业。在扇出之前拒绝无效拓扑，可以避免重复的 GPU 失败，并产生一条可操作的配置错误。
-
-### 为什么保持生成矩阵的临时性
-
-将生成的数据行签入源码会产生两个可编辑的权威来源。从主 YAML 重新生成可确保默认值和策略变更具有确定性，并使审查聚焦于意图和生成器行为。
-
-### 为什么拆分单节点、多节点、评测和智能体桶
-
-它们的形态不同。多节点数据行携带预填充和解码工作节点。固定序列数据行携带 ISL、OSL 和最大模型长度。智能体数据行携带时长和卸载输入。独立的桶使可复用工作流接口能够保持严格，而不必接受一个大部分字段均为可选的对象。
-
-### 为什么从具体运行器名称启动
-
-调度标签选择兼容的运行器池，但已分配的运行器标识具体物理集群：它所在的 `cluster:<id>` 标签选中集群记录，而完整名称仍可用于作业命名、避免冲突并记录结果来源。
-
-### 为什么既聚合又保留单作业工件
-
-运行级聚合使常规摄取成本较低。单作业评测样本、日志、指标和追踪携带无法在单个紧凑文件中表示的细节。同时保留两者，可以避免强制每个使用方下载全部诊断数据，同时保留深入分析和恢复能力。
-
-### 为什么工件名称要求严格
-
-GitHub Actions 工件不提供更丰富的有类型模式。稳定名称充当收集器和 ETL 的路由键。如果重命名 `results_bmk` 或 `eval_results_all` 却未更新 InferenceX-app，可能会出现生产方运行成功但数据库行缺失的情况。
-
-### 为什么智能体摄取是独立的
-
-AgentX 追踪导出的体积更大，并且需要追踪发现、时间线处理、数据集关联和旁路文件持久化。独立的长超时工作流可以防止这些成本削弱普通固定序列摄取路径。
-
-### 为什么摄取过程会再次规范化
-
-生产方验证证明的是作业形态，而不是长期数据库词汇。应用还会摄取历史工件和恢复的工件。其规范化器会吸收已知别名并报告未知实体，从而使数据库键在生产方演进过程中保持稳定。
-
-### 为什么缓存失效发生在数据库验证之后
-
-在写入通过验证前使缓存失效，可能会暴露部分数据并将其缓存。接收工作流会先迁移、摄取、应用覆盖值、验证，然后才使应用缓存失效。
-
-### 为什么源运行 ID 和合并运行 ID 不同
-
-每次合并都会复用已授权的 PR 扫描；`main` 从不重新运行昂贵的 GPU 工作。源运行标识实际的基准测试工件及其来源。合并运行提供当前触发和变更日志上下文。保留两者可以避免将旧工件归属于错误的执行，也可以避免丢失合并审计记录。
 
 ## 追踪并验证一项结果
 

@@ -41,7 +41,7 @@ def point(tmp_path):
         "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "none", "IS_AGENTIC": "0",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "ISL": "256", "OSL": "64",
         "RANDOM_RANGE_RATIO": "0.5", "CONC": "2", "RESULT_FILENAME": "point-identity",
-        "GPU_MONITOR_INTERVAL": "3", "MODEL_PREFIX": "test",
+        "MODEL_PREFIX": "test",
     }
     return path, recipe, env
 
@@ -52,13 +52,11 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
     overrides = parse_overrides(argv[1::2], [])
     actual = copy.deepcopy(recipe)
     apply_overrides_to_recipe(actual, overrides)
-    assert actual["srun_options"] == {
-        "gpus-per-node": "4", "container-workdir": "/infmax-workspace",
-    }
+    assert actual["srun_options"] == {"gpus-per-node": "4"}
     assert actual["benchmark"]["env"] == {
         "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
         "USE_CHAT_TEMPLATE": "false",
-        "CONC": "2", "RESULT_FILENAME": "point-identity", "GPU_MONITOR_INTERVAL": "3",
+        "CONC": "2", "RESULT_FILENAME": "point-identity",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "RESULT_DIR": "/logs",
         "FRAMEWORK": "sglang",
     }

@@ -21,11 +21,11 @@ services:
   - name: etcd
     type: etcd
     placement:
-      node: dedicated
+      node: infra
   - name: nats
     type: nats
     placement:
-      node: dedicated
+      node: infra
     options:
       max_payload_mb: 32
 frontend:
@@ -155,6 +155,7 @@ telemetry:
   dcgm_exporter:
     container_image: dcgm-exporter
     port: 9401
+    command: "dcgm-exporter --collect-interval=100 --address :{port} -f /configs/dcgm-counters-noprof.csv"
 
 benchmark:
   type: custom

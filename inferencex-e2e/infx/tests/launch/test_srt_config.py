@@ -152,6 +152,25 @@ def test_jobs_run_under_the_declared_else_exported_else_users_default_account(
     assert render(record, job(account=run.account)).get("default_account") == expected
 
 
+def test_selected_partition_overrides_inherited_and_point_environment(tmp_path):
+    record = cluster(slurm={"partition": "batch_3", "account": "benchmark"})
+    request = SrtRequest.from_env({
+        "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i", "FRAMEWORK": "sglang",
+        "MODEL_PREFIX": "m", "PRECISION": "fp8", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
+        "IS_AGENTIC": "0", "RUN_EVAL": "false", "EVAL_ONLY": "false",
+        "SBATCH_PARTITION": "batch_1", "SLURM_PARTITION": "batch_1",
+        "PREFILL_ADDITIONAL_SETTINGS": '["SBATCH_PARTITION=batch_1"]',
+    })
+    life = Lifecycle()
+    launch = Launch(record, SlurmBackend(record, request, life), request, life, LaunchPath.SRT_MULTI)
+
+    run = SrtRun.create(launch, request, {"SLURM_PARTITION": "another-pool"})
+
+    assert run.env["SBATCH_PARTITION"] == "batch_3"
+    assert run.env["SLURM_PARTITION"] == "batch_3"
+    assert request.env["SBATCH_PARTITION"] == "batch_1"
+
+
 @pytest.mark.parametrize(("health", "effective"), [
     (None, {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}),
     ({"max_attempts": 100, "interval_seconds": 5}, {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 5}),
@@ -160,7 +179,7 @@ def test_jobs_run_under_the_declared_else_exported_else_users_default_account(
 def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path, health, effective):
     recipe = tmp_path / "recipes/r.yaml"
     recipe.parent.mkdir()
-    recipe.write_text(yaml.safe_dump({"name": "r", **({"health_check": health} if health else {})}))
+    recipe.write_text(yaml.safe_dump({"schema": 2, "name": "r", **({"health_check": health} if health else {})}))
 
     prepare_recipe(tmp_path, "recipes/r.yaml", "job", None, None)
 
@@ -205,7 +224,7 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
         return staging
 
     run = SimpleNamespace(workspace=workspace, backend=SimpleNamespace(stage_workspace=rsync))
-    checkout = Checkout(tmp_path / "runs/srt-slurm-1-1-abc", "sha", False)
+    checkout = Checkout(tmp_path / "runs/srt-slurm-1-1-abc", "sha")
     staged = compute_workspace(run, checkout, shared=True)
 
     assert staged == tmp_path / "runs/infmax-workspace-1-1-abc"

@@ -16,8 +16,8 @@ and a direct `aiperf profile` command without CI or Slurm.
 ## 1. Pick the correct execution mode
 
 For a throughput-only PR sweep, set `no-evals: true` on its
-`perf-changelog.yaml` entries and use a normal primary sweep label, including
-`full-sweep-enabled`. This skips all eval job families for those entries without
+`perf-changelog.yaml` entries and use one primary sweep label (normally
+`full-sweep-fail-fast`). This skips all eval job families for those entries without
 changing benchmark duration or Prometheus artifacts. The flag defaults to false
 and is retained in changelog metadata. Another entry requesting the same config
 can still select its evals; mark every applicable entry to suppress them entirely.
@@ -27,16 +27,18 @@ throughput evidence, not model-evaluation evidence.
 
 There are two distinct layers: the matrix generator decides **which jobs exist**, while runtime variables decide **what a launched job does**.
 
-| Need | Generator/workflow mode | Runtime behavior |
+| Need | Generator flag (`infx.matrix.generate`) or workflow variables | Runtime behavior |
 |---|---|---|
-| Normal sweep | no eval option | Throughput jobs plus the selected 8k/1k eval subset |
+| Normal sweep | no eval option | Throughput jobs plus the selected 8k/1k eval subset and agentic GSM8K subset |
 | Throughput only | `--no-evals` | No eval jobs |
 | Selected eval subset only | `--evals-only` | Jobs have `RUN_EVAL=true`, `EVAL_ONLY=true` |
 | Every eligible eval only | `--all-evals` | Equivalent to `--evals-only --all-evals` and includes all fixed-sequence 8k/1k rows plus single-node and multi-node agentic GSM8K rows |
-| Throughput then eval in one recipe | `RUN_EVAL=true`, `EVAL_ONLY=false` | Server starts, throughput runs, then `run_eval` runs |
-| Eval against a freshly started server | `RUN_EVAL=true`, `EVAL_ONLY=true` | Launcher expands eval context, skips throughput, and runs the eval |
+| Throughput then eval in one recipe | `RUN_EVAL=true`, `EVAL_ONLY=false` | Server starts, throughput runs, then `python3 -m infx.bench eval` runs |
+| Eval against a freshly started server | `RUN_EVAL=true`, `EVAL_ONLY=true` | Launcher applies the eval-only server settings, skips throughput, and runs the eval |
 
-Default selection is scenario-aware. Single-node fixed-sequence evals use the median and highest eligible concurrency for each 8k/1k model/runner/framework/precision/parallelism group. Multi-node evals use the highest eligible concurrency per topology. Fixed-sequence concurrency below 16 is not selected. Kimi K3 and MiniMax M3 AgentX rows automatically select vendor evals at every generated point, including lower concurrencies. Other agentic evals are opt-in and select the highest eligible concurrency per deployment group. See [`mark_eval_entries()` and `mark_all_eval_entries()`](../infx/matrix/generate.py).
+The PR `all-evals` label instead goes through [`infx.matrix.plan`](../infx/matrix/plan.py), which expands eval selection and keeps throughput.
+
+Default selection is scenario-aware. Single-node fixed-sequence evals use the median and highest eligible concurrency for each 8k/1k model/runner/framework/precision/parallelism group. Multi-node evals use the highest eligible concurrency per topology. Fixed-sequence concurrency below 16 is not selected. Every AgentX model, including Kimi K3 and MiniMax M3, gets GSM8K by default. Single-node agentic rows run it at the highest concurrency of each model/runner/framework/precision/spec-decoding/dp-attn/image group, so MTP, DP-attention and image variants each get their own eval while TP/EP and KV-offloading variants share one. Multi-node agentic rows run it at the highest eligible concurrency per topology, and a deployment with no topology at concurrency 16 or above gets one eval at its highest concurrency. Kimi K3 and MiniMax M3 rows additionally run their vendor evals at every generated point, including lower concurrencies, so their GSM8K is an extra eval-only row. Every eval runs as a separate eval-only job, so agentic throughput coverage is unchanged. See [`mark_eval_entries()` and `mark_all_eval_entries()`](../infx/matrix/generate.py).
 
 Kimi K3 automatically runs `kimi-vendor` / `kimi_tool_call_schema_full` on AMD and NVIDIA, for single-node and multi-node recipes. This runs 204 unique schema cases in streaming and non-streaming modes, producing 408 checks. An explicit `eval-framework=kimi-vendor` and `eval-suite=kimi_tool_call_schema` workflow override retains the one-case, two-check smoke for fast diagnosis. `--trim-conc` trims deployment points, not the suite's case count. MiniMax M3 automatically runs `minimax-vendor` / `minimax_m3_full` across both vendors, covering all 102 provider cases. Its one-case `minimax_m3_smoke` is available through an explicit override. Fixed-sequence GSM8K selection is unchanged.
 
@@ -44,7 +46,7 @@ Read the task name and `n_eff` with the score: `kimi_tool_call_schema = 1.0, n_e
 
 The full Kimi vendor suite has no adapter-level whole-process timeout. Stock request timeouts, engine readiness deadlines, and workflow/scheduler allocation limits still apply. The smoke keeps its 900-second deadline; a direct Python adapter invocation can impose an explicit positive `--timeout-seconds` override on either suite.
 
-On a PR, combine one primary sweep label (normally `full-sweep-fail-fast`) with eval modifiers. `all-evals` expands coverage without suppressing throughput. `evals-only` suppresses throughput. Together they run all eligible evals only. Runs with `evals-only` are not reusable, while normal full sweeps and `all-evals` full sweeps are reusable. Adding or removing a modifier restarts the active sweep ([label policy](../../.github/workflows/README.md#pr-eval-modifiers)).
+On a PR, combine one primary sweep label (normally `full-sweep-fail-fast`) with eval modifiers. `all-evals` expands coverage without suppressing throughput. `evals-only` suppresses throughput. Together they run all eligible evals only. Runs with `evals-only` are not reusable, while normal full sweeps and `all-evals` full sweeps are reusable. Adding or removing a modifier restarts the active sweep ([label policy](ci-procedures.md#pr-primary-and-modifier-labels)).
 
 ```bash
 # Selected eval subset only
@@ -68,7 +70,7 @@ uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with p
   --config-files configs/nvidia-master.yaml | jq .
 ```
 
-A correct AgentX eval row contains `"scenario-type": "agentic-coding"`, `"run-eval": true`, and `"eval-only": true`. The workflow splits generated rows into throughput, fixed-sequence eval, and agentic eval jobs in [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml#L351-L358).
+A correct AgentX eval row contains `"scenario-type": "agentic-coding"`, `"run-eval": true`, and `"eval-only": true`. The workflow splits generated rows into throughput, fixed-sequence eval, and agentic eval jobs in [`.github/workflows/e2e-tests.yml`](../../.github/workflows/e2e-tests.yml#L328-L335).
 
 ## 2. Add a graded eval
 
@@ -81,69 +83,75 @@ A correct AgentX eval row contains `"scenario-type": "agentic-coding"`, `"run-ev
 Against an already healthy OpenAI-compatible server:
 
 ```bash
-source benchmarks/benchmark_lib.sh
 export MODEL='<HF_MODEL_ID>'
 export MODEL_NAME='<SERVED_MODEL_NAME>'
 export MODEL_PREFIX='<MODEL_PREFIX>'
 export PORT='<PORT>'
+export EVAL_ONLY=false IS_MULTINODE=false OPENAI_API_KEY=EMPTY
 export EVAL_TASKS_DIR='infx/evals/<task>.yaml'
-export EVAL_CONCURRENT_REQUESTS='16'
 export EVAL_LIMIT='10'
-run_eval --framework lm-eval --port "$PORT"
-append_lm_eval_summary
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency 16 --stage-to "$EVAL_DIR"
 python3 -m infx.evals.validate_scores \
   --model-prefix "$MODEL_PREFIX" \
-  --results-glob 'results*.json'
+  --meta-env "$EVAL_DIR/meta_env.json" \
+  --results-glob "$EVAL_DIR/results*.json"
 ```
 
 For the full eval, unset the limit and repeat against a clean, correctly configured server:
 
 ```bash
 unset EVAL_LIMIT
-run_eval --framework lm-eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX"
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency 16 --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores --model-prefix "$MODEL_PREFIX" \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
-`run_lm_eval` passes concurrency through `num_concurrent` in `--model_args`. It is deliberately an environment variable, not a `run_eval` CLI option. The exact invocation is in [`run_lm_eval()`](../benchmarks/benchmark_lib.sh#L2044-L2128).
+Run these with Python 3.10 or newer, normally inside the serving container, because lm-eval installs its pinned harness into that `python3` with `uv pip`. The command copies the allow-listed artifacts into `--stage-to` and writes `meta_env.json` there. It takes the concurrency from `--concurrency`, which lm-eval receives as `num_concurrent` in `--model_args`. `EVAL_CONCURRENT_REQUESTS` is no longer read. The exact invocation is in [`infx.bench.eval.lm_eval.run`](../infx/bench/eval/lm_eval.py#L121-L150).
 
 ## 3. `EVAL_ONLY` is a launcher contract
 
-Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside `run_eval`:
+Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside the eval command:
 
-1. `compute_eval_context_length`/`setup_eval_context` chooses the requested eval context capped by the model's native maximum.
-2. The launcher wires it to the server (`--context-length`, `--max-model-len`, or the framework equivalent).
-3. The health check still runs.
-4. Throughput returns immediately or is skipped.
-5. `run_eval` and artifact staging run.
+1. For a single-node fixed-sequence job, the srt binder sets the server context to the matrix `MAX_MODEL_LEN` (`isl + osl + 256`) through `context-length` for SGLang, `max_seq_len` and `max_num_tokens` for TRT-LLM, or `max-model-len` for vLLM and ATOM. AgentX points and multi-node jobs keep their recipe's own context, and multi-node jobs can select a real-verification `EVAL_CONFIG_FILE`.
+2. The health check still runs. In eval-only jobs, vendor frameworks also wait for the served model on the OpenAI chat route, within `EVAL_ENDPOINT_READY_TIMEOUT_SECONDS`.
+3. Throughput is skipped.
+4. `python3 -m infx.bench eval` sizes each lm-eval request from `EVAL_MAX_MODEL_LEN`, else from `MAX_MODEL_LEN` capped at the model's native maximum.
+5. The same command stages the artifacts and writes `meta_env.json`, whether the eval passed or failed.
 
-Relevant implementation: [context setup](../benchmarks/benchmark_lib.sh#L2016-L2042), [eval dispatch and failure policy](../benchmarks/benchmark_lib.sh#L2893-L3073), and [workflow inputs](../../.github/workflows/benchmark-tmpl.yml#L40-L57).
+Relevant implementation: [server context](../infx/srt_slurm/single_node.py#L183-L194), [request budget](../infx/bench/eval/lm_eval.py#L77-L98), [eval dispatch and failure policy](../infx/bench/eval/__init__.py#L74-L173), and [workflow inputs](../../.github/workflows/benchmark-tmpl.yml#L36-L53).
 
-Do not toggle `EVAL_ONLY` after a throughput-sized server is already running and assume the context changed. Restart through the recipe. In eval-only mode an eval failure is returned after available artifacts are staged. In a workflow, upload happens with `always()` before score validation so failed evidence survives ([single-node upload and gate](../../.github/workflows/benchmark-tmpl.yml#L467-L494), [multi-node upload and gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L487-L518)).
+Native multi-node post-eval reads the mounted checkpoint at `/model` and enables dataset downloads in the eval process, without changing worker environments. Context lookup reads numeric limits from local `config.json` before falling back to Transformers; an explicit `EVAL_MAX_MODEL_LEN` still takes precedence.
+
+Do not toggle `EVAL_ONLY` after a throughput-sized server is already running and assume the context changed. Restart through the recipe. In eval-only mode an eval failure is returned after available artifacts are staged. In a workflow, upload happens with `always()` before score validation so failed evidence survives ([single-node upload and gate](../../.github/workflows/benchmark-tmpl.yml#L449-L472), [multi-node upload and gate](../../.github/workflows/benchmark-multinode-tmpl.yml#L477-L503)).
 
 ## 4. Batched eval concurrency
 
-A space-separated `EVAL_CONCURRENT_REQUESTS` value runs several concurrency points **sequentially against one live engine**. It does not run several harnesses simultaneously. Within each point, the harness issues up to that point's concurrency.
+A space-separated `--concurrency` value runs several concurrency points **sequentially against one live engine**. Multi-node jobs pass `EVAL_CONC` this way. It does not run several harnesses simultaneously. Within each point, the harness issues up to that point's concurrency.
 
 ```bash
-source benchmarks/benchmark_lib.sh
 export MODEL='<HF_MODEL_ID>' MODEL_NAME='<SERVED_MODEL_NAME>' MODEL_PREFIX='<MODEL_PREFIX>'
 export PORT='<PORT>' EVAL_TASKS_DIR='infx/evals/gsm8k.yaml'
-export EVAL_CONCURRENT_REQUESTS='16 32 64'
-run_eval --framework lm-eval --port "$PORT"
-append_lm_eval_summary
-python3 -m infx.evals.validate_scores --expected-concs '16 32 64'
+export EVAL_ONLY=false IS_MULTINODE=false OPENAI_API_KEY=EMPTY
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "http://localhost:$PORT" --concurrency '16 32 64' --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores --expected-concs '16 32 64' \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
 ```
 
 The batch runner creates a fresh temporary output directory per point, stages files with `_conc<N>` suffixes, and writes these arrays to `meta_env.json`:
 
 - `eval_concs`: requested points.
-- `completed_eval_concs`: eval and staging both succeeded.
-- `failed_eval_concs`: either eval or staging failed.
+- `completed_eval_concs`: the eval succeeded and staged at least one artifact.
+- `failed_eval_concs`: the eval or its staging failed, or it staged nothing.
 
-A failed point is deferred so artifacts from every attempted point can upload. The post-upload validator then fails the job. Batched mode accepts positive integers and supports only `lm-eval`. See [`run_eval` batching](../benchmarks/benchmark_lib.sh#L2980-L3031), [artifact suffixing](../benchmarks/benchmark_lib.sh#L2130-L2188), and [manifest validation](../infx/evals/validate_scores.py#L119-L216).
+A failed point is deferred so artifacts from every attempted point can upload. The post-upload validator then fails the job. Batched mode accepts positive integers and supports only `lm-eval`. See [batching](../infx/bench/eval/__init__.py#L176-L211), [artifact suffixing](../infx/bench/eval/stage.py#L20-L43), and [manifest validation](../infx/evals/validate_scores.py#L119-L216).
 
-For multi-node `all-evals`, the workflow constructs `EVAL_CONC` by joining the topology's concurrency list ([dispatch](../../.github/workflows/e2e-tests.yml#L417-L419)). Never compare a point if its `_conc<N>` result or completed-manifest entry is missing.
+For multi-node `all-evals`, the workflow constructs `EVAL_CONC` by joining the topology's concurrency list ([dispatch](../../.github/workflows/e2e-tests.yml#L390-L392)). Never compare a point if its `_conc<N>` result or completed-manifest entry is missing.
 
 ## 5. Validate scores, not file existence
 
@@ -189,17 +197,17 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern 'eval_*' --dir ./evals/raw
 ```
 
-Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. Agentic SWE-bench additionally uploads `agent_preds.json`, `predictions.jsonl`, `swebench_report_*.json`, and trajectory files in the single-node template. The aggregate is a navigation aid, not a substitute for raw samples and batch completeness.
+Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. The aggregate is a navigation aid, not a substitute for raw samples and batch completeness.
 
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
-[`install_agentic_deps()`](../benchmarks/benchmark_lib.sh) declares the AgentX client dependencies directly alongside the editable `utils/aiperf` install. It installs them into the isolated `AIPERF_RUNTIME_DIR` environment with the caller-supplied `AIPERF_PYTHON_VERSION`.
+`python3 -m infx.bench agentic` builds its own client runtime with uv ([`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)). It creates a fresh Python 3.11 venv under `AIPERF_RUNTIME_DIR` (default `<tmp>/inferencex-agentic-<SLURM_JOB_ID or PID>`) and installs the editable `utils/aiperf` with its declared dependencies, plus the client requirements AIPerf does not declare ([`requirements.txt`](../infx/bench/agentic/requirements.txt)). It then re-runs itself under that venv's Python. Recipes reach it through [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh).
 
-AgentX is AIPerf `inferencex-agentx-mvp` trace replay, not a fixed-token synthetic benchmark. The checked-in default uses ten additional warmup requests per trajectory lane and the recipe's configured profile duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](../../.github/workflows/README.md#agentx-fast-mode), [fast replay settings](../benchmarks/benchmark_lib.sh#L3255-L3259)).
+AgentX is AIPerf `agentx` trace replay, not a fixed-token synthetic benchmark. The `agentx` scenario owns the replay defaults: ten additional warmup requests per trajectory lane, a 1,800-second warmup drain limit, a 0.10 live failure threshold, and a 300-second trace idle cap. A recipe may raise the drain limit with `AGENTIC_WARMUP_GRACE_PERIOD` or loosen the live abort with `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD`; the finished profile still fails validation above a 0.10 error rate ([post-run gate](../infx/bench/agentic/run.py#L33-L35)). The profile runs for the configured duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](ci-procedures.md#pr-primary-and-modifier-labels), [fast replay settings](../infx/bench/agentic/replay.py#L64-L65)).
 
-Every AgentX throughput concurrency runs against a fresh server deployment. The matrix creates a separate job per point; replay clients reject multiple concurrency values. AgentX does not flush caches or reuse a running server for another point. Warmup and profiling for the same point share the deployment. This does not change fixed-sequence sweeps or graded-eval batching.
+Every AgentX throughput concurrency runs against a fresh server deployment. The matrix creates a separate job per point. `infx.launch` rejects a multi-node AgentX throughput job whose `CONC_LIST` is not exactly its one positive `CONC`, and the replay client rejects a `CONC_LIST` that differs from `CONC`. AgentX does not flush caches or reuse a running server for another point. Warmup and profiling for the same point share the deployment. This does not change fixed-sequence sweeps or graded-eval batching.
 
-For multi-node srt-slurm jobs, the benchmark client may run on a different host from the frontend. `srt_agentic.sh` uses an explicit `AIPERF_SERVER_URL` when supplied, otherwise derives it from `SRT_FRONTEND_HOST` and `SRT_FRONTEND_PORT`, and falls back to `localhost:$PORT` only when no remote endpoint is available.
+For multi-node srt-slurm jobs, the benchmark client may run on a different host from the frontend. The replay targets `http://$SRT_FRONTEND_HOST:$SRT_FRONTEND_PORT` whenever `SRT_FRONTEND_HOST` is set, otherwise an explicit `AIPERF_SERVER_URL`, and falls back to `http://localhost:$PORT` only when neither is available ([`_server_url`](../infx/bench/agentic/replay.py#L115-L122)).
 
 Keep non-index engine or router wheels reproducible and immutable: check in the source patch and builder beside the launcher, verify the upstream wheel's digest before patching, assign an explicit local version, and install the published artifact through an exact URL with a SHA256 fragment. A local backport must not use an unreleased upstream version number.
 
@@ -221,24 +229,11 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
   -f agentx-fast=true
 ```
 
-Targeted AgentX SWE-bench smoke eval (first ten instances, real agentic generation):
-
-```bash
-gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX --ref "$REF" \
-  -f generate-cli-command='test-config --config-keys qwen3.5-fp8-b200-sglang-agentic --conc 1 --evals-only --config-files configs/nvidia-master.yaml' \
-  -f test-name='swebench-smoke-qwen35-c1' \
-  -f eval-framework=swebench \
-  -f eval-limit='10' \
-  -f swebench-gen-mode='agentic'
-```
-
-For a publishable SWE-bench score, omit `eval-limit`. Do not use `single-shot`, which is only a debugging escape hatch. SWE-bench generation/scoring controls and its `0.50` full-split threshold are documented next to the implementation in [`infx/evals/EVALS.md`](../infx/evals/EVALS.md#swe-bench-lite---framework-swebench).
-
-Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds or `AIPERF_UNSAFE_OVERRIDE=true` adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../benchmarks/benchmark_lib.sh#L3362-L3364)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
+Treat fast results as bring-up evidence, never as a replacement for the canonical candidate. A duration below 900 seconds adds AIPerf's `--unsafe-override` and flags the submission invalid. Use it only for smoke diagnosis ([source](../infx/bench/agentic/replay.py#L105)). After a fast run is healthy, run the exact candidate canonically before claiming benchmark success.
 
 ## 8. Preserve trace and run provenance
 
-AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. Set `AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1` only for an explicitly different live-assistant experiment. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins it. The resolver logs both loader and Hugging Face dataset ([trace resolution](../benchmarks/benchmark_lib.sh#L3165-L3234), [replay semantics](../benchmarks/benchmark_lib.sh#L3236-L3366)).
+AgentX defaults to recorded assistant-response replay. Live server outputs are measured but discarded when constructing later turns. The selected trace corpus is model-family dependent unless `WEKA_LOADER_OVERRIDE` pins `semianalysis_cc_traces_weka_062126` or `semianalysis_cc_traces_weka_062126_256k`. The resolver logs both loader and Hugging Face dataset ([trace resolution](../infx/bench/agentic/traces.py#L20-L25), [replay semantics](../infx/bench/agentic/replay.py#L150-L185)). Replays keep the model's native context. The client ignores `MAX_MODEL_LEN`, and only an explicit `AIPERF_MAX_CONTEXT_LENGTH` adds AIPerf's `--max-context-length`.
 
 Capture orchestration provenance immediately:
 
@@ -258,8 +253,6 @@ gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern 'agentic_*' --dir ./agentx/raw
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   --pattern '*server_logs_*' --dir ./agentx/server-logs
-gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
-  --pattern 'gpu_metrics_*' --dir ./agentx/gpu
 ```
 
 For each concurrency retain:
@@ -270,7 +263,7 @@ For each concurrency retain:
 - server/frontend logs and every metrics endpoint represented.
 - run URL/ID, attempt, head SHA, recipe/config identity, image, topology, fast flag, and any override.
 
-The runner writes the command before replay and validates raw results after aggregation ([execution path](../benchmarks/benchmark_lib.sh#L3412-L3566)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../infx/results/agentic/__init__.py)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../../.github/workflows/benchmark-tmpl.yml#L400-L409), [multi-node contract](../../.github/workflows/benchmark-multinode-tmpl.yml#L476-L485)).
+The runner writes the command before replay and validates raw results after aggregation ([execution path](../infx/bench/agentic/run.py#L122-L197)). Aggregation preserves dataset provenance and hardware/model/topology fields ([aggregate construction](../infx/results/agentic/__init__.py)). Raw workflow uploads intentionally omit very large `inputs.json` and `profile_export_raw.jsonl`. If those are required for an investigation, preserve them from the live allocation before cleanup ([single-node artifact contract](../../.github/workflows/benchmark-tmpl.yml#L382-L391), [multi-node contract](../../.github/workflows/benchmark-multinode-tmpl.yml#L466-L475)).
 
 ## 9. Debug long AgentX runs from live evidence
 
@@ -319,12 +312,12 @@ curl -fsS '<METRICS_URL>' | \
   rg -i 'request|queue|cache|token|prefill|decode|error|fail'
 ```
 
-Track trends over repeated samples: running/waiting requests, KV usage, prefix hits, input/output token rates, completed/cancelled/errored requests, frontend routing balance, and disaggregated KV transfer. AIPerf records endpoint identity for every server series ([metrics wiring](../benchmarks/benchmark_lib.sh#L3344-L3359)).
+Track trends over repeated samples: running/waiting requests, KV usage, prefix hits, input/output token rates, completed/cancelled/errored requests, frontend routing balance, and disaggregated KV transfer. AIPerf records endpoint identity for every server series ([metrics wiring](../infx/bench/agentic/replay.py#L125-L147)). When `AIPERF_SERVER_METRICS_URLS` is unset and `SRTCTL_FRONTEND_TYPE` is not `dynamo`, the replay scrapes each worker's `/metrics` from `SRT_AGG_ENDPOINTS`, or from `SRT_PREFILL_ENDPOINTS` plus `SRT_DECODE_ENDPOINTS`.
 
 Use phase markers, not total Slurm age:
 
 ```bash
-grep -E 'Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|replay_rc=' \
+grep -E 'Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|process_agentic_result' \
   "<LOG_DIR>/benchmark.out"
 date -u
 ```

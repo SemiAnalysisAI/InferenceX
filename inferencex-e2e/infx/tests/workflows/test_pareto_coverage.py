@@ -125,3 +125,20 @@ def test_counter_does_not_reorder_input_and_requires_literal_canonical_true():
     result = assess_coverage([curve(points)])[0]
     assert [point["x"] for point in points] == [3, 1, 2]
     assert result["frontier"] == [points[0]]
+
+
+def test_agg_and_disagg_configs_on_one_app_series_form_one_curve():
+    # PR #3187, run 37270628136: GB300 dynamo-sglang fp4 AgentX P90 E2EL (s) vs
+    # total tok/s/GPU. Agg (v0.5.19 image) and disagg (nightly image) share the
+    # app series gb300_dynamo-sglang, so they are one curve, not two.
+    agg = [{"x": 17.66609, "y": 2506.58096}, {"x": 13.85062, "y": 3800.67592}]
+    disagg = [
+        {"x": 20.51395, "y": 26304.25743}, {"x": 35.52751, "y": 85649.41766},
+        {"x": 44.64737, "y": 115825.02923}, {"x": 54.69959, "y": 123251.45871},
+        {"x": 83.99143, "y": 127047.36369},
+    ]
+    combined = assess([curve(agg + disagg, "dsv4/agentic/gb300_dynamo-sglang/fp4/37270628136/p90")])[0]
+    assert combined["frontierPoints"] == 6
+    assert combined["status"] == "PASS"
+    # The false WARN came from splitting the series by config/image.
+    assert assess([curve(agg)])[0]["frontierPoints"] == 1

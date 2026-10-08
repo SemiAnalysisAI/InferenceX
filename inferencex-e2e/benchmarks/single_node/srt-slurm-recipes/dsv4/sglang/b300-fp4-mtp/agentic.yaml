@@ -4,7 +4,7 @@ base:
   name: dsv4-fp4-b300-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang:dev-cu13-nightly-0929@sha256:497d6ce4887830aad5382242b79c5cfc15faefa0bbb970b4580041d8b131775b
+    container: lmsysorg/sglang:nightly-dev-cu13-20261008-7760d526@sha256:f991a9648fc0a00410bab27d96bf96a0263be9d9b178fe01ee95cffe622fd283
     precision: fp4
   resources:
     gpu_type: b300

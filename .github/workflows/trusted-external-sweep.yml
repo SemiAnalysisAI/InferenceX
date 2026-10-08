@@ -89,8 +89,49 @@ jobs:
                         core.setFailed(`Expected exactly the newly applied primary sweep label; found ${primary}.`);
                         return;
                       }
-                      if (!pull.merge_commit_sha) {
+                      // GitHub recomputes the test merge commit asynchronously, so merge_commit_sha
+                      // can still describe an older head. Wait for a settled mergeable state and
+                      // require the merge commit to be built from the exact approved head.
+                      let mergePull = pull;
+                      for (let attempt = 0; attempt < 10 && mergePull.mergeable === null; attempt += 1) {
+                        await new Promise((resolve) => setTimeout(resolve, 3000));
+                        ({data: mergePull} = await github.rest.pulls.get({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          pull_number: pull.number,
+                        }));
+                      }
+                      if (mergePull.head.sha !== pull.head.sha) {
+                        core.setFailed(
+                          `The PR advanced from ${pull.head.sha} to ${mergePull.head.sha}; ` +
+                          'remove and re-add the sweep label to approve the new revision.',
+                        );
+                        return;
+                      }
+                      if (mergePull.mergeable !== true) {
+                        core.setFailed(
+                          mergePull.mergeable === null
+                            ? 'GitHub has not finished computing mergeability; re-add the label shortly.'
+                            : 'The PR does not merge cleanly into main; resolve conflicts and re-add the label.',
+                        );
+                        return;
+                      }
+                      const mergeSha = mergePull.merge_commit_sha;
+                      if (!mergeSha) {
                         core.setFailed('GitHub has not produced a merge commit; resolve conflicts and re-add the label.');
+                        return;
+                      }
+                      const {data: mergeCommit} = await github.rest.git.getCommit({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        commit_sha: mergeSha,
+                      });
+                      const mergeParents = mergeCommit.parents.map((parent) => parent.sha);
+                      if (mergeParents.length !== 2 || mergeParents[1] !== pull.head.sha) {
+                        core.setFailed(
+                          `Merge commit ${mergeSha} has parents [${mergeParents.join(', ')}], not the approved ` +
+                          `head ${pull.head.sha}; GitHub may still be recomputing it. Re-add the label shortly.`,
+                        );
                         return;
                       }
 
@@ -103,7 +144,7 @@ jobs:
                         ref: context.payload.repository.default_branch,
                         inputs: {
                           'test-name': marker,
-                          'ref': pull.merge_commit_sha,
+                          'ref': mergeSha,
                           'changelog-base-ref': pull.base.sha,
                           'changelog-head-ref': pull.head.sha,
                           'trim-conc': 'false',
@@ -111,7 +152,6 @@ jobs:
                           'evals-only': String(labels.includes('evals-only')),
                           'fail-fast': String(primary[0].includes('fail-fast')),
                           'agentx-fast': String(labels.includes('agentx-fast')),
-                          'pr-labels-json': JSON.stringify(labels),
                         },
                       });
 

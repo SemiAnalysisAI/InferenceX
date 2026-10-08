@@ -53,7 +53,7 @@ Sources: [single-node process/upload](https://github.com/SemiAnalysisAI/Inferenc
 
 ### Eval results
 
-Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}`. They contain the files that exist for that evaluator, including `meta_env.json`, `results*.json`, `sample*.jsonl`, and, for supported agentic evaluators, predictions, reports, or trajectories. The workflow behavior is deliberate:
+Eval jobs upload per-config artifacts named `eval_${EXP_NAME}_${RESULT_FILENAME}`. They contain the files the eval command staged for that evaluator under the allow-list in [`infx/bench/eval/stage.py`](../infx/bench/eval/stage.py), namely `meta_env.json`, `results*.json`, `sample*.jsonl`, and native vendor-eval reports (`*_report.json`), detailed results (`*_results.jsonl`), and archives (`*_artifacts.tar.gz`). The workflow behavior is deliberate:
 
 - an eval-only job errors when no eval files are found.
 - eval files upload under `always()`, preserving partial evidence from a failed job.
@@ -276,103 +276,23 @@ Canonical source: [complete failed-ingest recovery command](../../.claude/comman
 
 ### Prevent recurrence
 
-Containers can run as root while the GitHub workspace is bind-mounted. The shared benchmark library prevents root-owned Python cache directories by setting:
+Containers can run as root while the GitHub workspace is bind-mounted. The benchmark workflows keep Python bytecode caches out of the workspace by setting these variables for every job:
 
-```bash
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+```yaml
+PYTHONDONTWRITEBYTECODE: '1'
+PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 ```
 
-Do not override these paths back into the workspace. The MI355X `amd_utils` lane also deletes stale benchmark logs before launch and registers an exit cleanup that copies Slurm output/error evidence, prints the error tail, then runs scoped `sudo rm -rf "$BENCHMARK_LOGS_DIR"`. The cleanup also runs on `SIGINT`/`SIGTERM`. Keep `KEEP_LOGS=1` for deliberate local debugging only. It disables the cleanup. A hard kill can still bypass teardown, so use the recovery scan below after an `EACCES` cleanup failure.
+Do not override these paths back into the workspace. Use the recovery scan below after an `EACCES` cleanup failure, including failures caused by logs left by retired launchers.
 
-Sources: [Python-cache prevention](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10), [MI355X cleanup](../infx/launch/drivers/legacy.py).
+Source: [Python-cache prevention](../../.github/workflows/benchmark-tmpl.yml#L145-L146).
 
-### Recover an MI355X TW runner workspace
+### Cluster-specific recovery
 
-Canonical signature:
+These need privileged cluster access and explicit approval. Follow the maintainer playbooks rather than copying their commands:
 
-```text
-Deleting the contents of '.../actions-runner/_work/InferenceX/InferenceX'
-Error: File was unable to be removed Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
-```
-
-The jumpbox has no sudo. Use agent forwarding to the hop host that has passwordless sudo on `/it-share`.
-
-1. **Read-only scan first:**
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root 2>/dev/null'"
-   ```
-
-2. Review every result. Every path must be below `actions-runner/_work/`, normally in `InferenceX/InferenceX/benchmark_logs/`. If any path is outside `_work`, **stop**.
-3. With explicit approval, delete only the verified matches:
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root -print0 2>/dev/null \
-      | xargs -0 -r sudo rm -rf'"
-   ```
-
-4. Run the read-only scan again and require zero results.
-5. Only after cleanup, rerun diagnosed failed sweeps. `slurm_job-<id>` can be correlated with `sacct -j <id>`. `CANCELLED` supports the skipped-teardown diagnosis.
-
-Never run an unscoped `rm -rf` against `/it-share`.
-
-Canonical source: [MI355X root-owned file recovery](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/clean-amd-mi355-runner-root-files.md).
-
-## MI300X cluster debugging: enroot/pyxis user-namespace failures
-
-Canonical signature on `mi300x-amd_*` / `chi-mi300x-*`:
-
-```text
-error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied
-error: pyxis: couldn't start container
-error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
-srun: error: chi-mi300x-0XX: task 0: Exited with exit code 1
-```
-
-Known July 2026 cause: Ubuntu 24.04 provisioning drift leaves `kernel.apparmor_restrict_unprivileged_userns=1` on some nodes, blocking the actual enroot path. `unshare -U` is not a valid discriminator because its AppArmor profile may still allow it.
-
-1. Confirm the exact signature and record failing nodes from GitHub logs:
-
-   ```bash
-   gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed
-   ```
-
-2. Access compute nodes through Slurm from the root controller. Direct root SSH to compute nodes is not available:
-
-   ```bash
-   ssh amd-vultr-mi300 \
-     'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<read-only-command>"'
-   ```
-
-3. Survey every visible node without changing it:
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in $(sinfo -N -h -o "%N" | sort -u); do
-     v=$(srun -w $n -N1 --immediate=20 sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>&1 | tail -1)
-     echo "$n: $v"
-   done'
-   ```
-
-   A split of failing nodes at `1` and working nodes at `0` confirms drift. If all nodes are `0`, stop treating this as the known issue. Compare enroot versions, pyxis plugin state, and AppArmor coverage of `/usr/local/bin/enroot-nsenter` against a working node.
-
-4. **Only with explicit approval**, change drifted nodes to the working baseline and persist it:
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in <drifted-nodes>; do
-     srun -w $n -N1 --immediate=30 bash -c \
-       "sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 && \
-        echo kernel.apparmor_restrict_unprivileged_userns=0 > /etc/sysctl.d/99-enroot-userns.conf"
-   done'
-   ```
-
-   This disables a kernel security mitigation. Verify each live value is `0` and the persistent file exists. Escalate the durable fix to the node provisioning image. Otherwise, reprovisioned nodes will regress.
-
-5. Rerun only affected flaky jobs after the cluster baseline is restored.
-
-Canonical source: [MI300X enroot/pyxis recovery](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/debug-mi300-enroot-pyxis.md).
+- MI355X TW `EACCES` workspace cleanup: [`clean-amd-mi355-runner-root-files.md`](../../.claude/commands/clean-amd-mi355-runner-root-files.md). Scan read-only first, delete only verified paths under `actions-runner/_work/`, and never run an unscoped `rm -rf` against `/it-share`.
+- MI300X `enroot-nsenter: failed to create user namespace` (pyxis): [`debug-mi300-enroot-pyxis.md`](../../.claude/commands/debug-mi300-enroot-pyxis.md). Confirm the per-node AppArmor userns drift before changing any node.
 
 ## Safe workflow reruns
 
@@ -431,20 +351,6 @@ Remaining durable fix:
 ```
 
 This evidence is the completion gate. “Workflow green” without artifact identity, source/merge identity, and ingest counts is not a verified result recovery.
-
-### AMD multi-node SGLang teardown
-
-On exit, including a failed startup/readiness check, the AMD SGLang launcher sends
-TERM only to its recorded `setsid` process groups. Normal completion stages results
-before this cleanup. It allows 30 seconds for graceful
-exit, then sends KILL to surviving groups and checks for exit for another five
-seconds. This handles orphaned or TERM-resistant workers that otherwise hold log
-pipes open. These cleanup deadlines do not change profiling, evaluation, or server
-readiness deadlines. A failed client retains its exit status; unresolved cleanup
-fails an otherwise successful node. Kernel-blocked processes may still require
-separately authorized node repair. Do not change or discard completed metrics to
-work around teardown failures. A single EXIT handler owns group cleanup and the
-existing UMBP standalone PID cleanup; the latter still runs if group cleanup fails.
 
 ### AMD multi-node GPU preflight coordination
 

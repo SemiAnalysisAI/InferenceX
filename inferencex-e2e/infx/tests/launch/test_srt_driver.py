@@ -19,7 +19,6 @@ import yaml
 
 from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
-from infx.launch.drivers.srt.checkout import SRT_FORKS
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
@@ -124,6 +123,9 @@ def srtslurm(root: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
 
+WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
+
+
 def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
     """Fail with the launcher's output when it did not exit 0."""
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
@@ -135,14 +137,12 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
-    assert (workspace / "gpu_metrics.csv").read_text() == "gpu,power\n0,300\n"
-    assert json.loads((workspace / "gpu_metrics_context.json").read_text()) == {"device_count": 4}
     assert (workspace / "srt-single-node-logs.tar.gz").stat().st_size > 0
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
     assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
-    assert {"--json", "--yes", "--output"} <= set(argv)
+    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
     assert "/hf" in srtslurm(workspace)["default_mounts"].values()
@@ -183,7 +183,7 @@ LABS = {
     ),
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
-        env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", FAKE_RESULTS="agentic"),
+        env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", FAKE_RESULTS="agentic"),
         model="models/model", preflight=True, tag=None, setup_script=None, served=None,
         dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
     ),
@@ -256,7 +256,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
     assert ("--no-preflight" in argv) is not lab["preflight"]
     assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
-    assert {"--json", "--yes", "benchmark.stream_output=true"} <= set(argv)
+    assert {"--json", "--yes", "benchmark.stream_output=true", WORKDIR} <= set(argv)
     if lab["tag"] is None:
         assert "--tags" not in argv
     else:
@@ -301,7 +301,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     env = lane_env(
         harness, "h200-dgxc", LANE_RECIPE + POWER_TELEMETRY,
         MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
-        IS_AGENTIC="1", ISL="0", OSL="0", CONC_LIST="4 8", FAKE_RESULTS="agentic",
+        IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
         REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter),
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
@@ -316,10 +316,10 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert (workspace / "LOGS/power/exporter-image.sha256").read_text() == provenance
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == commit + "\n"
     staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["benchmark"]["concurrencies"] == [4, 8]
+    assert staged["benchmark"]["concurrencies"] == [4]
 
     runs = lines(harness.logs, "adapter")
-    assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4", "conc_8"]
+    assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
     assert all(f"--expected-producer-sha {commit}" in run for run in runs)
     required = lane == "agentx" or require_power == "1"
     assert all(run.endswith("--require-power") is required for run in runs)
@@ -391,24 +391,24 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     assert list(runner_temp.glob("srt-batch.*.sh")) == []
 
 
-def test_tilert_native_lane_runs_on_its_fork_without_patches(harness):
+def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     env = lane_env(
-        harness, "b200-nscale", MODEL_PREFIX="glm5.1", PRECISION="fp8", FRAMEWORK="tilert",
-        MODEL="zai-org/GLM-5.1-FP8", SPEC_DECODING="mtp", IS_AGENTIC="1", ISL="0", OSL="0",
-        FAKE_RESULTS="agentic", PREFILL_IMAGE="prefill:tag",
-        FAKE_SRT_COMMIT=SRT_FORKS["tilert"].commit,
+        harness, "mi355x-amds", MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert",
+        MODEL="zai-org/GLM-5.3", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
-    assert not any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
+    assert any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
     [call] = srtctl_calls(harness.logs)
-    assert not {"--json", "--no-preflight", "benchmark.stream_output=true"} & set(call["argv"])
+    assert {"--json", "benchmark.stream_output=true"} <= set(call["argv"])
+    assert "--no-preflight" not in call["argv"]
     config = srtslurm(Path(call["cwd"]))
-    assert "default_health_check" not in config
-    assert config["containers"]["tilert-decode"].endswith("/test_tag.sqsh")
-    assert config["containers"]["tilert-prefill"].endswith("/prefill_tag.sqsh")
+    assert config["default_health_check"]["max_attempts"] > 0
+    assert {"test:tag", "prefill:tag"} <= set(config["containers"])
     assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
-    assert json.loads((harness.workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
+    assert "/models" in config["default_mounts"].values()
+    [point] = harness.workspace.glob("point-identity_sweep_*.json")
+    assert json.loads(point.read_text()) == {"conc": 4}
 
 
 def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
@@ -418,11 +418,17 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
     (mirror / "eval.yaml").write_text(LANE_RECIPE)
+    # What the in-container eval staged: its own batch record, but not every workflow input.
+    staged = {
+        "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
+        "eval_concs": [4, 8], "completed_eval_concs": [8], "failed_eval_concs": [4],
+        "infmax_model_prefix": "unknown",
+    }  # fmt: skip
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
         MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
         EVAL_ONLY="true", EVAL_CONFIG_FILE="recipes/test/eval.yaml", FAKE_RESULTS="eval",
-        EVAL_CONC="4 8",
+        EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -437,7 +443,16 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert srtslurm(checkout)["default_time_limit"] == "8:00:00"
     workspace = harness.workspace
     assert (workspace / "results_gsm8k.json").read_text() == "{}"
-    assert json.loads((workspace / "meta_env.json").read_text()) == {"conc": "4 8"}
+    # The host refresh keeps the eval's record and restates identity from the workflow.
+    meta = json.loads((workspace / "meta_env.json").read_text())
+    kept = ("eval_suite", "conc", "eval_concs", "completed_eval_concs", "failed_eval_concs")
+    assert {key: meta[key] for key in kept} == {
+        "eval_suite": "kimi_tool_call_schema", "conc": 4, "eval_concs": [4, 8],
+        "completed_eval_concs": [8], "failed_eval_concs": [4],
+    }  # fmt: skip
+    assert (meta["infmax_model_prefix"], meta["recipe_fingerprint"], meta["framework"]) == (
+        "dsv4", "recipe-fixture", "dynamo-trt",
+    )
     assert list(workspace.glob("point-identity_*.json")) == []
 
 
@@ -499,7 +514,7 @@ def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, mi
 
 
 def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
-    handed = {"SWEBENCH_NEW_KNOB": "7", "AIPERF_NEW": "1", "MODAL_TOKEN_ID": "modal-id"}
+    handed = {"EVAL_NEW_KNOB": "7", "AIPERF_NEW": "1", "OPENAI_API_KEY": "sk-fixture"}
     withheld = {
         "HF_TOKEN": "hf_fixture", "GITHUB_TOKEN": "ghs_fixture", "PORT": "8888",
         "EVAL_EMPTY": "", "EVAL_NOT-A-NAME": "x", "SLURM_JOB_ID": "99",
@@ -511,3 +526,50 @@ def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
                if arg.startswith("post_eval.passthrough_env=")]  # fmt: skip
     assert handed.keys() <= set(names)
     assert not {*withheld, "PATH", "HF_HUB_CACHE"} & set(names)
+
+
+def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness):
+    env = lane_env(
+        harness,
+        "h200-dgxc",
+        MODEL_PREFIX="dsr1",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [call] = srtctl_calls(harness.logs)
+    [command] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
+                 if arg.startswith("post_eval.command=")]  # fmt: skip
+    # Stand in for the external evaluator and inspect the environment it receives.
+    script = harness.workspace / "benchmarks/multi_node/srt_eval.sh"
+    script.write_text(
+        'printf "%s\\n" "$HF_HUB_OFFLINE" "$HF_DATASETS_OFFLINE" '
+        '"$TRANSFORMERS_OFFLINE" "$MODEL_PATH" "$EVAL_MAX_MODEL_LEN" "$1" "$2"\n'
+    )
+    result = subprocess.run(
+        [
+            arg.format(infmax_workspace=harness.workspace, endpoint="http://worker:8000")
+            for arg in command
+        ],
+        env={
+            **os.environ,
+            "HF_HUB_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "MODEL_PATH": "/host-only/checkpoint",
+            "EVAL_MAX_MODEL_LEN": "9472",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.splitlines() == [
+        "0",
+        "0",
+        "0",
+        "/model",
+        "9472",
+        "http://worker:8000",
+        str(harness.workspace),
+    ]

@@ -8,11 +8,21 @@
 
 Thanks for contributing! PRs are welcome. This page covers the review process every PR goes through before it can be merged.
 
+## PR descriptions
+
+Lead with a short explanation of the problem, the resulting behavior, and why the change matters. A reviewer should understand the PR at a high level without expanding any sections. Keep material risks, breaking changes, and unresolved failures visible alongside the summary. Include related issue links only when relevant.
+
+Put AI disclosure, change-type lists, author checklists, and other administrative boilerplate after the summary in clearly named `<details><summary>…</summary>` blocks. Omit the `open` attribute so they are collapsed by default, and leave blank lines around the Markdown inside each block. Keep required checklist items intact; collapsing them changes presentation, not review or merge requirements.
+
+Report validation only from actual integration or end-to-end runs: keep the outcome concise and link the run when available. Put supporting validation evidence, verbose check output, and logs in a collapsed `Validation details` block, while keeping material failures and regressions visible. Substantive benchmark comparisons that explain the change, including the specialized Klaud reports, remain visible; they are not administrative boilerplate. Omit routine local-check inventories (unit-test counts, mocked checks, lint/format, schema checks, matrix generation, and changelog-byte checks), empty sections, and pending-validation boilerplate. Continue running the appropriate checks; this rule governs what belongs in the PR description and comments. If no integration or end-to-end run was performed, omit the validation section.
+
+Every PR description must include an **AI model disclosure** section inside a collapsed-by-default `<details><summary>AI model disclosure</summary>` block. Name the exact model/version used to prepare the PR and each model's role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer alone are insufficient. Use the identifier exposed by the runtime; never guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Update the disclosure when later edits use another model.
+
 ## PR review flow
 
-Every PR description must include an **AI model disclosure** section. Name the exact model/version used to prepare the PR and each model's role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer alone are insufficient. Use the identifier exposed by the runtime; never guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Update the disclosure when later edits use another model.
+1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that change `inferencex-e2e/perf-changelog.yaml` (the matrix comes from the appended entries) and carry exactly one primary label, normally `full-sweep-fail-fast`. Labels, modifiers, canary, fail-fast, and the maintainer-approved fork path are described in [PR primary and modifier labels](inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels). Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
 
-1. Open your PR and get it through PR validation. Add the `full-sweep-fail-fast` label (strongly recommended because a broken change wastes one job per matrix rather than the whole fan-out). Use `full-sweep-enabled` only if you need jobs to keep running past a failure. Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
+   **Fork PRs:** external contributors cannot apply labels. Once the PR is open, ready for review, and free of merge conflicts, a maintainer applies the labels, which approves only the current head SHA. After each push, the maintainer must remove and re-add the primary label.
 2. For changes owned by a non-admin CODEOWNER other than `@SemiAnalysisAI/core`, ask one eligible [CODEOWNER](.github/CODEOWNERS) to review and post the **PR Review Checklist** sign-off (see below) in their approval comment.
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
@@ -135,7 +145,7 @@ A friendly reminder. Please follow the latest checklist template **correctly**:
 - The sign-off can be posted as a regular conversation comment, a review summary, or an inline review comment. All three trigger verification.
 - Submit a new checklist when the PR is open and ready. Editing that checklist triggers verification again. Pushes, reopening, and leaving draft do not trigger verification. If a review event was missed during a merge conflict, retry after resolving it using manual dispatch.
 - Starting Claude requires an eligible human actor with repository write access.
-- Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR, and any exception reasoning).
+- Fill in the "Additional detail section" with the links the checklist asks for (validation/eval workflow runs, the corresponding [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs/cookbook) PR, and any exception reasoning). Submit new SGLang cookbook PRs to `sgl-project/sglang`, under `docs/cookbook/`, which supplies the published site. The cookbook copy in `sgl-project/sgl-docs` is not the current deployment source; `sgl-project/sgl-cookbook` is archived.
 
 Once the sign-off is posted, CI independently re-verifies the review checklist claims, including CODEOWNER status, a green sweep and evals on a commit in the PR, the linked recipe, the reuse command, use of the latest checklist template, upstream [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) images, no architecture-changing benchmark hacks, chat-template usage for speculative decoding, and unchanged draft-model/head weights and precision. It creates one verdict comment for that sign-off resource, including the SHA actually assessed. Editing the same checklist updates only its associated verdict. A replacement or additional checklist receives a separate verdict, and verdicts associated with older sign-offs remain unchanged. Failing criteria stay visible; passing and N/A criteria appear together in a collapsed section. Checkmarks are not taken on trust, so please only check items you have actually verified.
 
@@ -149,7 +159,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
 - **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
-- Reuse does not require retaining a sweep label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
+- Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
 - From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
@@ -174,8 +184,9 @@ image and belong to an existing dashboard visual series. Each generated recipe c
 a deterministic fingerprint so two distinct recipes at the same concurrency remain
 distinct database points without splitting the visual curve. Removing or modifying an
 existing point, or changing shared logic that can affect one, is rejected. Append-only
-entries cannot be mixed with regular entries or eval-selection modifiers in the same
-sweep. The matrix validator enforces the additive generated-matrix invariant; the human
+entries cannot set the `all-evals`, `evals-only`, or `eval-min-prefill-ep` entry fields,
+share a sweep with regular entries, or run with the `all-evals`/`evals-only` modifiers.
+The matrix validator enforces the additive generated-matrix invariant; the human
 and AI reviewers must inspect the complete diff and verify behavioral isolation. The
 mechanical comparison renders each config revision with its own generator, validation
 code, and runner metadata. Launcher and benchmark-script changes still rely on
