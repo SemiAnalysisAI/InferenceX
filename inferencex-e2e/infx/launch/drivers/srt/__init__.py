@@ -158,8 +158,6 @@ def run_multinode(launch: Launch) -> int:
     infmax = compute_workspace(run, checkout, shared=shared)
     run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-    job_name = srtctl_job_name(request.runner_name)
-    prepare_recipe(checkout.root, staged, job_name, run.srt.dist_timeout_s)
     recipe = str(checkout.root / submit.BOUND_RECIPE)
     client_env = (
         config.agentic_client_env(run.cluster, run.srt, lane, request) if request.is_agentic else {}
@@ -167,6 +165,8 @@ def run_multinode(launch: Launch) -> int:
     power_port = run.srt.power_exporter_port if decision.dcgm else None
     if rc := submit.bind_recipe(run, checkout, staged, recipe, power_port, client_env):
         return rc
+    # Only the bound recipe is flat: a bundle keeps its names and roles under base and overrides.
+    prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
     arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
     manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
