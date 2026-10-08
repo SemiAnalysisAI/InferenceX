@@ -184,12 +184,14 @@ schema; unknown keys fail.
   master config's `cluster:<id>` label names; broad SKU labels use the GPU family when its
   clusters agree. Agentic master configs must use a `cluster:<id>` label; their DRAM
   KV-offload matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`.
-- `available-cpu-dram-mib` is the host DRAM, in MiB, that Slurm can give one job on a node;
-  omit it where unmeasured. A larger value makes Slurm reject single-node jobs. Single-node
-  srt-slurm launches cap every srun step at the serving GPUs' share,
-  `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB. The job requests the whole value
-  when `slurm.srt-slurm.single-node-exclusive` is true (the default), and that share
-  otherwise. A recipe's host KV pool and server processes must fit inside the step cap.
+- `available-cpu-dram-mib` is the host DRAM, in MiB, a benchmark job can use on a node;
+  omit it where unmeasured. Single-node srt-slurm launches cap every srun step at the
+  serving GPUs' share, `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB. When
+  `slurm.srt-slurm.single-node-exclusive` is true (the default) the job requests `--mem=0`,
+  all the memory Slurm has on the node, and a step using every GPU takes that instead of a
+  cap. Otherwise the job requests the share, and a value above what Slurm can give one job
+  makes it reject the job. A recipe's host KV pool and server processes must fit inside the
+  step cap.
 - `env` is the workload environment of every launch on the cluster. Like
   `slurm.srt-slurm.env`, it overrides the runner's own environment but never a name the
   point's additional-settings set. Values cannot contain commas: Slurm hands them to jobs
