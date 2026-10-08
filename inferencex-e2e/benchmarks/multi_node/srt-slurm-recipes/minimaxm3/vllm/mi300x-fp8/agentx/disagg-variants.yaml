@@ -32,7 +32,7 @@ base:
     max_attempts: 360
   engine:
     type: vllm
-    connector: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail"}'
+    connector: nixl
   roles:
     prefill:
       nodes: 1
@@ -51,6 +51,7 @@ base:
         NCCL_MIN_NCHANNELS: "112"
         GPU_MAX_HW_QUEUES: "2"
       args: &worker_args
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail"}'
         served-model-name: MiniMaxAI/MiniMax-M3-MXFP8
         tensor-parallel-size: 8
         trust-remote-code: true
@@ -76,7 +77,9 @@ base:
       workers: 1
       gpus: 8
       env: *worker_env
-      args: *worker_args
+      args:
+        <<: *worker_args
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail"}'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
