@@ -173,7 +173,11 @@ class SrtSlurmSettings(Record):
     shared_run_root: HostPath | None = Field(default=None, alias="shared-run-root")
     uv_cache_root: HostPath | None = Field(default=None, alias="uv-cache-root")
     volume_mounts: dict[str, str] = Field(default_factory=dict, alias="volume-mounts")
+    agentic_volume_mounts: dict[str, str] = Field(
+        default_factory=dict, alias="agentic-volume-mounts"
+    )
     mounts: dict[str, str] = Field(default_factory=dict)
+    power_exporter_port: int | None = Field(default=None, alias="power-exporter-port", gt=0)
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -211,9 +215,18 @@ class SlurmSettings(SchedulerSettings):
     @model_validator(mode="after")
     def _mounted_volumes_exist(self) -> Self:
         """srt-slurm volume mounts must name declared volumes."""
-        mounted = self.srt_slurm.volume_mounts if self.srt_slurm is not None else {}
-        if unknown := sorted(mounted.keys() - self.volumes.keys()):
-            raise ValueError(f"srt-slurm.volume-mounts names unknown volumes: {unknown}")
+        srt = self.srt_slurm
+        mounts = (
+            {}
+            if srt is None
+            else {
+                "volume-mounts": srt.volume_mounts,
+                "agentic-volume-mounts": srt.agentic_volume_mounts,
+            }
+        )
+        for field, mounted in mounts.items():
+            if unknown := sorted(mounted.keys() - self.volumes.keys()):
+                raise ValueError(f"srt-slurm.{field} names unknown volumes: {unknown}")
         return self
 
     @model_validator(mode="after")

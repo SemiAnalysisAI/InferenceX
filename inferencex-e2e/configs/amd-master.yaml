@@ -1512,8 +1512,9 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # ROCm 10.0 nightly carrying vllm-project/vllm#59039 and #61082 (see
-  # agentic.yaml).
+  # ROCm 10.0 nightly of 2026-10-13, the first to carry both
+  # vllm-project/vllm#59039 (decoder SWA bounded replay on ROCm) and #61082
+  # (mono decode on all 40 backbone layers, switched by --monokernel).
   image: vllm/vllm-openai-rocm:nightly-rocm100-5555a2d8f7116b2b4877f66516f4128176cf722a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash

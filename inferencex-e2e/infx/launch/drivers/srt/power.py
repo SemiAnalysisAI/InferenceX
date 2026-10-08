@@ -1,43 +1,23 @@
 """DCGM power eligibility of the srt-slurm multi-node lanes.
 
-A recipe asks for DCGM power in its top-level ``telemetry:`` mapping; each lane lists the
-requests and recipes that may have it.
+A matrix point asks for DCGM power with its master ``power`` field; each lane lists the
+requests that may have it.
 """
 
 from __future__ import annotations
 
-import fnmatch
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import yaml
-
 from infx.launch.context import LaunchError
-from infx.launch.drivers.srt.recipe import RECIPES_MIRROR, recipe_mirror_path, recipe_relpath
 from infx.launch.policy import LaunchPath, Match, any_of
 
 if TYPE_CHECKING:
-    from infx.launch.request import LaunchRequest, MultiNodeRequest
-
-MIRROR = f"{RECIPES_MIRROR.as_posix()}/"
-
-
-def recipe_enables_dcgm_power(text: str) -> bool:
-    """Whether the recipe's top-level ``telemetry`` is ``enabled: true`` with a ``dcgm_exporter``."""
-    try:
-        recipe = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return False
-    telemetry = recipe.get("telemetry") if isinstance(recipe, dict) else None
-    return (
-        isinstance(telemetry, dict)
-        and "dcgm_exporter" in telemetry
-        and telemetry.get("enabled") is True
-    )
+    from infx.launch.request import MultiNodeRequest
 
 
 class PowerPolicyError(LaunchError):
-    """The recipe enables DCGM power on a lane that does not support it."""
+    """The point asks for DCGM power on a lane that does not support it."""
 
 
 @dataclass(frozen=True)
@@ -46,7 +26,6 @@ class PowerRule:
 
     when: Match
     agentx: bool
-    recipe_glob: str | None = None
     adapter: bool = False
 
 
@@ -57,7 +36,6 @@ class PowerLane:
     rules: tuple[PowerRule, ...]
     error: str
     agentic_error: str | None = None
-    eval_recipe_when_eval_only: bool = False
 
 
 POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
@@ -66,24 +44,21 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             PowerRule(
                 Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
                 agentx=True,
-                recipe_glob=f"{MIRROR}glm5.2/sglang/gb200-fp4/agentx/agg.yaml",
             ),
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
-                recipe_glob=f"{MIRROR}kimik3/vllm/gb200-fp4/agentx/*",
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang"), agentic=False), agentx=False),
         ),
         error="dcgm-power requires dynamo-sglang or the supported Kimi-K3 AgentX route",
-        agentic_error="AgentX dcgm-power requires the GLM-5.2 aggregate or supported Kimi-K3 recipe",
+        agentic_error="AgentX dcgm-power requires GLM-5.2 FP4 dynamo-sglang or Kimi-K3 FP4 dynamo-vllm",
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
-                recipe_glob=f"{MIRROR}kimik3/vllm/*/agentx/*",
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),
         ),
@@ -120,7 +95,6 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             ),
         ),
         error="B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM",
-        eval_recipe_when_eval_only=True,
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
@@ -134,7 +108,6 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             ),
         ),
         error="B200 Nscale dcgm-power requires fixed-sequence DSV4 FP4 dynamo-vllm or Qwen3.5 FP8 AgentX dynamo-sglang",
-        eval_recipe_when_eval_only=True,
     ),
     ("h200-dgxc", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
@@ -166,38 +139,18 @@ class PowerDecision:
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
 
 
-def decide_power(
-    cluster_id: str, path: LaunchPath, *, dcgm: bool, request: LaunchRequest, recipe: str
-) -> PowerDecision:
-    """Apply the lane's rules to the inspected ``recipe`` path when it enables dcgm.
+def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -> PowerDecision:
+    """Apply the lane's rules when the point's ``power`` field is on.
 
     Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
-    lane = POWER_LANES.get((cluster_id, path))
-    if not dcgm or lane is None:
+    if not request.power:
         return NO_POWER
+    lane = POWER_LANES.get((cluster_id, path))
+    if lane is None:
+        raise PowerPolicyError(f"cluster {cluster_id!r} measures no DCGM power on {path}")
     for rule in lane.rules:
-        if rule.when(request) and (
-            rule.recipe_glob is None or fnmatch.fnmatchcase(recipe, rule.recipe_glob)
-        ):
+        if rule.when(request):
             return PowerDecision(dcgm=True, agentx=rule.agentx, adapter=rule.adapter)
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error
     raise PowerPolicyError(message)
-
-
-def resolve_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -> PowerDecision:
-    """Detect dcgm in the workspace copy of the recipe the lane inspects, and decide.
-
-    A recipe missing from the workspace stays non-power.
-    """
-    lane = POWER_LANES.get((cluster_id, path))
-    if lane is None:
-        return NO_POWER
-    srt_recipe = request.srt_recipe
-    if lane.eval_recipe_when_eval_only and request.eval_only and request.eval_srt_recipe:
-        srt_recipe = request.eval_srt_recipe
-    mirror = recipe_mirror_path(request.workspace, srt_recipe)
-    dcgm = mirror.is_file() and recipe_enables_dcgm_power(mirror.read_text())
-    return decide_power(
-        cluster_id, path, dcgm=dcgm, request=request, recipe=recipe_relpath(srt_recipe)
-    )

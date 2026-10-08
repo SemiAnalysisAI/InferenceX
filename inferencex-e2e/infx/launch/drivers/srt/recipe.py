@@ -1,21 +1,17 @@
-"""The workspace recipe mirror, and the edits multi-node lanes make to the job's recipe copy.
+"""The workspace recipe mirror, and the text edits multi-node lanes make to the job's copy.
 
-Only the disposable copy staged in the job's srt-slurm checkout is edited. Text edits keep
-its comments; concurrency injection rewrites it through YAML, which drops them.
+Only the disposable copy staged in the job's srt-slurm checkout is edited; the edits keep
+its comments.
 """
 
 from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-
 from infx.launch.context import LaunchError
-from infx.srt_slurm.workload import parse_concurrencies
 
 if TYPE_CHECKING:
     from infx.launch.drivers.srt.lanes import SrtLane
@@ -80,13 +76,7 @@ def add_dist_timeout(text: str, seconds: int) -> str:
     return "".join(lines)
 
 
-def prepare_recipe(
-    checkout: Path,
-    staged: str,
-    job_name: str,
-    dist_timeout_s: int | None,
-    conc_list: str | None,
-) -> None:
+def prepare_recipe(checkout: Path, staged: str, job_name: str, dist_timeout_s: int | None) -> None:
     """Edit the checkout's staged copy of the recipe for this job."""
     config_path = checkout / recipe_relpath(staged)
     if not config_path.is_file():
@@ -95,11 +85,6 @@ def prepare_recipe(
     if dist_timeout_s is not None:
         text = add_dist_timeout(text, dist_timeout_s)
     config_path.write_text(text)
-    if conc_list is not None:
-        try:
-            inject_concurrencies(config_path, parse_concurrencies(conc_list))
-        except ValueError as error:
-            raise LaunchError(str(error)) from error
 
 
 def strip_forced_acceptance(recipes: Path) -> None:
@@ -124,18 +109,3 @@ def eval_overrides(recipes: Path, lane: SrtLane, request: LaunchRequest) -> list
             overrides += ["--unset", key]
     return overrides
 
-
-def inject_concurrencies(recipe_path: Path, concurrencies: Sequence[int]) -> None:
-    """Set the recipe's top-level ``benchmark.concurrencies``.
-
-    Raises ``ValueError``, leaving the file untouched, for unreadable YAML or no top-level
-    ``benchmark`` mapping (override bundles keep theirs under ``base``).
-    """
-    try:
-        recipe = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as error:
-        raise ValueError(f"failed to load recipe {recipe_path}: {error}") from error
-    if not isinstance(recipe, dict) or not isinstance(recipe.get("benchmark"), dict):
-        raise ValueError(f"recipe {recipe_path} must contain a benchmark mapping")
-    recipe["benchmark"]["concurrencies"] = list(concurrencies)
-    recipe_path.write_text(yaml.safe_dump(recipe, sort_keys=False), encoding="utf-8")

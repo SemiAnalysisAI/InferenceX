@@ -1383,6 +1383,7 @@ kimik3-fp4-h200-vllm-agentic-latency:
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
         num-nodes: 4
         srt-recipe: agg-tp16dp2ep32-latency.yaml
+        power: true
         worker:
           num-worker: 2
           tp: 16
@@ -1409,6 +1410,7 @@ kimik3-fp4-h200-vllm-agentic-balanced:
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16]
         num-nodes: 4
         srt-recipe: agg-tp8dp4ep32-balanced.yaml
+        power: true
         worker:
           num-worker: 4
           tp: 8
@@ -1436,6 +1438,7 @@ kimik3-fp4-h200-vllm-agentic-simple:
         conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
         num-nodes: 4
         srt-recipe: agg-tp8dp4ep32-vllm-simple.yaml
+        power: true
         worker:
           num-worker: 4
           tp: 8
@@ -1632,6 +1635,7 @@ dsv4-fp8-h200-dynamo-sglang-agentic-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-tp8-mtp-kvoffload.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -3970,6 +3974,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         srt-recipe: disagg-1p1d-tp4-tp4-stp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -3984,6 +3989,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1024]
         srt-recipe: disagg-4p1d-dep4-dep16-stp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -4078,6 +4084,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: mooncake
         conc-list: [1, 4, 8, 16, 32, 64, 256]
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-b128-c1x4x8x16x32x64x256-stp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -4094,6 +4101,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: nixl
         conc-list: [2048]
         srt-recipe: disagg-5p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b4096-c2048-stp.yaml
+        power: true
         prefill:
           num-worker: 5
           tp: 4
@@ -4110,6 +4118,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: mooncake
         conc-list: [5120]
         srt-recipe: disagg-6p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b5120-c5120-stp.yaml
+        power: true
         prefill:
           num-worker: 6
           tp: 4
@@ -4126,6 +4135,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: mooncake
         conc-list: [5120]
         srt-recipe: disagg-7p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b5120-c5120-stp.yaml
+        power: true
         prefill:
           num-worker: 7
           tp: 4
@@ -6374,6 +6384,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
         conc-list: [1, 2, 4, 8, 16]
         num-nodes: 4
         srt-recipe: agg-dcp16-dspark4-maxseq2-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 16
@@ -6400,6 +6411,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
         conc-list: [8, 40, 48]
         num-nodes: 4
         srt-recipe: agg-dcp16-nospec-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 16
@@ -6535,6 +6547,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [16]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c16.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6548,6 +6561,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [32]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c32.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6560,6 +6574,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [48]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c48.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6572,6 +6587,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [72]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c72.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6584,6 +6600,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [96]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c96.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6854,6 +6871,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         srt-recipe: disagg-1p1d-tp4-tp4-stp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -6868,6 +6886,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1024]
         srt-recipe: disagg-4p1d-dep4-dep16-stp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -6916,6 +6935,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
         conc-list: [8]
         kv-offloading: none
         srt-recipe: disagg-2p2d-pcp8-tp8-dp8-mtp.yaml
+        power: true
         prefill:
           num-worker: 2
           tp: 1
@@ -6931,6 +6951,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
         conc-list: [12]
         kv-offloading: none
         srt-recipe: disagg-2p2d-pcp8-tp8-dp8-mtp.yaml
+        power: true
         prefill:
           num-worker: 2
           tp: 1
@@ -6946,6 +6967,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
         conc-list: [16]
         kv-offloading: none
         srt-recipe: disagg-2p2d-pcp8-tp8-dp8-mtp.yaml
+        power: true
         prefill:
           num-worker: 2
           tp: 1
@@ -6982,6 +7004,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 1
@@ -6998,6 +7021,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 1
@@ -7014,6 +7038,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 1
@@ -7050,6 +7075,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c2.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7061,6 +7087,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c4.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7072,6 +7099,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c8.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7083,6 +7111,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c12.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7094,6 +7123,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c16.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7334,6 +7364,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
         num-nodes: 2
         # Shared deployment GPU power telemetry.
         srt-recipe: agg.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7897,6 +7928,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1, 2, 8]
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-b128-c1x2x8-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -7911,6 +7943,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [32, 48, 80]
         srt-recipe: disagg-1p1d-p-tp8-ep8-d-tp8-ep8-b1024-c32x48x80-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7925,6 +7958,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [480]
         srt-recipe: disagg-3p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c480-mtp.yaml
+        power: true
         prefill:
           num-worker: 3
           tp: 4
@@ -7939,6 +7973,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [768]
         srt-recipe: disagg-4p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c768-mtp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -7953,6 +7988,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1280]
         srt-recipe: disagg-6p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c1280-mtp.yaml
+        power: true
         prefill:
           num-worker: 6
           tp: 4
@@ -7967,6 +8003,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1344]
         srt-recipe: disagg-7p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1344-mtp.yaml
+        power: true
         prefill:
           num-worker: 7
           tp: 4
@@ -7981,6 +8018,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1920, 2304]
         srt-recipe: disagg-8p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1920x2304-mtp.yaml
+        power: true
         prefill:
           num-worker: 8
           tp: 4
@@ -8017,6 +8055,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48, 56]
         srt-recipe: disagg-1p1d-dcp8-dcp8-dspark4-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -8029,6 +8068,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48, 64]
         srt-recipe: disagg-1p2d-dcp8-dcp8-dspark4-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -8041,6 +8081,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [1]
         srt-recipe: disagg-1p3d-dcp8-dcp8-dspark7-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -8053,6 +8094,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48]
         srt-recipe: disagg-1p3d-dcp8-dcp8-dspark4-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -8081,6 +8123,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         conc-list: [1, 4]
         num-nodes: 2
         srt-recipe: agg-dcp8-dspark7-maxseq2-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8093,6 +8136,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         conc-list: [48, 52, 56]
         num-nodes: 2
         srt-recipe: agg-dcp8-dspark4-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8133,6 +8177,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [1]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c1.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8145,6 +8190,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [4]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c4.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8157,6 +8203,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [8]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c8.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8169,6 +8216,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [14]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c14.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8181,6 +8229,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [24]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c24.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8193,6 +8242,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [48]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c48.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8204,6 +8254,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [96]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c96.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8216,6 +8267,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [32]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c32.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8228,6 +8280,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [56]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c56.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8240,6 +8293,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [72]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c72.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8252,6 +8306,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [80]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c80.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8280,6 +8335,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1, 2, 8]
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-b1024-c1x2x8-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8294,6 +8350,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [32, 48, 80]
         srt-recipe: disagg-1p1d-p-tp8-ep8-d-tp8-ep8-b1024-c32x48x80-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -8308,6 +8365,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [480]
         srt-recipe: disagg-3p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c480-mtp.yaml
+        power: true
         prefill:
           num-worker: 3
           tp: 4
@@ -8322,6 +8380,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [768]
         srt-recipe: disagg-4p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c768-mtp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -8336,6 +8395,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1280]
         srt-recipe: disagg-6p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c1280-mtp.yaml
+        power: true
         prefill:
           num-worker: 6
           tp: 4
@@ -8350,6 +8410,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1344]
         srt-recipe: disagg-7p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1344-mtp.yaml
+        power: true
         prefill:
           num-worker: 7
           tp: 4
@@ -8364,6 +8425,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1920, 2304]
         srt-recipe: disagg-8p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1920x2304-mtp.yaml
+        power: true
         prefill:
           num-worker: 8
           tp: 4
@@ -8765,6 +8827,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 8
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c8-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8782,6 +8845,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 16
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c16-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8799,6 +8863,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 24
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c24-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8816,6 +8881,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 32
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c32-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8833,6 +8899,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 48
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c48-write-through-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8850,6 +8917,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 64
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c64-write-through-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4

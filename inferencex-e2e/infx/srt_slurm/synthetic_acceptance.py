@@ -195,10 +195,21 @@ def build_overrides(
     return overrides
 
 
+def _without_nulls(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _without_nulls(item) for key, item in value.items() if item is not None}
+    return value
+
+
 def selected_recipes(
     raw: dict[str, Any], selector: str | None
 ) -> list[tuple[str | None, dict[str, Any]]]:
-    """Delegate expansion to SRT, retaining its selector for each submission."""
+    """Delegate expansion to SRT, retaining its selector for each submission.
+
+    ``srtctl apply`` merges a zip variant over its base as an override, which drops the
+    variant's null-valued keys (``connector: null`` falls back to the engine default);
+    the selected zip variants match that.
+    """
     if "base" not in raw:
         if selector is not None:
             raise ValueError("recipe selector requires an override-format recipe")
@@ -206,10 +217,11 @@ def selected_recipes(
     from srtctl.core.config import generate_override_configs
 
     selected = generate_override_configs(raw, selector=selector)
-    if (
-        selector == "base"
-        or (selector and selector.startswith("override_") and not any(c in selector for c in "*?"))
-        or (selector and re.fullmatch(r"zip_override_[\w-]+\[\d+\]", selector))
+    zip_variant = selector and re.fullmatch(r"zip_override_[\w-]+\[\d+\]", selector)
+    if zip_variant:
+        return [(selector, _without_nulls(selected[0][1]))]
+    if selector == "base" or (
+        selector and selector.startswith("override_") and not any(c in selector for c in "*?")
     ):
         return [(selector, selected[0][1])]
     keys = sorted(k for k in raw if k.startswith("override_")) + sorted(
@@ -220,8 +232,10 @@ def selected_recipes(
         if selector is not None and not fnmatch.fnmatch(key, selector):
             continue
         for index, (_, recipe) in enumerate(generate_override_configs(raw, selector=key)):
-            name = f"{key}[{index}]" if key.startswith("zip_override_") else key
-            result.append((name, recipe))
+            if key.startswith("zip_override_"):
+                result.append((f"{key}[{index}]", _without_nulls(recipe)))
+            else:
+                result.append((key, recipe))
     return result
 
 

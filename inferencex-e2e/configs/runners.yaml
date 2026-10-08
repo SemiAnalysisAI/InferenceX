@@ -518,6 +518,7 @@ clusters:
         volume-mounts:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
+        power-exporter-port: 9401
   b200-cw:
     gpus-per-node: 8
     arch: x86_64
@@ -611,6 +612,10 @@ clusters:
         single-node-models: staged
         container-aliases: [dynamo-vllm, dynamo-sglang, dynamo-trtllm, sglang-v0.5.11-cu130]
         nginx-aliases: [nginx-sqsh]
+        agentic-volume-mounts:
+          aiperf-cache: /aiperf_mmap_cache
+          hf-hub-cache: /hf_hub_cache
+        power-exporter-port: 9401
   b300-dsxe:
     gpus-per-node: 8
     available-cpu-dram-mib: 3_977_095
@@ -668,6 +673,7 @@ clusters:
         single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
         nginx-aliases: [nginx-sqsh]
+        power-exporter-port: 9401
   gb200-nv:
     gpus-per-node: 4
     available-cpu-dram-mib: 860_160
@@ -719,6 +725,10 @@ clusters:
         container-aliases: [dynamo-trtllm, dynamo-sglang]
         nginx-aliases: [nginx-sqsh]
         shared-run-root: /mnt/lustre01/users-public/sa-shared/gha-runs
+        agentic-volume-mounts:
+          aiperf-cache: /aiperf_mmap_cache
+          hf-hub-cache: /hf_hub_cache
+        power-exporter-port: 9401
   gb300-nv:
     gpus-per-node: 4
     available-cpu-dram-mib: 860_160
@@ -773,6 +783,7 @@ clusters:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
           dynamo-wheels: /configs/dynamo-wheels
+        power-exporter-port: 19401
   mi300x-amd:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_547_820

@@ -4,10 +4,6 @@
 base:
   schema: 2
   name: kimik3-fp4-b300-vllm-agentic
-  model:
-    path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -99,10 +95,7 @@ base:
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: moonshotai/Kimi-K3
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       KV_OFFLOADING: dram

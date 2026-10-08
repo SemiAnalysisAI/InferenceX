@@ -1,5 +1,4 @@
-"""Power eligibility, dcgm detection, allocation-time policy, and the tables' agreement
-with the cluster inventory."""
+"""Power eligibility, allocation-time policy, and the tables' agreement with the cluster inventory."""
 
 import json
 
@@ -10,13 +9,8 @@ from infx.launch import drivers, policy
 from infx.launch.__main__ import launch
 from infx.launch.context import LaunchError
 from infx.launch.drivers import check_tables
-from infx.launch.drivers.srt import models
-from infx.launch.drivers.srt.power import (
-    PowerPolicyError,
-    decide_power,
-    recipe_enables_dcgm_power,
-    resolve_power,
-)
+from infx.launch.drivers.srt import models, power
+from infx.launch.drivers.srt.power import PowerPolicyError, decide_power
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.policy import LaunchPath, Match, salloc_time_limit
 from infx.launch.request import LaunchRequest, MultiNodeRequest
@@ -29,114 +23,80 @@ def _request(**env):
     return LaunchRequest.from_env({"RUNNER_NAME": "r_0", **env})
 
 
-MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
-GB200_GLM = f"{MIRROR}/glm5.2/sglang/gb200-fp4/agentx/agg.yaml"
-KIMI_GB200 = f"{MIRROR}/kimik3/vllm/gb200-fp4/agentx/k.yaml"
-KIMI_GB300 = f"{MIRROR}/kimik3/vllm/gb300-fp4/agentx/deep/k.yaml"
-OTHER = f"{MIRROR}/other.yaml"
+def _multinode(**env):
+    return MultiNodeRequest.from_env({
+        "RUNNER_NAME": "r_0", "IMAGE": "i", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
+        "RUN_EVAL": "false", "EVAL_ONLY": "false", "GITHUB_WORKSPACE": "/ws", "SRT_RECIPE": "r.yaml",
+        **env,
+    })
+
 
 CASES = [
-    ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", GB200_GLM, AGENTX),
-    ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", OTHER, ERR),
-    ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", KIMI_GB200, AGENTX),
-    ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", KIMI_GB300, ERR),
-    ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", OTHER, DCGM),
-    ("gb200-nv", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", OTHER, ERR),
-    ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", KIMI_GB300, AGENTX),
-    ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", OTHER, ERR),
-    ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", OTHER, DCGM),
-    ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", OTHER, ERR),
-    ("b300-dsxe", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", OTHER, DCGM),
-    ("b300-dsxe", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", OTHER, ERR),
-    ("b300-dsxe", MULTI, "1", "dsv4", "fp4", "dynamo-sglang", OTHER, ERR),
-    ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", OTHER, AGENTX),
-    ("b200-nscale", NATIVE, "0", "dsv4", "fp4", "dynamo-sglang", OTHER, DCGM),
-    ("b200-nscale", NATIVE, "0", "glm5.2", "fp4", "dynamo-vllm", OTHER, ERR),
-    ("b200-nscale", MULTI, "1", "qwen3.5", "fp8", "dynamo-sglang", OTHER, AGENTX),
-    ("b200-nscale", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", OTHER, ERR),
-    ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", OTHER, DCGM),
-    ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-sglang", OTHER, ERR),
-    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "vllm", OTHER, AGENTX),
-    ("h200-dgxc", MULTI, "1", "dsv4", "fp8", "dynamo-sglang", OTHER, ADAPTER),
-    ("h200-dgxc", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", OTHER, ERR),
-    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", OTHER, ERR),
+    ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
+    ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
+    ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", DCGM),
+    ("gb200-nv", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
+    ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
+    ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", DCGM),
+    ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", ERR),
+    ("b300-dsxe", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", DCGM),
+    ("b300-dsxe", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
+    ("b300-dsxe", MULTI, "1", "dsv4", "fp4", "dynamo-sglang", ERR),
+    ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
+    ("b200-nscale", NATIVE, "0", "dsv4", "fp4", "dynamo-sglang", DCGM),
+    ("b200-nscale", NATIVE, "0", "glm5.2", "fp4", "dynamo-vllm", ERR),
+    ("b200-nscale", MULTI, "1", "qwen3.5", "fp8", "dynamo-sglang", AGENTX),
+    ("b200-nscale", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
+    ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", DCGM),
+    ("b200-nscale", MULTI, "0", "dsv4", "fp4", "dynamo-sglang", ERR),
+    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "vllm", AGENTX),
+    ("h200-dgxc", MULTI, "1", "dsv4", "fp8", "dynamo-sglang", ADAPTER),
+    ("h200-dgxc", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
+    ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
+    ("h100-dgxc", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", ERR),
 ]
 
 
 @pytest.mark.parametrize(
-    ("cluster", "path", "agentic", "prefix", "precision", "framework", "recipe", "expected"), CASES
+    ("cluster", "path", "agentic", "prefix", "precision", "framework", "expected"), CASES
 )
 def test_power_eligibility_of_each_cluster_lane(
-    cluster, path, agentic, prefix, precision, framework, recipe, expected
+    cluster, path, agentic, prefix, precision, framework, expected
 ):
-    request = _request(
-        IS_AGENTIC=agentic, MODEL_PREFIX=prefix, PRECISION=precision, FRAMEWORK=framework
-    )
+    env = dict(IS_AGENTIC=agentic, MODEL_PREFIX=prefix, PRECISION=precision, FRAMEWORK=framework)
+    if agentic == "1":
+        env.update(CONC="4", CONC_LIST="4", IS_MULTINODE="true")
     if expected == ERR:
         with pytest.raises(PowerPolicyError):
-            decide_power(cluster, path, dcgm=True, request=request, recipe=recipe)
+            decide_power(cluster, path, _multinode(**env, POWER="1"))
         return
-    decision = decide_power(cluster, path, dcgm=True, request=request, recipe=recipe)
+    decision = decide_power(cluster, path, _multinode(**env, POWER="1"))
     assert (decision.dcgm, decision.agentx, decision.adapter) == (
         True, expected == AGENTX, expected == ADAPTER,
     )  # fmt: skip
-    assert not decide_power(cluster, path, dcgm=False, request=request, recipe=recipe).dcgm
+    assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
 
 
 def test_gb200_reports_agentic_misses_distinctly():
-    request = _request(IS_AGENTIC="1", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-sglang")
-    with pytest.raises(PowerPolicyError, match="AgentX dcgm-power requires the GLM-5.2"):
-        decide_power("gb200-nv", MULTI, dcgm=True, request=request, recipe=OTHER)
+    request = _multinode(IS_AGENTIC="1", MODEL_PREFIX="dsv4", PRECISION="fp4",
+                         FRAMEWORK="dynamo-sglang", CONC="4", CONC_LIST="4", POWER="1")  # fmt: skip
+    with pytest.raises(PowerPolicyError, match="AgentX dcgm-power requires GLM-5.2"):
+        decide_power("gb200-nv", MULTI, request)
 
 
-@pytest.mark.parametrize(
-    ("text", "enabled"),
-    [
-        ("telemetry:\n  dcgm_exporter:\n    image: x\n  enabled: true\n", True),
-        ("telemetry:\n  dcgm_exporter:\nbenchmark:\n  enabled: true\n", False),
-        ("benchmark:\n  dcgm_exporter:\n  enabled: true\n", False),
-        ("telemetry:\n  dcgm_exporter:\n    enabled: true\n", False),
-        ("telemetry: [unclosed\n  enabled: true\n", False),
-    ],
-)
-def test_dcgm_detection_is_scoped_to_telemetry_block(text, enabled):
-    assert recipe_enables_dcgm_power(text) is enabled
-
-
-def _mirror(tmp_path, rel, text):
-    path = tmp_path / "benchmarks/multi_node/srt-slurm-recipes" / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-
-
-POWER_RECIPE = "telemetry:\n  dcgm_exporter:\n  enabled: true\n"
-
-
-def _multinode(**env):
-    return MultiNodeRequest.from_env({
-        "RUNNER_NAME": "r_0", "IMAGE": "i", "SPEC_DECODING": "none", "RESULT_FILENAME": "r",
-        "RUN_EVAL": "false", **env,
-    })
-
-
-def test_nscale_eval_only_inspects_eval_recipe(tmp_path):
-    _mirror(tmp_path, "dsv4/eval.yaml", POWER_RECIPE)
-    _mirror(tmp_path, "dsv4/bench.yaml", "model: {}\n")
-    env = dict(
-        GITHUB_WORKSPACE=str(tmp_path), IS_AGENTIC="0", MODEL_PREFIX="dsv4", PRECISION="fp4",
-        FRAMEWORK="dynamo-vllm", SRT_RECIPE=f"{MIRROR}/dsv4/bench.yaml:zip",
-        EVAL_SRT_RECIPE=f"{MIRROR}/dsv4/eval.yaml",
-    )
-    assert resolve_power("b200-nscale", MULTI, _multinode(**env, EVAL_ONLY="true")).dcgm
-    assert not resolve_power("b200-nscale", MULTI, _multinode(**env, EVAL_ONLY="false")).dcgm
-    assert not resolve_power("b300-dsxe", MULTI, _multinode(**env, EVAL_ONLY="true")).dcgm
-
-
-def test_recipe_missing_from_the_workspace_stays_non_power(tmp_path):
-    request = _multinode(GITHUB_WORKSPACE=str(tmp_path), SRT_RECIPE=f"{MIRROR}/missing.yaml",
-                         IS_AGENTIC="0", FRAMEWORK="dynamo-trt", MODEL_PREFIX="m",
-                         PRECISION="fp8", EVAL_ONLY="false")
-    assert not resolve_power("gb300-nv", MULTI, request).dcgm
+def test_a_power_lane_needs_its_clusters_exporter_port(monkeypatch):
+    labels = {"cluster:c": ["c_0"]}
+    srt = {"network-interface": ""}
+    record = {**RECORD, "slurm": {**RECORD["slurm"], "srt-slurm": srt}}
+    clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
+    monkeypatch.setitem(drivers.srt.lanes.SRT_LANES, ("c", MULTI), drivers.srt.lanes.SrtLane())
+    monkeypatch.setitem(power.POWER_LANES, ("c", MULTI), power.PowerLane(rules=(), error="x"))
+    assert drivers.srt.table_problems(clusters, "c") == [
+        "POWER_LANES['c', srt-multi]: no srt-slurm.power-exporter-port"
+    ]
+    srt["power-exporter-port"] = 9401
+    clusters = load_inventory({"labels": labels, "clusters": {"c": record}}).clusters
+    assert drivers.srt.table_problems(clusters, "c") == []
 
 
 AGENTX_FLASH = dict(MODEL_PREFIX="dsv41flash", FRAMEWORK="sglang", IS_MULTINODE="false",

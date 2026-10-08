@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: dsv4-fp4-b300-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-20ebb28
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -58,10 +54,7 @@ base:
         PYTHONNOUSERSITE: '1'
         VLLM_FLOAT32_MATMUL_PRECISION: high
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       # Native single-node jobs mount the persistent HF hub cache here.
       AIPERF_DATASET_MMAP_CACHE_DIR: /mnt/hf_hub_cache/aiperf_mmap_cache

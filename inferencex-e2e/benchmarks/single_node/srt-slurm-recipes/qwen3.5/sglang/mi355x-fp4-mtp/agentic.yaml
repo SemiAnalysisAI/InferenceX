@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: qwen3.5-fp4-mi355x-sglang-agentic
-  model:
-    path: hf:amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
-    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -55,12 +51,7 @@ base:
         ROCM_QUICK_REDUCE_QUANTIZATION: INT4
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
-      # 256k-capped corpus within this model's context.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 

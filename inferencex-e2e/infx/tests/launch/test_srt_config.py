@@ -181,7 +181,7 @@ def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path
     recipe.parent.mkdir()
     recipe.write_text(yaml.safe_dump({"schema": 2, "name": "r", **({"health_check": health} if health else {})}))
 
-    prepare_recipe(tmp_path, "recipes/r.yaml", "job", None, None)
+    prepare_recipe(tmp_path, "recipes/r.yaml", "job", None)
 
     resolved = resolve_config_with_defaults(yaml.safe_load(recipe.read_text()), render(cluster(), job()))
     assert resolved["health_check"] == effective

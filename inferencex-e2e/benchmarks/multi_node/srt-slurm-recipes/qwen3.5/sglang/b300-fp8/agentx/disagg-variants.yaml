@@ -4,16 +4,10 @@
 schema: 2
 
 base:
-  model:
-    path: qwen3.5-fp8
-    container: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
-    precision: fp8
   identity:
     model:
-      repo: Qwen/Qwen3.5-397B-A17B-FP8
       revision: ea5b4f81096f3901c91dea97f81324302495781d
-    container:
-      image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+    container: {}
   dynamo:
     install: true
     source:
@@ -161,17 +155,8 @@ base:
   sbatch_directives:
     mem: '0'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-      RESULT_DIR: /logs/agentic
-      PORT: '8000'
       ENABLE_AGENTX_POWER: '0'
-      IS_MULTINODE: 'true'
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
-      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
-      HF_HUB_CACHE: /hf_hub_cache
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
@@ -196,9 +181,6 @@ override_tp4_tp4_c4:
         mem-fraction-static: 0.8
         max-running-requests: 32
         cuda-graph-max-bs-decode: 16
-  benchmark:
-    concurrencies:
-      - 4
 
 # Colocated prefill and decode with prefill HiCache.
 override_tp4_tp4_c12:
@@ -220,9 +202,6 @@ override_tp4_tp4_c12:
         mem-fraction-static: 0.8
         max-running-requests: 32
         cuda-graph-max-bs-decode: 16
-  benchmark:
-    concurrencies:
-      - 12
 
 # Colocated TP4 prefill and decode with prefill HiCache.
 override_tp4_tp4_c24:
@@ -244,9 +223,6 @@ override_tp4_tp4_c24:
         mem-fraction-static: 0.8
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
-  benchmark:
-    concurrencies:
-      - 24
 
 # Colocated prefill and decode with prefill HiCache.
 override_tp4ep4_tp4_c32:
@@ -268,9 +244,6 @@ override_tp4ep4_tp4_c32:
         mem-fraction-static: 0.8
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
-  benchmark:
-    concurrencies:
-      - 32
 
 # Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c32:
@@ -280,9 +253,6 @@ override_tp2ep2_tp2ep2_c32:
       args:
         mem-fraction-static: 0.88
         cuda-graph-max-bs-decode: 32
-  benchmark:
-    concurrencies:
-      - 32
 
 # Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c40:
@@ -292,9 +262,6 @@ override_tp2ep2_tp2ep2_c40:
       args:
         mem-fraction-static: 0.88
         cuda-graph-max-bs-decode: 48
-  benchmark:
-    concurrencies:
-      - 40
 
 # Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c44:
@@ -304,9 +271,6 @@ override_tp2ep2_tp2ep2_c44:
       args:
         mem-fraction-static: 0.88
         cuda-graph-max-bs-decode: 48
-  benchmark:
-    concurrencies:
-      - 44
 
 # Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c48:
@@ -316,9 +280,6 @@ override_tp2ep2_tp2ep2_c48:
       args:
         mem-fraction-static: 0.92
         cuda-graph-max-bs-decode: 48
-  benchmark:
-    concurrencies:
-      - 48
 
 # Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c56_replayssm:
@@ -329,6 +290,3 @@ override_tp2ep2_tp2ep2_c56_replayssm:
         mem-fraction-static: 0.92
         enable-linear-replayssm-spec: true
         cuda-graph-max-bs-decode: 48
-  benchmark:
-    concurrencies:
-      - 56

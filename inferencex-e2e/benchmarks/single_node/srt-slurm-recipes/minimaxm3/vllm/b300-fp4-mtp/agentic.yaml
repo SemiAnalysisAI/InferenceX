@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: minimaxm3-fp4-b300-vllm-agentic
-  model:
-    path: hf:nvidia/MiniMax-M3-NVFP4
-    container: vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:e5c9e6bb82f645e8fca04e4d395743ee5ed473a62b98942d65f83c35d0c69301
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -54,10 +50,7 @@ base:
         VLLM_FLOAT32_MATMUL_PRECISION: high
         VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/MiniMax-M3-NVFP4
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. DRAM points give SimpleCPUOffload the whole host budget

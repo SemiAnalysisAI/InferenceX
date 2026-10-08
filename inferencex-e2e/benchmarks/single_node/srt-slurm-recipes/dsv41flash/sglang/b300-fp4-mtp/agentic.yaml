@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: dsv41flash-fp4-b300-sglang-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9@sha256:7cfd4dd8e0e902d2a3c0560565963c4e172091e1586aaed15ff5a0a131394d34
-    precision: fp4
   identity:
     model:
       repo: deepseek-ai/DeepSeek-V4.1-Flash
@@ -59,10 +55,7 @@ base:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

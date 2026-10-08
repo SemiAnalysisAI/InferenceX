@@ -22,13 +22,8 @@ schema: 2
 
 base:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang:nightly-dev-20260928-81f27fb3@sha256:d9e4917808cfaa4b3be033a0c85a3a73d71eb93c17accbfa2ac3e96f551f3a33
-    precision: fp4
   identity:
-    model:
-      repo: deepseek-ai/DeepSeek-V4.1-Flash
+    model: {}
   dynamo:
     install: true
     source:
@@ -111,19 +106,11 @@ base:
   srun_options:
     container-remap-root: ""
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-      RESULT_DIR: /logs/agentic
-      PORT: "8000"
       IS_MULTINODE: "false"
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
-      HF_HUB_CACHE: /hf_hub_cache
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
       TP: "2"
@@ -148,7 +135,6 @@ override_tp4_c1:
         SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
-      CONC: "1"
       TP: "4"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
 
@@ -167,5 +153,4 @@ override_tp2_c1:
         SGLANG_RAGGED_VERIFY_MODE: static
   benchmark:
     env:
-      CONC: "1"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
