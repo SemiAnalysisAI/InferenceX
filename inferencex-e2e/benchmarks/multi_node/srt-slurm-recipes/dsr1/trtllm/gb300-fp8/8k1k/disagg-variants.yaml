@@ -67,10 +67,6 @@ base:
         print_iter_log: true
         stream_interval: 100
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
   frontend:
     type: "dynamo"
     enable_multiple_frontends: false

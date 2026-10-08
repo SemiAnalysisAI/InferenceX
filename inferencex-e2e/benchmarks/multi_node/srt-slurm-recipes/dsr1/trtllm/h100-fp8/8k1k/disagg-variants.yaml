@@ -71,10 +71,6 @@ base:
         stream_interval: 100
         num_postprocess_workers: 4
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
   frontend:
     type: dynamo
     enable_multiple_frontends: false
