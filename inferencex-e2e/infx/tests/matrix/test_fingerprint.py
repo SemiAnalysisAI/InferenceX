@@ -31,8 +31,9 @@ def fixed(*spaces: dict) -> dict:
 MASTER = {
     "single": config(False, fixed({"tp": 4, "conc-list": [2, 4], "srt-recipe": "bundle.yaml"})),
     "other": config(False, fixed({"tp": 4, "conc-list": [2, 4], "srt-recipe": "plain.yaml"})),
+    # Power merges the telemetry block and binds the point's concurrencies into the recipe.
     "multi": config(True, fixed(
-        {**ROLES, "conc-list": [2, 4], "srt-recipe": "disagg.yaml:override_a"},
+        {**ROLES, "conc-list": [2, 4], "srt-recipe": "disagg.yaml:override_a", "power": True},
         {**ROLES, "conc-list": [8], "srt-recipe": "disagg.yaml:override_b"},
     )),
     "agentx": config(True, {"agentic-coding": [{"search-space": [{
@@ -47,21 +48,17 @@ RECIPES = {
         "benchmark": {"env": {"CONC": ["2", "4"]}},
     }},
     f"{SINGLE}/plain.yaml": single_node_fragment(4),
-    # Telemetry binds the point's concurrencies into the recipe.
     f"{MULTI}/disagg.yaml": {
-        "base": {"schema": 2, "engine": "sglang", "telemetry": {"enabled": True}, "roles": {
+        "base": {"schema": 2, "engine": "sglang", "roles": {
             "prefill": {"nodes": 1, "args": {"mem-fraction-static": 0.8}}, "decode": {"nodes": 1},
         }},
         "override_a": {"roles": {"decode": {"args": {"max-running-requests": 64}}}},
         "override_b": {"roles": {"decode": {"args": {"max-running-requests": 128}}}},
     },
     f"{MULTI}/agentx.yaml": {
-        "base": {
-            "schema": 2, "engine": "sglang",
-            "model": {"path": "alias", "container": "example/image:1", "precision": "fp8"},
-            "roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 1}},
-            "benchmark": {"type": "custom", "command": "bash srt_agentic.sh", "concurrencies": [2]},
-        },
+        "base": {"schema": 2, "engine": "sglang", "roles": {
+            "prefill": {"nodes": 1}, "decode": {"nodes": 1},
+        }},
         "override_bench": {"roles": {"decode": {"args": {"max-running-requests": 2}}}},
         "override_eval": {"roles": {"decode": {"args": {"max-running-requests": 4}}}},
     },
@@ -70,6 +67,7 @@ RUNNERS = {"labels": {"cluster:fixture": ["node-a"]}, "clusters": {"fixture": {
     "gpus-per-node": 8, "available-cpu-dram-mib": 1024000, "arch": "x86_64", "scheduler": "slurm",
     "slurm": {"partition": "batch", "exclusive": True, "srt-slurm": {
         "network-interface": "eth0", "mounts": {"/data/models": "/models"},
+        "power-exporter-port": 9400,
     }},
 }}}  # fmt: skip
 
@@ -105,10 +103,9 @@ def edit(project: Path, path: str, change) -> None:
 
 OTHER_POINTS = {("other", "plain.yaml", 2), ("other", "plain.yaml", 4)}
 SINGLE_POINTS = {("single", "bundle.yaml", 2), ("single", "bundle.yaml", 4), *OTHER_POINTS}
-MULTI_POINTS = {
-    ("multi", "disagg.yaml:override_a", 2), ("multi", "disagg.yaml:override_a", 4),
-    ("multi", "disagg.yaml:override_b", 8),
-}  # fmt: skip
+POWER_POINTS = {("multi", "disagg.yaml:override_a", 2), ("multi", "disagg.yaml:override_a", 4)}
+MULTI_POINTS = {*POWER_POINTS, ("multi", "disagg.yaml:override_b", 8)}
+AGENTX_POINTS = {("agentx", "agentx.yaml:override_bench", 2)}
 
 
 @pytest.mark.parametrize(("path", "change", "changed"), [
@@ -124,7 +121,7 @@ MULTI_POINTS = {
         lambda recipe: recipe["override_a"]["roles"]["decode"]["args"].update(
             {"max-running-requests": 65}
         ),
-        {("multi", "disagg.yaml:override_a", 2), ("multi", "disagg.yaml:override_a", 4)},
+        POWER_POINTS,
         id="multi-node-variant",
     ),
     pytest.param(
@@ -138,6 +135,23 @@ MULTI_POINTS = {
         MULTI_POINTS, id="multi-node-shared-block",
     ),
     pytest.param(
+        "configs/srt-recipes/agentic-multi.yaml",
+        lambda block: block["benchmark"].update(env={"EXTRA": "1"}),
+        AGENTX_POINTS, id="agentx-shared-block",
+    ),
+    pytest.param(
+        "configs/srt-recipes/telemetry-dcgm.yaml",
+        lambda block: block["telemetry"].update(collect_interval_ms=500),
+        POWER_POINTS, id="power-telemetry-block",
+    ),
+    pytest.param(
+        "configs/master.yaml",
+        lambda master: master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][1].update(
+            power=True
+        ),
+        {("multi", "disagg.yaml:override_b", 8)}, id="master-power",
+    ),
+    pytest.param(
         "configs/master.yaml", lambda master: master["other"].update(image="example/image:2"),
         OTHER_POINTS, id="master-image",
     ),
@@ -146,7 +160,7 @@ MULTI_POINTS = {
         lambda recipe: recipe["override_bench"]["roles"]["decode"]["args"].update(
             {"max-running-requests": 3}
         ),
-        {("agentx", "agentx.yaml:override_bench", 2)}, id="agentx-variant",
+        AGENTX_POINTS, id="agentx-variant",
     ),
     # Eval-only runs produce no benchmark results.
     pytest.param(
@@ -156,12 +170,13 @@ MULTI_POINTS = {
         ),
         set(), id="agentx-eval-variant",
     ),
+    # Cluster facts: model mounts and the DCGM exporter port.
     pytest.param(
         "configs/runners.yaml",
         lambda runners: runners["clusters"]["fixture"]["slurm"]["srt-slurm"].update(
-            mounts={"/scratch/models": "/models"}
+            {"mounts": {"/scratch/models": "/models"}, "power-exporter-port": 9500}
         ),
-        set(), id="cluster-mount",
+        set(), id="cluster-facts",
     ),
 ])  # fmt: skip
 def test_an_edit_changes_exactly_the_points_whose_recipe_it_changes(project, path, change, changed):

@@ -1,9 +1,11 @@
 """Recipe fingerprints: a matrix row's identity plus the concrete recipe its job runs.
 
 The recipe is what the launcher submits (``srt_slurm.generate.bound_variants``, expanding
-variants without srtctl), minus concurrency and the job name. Cluster facts the launcher adds
-(staged paths, mounts, fabric) never enter it, so a recipe keeps one fingerprint across
-concurrencies and clusters. An ``eval-srt-recipe`` contributes only its path, via the row.
+variants without srtctl): the fragment over its shared block, with the DCGM telemetry block
+for a ``power`` row, the selected variant bound to the master values. Concurrency, the job
+name and every cluster fact (exporter port, staged paths, mounts, client cache paths, fabric)
+stay out, so a recipe keeps one fingerprint across concurrencies and clusters. An
+``eval-srt-recipe`` contributes only its path, via the row.
 """
 
 from __future__ import annotations
@@ -23,13 +25,17 @@ from infx.srt_slurm.variants import expand_variants
 
 # Point-level row fields: one recipe serves every concurrency and experiment name.
 ROW_EXCLUDED = frozenset({"conc", "exp-name", "recipe-fingerprint"})
-# The job name (srtctl numbers zip variants by position) and the point's concurrencies.
+# The job name (srtctl numbers zip variants by position), the point's concurrencies and the
+# cluster's exporter port.
 RECIPE_EXCLUDED = (
     ("name",),
     ("benchmark", "concurrencies"),
     ("benchmark", "env", "CONC"),
     ("benchmark", "env", "CONC_LIST"),
+    ("telemetry", "dcgm_exporter", "port"),
 )
+# Stands in for the cluster's exporter port so a power row composes its telemetry block.
+EXPORTER_PORT = 0
 
 
 def _digest(value: Any) -> str:
@@ -60,7 +66,10 @@ def _without(block: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
 def concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
     """The variants the launcher submits for ``entry`` under ``root``, minus point-level keys."""
     recipes = []
-    for _, recipe in bound_variants(entry, point_environment(entry), root, expand=expand_variants):
+    variants = bound_variants(
+        entry, point_environment(entry), root, expand=expand_variants, power_port=EXPORTER_PORT
+    )
+    for _, recipe in variants:
         for path in RECIPE_EXCLUDED:
             recipe = _without(recipe, path)
         recipes.append(recipe)
