@@ -109,7 +109,3 @@ roles:
       tensor-parallel-size: 4
       expert-parallel-size: 1
       enable-dp-attention: false
-
-benchmark:
-  env:
-    TOKENIZER: /model

@@ -169,7 +169,3 @@ roles:
       tp-size: 48
       dp-size: 48
       ep-size: 48
-
-benchmark:
-  env:
-    TOKENIZER: /model
