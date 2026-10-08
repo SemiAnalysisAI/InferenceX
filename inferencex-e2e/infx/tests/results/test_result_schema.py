@@ -1,7 +1,6 @@
 """Published-row contract: producer stamps, collector quarantine, and committed JSON Schemas."""
 
 import json
-import math
 import os
 import subprocess
 import sys
@@ -185,10 +184,11 @@ def test_benchmark_collector_publishes_valid_rows_and_quarantines_malformed_ones
         ("bmk_agentic_string_conc/point.json", "conc", "int_type"),
         ("bmk_nan/agg.json", "tput_per_gpu", "finite_number"),
     }
-    rejected = {entry["source"]: entry["row"] for entry in
-                json.loads((tmp_path / "rejected_rows.json").read_text())}
+    text = (tmp_path / "rejected_rows.json").read_text()
+    entries = json.loads(text, parse_constant=lambda token: pytest.fail(f"not JSON: {token}"))
+    rejected = {entry["source"]: entry["row"] for entry in entries}
     assert rejected["bmk_agentic_string_conc/point.json"] == string_conc
-    assert math.isnan(rejected["bmk_nan/agg.json"]["tput_per_gpu"])
+    assert rejected["bmk_nan/agg.json"]["tput_per_gpu"] == "NaN"
     annotations = [line for line in result.stderr.splitlines() if line.startswith("::error")]
     sources = [line.removeprefix("::error title=Rejected result row::").split(": ")[0]
                for line in annotations]

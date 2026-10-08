@@ -1,6 +1,7 @@
 """Keep rows that break the result contract out of published aggregates."""
 
 import json
+import math
 import sys
 from collections.abc import Iterable
 from pathlib import Path
@@ -56,11 +57,22 @@ def _escape(message: str) -> str:
     return message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
+def _standard_json(value: Any) -> Any:
+    """Spell non-finite floats as strings such as ``"NaN"`` so strict JSON parsers can read rows."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return json.dumps(value)
+    if isinstance(value, dict):
+        return {key: _standard_json(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_standard_json(item) for item in value]
+    return value
+
+
 def report(rejected: list[dict[str, Any]], path: Path = REJECTED_ROWS) -> int:
     """Write and annotate rejections; return the collector's exit status."""
     if not rejected:
         return 0
-    path.write_text(json.dumps(rejected, indent=2) + "\n")
+    path.write_text(json.dumps(_standard_json(rejected), indent=2, allow_nan=False) + "\n")
     for entry in rejected:
         problems = "; ".join(
             f"{'.'.join(map(str, error['loc'])) or 'row'}: {error['msg']}"

@@ -76,7 +76,7 @@
 
 早于该标记的 checkout（例如仍在进行中的 PR 分支，或使用较旧 `ref` 的 e2e 运行）仍会输出未标记的记录。收集器按版本 1 校验此类记录，通过后加上标记再发布。带有其他任何版本号的记录会以 `unsupported_version` 为原因被隔离。
 
-执行校验的收集器有 `collect_results`、`collect_eval_results` 和 `calc_success_rate`。违反契约的记录不会进入聚合结果，而是连同其来源和校验错误一起写入 `rejected_rows.json`。收集器为每条被拒记录向 stderr 输出一条 `::error::` 注解，并在写出有效聚合结果后以非零状态退出。收集任务仍会上传聚合结果；存在被拒记录时，还会上传 `rejected_rows_<prefix>`、`rejected_rows_eval_<prefix>` 或 `rejected_rows_run_stats`。失败的任务会使该 sweep 无法被默认复用。InferenceX-app 也会直接读取单配置 `bmk_*` 和 `eval_*` 工件，因此只有当应用执行相同的契约时，被拒记录才不会进入数据库。
+执行校验的收集器有 `collect_results`、`collect_eval_results` 和 `calc_success_rate`。违反契约的记录不会进入聚合结果，而是连同其来源和校验错误一起写入 `rejected_rows.json`。该记录中的非有限数值会写成 `"NaN"` 这类字符串，使文件保持为标准 JSON。收集器为每条被拒记录向 stderr 输出一条 `::error::` 注解，并在写出有效聚合结果后以非零状态退出。收集任务仍会上传聚合结果；存在被拒记录时，还会上传 `rejected_rows_<prefix>`、`rejected_rows_eval_<prefix>` 或 `rejected_rows_run_stats`。失败的任务会使该 sweep 无法被默认复用。InferenceX-app 也会直接读取单配置 `bmk_*` 和 `eval_*` 工件，因此只有当应用执行相同的契约时，被拒记录才不会进入数据库。
 
 四种记录模型的 JSON Schema 已提交到 [`schemas/`](../schemas/)；它们与模型不一致时，测试会失败。修改模型后，在本项目目录中重新生成：
 
