@@ -21,11 +21,6 @@ base:
     source:
       pypi: 0.8.1
 
-  model:
-    path: "dsr1"
-    container: "dynamo-sglang"
-    precision: "fp4"
-
   frontend:
     type: dynamo
     enable_multiple_frontends: true
@@ -157,12 +152,8 @@ base:
     interval_seconds: 10
 
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
     env:
       TOKENIZER: /model
-      ISL: '8192'
-      OSL: '1024'
 
 
 # STP TP4 prefill mode: TP4 (DP=1, EP=1) instead of dep4 — low-latency single-node

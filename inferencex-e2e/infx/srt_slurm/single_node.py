@@ -12,7 +12,9 @@ from typing import Any
 
 import yaml
 
+from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
+from infx.srt_slurm.workload import bind_workload, compose_recipe
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
 
@@ -55,10 +57,21 @@ def parallelism_constraints(
     raise ValueError(f"Unsupported single-node SRT engine: {engine!r}")
 
 
-def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dict[str, Any]]:
-    """Resolve a matrix point to one native variant, never submit an entire sweep."""
+def select_recipe(
+    config: str, environment: Mapping[str, str], *, root: Path | None = None
+) -> tuple[str, dict[str, Any]]:
+    """Resolve a matrix point to one native variant, never submit an entire sweep.
+
+    Fixed-sequence variants are composed with the shared block under ``root`` (default:
+    this repository) and bound first; AgentX recipes are used as written.
+    """
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
+    fixed = environment["IS_AGENTIC"] == "0"
+    raw = (
+        compose_recipe(Path(path), multinode=False, root=root or repository_root())
+        if fixed
+        else yaml.safe_load(Path(path).read_text())
+    )
     if not isinstance(raw, dict):
         raise ValueError("Recipe must be a mapping")
     recipes = selected_recipes(raw, selector or None)
@@ -66,6 +79,8 @@ def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dic
     errors = []
     for name, recipe in recipes:
         try:
+            if fixed:
+                recipe = bind_workload(recipe, environment, multinode=False)
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
@@ -116,10 +131,6 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    if not agentic:
-        expected["USE_CHAT_TEMPLATE"] = (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false")
-        for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
-            expected[name] = (str(workload[name]), environment[name])
     # A variant that names its point, or the host budget it sizes, must match the matrix.
     for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
         if name in workload:
@@ -219,8 +230,12 @@ def main() -> None:
     parsed = parser.parse_args()
     try:
         if parsed.command == "prepare":
-            config, _ = select_recipe(parsed.recipe, os.environ)
+            config, recipe = select_recipe(parsed.recipe, os.environ)
             arguments = runtime_arguments(parsed.recipe, os.environ)
+            if os.environ["IS_AGENTIC"] == "0":
+                # srtctl gets the bound variant, never the fragment.
+                config = str(parsed.output.with_name("recipe.yaml"))
+                Path(config).write_text(yaml.safe_dump(recipe, sort_keys=False))
             parsed.output.write_bytes("\0".join([config, *arguments, ""]).encode())
         else:
             print("\n".join(submission_fields(parsed.manifest)))
