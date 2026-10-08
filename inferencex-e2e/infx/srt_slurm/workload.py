@@ -144,21 +144,20 @@ def _block(path: Path) -> dict[str, Any]:
     return block
 
 
-def _check_setup_scripts(recipe: Mapping[str, Any], source: Path, root: Path) -> None:
-    """Fail where srtctl would only warn: a setup_script in none of the configs/ it stages."""
-    blocks = [block for name, block in recipe.items() if name != "schema"]
-    for block in blocks if "base" in recipe else [recipe]:
-        scripts = block.get("setup_script") if isinstance(block, Mapping) else None
-        for script in scripts if isinstance(scripts, list) else [scripts]:
-            if isinstance(script, str) and not any(
-                (root / directory / sub / script).is_file()
-                for directory in SETUP_SCRIPT_DIRS
-                for sub in ("", "patches")
-            ):
-                raise ValueError(
-                    f"{source}: setup_script {script} is in none of "
-                    f"{', '.join(map(str, SETUP_SCRIPT_DIRS))} or their patches/"
-                )
+def check_setup_script(recipe: Mapping[str, Any], source: Path, root: Path) -> None:
+    """Fail where srtctl would only warn: a bound recipe's setup_script in none of the
+    configs/ it stages. Launch and ``infx generate`` only: planner snapshots lack the
+    srt-slurm submodule."""
+    script = recipe.get("setup_script")
+    if isinstance(script, str) and not any(
+        (root / directory / sub / script).is_file()
+        for directory in SETUP_SCRIPT_DIRS
+        for sub in ("", "patches")
+    ):
+        raise ValueError(
+            f"{source}: setup_script {script} is in none of "
+            f"{', '.join(map(str, SETUP_SCRIPT_DIRS))} or their patches/"
+        )
 
 
 def compose_recipe(
@@ -177,11 +176,8 @@ def compose_recipe(
         exporter = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
         shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
     if "base" in raw:
-        composed = {**raw, "base": merge_blocks(shared, raw["base"])}
-    else:
-        composed = merge_blocks(shared, raw)
-    _check_setup_scripts(composed, path, root)
-    return composed
+        return {**raw, "base": merge_blocks(shared, raw["base"])}
+    return merge_blocks(shared, raw)
 
 
 def _required(environment: Mapping[str, str], name: str) -> str:
@@ -373,12 +369,9 @@ def main(argv: list[str] | None = None) -> None:
     path, _, selector = args.recipe.partition(":")
     agentic = os.environ.get("IS_AGENTIC") == "1"
     try:
+        root = repository_root()
         composed = compose_recipe(
-            Path(path),
-            agentic=agentic,
-            multinode=True,
-            root=repository_root(),
-            power_port=args.power_port,
+            Path(path), agentic=agentic, multinode=True, root=root, power_port=args.power_port
         )
         variants = selected_recipes(composed, selector or None)
         if len(variants) != 1:
@@ -392,6 +385,7 @@ def main(argv: list[str] | None = None) -> None:
             source=Path(path),
         )
         bound = resolve_fabric(bound, args.fabric)
+        check_setup_script(bound, Path(path), root)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))
     args.output.write_text(yaml.safe_dump(bound, sort_keys=False))
