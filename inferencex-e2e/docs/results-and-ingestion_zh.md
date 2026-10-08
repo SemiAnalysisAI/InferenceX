@@ -91,9 +91,9 @@ shape:    array of benchmark row objects
 | 多节点拓扑 | `prefill_tp`、`prefill_pp`、`prefill_dcp_size`、`prefill_pcp_size`、`prefill_ep`、`prefill_dp_attention`、`prefill_num_workers`，对应的 `decode_*` 字段，`num_prefill_gpu`、`num_decode_gpu`，以及可选的 `prefill_hw`/`decode_hw` |
 | 主要派生指标 | `tput_per_gpu`、`input_tput_per_gpu`、`output_tput_per_gpu` |
 | 延迟和交互性 | 基准输入中每个以 `ms` 结尾的键都会从毫秒换算为秒，并移除 `_ms`。包含 `tpot` 的键还会产生其倒数 `intvty`。 |
-| 可选运行时元数据 | 形式必须精确为 `{name, version}` 的 `router`、`kv_p2p_transfer`，以及在可用时由 `gpu_metrics.csv` 补入的实测功耗 |
+| 可选运行时元数据 | 形式必须精确为 `{name, version}` 的 `router`、`kv_p2p_transfer`，以及多节点结果中由 srt-slurm 遥测包补入的实测功耗 |
 
-单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，功耗验证失败会在保留已有结果和审计后使任务失败。
+单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。只有多节点结果执行功耗聚合；单节点结果不含功耗字段或结论。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，功耗验证失败会在保留已有结果和审计后使任务失败。
 
 InferenceX-app 将路由字段作为列或配置维度，并把数值测量存入 `benchmark_results.metrics` JSONB。映射器支持共享拓扑的 v1、拆分 prefill/decode 拓扑的 v2，以及嵌套 AgentX 指标的 v3。未知数值指标会被保留并产生警告，因此架构可以扩展，同时不会无提示地丢失数值数据。
 
@@ -101,13 +101,13 @@ InferenceX-app 将路由字段作为列或配置维度，并把数值测量存�
 
 服务客户端在保存原始结果前写入 `benchmark_outcome`，保留现有的 5% 最大请求失败率，以及请求总数、完成数和失败数。处理器检查该记录并复制到聚合结果中；即使遥测有效，请求失败率超限仍返回失败。零成功请求会保留诊断聚合结果，但不会生成不存在的延迟倒数。请求计数无效时，失败诊断状态保留原始 `requested`/`completed` 值和 `error`，不生成无依据的失败数或失败率；客户端先保存原始 JSON 再退出，处理器仍拒绝该结果。没有状态元数据的历史结果仍可区分；功耗有效不能证明基准成功或答案质量。
 
-`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义，本地 SMI 序号不是物理 UUID 的证明。
+`power_invalid_reasons` 和 `power_audit` 在数值指标旁携带有界摘要，包括可用的测量窗口、预期与观测 GPU 数、采样诊断、观测设备标识和生产者版本。`source` 指向保留的 `power_validation_*.json` 工件名称。设备标识保留采集器原有语义。
 
 对于多节点固定序列任务，`python -m infx.results.fixed_sequence --all` 先处理所有已有结果，再返回失败。它接受 `_c<N>_gpus_...`、`_conc<N>_gpus_...` 和 AMD 的 `_concurrency_<N>_req_rate_<R>_gpus_...` 文件名，也支持 `inf` 请求速率。它将结果并发度与 `CONC_LIST` 比较，拒绝重复或矛盾的点身份，并将遗漏和错误记录到 `result_processing_<RESULT_FILENAME>.json`。共享工作池通过 `AGGREGATE_GPUS` 及零值角色 GPU 数进行遥测验证；独立的 prefill/decode 能耗保持缺失。当 `DISAGG=true` 的配置组中某个点没有 decode worker 时，聚合行会有意设置 `disagg: false` 并记录 `num_aggregate_gpu`；文件名、工件名和工作流输入仍保留配置组身份。下游应按聚合行的拓扑解释测量结果。
 
 PR changelog 选择具有代表性的 NVIDIA 和 AMD 覆盖，并非所有受影响配置的完整列表；共享处理逻辑的变更适用于所有固定序列配置。
 
-启动器或验证失败后仍会运行处理和功耗诊断上传，并在审计工件中保留原始及聚合 JSON。正常 `bmk_*` 上传要求基准和处理步骤成功，因此不完整批次或 Slurm 失败不会发布诊断数据。主分支的入库触发器仍可发布部分失败 sweep 中其他成功配置的数据；这并不证明整个硬件范围已完成覆盖。下游导入器可利用保留的状态拒绝明确失败的基准结果。
+启动器或验证失败后仍会运行处理步骤以及多节点任务的功耗诊断上传，并在审计工件中保留原始及聚合 JSON。正常 `bmk_*` 上传要求基准和处理步骤成功，因此不完整批次或 Slurm 失败不会发布诊断数据。主分支的入库触发器仍可发布部分失败 sweep 中其他成功配置的数据；这并不证明整个硬件范围已完成覆盖。下游导入器可利用保留的状态拒绝明确失败的基准结果。
 
 ### SRT 多节点窗口保留
 
@@ -121,17 +121,11 @@ SRT samples CSV 支持版本 1、2 和 3。版本 3 新增可选的 `temperature
 以及顶层 `per_gpu_energy_j` / `per_gpu_max_sample_gap_s` 诊断字段；这些不构成发布许可。
 回放不会重写输入或修复不一致的证据。
 
-### 原生多节点遥测
-
-`native_power_collect.sh` 和 `native_power_lifecycle.sh` 提供每节点采集及有时限的就绪/停止状态文件。启动器可使用 `LOGS/native_power` 下的原生产物；此前置改动不会启用新 recipe。适配器验证服务 GPU 身份、时钟同步、采集完成及正式窗口完整覆盖，并在审计中保留节点故障、样本数和采集器版本。
-
-原生采集器单独设置 UTC，并在 CSV 旁记录上下文以支持跨环境回放；现有基准监控行为保持不变。启动器接入需要另行完成硬件验证。离线适配器接受该上下文，不改变现有生产端。正式窗口外的无效样本不能构成覆盖；`boundary_degenerate_rows` 保留其逐 GPU 计数。
-
 ## 评测工件
 
 ### 单配置身份和收集
 
-每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL、预测、SWE-bench 报告和轨迹文件。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
+每个评测上传名为 `eval_<EXP_NAME>_<RESULT_FILENAME>`。当前允许的载荷包括 `meta_env.json`、`results*.json`、样本 JSONL，以及厂商评估的原生报告、详细结果和归档。收集器只使用元数据和 lm-eval 结果 JSON 来生成聚合记录。
 
 收集与复用共用结果读取和选择逻辑，但保留各自的校验规则。收集可以输出失败批次中已完成的点；复用则拒绝失败或不完整的批次。每个阶段使用已读取的 JSON 完成选择和校验。去重改写或删除工件后，校验会重新读取最终文件。
 
@@ -191,9 +185,9 @@ raw tree:           results/**, excluding inputs.json and profile_export_raw.jso
 
 服务器日志是单独的 `server_logs_<RESULT_FILENAME>` 工件。应用会使用完全移除前缀后的后缀作为回退，从而让 AgentX 记录找到不含 `agentic_` 前缀的日志工件。
 
-普通单节点 AgentX 提交默认启用共享 GPU 功耗监控。
-`power_audit_<RESULT_FILENAME>` 工件保留 `results/` 中的原始遥测、GPU 身份、
-正式测量窗口、时区偏移和校验结果。多节点运行在同一审计工件中保留
+只有 `IS_MULTINODE=true` 的回放才采集 AgentX 功耗。单节点回放（包括设置
+`IS_MULTINODE: false` 的聚合式 srt-slurm 配方）无论 `ENABLE_AGENTX_POWER` 如何设置，
+都不发布功耗字段或结论。多节点运行在 `power_audit_<RESULT_FILENAME>` 工件中保留
 `LOGS/power/` 下的部署遥测，以及 `LOGS/agentic/` 下各并发的窗口和校验文件。
 即使基准测试失败，已有的审计文件和 AgentX 聚合结果仍会上传。
 文件缺失不代表路径支持功耗采集：多节点配方还需启用 `telemetry`，让固定版本的 srt-slurm
@@ -425,7 +419,7 @@ rm -rf -- "$tmp"
 
 ## GPU 实测功耗 P75 和 P90
 
-通过验证的单节点 SMI 和多节点 DCGM 结果还会输出 `p75_total_gpu_power_w`、
+通过验证的多节点 DCGM 结果还会输出 `p75_total_gpu_power_w`、
 `p75_power_w`、`p90_total_gpu_power_w` 与 `p90_power_w`。两个整组指标使用与能耗
 积分相同的正式基准测试窗口，对参与测量的所有 GPU 板卡功耗之和计算按时间加权的
 第 75 和第 90 百分位数。各设备采样通过分段线性插值按时间对齐后求和，分位数按

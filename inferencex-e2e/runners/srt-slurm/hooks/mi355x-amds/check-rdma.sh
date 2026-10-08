@@ -6,7 +6,7 @@ set -eo pipefail
 log() { printf '[%s] %s\n' "$(hostname -s)" "$*"; }
 fail() { log "RDMA preflight failed: $*" >&2; exit 1; }
 
-source "$(dirname "${BASH_SOURCE[0]}")/../../../../benchmarks/benchmark_lib.sh" --validation-only
+source "$(dirname "${BASH_SOURCE[0]}")/../../../../benchmarks/check_env.sh"
 check_env_vars IBDEVICES
 expected_devices="$IBDEVICES"
 IFS=',' read -r -a devices <<< "$expected_devices"
