@@ -1116,7 +1116,7 @@ minimaxm3-fp8-mi325x-vllm-agentic-disagg:
   framework: vllm
   multinode: true
   disagg: true
-  router: {name: vllm-router, version: '0.0.0'}
+  router: {name: vllm-router, version: '0.1.15'}
   kv-p2p-transfer: nixl
   scenarios:
     agentic-coding:
