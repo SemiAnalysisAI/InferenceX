@@ -1,0 +1,703 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentXRow",
+  "$defs": {
+    "AgentXMultinodeRow": {
+      "additionalProperties": false,
+      "description": "AgentX point; tp sums both roles, ep is the larger role's, dp_attention is either role's.",
+      "patternProperties": {
+        "^(?:avg_power_w|p75_power_w|p75_total_gpu_power_w|p90_power_w|p90_total_gpu_power_w|avg_total_gpu_power_w|total_gpu_energy_j|joules_per_successful_query|joules_per_input_token|joules_per_output_token|joules_per_total_token|prefill_gpu_energy_j|decode_gpu_energy_j|prefill_avg_power_w|decode_avg_power_w|prefill_joules_per_input_token|decode_joules_per_output_token)$": {
+          "type": "number"
+        }
+      },
+      "properties": {
+        "result_schema_version": {
+          "const": 1,
+          "maximum": 1,
+          "minimum": 1,
+          "title": "Result Schema Version",
+          "type": "integer"
+        },
+        "hw": {
+          "minLength": 1,
+          "title": "Hw",
+          "type": "string"
+        },
+        "conc": {
+          "exclusiveMinimum": 0,
+          "title": "Conc",
+          "type": "integer"
+        },
+        "image": {
+          "minLength": 1,
+          "title": "Image",
+          "type": "string"
+        },
+        "recipe_fingerprint": {
+          "description": "Empty when the dispatched config has none.",
+          "pattern": "^(?:[0-9a-f]{64})?$",
+          "title": "Recipe Fingerprint",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "infmax_model_prefix": {
+          "minLength": 1,
+          "title": "Infmax Model Prefix",
+          "type": "string"
+        },
+        "framework": {
+          "minLength": 1,
+          "title": "Framework",
+          "type": "string"
+        },
+        "precision": {
+          "minLength": 1,
+          "title": "Precision",
+          "type": "string"
+        },
+        "spec_decoding": {
+          "minLength": 1,
+          "title": "Spec Decoding",
+          "type": "string"
+        },
+        "disagg": {
+          "title": "Disagg",
+          "type": "boolean"
+        },
+        "scenario_type": {
+          "const": "agentic-coding",
+          "title": "Scenario Type",
+          "type": "string"
+        },
+        "num_gpus": {
+          "exclusiveMinimum": 0,
+          "title": "Num Gpus",
+          "type": "integer"
+        },
+        "tp": {
+          "exclusiveMinimum": 0,
+          "title": "Tp",
+          "type": "integer"
+        },
+        "ep": {
+          "exclusiveMinimum": 0,
+          "title": "Ep",
+          "type": "integer"
+        },
+        "dp_attention": {
+          "description": "Workflow flag copied as a string, not a JSON boolean.",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Dp Attention",
+          "type": "string"
+        },
+        "kv_offloading": {
+          "minLength": 1,
+          "title": "Kv Offloading",
+          "type": "string"
+        },
+        "kv_offload_backend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OffloadBackend"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allocated_cpu_dram_gb": {
+          "minimum": 0,
+          "title": "Allocated Cpu Dram Gb",
+          "type": "integer"
+        },
+        "num_requests_total": {
+          "minimum": 0,
+          "title": "Num Requests Total",
+          "type": "integer"
+        },
+        "num_requests_successful": {
+          "minimum": 0,
+          "title": "Num Requests Successful",
+          "type": "integer"
+        },
+        "request_accounting": {
+          "$ref": "#/$defs/RequestAccounting"
+        },
+        "router": {
+          "$ref": "#/$defs/ComponentMetadata",
+          "default": null
+        },
+        "kv_p2p_transfer": {
+          "default": null,
+          "minLength": 1,
+          "title": "Kv P2P Transfer",
+          "type": "string"
+        },
+        "dataset": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "default": null,
+          "title": "Dataset",
+          "type": "object"
+        },
+        "request_metrics": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Request Metrics",
+          "type": "object"
+        },
+        "server_metrics": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Server Metrics",
+          "type": "object"
+        },
+        "kv_cache_pool_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Kv Cache Pool Tokens"
+        },
+        "warnings": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "power_metric_schema_version": {
+          "const": 2,
+          "default": null,
+          "maximum": 2,
+          "minimum": 2,
+          "title": "Power Metric Schema Version",
+          "type": "integer"
+        },
+        "power_valid": {
+          "default": null,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Power Valid",
+          "type": "integer"
+        },
+        "is_multinode": {
+          "const": true,
+          "title": "Is Multinode",
+          "type": "boolean"
+        },
+        "prefill_num_workers": {
+          "minimum": 0,
+          "title": "Prefill Num Workers",
+          "type": "integer"
+        },
+        "prefill_tp": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Tp",
+          "type": "integer"
+        },
+        "prefill_pp": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Pp",
+          "type": "integer"
+        },
+        "prefill_dcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Dcp Size",
+          "type": "integer"
+        },
+        "prefill_pcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Pcp Size",
+          "type": "integer"
+        },
+        "prefill_ep": {
+          "exclusiveMinimum": 0,
+          "title": "Prefill Ep",
+          "type": "integer"
+        },
+        "prefill_dp_attention": {
+          "description": "Workflow flag copied as a string, not a JSON boolean.",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Prefill Dp Attention",
+          "type": "string"
+        },
+        "num_prefill_gpu": {
+          "minimum": 0,
+          "title": "Num Prefill Gpu",
+          "type": "integer"
+        },
+        "decode_num_workers": {
+          "minimum": 0,
+          "title": "Decode Num Workers",
+          "type": "integer"
+        },
+        "decode_tp": {
+          "minimum": 0,
+          "title": "Decode Tp",
+          "type": "integer"
+        },
+        "decode_pp": {
+          "exclusiveMinimum": 0,
+          "title": "Decode Pp",
+          "type": "integer"
+        },
+        "decode_dcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Decode Dcp Size",
+          "type": "integer"
+        },
+        "decode_pcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Decode Pcp Size",
+          "type": "integer"
+        },
+        "decode_ep": {
+          "minimum": 0,
+          "title": "Decode Ep",
+          "type": "integer"
+        },
+        "decode_dp_attention": {
+          "description": "Workflow flag copied as a string, not a JSON boolean.",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Decode Dp Attention",
+          "type": "string"
+        },
+        "num_decode_gpu": {
+          "minimum": 0,
+          "title": "Num Decode Gpu",
+          "type": "integer"
+        },
+        "prefill_hw": {
+          "default": null,
+          "minLength": 1,
+          "title": "Prefill Hw",
+          "type": "string"
+        },
+        "decode_hw": {
+          "default": null,
+          "minLength": 1,
+          "title": "Decode Hw",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result_schema_version",
+        "hw",
+        "conc",
+        "image",
+        "recipe_fingerprint",
+        "model",
+        "infmax_model_prefix",
+        "framework",
+        "precision",
+        "spec_decoding",
+        "disagg",
+        "scenario_type",
+        "num_gpus",
+        "tp",
+        "ep",
+        "dp_attention",
+        "kv_offloading",
+        "kv_offload_backend",
+        "allocated_cpu_dram_gb",
+        "num_requests_total",
+        "num_requests_successful",
+        "request_accounting",
+        "request_metrics",
+        "server_metrics",
+        "kv_cache_pool_tokens",
+        "is_multinode",
+        "prefill_num_workers",
+        "prefill_tp",
+        "prefill_pp",
+        "prefill_dcp_size",
+        "prefill_pcp_size",
+        "prefill_ep",
+        "prefill_dp_attention",
+        "num_prefill_gpu",
+        "decode_num_workers",
+        "decode_tp",
+        "decode_pp",
+        "decode_dcp_size",
+        "decode_pcp_size",
+        "decode_ep",
+        "decode_dp_attention",
+        "num_decode_gpu"
+      ],
+      "title": "AgentXMultinodeRow",
+      "type": "object"
+    },
+    "AgentXSingleNodeRow": {
+      "additionalProperties": false,
+      "description": "AgentX point served by one single-node deployment.",
+      "patternProperties": {
+        "^(?:avg_power_w|p75_power_w|p75_total_gpu_power_w|p90_power_w|p90_total_gpu_power_w|avg_total_gpu_power_w|total_gpu_energy_j|joules_per_successful_query|joules_per_input_token|joules_per_output_token|joules_per_total_token|prefill_gpu_energy_j|decode_gpu_energy_j|prefill_avg_power_w|decode_avg_power_w|prefill_joules_per_input_token|decode_joules_per_output_token)$": {
+          "type": "number"
+        }
+      },
+      "properties": {
+        "result_schema_version": {
+          "const": 1,
+          "maximum": 1,
+          "minimum": 1,
+          "title": "Result Schema Version",
+          "type": "integer"
+        },
+        "hw": {
+          "minLength": 1,
+          "title": "Hw",
+          "type": "string"
+        },
+        "conc": {
+          "exclusiveMinimum": 0,
+          "title": "Conc",
+          "type": "integer"
+        },
+        "image": {
+          "minLength": 1,
+          "title": "Image",
+          "type": "string"
+        },
+        "recipe_fingerprint": {
+          "description": "Empty when the dispatched config has none.",
+          "pattern": "^(?:[0-9a-f]{64})?$",
+          "title": "Recipe Fingerprint",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "infmax_model_prefix": {
+          "minLength": 1,
+          "title": "Infmax Model Prefix",
+          "type": "string"
+        },
+        "framework": {
+          "minLength": 1,
+          "title": "Framework",
+          "type": "string"
+        },
+        "precision": {
+          "minLength": 1,
+          "title": "Precision",
+          "type": "string"
+        },
+        "spec_decoding": {
+          "minLength": 1,
+          "title": "Spec Decoding",
+          "type": "string"
+        },
+        "disagg": {
+          "title": "Disagg",
+          "type": "boolean"
+        },
+        "scenario_type": {
+          "const": "agentic-coding",
+          "title": "Scenario Type",
+          "type": "string"
+        },
+        "num_gpus": {
+          "exclusiveMinimum": 0,
+          "title": "Num Gpus",
+          "type": "integer"
+        },
+        "tp": {
+          "exclusiveMinimum": 0,
+          "title": "Tp",
+          "type": "integer"
+        },
+        "ep": {
+          "exclusiveMinimum": 0,
+          "title": "Ep",
+          "type": "integer"
+        },
+        "dp_attention": {
+          "description": "Workflow flag copied as a string, not a JSON boolean.",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "title": "Dp Attention",
+          "type": "string"
+        },
+        "kv_offloading": {
+          "minLength": 1,
+          "title": "Kv Offloading",
+          "type": "string"
+        },
+        "kv_offload_backend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OffloadBackend"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allocated_cpu_dram_gb": {
+          "minimum": 0,
+          "title": "Allocated Cpu Dram Gb",
+          "type": "integer"
+        },
+        "num_requests_total": {
+          "minimum": 0,
+          "title": "Num Requests Total",
+          "type": "integer"
+        },
+        "num_requests_successful": {
+          "minimum": 0,
+          "title": "Num Requests Successful",
+          "type": "integer"
+        },
+        "request_accounting": {
+          "$ref": "#/$defs/RequestAccounting"
+        },
+        "router": {
+          "$ref": "#/$defs/ComponentMetadata",
+          "default": null
+        },
+        "kv_p2p_transfer": {
+          "default": null,
+          "minLength": 1,
+          "title": "Kv P2P Transfer",
+          "type": "string"
+        },
+        "dataset": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "default": null,
+          "title": "Dataset",
+          "type": "object"
+        },
+        "request_metrics": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Request Metrics",
+          "type": "object"
+        },
+        "server_metrics": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Server Metrics",
+          "type": "object"
+        },
+        "kv_cache_pool_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Kv Cache Pool Tokens"
+        },
+        "warnings": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "power_metric_schema_version": {
+          "const": 2,
+          "default": null,
+          "maximum": 2,
+          "minimum": 2,
+          "title": "Power Metric Schema Version",
+          "type": "integer"
+        },
+        "power_valid": {
+          "default": null,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Power Valid",
+          "type": "integer"
+        },
+        "is_multinode": {
+          "const": false,
+          "title": "Is Multinode",
+          "type": "boolean"
+        },
+        "pp": {
+          "exclusiveMinimum": 0,
+          "title": "Pp",
+          "type": "integer"
+        },
+        "dcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Dcp Size",
+          "type": "integer"
+        },
+        "pcp_size": {
+          "exclusiveMinimum": 0,
+          "title": "Pcp Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "result_schema_version",
+        "hw",
+        "conc",
+        "image",
+        "recipe_fingerprint",
+        "model",
+        "infmax_model_prefix",
+        "framework",
+        "precision",
+        "spec_decoding",
+        "disagg",
+        "scenario_type",
+        "num_gpus",
+        "tp",
+        "ep",
+        "dp_attention",
+        "kv_offloading",
+        "kv_offload_backend",
+        "allocated_cpu_dram_gb",
+        "num_requests_total",
+        "num_requests_successful",
+        "request_accounting",
+        "request_metrics",
+        "server_metrics",
+        "kv_cache_pool_tokens",
+        "is_multinode",
+        "pp",
+        "dcp_size",
+        "pcp_size"
+      ],
+      "title": "AgentXSingleNodeRow",
+      "type": "object"
+    },
+    "ComponentMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "ComponentMetadata",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "OffloadBackend": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "default": null,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "OffloadBackend",
+      "type": "object"
+    },
+    "RequestAccounting": {
+      "additionalProperties": false,
+      "properties": {
+        "records_total": {
+          "minimum": 0,
+          "title": "Records Total",
+          "type": "integer"
+        },
+        "records_profiled": {
+          "minimum": 0,
+          "title": "Records Profiled",
+          "type": "integer"
+        },
+        "records_dropped_total": {
+          "minimum": 0,
+          "title": "Records Dropped Total",
+          "type": "integer"
+        },
+        "records_warmup_dropped": {
+          "minimum": 0,
+          "title": "Records Warmup Dropped",
+          "type": "integer"
+        },
+        "records_error_dropped": {
+          "minimum": 0,
+          "title": "Records Error Dropped",
+          "type": "integer"
+        },
+        "error_categories": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": "Error Categories",
+          "type": "object"
+        }
+      },
+      "required": [
+        "records_total",
+        "records_profiled",
+        "records_dropped_total",
+        "records_warmup_dropped",
+        "records_error_dropped",
+        "error_categories"
+      ],
+      "title": "RequestAccounting",
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AgentXSingleNodeRow"
+    },
+    {
+      "$ref": "#/$defs/AgentXMultinodeRow"
+    }
+  ]
+}

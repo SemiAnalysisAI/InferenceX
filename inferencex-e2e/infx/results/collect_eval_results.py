@@ -17,6 +17,8 @@ from infx.results.evals import (
     result_order as result_order,
     select_latest_results,
 )
+from infx.results.schema.models import EVAL_ROW
+from infx.results.schema.quarantine import quarantine, report
 
 MODEL = "Model"
 HARDWARE = "Hardware"
@@ -133,15 +135,19 @@ def collect_eval_rows(root: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def main() -> None:
+def main() -> int:
     if len(sys.argv) < 3:
         print("Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]")
-        sys.exit(1)
+        return 1
 
     root = Path(sys.argv[1])
     exp_name = sys.argv[2]
 
-    rows = collect_eval_rows(root)
+    accepted, rejected = quarantine(
+        (f"{row.get('source')} [{row.get('task')}]", row, EVAL_ROW)
+        for row in collect_eval_rows(root)
+    )
+    rows = [row for _, row in accepted]
 
     single_node_rows = [r for r in rows if not r["is_multinode"]]
     multinode_rows = [r for r in rows if r["is_multinode"]]
@@ -329,7 +335,8 @@ def main() -> None:
     out_path = Path(f"agg_eval_{exp_name}.json")
     with open(out_path, "w") as f:
         json.dump(rows, f, indent=2)
+    return report(rejected)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

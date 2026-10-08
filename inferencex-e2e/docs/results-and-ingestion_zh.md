@@ -14,6 +14,7 @@
 | --- | --- |
 | [`benchmark-tmpl.yml`](../../.github/workflows/benchmark-tmpl.yml)、[`benchmark-multinode-tmpl.yml`](../../.github/workflows/benchmark-multinode-tmpl.yml) | 吞吐量、评测和 AgentX 工件的单配置名称、文件及上传规则 |
 | [`infx/results/fixed_sequence.py`](../infx/results/fixed_sequence.py) | 固定序列吞吐量聚合架构及派生的每 GPU 指标 |
+| [`infx/results/schema/`](../infx/results/schema/models.py)、[`schemas/`](../schemas/) | 已发布记录契约、`result_schema_version`、收集器隔离及生成的 JSON Schema |
 | [`infx/results/collect_results.py`](../infx/results/collect_results.py)、[`collect-results.yml`](../../.github/workflows/collect-results.yml) | 将基准结果递归收集为 `agg_<prefix>.json` 和 `results_<prefix>` |
 | [`infx/results/collect_eval_results.py`](../infx/results/collect_eval_results.py)、[`collect-evals.yml`](../../.github/workflows/collect-evals.yml) | 评测发现、指标提取、批量并发选择及 `eval_results_<prefix>` |
 | [`infx/results/evals.py`](../infx/results/evals.py)、[`eval_artifacts.py`](../infx/results/eval_artifacts.py) | 供收集流程和 Klaud 共用的评测读取、结果选择、复用一致性检查及重跑去重 |
@@ -29,16 +30,17 @@
 ## 索引
 
 1. [各层身份](#各层身份)
-2. [吞吐量工件](#吞吐量工件)
-3. [评测工件](#评测工件)
-4. [AgentX 工件](#agentx-工件)
-5. [应用交接和复用运行](#应用交接和复用运行)
-6. [摄取阶段](#摄取阶段)
-7. [去重和失败行行为](#去重和失败行行为)
-8. [来源不变量](#来源不变量)
-9. [已发布结果 API](#已发布结果-api)
-10. [安全检查](#安全检查)
-11. [验证和停止条件](#验证和停止条件)
+2. [结果记录契约](#结果记录契约)
+3. [吞吐量工件](#吞吐量工件)
+4. [评测工件](#评测工件)
+5. [AgentX 工件](#agentx-工件)
+6. [应用交接和复用运行](#应用交接和复用运行)
+7. [摄取阶段](#摄取阶段)
+8. [去重和失败行行为](#去重和失败行行为)
+9. [来源不变量](#来源不变量)
+10. [已发布结果 API](#已发布结果-api)
+11. [安全检查](#安全检查)
+12. [验证和停止条件](#验证和停止条件)
 
 ## 各层身份
 
@@ -57,6 +59,33 @@
 
 由于每次正式摄取都复用 PR sweep，这些区别尤其重要。工件字节来自 PR sweep，而变更日志元数据和摄取触发来自之后 `main` 上的 Merge Ingest 运行。存储后的基准记录仍归属于 source 运行及其 source attempt。
 
+## 结果记录契约
+
+[`infx/results/schema/models.py`](../infx/results/schema/models.py) 为每类已发布的聚合记录定义 Pydantic 模型：`results_<prefix>` 中的固定序列记录和 AgentX 记录（只有 AgentX 记录带有 `scenario_type`）、`eval_results_<prefix>` 中的评测记录，以及 `run-stats` 中按硬件划分的条目。身份和拓扑字段采用严格类型；字符串、整数和布尔值从不进行类型强制转换。
+
+其他数值字段必须属于某个指标族。固定序列记录接受延迟和交互性统计量（`mean_`、`median_`、`std_` 或 `p<N>_` 后接 `ttft`、`tpot`、`itl`、`e2el` 或 `intvty`），以及 [`infx.results.power`](../infx/results/power/__init__.py) 定义的功耗键。AgentX 记录将请求指标和服务器指标嵌套存放，顶层只接受功耗键。所有数值（包括嵌套的 AgentX 指标）都必须是有限值。
+
+这些模型描述生产端的实际输出，包括以下特殊情况：
+
+- 在吞吐量和 AgentX 记录中，`dp_attention`、`prefill_dp_attention` 和 `decode_dp_attention` 是字符串 `"true"` 和 `"false"`。
+- 多节点 AgentX 的 `tp` 为 prefill TP 与 decode TP 之和，`ep` 取两个角色 EP 中的较大值。没有 decode GPU 的多节点记录将 `decode_tp` 和 `decode_ep` 报告为 `0`。
+- 分发的配置没有 `recipe_fingerprint` 时，该字段为空。
+- 评测记录将 `hw` 转为大写，缺少 `isl` 或 `osl` 时使用 `0`，保留 `build_row` 的默认值（如 `"unknown"`），两个角色的 DP-attention 设置不同时写入 `prefill=<flag>,decode=<flag>`，并且可能带有 lm-eval 的 `"N/A"` 标准误差。
+
+生产端会在每条记录上标记 `result_schema_version: 1`：固定序列和 AgentX 记录由 `build_result` 标记，评测记录由 `build_row` 标记，运行统计由 `calc_success_rate` 标记。该常量位于仅依赖标准库的 `infx.results.schema` 包中，因为固定序列处理运行在 runner 的裸 Python 解释器上，而 AgentX 聚合运行在推理服务容器内。两者都不做校验。
+
+早于该标记的 checkout（例如仍在进行中的 PR 分支，或使用较旧 `ref` 的 e2e 运行）仍会输出未标记的记录。收集器按版本 1 校验此类记录，通过后加上标记再发布。带有其他任何版本号的记录会以 `unsupported_version` 为原因被隔离。
+
+执行校验的收集器有 `collect_results`、`collect_eval_results` 和 `calc_success_rate`。违反契约的记录不会进入聚合结果，而是连同其来源和校验错误一起写入 `rejected_rows.json`。该记录中的非有限数值会写成 `"NaN"` 这类字符串，使文件保持为标准 JSON。收集器为每条被拒记录向 stderr 输出一条 `::error::` 注解，并在写出有效聚合结果后以非零状态退出。收集任务仍会上传聚合结果；存在被拒记录时，还会上传 `rejected_rows_<prefix>`、`rejected_rows_eval_<prefix>` 或 `rejected_rows_run_stats`。失败的任务会使该 sweep 无法被默认复用。InferenceX-app 也会直接读取单配置 `bmk_*` 和 `eval_*` 工件，因此只有当应用执行相同的契约时，被拒记录才不会进入数据库。
+
+四种记录模型的 JSON Schema 已提交到 [`schemas/`](../schemas/)；它们与模型不一致时，测试会失败。修改模型后，在本项目目录中重新生成：
+
+```bash
+uv run python -m infx.results.schema export schemas
+```
+
+InferenceX-app 尚未读取 `result_schema_version`。在其基准映射器将该键视为非指标字段之前，摄取会把它存为一个意外的数值指标并记录警告。
+
 ## 吞吐量工件
 
 ### 生产端和收集器
@@ -70,7 +99,7 @@ file:     agg_<RESULT_FILENAME>.json
 
 多节点模板在基础名称中编码 prefill 和 decode 拓扑、worker 数、模式、并发及 runner。一个 `bmk_<RESULT_FILENAME>` 工件中可以包含多个 `agg_<RESULT_FILENAME>_*.json` 文件。
 
-[`collect-results.yml`](../../.github/workflows/collect-results.yml) 通常接收 `result-prefix: bmk`。它下载 `bmk_*`，[`infx/results/collect_results.py`](../infx/results/collect_results.py) 再递归加载每个 JSON 文件，形成一个数组。交接身份为：
+[`collect-results.yml`](../../.github/workflows/collect-results.yml) 通常接收 `result-prefix: bmk`。它下载 `bmk_*`，[`infx/results/collect_results.py`](../infx/results/collect_results.py) 再递归加载每个 JSON 文件，并将满足[结果记录契约](#结果记录契约)的记录写入一个数组。交接身份为：
 
 ```text
 artifact: results_bmk
@@ -78,7 +107,7 @@ file:     agg_bmk.json
 shape:    array of benchmark row objects
 ```
 
-收集器不验证记录、不排序，也不去重。成功解析 JSON 是它唯一的内容检查。应把 `results_bmk` 视为传输聚合，而不是所有记录均可用的证明。
+收集器不对记录排序，也不去重。它的契约检查只覆盖结构和类型，不涉及测量质量；应把 `results_bmk` 视为传输聚合，而不是所有记录均可用的证明。
 
 ### 吞吐量记录架构
 
@@ -166,7 +195,7 @@ shape:    array of one row per config, concurrency, and task
 
 应用也会读取每个未聚合的 `eval_*` 目录。`meta_env.json` 提供配置身份，`results_*.json` 提供 `lm_eval_version`、任务、原始数值指标和有效样本数。应用会规范化 strict 和 flexible exact-match 名称。样本文件按任务附加到解析后的评测记录。该双路径是有意设计。聚合记录用于摘要摄取，单配置文件则保留样本详情。
 
-收集器解析失败时，`load_json` 会跳过文件，不会生成一条失败的评测记录。缺少 `meta_env.json`、没有可识别的 lm-eval 结果、`results` 对象为空，或并发不在 `completed_eval_concs` 中，都会导致不输出聚合记录。
+收集器解析失败时，`load_json` 会跳过文件，不会生成一条失败的评测记录。缺少 `meta_env.json`、没有可识别的 lm-eval 结果、`results` 对象为空，或并发不在 `completed_eval_concs` 中，都会导致不输出聚合记录。已构建但违反[结果记录契约](#结果记录契约)的记录则会被隔离。
 
 ## AgentX 工件
 
@@ -292,7 +321,7 @@ InferenceX-app 按以下顺序执行。固定序列工作流超时为 30 分钟�
 | --- | --- |
 | CI 中的工件准备 | 每个完全相同的工件名保留最新且未过期的上传。复用只会以 merge 运行副本替换变更日志元数据。 |
 | 应用直接下载模式 | [`dedupeArtifactsByLogicalName`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/github-artifacts.ts) 移除末尾 runner-pool 和 attempt token，并保留最新的逻辑工件，防止重试工件覆盖良好指标。 |
-| 基准收集 | `infx.results.collect_results` 附加每个已解析 JSON。它不做记录级去重。 |
+| 基准收集 | `infx.results.collect_results` 附加每个满足结果记录契约的已解析 JSON。它不做记录级去重。 |
 | 基准数据库写入 | 按基准自然键执行 `ON CONFLICT`，更新指标、镜像、功耗 worker 及相关字段。当新工件缺少服务器派生的 `kv_cache_pool_tokens` 时会保留已有值。 |
 | 评测数据库写入 | 维度完整且匹配的聚合记录和单配置记录会按评测自然键冲突。后一次写入刷新指标，并返回同一记录 ID 供样本附加。任一可空键维度为空时，PostgreSQL 当前的普通唯一约束不会对这些记录去重。 |
 | 评测样本 | 按 `(eval_result_id, doc_id)` 冲突，防止文档重复。 |
@@ -304,6 +333,7 @@ InferenceX-app 按以下顺序执行。固定序列工作流超时为 30 分钟�
 - AgentX 聚合从指标计算中排除 warmup 和错误请求记录，但在 `request_accounting` 中保留计数和类别。
 - 未知模型或硬件、缺少固定序列 ISL/OSL/并发、无效 JSON、point overrides 和数据库错误都会被跟踪为跳过，不会成为占位记录。
 - 评测收集器解析失败或缺少可识别结果文件时不输出记录。应用侧格式错误的单配置文件会产生警告或已跟踪的跳过。
+- 收集器将违反[结果记录契约](#结果记录契约)的记录隔离到 `rejected_rows.json`，并在发布有效聚合结果后失败。单配置工件仍包含这些记录。
 - 数据库写入具备幂等性，因此部分摄取可以安全重跑。但不能忽略新增跳过计数、冲突的数据集来源、缺失的 AgentX 原始同级工件或失败的数据库验证。
 
 ## 来源不变量
@@ -437,6 +467,7 @@ rm -rf -- "$tmp"
 - 明确目标 `github_run_id` 和 `run_attempt`。
 - 预期吞吐量或 AgentX 数据点时，`results_bmk` 包含 JSON 数组。
 - 预期聚合评测时，`eval_results_all` 包含 JSON 数组。需要样本详情时，对应单配置 `eval_*` 文件包仍然存在。
+- 不存在任何 `rejected_rows_*` 工件。此类工件中的记录不在聚合结果中，但仍存在于单配置工件中。
 - 每个预期 AgentX 聚合都有对应的 `agentic_<suffix>` 原始同级工件。需要服务器派生指标时，服务器日志存在。
 - 固定序列记录具有正数 `isl`、`osl` 和 `conc`。AgentX 记录具有 agentic 场景、正并发、请求计数，以及预期的 offload 和数据集元数据。
 - source/merge dry-run 精确选择预期的 source 测量和 merge 变更日志。
