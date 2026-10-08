@@ -1,8 +1,7 @@
 # DeepSeek-V4-Pro-0813 AgentX on MI355X with ATOM DSpark K6 (six draft tokens,
 # a verify window of 7). Low concurrency is TP-only. The DP-attention band runs
-# native RCCL expert parallelism at C48 and C96 and MegaMoE from C64. C256 and
-# C384 add an LMCache CPU KV tier (lmcache_mp); the other points keep the KV
-# cache GPU-resident.
+# MegaMoE with EPLB from C48 (C64 without EPLB). C256 and C384 add an LMCache
+# CPU KV tier (lmcache_mp); the other points keep the KV cache GPU-resident.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-atom-agentic
@@ -121,15 +120,22 @@ override_tp8_c48_dep:
         kv-cache-dtype: fp8
         enable-expert-parallel: true
         enable-dp-attention: true
-        all2all-backend: rccl
+        all2all-backend: high-throughput
         dp-load-balance: least_tokens
-        moe-backend: standard
+        moe-backend: mega
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
       env:
         ATOM_DP_SESSION_AFFINITY: '1'
         ATOM_DP_LB_REQ_EQUIV: '512'
         ATOM_ENABLE_PREFILL_DELAYER: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '10'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '256'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '511'
+        ATOM_EPLB_MAX_REBALANCES: '1'
   benchmark:
     env:
       CONC: '48'
@@ -171,15 +177,22 @@ override_tp8_c96_dep:
         kv-cache-dtype: fp8
         enable-expert-parallel: true
         enable-dp-attention: true
-        all2all-backend: rccl
+        all2all-backend: high-throughput
         dp-load-balance: least_tokens
-        moe-backend: standard
+        moe-backend: mega
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
       env:
         ATOM_DP_SESSION_AFFINITY: '1'
         ATOM_DP_LB_REQ_EQUIV: '512'
         ATOM_ENABLE_PREFILL_DELAYER: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '10'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
+        ATOM_EPLB_MAX_REBALANCES: '1'
   benchmark:
     env:
       CONC: '96'
