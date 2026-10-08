@@ -71,10 +71,6 @@ base:
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 3
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
   # Container setup plus loading the weights over NFS outlasts the 30-minute default.
   health_check:
     max_attempts: 360

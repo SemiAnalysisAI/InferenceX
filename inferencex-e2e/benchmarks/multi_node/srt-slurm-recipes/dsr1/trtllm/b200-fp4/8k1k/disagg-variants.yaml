@@ -72,10 +72,6 @@ base:
         stream_interval: 100
         num_postprocess_workers: 4
 
-  benchmark:
-    env:
-      TOKENIZER: /model
-
   frontend:
     nginx_container: "nginx-sqsh"
     type: "dynamo"
