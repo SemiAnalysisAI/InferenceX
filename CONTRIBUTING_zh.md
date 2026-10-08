@@ -8,18 +8,21 @@
 
 感谢你的贡献！我们欢迎 PR。本页介绍每个 PR 在合并前需要经过的审阅流程。
 
+## PR 描述
+
+开头用简短说明交代问题、变更后的行为及其意义。审阅者应当无需展开任何部分，就能理解 PR 的整体作用。重要风险、破坏性变更和尚未解决的失败应与摘要一同保持可见。仅在相关时附上 issue 链接。
+
+将 AI 模型使用说明、变更类型、作者检查清单及其他流程性内容放在摘要之后，使用标题清晰的 `<details><summary>…</summary>` 折叠块。不添加 `open` 属性，使其默认折叠，并在块内的 Markdown 前后保留空行。保留所有必需的检查项；折叠只改变展示方式，不改变审阅或合并要求。
+
+验证说明只报告实际执行的集成测试或端到端运行：简述结果，并在有运行链接时附上。支持性验证证据、冗长的检查输出和日志放入默认折叠的 `Validation details` 块，重要失败和性能回退则保持可见。用于解释变更的实质性基准测试对比（包括专用的 Klaud 报告）保持可见；这些内容不属于流程性套话。省略例行本地检查清单（单元测试数量、mock 检查、lint/格式检查、schema 检查、矩阵生成及变更日志字节检查）、空章节和等待验证的套话。仍须执行适当的检查；此规则仅约束 PR 描述和评论中的报告内容。未执行集成测试或端到端运行时，省略验证章节。
+
+每个 PR 描述都必须在默认折叠的 `<details><summary>AI model disclosure</summary>` 块内包含 **AI model disclosure（AI 模型使用说明）** 部分，列出准备该 PR 时实际使用的完整模型名称/版本及各自的工作内容，包括委派给其他 agent 的工作。不能只写 Claude Code、Cursor 或 Perplexity Computer 等工具名。模型标识应以运行环境提供的信息为准，不得猜测；如果运行环境未提供确切模型，须明确说明无法确认。完全未使用 AI 的 PR 须填写 `No AI used`。后续修改使用其他模型时，须同步更新说明。
+
 ## PR 审阅流程
 
-每个 PR 描述都必须包含 **AI model disclosure（AI 模型使用说明）** 部分，列出准备该 PR 时实际使用的完整模型名称/版本及各自的工作内容，包括委派给其他 agent 的工作。不能只写 Claude Code、Cursor 或 Perplexity Computer 等工具名。模型标识应以运行环境提供的信息为准，不得猜测；如果运行环境未提供确切模型，须明确说明无法确认。完全未使用 AI 的 PR 须填写 `No AI used`。后续修改使用其他模型时，须同步更新说明。
+1. 打开你的 PR 并通过 PR 验证。只有修改了 `inferencex-e2e/perf-changelog.yaml`（矩阵来自新追加的条目）且恰好带有一个主标签（通常为 `full-sweep-fail-fast`）的同仓库 PR 才会运行 `run-sweep.yml` sweep。标签、修饰标签、canary、fail-fast 以及由维护者批准的 fork 路径详见 [PR 主标签与修饰标签](inferencex-e2e/docs/ci-procedures_zh.md#pr-主标签与修饰标签)。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
 
-1. 打开你的 PR 并通过 PR 验证。只有修改了 `inferencex-e2e/perf-changelog.yaml`（矩阵来自新追加的条目）且恰好带有一个主标签的同仓库 PR 才会运行 `run-sweep.yml` sweep；带有多个主标签会导致验证失败。详见 [PR 主标签与修饰标签](inferencex-e2e/docs/ci-procedures_zh.md#pr-主标签与修饰标签)。
-   - `full-sweep-fail-fast`（强烈推荐）：canary 门控加 fail-fast，每个矩阵在首次失败时停止。
-   - `full-sweep-enabled`：同样的 canary 门控，但不启用 fail-fast；仅当需要任务在失败后继续运行时才使用。
-   - `non-canary-full-sweep-enabled`：不运行 canary，也不启用 fail-fast。
-
-   Canary 是最低并发的合格基准测试条目；它失败时，其余所有矩阵都会被跳过。防止有问题的变更浪费整个扇出的是这个共用的 canary，而不是 fail-fast。只含多节点固定序列条目或 eval 条目的 sweep 没有 canary，所有矩阵会同时扇出，只能靠 fail-fast 减少浪费。修饰标签 `all-evals`、`evals-only` 和 `agentx-fast` 在没有主标签时不会启动 GPU sweep（仍会运行 `check-changelog`）；PR 带有 `evals-only` 或 `agentx-fast` 时，`/use` 会被拒绝。让基准测试 sweep 运行，并在 PR 的某个 commit 上获得全绿的完整 sweep，包括 evals。
-
-   **Fork PR：** 外部贡献者无法自行添加标签，`run-sweep.yml` 也不会为 fork PR 运行任何任务，连变更日志验证也不会运行。PR 处于打开、非草稿且无合并冲突的状态后，由具有写权限的维护者先添加所需的修饰标签，再添加一个主标签。这只会批准当前的 head SHA：`trusted-external-sweep.yml` 会为该 SHA 调度 `e2e-tests.yml`，任何主标签都不运行 canary，只有 `full-sweep-fail-fast` 会启用 fail-fast。每次推送后，维护者都必须移除并重新添加主标签，以批准新的 head。
+   **Fork PR：** 外部贡献者无法自行添加标签。PR 处于打开、非草稿且无合并冲突的状态后，由维护者添加标签，这只会批准当前的 head SHA。每次推送后，维护者都必须移除并重新添加主标签。
 2. 若修改的文件归属于仓库管理员及 `@SemiAnalysisAI/core` 之外的 CODEOWNER，请联系一位有资格的 [CODEOWNER](.github/CODEOWNERS) 审阅，并在批准评论中填写 **PR Review Checklist** 签署（见下文）。
 3. 在 Slack 上联系核心维护者进行最终批准；若要求清单签署，请先完成签署。
 4. 由授权维护者发布 `/use <run_id>`（见下文），然后通过 reuse 路径合并 PR。
@@ -79,7 +82,7 @@ CODEOWNER 自动验证目前仅供审阅参考。工作流会核验新提交及�
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布。这三种方式都会触发验证。
 - 请在 PR 处于打开且非草稿状态时提交新清单。编辑该清单会再次触发验证；推送、重新打开或退出草稿状态不会触发验证。如果合并冲突期间遗漏了 Review 事件，请在解决冲突后手动分发工作流来重试。
 - 启动 Claude 要求触发者为具有合格仓库写权限的人类用户。
-- 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
+- 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs/cookbook) PR，以及任何例外理由）。新的 SGLang cookbook PR 应提交到 `sgl-project/sglang` 的 `docs/cookbook/` 下，该目录是已发布网站的来源。`sgl-project/sgl-docs` 中的 cookbook 副本并非当前部署来源；`sgl-project/sgl-cookbook` 已归档。
 
 签署发布后，CI 会独立复核审阅清单中的各项声明，包括 CODEOWNER 身份、PR 内 commit 上的全绿 sweep 与 evals、所链接的 recipe、复用命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack、投机解码是否使用 chat template，以及 draft 模型和 draft head 的权重与精度是否保持不变。CI 会为该签署资源创建一条裁定评论，并注明实际评估的 SHA。编辑同一清单时只更新与其关联的裁定。替代清单或新增清单会获得独立裁定；与旧签署关联的裁定保持不变。未通过的条目直接显示；已通过和不适用（N/A）的条目统一放入折叠区域。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 

@@ -24,10 +24,6 @@
 
 ### 吞吐量结果
 
-启用 AgentX 功耗采集时，单节点和聚合式 recipe 必须在 benchmark 环境中提供与服务端
-拓扑一致的 `TP`、`PP_SIZE` 和 `PCP_SIZE`。缺少这些值时，即使 `REQUIRE_POWER=0`，
-也会在功耗监控和请求回放开始前报错。
-
 可复用基准工作流在启动 GPU 任务前准备 Python 3.12，并通过
 `INFERENCEX_RESULTS_PYTHON` 导出其绝对路径。固定序列结果处理和 AgentX 功耗处理
 （包括 H200 DCGM 路径）都会校验并使用该解释器。该设置缺失或为空时，处理失败；
@@ -56,7 +52,7 @@ DECODE_GPUS="$decode_gpus" \
 
 ### 评测结果
 
-评测任务上传以 `eval_${EXP_NAME}_${RESULT_FILENAME}` 命名的逐配置制品。制品包含该评测器实际生成的文件，例如 `meta_env.json`、`results*.json`、`sample*.jsonl`；对于受支持的 agentic 评测器，还可能包含 predictions、reports 或 trajectories。工作流的以下行为都是有意设计的：
+评测任务上传以 `eval_${EXP_NAME}_${RESULT_FILENAME}` 命名的逐配置制品。制品包含评估命令按 [`infx/bench/eval/stage.py`](../infx/bench/eval/stage.py) 中的允许列表为该评测器暂存的文件，即 `meta_env.json`、`results*.json`、`sample*.jsonl`，以及厂商评估的原生报告（`*_report.json`）、详细结果（`*_results.jsonl`）和归档（`*_artifacts.tar.gz`）。工作流的以下行为都是有意设计的：
 
 - eval-only 任务没有任何评测文件时会报错；
 - 评测文件在 `always()` 条件下上传，以保留失败任务的部分证据；
@@ -279,103 +275,23 @@ git diff --check origin/main...HEAD
 
 ### 防止复发
 
-容器可能以 root 身份运行，同时 GitHub 工作区被 bind mount。共享基准库通过以下设置防止工作区中出现 root-owned Python 缓存目录：
+容器可能以 root 身份运行，同时 GitHub 工作区被 bind mount。基准测试工作流为每个作业设置以下变量，使 Python 字节码缓存不写入工作区：
 
-```bash
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
+```yaml
+PYTHONDONTWRITEBYTECODE: '1'
+PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 ```
 
 不要把这些路径重新覆盖到工作区。出现 `EACCES` 清理错误后，应执行下述恢复扫描，包括由已退役启动器遗留的日志导致的错误。
 
-来源：[Python 缓存预防](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/benchmarks/benchmark_lib.sh#L5-L10)。
+来源：[Python 缓存预防](../../.github/workflows/benchmark-tmpl.yml#L145-L146)。
 
-### 恢复 MI355X TW runner 工作区
+### 集群特定恢复
 
-典型特征：
+这些操作需要集群特权访问并须获得明确批准。请遵循维护者 playbook，而不是复制其中的命令：
 
-```text
-Deleting the contents of '.../actions-runner/_work/InferenceX/InferenceX'
-Error: File was unable to be removed Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
-```
-
-jumpbox 没有 sudo；需要使用 agent forwarding 连接到在 `/it-share` 上拥有免密码 sudo 的 hop host。
-
-1. **先进行只读扫描：**
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root 2>/dev/null'"
-   ```
-
-2. 检查每一个结果。每条路径都必须位于 `actions-runner/_work/` 下，通常在 `InferenceX/InferenceX/benchmark_logs/` 中。如果任何路径位于 `_work` 外，必须**停止**。
-3. 获得明确批准后，只删除已经验证的匹配项：
-
-   ```bash
-   ssh -A -o BatchMode=yes amd-tw-mi355 "ssh -o BatchMode=yes mia1-vm-amd-prj3-slog-001 \
-     'sudo find /it-share/gharunners*/gharunner*/actions-runner/_work -user root -print0 2>/dev/null \
-      | xargs -0 -r sudo rm -rf'"
-   ```
-
-4. 再次运行只读扫描，并要求结果为零。
-5. 只有清理完成后，才能重跑已确诊的失败 sweep。可使用 `sacct -j <id>` 关联 `slurm_job-<id>`；`CANCELLED` 状态支持“跳过了 teardown”的诊断。
-
-绝不要对 `/it-share` 运行没有范围限制的 `rm -rf`。
-
-权威来源：[MI355X root-owned 文件恢复](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/clean-amd-mi355-runner-root-files.md)。
-
-## MI300X 集群调试：enroot/pyxis 用户命名空间故障
-
-`mi300x-amd_*` / `chi-mi300x-*` 上的典型特征：
-
-```text
-error: pyxis:     enroot-nsenter: failed to create user namespace: Permission denied
-error: pyxis: couldn't start container
-error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
-srun: error: chi-mi300x-0XX: task 0: Exited with exit code 1
-```
-
-2026 年 7 月已知原因：Ubuntu 24.04 provisioning drift 使部分节点保留 `kernel.apparmor_restrict_unprivileged_userns=1`，阻止实际的 enroot 路径。`unshare -U` 不是有效判据，因为它自己的 AppArmor profile 仍可能允许该操作。
-
-1. 在 GitHub 日志中确认准确特征并记录失败节点：
-
-   ```bash
-   gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed
-   ```
-
-2. 从 root controller 通过 Slurm 访问计算节点；计算节点不接受直接 root SSH：
-
-   ```bash
-   ssh amd-vultr-mi300 \
-     'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<read-only-command>"'
-   ```
-
-3. 在不做更改的情况下调查所有可见节点：
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in $(sinfo -N -h -o "%N" | sort -u); do
-     v=$(srun -w $n -N1 --immediate=20 sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>&1 | tail -1)
-     echo "$n: $v"
-   done'
-   ```
-
-   失败节点为 `1`、工作节点为 `0` 的分裂结果可以确认 drift。如果所有节点都是 `0`，停止把它当成这个已知问题；应与工作节点比较 enroot 版本、pyxis plugin 状态，以及 `/usr/local/bin/enroot-nsenter` 的 AppArmor 覆盖范围。
-
-4. **只有获得明确批准后**，才能把 drift 节点改成工作基线并持久化：
-
-   ```bash
-   ssh amd-vultr-mi300 'for n in <drifted-nodes>; do
-     srun -w $n -N1 --immediate=30 bash -c \
-       "sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 && \
-        echo kernel.apparmor_restrict_unprivileged_userns=0 > /etc/sysctl.d/99-enroot-userns.conf"
-   done'
-   ```
-
-   此操作会禁用一项内核安全缓解措施。验证每个节点的实时值为 `0`，且持久化文件存在。必须把长期修复升级到节点 provisioning image；否则重新 provision 的节点还会复发。
-
-5. 集群基线恢复后，只重跑受影响的偶发失败任务。
-
-权威来源：[MI300X enroot/pyxis 恢复](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.claude/commands/debug-mi300-enroot-pyxis.md)。
+- MI355X TW `EACCES` 工作区清理：[`clean-amd-mi355-runner-root-files.md`](../../.claude/commands/clean-amd-mi355-runner-root-files.md)。先只读扫描，只删除 `actions-runner/_work/` 下已核实的路径，绝不对 `/it-share` 运行无范围限制的 `rm -rf`。
+- MI300X `enroot-nsenter: failed to create user namespace`（pyxis）：[`debug-mi300-enroot-pyxis.md`](../../.claude/commands/debug-mi300-enroot-pyxis.md)。修改任何节点前，先确认各节点的 AppArmor userns 配置漂移。
 
 ## 安全地重跑工作流
 
@@ -434,17 +350,6 @@ Remaining durable fix:
 ```
 
 这些证据就是完成关卡。如果没有制品身份、source/merge 身份和摄取数量，仅仅“工作流绿色”并不代表结果恢复已经验证。
-
-### AMD 多节点 SGLang 清理
-
-退出时（包括启动或就绪检查失败），AMD SGLang 启动器仅向其记录的 `setsid`
-进程组发送 TERM，等待最多 30 秒。正常完成时，先暂存结果再进行清理。随后向仍存活的进程组发送 KILL，再等待最多
-5 秒并检查退出状态。这可以清理已成为孤儿进程或忽略 TERM 的工作进程，避免其
-持续占用日志管道。这些清理期限不会改变性能采集、评估或服务器就绪检查的期限。
-客户端失败时保留原退出码；若客户端成功但清理仍未完成，则节点任务失败。
-内核阻塞的进程仍可能需要另行授权的节点修复。不要为绕过清理失败而修改或丢弃
-已完成的指标。单一 EXIT 处理器统一负责进程组清理和现有 UMBP 独立进程 PID
-清理；即使进程组清理失败，后者仍会执行。
 
 ### AMD 多节点 GPU 预检协调
 

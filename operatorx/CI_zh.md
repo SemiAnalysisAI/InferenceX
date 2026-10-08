@@ -160,7 +160,3 @@ NVIDIA 使用 `vllm/vllm-openai:v0.19.0`（amd64/arm64），AMD 复用现有 ROC
 `6*num_tokens*top_k*hidden*(intermediate/routed_tensor_parallel_size)/(latency_us*1e6)`。
 本地 top-k 全部指向本地专家表，与通用基准测试的 EP 模拟方式一致。不要再次除以 EP，
 也不要乘以节点分配的 GPU 数。该指标不计激活或路由的 FLOP，不代表完整模型吞吐量。
-
-### GPU 验证状态
-
-完整的八项 BF16 测试已在 H200、MI300X 和 MI325X 上通过。H100 目前在执行内核前失败：Enroot 导入 vLLM 镜像时，在 `/tmp` 和 `/var/tmp` 均无法转换 OCI whiteout。CollectiveX swap-blocks 也记录了相同的主机限制。H100 需先恢复镜像导入环境，才能提供性能数据；本次改动不修改节点配置。B200、B300、GB200、GB300 和 MI355X 的任务正在等待共享 GPU 资源。注册 GPU 池不代表已完成运行时验证。

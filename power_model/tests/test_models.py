@@ -6,16 +6,16 @@ from power_fixtures import constant_efficiency_psu, controlled_fan_policy
 from pydantic import ValidationError
 
 from power_model import (
-    BasicExamplePowerModel,
     CoolingProfile,
+    ExamplePowerModel,
     OperatingState,
     PowerEstimate,
     create_power_model,
 )
 from power_model.models.advanced import (
-    AdvancedAllInPowerModel,
     Cluster,
     NetworkGroup,
+    OSSAllinPowerModel,
     SystemGroup,
 )
 from power_model.models.advanced.components import (
@@ -53,7 +53,7 @@ def advanced(
         if network_switches is None
         else (NetworkGroup(gear=QM9790NDRInfiniBandSwitch(), quantity=network_switches),)
     )
-    return AdvancedAllInPowerModel(
+    return OSSAllinPowerModel(
         cooling=CoolingProfile(mode=cooling),
         workload_state=workload_state,
         using_scale_out=using_scale_out,
@@ -85,7 +85,7 @@ def named(result, name):
 def test_model_constructs_equipment_and_resolves_scenario_without_the_cli(
     system_type, network_name, network_w
 ):
-    model = AdvancedAllInPowerModel.for_system(
+    model = OSSAllinPowerModel.for_system(
         system_type,
         workload_state="agentic-cpu-offloading",
         using_scale_out=True,
@@ -114,7 +114,7 @@ def test_public_factory_uses_model_owned_defaults_and_family_nics():
     assert dict(fan.details)["non_fan_power_w_per_system"] == pytest.approx(1711.6)
 
 
-@pytest.mark.parametrize("factory", [create_power_model, AdvancedAllInPowerModel.for_system])
+@pytest.mark.parametrize("factory", [create_power_model, OSSAllinPowerModel.for_system])
 @pytest.mark.parametrize(
     "argument",
     ["fan_base_power_w", "fan_watts_per_watt", "power_conversion_loss_w", "network_power_w"],
@@ -125,8 +125,8 @@ def test_scenario_factories_reject_retired_hardware_power_overrides(factory, arg
 
 
 @pytest.mark.parametrize("cooling, expected", [("air", 1950.0), ("liquid", 1650.0)])
-def test_basic_example_formula_and_breakdown(cooling, expected):
-    model = BasicExamplePowerModel(cooling=CoolingProfile(mode=cooling))
+def test_example_formula_and_breakdown(cooling, expected):
+    model = ExamplePowerModel(cooling=CoolingProfile(mode=cooling))
     result = model.estimate_breakdown(1000)
     assert model.estimate(1000) == pytest.approx(expected)
     assert result.AllInPower_per_gpu == pytest.approx(expected)
@@ -138,13 +138,13 @@ def test_basic_example_formula_and_breakdown(cooling, expected):
 
 @pytest.mark.parametrize("value", [-1, float("nan"), float("inf"), "100", True, None])
 def test_invalid_per_gpu_input_is_rejected(value):
-    model = BasicExamplePowerModel(cooling=CoolingProfile(mode="air"))
+    model = ExamplePowerModel(cooling=CoolingProfile(mode="air"))
     with pytest.raises(ValueError):
         model.estimate(value)
 
 
 def test_finite_input_cannot_produce_infinite_facility_power():
-    model = BasicExamplePowerModel(cooling=CoolingProfile(mode="air"))
+    model = ExamplePowerModel(cooling=CoolingProfile(mode="air"))
     with pytest.raises(ValueError):
         model.estimate(1e308)
 
@@ -287,9 +287,9 @@ def test_workload_requires_a_supported_name(value):
         advanced(workload_state=value)
 
 
-def test_basic_example_model_rejects_offloading_workload_without_a_memory_inventory():
+def test_example_model_rejects_offloading_workload_without_a_memory_inventory():
     with pytest.raises(ValidationError, match="CPU offloading requires"):
-        BasicExamplePowerModel(
+        ExamplePowerModel(
             cooling=CoolingProfile(mode="air"), workload_state="agentic-cpu-offloading"
         )
 
@@ -317,7 +317,7 @@ def test_system_quantities_scale_nonlinear_fans_but_not_shared_networking(
 
 
 def test_mixed_chassis_and_rack_use_their_actual_gpu_counts():
-    model = AdvancedAllInPowerModel(
+    model = OSSAllinPowerModel(
         cooling=CoolingProfile(mode="liquid"),
         cluster=Cluster(
             systems=(SystemGroup(system=hgx()), SystemGroup(system=GB200NVL72RackScaleSystem())),
@@ -350,7 +350,7 @@ def test_cooling_only_changes_facility_accounting():
 
 
 def test_zero_gpu_input_preserves_advanced_overhead_and_gpu_count():
-    assert BasicExamplePowerModel(cooling=CoolingProfile(mode="air")).estimate(0) == 0
+    assert ExamplePowerModel(cooling=CoolingProfile(mode="air")).estimate(0) == 0
     result = advanced().estimate_breakdown(0)
     assert result.gpu_count == 8
     assert result.it_power_w == pytest.approx(1695.430649885949)

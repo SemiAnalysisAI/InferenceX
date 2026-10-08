@@ -1,6 +1,6 @@
 # Agent Operations Reference
 
-Detailed operational reference moved out of `AGENTS.md` to keep the default agent context small. Read only the section relevant to the current task.
+Read only the section relevant to the current task.
 
 ## Translation terminology
 
@@ -26,28 +26,9 @@ Write natural technical Chinese used by ML infrastructure engineers. Preserve mo
 
 ## Sweep labels and reuse
 
-A PR sweep requires exactly one primary label:
+Primary labels, modifiers, canary, fail-fast, and the fork dispatch path are owned by [PR primary and modifier labels](../inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels) and [canary and fail-fast semantics](../inferencex-e2e/docs/ci-procedures.md#canary-and-fail-fast-semantics). Apply exactly one primary label, normally `full-sweep-fail-fast`.
 
-- `full-sweep-fail-fast`: canary-gated full sweep with matrix-scoped fail-fast. Recommended for image bumps, recipe changes, bring-up, and other full sweeps.
-- `full-sweep-enabled`: canary-gated full sweep without fail-fast. Use when a flaky job must not cancel its matrix's in-flight work.
-- `non-canary-full-sweep-enabled`: full sweep without canary or fail-fast. Use when both canary gating and fail-fast are unsuitable.
-
-`run-sweep.yml` sweeps run only on same-repository PRs that change `inferencex-e2e/perf-changelog.yaml`; the matrix comes from the appended entries. More than one primary label fails `check-changelog`, and modifiers alone start no GPU sweep (`check-changelog` still runs). Adding or removing any primary or modifier label cancels the in-progress sweep; a new one starts only while a primary label remains.
-
-Fork PRs run no `run-sweep.yml` jobs, not even changelog validation. A maintainer with `write`, `maintain`, or `admin` permission applies one primary label to an open, non-draft, conflict-free PR, and `.github/workflows/trusted-external-sweep.yml` dispatches `e2e-tests.yml` for that exact head SHA. That path runs no canary for any label, and only `full-sweep-fail-fast` sets fail-fast. Remove and re-add the primary label after each push to approve the new head.
-
-The canary is the lowest-concurrency non-eval single-node `1k1k`, `8k1k`, or AgentX entry, or a multi-node AgentX entry when there is no single-node candidate. If it fails, every other matrix is skipped. A sweep with only multi-node fixed-sequence or eval entries has no canary, so every matrix fans out at once and fail-fast is the only guard. No label trims concurrency; for a lowest-concurrency smoke run, dispatch `e2e-tests.yml` with `trim-conc: true`.
-
-Modifiers:
-
-- `all-evals` expands eval selection to every generated fixed-sequence configuration without suppressing throughput. It remains reuse-eligible; artifact reuse does not require a current sweep label.
-- `evals-only` suppresses throughput. Combining it with `all-evals` runs every eval and no throughput. Reuse is rejected while the PR carries it.
-- `agentx-fast` uses one deterministic warmup request per lane and a 20-minute AgentX profile. It does not affect fixed-sequence or eval jobs. Reuse is rejected while the PR carries it.
-- `all-evals` and `evals-only` fail `check-changelog` when the changelog additions include `append-only: true` or `no-evals: true` entries.
-
-Fail-fast is matrix-scoped: one matrix failure does not cancel other matrices, and completed results remain valid. The failed job remains red.
-
-Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, follow `inferencex-e2e/docs/KLAUD_DEBUG.md` section 1.1: merge `origin/main`, restore the file byte-for-byte from `origin/main`, then append only the PR's entry at the tail. Never 3-way merge the changelog.
+Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, run `python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict` while the conflict stages are present, as in [changelog conflict recovery](../inferencex-e2e/docs/ci-procedures.md#changelog-conflict-recovery). It keeps main's bytes and re-appends only the PR's entry. Never hand-merge, 3-way merge, or reformat the changelog.
 
 Pushes to `main` never run a sweep: `.github/workflows/run-sweep.yml` is PR-only. A push that changes `inferencex-e2e/perf-changelog.yaml` runs `.github/workflows/merge-ingest.yml` (Merge Ingest). Its single `ingest` job validates the merged PR's authorized `/use <run_id>` (or legacy `/reuse-sweep-run`) command and source run, then dispatches ingest of that reused PR sweep. Without valid reuse authorization the run fails, and nothing is benchmarked or ingested. `[skip-sweep]` only skips PR benchmark setup; changelog validation and reuse authorization checks still run, and Merge Ingest ignores it.
 
@@ -67,7 +48,7 @@ gh api -X POST \
   -f 'inputs[duration-override]='
 ```
 
-The top-level `ref` selects the workflow definition and is normally `main`. `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]` with paths relative to the selected checkout's `inferencex-e2e/` directory. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid fixed-sequence power telemetry fatal.
+The top-level `ref` selects the workflow definition and is normally `main`. `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]` with paths relative to the selected checkout's `inferencex-e2e/` directory. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid multi-node power telemetry fatal.
 
 For AgentX preflight, add `-F 'inputs[agentx-fast]=true'`. Official runs use 10 warmup requests per lane and a one-hour profile.
 
@@ -83,27 +64,19 @@ The dispatch POST returns no body or run ID.
 
 ## Evaluation selection
 
-Full details live in `inferencex-e2e/infx/evals/EVALS.md`.
-
-`mark_eval_entries()` in `inferencex-e2e/infx/matrix/generate.py` selects evals, which default to the 8k1k subset plus AgentX GSM8K for every model, and run separately from throughput with `EVAL_ONLY=true`. Single-node AgentX GSM8K runs at the highest concurrency of each model/runner/framework/precision/spec-decoding/dp-attn/image group and uses the same `thresholds.yaml` floors as 8k1k. Kimi K3 and MiniMax M3 also run their vendor suites at every point, with GSM8K as an extra eval-only row.
-
-- `--no-evals`: skip evals.
-- `--evals-only`: run the default selected eval subset and suppress throughput.
-- `--all-evals`: expand selection to every generated fixed-sequence configuration. In `infx.matrix.generate`, it is eval-only even without `--evals-only`; in `infx.matrix.plan` (the PR label path), it only expands selection and composes with `--evals-only`.
-
-For multi-node configurations, `--all-evals` creates one eval job per engine topology and runs every distinct `conc-list` value sequentially against that engine. Changelog `all-evals: true` suppresses throughput for that entry. The PR `all-evals` label expands selection only, while the `evals-only` label suppresses throughput. `inferencex-e2e/infx/results/collect_eval_results.py` produces aggregated output.
+Eval selection, the `--no-evals` / `--evals-only` / `--all-evals` flags, and changelog eval fields are owned by `inferencex-e2e/infx/evals/EVALS.md`.
 
 ## Power telemetry
 
-Single-node fixed-sequence results may include `power_valid`, `avg_power_w`, `avg_total_gpu_power_w`, `total_gpu_energy_j`, and joules per query/input/output/total token. Invalid telemetry records `power_valid: 0` without energy metrics and fails only with `REQUIRE_POWER=1`.
+Multinode srt-slurm results may include `power_valid`, `avg_power_w`, `avg_total_gpu_power_w`, `total_gpu_energy_j`, and joules per query/input/output/total token. Invalid telemetry records `power_valid: 0` without energy metrics and fails only with `REQUIRE_POWER=1`. Single-node results carry no power fields until srt-slurm telemetry covers those lanes.
 
 Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j`, `prefill_avg_power_w`, `decode_avg_power_w`, `prefill_joules_per_input_token`, and `decode_joules_per_output_token`. Role energy covers the full formal benchmark window, not kernel-level phases, and the role watts are that energy divided by the same window and by the role's GPU count.
 
-Every power result — valid or invalid, single-node or multinode — carries `power_metric_schema_version`. Version 2 defines each unprefixed `joules_per_*` field as whole-deployment GPU-board energy over the named denominator; role-scoped energy uses the explicit `prefill_*` / `decode_*` keys. Rows without the field predate the whole-deployment switch and their unprefixed joules are not comparable across topologies.
+Every power result, valid or invalid, carries `power_metric_schema_version`. Version 2 defines each unprefixed `joules_per_*` field as whole-deployment GPU-board energy over the named denominator; role-scoped energy uses the explicit `prefill_*` / `decode_*` keys. Rows without the field predate the whole-deployment switch and their unprefixed joules are not comparable across topologies.
 
 For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for every srt-slurm job, including TileRT. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
 
-Power audit artifacts are named `power_audit_<result>` and contain `power_validation_<result>.json` for single-node runs or `power_validation_<result>_*.json` for multinode runs. They are uploaded even when validation fails.
+Power audit artifacts are named `power_audit_<result>` and contain the multinode `power_validation_<result>_*.json` sidecars. They are uploaded even when validation fails.
 
 ## Result artifacts and metrics
 
