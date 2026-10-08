@@ -15,7 +15,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="infx")
     commands = parser.add_subparsers(dest="command", required=True)
     generate = commands.add_parser(
-        "generate", help="Write the bound fixed-sequence srt-slurm recipes of master-config points"
+        "generate", help="Write the bound srt-slurm recipes of master-config points"
     )
     generate.add_argument(
         "--config-key", action="append", required=True, help="master-config key or glob; repeatable"

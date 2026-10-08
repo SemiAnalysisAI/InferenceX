@@ -22,11 +22,12 @@ from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
-    from infx.clusters.slurm import SlurmSettings
+    from infx.clusters.slurm import SlurmSettings, SrtSlurmSettings
     from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.power import PowerDecision
     from infx.launch.drivers.srt.run import SrtRun
+    from infx.launch.request import SrtRequest
 
 NGINX_IMAGE = "nginx:1.27.4"
 DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
@@ -184,11 +185,12 @@ def create_volume_mounts(run: SrtRun) -> None:
         _create_dir(volume_path(run.cluster, name))
 
 
-def _lane_volumes(run: SrtRun, lane: SrtLane) -> list[tuple[str, str | None, bool]]:
+def _lane_volumes(
+    srt: SrtSlurmSettings, lane: SrtLane, request: SrtRequest
+) -> list[tuple[str, str | None, bool]]:
     """(volume, container target, world-writable) of each volume a multi-node job adds."""
-    request = run.request
     volumes = (
-        [(name, target, True) for name, target in run.srt.agentic_volume_mounts.items()]
+        [(name, target, True) for name, target in srt.agentic_volume_mounts.items()]
         if request.is_agentic
         else []
     )
@@ -199,7 +201,7 @@ def _lane_volumes(run: SrtRun, lane: SrtLane) -> list[tuple[str, str | None, boo
 def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
     """The (host, container) mounts a multi-node job adds for this request; hosts are created."""
     mounts: list[tuple[str, str]] = []
-    for volume, target, world_writable in _lane_volumes(run, lane):
+    for volume, target, world_writable in _lane_volumes(run.srt, lane, run.request):
         host = volume_path(run.cluster, volume)
         _create_dir(host, world_writable=world_writable)
         mounts.append((str(host), target or str(host)))
@@ -216,11 +218,13 @@ _CLIENT_CACHES = {
 }
 
 
-def agentic_client_env(run: SrtRun, lane: SrtLane) -> dict[str, str]:
+def agentic_client_env(
+    cluster: Cluster, srt: SrtSlurmSettings, lane: SrtLane, request: SrtRequest
+) -> dict[str, str]:
     """The result and cache paths a multi-node AgentX job hands its benchmark client."""
-    targets = dict(run.srt.volume_mounts)
-    for volume, target, _ in _lane_volumes(run, lane):
-        targets[volume] = target or str(volume_path(run.cluster, volume))
+    targets = dict(srt.volume_mounts)
+    for volume, target, _ in _lane_volumes(srt, lane, request):
+        targets[volume] = target or str(volume_path(cluster, volume))
     env = {"RESULT_DIR": lane.agentic_result_dir}
     for name, (volumes, unmounted) in _CLIENT_CACHES.items():
         env[name] = next((targets[volume] for volume in volumes if volume in targets), unmounted)
