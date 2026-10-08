@@ -18,10 +18,11 @@ from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
 @pytest.fixture
 def point(tmp_path, monkeypatch):
-    """A fixed-sequence fragment, the point binding its first variant, and the shared block."""
-    shared = tmp_path / "configs/srt-recipes/fixed-sequence-single.yaml"
-    shared.parent.mkdir(parents=True)
-    shared.write_text(yaml.safe_dump({"benchmark": {"type": "custom", "command": "bash client.sh"}}))
+    """A fixed-sequence fragment, the point binding its first variant, and the shared blocks."""
+    for workload, client in (("fixed-sequence", "client.sh"), ("agentic", "srt_agentic.sh")):
+        shared = tmp_path / f"configs/srt-recipes/{workload}-single.yaml"
+        shared.parent.mkdir(parents=True, exist_ok=True)
+        shared.write_text(yaml.safe_dump({"benchmark": {"type": "custom", "command": f"bash {client}"}}))
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
     recipe = {
         "engine": "sglang",
@@ -76,17 +77,19 @@ def test_mismatched_point_fails_before_submission(point, field, value, message):
         runtime_arguments(f"{path}:base", {**env, field: value})
 
 
-def test_agentx_recipes_are_validated_as_written(point):
+def test_agentx_fragments_are_composed_and_bound_to_the_point(point):
     path, recipe, env = point
-    complete = {
-        **recipe, "model": {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"},
-        "benchmark": {"type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "test/model"}},
-    }  # fmt: skip
-    path.write_text(yaml.safe_dump({"base": complete}))
-    agentic = {**env, "IS_AGENTIC": "1"}
-    assert select_recipe(f"{path}:base", agentic) == (f"{path}:base", complete)
-    with pytest.raises(ValueError, match="image"):
-        select_recipe(f"{path}:base", {**agentic, "IMAGE": "other:tag"})
+    path.write_text(yaml.safe_dump({"base": recipe, "override_c2": {"benchmark": {"env": {"CONC": "2"}}}}))
+    agentic = {**env, "IS_AGENTIC": "1", "IMAGE": "other:tag"}
+    selected, bound = select_recipe(str(path), agentic)
+    assert selected == f"{path}:override_c2"
+    assert bound["model"] == {"path": "hf:test/model", "container": "other:tag", "precision": "fp8"}
+    assert bound["benchmark"] == {
+        "type": "custom", "command": "bash srt_agentic.sh", "env": {"CONC": "2", "MODEL": "test/model"},
+    }
+    path.write_text(yaml.safe_dump({"base": {**recipe, "model": {"container": "stale:tag"}}}))
+    with pytest.raises(ValueError, match=r"remove base\.model\.container"):
+        select_recipe(f"{path}:base", agentic)
 
 
 def test_ambiguous_native_variants_are_rejected(point):

@@ -9,10 +9,6 @@
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
-  model:
-    path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -69,10 +65,7 @@ base:
         VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: moonshotai/Kimi-K3
       # Long agentic turns against a 1M context are prefill-bound on the server.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
