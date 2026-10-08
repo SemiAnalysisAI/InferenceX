@@ -17,7 +17,7 @@ refine it; do not manufacture a smooth curve or call an isolated noisy win a thr
 | --- | --- | --- | --- | --- |
 | `none` | 80 GiB/GPU | 0 | 0 | HBM prefix cache |
 | `dram` | 80 GiB/GPU | 739 GB/node | 0 | SimpleCPU, lazy |
-| `nvme` | 80 GiB/GPU | No resident KV cache; transfer buffers remain | 2 TiB/node (current capacity probe) | SimpleCPU disk, lazy, direct I/O |
+| `nvme` | 80 GiB/GPU | No resident KV cache; transfer buffers remain | 4 TiB/node (replication control) | SimpleCPU disk, lazy, direct I/O |
 | `dram-nvme` | 80 GiB/GPU | 739 GB/node | 2 TiB stop guard | Native tiered CPU + filesystem |
 
 The host budget is the actual fresh-main generator output at `dram-utilization:
@@ -68,6 +68,9 @@ tok/s/GPU and 11,495.896 J/successful query, respectively 1.667% below and
 2.915% above the single 4 TiB run. This repeated direction is local evidence;
 the 4 TiB cohort still needs a repeat to estimate run variation before any
 capacity effect can be claimed.
+The next control therefore repeats 4 TiB NVMe-only at c488 with the same
+protocol and extended execution envelope. This changes only the bounded disk
+capacity; the 2 TiB results and prior 4 TiB run remain distinct cohorts.
 
 The connector preallocates its configured disk files, so concurrency does not
 determine disk footprint: admission now requires 2,199,023,255,552 bytes plus

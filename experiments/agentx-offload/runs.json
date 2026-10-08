@@ -6234,21 +6234,22 @@
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639",
-  "status": "Two valid 2 TiB c488 capacity results documented; compare with single 4 TiB c488 as local cross-capacity evidence before next adaptive control.",
+  "status": "Two valid 2 TiB c488 runs documented; 4 TiB c488 replication prepared after fresh zero-queued B200 inventory.",
   "last_capacity_check": {
-    "checked_at": "2026-10-07T18:21:58Z",
+    "checked_at": "2026-10-08T02:51:13Z",
     "active_study_run_ids": [],
     "pending_study_run_ids": [],
     "dispatch_allowed": true,
     "b200_priority_jobs_queued": 0,
     "b200_priority_jobs_in_progress": 0,
     "b200_active_or_queued_run_ids": [],
-    "reason": "Fresh cluster-wide queued/in-progress job-label inventory before exact-config 2 TiB c488 replication."
+    "reason": "Fresh repository-wide queued/in-progress workflow job-label inventory before 4 TiB c488 replication; all 12 active-or-queued workflows inspected, no cluster:b200-nscale jobs."
   },
   "next_dispatch": {
-    "arm": null,
-    "concurrency": null,
-    "requires": "Do not dispatch while 2 TiB NVMe c488 replication 37666309639 is active or queued. Verify generated job cluster:b200-nscale and nodes:1, and on allocation im-b200-c001, >2,336,462,209,024 free bytes, O_DIRECT, exact task-owned scratch. Then canonical warmup, full profile, strict power validation, artifacts, exact host cleanup and temporary download deletion."
+    "arm": "nvme",
+    "concurrency": 488,
+    "capacity_bytes_per_node": 4398046511104,
+    "requires": "Replicate prior 4 TiB NVMe-only c488 with 510/530-minute envelope, same pinned image and canonical protocol. Require no queued B200 jobs, no active study workflow, allowlisted im-b200-c001, >4,535,485,464,576 free bytes and O_DIRECT before exact task-owned scratch creation. Dispatch at most one NVMe-bearing workflow."
   },
   "dispatch_policy": {
     "updated_at": "2026-09-21T05:30:00Z",

@@ -119,7 +119,7 @@ def test_capacity_guard_targets_workload_descendants_before_parent(
 def test_study_uses_one_expanded_nvme_run_at_a_time():
     study = json.loads((Path(__file__).parent / "study.json").read_text())
 
-    assert study["nvme_bytes_per_node"] == 2 * 2**40
+    assert study["nvme_bytes_per_node"] == 4 * 2**40
     assert study["max_concurrent_nvme_bearing_runs"] == 1
     assert study["nvme_node_allowlist"] == ["im-b200-c001"]
     assert study["expanded_nvme_probe_concurrency"] == [256, 320, 384, 448, 480, 488, 489, 490, 492, 496, 512]

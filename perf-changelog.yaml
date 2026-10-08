@@ -8165,3 +8165,12 @@
     - "Probe the AgentX cache-capacity boundary at c488 by reducing only the branch-only NVMe SimpleCPU disk budget from 4 TiB to 2 TiB. Keep the model image digest, B200 TP4 topology, 80 GiB/GPU HBM budget, AgentX corpus, canonical warmup, connector implementation and 3,600-second profile unchanged. Treat the earlier 4 TiB NVMe and HBM-only c488 results as local controls, not capacity-matched repeats. Require 2 TiB plus 128 GiB free before task-owned scratch creation and retain the one-NVMe-workflow guard."
     - "在 c488 探测 AgentX 缓存容量边界，仅把此实验分支的 NVMe SimpleCPU disk 预算从 4 TiB 降至 2 TiB。模型镜像 digest、B200 TP4 拓扑、每 GPU 80 GiB HBM 预算、AgentX 语料、规范 warmup、连接器实现及 3,600 秒 profiling 均保持不变。此前 4 TiB NVMe 与 HBM-only c488 结果只能作为局部对照，不能当作容量匹配的重复测量。创建任务专属 scratch 前要求 2 TiB 容量另加 128 GiB 空闲空间，并保留同一时刻仅运行一个 NVMe 工作流的限制。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replicate the 4 TiB NVMe-only c488 AgentX capacity control after two valid 2 TiB c488 runs showed lower throughput and higher energy per successful query than the single prior 4 TiB run. Restore only the branch-only bounded SimpleCPU disk budget from 2 TiB to 4 TiB; preserve the pinned image, B200 TP4 topology, zero host DRAM, connector settings, AgentX corpus, canonical warmup, 3,600-second profile, and 510/530-minute execution envelope. Require 4 TiB plus 128 GiB free before exact task-owned scratch creation and retain the one-NVMe-workflow guard. This replication estimates run variation before attributing the difference to capacity."
+    - "两次有效的 2 TiB c488 运行相对单次 4 TiB 运行表现为较低吞吐量和较高的每成功请求能耗，因此重复 4 TiB NVMe-only c488 AgentX 容量对照。仅将实验分支中有界 SimpleCPU disk 预算从 2 TiB 恢复为 4 TiB；固定镜像、B200 TP4、零宿主机 DRAM、连接器设置、AgentX 语料、规范 warmup、3,600 秒 profiling 和 510/530 分钟运行时间范围均保持不变。创建精确任务专属 scratch 前要求 4 TiB 容量另加 128 GiB 空闲空间，并保留同一时刻仅运行一个 NVMe 工作流的限制。此次重复用于在归因容量效应前估计运行间波动。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiment/agentx-b200-offload
