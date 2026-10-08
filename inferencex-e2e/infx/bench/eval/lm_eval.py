@@ -16,7 +16,7 @@ from infx.bench.eval.context import EvalContext, EvalOutcome
 
 REPOSITORY = "https://github.com/EleutherAI/lm-evaluation-harness"
 REF = "b315ef3b05176acc9732bb7fdec116abe1ecc476"  # installed over the lm-eval[api] release
-DEFAULT_TASKS = "infx/evals/lm_eval_tasks/cruxeval_input.yaml"
+DEFAULT_TASKS = "infx/evals/lm_eval_tasks/cruxeval_output.yaml infx/evals/lm_eval_tasks/cruxeval_input.yaml"
 PATCH = "infx/evals/patches/lm_eval_sitecustomize.py"
 FALLBACK_CONTEXT = 16384
 PROMPT_RESERVE = 4096
@@ -112,12 +112,14 @@ def task_args(task: str) -> list[str]:
     A task that executes model output declares ``unsafe_code: true`` and runs only
     with ``--confirm_run_unsafe_code``.
     """
-    args = ["--tasks", task]
-    path = proc.REPO_ROOT / task
-    if path.suffix not in (".yaml", ".yml") or not path.is_file():
+    # Throwaway: several space-separated task YAMLs from one directory in one run.
+    names = task.split()
+    args = ["--tasks", *names]
+    paths = [proc.REPO_ROOT / name for name in names]
+    if any(p.suffix not in (".yaml", ".yml") or not p.is_file() for p in paths):
         return args
-    args = ["--include_path", str(Path(task).parent), *args]
-    if _UNSAFE_CODE.search(path.read_text()):
+    args = ["--include_path", str(Path(names[0]).parent), *args]
+    if any(_UNSAFE_CODE.search(p.read_text()) for p in paths):
         args.append("--confirm_run_unsafe_code")
     return args
 
