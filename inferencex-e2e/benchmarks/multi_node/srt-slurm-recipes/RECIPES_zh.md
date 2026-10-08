@@ -72,13 +72,15 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 
 引用替换为整数；作为环境变量值或参数列表项（例如 `--l1-size-gb` 之后的一项）时替换为十进制字符串；也可以作为 JSON 对象字符串（例如 `kv-transfer-config`）中的完整取值。按 rank 分配的内存池使用 `per-gpu` 取值：SGLang `hicache-size`、LMCache `LMCACHE_MAX_LOCAL_CPU_SIZE`、vLLM SimpleCPU `cpu_bytes_to_use_per_rank`、TRT-LLM `host_cache_size`，以及以字节表示的 Mooncake `global_segment_size`（Mooncake 将 `GB` 视为 GiB）。没有 DRAM 预算的测试点遇到任何引用都会失败，未知名称和嵌在更长字符串中的引用同样失败。SimpleCPU、LMCache CPU 和 `--l1-size-gb` 的大小必须使用引用；实测得到的 HiCache、TRT-LLM 主机缓存或 Mooncake 段大小只要不超过节点份额，可以保留字面值。若后端从预算中分配多个内存池（例如混合模型的 HiCache KV 池和 Mamba 池），由主配置的 `dram-utilization` 确定其中一个池的大小。
 
+配置不硬编码集群硬件信息：配置中任意位置的 `'@fabric.<name>'` 值在绑定后替换为作业所在集群的 `srt-slurm.fabric` 字段（列表以逗号连接；字段见 [CONFIGS.md](../../../configs/CONFIGS.md#runners)）。schema 未定义的名称、嵌在更长字符串中的引用，或集群未设置的字段，都会在提交前失败；生成矩阵时，若某行选中的变体所引用的字段在其运行器标签可达的任一集群上未设置，也已失败。启动前不会解析引用：配置指纹按原样对引用计算哈希，因此与集群无关。配置有意选择的值（例如重新排列的 rail 顺序或设备子集）保持字面值。
+
 无需集群即可查看启动器实际提交的内容：
 
 ```bash
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-该命令为每个定长序列或 AgentX 测试点写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`）、AgentX 客户端路径，以及 DRAM 预算所覆盖的每节点 GPU 数。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
+该命令为每个定长序列或 AgentX 测试点写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`）、AgentX 客户端路径，以及 DRAM 预算所覆盖的每节点 GPU 数。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。fabric 引用取该集群的值；标签跨多个集群时保持引用原样。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
 ## 配置指纹
 
