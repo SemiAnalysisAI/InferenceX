@@ -8,3 +8,6 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
+| `508-discovery-connector-templates.patch` | [#508](https://github.com/NVIDIA/srt-slurm/pull/508) (`3027f20ab30910f809b44c74c075afd83c70dc8e`) | Bind allocated discovery endpoints inside explicit connector templates without replacing sibling connectors. |
+
+The CPU suite applies the carried patches to a temporary clone of the current submodule and runs the upstream discovery-template command-rendering regressions against that checkout.

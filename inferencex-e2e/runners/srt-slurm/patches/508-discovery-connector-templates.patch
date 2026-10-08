@@ -1,0 +1,366 @@
+diff --git a/docs/vllm-router.md b/docs/vllm-router.md
+index 30b16625..aebe134a 100644
+--- a/docs/vllm-router.md
++++ b/docs/vllm-router.md
+@@ -182,6 +182,50 @@ Readiness is the Router's `/health`: it answers 503 `Waiting for discovered work
+ 
+ Rules the recipe must satisfy: both `prefill` and `decode` run the connector (an engine-wide `connector: moriio`, or the same value in both roles' `args`), the topology is prefill/decode, `frontend.enable_multiple_frontends` is `false`, and `frontend.orchestrator_placement` is `head`. `srtctl dry-run` rejects anything else, and any other `frontend.type` with this connector. Upstream key names are those `moriio_common.py` reads (vllm-project/vllm 9679173788). `examples/vllm/vllm-router-moriio-disagg.yaml` is the reference recipe.
+ 
++### Discovery templates and CPU offload
++
++Keep `engine.connector: moriio` to select discovery and allocate listeners.
++`roles.<role>.args.kv-transfer-config` (or `kv_transfer_config`) may supply a JSON
++object or JSON string containing exactly one `MoRIIOConnector`, directly or inside
++a connector chain. Supplying both argument spellings is rejected.
++The renderer preserves failure policies, transport options and sibling connectors,
++and fills the discovery child's role and topology fields. Explicit roles or binding
++values that conflict with the allocated topology are rejected when the worker command
++is built. Matching port values may be integers or decimal strings; rendered ports use
++the allocator's string values.
++Do not hard-code worker addresses or listener ports in a reusable recipe.
++
++For example, a prefill template can combine RDMA READ with CPU offload:
++
++```yaml
++engine:
++  type: vllm
++  connector: moriio
++roles:
++  prefill:
++    args:
++      kv-transfer-config:
++        kv_connector: MultiConnector
++        kv_role: kv_both
++        kv_load_failure_policy: fail
++        kv_connector_extra_config:
++          connectors:
++            - kv_connector: MoRIIOConnector
++              kv_role: kv_producer
++              kv_load_failure_policy: fail
++              kv_connector_extra_config:
++                backend: rdma
++                qp_per_transfer: 8
++            - kv_connector: SimpleCPUOffloadConnector
++              kv_role: kv_both
++              kv_connector_extra_config:
++                cpu_bytes_to_use: 1073741824
++                lazy_offload: false
++```
++
++The pinned vLLM image must support the supplied connectors and their fields.
++Apply this template to the prefill role of `examples/vllm/vllm-router-moriio-disagg.yaml`, the existing colocated discovery recipe. As with all discovery recipes, listener blocks remain allocator-owned.
++
+ ## Multiple Router processes
+ 
+ With `enable_multiple_frontends: true`, srtctl starts nginx on the public port
+diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
+index ecf0be3c..7dc2fb25 100644
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -452,7 +452,9 @@ class VLLMBackend(Backend):
+         """``--kv-transfer-config`` JSON for a worker mode, or None when the mode has no connector.
+ 
+         Table connectors expand to their preset for the mode; a raw JSON string
+-        from the recipe passes through unchanged. A discovery connector also needs
++        in ``connector`` passes through unchanged. A discovery connector uses an
++        explicit ``kv-transfer-config`` as a template, binding its unique matching
++        child without modifying the recipe or sibling connectors. It also needs
+         the realized topology (``process`` and ``runtime``) for its
+         ``kv_connector_extra_config``: the router's address and discovery port,
+         this worker's HTTP port and routable IP, and the handshake and notify
+@@ -469,8 +471,49 @@ class VLLMBackend(Backend):
+                 f"connector {connector!r} registers workers with the vLLM Router and needs the worker topology; "
+                 "it is only available with frontend.type: vllm-router"
+             )
+-        payload = row.transfer_config(mode)
+-        payload["kv_connector_extra_config"] = self._discovery_extra_config(process, runtime)
++        config = self.get_config_for_mode(mode)
++        if "kv-transfer-config" in config and "kv_transfer_config" in config:
++            raise ValueError("discovery template must not set both kv-transfer-config and kv_transfer_config")
++        template = config.get("kv-transfer-config", config.get("kv_transfer_config"))
++        if template is None:
++            payload = row.transfer_config(mode)
++        elif isinstance(template, str):
++            payload = json.loads(template)
++        else:
++            # Copy JSON objects so binding one worker cannot mutate another's template.
++            payload = json.loads(json.dumps(template))
++        targets: list[dict[str, Any]] = []
++
++        def visit(node: Any) -> None:
++            if not isinstance(node, dict):
++                raise TypeError("discovery kv-transfer-config and its connectors must be JSON objects")
++            if node.get("kv_connector") == row.kv_connector:
++                targets.append(node)
++            extra = node.get("kv_connector_extra_config", {})
++            if not isinstance(extra, dict):
++                raise TypeError("kv_connector_extra_config must be a JSON object")
++            children = extra.get("connectors", [])
++            if not isinstance(children, list):
++                raise TypeError("connectors must be a list")
++            for child in children:
++                visit(child)
++
++        visit(payload)
++        if len(targets) != 1:
++            raise ValueError(f"discovery kv-transfer-config requires exactly one {row.kv_connector}")
++        target = targets[0]
++        expected_role = row.transfer_config(mode)["kv_role"]
++        if target.get("kv_role", expected_role) != expected_role:
++            raise ValueError(f"discovery kv_role must be {expected_role} for {mode}")
++        target["kv_role"] = expected_role
++        extra = target.setdefault("kv_connector_extra_config", {})
++        for key, value in self._discovery_extra_config(process, runtime).items():
++            configured = extra.get(key, value)
++            if key.endswith("_port") and type(configured) is int:
++                configured = str(configured)
++            if configured != value:
++                raise ValueError(f"discovery {key} conflicts with the allocated worker topology")
++            extra[key] = value
+         return json.dumps(payload)
+ 
+     def _discovery_extra_config(self, process: Process, runtime: RuntimeContext) -> dict[str, Any]:
+@@ -1167,7 +1210,14 @@ class VLLMBackend(Backend):
+             if mode in {"prefill", "decode"} or role_connector is not None:
+                 kv_transfer_config = self.kv_transfer_config(mode, process, runtime)
+                 if kv_transfer_config is not None:
+-                    config.setdefault("kv-transfer-config", kv_transfer_config)
++                    row = self.kv_connector_for_mode(mode)
++                    if row is not None and row.discovery:
++                        # The resolver preserves explicit templates and binds their
++                        # discovery child to this worker's allocated addresses/ports.
++                        config.pop("kv_transfer_config", None)
++                        config["kv-transfer-config"] = kv_transfer_config
++                    else:
++                        config.setdefault("kv-transfer-config", kv_transfer_config)
+ 
+             node_rank = endpoint_nodes.index(process.node)
+             # The worker that is itself the public endpoint may run the alternate
+diff --git a/tests/test_discovery_connector_templates.py b/tests/test_discovery_connector_templates.py
+new file mode 100644
+index 00000000..f6312c15
+--- /dev/null
++++ b/tests/test_discovery_connector_templates.py
+@@ -0,0 +1,222 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++"""Render real worker commands for discovery connectors with CPU offload."""
++
++import copy
++import json
++from pathlib import Path
++from types import SimpleNamespace
++from typing import Any
++from unittest.mock import patch
++
++import pytest
++
++from srtctl.backends import VLLMBackend
++from srtctl.backends.vllm import WorkerMode
++from srtctl.core.schema import RoleConfig
++from srtctl.core.topology import Process
++
++
++def _template() -> dict[str, Any]:
++    return {
++        "kv_connector": "MultiConnector",
++        "kv_role": "kv_both",
++        "kv_load_failure_policy": "fail",
++        "kv_connector_extra_config": {
++            "connectors": [
++                {
++                    "kv_connector": "MoRIIOConnector",
++                    "kv_role": "kv_producer",
++                    "kv_load_failure_policy": "fail",
++                    "kv_connector_extra_config": {"qp_per_transfer": 8, "backend": "rdma"},
++                },
++                {
++                    "kv_connector": "SimpleCPUOffloadConnector",
++                    "kv_role": "kv_both",
++                    "kv_connector_extra_config": {"cpu_bytes_to_use": 1024, "lazy_offload": False},
++                },
++            ]
++        },
++    }
++
++
++def _command(
++    template: Any,
++    mode: WorkerMode = "prefill",
++    connector: str = "moriio",
++    *,
++    key: str = "kv-transfer-config",
++    extra_args: dict[str, Any] | None = None,
++) -> list[str]:
++    backend = VLLMBackend(
++        connector=connector,
++        roles={mode: RoleConfig(args={"tensor-parallel-size": 2, key: template, **(extra_args or {})})},
++    )
++    process = Process(
++        "node1",
++        frozenset({0, 1}),
++        7500,
++        6101,
++        mode,
++        0,
++        moriio_handshake_port=26008,
++        moriio_notify_port=27008,
++    )
++    runtime = SimpleNamespace(
++        model_path=Path("/weights"),
++        is_hf_model=False,
++        frontend_port=8000,
++        network_interface="rdma-test",
++        request_plane="nats",
++        head_node_ip="10.0.0.1",
++    )
++    with patch("srtctl.core.slurm.get_hostname_ip", return_value="10.0.0.2"):
++        return backend.build_worker_command(process, [process], runtime, frontend_type="vllm-router")
++
++
++@pytest.mark.parametrize("encoded", [False, True])
++@pytest.mark.parametrize("key", ["kv-transfer-config", "kv_transfer_config"])
++def test_offload_template_receives_discovery_topology_without_mutating_input(encoded: bool, key: str) -> None:
++    template = _template()
++    original = copy.deepcopy(template)
++    command = _command(json.dumps(template) if encoded else template, key=key)
++    assert command.count("--kv-transfer-config") == 1
++    result = json.loads(command[command.index("--kv-transfer-config") + 1])
++    mori, cpu = result["kv_connector_extra_config"]["connectors"]
++    assert mori["kv_connector_extra_config"] == {
++        "qp_per_transfer": 8,
++        "backend": "rdma",
++        "read_mode": True,
++        "proxy_ip": "10.0.0.1",
++        "proxy_ping_port": "36367",
++        "host_ip": "10.0.0.2",
++        "http_port": "6101",
++        "handshake_port": "26008",
++        "notify_port": "27008",
++    }
++    assert mori["kv_role"] == "kv_producer"
++    assert result["kv_load_failure_policy"] == mori["kv_load_failure_policy"] == "fail"
++    assert cpu == {
++        "kv_connector": "SimpleCPUOffloadConnector",
++        "kv_role": "kv_both",
++        "kv_connector_extra_config": {"cpu_bytes_to_use": 1024, "lazy_offload": False},
++    }
++    assert template == original
++
++
++@pytest.mark.parametrize("key", ["kv-transfer-config", "kv_transfer_config"])
++def test_direct_consumer_keeps_transfer_options_and_receives_allocated_ports(key: str) -> None:
++    template = {
++        "kv_connector": "MoRIIOConnector",
++        "kv_load_failure_policy": "fail",
++        "kv_connector_extra_config": {"qp_per_transfer": 4},
++    }
++    command = _command(template, "decode", key=key)
++    assert command.count("--kv-transfer-config") == 1
++    result = json.loads(command[command.index("--kv-transfer-config") + 1])
++    assert result["kv_role"] == "kv_consumer"
++    assert result["kv_load_failure_policy"] == "fail"
++    assert result["kv_connector_extra_config"]["qp_per_transfer"] == 4
++    assert result["kv_connector_extra_config"]["notify_port"] == "27008"
++
++
++@pytest.mark.parametrize(
++    "field,value",
++    [
++        ("host_ip", "wrong-host"),
++        ("http_port", "1"),
++        ("http_port", 6102),
++        ("http_port", 6101.0),
++        ("http_port", True),
++        ("read_mode", False),
++    ],
++)
++def test_conflicting_discovery_bindings_fail_before_launch(field: str, value: Any) -> None:
++    template = _template()
++    template["kv_connector_extra_config"]["connectors"][0]["kv_connector_extra_config"][field] = value
++    with pytest.raises(ValueError, match=field):
++        _command(template)
++
++
++@pytest.mark.parametrize("kind", ["missing", "duplicate", "wrong-role", "not-object"])
++def test_ambiguous_or_invalid_discovery_template_fails(kind: str) -> None:
++    template = _template()
++    children = template["kv_connector_extra_config"]["connectors"]
++    if kind == "missing":
++        children.pop(0)
++    elif kind == "duplicate":
++        children.append(copy.deepcopy(children[0]))
++    elif kind == "wrong-role":
++        children[0]["kv_role"] = "kv_consumer"
++    else:
++        template = "[]"
++    with pytest.raises((ValueError, TypeError)):
++        _command(template)
++
++
++def test_nested_template_binds_only_the_discovery_child() -> None:
++    template = {
++        "kv_connector": "MultiConnector",
++        "kv_role": "kv_both",
++        "kv_connector_extra_config": {"connectors": [_template()]},
++    }
++    original = copy.deepcopy(template)
++    command = _command(template)
++    result = json.loads(command[command.index("--kv-transfer-config") + 1])
++    chain = result["kv_connector_extra_config"]["connectors"][0]
++    children = chain["kv_connector_extra_config"]["connectors"]
++    assert children[0]["kv_connector_extra_config"]["http_port"] == "6101"
++    assert children[1] == _template()["kv_connector_extra_config"]["connectors"][1]
++    assert "host_ip" not in result["kv_connector_extra_config"]
++    assert "host_ip" not in chain["kv_connector_extra_config"]
++    assert template == original
++
++
++@pytest.mark.parametrize("integer_ports", [False, True])
++def test_matching_explicit_bindings_are_accepted(integer_ports: bool) -> None:
++    expected = {
++        "proxy_ip": "10.0.0.1",
++        "proxy_ping_port": "36367",
++        "host_ip": "10.0.0.2",
++        "http_port": "6101",
++        "handshake_port": "26008",
++        "notify_port": "27008",
++        "read_mode": True,
++    }
++    extra = dict(expected)
++    if integer_ports:
++        extra.update(proxy_ping_port=36367, http_port=6101, handshake_port=26008, notify_port=27008)
++    template = {"kv_connector": "MoRIIOConnector", "kv_connector_extra_config": extra}
++    original = copy.deepcopy(template)
++    command = _command(template)
++    result = json.loads(command[command.index("--kv-transfer-config") + 1])
++    assert result["kv_connector_extra_config"] == expected
++    assert template == original
++
++
++def test_duplicate_discovery_argument_spellings_are_rejected() -> None:
++    template = _template()
++    with pytest.raises(ValueError, match="both kv-transfer-config and kv_transfer_config"):
++        _command(template, extra_args={"kv_transfer_config": template})
++
++
++@pytest.mark.parametrize(
++    "extra,error",
++    [
++        ([], "kv_connector_extra_config must be a JSON object"),
++        ({"connectors": {}}, "connectors must be a list"),
++        ({"connectors": [None]}, "connectors must be JSON objects"),
++    ],
++)
++def test_malformed_connector_chain_fails(extra: Any, error: str) -> None:
++    template = _template()
++    template["kv_connector_extra_config"] = extra
++    with pytest.raises(TypeError, match=error):
++        _command(template)
++
++
++def test_non_discovery_explicit_config_keeps_existing_precedence() -> None:
++    template = json.dumps({"kv_connector": "CustomConnector", "kv_role": "kv_both"})
++    command = _command(template, connector="nixl")
++    assert command.count("--kv-transfer-config") == 1
++    assert command[command.index("--kv-transfer-config") + 1] == template
