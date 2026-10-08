@@ -17,7 +17,7 @@ model:
 
 dynamo:
   source:
-    pypi: "1.1.0"
+    pypi: "1.6.0.dev20261007"
 
 frontend:
   type: dynamo
@@ -70,7 +70,7 @@ roles:
       enable-dp-attention: true
       enable-dp-lm-head: true
 
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 2048
       mamba-ssm-dtype: "bfloat16"
 
@@ -110,7 +110,6 @@ roles:
       SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
       SGLANG_MOE_NVFP4_DISPATCH: "1"
       SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: "1"
-      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: "1"
       SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: "1"
       FLASHINFER_DISABLE_VERSION_CHECK: "1"
       SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
@@ -144,7 +143,7 @@ roles:
       enable-dp-lm-head: true
       enable-two-batch-overlap: true
 
-      mamba-scheduler-strategy: "no_buffer"
+      mamba-radix-cache-strategy: "no_buffer"
       mamba-track-interval: 128
       mamba-ssm-dtype: "bfloat16"
 
