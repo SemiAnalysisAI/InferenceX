@@ -9417,4 +9417,4 @@
   description:
     - "Tune B200 vLLM AgentX DEP2/DEP4 with prefill-schedule-interval and extended piecewise CUDA graph capture."
     - "Add TP2 c1 and DEP2 c128 host-KV (native CPU offloading) rows."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3837
