@@ -612,7 +612,7 @@ clusters:
         fabric:
           ucx-net-devices: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1, mlx5_4:1, mlx5_5:1, mlx5_10:1,
                             mlx5_11:1]
-          ib-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3, mlx5_4, mlx5_5, mlx5_10, mlx5_11]
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3, mlx5_4, mlx5_5, mlx5_10, mlx5_11]
           mooncake-gid-index: 3
         job-tag: b200
         default-time-limit: "4:00:00"
@@ -731,8 +731,7 @@ clusters:
         network-interface: ""
         fabric:
           ucx-net-devices: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
-          nccl-ib-hca: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
-          mooncake-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
           mooncake-gid-index: 3
         job-tag: gb200
         default-time-limit: "6:00:00"
@@ -791,8 +790,7 @@ clusters:
         network-interface: ""
         fabric:
           ucx-net-devices: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
-          nccl-ib-hca: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
-          mooncake-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
         job-tag: gb300
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, v0.5.11, v0.5.13.post1]
@@ -900,8 +898,7 @@ clusters:
       srt-slurm:
         network-interface: eno0
         fabric:
-          ib-devices: [rdma0, rdma1, rdma2, rdma3, rdma4, rdma5, rdma6, rdma7]
-          nccl-ib-hca: [rdma0, rdma1, rdma2, rdma3, rdma4, rdma5, rdma6, rdma7]
+          rdma-devices: [rdma0, rdma1, rdma2, rdma3, rdma4, rdma5, rdma6, rdma7]
           socket-ifname: [eno0]
           mooncake-gid-index: 1
           mori-rdma-tc: 104
@@ -913,7 +910,7 @@ clusters:
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
-            IBDEVICES: '@fabric.ib-devices'
+            IBDEVICES: '@fabric.rdma-devices'
           timeout-s: 1200
           nodes: all
         volume-mounts:

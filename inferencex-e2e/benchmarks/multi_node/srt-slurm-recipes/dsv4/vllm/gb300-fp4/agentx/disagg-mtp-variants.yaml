@@ -42,7 +42,7 @@ base:
           global_segment_size: "180GB"
           local_buffer_size: "4GB"
           protocol: "rdma"
-          device_name: "@fabric.mooncake-devices"
+          device_name: "@fabric.rdma-devices"
           mode: "embedded"
           enable_offload: false
   frontend:
@@ -81,7 +81,7 @@ base:
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
         VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
         VLLM_DSV4_MEGA_FP8_COMBINE: "1"
@@ -137,7 +137,7 @@ base:
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         VLLM_DSV4_MEGA_FP8_COMBINE: "1"
         MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
         MC_STORE_CLIENT_METRIC: "1"

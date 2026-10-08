@@ -11,7 +11,7 @@ environment:
   PYTHONDONTWRITEBYTECODE: "1"
   NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
   GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
-  NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+  NCCL_IB_HCA: "@fabric.rdma-devices"
 roles:
   prefill:
     engine:
