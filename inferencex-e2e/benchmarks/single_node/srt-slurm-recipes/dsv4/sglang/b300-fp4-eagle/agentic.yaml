@@ -5,10 +5,6 @@
 base:
   schema: 2
   name: dsv4-fp4-b300-sglang-agentic-eagle
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4-Pro
-    container: lmsysorg/sglang:dev-cu13-nightly-09242@sha256:c47bbe7448050608b4e08669c742df4835a45a95bf6b19f2c4e51a7f6609e9d5
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -64,10 +60,7 @@ base:
         # Triton compiles with the image's CUDA ptxas.
         TRITON_PTXAS_PATH: /usr/local/cuda/bin/ptxas
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4-Pro
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

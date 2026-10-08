@@ -1463,3 +1463,16 @@ labels:
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(("topology", "accepted"), [
+    ({"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}, True),
+    ({"tp": 8, "kv-offloading": "none"}, False),
+])  # fmt: skip
+def test_only_multinode_agentic_rows_measure_power(topology, accepted):
+    row = {"srt-recipe": "r.yaml", "conc-list": [4], "power": True, **topology}
+    if accepted:
+        assert AgenticCodingSearchSpaceEntry(**row).power is True
+    else:
+        with pytest.raises(ValidationError, match="Only multinode entries measure DCGM power"):
+            AgenticCodingSearchSpaceEntry(**row)

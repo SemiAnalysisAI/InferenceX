@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: minimaxm3-fp4-b300-trtllm-agentic
-  model:
-    path: hf:nvidia/MiniMax-M3-NVFP4
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -93,10 +89,7 @@ base:
     max_attempts: 1440
     interval_seconds: 5
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/MiniMax-M3-NVFP4
       # trtllm-serve exposes Prometheus text at /prometheus/metrics.
       AIPERF_SERVER_METRICS_URLS: http://localhost:8000/prometheus/metrics
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization

@@ -5,10 +5,6 @@
 schema: 2
 base:
   name: mi355x-dsv4-pro-0813-agentx-umbp
-  model:
-    path: DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi35x-20261001
-    precision: fp4
   slurm:
     time_limit: "08:00:00"
   resources:
@@ -209,19 +205,11 @@ base:
     max_attempts: 720
     interval_seconds: 5
   benchmark:
-    type: custom
     container_image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      # The MI355X launcher collects results from the job workspace.
-      RESULT_DIR: /infmax-workspace/LOGS/agentic
-      AGENTIC_OUTPUT_DIR: /infmax-workspace
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
-      HF_HUB_CACHE: /hf_hub_cache/hub
       TOKENIZERS_PARALLELISM: "false"
       TRANSFORMERS_VERBOSITY: error
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
 
 # One variant per point; each point runs in its own allocation. Admission is
 # 2x CONC on both roles. Decode captures graphs up to 2x CONC, or CONC/4 per
@@ -262,9 +250,6 @@ override_c4:
           - 8
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
-  benchmark:
-    env:
-      CONC: '4'
 
 override_c16:
   roles:
@@ -320,9 +305,6 @@ override_c16:
           - 32
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
-  benchmark:
-    env:
-      CONC: '16'
 
 override_c32:
   roles:
@@ -410,9 +392,6 @@ override_c32:
           - 64
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
-  benchmark:
-    env:
-      CONC: '32'
 
 override_c48:
   roles:
@@ -532,9 +511,6 @@ override_c48:
           - 96
         speculative-dspark-block-size: 3
         speculative-num-draft-tokens: 4
-  benchmark:
-    env:
-      CONC: '48'
 
 override_c192:
   roles:
@@ -672,7 +648,6 @@ override_c192:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '192'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
 override_c256:
@@ -827,7 +802,6 @@ override_c256:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '256'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
 # MegaMoE prefill on the DP-attention arm, with the fp8 unified KV pool, at
@@ -1029,7 +1003,6 @@ override_c384:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '384'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
 override_c512:
@@ -1256,5 +1229,4 @@ override_c512:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '512'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'

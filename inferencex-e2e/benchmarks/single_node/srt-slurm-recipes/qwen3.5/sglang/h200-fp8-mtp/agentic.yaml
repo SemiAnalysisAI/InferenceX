@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: qwen3.5-fp8-h200-sglang-agentic
-  model:
-    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
-    precision: fp8
   resources:
     gpu_type: h200
     gpus_per_node: 8
@@ -46,14 +42,6 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         SGLANG_ENABLE_SPEC_V2: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
-    env:
-      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-      # 256k-capped with-subagents corpus: the unfiltered corpus has requests up
-      # to ~1M tokens, beyond this model's TP8 context.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
 
 override_gpu_kv:
   benchmark:
@@ -77,8 +65,6 @@ override_hicache:
       TOTAL_CPU_DRAM_GB: '1234'
 # The same HiCache arm with the experts TP-sharded (EP1) on a later nightly.
 override_hicache_ep1:
-  model:
-    container: lmsysorg/sglang:nightly-dev-cu13-20260916-c9a8fba9
   roles:
     agg:
       args:
