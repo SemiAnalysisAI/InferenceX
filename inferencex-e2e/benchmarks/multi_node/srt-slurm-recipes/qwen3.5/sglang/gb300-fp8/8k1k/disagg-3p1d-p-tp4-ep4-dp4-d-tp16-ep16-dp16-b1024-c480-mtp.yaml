@@ -158,10 +158,6 @@ roles:
       decode-log-interval: 1
       stream-interval: 50
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 telemetry:
   enabled: true
   collect_interval_ms: 1000

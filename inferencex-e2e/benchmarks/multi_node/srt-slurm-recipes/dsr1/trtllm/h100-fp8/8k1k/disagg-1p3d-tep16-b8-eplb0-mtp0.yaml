@@ -87,10 +87,6 @@ roles:
       num_postprocess_workers: 4
 
 
-benchmark:
-  env:
-    TOKENIZER: /model
-
 frontend:
   type: "dynamo"
   enable_multiple_frontends: false # There are errors about colliding on port 8080, and others.
