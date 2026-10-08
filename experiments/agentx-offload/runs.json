@@ -6243,7 +6243,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c488-r2-capacity-20261008",
       "dispatched_at": "2026-10-08T02:52:12Z",
-      "phase": "admitted to b200-nscale-slurm_00; Slurm allocation pending",
+      "phase": "canonical 521-request primer warmup; zero errors",
       "performance_result": false,
       "energy_result": false,
       "nvme_bytes_per_node": 4398046511104,
@@ -6258,11 +6258,38 @@
       "job_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37719973737/job/113125224837",
       "dispatch_evidence": "Two valid 2 TiB c488 runs retained full benchmark and strict power results, with lower total throughput and higher J/successful query than one prior 4 TiB c488 run. Focused runtime tests passed 26/26; exact generator preview resolved MiniMax-M3 NVFP4, pinned image, vLLM TP4, c488, NVMe SimpleCPU disk and 3,600-second profile. At 2026-10-08T02:52:09Z, fresh repository-wide queued/in-progress/waiting/pending inventory inspected 12 workflows and 211 jobs: zero queued or in-progress cluster:b200-nscale jobs, no active study workflow. Local HEAD, origin branch and workflow head matched full input SHA. Generated job 113125224837 carries cluster:b200-nscale and nodes:1; currently queued, Slurm allocation and scratch not yet verified. The job was admitted to b200-nscale-slurm_00 at 02:53:56Z; Slurm allocation and runtime preflight remain pending.",
       "runner": "b200-nscale-slurm_00",
-      "started_at": "2026-10-08T02:53:56Z"
+      "started_at": "2026-10-08T02:53:56Z",
+      "slurm_job_id": 19886,
+      "slurm_state": "RUNNING",
+      "slurm_time_limit": "08:30:00",
+      "node": "im-b200-c001",
+      "scratch": "/offload-scratch/inferencex-offload-37719973737-1-19886-c53ebe3a101c",
+      "host_scratch": "/scratch/inferencex-offload-37719973737-1-19886-c53ebe3a101c",
+      "dram_bytes": 0,
+      "nvme_bytes": 4398046511104,
+      "connector": {
+        "name": "SimpleCPUOffloadConnector",
+        "backend": "disk",
+        "lazy_offload": true,
+        "use_page_cache": false
+      },
+      "storage_free_bytes_pre_scratch": 23022418558976,
+      "o_direct_verified": true,
+      "warmup_started_at": "2026-10-08T03:03:08Z",
+      "warmup_target_requests": 5401,
+      "warmup_latest": {
+        "sample_at": "2026-10-08T03:13:08Z",
+        "returned": 139,
+        "sent": 521,
+        "in_flight": 382,
+        "errors": 0,
+        "elapsed_seconds": 600.1
+      },
+      "runtime_evidence": "Slurm 19886 runs on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,022,418,558,976 bytes free before scratch (>4,535,485,464,576 threshold), O_DIRECT, zero DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37719973737, attempt 1, Slurm 19886. Canonical warmup began 03:03:08Z; sample at 03:13:08Z returned 139/5,401, sent 521, retained 382 in flight, zero errors."
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639",
-  "status": "Two valid 2 TiB c488 results documented; 4 TiB c488 replication admitted to B200 runner.",
+  "status": "Two valid 2 TiB c488 results documented; 4 TiB c488 replication allocated and in canonical warmup.",
   "last_capacity_check": {
     "checked_at": "2026-10-08T02:52:09Z",
     "active_study_run_ids": [],
