@@ -67,7 +67,7 @@ def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
     """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
-        f"{run.workspace}/{run.request.srt_recipe}", str(arguments),
+        f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
     ]  # fmt: skip
     return proc.run(prepare, env=run.env, cwd=checkout.root).returncode
 
@@ -98,7 +98,13 @@ def bind_recipe(
         bind += ["--power-port", str(power_port)]
     for name, value in client_env.items():
         bind += ["--client-env", f"{name}={value}"]
+    bind += _fabric(run)
     return proc.run(bind, env=run.env, cwd=checkout.root).returncode
+
+
+def _fabric(run: SrtRun) -> list[str]:
+    """The binder argument that resolves recipe ``'@fabric.<name>'`` values on this cluster."""
+    return ["--fabric", json.dumps(run.srt.fabric.rendered())]
 
 
 def apply(

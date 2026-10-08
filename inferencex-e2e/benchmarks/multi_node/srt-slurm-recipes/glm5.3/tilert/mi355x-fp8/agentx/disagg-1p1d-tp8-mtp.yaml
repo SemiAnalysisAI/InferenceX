@@ -10,9 +10,9 @@ environment:
   TILERT_VERSION: "0.1.6.post3"
   RDMAV_FORK_SAFE: "1"
   PYTHONDONTWRITEBYTECODE: "1"
-  NCCL_SOCKET_IFNAME: eno0
-  GLOO_SOCKET_IFNAME: eno0
-  NCCL_IB_HCA: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+  NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
+  GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+  NCCL_IB_HCA: "@fabric.nccl-ib-hca"
 roles:
   prefill:
     engine:
