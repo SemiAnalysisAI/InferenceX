@@ -116,8 +116,6 @@ result = os.environ["RESULT_FILENAME"]
 mode = os.environ["FAKE_RESULTS"]
 if mode == "single":
     (logs / f"{result}.json").write_text('{"completed": 2}')
-    (logs / "gpu_metrics.csv").write_text("gpu,power\n0,300\n")
-    (logs / "gpu_metrics_context.json").write_text('{"device_count": 4}')
 elif mode == "fixed":
     point = logs / "sweep_isl_1024_osl_1024"
     point.mkdir()
@@ -130,6 +128,8 @@ elif mode == "agentic":
 if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true":
     (logs / "eval_results").mkdir()
     (logs / "eval_results" / "results_gsm8k.json").write_text("{}")
+    if os.environ.get("FAKE_EVAL_META"):
+        (logs / "eval_results" / "meta_env.json").write_text(os.environ["FAKE_EVAL_META"])
     (logs / "infx-eval-exit-code").write_text("0\n")
 if os.environ.get("FAKE_ACTIVE"):
     pathlib.Path(os.environ["FAKE_ACTIVE"]).touch()
@@ -217,7 +217,7 @@ def runner_for(cluster_id: str) -> str:
 
 
 def make_workspace(workspace: Path) -> Path:
-    """A GITHUB_WORKSPACE with the recipe mirror, one patch beside the patches README, and a stub benchmark_lib."""
+    """A GITHUB_WORKSPACE with the recipe mirror and one patch beside the patches README."""
     recipes = workspace / "benchmarks/multi_node/srt-slurm-recipes"
     (recipes / "configs").mkdir(parents=True)
     (recipes / "configs/setup.sh").write_text("true\n")
@@ -225,9 +225,6 @@ def make_workspace(workspace: Path) -> Path:
     patches.mkdir(parents=True)
     (patches / "README.md").write_text("# srt-slurm patches\n")
     (patches / "001-fixture.patch").write_text("fixture\n")
-    (workspace / "benchmarks/benchmark_lib.sh").write_text(
-        '_write_lm_eval_meta_json() { printf \'{"conc": "%s"}\\n\' "$3" > "$1"; }\n'
-    )
     return workspace
 
 
@@ -252,7 +249,6 @@ def base_env(*, fakes: Path, logs: Path, workspace: Path, sandbox: Path) -> dict
         SALLOC_TIME_LIMIT="10",
         HF_HUB_CACHE="/hf",
         THINKING_MODE="thinking_on",
-        GPU_MONITOR_INTERVAL="3",
         EVAL_ONLY="false",
         RUN_EVAL="false",
         REQUIRE_POWER="0",
