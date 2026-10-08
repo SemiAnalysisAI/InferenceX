@@ -30,7 +30,7 @@ from srtctl.core.schema import ClusterConfig  # noqa: E402
 # manifests comparable with earlier AMD runs.
 AMD_EXPORTER = {
     "container_image": "ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:"
-    "db82192b0a7387bb4b2238fc2f5d0e2267ada14d996cc26061d881f1645b9bdc",
+    "8a3fe70b8a848ca10a7fd90862d1d9e41e9c7b6314669a2e8340c646e6dae15c",
     "port": 19500,
     "command": "env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh",
     "kind": "custom",

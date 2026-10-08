@@ -241,7 +241,7 @@ schema; unknown keys fail.
   `gpu_metrics` the power, utilization and temperature metrics (`gpu_power_usage` with its
   recorded `scope`, `gpu_gfx_activity`, `gpu_junction_temperature`); unknown keys such as
   the former `power_profile` are rejected. The image is the public
-  `ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:db82192b0a7387bb4b2238fc2f5d0e2267ada14d996cc26061d881f1645b9bdc`,
+  `ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:8a3fe70b8a848ca10a7fd90862d1d9e41e9c7b6314669a2e8340c646e6dae15c`,
   AMD nightly `build-dme-10.2.0a20261001` with AMD's 255 W power-reading fix plus our
   cache-TTL patch, started with `env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh`
   on port `19500` and resolved by digest through the cluster's `squash` settings like any
