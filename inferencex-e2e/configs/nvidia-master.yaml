@@ -8901,7 +8901,7 @@ dsv4-fp4-b200-dynamo-sglang-agentic-disagg:
           dp-attn: true
 
 qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85
+  image: lmsysorg/sglang:nightly-dev-cu13-20261008-7760d526@sha256:f991a9648fc0a00410bab27d96bf96a0263be9d9b178fe01ee95cffe622fd283
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:b200-nscale
