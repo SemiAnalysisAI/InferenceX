@@ -6243,7 +6243,7 @@
       "status": "in_progress",
       "workflow_name": "offload-v1-nvme4tib-c488-r2-capacity-20261008",
       "dispatched_at": "2026-10-08T02:52:12Z",
-      "phase": "canonical 521-request primer warmup; zero errors",
+      "phase": "canonical zero-idle cache-pressure replay; zero errors",
       "performance_result": false,
       "energy_result": false,
       "nvme_bytes_per_node": 4398046511104,
@@ -6278,18 +6278,19 @@
       "warmup_started_at": "2026-10-08T03:03:08Z",
       "warmup_target_requests": 5401,
       "warmup_latest": {
-        "sample_at": "2026-10-08T03:13:08Z",
-        "returned": 139,
-        "sent": 521,
-        "in_flight": 382,
+        "sample_at": "2026-10-08T04:12:39Z",
+        "returned": 997,
+        "sent": 1669,
+        "in_flight": 672,
         "errors": 0,
-        "elapsed_seconds": 600.1
+        "elapsed_seconds": 4170.8
       },
-      "runtime_evidence": "Slurm 19886 runs on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,022,418,558,976 bytes free before scratch (>4,535,485,464,576 threshold), O_DIRECT, zero DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37719973737, attempt 1, Slurm 19886. Canonical warmup began 03:03:08Z; sample at 03:13:08Z returned 139/5,401, sent 521, retained 382 in flight, zero errors."
+      "runtime_evidence": "Slurm 19886 runs on allowlisted im-b200-c001 with 08:30:00 limit. Live offload_config.json verifies 23,022,418,558,976 bytes free before scratch (>4,535,485,464,576 threshold), O_DIRECT, zero DRAM, 4,398,046,511,104 NVMe bytes, SimpleCPUOffloadConnector disk backend, lazy offload and page cache disabled. Exact host /scratch owner.json matches run 37719973737, attempt 1, Slurm 19886. Canonical warmup began 03:03:08Z; sample at 03:13:08Z returned 139/5,401, sent 521, retained 382 in flight, zero errors. The 521-request primer completed and zero-idle cache-pressure replay began at 03:46:13Z. Latest sample at 04:12:39Z returned 997/5,401, sent 1,669, retained 672 in flight, zero errors after 4,170.8s.",
+      "warmup_replay_started_at": "2026-10-08T03:46:13Z"
     }
   ],
   "comparison_url": "https://inferencex.semianalysis.com/inference/minimax-m3?i_seq=agentic-traces&i_prec=fp4&i_pctl=p90&i_metric=y_tpPerGpu&unofficialruns=35444664736,35449533638,35454656748,35456989669,35469801850,35476053573,35497846918,35524019140,35524083518,35542179539,35542182560,35542185178,35542190411,35542193122,35542196012,35565505126,35565538871,35635160852,35646317491,35727274307,35766002905,35802396548,35832083322,35882091021,35934408414,35972536894,36796500128,37027095833,37428997901,37490705589,37602969372,37666309639",
-  "status": "Two valid 2 TiB c488 results documented; 4 TiB c488 replication allocated and in canonical warmup.",
+  "status": "Two valid 2 TiB c488 results documented; 4 TiB c488 replication in zero-idle warmup replay.",
   "last_capacity_check": {
     "checked_at": "2026-10-08T02:52:09Z",
     "active_study_run_ids": [],
