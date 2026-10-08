@@ -111,6 +111,11 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         ),
         time_limit="01:00:00",
     ),
+    ("mi325x-amd", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=any_of("vllm"),
+        mounts=_AGENTIC_CACHES,
+        time_limit="08:00:00",
+    ),
 }
 
 
