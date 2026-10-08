@@ -57,7 +57,7 @@ base:
         UCX_MEMTYPE_CACHE: "n"
         UCX_NET_DEVICES: "@fabric.ucx-net-devices"
         UCX_TLS: "cuda_copy,cuda_ipc,rc"
-        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
       args:
         served-model-name: "nvidia/MiniMax-M3-NVFP4"
         tensor-parallel-size: 4

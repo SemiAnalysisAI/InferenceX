@@ -103,7 +103,7 @@ base:
         disaggregation-transfer-backend: mooncake
         # Use the eight external HCAs. mlx5_6..9 are on a separate low-LID
         # fabric, while mlx5_bond_0 caused cross-fabric QP RTR timeouts.
-        disaggregation-ib-device: '@fabric.ib-devices'
+        disaggregation-ib-device: '@fabric.rdma-devices'
         disaggregation-mode: prefill
         load-balance-method: total_tokens
         mem-fraction-static: 0.85
@@ -175,7 +175,7 @@ base:
         enable-deepseek-v4-fp4-indexer: true
         enable-w4a4-mxfp4-megamoe: true
         disaggregation-transfer-backend: mooncake
-        disaggregation-ib-device: '@fabric.ib-devices'
+        disaggregation-ib-device: '@fabric.rdma-devices'
         disaggregation-mode: decode
         load-balance-method: total_tokens
         mem-fraction-static: 0.9
