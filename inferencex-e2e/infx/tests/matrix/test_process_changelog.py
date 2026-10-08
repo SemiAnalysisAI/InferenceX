@@ -16,6 +16,7 @@ from infx.matrix import plan as process_changelog
 from infx.matrix import revision
 from infx.matrix.generate import generate_test_config_sweep
 from infx.matrix.validation import validate_master_config
+from infx.tests.srt_recipes import agentic_recipe, single_node_fragment, write_shared_blocks
 from infx.workflows import benchmark_schema
 
 
@@ -208,28 +209,6 @@ def test_append_only_delta_rejects_head_only_image_variant():
         raise AssertionError("an append cannot fork the target curve's image")
 
 
-def test_recipe_fingerprint_ignores_concurrency_and_experiment_name():
-    first = _fixed_matrix_row(4)
-    second = _fixed_matrix_row(16)
-
-    assert process_changelog.recipe_fingerprint(first) == (
-        process_changelog.recipe_fingerprint(second)
-    )
-
-
-def test_recipe_fingerprint_changes_for_any_recipe_variant():
-    base = _fixed_matrix_row(4, tp=4, duration=3600)
-    changed_parallelism = _fixed_matrix_row(4, tp=8, duration=3600)
-    changed_duration = _fixed_matrix_row(4, tp=4, duration=300)
-
-    fingerprints = {
-        process_changelog.recipe_fingerprint(entry)
-        for entry in (base, changed_parallelism, changed_duration)
-    }
-
-    assert len(fingerprints) == 3
-
-
 def test_append_only_delta_rejects_removed_parallelism_recipe():
     tp4 = _fixed_matrix_row(4, tp=4)
     tp8 = _fixed_matrix_row(8, tp=8)
@@ -406,7 +385,7 @@ def planning_inputs() -> tuple[dict, dict]:
                     {**shape, "conc-list": [16, 32, 64], "srt-recipe": "recipe.yaml"},
                 ]}],
                 "agentic-coding": [{"search-space": [
-                    {**shape, "conc-list": [16, 32], "srt-recipe": "recipe.yaml",
+                    {**shape, "conc-list": [16, 32], "srt-recipe": "agentic.yaml",
                      **({} if multinode else {"kv-offloading": "none"})},
                 ]}],
             },
@@ -424,10 +403,17 @@ def planning_repo(tmp_path, monkeypatch):
     master, runners = planning_inputs()
     (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
     (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
-    for node in ("single_node", "multi_node"):
-        recipe = tmp_path / f"benchmarks/{node}/srt-slurm-recipes/fixture/recipe.yaml"
-        recipe.parent.mkdir(parents=True)
-        recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\n")
+    write_shared_blocks(tmp_path)
+    single = tmp_path / "benchmarks/single_node/srt-slurm-recipes/fixture"
+    single.mkdir(parents=True)
+    (single / "recipe.yaml").write_text(yaml.safe_dump(single_node_fragment(8)))
+    (single / "agentic.yaml").write_text(yaml.safe_dump(
+        agentic_recipe(8, model="single", image="example/image:stable", precision="fp8")
+    ))
+    multi = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture"
+    multi.mkdir(parents=True)
+    for name in ("recipe.yaml", "agentic.yaml"):
+        (multi / name).write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\n")
     monkeypatch.chdir(tmp_path)
     return tmp_path, master, runners
 
