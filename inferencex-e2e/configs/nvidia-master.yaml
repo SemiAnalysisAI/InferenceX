@@ -5783,7 +5783,7 @@ minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           - "EVAL_CONFIG_FILE=recipes/minimaxm3/vllm/gb300-fp4/agentx/disagg-variants.yaml:override_2p5d_tp2_tp2_c120_eval"
         decode: { num-worker: 5, tp: 2, ep: 1, dp-attn: false }
 minimaxm3-fp4-b300-trtllm-agentic-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.4.0rc0.dev202610070001
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-dsxe
@@ -5794,9 +5794,9 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.8
       search-space:
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [20, 25, 30], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [10, 15, 20, 25, 30, 35, 40, 45], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5, 10, 15], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/trtllm/b300-fp4-mtp/agentic.yaml }
 
 # GB200 DeepSeek-V4 disaggregated AgentX frontier. The 3P/2D TEP8/TP8 curve
 # covers the middle/high-interactivity range omitted by the one-decode DEP
