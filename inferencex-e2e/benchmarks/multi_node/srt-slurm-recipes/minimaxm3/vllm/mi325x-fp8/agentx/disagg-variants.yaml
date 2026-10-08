@@ -118,6 +118,10 @@ override_1p1d_tep8_c16:
       CONC: '16'
 
 override_1p1d_tp4dp2ep8_c16:
+  frontend:
+    args:
+      prefill-policy: consistent_hash
+      decode-policy: consistent_hash
   engine:
     dp_launch_mode: per_node
   roles:
@@ -136,3 +140,4 @@ override_1p1d_tp4dp2ep8_c16:
   benchmark:
     env:
       CONC: '16'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: 'true'
