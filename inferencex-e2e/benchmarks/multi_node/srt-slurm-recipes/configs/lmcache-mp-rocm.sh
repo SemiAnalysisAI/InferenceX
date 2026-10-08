@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Install the ROCm LMCache wheel for the MI300X MiniMax-M3 AgentX LMCache point.
-# It runs twice: as the vLLM worker's setup_script (the connector is imported
-# there) and in the lmcache-server service's preamble (its own container).
-set -euo pipefail
-version=0.5.3
+# Install the ROCm LMCache wheel, at the master config's kv-offload-backend version, for
+# the MI300X MiniMax-M3 AgentX LMCache point. It runs twice: as the vLLM worker's
+# setup_script (the connector is imported there) and in the lmcache-server service's
+# preamble (its own container).
+set -eo pipefail
+source /infmax-workspace/benchmarks/check_env.sh
+check_env_vars KV_OFFLOAD_BACKEND_VERSION
+version=$KV_OFFLOAD_BACKEND_VERSION
 pip_install=(python3 -m pip install)
 if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
     pip_install+=(--break-system-packages)
