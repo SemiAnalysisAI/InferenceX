@@ -63,9 +63,9 @@ base:
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
         UCX_MEMTYPE_CACHE: "n"
-        UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+        UCX_NET_DEVICES: "@fabric.ucx-net-devices"
         UCX_TLS: "rc,cuda_copy"
-        NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        NCCL_IB_HCA: "@fabric.nccl-ib-hca"
       args:
         kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
         served-model-name: deepseek-ai/DeepSeek-V4-Pro

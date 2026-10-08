@@ -18,7 +18,7 @@ FRAGMENT = {
         "frontend": {"type": "sglang", "enable_multiple_frontends": False},
         "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 4, "args": {
             "tensor-parallel-size": 4, "speculative-algorithm": "EAGLE", "speculative-num-steps": 2,
-        }, "env": {"SGLANG_SIMULATE_ACC_LEN": "2.5"}}},
+        }, "env": {"SGLANG_SIMULATE_ACC_LEN": "2.5", "NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}}},
     },
     "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}},
 }  # fmt: skip
@@ -86,6 +86,7 @@ def project(tmp_path):
                 "network-interface": "eth0", "power-exporter-port": 9555,
                 "volume-mounts": {"hf-hub-cache": "/hf"},
                 "agentic-volume-mounts": {"aiperf-cache": "/aiperf"},
+                "fabric": {"socket-ifname": ["eth7"]},
             },
         }, "available-cpu-dram-mib": 1_000_000}},
     }))  # fmt: skip
@@ -149,9 +150,11 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
     assert generate(project, output) == 0
 
     manifest = json.loads((output / "manifest.json").read_text())
-    assert [(r["config-key"], r["variant"], r["matrix"]["conc"]) for r in manifest["recipes"]] == [
-        ("fixture-sglang", "zip_override_conc[0]", 2),
-        ("fixture-sglang", "zip_override_conc[1]", 4),
+    assert [
+        (r["config-key"], r["variant"], r["cluster"], r["matrix"]["conc"]) for r in manifest["recipes"]
+    ] == [
+        ("fixture-sglang", "zip_override_conc[0]", "fixture", 2),
+        ("fixture-sglang", "zip_override_conc[1]", "fixture", 4),
     ]
     recipe = yaml.safe_load((output / manifest["recipes"][1]["file"]).read_text())
     assert recipe["model"] == {"path": "hf:org/model", "container": "org/image:1", "precision": "fp8"}
@@ -159,8 +162,25 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
         "CONC": "4", "ISL": "1024", "OSL": "128", "MODEL": "org/model",
         "RANDOM_RANGE_RATIO": "0.8", "USE_CHAT_TEMPLATE": "true",
     }}  # fmt: skip
-    # Fixed-sequence runs verify real drafts; simulated acceptance is unset.
-    assert recipe["roles"]["agg"]["env"] == {}
+    # Fixed-sequence runs verify real drafts; simulated acceptance is unset. The runner
+    # label names one cluster, whose fabric the reference takes.
+    assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth7"}
+
+
+def test_a_label_on_several_clusters_keeps_fabric_references(project, tmp_path):
+    runners = yaml.safe_load((project / "configs/runners.yaml").read_text())
+    runners["labels"] = {
+        "fixture": ["fixture_0", "spare_0"], "cluster:fixture": ["fixture_0"], "cluster:spare": ["spare_0"],
+    }  # fmt: skip
+    runners["clusters"]["spare"] = runners["clusters"]["fixture"]
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
+    output = tmp_path / "out"
+    assert generate(project, output) == 0
+
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert [r["cluster"] for r in manifest["recipes"]] == [None, None]
+    recipe = yaml.safe_load((output / manifest["recipes"][0]["file"]).read_text())
+    assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}
 
 
 def test_a_single_node_agentx_point_gets_the_agentic_client_and_no_sequence_lengths(
