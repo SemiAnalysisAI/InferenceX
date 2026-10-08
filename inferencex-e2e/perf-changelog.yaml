@@ -9408,4 +9408,4 @@
     - "Run C128 with prefill-decode interval 20, max-num-seqs 128 per DP rank and prefill-only EPLB (load window 100, rebalance interval 200) that stops after 2 rebalances, inside the warmup."
     - "Run C256 and C384 with an LMCache MP CPU KV tier: ATOM_KV_OFFLOAD=lmcache_mp against one LMCache server per node, started from the image's LMCache 0.5.6.dev139+gf22dec28 by the new dsv4-atom-lmcache-mp-server.sh setup script (1000 GB lazy L1, 900 s read TTL, eviction watermark 0.98) within a 1019 GB budget (dram-utilization 0.34). C256: interval 40, MTPR 512, EPLB stops after 4 rebalances. C384 (new point): interval 20, MTPR 1024 with cudagraph sizes every 8 from 64 to 128, EPLB stops after 5 rebalances. Both run max-num-seqs 128 per DP rank."
     - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4-Pro-0813 runs as shipped, with the unchanged kv-cache-dtype fp8 and index-cache-dtype fp4 in the DEP band."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3819
