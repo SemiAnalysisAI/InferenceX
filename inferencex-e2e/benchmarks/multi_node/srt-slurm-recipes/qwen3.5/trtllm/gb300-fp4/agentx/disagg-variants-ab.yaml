@@ -69,7 +69,7 @@ base:
           block_reuse_config:
             max_num_turns: 3
             policy: per_conversation
-          dtype: auto
+          dtype: fp8
           enable_block_reuse: true
           event_buffer_max_size: 0
           free_gpu_memory_fraction: 0.8
@@ -147,7 +147,7 @@ base:
         enable_lm_head_tp_in_adp: false
         kv_cache_config:
           avg_seq_len: 102150
-          dtype: auto
+          dtype: fp8
           enable_block_reuse: false
           event_buffer_max_size: 0
           free_gpu_memory_fraction: 0.85

@@ -35,7 +35,15 @@ def install(environ: Mapping[str, str]) -> None:
     # torchvision causes circular imports in ATOM; TRT-LLM/SGLang need it at module level.
     if "atom" in environ.get("IMAGE", ""):
         _pip(environ, "uninstall", "torchvision")
-    _pip(environ, "install", "lm-eval[api]")
+    # Throwaway: keep the image's huggingface-hub; an unpinned upgrade to 2.x breaks
+    # images whose transformers requires huggingface-hub<2.
+    try:
+        from importlib.metadata import version
+
+        hub = [f"huggingface-hub=={version('huggingface_hub')}"]
+    except Exception:  # noqa: BLE001 - not installed: let the resolver choose
+        hub = []
+    _pip(environ, "install", "lm-eval[api]", *hub)
     pinned = ("install", "--no-deps", "--reinstall")
     git = shutil.which("git", path=environ.get("PATH"))
     if git and _pip(environ, *pinned, f"git+{REPOSITORY}.git@{REF}"):
