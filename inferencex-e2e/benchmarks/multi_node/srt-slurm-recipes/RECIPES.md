@@ -84,7 +84,13 @@ It writes one bound recipe per fixed-sequence or AgentX point, validated by the 
 
 The planner gives every benchmark row a `recipe-fingerprint`, a SHA-256 of the row's matrix fields (all but `conc`, `exp-name` and the fingerprint) together with the concrete recipe the launcher submits for it. That recipe is the fragment composed with its shared block (and the telemetry block for a `power: true` row), the row's variant, and the bound model, image, precision and, for fixed sequences, lengths. Concurrency values (`benchmark.env.CONC`, `CONC_LIST`, `benchmark.concurrencies`) and the job `name` stay out, as does everything the launcher adds for a cluster (staged checkpoint and container paths, mounts, AgentX client cache paths, the exporter port, fabric settings), so a recipe keeps one fingerprint across the concurrencies it serves and the clusters that run it. An `eval-srt-recipe` only contributes its path, because eval-only runs produce no benchmark results. Rows without an srt-slurm recipe hash their matrix fields alone.
 
-The planner selects variants without srtctl ([`variants.py`](../../../infx/srt_slurm/variants.py)), the way the launcher does, so a row that no variant serves fails planning instead of its launch.
+The planner selects variants without srtctl ([`variants.py`](../../../infx/srt_slurm/variants.py)), the way the launcher does, so a row that no variant serves fails planning instead of its launch. Before writing a `perf-changelog.yaml` entry, list the config keys whose results the change invalidates:
+
+```bash
+uv run python -m infx.matrix.changed --base origin/main
+```
+
+The base matrix comes from the base revision's own generator, and both sides are fingerprinted under their own recipes. Each listed key shows its point counts and the points (fingerprint and concurrency) that were added or removed. `--config-files` limits the comparison, and `--json` prints a machine-readable report.
 
 ## Migration and validation
 

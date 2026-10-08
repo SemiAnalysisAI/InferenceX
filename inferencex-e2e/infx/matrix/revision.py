@@ -97,8 +97,16 @@ class Revision:
         env["INFERENCEX_REPOSITORY_ROOT"] = str(self.root)
         return env
 
-    def generate(self, config_keys: Sequence[str], flags: Sequence[str]) -> list[dict]:
-        """Decode this revision's ``test-config`` matrix; raise CalledProcessError on failure."""
+    def generate(
+        self,
+        config_keys: Sequence[str],
+        flags: Sequence[str],
+        config_files: Sequence[str] | None = None,
+    ) -> list[dict]:
+        """Decode this revision's ``test-config`` matrix; raise CalledProcessError on failure.
+
+        ``config_files`` default to the revision's master configs.
+        """
         command, env = self.invocation(
             GENERATOR,
             [
@@ -106,7 +114,7 @@ class Revision:
                 "--config-keys",
                 *config_keys,
                 "--config-files",
-                *self.master_configs,
+                *(self.master_configs if config_files is None else config_files),
                 "--runner-config",
                 self.runner_config,
                 *flags,
