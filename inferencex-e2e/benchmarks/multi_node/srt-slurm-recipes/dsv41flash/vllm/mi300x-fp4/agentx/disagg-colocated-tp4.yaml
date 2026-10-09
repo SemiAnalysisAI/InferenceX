@@ -126,3 +126,21 @@ override_1p3d_cpu_c32:
   benchmark:
     env:
       CONC: "32"
+
+override_1p2d_tp2_cpu_c8:
+  roles:
+    prefill:
+      args:
+        engram-config: '{"cpu_offload":true}'
+    decode:
+      workers: 2
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 512
+  benchmark:
+    env:
+      CONC: "8"
