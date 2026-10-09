@@ -9227,7 +9227,7 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
 
 # Official SGLang nightly; TP4 C1/C2 use GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260929-79cafec0@sha256:0f075735a6bf913a7cc1cd7ece4f526ae8af70fc5b88fdc02d9efe92a61cf3ae
+  image: lmsysorg/sglang:nightly-dev-cu13-20261008-7760d526@sha256:f991a9648fc0a00410bab27d96bf96a0263be9d9b178fe01ee95cffe622fd283
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv

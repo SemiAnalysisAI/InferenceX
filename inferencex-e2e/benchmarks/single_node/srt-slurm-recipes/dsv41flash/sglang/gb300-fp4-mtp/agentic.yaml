@@ -5,7 +5,7 @@ base:
   name: dsv41flash-fp4-gb300-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang:nightly-dev-cu13-20260929-79cafec0@sha256:0f075735a6bf913a7cc1cd7ece4f526ae8af70fc5b88fdc02d9efe92a61cf3ae
+    container: lmsysorg/sglang:nightly-dev-cu13-20261008-7760d526@sha256:f991a9648fc0a00410bab27d96bf96a0263be9d9b178fe01ee95cffe622fd283
     precision: fp4
   resources:
     gpu_type: gb300
@@ -69,10 +69,11 @@ base:
 # prefix tails are 64x CONC up to 4096 from c2. TP2 keeps row-sharded Engram
 # tables in host DRAM and doubles the prefill chunk from c64; TP2 c128 admits
 # 128 requests with a 4-step prefill-decode interval. TP4 uses static ragged
-# verify; pure TP4 c1/c2 keep Engram in HBM, while TP4/EP4 from c4 keeps it in
-# host DRAM with 4096 SWA tails and a 128 graph batch, 16K chunks and no
-# prefill-decode interval, except c64, which runs 8K chunks with a 16-step
-# interval. Saturation points get a longer warmup drain.
+# verify; pure TP4 c1/c2 keep Engram in HBM, and c1 runs 16K chunks with no
+# prefill-decode interval. TP4/EP4 from c4 keeps Engram in host DRAM with 4096
+# SWA tails and a 128 graph batch, 16K chunks and no prefill-decode interval,
+# except c64, which runs 8K chunks with a 16-step interval. Saturation points
+# get a longer warmup drain.
 override_tp2_c1:
   roles:
     agg:
@@ -228,7 +229,8 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
-        chunked-prefill-size: 4096
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
         max-running-requests: 2
       env:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
