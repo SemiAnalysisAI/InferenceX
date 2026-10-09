@@ -89,8 +89,6 @@ INSTALLERS = {
 VERSION_ENV = {"router": "ROUTER_VERSION", "kv-offload-backend": "KV_OFFLOAD_BACKEND_VERSION"}
 # The workflow exports each master field as JSON.
 _METADATA_ENV = {"router": "ROUTER_METADATA", "kv-offload-backend": "KV_OFFLOAD_BACKEND_METADATA"}
-# A pin of these packages in pip-runtime-deps.sh's SETUP_PIP_PACKAGES must be the master's.
-PIP_COMPONENTS = {"vllm-router": ("router", "vllm-router")}
 # srtctl runs setup_script from its checkout's configs/ (these trees staged together) or
 # configs/patches/, and only warns when it finds neither.
 SETUP_SCRIPT_DIRS = (
@@ -154,21 +152,20 @@ def _dram_literals(node: Any, where: str) -> Iterator[str]:
                 yield from _dram_literals(item, f"{where}[{index}]")
 
 
-def _fragment_versions(block: Any, path: str) -> list[str]:
+def _fragment_versions(block: Any, path: str) -> Iterator[str]:
     """Where ``block`` sets a bound component version, in an env mapping at any depth."""
-    found = []
     if isinstance(block, list):
         for index, item in enumerate(block):
-            found += _fragment_versions(item, f"{path}[{index}]")
+            yield from _fragment_versions(item, f"{path}[{index}]")
     elif isinstance(block, Mapping):
         for key, value in block.items():
             where = f"{path}.{key}" if path else str(key)
-            if key in ("env", "environment") and isinstance(value, Mapping):
-                names = [name for name in VERSION_ENV.values() if name in value]
-                found += [f"{where}.{name} (= {value[name]!r})" for name in names]
+            if key in TEXT_MAPPINGS and isinstance(value, Mapping):
+                for name in VERSION_ENV.values():
+                    if name in value:
+                        yield f"{where}.{name} (= {value[name]!r})"
             else:
-                found += _fragment_versions(value, where)
-    return found
+                yield from _fragment_versions(value, where)
 
 
 def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
@@ -186,7 +183,7 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
             present, value = _lookup(block, key)
             if present and not (single_node_variant and key in VARIANT_POINT_KEYS):
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
-        found += _fragment_versions(block, name or "")
+        found.extend(_fragment_versions(block, name or ""))
     if found:
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher binds them"
@@ -284,8 +281,8 @@ def _master_version(
 def _bind_components(bound: dict[str, Any], environment: Mapping[str, str], source: Path) -> None:
     """Write the master version of each component a repo script installs where the script
     runs: the top-level environment for setup_script, a service's env for its preamble
-    (services do not inherit environment). A master component that SETUP_PIP_PACKAGES pins
-    must carry the master version."""
+    (services do not inherit environment). A SETUP_PIP_PACKAGES vllm-router pin must be the
+    master router's."""
     if (script := bound.get("setup_script")) in INSTALLERS:
         version = _master_version(environment, INSTALLERS[script], source, script)
         bound.setdefault("environment", {})[VERSION_ENV[INSTALLERS[script][0]]] = version
@@ -299,13 +296,12 @@ def _bind_components(bound: dict[str, Any], environment: Mapping[str, str], sour
     for env in envs:
         for spec in str((env or {}).get("SETUP_PIP_PACKAGES", "")).split():
             package = re.split(r"[^\w.-]", spec, maxsplit=1)[0]
-            component = PIP_COMPONENTS.get(re.sub(r"[-_.]+", "-", package).lower())
-            if component is None:
+            if re.sub(r"[-_.]+", "-", package).lower() != "vllm-router":
                 continue
             pin = f"SETUP_PIP_PACKAGES {spec}"
-            version = _master_version(environment, component, source, pin)
+            version = _master_version(environment, INSTALLERS["vllm-router.sh"], source, pin)
             if spec != f"{package}=={version}":
-                raise ValueError(f"{source}: {pin} is not the master {component[0]} {version}")
+                raise ValueError(f"{source}: {pin} is not the master router {version}")
 
 
 def bind_workload(
