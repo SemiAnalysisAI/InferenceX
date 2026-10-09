@@ -1408,6 +1408,18 @@ dsv41flash-fp4-mi300x-vllm-agentic-smg-baseline:
           dp-attn: false
           additional-settings:
           - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-tp8.yaml:override_2x_tp4_cpu_c16
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 4
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-tp8.yaml:override_4x_tp2_cpu_c8
 
 # DeepSeek-V4.1-Flash AgentX on MI300X (gfx942), a copy of the validated MI355X vLLM
 # arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream

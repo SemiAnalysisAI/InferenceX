@@ -143,3 +143,16 @@ override_2x_tp4_cpu_c4:
     env:
       CONC: "4"
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_4x_tp2_cpu_c8:
+  <<: *tp4_cpu
+  roles:
+    agg:
+      workers: 4
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 512
