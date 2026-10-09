@@ -1,6 +1,5 @@
 # AgentX dsv41flash sglang gb300-fp4 recipes (Dynamo frontend + SGLang, AGGREGATED
-# topology): shared settings in base, one override per benchmark point. Select one
-# with CONFIG_FILE=recipes/dsv41flash/sglang/gb300-fp4/agentx/agg-variants.yaml:override_<name>.
+# topology): shared settings in base, one override per benchmark point.
 #
 # One SGLang worker serves prefill and decode with the checkpoint's bundled DSpark
 # draft (block size 5); the Dynamo frontend routes with the KV-aware router and
