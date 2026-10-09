@@ -92,3 +92,19 @@ override_c16:
   benchmark:
     env:
       CONC: "16"
+
+override_2x_tp4_c4:
+  frontend:
+    type: vllm-router
+    container_image: vllm/vllm-router@sha256:9321abfa55f5d75d1bfce51a4a9835824ef6a5c73731d6ea65b3fc5402d85354
+    args:
+      policy: consistent_hash
+  roles:
+    agg:
+      workers: 2
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
