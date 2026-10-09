@@ -1,11 +1,5 @@
 # Results and Ingestion
 
-<div align="center">
-
-**English** | [中文](results-and-ingestion_zh.md)
-
-</div>
-
 Use this page to identify benchmark artifacts, inspect their contracts, and decide whether a run is safe to hand to InferenceX-app. The producers and ingest code remain authoritative. InferenceX-app links below are pinned to commit [`3be1c34`](https://github.com/SemiAnalysisAI/InferenceX-app/tree/3be1c34a174f62fea2194f1133210e692e5bf415).
 
 ## Source map
