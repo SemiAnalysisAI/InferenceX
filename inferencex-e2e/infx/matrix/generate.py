@@ -319,7 +319,7 @@ def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
     for cluster_label, members in labels.items():
         if cluster_label.startswith(CLUSTER_LABEL_PREFIX) and runners & set(members):
             cluster_id = cluster_label.removeprefix(CLUSTER_LABEL_PREFIX)
-            record = runner_data.get("clusters", {}).get(cluster_id) or {}
+            record = runner_data["clusters"][cluster_id]
             srt = (record.get("slurm") or {}).get("srt-slurm") or {}
             fabrics[cluster_id] = Fabric.model_validate(srt.get("fabric") or {})
     return fabrics
