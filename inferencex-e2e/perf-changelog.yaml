@@ -9497,3 +9497,9 @@
     - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with native NEXTN MTP and SGLang HiCache."
     - "Pin the stock SGLang v0.5.21-cu130 image and checkpoint revision; enable engine metrics and cache reporting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3816
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-dev-x86_64-cu13.0.1-591bb95 to nightly-dev-x86_64-cu13.0.1-20ebb28."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3871
