@@ -127,7 +127,7 @@ zip_override_dep2:
 
 # DEP4: TP1 x DP4 + EP4 with MegaMoE behind a consistent-hash router. At
 # c128, new prefills are admitted every 48 engine steps, aligned across DP
-# ranks; c64 keeps the vLLM default of 1.
+# ranks.
 zip_override_dep4:
   frontend:
     type: vllm-router
@@ -147,12 +147,12 @@ zip_override_dep4:
         enable-expert-parallel: true
         kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
         engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
-        max-num-seqs: [64, 128]
-        prefill-schedule-interval: [1, 48]
+        max-num-seqs: [128]
+        prefill-schedule-interval: [48]
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
   benchmark:
     env:
-      CONC: ['64', '128']
+      CONC: ['128']
 
 # TP2 c1: the TP4 c1 settings on two GPUs.
 override_tp2_c1:

@@ -8678,7 +8678,7 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       # DEP2 c128 adds vLLM's native CPU KV offloading at 32 GiB per DP rank.
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: native }, spec-decoding: mtp, conc-list: [128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/agentic.yaml }
       # DEP4 is native TP1 x DP4 + EP4 with MegaMoE behind the same router.
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/b200-fp4-mtp/agentic.yaml }
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
