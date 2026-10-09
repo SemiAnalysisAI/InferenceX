@@ -1,7 +1,6 @@
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 AgentX on GB200 behind the llm-d router
 # (srt-slurm frontend.type: llm-d): one aggregated worker over two trays, as TP8,
-# DEP8, or DEP8 with an embedded Mooncake prefix-cache store. Image, vLLM flags,
-# environment, and EPP schedulers follow #2719's llm-d recipes. srt-slurm launches a
+# DEP8, or DEP8 with an embedded Mooncake prefix-cache store. srt-slurm launches a
 # DEP8 worker as one `vllm serve` that balances its eight DP ranks itself, so the EPP
 # routes to the worker rather than to one rank, and VLLM_USE_RUST_FRONTEND is left
 # unset (the Python API server).
@@ -31,7 +30,7 @@ base:
   frontend:
     type: llm-d
     enable_multiple_frontends: false
-    # #2719's scheduler, without its file-discovery plugin (srtctl adds its own).
+    # srtctl adds the file-discovery plugin.
     epp_config:
       plugins:
         - type: inflight-load-producer

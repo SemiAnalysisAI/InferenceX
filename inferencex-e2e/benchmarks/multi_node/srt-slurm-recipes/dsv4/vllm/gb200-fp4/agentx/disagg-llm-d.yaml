@@ -1,14 +1,11 @@
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 AgentX on GB200 behind the llm-d router
 # (srt-slurm frontend.type: llm-d): DEP8 prefill workers over two trays each and one
 # DEP8 or DEP16 decode worker. KV moves over NIXL and the prefill workers share prefix
-# cache through an embedded Mooncake store. Image, vLLM flags, environment, and EPP
-# scheduler follow #2719's disagg-gb200-1p1d-dep8-dep8-dspark-agentic.yaml, with these
-# differences:
-# - srt-slurm launches each worker as one `vllm serve` over its trays that balances its
-#   DP ranks itself, so the EPP routes to the worker rather than to one rank.
-# - Prefill drafts three DSpark tokens like decode (#2719: one): the srt launch planner
-#   gives both roles the decode role's golden acceptance length.
-# - VLLM_USE_RUST_FRONTEND is left unset (the Python API server).
+# cache through an embedded Mooncake store. srt-slurm launches each worker as one
+# `vllm serve` over its trays that balances its DP ranks itself, so the EPP routes to the
+# worker rather than to one rank. Prefill drafts three DSpark tokens like decode: the srt
+# launch planner gives both roles the decode role's golden acceptance length.
+# VLLM_USE_RUST_FRONTEND is left unset (the Python API server).
 # Select one with CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-llm-d.yaml:override_<name>.
 
 schema: 2
@@ -48,7 +45,7 @@ base:
   frontend:
     type: llm-d
     enable_multiple_frontends: false
-    # #2719's scheduler, without its file-discovery plugin (srtctl adds its own).
+    # srtctl adds the file-discovery plugin.
     epp_config:
       plugins:
         - type: prefill-filter
