@@ -143,6 +143,10 @@ telemetry:
     port: 19401
     command: "dcgm-exporter --collect-interval=100 --address :{port} -f /configs/dcgm-counters-noprof.csv"
 
+  cpu_power_exporter:
+    port: 9405
+    source: acpi
+
 benchmark:
   type: custom
   concurrencies: [48, 52, 56]

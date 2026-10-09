@@ -1,7 +1,9 @@
 """Workspace staging behavior of the launcher artifact helpers."""
 
+import json
 import os
 import stat
+import sys
 import tarfile
 
 import pytest
@@ -112,3 +114,53 @@ def test_power_collection_records_the_job_status_and_stages_results_either_way(t
 
     assert (logs / "power" / "native-job-status.txt").read_text() == f"42|{status.raw}\n"
     assert (workspace / "point_conc4.json").exists()
+
+
+def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path):
+    from infx.tests.results.power.test_aggregate_power_multinode import (
+        PRODUCER_SHA,
+        build_package,
+    )
+
+    pkg = build_package(tmp_path / "captured")
+    result_dir = pkg.logs_root / "agentic/conc_4"
+    result_dir.mkdir(parents=True)
+    formal_result = result_dir / "agentic_power_concurrency_4.json"
+    formal_result.write_bytes(pkg.original_result.read_bytes())
+    [window_path] = pkg.windows_dir.glob("*.json")
+    window = json.loads(window_path.read_text())
+    window["result_path"] = str(formal_result.relative_to(pkg.logs_root))
+    window_path.unlink()
+    window_path = pkg.windows_dir / formal_result.name
+    window_path.write_text(json.dumps(window))
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["window_validations"][0]["window_file"] = f"windows/{formal_result.name}"
+    for device in manifest["expected_devices"]:
+        device["assignments"][0].update(worker_role="agg", het_group=0)
+    manifest_path.write_text(json.dumps(manifest))
+    source, workspace = tmp_path / "source", tmp_path / "output"
+    source.mkdir()
+    workspace.mkdir()
+    (source / "point_conc4.json").write_text(
+        json.dumps({"disagg": False, "num_prefill_gpu": 4, "num_decode_gpu": 0})
+    )
+    status = JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0)
+    assert collect_agentic_power_results(
+        status,
+        "42",
+        pkg.logs_root,
+        source,
+        workspace,
+        "point",
+        PRODUCER_SHA,
+        [4],
+        results_python=sys.executable,
+        expected_cpu_source="acpi",
+    ) == 1
+    result = json.loads((workspace / "point_conc4.json").read_text())
+    assert result["power_valid"] == 1
+    assert result["cpu_power_valid"] == 0
+    assert result["total_gpu_energy_j"] == 84000.0
+    assert result["power_audit"]["source"] == "LOGS/agentic/conc_4/power_validation.json"
+    assert result["power_audit"]["cpu"]["reason_codes"] == ["cpu_artifacts_missing"]

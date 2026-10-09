@@ -9528,3 +9528,20 @@
     - "TP4 c64: 8K prefill chunks with a 16-step prefill-decode interval instead of 16K chunks with none. Local runs with the fold: 82,586 -> 85,093 tok/s/GPU at 86.8 -> 136.8 tok/s/user median (46.3 -> 72.1 P90); P90 TTFT 5.7 -> 12.5 s."
     - "TP2 c128: admit all 128 sessions (max-running-requests and cuda-graph-max-bs-decode 64 -> 128) with a 4-step prefill-decode interval and mem-fraction-static 0.85. The PR #3421 sweep measured 18,631 tok/s/GPU at 130.9 tok/s/user median at this point; locally the new settings gave 147,763 tok/s/GPU at 37.9 tok/s/user median with a 51 s P90 TTFT (measured before the fold was added)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+    - fixed-seq-len
+    - agentic-coding
+  description:
+    - "Collect ACPI Grace CPU power on the Qwen3.5 GB200/GB300 1P1D, 4P1D, and 8P1D NVL72 recipes and the Kimi K3 GB200/GB300 AgentX recipes with the pinned cpu-power-exporter v2.47.2, matching the srt-slurm v2.47.2 source pin. Verify the release asset checksum and submit-time exporter compatibility; CPU-enabled jobs fail before sbatch if the exporter is missing, non-executable, or built for the wrong architecture."
+    - "Integrate CPU power over the formal GPU measurement window and emit cpu_power_valid and CPU-side metrics independently of the GPU power verdict, including the ACPI Grace socket total and its CPU-only and SysIO rails. Publish validated per-host GPU power so cross-host workers can be modeled as physical trays. During strict power qualification, require the recipe's declared CPU source and reject missing or invalid CPU totals; recipes without a declared source retain best-effort CPU behavior."
+    - "Enable required DCGM telemetry with collect_interval_ms: 1000 on the Qwen3.5 GB200/GB300 8P1D recipes, and set require-power on both Qwen3.5 GB200/GB300 8k1k sequences. Keep the Qwen3.5 8P1D frontend, benchmark client, and infra on the reserved head so power and benchmark timestamps share its clock, while retaining 13 allocated nodes and 12 GPU workers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3296

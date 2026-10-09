@@ -124,6 +124,9 @@ def run_multinode(launch: Launch) -> int:
     lanes.check_request(lane, request)
     config_file = lanes.config_file(request)
     decision = power.resolve_power(launch.cluster.id, launch.path, request)
+    if github_env := request.env.get("GITHUB_ENV"):
+        with Path(github_env).open("a") as handle:
+            handle.write(f"POWER_EXPECTED_CPU_SOURCE={decision.expected_cpu_source or ''}\n")
     model = models.checkpoint(launch.cluster, request)
     served = models.served_path(launch.cluster, request, model)
     model_paths = models.model_paths(launch.cluster, request, config_file, served)

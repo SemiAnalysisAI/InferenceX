@@ -7,6 +7,36 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from .cpu_side import HEADLINE_PREFERENCE
+
+_REASON_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
+_CPU_COUNT_FIELDS = ("expected_sockets", "observed_sockets", "sample_row_count")
+
+
+def _bounded_reasons(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [
+        reason for reason in values if isinstance(reason, str) and _REASON_CODE.fullmatch(reason)
+    ][:32]
+
+
+def _cpu_audit(cpu: Mapping[str, Any]) -> dict[str, Any]:
+    """Project the CPU-side provenance: sensor kind, source, counts, reasons."""
+    summary: dict[str, Any] = {}
+    kind = cpu.get("sensor_kind")
+    if kind in HEADLINE_PREFERENCE:
+        summary["sensor_kind"] = kind
+    source = cpu.get("source")
+    if isinstance(source, str) and 0 < len(source) <= 32:
+        summary["source"] = source
+    for key in _CPU_COUNT_FIELDS:
+        value = cpu.get(key)
+        if type(value) is int and value >= 0:
+            summary[key] = value
+    summary["reason_codes"] = _bounded_reasons(cpu.get("reason_codes"))
+    return summary
+
 
 def audit_summary(validation: Mapping[str, Any], source: str) -> dict[str, Any]:
     """Project the shared app audit contract without publishing raw telemetry."""
@@ -49,11 +79,10 @@ def audit_summary(validation: Mapping[str, Any], source: str) -> dict[str, Any]:
         audit["observed_gpu_ids"] = list(
             dict.fromkeys(str(value) for value in ids if 0 < len(str(value)) <= 128)
         )[:1024]
+    cpu = validation.get("cpu")
+    if isinstance(cpu, Mapping):
+        audit["cpu"] = _cpu_audit(cpu)
     return {
-        "power_invalid_reasons": [
-            reason
-            for reason in validation.get("reasons", [])
-            if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason)
-        ][:32],
+        "power_invalid_reasons": _bounded_reasons(validation.get("reasons", [])),
         "power_audit": audit,
     }

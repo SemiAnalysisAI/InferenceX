@@ -87,7 +87,7 @@ The fixed-sequence transformer requires runner, framework, precision, speculativ
 | Latency and interactivity | Each benchmark input key ending in `ms` is converted from milliseconds to seconds with `_ms` removed. Keys containing `tpot` also produce an `intvty` reciprocal. |
 | Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and, for multinode results, measured power from the srt-slurm telemetry package |
 
-Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Only multinode results are power-aggregated; single-node results carry no power fields or verdict. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
+Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Only multinode results are power-aggregated; single-node results carry no power fields or verdict. Power aggregation is best effort by default; when power validation fails, `REQUIRE_POWER=1` or an AgentX lane whose launcher validates power fails the job after preserving available results and audits.
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
 
@@ -95,7 +95,7 @@ InferenceX-app treats routing fields as columns or config dimensions and stores 
 
 The serving client records `benchmark_outcome` before saving its raw result. It retains the existing maximum request-failure rate of 5%, including the requested/completed/failed counts. The processor verifies this record, copies it to the aggregate, and returns failure even when telemetry is valid. Zero successful requests retain a diagnostic aggregate without fabricated reciprocal latency. Invalid request counts retain a failed diagnostic outcome with the raw `requested`/`completed` values and an `error`, without a fabricated failed count or rate; the client saves the raw JSON before exiting and the processor still rejects it. Legacy results without outcome metadata remain distinguishable; power validity alone never establishes benchmark success or answer quality.
 
-`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics.
+`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics; local SMI indices are not physical UUID proof. When the package carries the Grace CPU-side leg, `power_audit.cpu` adds its sensor kind, source, socket counts, row count, and reason codes; see [Measured Grace CPU-side power (NVL72)](#measured-grace-cpu-side-power-nvl72).
 
 For multinode fixed-sequence jobs, `python -m infx.results.fixed_sequence --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
 
@@ -192,6 +192,14 @@ the result root and concurrency from that directory and the replay itself.
 When that measurement-window contract is absent, the aggregate records
 `power_valid: 0` and the audit names `multinode_power_contract_missing`;
 `REQUIRE_POWER=1` also fails the job after preserving available results.
+
+Validated multinode aggregates also publish `workers` power entries grouped by
+physical hostname and role. `num_gpus` counts the audited device UUIDs on that
+host; `avg_power_w` is their integrated energy divided by the same formal window
+and GPU count. A serving worker spanning two hosts produces two power entries;
+these indices do not replace the serving topology's worker counts. Revalidation
+removes old entries before publishing the current verdict, and invalid GPU power
+publishes no host power. CPU telemetry keeps its independent validity gate.
 
 Treat `power_valid: 1` with `power_metric_schema_version: 2` as a GPU telemetry
 verdict, not a request-accounting or model-quality verdict. Before using a point
@@ -434,6 +442,93 @@ It is not an individual GPU's percentile or the average of device percentiles.
 All four values are withheld when telemetry validation fails. Older results remain
 missing until their original raw traces can be replayed; average watts cannot
 supply P75 or P90. The validation sidecar records `power_percentile_method`.
+
+## Measured Grace CPU-side power (NVL72)
+
+GB200 and GB300 NVL72 recipes that enable srt-slurm's `telemetry.cpu_power_exporter` leg write
+`LOGS/power/cpu/samples.csv` and a non-authoritative `cpu_manifest.json` beside the GPU DCGM
+package. The multinode validator accepts the historical v2.2.1 long format (one row per sensor
+reading, header `schema_version,timestamp_unix,hostname,source,sensor,socket_id,power_w,total_power_w`)
+and the current wide format (one row per scrape, host, and socket, with `cpu_rail_w`, `soc_w`, and
+`dram_w` reference columns). It classifies each row by its `sensor` cell. The firmware meters
+nest inside one another; none of them is a Bianca board or compute-tray figure, and the socket
+total is not the sum of its component rails
+([NVIDIA Grace power guide](https://docs.nvidia.com/dccpu/grace-perf-tuning-guide/power-thermals.html)):
+
+| Sensor (ACPI OEM label) | Contains | Does not contain | Published as |
+| --- | --- | --- | --- |
+| `Module Power Socket N` | The whole GB200/GB300 superchip module: Grace, its two Blackwell GPUs, HBM, LPDDR5X, and on-module regulator loss | Everything else on the tray (NICs, NVMe, fans, the tray converter) | `*_module_*` keys, only when every socket reports it |
+| `Grace Power Socket N` (`CPU<n>:cpuSidePowerUsageW` in the wide format) | The whole Grace socket: CPU rail, SoC rail, LPDDR5X, and regulator loss | The GPUs and HBM | The Grace-side `*_cpu_*` headline keys |
+| `CPU Power Socket N` (`cpu_rail_w`) | The CPU rail only (cores) | SysIO, LPDDR5X, regulator loss | `*_cpu_rail_*` keys |
+| `SysIO Power Socket N` (`soc_w`) | The SoC rail (system I/O) | The CPU rail and LPDDR5X | `*_cpu_sysio_*` keys |
+| `DRAM Power Socket N` (`dram_w`) | The LPDDR5X rail where firmware exposes it | | Never; blank on the current NVL72 firmware |
+| `CPU<n>:cpuPowerUsageW` | DCGM field 1130, the CPU rail only | SysIO and LPDDR5X | The Grace-side keys only when ACPI is unavailable |
+
+On a GB300 tray each socket total reads about 97 W while its CPU and SysIO rails sum to about
+55 W; the remaining ~42 W is LPDDR5X and regulator loss, so rails are never added to or
+subtracted from a total. The CI clusters' NVL72 firmware currently binds the Grace, CPU, and
+SysIO meters only: the module ACPI meters on GB200 are unbound, and the DRAM rail is blank. The
+module reading is available there through NVML instead (`nvidia-smi
+--query-gpu=module.power.draw.average`), where both GPUs of one superchip report the same module
+value, about 475 W at idle against roughly 95 W Grace plus two GPUs near 170 W each. srt-slurm's
+CPU leg does not read NVML yet, so no package carries a module series today.
+
+Per socket the headline series is chosen in the order module, Grace socket total, DCGM CPU rail,
+and one kind must be present for every socket. Every fed series is integrated over the same bound
+formal window as GPU energy with the same trapezoid, linear boundary interpolation, and 3.0 s
+maximum sample gap. Expected sockets are two per distinct worker host in the manifest topology
+(one compute tray per host). The additive keys, rounded like the GPU keys and stripped on re-run,
+are:
+
+| Key | Meaning |
+| --- | --- |
+| `cpu_power_valid` | `1` or `0` for the CPU-side leg; absent only when CPU is undeclared and the package has no `cpu/` |
+| `avg_cpu_socket_power_w` | Mean over sockets of each socket's window-mean Grace-side watts |
+| `avg_total_cpu_power_w` | Sum over sockets of window-mean Grace-side watts |
+| `total_cpu_energy_j` | Grace-side energy over the window, all sockets |
+| `avg_total_module_power_w`, `total_module_energy_j` | Module watts and energy; only when a module series exists for every socket |
+| `avg_total_cpu_rail_power_w`, `total_cpu_rail_energy_j` | ACPI `CPU Power Socket N` (cores, no SysIO) watts and energy; only when every Grace socket reports a gap-free rail |
+| `avg_total_cpu_sysio_power_w`, `total_cpu_sysio_energy_j` | ACPI `SysIO Power Socket N` watts and energy; same condition |
+
+The Grace-side keys come from the Grace socket total (or, without ACPI, the DCGM CPU rail) even
+when the module sensor is preferred, so a module reading is never published as a Grace-side one.
+The sidecar's `cpu` block and the aggregate's `power_audit.cpu` record `sensor_kind` (`module`,
+`grace_socket`, or `dcgm_cpu_rail`), `source` (`acpi` or `dcgm`), expected and observed socket
+counts, the parsed row count, and reason codes. `power_metric_schema_version` stays `2`.
+
+The CPU verdict is independent of `power_valid`: it borrows only the bound
+formal window and the worker-host topology from the GPU package, and no GPU verdict reaches it, so
+an unpinned producer or failed GPU coverage withholds GPU energy while `cpu_power_valid` still
+judges the CPU samples on their own. Any CPU-leg failure records `cpu_power_valid: 0` with no CPU
+keys and leaves every GPU field unchanged. It fails the job only when power is required
+and the recipe declares `telemetry.cpu_power_exporter.source`. AgentX lanes whose launcher
+validates power (`agentx=True` in [`power.py`](../infx/launch/drivers/srt/power.py)), including
+the Kimi-K3 GB200/GB300 recipes with DCGM and ACPI telemetry, always require power; other lanes
+require it through `REQUIRE_POWER=1`, set by the `require-power` master-config field (as on the
+Qwen3.5 GB200/GB300 8k1k sequences) or workflow input. A declared `acpi` source requires complete
+Grace socket or module totals, and missing CPU artifacts produce an invalid CPU audit instead of no
+verdict.
+Without a declared source, the CPU verdict never changes the job's exit code. Reason codes:
+`cpu_artifacts_missing`, `cpu_sensor_source_mismatch`,
+`cpu_samples_missing`, `cpu_samples_header_mismatch`, `cpu_samples_malformed`,
+`cpu_manifest_invalid`, `cpu_socket_count_mismatch`, `cpu_sensor_kind_mixed`,
+`cpu_sample_gap_exceeded`, `cpu_window_not_bracketed`, and `cpu_window_unavailable` (no completed
+window binds to the result, or the window's own contract checks failed). An overflowed CPU
+integration reuses the GPU leg's `non_finite_power_metric`, and `aggregate_result_missing` or
+`aggregate_result_unwritable` appears in both audits when the aggregate itself cannot be patched.
+The srt-slurm source pin (`9d65c0ae`, v2.47.2) writes the wide format and does not classify the
+Module label, so these packages yield the Grace socket total plus its CPU-only and SysIO rails;
+module keys require a producer that classifies that label. A rail gap drops only that rail's keys
+and never changes `cpu_power_valid`. The selected Qwen3.5 and Kimi-K3 CPU-telemetry recipes pass
+`CPU_POWER_EXPORTER_RELEASE=v2.47.2` from their master-config `additional-settings` to
+`make setup`. Qwen3.5 8P1D keeps its frontend, benchmark client, and infra on the reserved head so their timestamps share the collector clock; its 13-node allocation still contains 12 GPU-worker nodes. This release includes legacy ACPI hwmon discovery. Setup verifies the downloaded
+asset checksum, replaces a cached binary with a different release marker, and fails on a pinned
+download error. The pinned srt-slurm submit preflight (NVIDIA/srt-slurm#553) rejects a missing,
+non-executable, or wrong-architecture binary before `sbatch`.
+Qualification still needs the setup log and actual exporter identity, complete same-window
+samples, and verified firmware sensor boundaries. A source pin or successful setup alone does
+not establish valid measurements. Without an expected CPU source, a package without `cpu/` adds no CPU metrics or CPU verdict.
+Validated GPU packages still publish the per-host `workers` entries described above.
 
 ## Verification and stop conditions
 
