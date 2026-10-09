@@ -6,7 +6,7 @@
 #   override_stp_maxtpt_7p2d:  dep4 prefill + dep8 decode, 7p2d
 #
 # Usage:
-#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                              # all 5 variants
+#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                              # all variants
 #   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:override_stp_tp4             # STP tp4 only
 #   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:zip_override_stp_lowlat[0]   # STP 1p1d only
 #   srtctl dry-run -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                             # preview
