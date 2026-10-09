@@ -93,7 +93,7 @@ The fixed-sequence transformer requires runner, framework, precision, speculativ
 | Latency and interactivity | Each benchmark input key ending in `ms` is converted from milliseconds to seconds with `_ms` removed. Keys containing `tpot` also produce an `intvty` reciprocal. |
 | Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and, for multinode results, measured power from the srt-slurm telemetry package |
 
-Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Only multinode results are power-aggregated; single-node results carry no power fields or verdict. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
+Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Only multinode results are power-aggregated; single-node results carry no power fields or verdict. Power aggregation is best effort by default; when power validation fails, `REQUIRE_POWER=1` or an AgentX lane whose launcher validates power fails the job after preserving available results and audits.
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
 
@@ -470,8 +470,8 @@ total is not the sum of its component rails
 | `DRAM Power Socket N` (`dram_w`) | The LPDDR5X rail where firmware exposes it | | Never; blank on the current NVL72 firmware |
 | `CPU<n>:cpuPowerUsageW` | DCGM field 1130, the CPU rail only | SysIO and LPDDR5X | The Grace-side keys only when ACPI is unavailable |
 
-On a GB300 tray the socket total reads about 95 W per socket while its CPU and SysIO rails sum
-to about 51 W; the remainder is LPDDR5X and regulator loss, so rails are never added to or
+On a GB300 tray each socket total reads about 97 W while its CPU and SysIO rails sum to about
+55 W; the remaining ~42 W is LPDDR5X and regulator loss, so rails are never added to or
 subtracted from a total. The CI clusters' NVL72 firmware currently binds the Grace, CPU, and
 SysIO meters only: the module ACPI meters on GB200 are unbound, and the DRAM rail is blank. The
 module reading is available there through NVML instead (`nvidia-smi
@@ -506,7 +506,15 @@ The CPU verdict is independent of `power_valid`: it borrows only the bound
 formal window and the worker-host topology from the GPU package, and no GPU verdict reaches it, so
 an unpinned producer or failed GPU coverage withholds GPU energy while `cpu_power_valid` still
 judges the CPU samples on their own. Any CPU-leg failure records `cpu_power_valid: 0` with no CPU
-keys and leaves every GPU field unchanged. With `REQUIRE_POWER=1`, a recipe-declared CPU source must be valid; ACPI requires complete Grace socket or module totals, and missing CPU artifacts produce an independent invalid CPU audit. GPU-only recipes retain their existing behavior. Reason codes:
+keys and leaves every GPU field unchanged. It fails the job only when power is required
+and the recipe declares `telemetry.cpu_power_exporter.source`. AgentX lanes whose launcher
+validates power (`agentx=True` in [`power.py`](../infx/launch/drivers/srt/power.py)), including
+the Kimi-K3 GB200/GB300 recipes with DCGM and ACPI telemetry, always require power; other lanes
+require it through `REQUIRE_POWER=1`, set by the `require-power` master-config field (as on the
+Qwen3.5 GB200/GB300 8k1k sequences) or workflow input. A declared `acpi` source requires complete
+Grace socket or module totals, and missing CPU artifacts produce an invalid CPU audit instead of no
+verdict.
+Without a declared source, the CPU verdict never changes the job's exit code. Reason codes:
 `cpu_artifacts_missing`, `cpu_sensor_source_mismatch`,
 `cpu_samples_missing`, `cpu_samples_header_mismatch`, `cpu_samples_malformed`,
 `cpu_manifest_invalid`, `cpu_socket_count_mismatch`, `cpu_sensor_kind_mixed`,

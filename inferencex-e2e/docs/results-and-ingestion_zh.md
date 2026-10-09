@@ -93,7 +93,7 @@ shape:    array of benchmark row objects
 | 延迟和交互性 | 基准输入中每个以 `ms` 结尾的键都会从毫秒换算为秒，并移除 `_ms`。包含 `tpot` 的键还会产生其倒数 `intvty`。 |
 | 可选运行时元数据 | 形式必须精确为 `{name, version}` 的 `router`、`kv_p2p_transfer`，以及多节点结果中由 srt-slurm 遥测包补入的实测功耗 |
 
-单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。只有多节点结果执行功耗聚合；单节点结果不含功耗字段或结论。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，功耗验证失败会在保留已有结果和审计后使任务失败。
+单节点 GPU 数为 `tp * pp * pcp_size`。DCP 不会增加物理 GPU 数。多节点每 GPU 指标的分母使用声明的 prefill 和 decode GPU 数。无效或缺失的必需元数据会使转换失败。只有多节点结果执行功耗聚合；单节点结果不含功耗字段或结论。功耗聚合默认尽力而为；当设置 `REQUIRE_POWER=1` 时，或在由 launcher 自行验证功耗的 AgentX 通道上，功耗验证失败会在保留已有结果和审计后使任务失败。
 
 InferenceX-app 将路由字段作为列或配置维度，并把数值测量存入 `benchmark_results.metrics` JSONB。映射器支持共享拓扑的 v1、拆分 prefill/decode 拓扑的 v2，以及嵌套 AgentX 指标的 v3。未知数值指标会被保留并产生警告，因此架构可以扩展，同时不会无提示地丢失数值数据。
 
@@ -454,7 +454,7 @@ socket 总功耗也不等于各组件供电轨之和
 | `DRAM Power Socket N`（`dram_w`） | 固件提供时的 LPDDR5X 供电轨 | | 不发布；当前 NVL72 固件下为空 |
 | `CPU<n>:cpuPowerUsageW` | DCGM 字段 1130，仅 CPU 供电轨 | SysIO 与 LPDDR5X | 仅在没有 ACPI 时作为 Grace 侧字段 |
 
-在 GB300 tray 上，socket 总功耗约为每 socket 95 W，而 CPU 与 SysIO 两条供电轨之和约为 51 W；差值是
+在 GB300 tray 上，每个 socket 总功耗约为 97 W，而 CPU 与 SysIO 两条供电轨之和约为 55 W；剩余约 42 W 是
 LPDDR5X 与稳压损耗，因此供电轨读数永远不会与总功耗相加或相减。CI 集群的 NVL72 固件目前只绑定 Grace、CPU
 和 SysIO 三个功耗计：GB200 上的模块 ACPI 功耗计未绑定，DRAM 供电轨为空。模块读数在那里改由 NVML 提供
 （`nvidia-smi --query-gpu=module.power.draw.average`），同一颗 superchip 的两颗 GPU 报出相同的模块值，空闲时
@@ -481,10 +481,15 @@ LPDDR5X 与稳压损耗，因此供电轨读数永远不会与总功耗相加或
 记录 `sensor_kind`（`module`、`grace_socket` 或 `dcgm_cpu_rail`）、`source`（`acpi` 或 `dcgm`）、
 预期与观测 socket 数、解析行数和原因码。`power_metric_schema_version` 保持为 `2`。
 
-该测量环节尽力而为，其结论与 `power_valid` 相互独立：它只从 GPU 产物包借用已绑定的正式测量窗口和
+CPU 侧结论与 `power_valid` 相互独立：它只从 GPU 产物包借用已绑定的正式测量窗口和
 worker 主机拓扑，GPU 侧的任何结论都不会传导过来，因此 producer 固定版本校验失败或 GPU 覆盖不足只会
 使 GPU 能耗不予发布，`cpu_power_valid` 仍按 CPU 采样自身给出结论。CPU 侧的任何失败都会记录
-`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持不变。设置 `REQUIRE_POWER=1` 时，配方声明的 CPU 来源必须有效；ACPI 必须提供完整的 Grace socket 或模块总功耗，缺失 CPU 产物会生成独立的无效 CPU 审计。仅采集 GPU 的配方保留原有行为。
+`cpu_power_valid: 0` 且不输出 CPU 字段，所有 GPU 字段保持不变。只有在强制功耗验证且配方声明了 `telemetry.cpu_power_exporter.source` 时，
+CPU 侧失败才会使任务失败。由 launcher 自行验证功耗的 AgentX 通道（[`power.py`](../infx/launch/drivers/srt/power.py)
+中 `agentx=True`，包括启用 DCGM 与 ACPI 遥测的 Kimi-K3 GB200/GB300 配方）始终强制功耗验证；其他通道通过
+`REQUIRE_POWER=1` 强制功耗验证，该值来自主配置的 `require-power` 字段（如 Qwen3.5 GB200/GB300 8k1k 序列）
+或工作流输入。声明 `acpi` 来源时，必须提供完整的 Grace socket 或模块总功耗；缺失 CPU 产物会生成无效的 CPU 审计，而不是不给出结论。未声明来源时，
+CPU 侧结论不会改变任务的退出码。
 原因码包括 `cpu_artifacts_missing`、`cpu_sensor_source_mismatch`、`cpu_samples_missing`、`cpu_samples_header_mismatch`、`cpu_samples_malformed`、
 `cpu_manifest_invalid`、`cpu_socket_count_mismatch`、`cpu_sensor_kind_mixed`、
 `cpu_sample_gap_exceeded`、`cpu_window_not_bracketed` 以及 `cpu_window_unavailable`（没有已完成的窗口

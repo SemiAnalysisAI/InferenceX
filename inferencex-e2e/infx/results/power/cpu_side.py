@@ -1,4 +1,4 @@
-"""Best-effort Grace CPU-side power leg of the multinode srt-slurm package.
+"""Grace CPU-side power leg of the multinode srt-slurm package.
 
 srt-slurm's ``cpu_power_exporter`` leg writes ``power/cpu/samples.csv`` and a
 non-authoritative ``power/cpu/cpu_manifest.json`` beside the GPU DCGM package
@@ -11,11 +11,11 @@ Each (hostname, socket) headline series is integrated over the GPU leg's
 bound formal window with the shared trapezoid and boundary interpolation and
 published as additive metrics next to the GPU-board numbers. The v2 ACPI
 CPU-only and SysIO rails are integrated the same way when every socket reports
-them; a rail with gaps drops only its own metrics. The leg is
-best-effort by contract: any failure records ``cpu_power_valid=0`` with
-reason codes and leaves every GPU field untouched. Strict qualification also
-requires a recipe-declared CPU source; GPU-only callers keep best-effort CPU
-behavior. A package without ``cpu/`` emits nothing unless a source is expected.
+them; a rail with gaps drops only its own metrics. Any failure records
+``cpu_power_valid=0`` with reason codes and leaves every GPU field untouched.
+This module only judges the leg: the caller fails the job only when power is
+required and the recipe declares a CPU source (``expected_source``). A package
+without ``cpu/`` emits nothing unless a source is expected.
 """
 
 from __future__ import annotations

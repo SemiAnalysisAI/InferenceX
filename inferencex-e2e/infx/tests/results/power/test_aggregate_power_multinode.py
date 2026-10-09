@@ -1019,7 +1019,7 @@ class TestCpuSidePower:
     )
     def test_cpu_leg_failures_leave_gpu_fields_untouched(self, tmp_path, tampered, reason):
         pkg = tampered
-        # REQUIRE_POWER guards the GPU leg only; a broken CPU leg never fails the run.
+        # Without an expected CPU source, REQUIRE_POWER gates only the GPU leg.
         assert pkg.run(require_power=True) == 0
         agg = pkg.agg()
         assert agg["cpu_power_valid"] == 0

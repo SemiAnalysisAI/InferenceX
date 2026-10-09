@@ -31,9 +31,9 @@ and aggregate power metrics remain blocked.
 Grace CPU-side leg: when the package also carries ``power/cpu/`` (see
 :mod:`.cpu_side`), each socket's Grace-side (and, when exposed, whole-module)
 power is integrated over the same bound formal window and published under
-``cpu_power_valid``. That verdict is independent of ``power_valid``. Strict
-power qualification fails when a recipe-declared CPU source is missing or invalid;
-GPU-only callers retain best-effort CPU behavior.
+``cpu_power_valid``. That verdict is independent of ``power_valid``. A missing
+or invalid CPU leg fails the run only with ``require_power`` and an
+``expected_cpu_source``; otherwise it never changes the exit code.
 """
 
 from __future__ import annotations
