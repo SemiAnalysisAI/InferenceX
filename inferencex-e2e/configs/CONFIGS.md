@@ -140,11 +140,9 @@ backends such as LMCache or Mooncake. Additional keys and image references in
 `version` are rejected.
 
 Most `router` and `kv-offload-backend` versions label what the image ships. When a
-repository setup script installs the component instead (the vLLM Router, TileRT, the
-single-node Mooncake client and the MI300X LMCache wheel), the master `version` is the
-installed version: the launcher binds it into the recipe as `ROUTER_VERSION` or
-`KV_OFFLOAD_BACKEND_VERSION` for the script, or checks a `vllm-router==` pin in
-`SETUP_PIP_PACKAGES` against it, and a point that omits it fails before submission.
+repository setup script installs the component instead, `version` is required and is
+the installed version; the launcher binds or checks it
+([recipe fragments](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#recipe-fragments)).
 
 Agentic duration is not a master YAML field. Matrix generation defaults agentic
 jobs to 3600 seconds. Reusable workflow callers may override the `duration`
