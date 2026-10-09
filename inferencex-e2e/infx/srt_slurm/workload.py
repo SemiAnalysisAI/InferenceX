@@ -159,18 +159,26 @@ def bind_workload(
     return bound
 
 
+def bind_multinode(
+    recipe: str, environment: Mapping[str, str], *, root: Path
+) -> tuple[str | None, dict[str, Any]]:
+    """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
+    path, _, selector = recipe.partition(":")
+    composed = compose_recipe(Path(path), multinode=True, root=root)
+    variants = selected_recipes(composed, selector or None)
+    if len(variants) != 1:
+        raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
+    name, selected = variants[0]
+    return name, bind_workload(selected, environment, multinode=True)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Bind one multi-node fixed-sequence recipe")
     parser.add_argument("recipe", help="fragment[:selector]")
     parser.add_argument("output", type=Path)
     args = parser.parse_args(argv)
-    path, _, selector = args.recipe.partition(":")
     try:
-        composed = compose_recipe(Path(path), multinode=True, root=repository_root())
-        variants = selected_recipes(composed, selector or None)
-        if len(variants) != 1:
-            raise ValueError(f"{args.recipe} selects {len(variants)} variants, not one")
-        bound = bind_workload(variants[0][1], os.environ, multinode=True)
+        _, bound = bind_multinode(args.recipe, os.environ, root=repository_root())
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))
     args.output.write_text(yaml.safe_dump(bound, sort_keys=False))
