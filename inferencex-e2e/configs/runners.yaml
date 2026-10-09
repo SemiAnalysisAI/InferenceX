@@ -862,7 +862,6 @@ clusters:
         aiperf-cache: {path: /it-share/aiperf-cache}
         it-share-data: {path: /it-share/data}
         k3-draft: {path: /it-share/data/Inferact-Kimi-K3-DSpark}
-        ionic-provider: {path: /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so, visibility: node-local}
       squash:
         dir: /it-share/gharunners2/srt-slurm/containers
         visibility: shared
@@ -874,6 +873,8 @@ clusters:
         gpus-per-node-directive: true
         segment-directive: false
         outputs: /it-share/gharunners2/srt-slurm/outputs
+        env:
+          IONIC_PROVIDER_PATH: /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
