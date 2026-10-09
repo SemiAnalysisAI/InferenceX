@@ -9,4 +9,4 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
 | `573-participating-gpus.patch` | [NVIDIA/srt-slurm#573](https://github.com/NVIDIA/srt-slurm/pull/573) | Record only the GPUs workers occupy on a worker node; an exporter such as AMD's reports every GPU, which the collector otherwise flags as `unexpected_device`. |
-| `clock-sync-kernel-flag.patch` | NVIDIA/srt-slurm PR pending (branch `fix/clock-sync-kernel-adjtimex-fallback`) | `clock_sync_check` also accepts the kernel's own `STA_UNSYNC` flag read through `adjtimex(2)` and keeps each probe's stderr; DGX Cloud H200 nodes have no systemd/D-Bus and no `chronyc`/`ntpq`, so every daemon probe failed although the clock is disciplined. |
+| `592-clock-sync-kernel-flag.patch` | [NVIDIA/srt-slurm#592](https://github.com/NVIDIA/srt-slurm/pull/592) | `clock_sync_check` also accepts the kernel's own `STA_UNSYNC` flag read through `adjtimex(2)` and keeps each probe's stderr; DGX Cloud H200 nodes have no systemd/D-Bus and no `chronyc`/`ntpq`, so every daemon probe failed although the clock is disciplined. |
