@@ -9495,6 +9495,7 @@
     - minimaxm3-fp8-mi325x-vllm-agentic-hybrid-agg
     - minimaxm3-fp8-mi325x-vllm-agentic-disagg
     - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi325x-vllm-agentic-replicas
     - dsv41flash-fp4-mi325x-vllm-agentic-nixl
   scenario-type:
     - agentic-coding

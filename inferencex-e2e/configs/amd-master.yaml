@@ -1237,6 +1237,31 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
       # recipe halves the indexer buffer and caps the scheduler here.
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi325x-fp4-mtp/agentic.yaml }
 
+dsv41flash-fp4-mi325x-vllm-agentic-replicas:
+  image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi325x-amd
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  router: {name: vllm-router, version: '0.1.15'}
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - conc-list: [4]
+        spec-decoding: mtp
+        kv-offloading: none
+        num-nodes: 1
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi325x-fp4/agentx/agg-replicas.yaml
+
 dsv41flash-fp4-mi325x-vllm-agentic-nixl:
   image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
   model: deepseek-ai/DeepSeek-V4.1-Flash
