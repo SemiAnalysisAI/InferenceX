@@ -52,7 +52,6 @@ class Lifecycle:
         """Register a cleanup; one that raises or returns a nonzero int fails the launch."""
 
         def run() -> None:
-            name = getattr(fn, "__name__", fn)
             try:
                 result = fn(*args, **kwargs)
             except Exception as error:  # noqa: BLE001 - every cleanup must get its turn
@@ -61,7 +60,7 @@ class Lifecycle:
                 self._cleanup_failed = True
                 return
             if isinstance(result, int) and not isinstance(result, bool) and result:
-                message = f"cleanup {name!s} returned {result}"
+                message = f"cleanup {getattr(fn, '__name__', fn)!s} returned {result}"
                 print(f"WARNING: {message}", file=sys.stderr)
                 self.event.fail("CleanupFailed", message, stage="cleanup", report=False)
                 self._cleanup_failed = True

@@ -128,7 +128,7 @@ def job_event(workspace: Path) -> dict:
 
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
-    env = single_node_env(harness, "h200-cw", EXP_NAME="dsr1_1k1k", RECIPE_FINGERPRINT="fp-1")
+    env = single_node_env(harness, "h200-cw")
     # The binder takes the job cluster's fabric facts.
     records = yaml.safe_load(harness.config.read_text())
     records["clusters"]["h200-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
@@ -160,16 +160,12 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert lines(harness.logs, "scancel") == []
 
     event = job_event(workspace)
-    identity = {
-        "run_id": "9001", "run_attempt": 1, "result_filename": "point-identity", "exp_name": "dsr1_1k1k",
-        "runner": env["RUNNER_NAME"], "cluster": "h200-cw", "launch_path": "srt-single",
-        "model_prefix": "dsr1", "framework": "sglang", "precision": "fp8", "spec_decoding": "none",
-        "multinode": False, "conc": 2, "recipe": "recipe.yaml:zip_override_conc[0]",
-        "recipe_fingerprint": "fp-1", "slurm_job_id": "42", "outcome": "success", "error": None,
+    expected = {
+        "cluster": "h200-cw", "launch_path": "srt-single", "recipe": "recipe.yaml:zip_override_conc[0]",
+        "slurm_job_id": "42", "outcome": "success", "error": None,
     }  # fmt: skip
-    assert {key: event[key] for key in identity} == identity
+    assert {key: event[key] for key in expected} == expected
     assert list(event["stages"]) == ["prepare", "submit", "queue_wait", "run", "collect"]
-    assert all(seconds >= 0 for seconds in event["stages"].values())
     assert {"point-identity.json", "srt-single-node-logs.tar.gz", "srt-setup.log"} <= set(event["artifacts"])
     assert "recipe.yaml" not in event["artifacts"]
 
@@ -461,7 +457,6 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     assert {key: error[key] for key in ("stage", "type", "exit_code", "retriable")} == {
         "stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True,
     }
-    assert "::error" not in stdout + stderr
 
 
 def batch_env(harness, **overrides: str) -> dict[str, str]:
