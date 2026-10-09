@@ -7567,7 +7567,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 2
-        srt-recipe: agg-tp8-c1-mtp.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c1
         worker:
           num-worker: 1
           tp: 8
@@ -7579,7 +7579,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 2
-        srt-recipe: agg-tp8-c2-mtp.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c2
         worker:
           num-worker: 1
           tp: 8
@@ -7591,7 +7591,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 2
-        srt-recipe: agg-tp8-c4-mtp.yaml
+        srt-recipe: agg-variants.yaml:override_tp8_c4
         worker:
           num-worker: 1
           tp: 8
@@ -7619,7 +7619,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
         conc-list: [48]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-1p2d-p-dep4-d-tp4-c48-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p2d_c48
         prefill:
           num-worker: 1
           tp: 4
@@ -7635,7 +7635,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
         conc-list: [45]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-1p4d-p-dep4-d-tp4-c45-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p4d_c45
         prefill:
           num-worker: 1
           tp: 4
@@ -7651,7 +7651,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
         conc-list: [45]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-1p6d-p-dep4-d-tp4-c45-mtp.yaml
+        srt-recipe: disagg-variants.yaml:override_1p6d_c45
         prefill:
           num-worker: 1
           tp: 4
