@@ -9496,7 +9496,7 @@
     - agentic-coding
   description:
     - "Update DeepSeek-V4.1-Flash FP4 AgentX on MI325X to the pinned October 8 vLLM ROCm nightly with native five-token DSpark, full context, and automatically selected golden acceptance."
-    - "Compare TP8 and packed TP4 aggregation with colocated NIXL prefill/decode pools. Every deployment uses and accounts for all eight GPUs on one node."
-    - "Use stock SMG cache-aware routing for aggregate replicas and session-affinity routing for NIXL pools. Engram tables are GPU-resident at TP8 and CPU-resident in the packed deployments."
+    - "Compare TP8 and packed TP4/TP2 aggregation with colocated and multi-prefill NIXL pools across low-latency and high-throughput settings. Deployments use and account for all eight GPUs on one node or all sixteen GPUs across two nodes."
+    - "Use stock SMG cache-aware routing for aggregate replicas, including stricter low-concurrency load balancing, and session-affinity routing for NIXL pools. Engram tables are GPU-resident at TP8 and CPU-resident in the packed deployments."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3843

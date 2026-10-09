@@ -1,6 +1,6 @@
 base:
   schema: 2
-  name: dsv41flash-fp4-mi325x-vllm-nixl-p4-2d2-agentic
+  name: dsv41flash-fp4-mi325x-vllm-nixl-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
     container: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
@@ -86,18 +86,13 @@ base:
       INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
       RESULT_DIR: /logs/agentic
       IS_MULTINODE: 'true'
-      CONC: '8'
+      CONC: '16'
       KV_OFFLOADING: none
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       HF_HUB_CACHE: /hf_hub_cache
-
-override_c8:
-  benchmark:
-    env:
-      CONC: '8'
 
 override_c16:
   benchmark:
@@ -108,3 +103,28 @@ override_c32:
   benchmark:
     env:
       CONC: '32'
+
+override_c64:
+  slurm:
+    time_limit: '04:00:00'
+  benchmark:
+    env:
+      CONC: '64'
+
+override_3p4d4_c64:
+  slurm:
+    time_limit: '04:00:00'
+  roles:
+    prefill:
+      nodes: 2
+      workers: 3
+    decode:
+      workers: 1
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 1024
+  benchmark:
+    env:
+      CONC: '64'
