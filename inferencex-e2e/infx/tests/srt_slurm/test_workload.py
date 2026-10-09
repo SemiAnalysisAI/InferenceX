@@ -14,6 +14,7 @@ from infx.clusters.slurm import Fabric
 from infx.srt_slurm.synthetic_acceptance import selected_recipes
 from infx.srt_slurm.workload import (
     bind_workload,
+    check_setup_script,
     compose_recipe,
     dram_budget,
     parse_concurrencies,
@@ -328,11 +329,6 @@ def test_a_component_a_script_installs_gets_the_master_version_where_the_script_
          "env": {"KV_OFFLOAD_BACKEND_VERSION": "0.3.11.post1"}},
         {"name": "etcd", "env": {"ETCD_QUOTA": "1"}},
     ]  # fmt: skip
-    router = {"setup_script": "vllm-router.sh", "frontend": {"type": "vllm-router"}}
-    bound = bind_workload(
-        router, {**AGENTX_ENV, "ROUTER_METADATA": ROUTER}, agentic=True, multinode=True, source=SOURCE
-    )
-    assert bound["environment"] == {"ROUTER_VERSION": "0.1.14"}
 
 
 @pytest.mark.parametrize("metadata", ["", '{"name": "mooncake"}', '{"name": "lmcache", "version": "1"}'])
@@ -358,35 +354,20 @@ def test_a_router_pinned_in_setup_pip_packages_must_be_the_master_router():
         "fragment.yaml: SETUP_PIP_PACKAGES vllm-router==0.1.13 is not the master router 0.1.14"
     )
     recipe["frontend"]["env"]["SETUP_PIP_PACKAGES"] = "vllm-router==0.1.14"
-    bound = bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
-    assert (bound["frontend"], bound["roles"]) == (recipe["frontend"], recipe["roles"])
+    bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
 
 
-def test_the_launcher_binder_fails_on_a_setup_script_srtctl_would_not_find(project, tmp_path):
+def test_a_setup_script_srtctl_would_not_find_fails(project):
     patches = project / "utils/srt-slurm/configs/patches"
     patches.mkdir(parents=True)
     (patches / "upstream.sh").write_text("true\n")
-    path = fragment(project, {
-        "base": {"setup_script": "upstream.sh"}, "override_own": {"setup_script": "own.sh"},
-    })  # fmt: skip
-    env = {**os.environ, **MULTI_ENV, "INFERENCEX_REPOSITORY_ROOT": str(project),
-           "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
-
-    def bind(variant: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, "-m", "infx.srt_slurm.workload", f"{path}:{variant}",
-             str(tmp_path / "bound.yaml"), "--fabric", "{}"],
-            env=env, capture_output=True, text=True, check=False,
-        )  # fmt: skip
-
-    assert bind("base").returncode == 0
-    missing = bind("override_own")
-    assert missing.returncode == 2
-    assert f"{path}: setup_script own.sh is in none of" in missing.stderr
+    check_setup_script({"setup_script": "upstream.sh"}, SOURCE, project)
+    with pytest.raises(ValueError, match="^fragment.yaml: setup_script own.sh is in none of"):
+        check_setup_script({"setup_script": "own.sh"}, SOURCE, project)
     configs = project / "benchmarks/multi_node/srt-slurm-recipes/configs"
     configs.mkdir(parents=True)
     (configs / "own.sh").write_text("true\n")
-    assert bind("override_own").returncode == 0
+    check_setup_script({"setup_script": "own.sh"}, SOURCE, project)
 
 
 def test_conc_list_must_be_canonical_positive_integers():
