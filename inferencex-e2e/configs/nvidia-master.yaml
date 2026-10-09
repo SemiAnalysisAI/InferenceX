@@ -956,7 +956,7 @@ dsv4-fp4-b200-vllm-agentic-mtp:
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
 # B200 SGLang recipe as-is until B300-specific tuning is available.
 dsr1-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.21-cu130@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b300
