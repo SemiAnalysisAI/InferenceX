@@ -22,10 +22,9 @@ base:
     interval_seconds: 10
     max_attempts: 360
   # Embedded Mooncake: each TP rank contributes TOTAL_CPU_DRAM_GB / 8 GB. The
-  # setup script installs the master config's Mooncake, as the service preamble
-  # does, and fills in the node's active RDMA rail. DSXE rails are InfiniBand
-  # without a netdev, so the transfer engine picks its own GID (a RoCE v2 index 3
-  # does not exist).
+  # setup script installs the master config's Mooncake and fills in the node's
+  # active RDMA rail. DSXE rails are InfiniBand without a netdev, so the transfer
+  # engine picks its own GID (a RoCE v2 index 3 does not exist).
   setup_script: kimik3-b300-mooncake.sh
   services:
     - name: mooncake-master
