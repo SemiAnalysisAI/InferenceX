@@ -1,27 +1,4 @@
 base:
-  # DIAGNOSTIC ONLY (campaign branch): print the bare host's NTP state and abort before the
-  # model loads, to learn why srt-slurm's clock_sync_check fails on every dgxc worker.
-  host_setup:
-    nodes: all
-    ignore_failure: false
-    timeout_seconds: 120
-    commands:
-      - |-
-        echo "=== $(hostname) $(date -u +%FT%TZ) uid=$(id -u)"; uname -r; cat /etc/os-release | head -2; true
-      - |-
-        echo "=== timedatectl"; command -v timedatectl; timedatectl show 2>&1 | head -20; timedatectl timesync-status 2>&1 | head -15; true
-      - |-
-        echo "=== chrony"; command -v chronyc; chronyc -n tracking 2>&1 | head -12; chronyc -n sources 2>&1 | head -8; ls -l /var/run/chrony /run/chrony 2>&1; true
-      - |-
-        echo "=== ntp"; command -v ntpq; ntpq -pn 2>&1 | head -8; true
-      - |-
-        echo "=== services"; for u in chrony chronyd systemd-timesyncd ntp ntpd; do printf "%s=%s " "$u" "$(systemctl is-active "$u" 2>&1)"; done; echo; pgrep -a chronyd 2>&1; pgrep -a ntpd 2>&1; pgrep -a systemd-timesyn 2>&1; true
-      - |-
-        echo "=== kernel adjtimex"; python3 -c 'import ctypes,ctypes.util; L=ctypes.CDLL(ctypes.util.find_library("c")); F=[("modes",ctypes.c_uint),("offset",ctypes.c_long),("freq",ctypes.c_long),("maxerror",ctypes.c_long),("esterror",ctypes.c_long),("status",ctypes.c_int),("constant",ctypes.c_long),("precision",ctypes.c_long),("tolerance",ctypes.c_long),("tv_sec",ctypes.c_long),("tv_usec",ctypes.c_long),("tick",ctypes.c_long),("ppsfreq",ctypes.c_long),("jitter",ctypes.c_long),("shift",ctypes.c_int),("stabil",ctypes.c_long),("jitcnt",ctypes.c_long),("calcnt",ctypes.c_long),("errcnt",ctypes.c_long),("stbcnt",ctypes.c_long),("tai",ctypes.c_int),("pad",ctypes.c_int*11)]; T=type("T",(ctypes.Structure,),{"_fields_":F}); t=T(); r=L.adjtimex(ctypes.byref(t)); print("adjtimex ret",r,"(0=TIME_OK 5=TIME_ERROR/unsync) status",t.status,"STA_UNSYNC",bool(t.status&64),"maxerror_us",t.maxerror,"esterror_us",t.esterror,"offset_us",t.offset,"freq_ppm",t.freq/65536)' 2>&1; true
-      - |-
-        echo "=== config"; ls /etc/chrony* /etc/ntp* /etc/systemd/timesyncd.conf 2>&1; grep -hv "^#" /etc/chrony/chrony.conf /etc/chrony.conf 2>/dev/null | grep -v "^$" | head -15; grep -hv "^#" /etc/systemd/timesyncd.conf 2>/dev/null | grep -v "^$" | head; true
-      - |-
-        echo "=== end of diagnostic, aborting on purpose"; false
   schema: 2
   name: qwen3.5-fp8-h200-sglang-8k1k
   model:
