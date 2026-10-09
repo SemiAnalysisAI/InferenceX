@@ -7,7 +7,7 @@ base:
   name: dsv41flash-fp4-mi325x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
+    container: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
     precision: fp4
   resources:
     gpu_type: mi325x
@@ -22,6 +22,8 @@ base:
   engine:
     type: vllm
     connector: null
+  sbatch_directives:
+    mem: '0'
   # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
@@ -36,6 +38,7 @@ base:
         tokenizer-mode: deepseek_v41
         tool-call-parser: deepseek_v41
         enable-auto-tool-choice: true
+        enable-prompt-tokens-details: true
         reasoning-parser: deepseek_v41
         # The upstream recipe's name resolves to the Triton MXFP4 W4A16 kernel
         # on gfx942.

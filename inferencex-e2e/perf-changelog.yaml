@@ -9493,10 +9493,13 @@
     - minimaxm3-fp8-mi325x-vllm-agentic-mtp
     - minimaxm3-fp8-mi325x-vllm-agentic-hybrid-agg
     - minimaxm3-fp8-mi325x-vllm-agentic-disagg
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi325x-vllm-agentic-nixl
   scenario-type:
     - agentic-coding
   description:
-    - "Compare MiniMax-M3 MXFP8 AgentX aggregation and NIXL disaggregation on MI325X using the same pinned October 8 vLLM ROCm nightly."
-    - "Compare TP8 and TP8/EP8 aggregation and disaggregation, using the cache-aware vLLM Router for prefill/decode workers, three-token EAGLE3, and automatically selected golden acceptance."
+    - "Compare MiniMax-M3 MXFP8 and DeepSeek-V4.1-Flash FP4 AgentX aggregation and NIXL disaggregation on MI325X using the same pinned October 8 vLLM ROCm nightly."
+    - "Explore MiniMax TP8, TP8/EP8, and TP4/DP2/EP8 deployments, with native session-affinity routing for the DP pools and three-token EAGLE3."
+    - "Compare DeepSeek TP8 aggregation with colocated TP4 prefill and TP4 decode, host-resident Engram tables, and five-token DSpark. Use full native context and automatically selected golden acceptance."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3843
