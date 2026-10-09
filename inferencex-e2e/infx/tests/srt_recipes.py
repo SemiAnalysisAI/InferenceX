@@ -1,8 +1,4 @@
-"""Launchable srt-slurm recipes for tests that plan or fingerprint matrix rows.
-
-The planner fingerprints a row by composing, selecting and binding its recipe as the launcher
-would, so planned fixtures need fragments that serve their points and the shared blocks.
-"""
+"""Launchable srt-slurm recipes for tests that plan or fingerprint matrix rows."""
 
 from pathlib import Path
 

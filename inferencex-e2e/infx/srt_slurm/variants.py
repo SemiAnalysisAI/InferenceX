@@ -79,9 +79,9 @@ def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, 
     return variants
 
 
-def _without_nulls(value: Any) -> Any:
+def without_nulls(value: Any) -> Any:
     if isinstance(value, dict):
-        return {key: _without_nulls(item) for key, item in value.items() if item is not None}
+        return {key: without_nulls(item) for key, item in value.items() if item is not None}
     return value
 
 
@@ -118,6 +118,6 @@ def expand_variants(
         for _, recipe in selected:
             recipe.setdefault("schema", raw["schema"])
     return [
-        (name, _without_nulls(recipe) if name.startswith("zip_override_") else recipe)
+        (name, without_nulls(recipe) if name.startswith("zip_override_") else recipe)
         for name, recipe in selected
     ]

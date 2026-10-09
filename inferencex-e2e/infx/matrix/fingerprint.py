@@ -1,11 +1,7 @@
 """Recipe fingerprints: a matrix row's identity plus the concrete recipe its job runs.
 
-The recipe is what the launcher submits (``srt_slurm.generate.bound_variant``, expanding
-variants without srtctl): the fragment over its shared block, with the DCGM telemetry block
-for a ``power`` row, the selected variant bound to the master values. Concurrency, the job
-name and every cluster fact (exporter port, staged paths, mounts, client cache paths, fabric)
-stay out, so a recipe keeps one fingerprint across concurrencies and clusters. An
-``eval-srt-recipe`` contributes only its path, via the row.
+Concurrency, the job name and cluster facts stay out, so a recipe keeps one fingerprint across
+concurrencies and clusters.
 """
 
 from __future__ import annotations
@@ -31,7 +27,6 @@ RECIPE_EXCLUDED = (
     ("name",),
     ("benchmark", "concurrencies"),
     ("benchmark", "env", "CONC"),
-    ("benchmark", "env", "CONC_LIST"),
     ("telemetry", "dcgm_exporter", "port"),
 )
 # Stands in for the cluster's exporter port so a power row composes its telemetry block.
@@ -43,13 +38,13 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def row_identity(entry: Mapping[str, Any]) -> dict[str, Any]:
+def _row_identity(entry: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in entry.items() if key not in ROW_EXCLUDED}
 
 
 def row_fingerprint(entry: Mapping[str, Any]) -> str:
     """The generated row alone: for rows without an srt-slurm recipe, and older revisions."""
-    return _digest(row_identity(entry))
+    return _digest(_row_identity(entry))
 
 
 def _without(block: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
@@ -63,10 +58,11 @@ def _without(block: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
     return {**block, key: _without(block[key], tuple(rest))}
 
 
-def concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
+def _concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
     """The variant the launcher submits for ``entry`` under ``root``, minus point-level keys."""
+    power_port = EXPORTER_PORT if entry.get("power") else None
     _, recipe = bound_variant(
-        entry, point_environment(entry), root, expand=expand_variants, power_port=EXPORTER_PORT
+        entry, point_environment(entry), root, expand=expand_variants, power_port=power_port
     )
     for path in RECIPE_EXCLUDED:
         recipe = _without(recipe, path)
@@ -78,11 +74,11 @@ def recipe_fingerprint(entry: Mapping[str, Any], root: Path) -> str:
     if not entry.get("srt-recipe"):
         return row_fingerprint(entry)
     try:
-        recipes = concrete_recipes(entry, root)
+        recipes = _concrete_recipes(entry, root)
     except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as error:
         point = f"{entry.get('exp-name')} conc {entry.get('conc')}"
         raise ValueError(f"{entry['srt-recipe']} ({point}): {error}") from error
-    return _digest({"row": row_identity(entry), "recipe": recipes})
+    return _digest({"row": _row_identity(entry), "recipe": recipes})
 
 
 def main() -> None:
