@@ -271,3 +271,6 @@ bash -n collectivex/runtime/*.sh collectivex/launchers/*.sh
 
 Core paths are `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`, `launchers/`,
 and `tests/`.
+
+NCCL-EP nightly installation and exact wheel provenance are documented in
+[the NCCL-EP guide](docs/nccl-ep.md).
