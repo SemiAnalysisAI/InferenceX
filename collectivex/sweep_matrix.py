@@ -30,8 +30,9 @@ def _load_config(name: str) -> dict[str, Any]:
 
 SWEEP = _load_config("sweep.json")
 SWAP_SWEEP = _load_config("swap_sweep.json")
+KV_SWEEP = _load_config("kv_sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
-SUITES = ("ep", "swap-blocks")
+SUITES = ("ep", "swap-blocks", "kv-transfer")
 
 
 SWEEP_BACKENDS = tuple(dict.fromkeys(
@@ -177,6 +178,76 @@ def _swap_shard(sku: str, profile_name: str) -> tuple[list[dict[str, Any]], dict
         allocation_minutes=SWAP_SWEEP["allocation_minutes"], **staged,
     )
     return _runnable(sku, cases), shard
+
+
+def _kv_shards(sku: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The kv-transfer shards one pool runs: one per (backend, fabric) its registry enables.
+
+    A KV leg is 2 nodes x 1 GPU: the per-worker transfer pair an engine actually forms, not an
+    allocation-wide collective. A pool with no ``kv_backends`` entry emits nothing -- absence is
+    not-yet-enabled, mirroring ll_backends. The allocation and the per-case hang guard come from
+    kv_sweep.json's scheduling block: KV grids run for hours, and gb300 paces ~1.8x gb200 at the
+    top ISLs over mnnvl, so both are sized per pool rather than fleet-wide.
+    """
+    platform = PLATFORMS[sku]
+    timing = KV_SWEEP["timing"]
+    scheduling = KV_SWEEP["scheduling"].get(sku, KV_SWEEP["scheduling"]["default"])
+    requested, shards = [], []
+    for backend, raw in sorted(platform.get("kv_backends", {}).items()):
+        # A registry value is a fabric list (the full sweep) or an object that restricts it: `ops`
+        # (a direction the fabric cannot serve, e.g. ionic RDMA READ on Pollara), `image` (a build
+        # shipped only in one image), `device` (an engine NIC filter; `{gpu}` expands to the
+        # physical GPU index at runtime) and `pool_budget` (bytes, where the NICs cannot register
+        # the default pool).
+        spec = raw if isinstance(raw, dict) else {"fabrics": raw}
+        for fabric in spec["fabrics"]:
+            cases = []
+            # A workload's dtype mix can be architectural (dsv4's fp8 slots), so the sweep config
+            # maps each workload to its precisions; a test proves every mapped cell plans.
+            for workload, workload_precisions in KV_SWEEP["workloads"].items():
+                for precision in workload_precisions:
+                    case = {
+                        "suite": KV_SWEEP["suite"],
+                        "workload": workload,
+                        "backend": backend,
+                        "routing": "paged",
+                        "precision": precision,
+                        "phase": "xfer",
+                        "ep": 2,
+                        "mode": fabric,
+                        "isl_ladder": " ".join(map(str, KV_SWEEP["isl_ladder"])),
+                        "page_tokens": " ".join(map(str, KV_SWEEP["page_tokens"])),
+                        "batch_sizes": " ".join(map(str, KV_SWEEP["batch_sizes"])),
+                        "ops": " ".join(spec.get("ops", KV_SWEEP["ops"])),
+                        "kv_device": spec.get("device", ""),
+                        "pool_slack": KV_SWEEP["pool_slack"],
+                        "seed": KV_SWEEP["seed"],
+                        "warmup": timing["warmup_per_trial"],
+                        "reps": timing["reps_per_trial"],
+                        "trials": timing["trials_per_point"],
+                        "nodes": 2,
+                        "gpus_per_node": 1,
+                        "scale_up_domain": platform["scale_up_domain"],
+                        "scale_up_transport": platform["scale_up_transport"],
+                        "topology_class": f"{platform['product']}-kv-{fabric}",
+                    }
+                    if "pool_budget" in spec:
+                        case["pool_budget"] = spec["pool_budget"]
+                    case["case_id"] = ep_harness.case_id(sku, case)
+                    cases.append(case)
+            requested += _runnable(sku, cases)
+            shards.append(_shard(
+                sku, f"{sku}-kv-{backend}-{fabric}", backend, cases,
+                suite=KV_SWEEP["suite"], fabric=fabric,
+                allocation_minutes=scheduling["allocation_minutes"],
+                run_timeout=scheduling["run_timeout"],
+                # The GitHub job must outlive the allocation plus its salloc queue wait, or it
+                # cancels a healthy shard before the launcher's own guards act; never below the
+                # fleet-wide 350.
+                job_timeout_minutes=max(350, scheduling["allocation_minutes"] + 30),
+                **({"image": spec["image"]} if "image" in spec else {}),
+            ))
+    return requested, shards
 
 
 def resolve_matrix(
@@ -330,6 +401,12 @@ def resolve_matrix(
             requested, shard = _swap_shard(sku, swap_profile)
             requested_cases += requested
             shards_by_sku.setdefault(sku, []).append(shard)
+    if "kv-transfer" in selected_suites:
+        for sku in selected_skus:
+            requested, kv_shards = _kv_shards(sku)
+            requested_cases += requested
+            if kv_shards:
+                shards_by_sku.setdefault(sku, []).extend(kv_shards)
     include = [
         shards_by_sku[sku][index]
         for index in range(max(map(len, shards_by_sku.values()), default=0))

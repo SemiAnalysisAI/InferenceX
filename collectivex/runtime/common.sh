@@ -70,8 +70,11 @@ collx_set_placement() {
   TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
+  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
+  # NVL domain, so it takes the same network profile and validation as any other scale-out.
   COLLX_TRANSPORT="$4"
-  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
+  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
+    || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -429,6 +432,9 @@ collx_allocation_nodes_csv() {
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
+  # Inside an MNNVL domain the socket interface is never validated (the registry pins it for the
+  # kv rdma legs only), so rank zero keeps resolving by hostname there.
+  [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.
   if [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]]; then
@@ -485,7 +491,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH

@@ -109,18 +109,85 @@ def _headline(document: dict) -> tuple:
     )
 
 
-def render(documents: list[dict]) -> str:
-    documents = sorted(documents, key=_identity)
+KV_SUITE = "kv-transfer"
+
+
+def _invalid_banner(documents: list[dict]) -> list[str]:
+    # The leg is already red (each benchmark entrypoint returns nonzero on a non-success
+    # outcome); call the count out loudly so it is not lost in the per-row table.
     invalid = [d for d in documents if d["outcome"]["status"] != "success"]
-    lines = ["## CollectiveX EP results", ""]
-    if invalid:
-        # The leg is already red (ep_harness.run_sweep returns nonzero on a non-success
-        # outcome); call the count out loudly so it is not lost in the per-row table.
+    if not invalid:
+        return []
+    return [f"> **{len(invalid)} of {len(documents)} outcome(s) INVALID** — "
+            "the leg fails; see the outcome column below.", ""]
+
+
+def _kv_cell(rows: list[dict], kind: str, op: str, batch: str = "min"):
+    """The largest-ISL row of a (kind, op) family -- the bandwidth-bound point -- at its smallest
+    or largest measured batch."""
+    matching = [r for r in rows if r.get("kind") == kind and r.get("op") == op]
+    if not matching:
+        return "-", "-"
+    isl = max(r["isl"] for r in matching)
+    pick = min if batch == "min" else max
+    row = pick((r for r in matching if r["isl"] == isl), key=lambda r: r["batch"])
+    return row["gbps_p50"], row["latency_ms"]["p50"]
+
+
+def render_kv(documents: list[dict]) -> str:
+    """kv-transfer table: paged bandwidth at the bandwidth-bound ISL plus the contiguous
+    baseline, and the paged latency."""
+    def key(document):
+        factors = document["identity"]["case_factors"]
+        case = factors["case"]
+        return factors["sku"], case["backend"], case["mode"], case["workload"], case["precision"]
+
+    lines = ["## CollectiveX KV-transfer results", "", *_invalid_banner(documents),
+             "| ver | sku | backend | fabric | workload | precision | outcome | op "
+             "| paged GB/s b1 | paged GB/s bmax | contig GB/s | paged ms b1 |",
+             "|--:|---|---|---|---|---|---|---|--:|--:|--:|--:|"]
+    for document in sorted(documents, key=key):
+        sku, backend, fabric, workload, precision = key(document)
+        rows = document["measurement"]["rows"]
+        # Cells read the pull lane when measured, else the push lane (a backend may serve one
+        # direction only, e.g. mooncake on Pollara, where upstream ionic RDMA READ is broken);
+        # the op column names which lane the row's numbers come from.
+        op = next((candidate for candidate in ("pull", "push")
+                   if _kv_cell(rows, "paged", candidate)[0] != "-"), "pull")
+        paged_gbps, paged_ms = _kv_cell(rows, "paged", op)
+        paged_bmax, _ = _kv_cell(rows, "paged", op, batch="max")
+        bulk_gbps, _ = _kv_cell(rows, "bulk", op)
         lines.append(
-            f"> **{len(invalid)} of {len(documents)} outcome(s) INVALID** — "
-            "the leg fails; see the outcome column below."
+            f"| {document['version']} | {sku} | `{backend}` | {fabric} | {workload} | "
+            f"{precision} | {document['outcome']['status']} | {op} | {paged_gbps} | "
+            f"{paged_bmax} | {bulk_gbps} | {paged_ms} |"
         )
-        lines.append("")
+    lines.append(
+        "\n> Paged rows move requests' KV as vLLM's packed block-major descriptor lists (one "
+        "contiguous descriptor per physical block per cache group) over randomized block "
+        "tables; b1/bmax = requests posted per burst (GB/s is burst-aggregate); contig is the "
+        "single-descriptor contiguous baseline (host-observed goodput, not proven wire "
+        "utilization); op names the measured direction. GB/s at the largest ISL "
+        "(bandwidth-bound)."
+    )
+    return "\n".join(lines)
+
+
+def render(documents: list[dict]) -> str:
+    """One table per suite present; the EP table also renders when nothing was found."""
+    kv, ep = [], []
+    for document in documents:
+        is_kv = document["identity"]["case_factors"]["case"].get("suite") == KV_SUITE
+        (kv if is_kv else ep).append(document)
+    parts = [render_ep(ep)] if ep or not kv else []
+    if kv:
+        parts.append(render_kv(kv))
+    return "\n\n".join(parts)
+
+
+def render_ep(documents: list[dict]) -> str:
+    documents = sorted(documents, key=_identity)
+    lines = ["## CollectiveX EP results", "", *_invalid_banner(documents)]
     lines += [
         "| ver | sku | backend | mode | precision | suite | phase | routing | ep | topo "
         "| wire | outcome | T* | p50* us | p99* us | min50 us | skew us |",

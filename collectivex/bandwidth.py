@@ -32,7 +32,7 @@ import sys
 from typing import NamedTuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from summarize import load_results  # noqa: E402  (sibling consumer, stdlib-only)
+from summarize import KV_SUITE, load_results  # noqa: E402  (sibling consumer, stdlib-only)
 
 # stage moves nothing (bytes always 0); isolated_sum is a derived percentile sum, not a real
 # chained rate. Only these three carry a measured latency + bytes.
@@ -184,6 +184,12 @@ def _provenance(document: dict) -> str:
 
 
 def render(documents: list[dict]) -> str:
+    # kv-transfer documents have their own row model (per-transfer, no tokens_per_rank or
+    # routing); this renderer reads only EP rows, and prints nothing for a kv-only leg.
+    documents = [d for d in documents
+                 if d["identity"]["case_factors"]["case"].get("suite") != KV_SUITE]
+    if not documents:
+        return ""
     lines = [
         "## CollectiveX EP bandwidth (per-GPU, wire-basis payload)",
         "",
