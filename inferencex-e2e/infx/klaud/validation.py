@@ -65,8 +65,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     with tempfile.TemporaryDirectory(prefix="klaud-recipes-") as temp:
         # Recipes are head data too: resolve them from the candidate, not this checkout.
         root = Path(temp)
-        for reference in srt_recipe_references(family_config)[key]:
-            path = reference.partition(":")[0]
+        for path in {ref.partition(":")[0] for ref in srt_recipe_references(family_config)[key]}:
             (root / path).parent.mkdir(parents=True, exist_ok=True)
             (root / path).write_bytes(github.file_at(repository, head, prefix + path))
         entries = generate_test_config_sweep(
