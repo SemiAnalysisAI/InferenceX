@@ -1,7 +1,5 @@
 # Models
 
-English | [中文](MODELS_zh.md)
-
 This document tracks every model benchmarked by InferenceX-e2e: when it was added, which benchmark scenarios are currently active for it, and which scenarios are deprecated. Results for active scenarios are published to <https://inferencex.com/>.
 
 ## Review and merge SLO
@@ -112,7 +110,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463; GPU validation pending) | |
+| DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |
 | GLM-5.3 | `glm5.3` | 2026-09-22 ([#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)) | Agentic coding (MTP only, per the deprecation policy) | Single-turn 1k1k (deprecated for all models before this model was added; never run) |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark may be disabled for better Pareto points) | Standalone non-DSpark A/B baseline (not required from day 0) |
@@ -136,4 +134,4 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 - Deprecating a precision (e.g. Qwen3.5 bf16) or one arm of an A/B pair (e.g. non-MTP) narrows a model's recipe coverage without retiring the model. The model stays listed as active as long as one scenario still runs.
 - Klaud Cold reads the Scenarios table and this page's Model support matrix when it freezes an image-refresh baseline. A published single-turn point is exempt from re-measurement only if the family no longer runs any point with its ISL/OSL; the only Scenarios row for that ISL/OSL starts with `Deprecated since YYYY-MM-DD ([#N](PR link))` or `**Deprecated for all models** since YYYY-MM-DD ([#N](PR link))`, dated after the baseline and linking a PR of this repository; and the model's row lists that scenario under deprecated and not under active scenarios. Removing only some topologies or concurrencies exempts nothing. Keep that wording, one row per ISL/OSL and per model, and one cell per column when editing these tables; see [Klaud Cold reports](klaud-reporting.md).
 - `dsr1` began as the DeepSeek-V3 workflow templates in the initial repo import and was switched to DeepSeek-R1 benchmarking on 2025-08-13 (renamed `dsv3` → `dsr1` on 2025-08-20).
-- Adding a model? Use the [config reference](../configs/CONFIGS.md) and add a row here (and in [`MODELS_zh.md`](MODELS_zh.md)) in the same PR.
+- Adding a model? Use the [config reference](../configs/CONFIGS.md) and add a row here in the same PR.
