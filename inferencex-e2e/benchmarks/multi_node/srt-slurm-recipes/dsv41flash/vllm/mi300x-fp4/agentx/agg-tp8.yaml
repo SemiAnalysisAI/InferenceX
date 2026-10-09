@@ -78,6 +78,16 @@ base:
 
 override_c4: {}
 
+override_c2:
+  benchmark:
+    env:
+      CONC: "2"
+
+override_c3:
+  benchmark:
+    env:
+      CONC: "3"
+
 override_c16:
   benchmark:
     env:
