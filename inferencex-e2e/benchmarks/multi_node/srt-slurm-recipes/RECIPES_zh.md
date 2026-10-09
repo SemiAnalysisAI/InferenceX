@@ -66,7 +66,7 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-该命令为每个定长序列测试点及变体写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
+该命令为每个定长序列测试点写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
 ## 迁移与验证
 

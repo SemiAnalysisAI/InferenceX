@@ -66,7 +66,7 @@ Inspect what the launcher submits without a cluster:
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-It writes one bound recipe per fixed-sequence point and variant, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
+It writes one bound recipe per fixed-sequence point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
 
 ## Migration and validation
 
