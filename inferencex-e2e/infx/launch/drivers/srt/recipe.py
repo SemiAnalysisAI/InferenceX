@@ -24,13 +24,9 @@ _MAX_ATTEMPTS = re.compile(r"(\bmax_attempts:\s*)(\d+)")
 FORCED_ACCEPTANCE_MARKER = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
 
-def recipe_relpath(srt_recipe: str) -> str:
-    """``srt_recipe`` without its ``:<selector>``."""
-    return srt_recipe.split(":", 1)[0]
-
-
 def recipe_mirror_path(workspace: Path, srt_recipe: str) -> Path:
-    return workspace / recipe_relpath(srt_recipe)
+    """``srt_recipe``'s workspace copy, without its ``:<selector>``."""
+    return workspace / srt_recipe.split(":", 1)[0]
 
 
 def staged_recipe(srt_recipe: str) -> str:
@@ -42,7 +38,7 @@ def staged_recipe(srt_recipe: str) -> str:
 
 
 def rename_job(text: str, name: str) -> str:
-    """Set the top-level ``name:``, the job name srtctl submits."""
+    """Set the top-level ``name:``, srtctl's run name."""
     return re.sub(r"(?m)^name:.*$", lambda _: f'name: "{name}"', text)
 
 
