@@ -5381,8 +5381,8 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   scenarios:
     agentic-coding:
     # The fast sweep places the resident HBM cliff between c5 and c6.
-    # Sizes the 105 GiB Mooncake segment per GPU; weights and page cache use the rest.
-    - dram-utilization: 0.449
+    # Sizes the ~119 GiB Mooncake segment per GPU; weights and page cache use the rest.
+    - dram-utilization: 0.4725
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5], srt-recipe: agentic.yaml }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8], srt-recipe: agentic.yaml }
