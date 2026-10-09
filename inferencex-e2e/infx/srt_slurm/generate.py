@@ -16,8 +16,8 @@ import yaml
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
-from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_workload, compose_recipe
+from infx.srt_slurm.synthetic_acceptance import build_overrides
+from infx.srt_slurm.workload import bind_multinode
 
 # What benchmark-tmpl.yml and benchmark-multinode-tmpl.yml export.
 RANDOM_RANGE_RATIO = "0.8"
@@ -55,19 +55,14 @@ def _environment(point: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _bound_variants(
+def _bound_variant(
     point: Mapping[str, Any], environment: Mapping[str, str], root: Path
-) -> list[tuple[str | None, dict[str, Any]]]:
-    """Each variant the launcher would submit for ``point``, bound."""
-    path, _, selector = point["srt-recipe"].partition(":")
+) -> tuple[str | None, dict[str, Any]]:
+    """The variant the launcher submits for ``point``, bound."""
     if "prefill" not in point:
         selected, recipe = select_recipe(str(root / point["srt-recipe"]), environment, root=root)
-        return [(selected.partition(":")[2] or None, recipe)]
-    composed = compose_recipe(root / path, multinode=True, root=root)
-    return [
-        (name, bind_workload(recipe, environment, multinode=True))
-        for name, recipe in selected_recipes(composed, selector or None)
-    ]
+        return selected.partition(":")[2] or None, recipe
+    return bind_multinode(str(root / point["srt-recipe"]), environment, root=root)
 
 
 def _validated(recipe: dict[str, Any], environment: Mapping[str, str], source: str) -> None:
@@ -118,15 +113,13 @@ def generate_recipes(
             raise ValueError(f"{key} has no fixed-sequence points")
         for point in points:
             environment = _environment(point)
-            for variant, recipe in _bound_variants(point, environment, root):
-                _validated(recipe, environment, point["srt-recipe"])
-                identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
-                digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
-                name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"
-                recipes[name] = recipe
-                records.append(
-                    {"file": name, "config-key": key, "variant": variant, "matrix": point}
-                )
+            variant, recipe = _bound_variant(point, environment, root)
+            _validated(recipe, environment, point["srt-recipe"])
+            identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
+            digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
+            name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"
+            recipes[name] = recipe
+            records.append({"file": name, "config-key": key, "variant": variant, "matrix": point})
     output.mkdir(parents=True, exist_ok=True)
     for name, recipe in recipes.items():
         (output / name).write_text(yaml.safe_dump(recipe, sort_keys=False))
