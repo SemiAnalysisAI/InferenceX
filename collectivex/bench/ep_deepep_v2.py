@@ -213,8 +213,12 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
             ),
         )
         tuning_num_experts = int(args.experts)
+        # DeepEP sizes SMs from the scale-out rate, which it reads from ibstat; on fabrics ibstat
+        # cannot see (EFA) that probe returns 0 and the model divides by it, so the registry's
+        # per-GPU rate stands in. Unset (0) keeps DeepEP's own probe.
+        rdma_gbs = float(os.environ.get("COLLX_RDMA_GBS") or 0)
         self.num_sms = int(
-            self.buffer.get_theoretical_num_sms(tuning_num_experts, args.topk)
+            self.buffer.get_theoretical_num_sms(tuning_num_experts, args.topk, rdma_gbs=rdma_gbs)
         )
         self.num_qps = int(self.buffer.get_theoretical_num_qps(self.num_sms))
         realized = {
