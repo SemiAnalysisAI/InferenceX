@@ -467,7 +467,6 @@ def test_srtctl_runs_the_bundle_variant_staged_from_srt_recipe(harness):
     assert_ok(launch(env, harness.config, harness.workspace))
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    # The same path:selector the CONFIG_FILE=recipes/... setting used to hand srtctl.
     assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml:override_x"
 
 

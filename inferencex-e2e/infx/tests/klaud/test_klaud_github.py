@@ -1142,9 +1142,7 @@ def test_failing_producer_keeps_its_stderr_and_never_sees_credentials(tmp_path, 
 
 
 @pytest.mark.parametrize("from_repository_root", [False, True])
-def test_live_families_preserve_public_identity_after_move(
-    tmp_path, monkeypatch, family_configs, from_repository_root,
-):
+def test_live_families_preserve_public_identity_after_move(tmp_path, family_configs, from_repository_root):
     master, runners = family_configs
     project = tmp_path / "inferencex-e2e"
     configs = project / "configs"
@@ -1161,7 +1159,7 @@ def test_live_families_preserve_public_identity_after_move(
     }
 
 
-def test_historical_families_ignore_leftover_nested_results(tmp_path, monkeypatch, family_configs):
+def test_historical_families_ignore_leftover_nested_results(tmp_path, family_configs):
     master, runners = family_configs
     configs = tmp_path / "configs"
     configs.mkdir()
