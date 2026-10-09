@@ -108,3 +108,38 @@ override_2x_tp4_c4:
   benchmark:
     env:
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_2x_tp4_cpu_c8: &tp4_cpu
+  frontend:
+    type: smg
+    container_image: lightseekorg/smg:1.11.0@sha256:bf6bf2671df71606b03da98679e65497dc62329a83685f6a4c1ff8dd345fb077
+    args:
+      policy: cache_aware
+      cache-index: tree
+      balance-abs-threshold: 1
+      balance-rel-threshold: 1.5
+  roles:
+    agg:
+      workers: 2
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: "8"
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_2x_tp4_cpu_c16:
+  <<: *tp4_cpu
+  benchmark:
+    env:
+      CONC: "16"
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_2x_tp4_cpu_c4:
+  <<: *tp4_cpu
+  benchmark:
+    env:
+      CONC: "4"
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"

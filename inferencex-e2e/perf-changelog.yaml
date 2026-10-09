@@ -9496,6 +9496,7 @@
     - minimaxm3-fp8-mi300x-vllm-agentic-hybrid
     - dsv41flash-fp4-mi300x-vllm-agentic-nixl
     - dsv41flash-fp4-mi300x-vllm-agentic-nixl-baseline
+    - dsv41flash-fp4-mi300x-vllm-agentic-smg-baseline
   scenario-type:
     - agentic-coding
   description:

@@ -1327,6 +1327,55 @@ dsv41flash-fp4-mi300x-vllm-agentic-nixl-baseline:
           additional-settings:
           - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-tp8.yaml:override_2x_tp4_c4
 
+dsv41flash-fp4-mi300x-vllm-agentic-smg-baseline:
+  image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi300x-amd
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-tp8.yaml:override_2x_tp4_cpu_c4
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-tp8.yaml:override_2x_tp4_cpu_c8
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [16]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-tp8.yaml:override_2x_tp4_cpu_c16
+
 # DeepSeek-V4.1-Flash AgentX on MI300X (gfx942), a copy of the validated MI355X vLLM
 # arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
 # hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8 rather than TP4
