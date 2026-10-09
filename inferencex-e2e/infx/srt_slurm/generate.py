@@ -1,4 +1,4 @@
-"""What the launcher submits for master-config points, and ``infx generate``, which writes it."""
+"""Bind master-config points to the recipes the launcher submits; ``infx generate`` writes them."""
 
 from __future__ import annotations
 
@@ -143,8 +143,8 @@ def bound_variant(
 ) -> tuple[str | None, dict[str, Any]]:
     """The variant the launcher submits for ``point``, composed and bound.
 
-    A multi-node point with ``power`` gets the DCGM telemetry block only with the cluster's
-    exporter ``power_port``; ``client_env`` holds the AgentX client paths the launcher binds.
+    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client paths
+    ``client_env``, the binder inputs the launcher computes.
     """
     if "prefill" not in point:
         selected, recipe = select_recipe(
@@ -156,7 +156,7 @@ def bound_variant(
         environment,
         root=root,
         expand=expand,
-        power_port=power_port if point.get("power") else None,
+        power_port=power_port,
         client_env=client_env,
     )
 
