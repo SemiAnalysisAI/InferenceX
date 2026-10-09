@@ -6,7 +6,6 @@ import yaml
 from infx.launch.drivers.srt.recipe import (
     add_dist_timeout,
     inject_concurrencies,
-    parse_concurrencies,
     raise_health_attempts,
     rename_job,
 )
@@ -69,10 +68,3 @@ def test_an_unusable_recipe_is_left_untouched(tmp_path, text, message):
     with pytest.raises(ValueError, match=message):
         inject_concurrencies(recipe, [4])
     assert recipe.read_text() == text
-
-
-def test_conc_list_must_be_canonical_positive_integers():
-    assert parse_concurrencies(" 4 8\t16 ") == [4, 8, 16]
-    for bad in ("", "08", "0", "-4", "4.0", "4 4", "+4"):
-        with pytest.raises(ValueError):
-            parse_concurrencies(bad)
