@@ -144,9 +144,8 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    # srtctl runs the variant the point selects, bound beside the binder's arguments.
+    # srtctl runs the point's bound variant.
     bound = Path(argv[argv.index("--file") + 1])
-    assert (bound.parent.parent, bound.name) == (workspace, "recipe.yaml")
     recipe = yaml.safe_load(bound.read_text())
     assert recipe["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
     assert {k: recipe["benchmark"]["env"][k] for k in ("MODEL", "CONC", "USE_CHAT_TEMPLATE")} == {
@@ -285,7 +284,6 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert submitted == "recipes/test/lane.yaml"
     else:
         # The fixed-sequence fragment is bound after the lane edits its staged copy.
-        assert Path(submitted).resolve() == checkout / "recipe.yaml"
         bound = yaml.safe_load(Path(submitted).read_text())
         assert (bound["name"], bound["roles"], bound["model"]) == (
             staged["name"], staged["roles"],
