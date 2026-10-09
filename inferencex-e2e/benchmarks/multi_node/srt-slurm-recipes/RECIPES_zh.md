@@ -54,11 +54,11 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 
 定长序列配置（单节点和多节点）均为片段：只包含该配置特有设置的原生 srt-slurm YAML。启动时先组合片段，再绑定测试点：
 
-1. 工作负载的共享块 [`configs/srt-recipes/fixed-sequence-single.yaml`](../../../configs/srt-recipes/fixed-sequence-single.yaml) 或 [`fixed-sequence-multi.yaml`](../../../configs/srt-recipes/fixed-sequence-multi.yaml) 合并到片段之下（配置集合则合并到 `base` 之下）。片段优先：映射逐层合并，列表整体替换。共享块设置基准测试客户端；多节点共享块还将 `benchmark.env.TOKENIZER` 指向挂载的检查点 `/model`。
+1. 工作负载的共享块 [`configs/srt-recipes/fixed-sequence-single.yaml`](../../../configs/srt-recipes/fixed-sequence-single.yaml) 或 [`fixed-sequence-multi.yaml`](../../../configs/srt-recipes/fixed-sequence-multi.yaml) 合并到片段之下（配置集合则合并到 `base` 之下）。片段优先：映射逐层合并，列表整体替换。
 2. 主配置行的选择器选出变体。单节点变体可以声明自身的 `benchmark.env.CONC`，使该并发数与其调优参数保持配对。
 3. 绑定器（[`workload.py`](../../../infx/srt_slurm/workload.py)）将矩阵测试点写入选中的配置：`model.path: hf:<model>`、`model.container: <image>`、`model.precision` 和 `benchmark.env.ISL`/`OSL`；片段声明了 `identity.container`/`identity.model` 时写入 `identity.container.image` 和 `identity.model.repo`；启用遥测时写入 `benchmark.concurrencies`。单节点配置还会获得 `MODEL`、`CONC`、`RANDOM_RANGE_RATIO` 和 `USE_CHAT_TEMPLATE`（当且仅当配置启用投机解码时为 `true`）。多节点客户端从作业环境读取 `CONC_LIST`。
 
-片段若设置了上述任一绑定键或 `benchmark.env.CONC_LIST`，即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），主配置镜像解析为预置的容器，因此配置不再引用别名。AgentX 配置尚未采用组合方式，仍保持完整。
+片段若设置了上述任一绑定键或 `benchmark.env.CONC_LIST`，即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），主配置镜像解析为预置的容器。AgentX 配置保持完整，不进行组合。
 
 无需集群即可查看启动器实际提交的内容：
 
