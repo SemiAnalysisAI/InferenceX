@@ -9,7 +9,6 @@ from infx.results.metadata import parse_component_metadata
 from infx.results.topology import Parallelism, validate_parallelism
 
 from .request_metrics import compute_request_metrics
-from .server_metrics import compute_server_metrics
 
 
 def _env_int(env: Mapping[str, str], name: str, default: int = 0) -> int:
@@ -141,21 +140,20 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
 def build_result(
     records: list[dict[str, Any]],
     aggregate: dict[str, Any],
-    server_metrics: dict[str, Any],
     env: Mapping[str, str],
     *,
     request_accounting: dict[str, Any] | None = None,
     traces: Iterable[dict[str, Any]] = (),
-    server_logs: Iterable[str | None] = (),
 ) -> dict[str, Any]:
     """Build an unrounded AgentX aggregate from explicit inputs.
 
     Does not read process environment or open files. Inputs are not mutated;
     dataset and request-accounting mappings remain shared with the result.
-    Optional traces and logs are consumed once, only when needed. Traces must
-    belong to the aggregate's dataset; each log item is one decoded file head.
-    Preserve CLI validation order and errors, including SystemExit for invalid
-    required metadata. The caller owns serialization and output rounding.
+    Optional traces are consumed once, only when needed, and must belong to the
+    aggregate's dataset. Preserve CLI validation order and errors, including
+    SystemExit for invalid required metadata. The caller owns serialization and
+    output rounding. Server-side metrics are not aggregated here; InferenceX-app
+    derives them from the raw server metrics export and server logs.
     """
     kv_offloading, kv_offload_backend = _validate_kv_offload_env(env)
     multinode_fields, num_gpus, tp, ep, dp_attention = _gpu_shape(env)
@@ -210,12 +208,6 @@ def build_result(
             agg["dataset"] = dataset
 
     request_flat, request_nested = compute_request_metrics(records, aggregate, traces=traces)
-    _, server_nested, warnings = compute_server_metrics(
-        server_metrics,
-        framework=framework,
-        records=records,
-        server_logs=server_logs,
-    )
 
     if "total_tput_tps" in request_flat and num_gpus > 0:
         request_nested["throughput"]["per_gpu"] = {
@@ -225,8 +217,4 @@ def build_result(
         }
 
     agg["request_metrics"] = request_nested
-    agg["server_metrics"] = server_nested
-    agg["kv_cache_pool_tokens"] = server_nested["kv_cache"]["gpu_total_tokens"]
-    if warnings:
-        agg["warnings"] = warnings
     return agg

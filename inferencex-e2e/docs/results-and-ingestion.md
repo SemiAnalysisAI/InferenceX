@@ -216,8 +216,8 @@ Other GB200 AgentX recipes retain their existing producer and power restrictions
 | --- | --- |
 | `profile_export.jsonl` | Per-request metrics and lifecycle metadata. Required. |
 | `profile_export_aiperf.json` | AIPerf aggregate metadata, including dataset provenance when emitted. Optional. |
-| `server_metrics_export.json` | Server cache, KV-cache, and token metrics. Missing data produces empty or warning-backed server metrics rather than replacing the request source. |
-| Server logs | Framework-specific fallback for server metrics and capacity. |
+
+The processor does not read `server_metrics_export.*` or server logs. Those raw artifacts are uploaded unchanged, and InferenceX-app derives server-side AgentX metrics (cache hit rates, KV usage, token totals, and KV pool size) from them.
 
 Every nonblank JSONL record increments `records_total`. Records with `metadata.benchmark_phase` other than `profiling` are warmup diagnostics and are excluded. Records with a truthy `error` are also excluded and categorized. Older records with no phase are treated as profiling. The retained count becomes `num_requests_successful`. The full accounting is preserved in `request_accounting` with profiled, total dropped, warmup dropped, error dropped, and `error_categories` fields.
 
@@ -243,16 +243,10 @@ Other important AgentX fields include:
 | Cache configuration | `kv_offloading`, `kv_offload_backend`, optional `kv_p2p_transfer`, `allocated_cpu_dram_gb`, optional `router` |
 | Provenance | `dataset`, copied from AIPerf `metadata.dataset` |
 | Request metrics | `request_metrics.qps`, `latency` blocks for TTFT/E2EL/ITL/TPOT/interactivity, token distributions, throughput, cache, and per-GPU throughput |
-| Server metrics | `server_metrics.cache`, `kv_cache`, token totals, source details, and any `warnings` |
-| Compatibility | `kv_cache_pool_tokens` mirrors `server_metrics.kv_cache.gpu_total_tokens` |
 
-For a `dynamo-sglang` run with `sglang:` telemetry, the processor uses the
-SGLang adapter for cache, utilization, and token metrics. Logical GPU KV capacity
-remains `null` with a warning because TP ranks may report duplicate capacity
-values. Raw Dynamo frontend totals may include warmup requests. Missing host-hit
-counters do not imply zero CPU cache hits.
+The aggregate carries request metrics only. It has no `server_metrics`, `kv_cache_pool_tokens`, or server-metric `warnings`.
 
-The app flattens nested AgentX v3 values into canonical metric keys. Examples include `median_ttft`, `p95_e2el`, `total_tput_tps`, `tput_per_gpu`, `server_gpu_cache_hit_rate`, and `gpu_kv_cache_usage_pct`. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
+The app flattens nested AgentX v3 request values into canonical metric keys such as `median_ttft`, `p95_e2el`, `total_tput_tps`, and `tput_per_gpu`, and adds server keys such as `server_gpu_cache_hit_rate` and `gpu_kv_cache_usage_pct` from the raw server artifacts. It maps p50 to `median`. Full-response ITL fields take precedence when present, and interactivity percentiles are derived as the reciprocal of the matching ITL percentile so historical and current rows use one definition.
 
 Before normal upload, the single-node workflow runs [`validate_agentic_result.py`](../infx/results/agentic/validate_agentic_result.py). It requires an aggregate object, a numeric non-negative `request_count.avg`, positive completed requests, and an error rate at or below the configured threshold. Passing this gate does not mean no requests failed. Failed request records remain visible through `request_accounting` but do not contribute to performance metrics.
 
@@ -297,7 +291,7 @@ Dedupe exists at several boundaries. Check the boundary before diagnosing a dupl
 | Artifact preparation in CI | Newest unexpired upload per exact artifact name. Reuse replaces only changelog metadata with the merge-run copy. |
 | Direct app download mode | [`dedupeArtifactsByLogicalName`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/github-artifacts.ts) strips a trailing runner-pool and attempt token and keeps the newest logical artifact. This prevents a retry artifact from overwriting good metrics. |
 | Benchmark collection | `infx.results.collect_results` appends every parsed JSON. It has no row-level dedupe. |
-| Benchmark database write | `ON CONFLICT` on the benchmark natural key updates metrics, image, power workers, and related fields. Server-derived `kv_cache_pool_tokens` is preserved when a fresh artifact lacks it. |
+| Benchmark database write | `ON CONFLICT` on the benchmark natural key updates metrics, image, power workers, and related fields. `kv_cache_pool_tokens`, which the app derives from raw server artifacts, is preserved when a fresh ingest cannot derive it. |
 | Eval database write | Aggregate and per-config rows with fully populated matching dimensions conflict on the eval natural key. The later write refreshes metrics and returns the same row ID for sample attachment. If any nullable key dimension is null, PostgreSQL's current ordinary unique constraint does not deduplicate the rows. |
 | Eval samples | Conflict on `(eval_result_id, doc_id)` prevents duplicate documents. |
 | AgentX trace sidecar | Existing links are queried first. Blob preparation and insertion are skipped when all benchmark rows are already linked. |

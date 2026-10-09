@@ -1,11 +1,9 @@
 """Smoke tests for process_agentic_result.py against synthetic aiperf output.
 
-The processor consumes three files in $RESULT_DIR/aiperf_artifacts/:
-profile_export.jsonl, profile_export_aiperf.json, and
-(optionally) server_metrics_export.json. It writes one
-$RESULT_FILENAME.json under $AGENTIC_OUTPUT_DIR. We build a minimal
-fixture, run the processor, and assert the agg JSON has the expected
-metadata plus nested request/server metric schema.
+The processor consumes profile_export.jsonl and profile_export_aiperf.json in
+$RESULT_DIR/aiperf_artifacts/. It writes one $RESULT_FILENAME.json under
+$AGENTIC_OUTPUT_DIR. We build a minimal fixture, run the processor, and assert
+the agg JSON has the expected metadata plus nested request metric schema.
 
 These tests run entirely in tmpdir; no aiperf install or HF cache
 required.
@@ -30,7 +28,6 @@ from infx.results.agentic import (
     _optional_component_metadata,
     _optional_kv_offload_backend_metadata,
 )
-from infx.results.agentic.server_metrics import compute_server_metrics
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -58,8 +55,6 @@ AGG_TOP_LEVEL_KEYS = {
     "num_requests_successful",
     "request_accounting",
     "request_metrics",
-    "server_metrics",
-    "kv_cache_pool_tokens",
 }
 REQUEST_ACCOUNTING_KEYS = {
     "records_total",
@@ -70,59 +65,6 @@ REQUEST_ACCOUNTING_KEYS = {
     "error_categories",
 }
 
-SERVER_METRICS_KEYS = {
-    "present",
-    "adapter",
-    "metric_count",
-    "cache",
-    "kv_cache",
-    "kv_offload",
-    "tokens",
-    "sources",
-}
-SERVER_CACHE_KEYS = {
-    "gpu_cache_hit_rate",
-    "cpu_cache_hit_rate",
-    "external_cache_hit_rate",
-    "overall_cache_hit_rate",
-    "prefix_cache_hits",
-    "prefix_cache_queries",
-    "external_prefix_cache_hits",
-    "external_prefix_cache_queries",
-    "cached_tokens_by_source",
-    "frontend_cache_hit_rate",
-    "router_kv_hit_rate",
-    "router_shared_cache_hit_rate",
-    "frontend_cached_tokens",
-    "frontend_input_tokens",
-}
-SERVER_KV_CACHE_KEYS = {
-    "gpu_usage_pct",
-    "gpu_total_tokens",
-    "cpu_usage_pct",
-    "cpu_used_tokens",
-    "cpu_total_tokens",
-}
-SERVER_KV_OFFLOAD_KEYS = {
-    "bytes_gpu_to_cpu",
-    "bytes_cpu_to_gpu",
-    "time_gpu_to_cpu",
-    "time_cpu_to_gpu",
-    "bandwidth_gpu_to_cpu_bytes_per_second",
-    "bandwidth_cpu_to_gpu_bytes_per_second",
-}
-SERVER_TOKEN_KEYS = {
-    "prompt_total",
-    "generation_total",
-    "requests_completed",
-    "prompt_by_source",
-}
-SERVER_PROMPT_SOURCE_KEYS = {
-    "gpu_cache_hit",
-    "cpu_or_external_cache_hit",
-    "computed",
-    "raw",
-}
 REQUEST_METRICS_KEYS = {"qps", "latency", "tokens", "throughput", "cache"}
 REQUEST_LATENCY_KEYS = {
     "ttft",
@@ -143,16 +85,6 @@ REQUEST_THROUGHPUT_KEYS = {
     "per_gpu",
 }
 REQUEST_CACHE_KEYS = {"theoretical_cache_hit_rate"}
-
-
-def _assert_stable_server_metrics_schema(agg: dict) -> None:
-    server_metrics = agg["server_metrics"]
-    assert set(server_metrics) == SERVER_METRICS_KEYS
-    assert set(server_metrics["cache"]) == SERVER_CACHE_KEYS
-    assert set(server_metrics["kv_cache"]) == SERVER_KV_CACHE_KEYS
-    assert set(server_metrics["kv_offload"]) == SERVER_KV_OFFLOAD_KEYS
-    assert set(server_metrics["tokens"]) == SERVER_TOKEN_KEYS
-    assert set(server_metrics["tokens"]["prompt_by_source"]) == SERVER_PROMPT_SOURCE_KEYS
 
 
 def _assert_stable_request_metrics_schema(agg: dict) -> None:
@@ -290,8 +222,6 @@ def _write_fixture(tmp_path: Path) -> Path:
             },
             f,
         )
-
-    # No server_metrics_export.json — exercises the missing-file path.
     return result_dir
 
 
@@ -349,17 +279,19 @@ def _run_processor(
     return json.loads(out.read_text())
 
 
-def test_processor_emits_nested_request_and_server_metrics(tmp_path: Path):
+def test_processor_emits_nested_request_metrics_without_server_aggregates(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
+    (result_dir / "aiperf_artifacts" / "server_metrics_export.json").write_text(
+        json.dumps({"metrics": {"vllm:prefix_cache_hits": {"series": [{"stats": {"total": 1}}]}}})
+    )
+    (result_dir / "server.log").write_text("GPU KV cache size: 1,000 tokens\n")
     output_dir = tmp_path / "out"
     agg = _run_processor(result_dir, output_dir)
     assert agg["recipe_fingerprint"] == "b" * 64
     missing = AGG_TOP_LEVEL_KEYS - set(agg.keys())
     assert not missing, f"agg JSON missing top-level keys: {sorted(missing)}"
-    assert "server_gpu_cache_hit_rate" not in agg
-    assert "total_prompt_tokens" not in agg
+    assert not {"server_metrics", "kv_cache_pool_tokens", "warnings"} & set(agg)
     _assert_stable_request_metrics_schema(agg)
-    _assert_stable_server_metrics_schema(agg)
 
 
 def test_processor_preserves_dataset_provenance(tmp_path: Path):
@@ -911,141 +843,9 @@ def test_processor_surfaces_request_accounting(tmp_path: Path, error, category):
         "records_error_dropped": 1,
         "error_categories": {category: 1},
     }
-    assert agg["server_metrics"]["tokens"]["requests_completed"] == 1
     e2e_norm_intvty = agg["request_metrics"]["latency"]["e2e_norm_intvty"]
     assert e2e_norm_intvty["mean"] == pytest.approx(50.0)
     assert e2e_norm_intvty["p95"] == pytest.approx(50.0)
-
-
-def test_processor_handles_missing_server_metrics(tmp_path: Path):
-    """No server_metrics_export.json -> server cache fields are None, not error."""
-    result_dir = _write_fixture(tmp_path)
-    output_dir = tmp_path / "out"
-    agg = _run_processor(result_dir, output_dir)
-    server_metrics = agg["server_metrics"]
-    assert server_metrics["cache"]["gpu_cache_hit_rate"] is None
-    assert server_metrics["kv_cache"]["gpu_total_tokens"] is None
-    assert agg["kv_cache_pool_tokens"] is None
-    assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] is None
-    # Non-server-derived totals fall back to per-record sums.
-    assert server_metrics["tokens"]["prompt_total"] == 840
-    assert server_metrics["tokens"]["generation_total"] == 275
-    assert server_metrics["tokens"]["requests_completed"] == 5
-    _assert_stable_server_metrics_schema(agg)
-    assert agg["server_metrics"]["present"] is False
-
-
-def test_processor_reads_gpu_kv_cache_capacity_from_server_log(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
-    (result_dir / "server.log").write_text(
-        "\n".join(
-            [
-                "INFO (EngineCore_DP0 pid=100) GPU KV cache size: 5,000,000 tokens",
-                "INFO (EngineCore_DP0 pid=100) GPU KV cache size: 5,000,000 tokens",
-                "INFO (EngineCore_DP1 pid=101) GPU KV cache size: 6,500,000 tokens",
-            ]
-        )
-    )
-
-    agg = _run_processor(result_dir, tmp_path / "out")
-
-    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 11_500_000
-    assert agg["kv_cache_pool_tokens"] == 11_500_000
-    _assert_stable_server_metrics_schema(agg)
-
-
-def test_processor_emits_sglang_kv_pool_from_server_log(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
-    (result_dir / "server.log").write_text(
-        "\n".join(
-            [
-                "[2026-07-08 16:43:35] server_args=ServerArgs(tp_size=4, dp_size=4)",
-                "[2026-07-08 16:49:59 DP0 TP0 EP0] "
-                "max_total_num_tokens=4602880, chunked_prefill_size=4096",
-            ]
-        )
-    )
-
-    agg = _run_processor(
-        result_dir,
-        tmp_path / "out",
-        env_overrides={"FRAMEWORK": "sglang"},
-    )
-
-    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 18_411_520
-    assert agg["kv_cache_pool_tokens"] == 18_411_520
-    _assert_stable_server_metrics_schema(agg)
-
-
-def test_processor_reads_multinode_gpu_kv_cache_capacity_from_worker_logs(
-    tmp_path: Path,
-):
-    result_dir = _write_fixture(tmp_path)
-    log_root = result_dir.parent
-    (log_root / "watchtower-node-a_prefill_w0.out").write_text(
-        "\n".join(
-            [
-                "INFO (EngineCore_DP0 pid=100) GPU KV cache size: 5,000,000 tokens",
-                "INFO (EngineCore_DP1 pid=101) GPU KV cache size: 6,500,000 tokens",
-            ]
-        )
-    )
-    (log_root / "watchtower-node-b_decode_w0.out").write_text(
-        "INFO (EngineCore_DP0 pid=200) GPU KV cache size: 7,000,000 tokens"
-    )
-
-    agg = _run_processor(result_dir, tmp_path / "out")
-
-    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 18_500_000
-    _assert_stable_server_metrics_schema(agg)
-
-
-def test_processor_falls_back_to_sglang_max_total_num_tokens(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "metrics": {
-            "sglang:max_total_num_tokens": {
-                "type": "gauge",
-                "series": [
-                    {"labels": {"dp_rank": "0"}, "stats": {"max": 1000.0}},
-                    {"labels": {"dp_rank": "1"}, "stats": {"max": 1200.0}},
-                ],
-            },
-            "sglang:token_usage": {
-                "type": "gauge",
-                "series": [{"stats": {"max": 0.25}}],
-            },
-        }
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    agg = _run_processor(
-        result_dir,
-        tmp_path / "out",
-        env_overrides={"FRAMEWORK": "sglang"},
-    )
-
-    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 2200
-    assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.25)
-    _assert_stable_server_metrics_schema(agg)
-
-
-def test_server_metrics_reject_unknown_backend() -> None:
-    with pytest.raises(ValueError, match="Unsupported agentic server metrics backend"):
-        compute_server_metrics(
-            {
-                "metrics": {
-                    "unknown_backend:cache_hits": {
-                        "type": "counter",
-                        "series": [{"stats": {"total": 1.0}}],
-                    }
-                }
-            },
-            framework="unknown",
-            records=[],
-        )
 
 
 def test_processor_excludes_warmup_phase_records(tmp_path: Path):
@@ -1093,525 +893,30 @@ def test_processor_excludes_warmup_phase_records(tmp_path: Path):
     assert agg["request_accounting"]["records_dropped_total"] == 1
     assert agg["request_accounting"]["records_warmup_dropped"] == 1
     assert agg["request_accounting"]["records_error_dropped"] == 0
-    assert agg["server_metrics"]["tokens"]["requests_completed"] == 1
-    assert agg["server_metrics"]["tokens"]["prompt_total"] == 100
-    assert agg["server_metrics"]["tokens"]["generation_total"] == 50
     assert agg["request_metrics"]["latency"]["ttft"]["mean"] == pytest.approx(0.03)
 
 
 def test_processor_rounds_decimal_outputs_to_five_decimal_places(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
+    result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "metrics": {
-            "vllm:prefix_cache_hits": {
-                "type": "counter",
-                "series": [{"stats": {"total": 12345.678901}}],
-            },
-            "vllm:prefix_cache_queries": {
-                "type": "counter",
-                "series": [{"stats": {"total": 37037.036703}}],
-            },
-            "vllm:kv_cache_usage_perc": {
-                "type": "gauge",
-                "series": [{"stats": {"max": 0.123456789}}],
-            },
-        }
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
+    artifact.mkdir(parents=True)
+    record = _make_record(
+        conv_id="trace-A",
+        turn_index=0,
+        isl=100,
+        osl=50,
+        ttft_ms=12.3456789,
+        e2e_ms=1_000.0,
+        itl_ms=10.0,
+        start_ns=1_000_000_000,
+        end_ns=2_000_000_000,
+    )
+    (artifact / "profile_export.jsonl").write_text(json.dumps(record) + "\n")
+    (artifact / "profile_export_aiperf.json").write_text(json.dumps({"request_count": 1}))
 
     agg = _run_processor(result_dir, tmp_path / "out")
 
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == 0.33333
-    assert agg["server_metrics"]["cache"]["prefix_cache_hits"] == 12345.6789
-    assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == 0.12346
-
-
-def test_processor_parses_real_server_metrics_schema(tmp_path: Path):
-    """Verify aiperf's actual server_metrics_export.json shape is parsed.
-
-    Real schema: ``{"metrics": {<name>: {"series": [{"stats": {...}}, ...]}}}``
-    — keyed by metric name, with stats nested inside each series entry.
-    Regression guard: the v1 of the processor crashed with
-    ``AttributeError: 'str' object has no attribute 'get'`` because it
-    iterated the metrics dict like a list.
-    """
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "schema_version": "1.0",
-        "summary": {
-            "endpoints_configured": ["http://localhost:8888/metrics"],
-            "endpoints_successful": ["http://localhost:8888/metrics"],
-        },
-        "metrics": {
-            "vllm:prefix_cache_hits": {
-                "type": "counter",
-                "unit": "tokens",
-                "series": [
-                    {
-                        "endpoint_url": "http://localhost:8888/metrics",
-                        "labels": {"model": "test"},
-                        "stats": {"total": 800.0, "rate": 8.0},
-                    }
-                ],
-            },
-            "vllm:prefix_cache_queries": {
-                "type": "counter",
-                "unit": "tokens",
-                "series": [
-                    {
-                        "endpoint_url": "http://localhost:8888/metrics",
-                        "labels": {"model": "test"},
-                        "stats": {"total": 1000.0, "rate": 10.0},
-                    }
-                ],
-            },
-            "vllm:prompt_tokens": {
-                "type": "counter",
-                "unit": "tokens",
-                "series": [
-                    {
-                        "endpoint_url": "http://localhost:8888/metrics",
-                        "labels": {"model": "test"},
-                        "stats": {"total": 12345.0, "rate": 100.0},
-                    }
-                ],
-            },
-            "vllm:generation_tokens": {
-                "type": "counter",
-                "unit": "tokens",
-                "series": [
-                    {
-                        "endpoint_url": "http://localhost:8888/metrics",
-                        "labels": {"model": "test"},
-                        "stats": {"total": 6789.0, "rate": 50.0},
-                    }
-                ],
-            },
-        },
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    output_dir = tmp_path / "out"
-    agg = _run_processor(result_dir, output_dir)
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.8)
-    assert agg["server_metrics"]["tokens"]["prompt_total"] == 12345
-    assert agg["server_metrics"]["tokens"]["generation_total"] == 6789
-    _assert_stable_server_metrics_schema(agg)
-    assert agg["server_metrics"]["adapter"] == "vllm"
-
-
-def test_processor_aggregates_across_multiple_series(tmp_path: Path):
-    """Counters with multiple series (multi-endpoint) sum across them."""
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "metrics": {
-            "vllm:prefix_cache_hits": {
-                "type": "counter",
-                "series": [
-                    {"stats": {"total": 100.0}},
-                    {"stats": {"total": 200.0}},
-                ],
-            },
-            "vllm:prefix_cache_queries": {
-                "type": "counter",
-                "series": [
-                    {"stats": {"total": 400.0}},
-                    {"stats": {"total": 600.0}},
-                ],
-            },
-        }
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    output_dir = tmp_path / "out"
-    agg = _run_processor(result_dir, output_dir)
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.3)
-
-
-def test_processor_surfaces_vllm_kv_offload_transfer_stats(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "metrics": {
-            "vllm:kv_offload_bytes_gpu_to_cpu": {
-                "type": "counter",
-                "series": [{"stats": {"total": 10_000_000.0}}],
-            },
-            "vllm:kv_offload_bytes_cpu_to_gpu": {
-                "type": "counter",
-                "series": [{"stats": {"total": 5_000_000.0}}],
-            },
-            "vllm:kv_offload_time_gpu_to_cpu": {
-                "type": "counter",
-                "series": [{"stats": {"total": 2.0}}],
-            },
-            "vllm:kv_offload_time_cpu_to_gpu": {
-                "type": "counter",
-                "series": [{"stats": {"total": 0.5}}],
-            },
-        }
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    agg = _run_processor(result_dir, tmp_path / "out")
-    kv_offload = agg["server_metrics"]["kv_offload"]
-
-    assert kv_offload["bytes_gpu_to_cpu"] == 10_000_000
-    assert kv_offload["bytes_cpu_to_gpu"] == 5_000_000
-    assert kv_offload["time_gpu_to_cpu"] == 2
-    assert kv_offload["time_cpu_to_gpu"] == 0.5
-    assert kv_offload["bandwidth_gpu_to_cpu_bytes_per_second"] == 5_000_000
-    assert kv_offload["bandwidth_cpu_to_gpu_bytes_per_second"] == 10_000_000
-
-
-def test_processor_ignores_server_warmup_metrics_for_headline_stats(
-    tmp_path: Path,
-):
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "metrics_phase": "profiling",
-        "metrics": {
-            "vllm:prefix_cache_hits": {
-                "type": "counter",
-                "series": [{"stats": {"total": 100.0}}],
-            },
-            "vllm:prefix_cache_queries": {
-                "type": "counter",
-                "series": [{"stats": {"total": 200.0}}],
-            },
-            "vllm:prompt_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 1000.0}}],
-            },
-        },
-        "warmup_metrics": {
-            "vllm:prefix_cache_hits": {
-                "type": "counter",
-                "series": [{"stats": {"total": 900000.0}}],
-            },
-            "vllm:prefix_cache_queries": {
-                "type": "counter",
-                "series": [{"stats": {"total": 900000.0}}],
-            },
-            "vllm:prompt_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 900000.0}}],
-            },
-        },
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    agg = _run_processor(result_dir, tmp_path / "out")
-
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
-
-
-@pytest.mark.parametrize("framework", ["sglang", "dynamo-sglang"])
-def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: str):
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "metrics": {
-            "sglang:prompt_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 1000.0}}],
-            },
-            "sglang:generation_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 200.0}}],
-            },
-            "sglang:cached_tokens": {
-                "type": "counter",
-                "series": [
-                    {"labels": {"cache_source": "device"}, "stats": {"total": 400.0}},
-                    {"labels": {"cache_source": "host"}, "stats": {"total": 100.0}},
-                ],
-            },
-            "sglang:token_usage": {
-                "type": "gauge",
-                "series": [{"stats": {"max": 0.75}}],
-            },
-            "sglang:hicache_host_used_tokens": {
-                "type": "gauge",
-                "series": [{"stats": {"max": 300.0}}],
-            },
-            "sglang:hicache_host_total_tokens": {
-                "type": "gauge",
-                "series": [{"stats": {"max": 1000.0}}],
-            },
-            "sglang:realtime_tokens": {
-                "type": "counter",
-                "series": [
-                    {"labels": {"mode": "prefill_compute"}, "stats": {"total": 500.0}}
-                ],
-            },
-        }
-    }
-    if framework == "dynamo-sglang":
-        server_metrics["metrics"].update(
-            {
-                "dynamo_frontend_input_sequence_tokens": {
-                    "type": "counter",
-                    "series": [{"stats": {"total": 1100.0}}],
-                },
-                "sglang:max_total_num_tokens": {
-                    "type": "gauge",
-                    "series": [
-                        {"labels": {"tp_rank": "0"}, "stats": {"max": 1000.0}},
-                        {"labels": {"tp_rank": "1"}, "stats": {"max": 1000.0}},
-                    ],
-                },
-            }
-        )
-        (result_dir / "server.log").write_text("max_total_num_tokens=1000, dp_size=1")
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    agg = _run_processor(
-        result_dir,
-        tmp_path / "out",
-        env_overrides={"FRAMEWORK": framework},
-    )
-
-    assert agg["server_metrics"]["adapter"] == "sglang"
-    _assert_stable_server_metrics_schema(agg)
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.4)
-    assert agg["server_metrics"]["cache"]["cpu_cache_hit_rate"] == pytest.approx(0.1)
-    assert agg["server_metrics"]["cache"]["external_cache_hit_rate"] == pytest.approx(0.1)
-    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.75)
-    assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.3)
-    assert agg["server_metrics"]["tokens"]["prompt_by_source"]["computed"] == 500.0
-
-    assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
-    assert agg["server_metrics"]["tokens"]["generation_total"] == 200
-    if framework == "dynamo-sglang":
-        assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] is None
-        assert agg["kv_cache_pool_tokens"] is None
-        assert any(
-            "rank replicas are not normalized" in warning for warning in agg["warnings"]
-        )
-
-
-def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    prefill_url = "http://10.0.0.1:7500/metrics"
-    decode_url = "http://10.0.0.2:7501/metrics"
-    server_metrics = {
-        "metrics": {
-            "dynamo_frontend_input_sequence_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 1000.0}}],
-            },
-            "dynamo_frontend_output_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 200.0}}],
-            },
-            "trtllm_prompt_tokens_total": {
-                "type": "counter",
-                "series": [
-                    {
-                        "endpoint_url": prefill_url,
-                        "labels": {"dynamo_component": "prefill"},
-                        "stats": {"total": 600.0},
-                    },
-                    {
-                        "endpoint_url": decode_url,
-                        "labels": {"dynamo_component": "backend"},
-                        "stats": {"total": 400.0},
-                    },
-                ],
-            },
-            "trtllm_generation_tokens_total": {
-                "type": "counter",
-                "series": [
-                    {
-                        "endpoint_url": decode_url,
-                        "labels": {"dynamo_component": "backend"},
-                        "stats": {"total": 200.0},
-                    }
-                ],
-            },
-            "trtllm_prompt_cached_tokens_total": {
-                "type": "counter",
-                "series": [
-                    {"endpoint_url": prefill_url, "stats": {"total": 200.0}},
-                    {"endpoint_url": decode_url, "stats": {"total": 300.0}},
-                ],
-            },
-            "trtllm_kv_cache_hit_rate": {
-                "type": "gauge",
-                "series": [
-                    {"endpoint_url": prefill_url, "stats": {"avg": 0.4}},
-                    {"endpoint_url": decode_url, "stats": {"avg": 0.6}},
-                ],
-            },
-            "trtllm_kv_cache_utilization": {
-                "type": "gauge",
-                "series": [
-                    {"endpoint_url": prefill_url, "stats": {"max": 0.7}},
-                    {"endpoint_url": decode_url, "stats": {"max": 0.8}},
-                ],
-            },
-            "trtllm_kv_cache_host_utilization": {
-                "type": "gauge",
-                "series": [{"endpoint_url": prefill_url, "stats": {"max": 0.25}}],
-            },
-            "trtllm_kv_cache_offload_bytes_total": {
-                "type": "counter",
-                "series": [
-                    {
-                        "endpoint_url": prefill_url,
-                        "labels": {"disaggregation_mode": "prefill"},
-                        "stats": {"total": 4096.0},
-                    }
-                ],
-            },
-            "trtllm_kv_cache_onboard_bytes_total": {
-                "type": "counter",
-                "series": [
-                    {
-                        "endpoint_url": decode_url,
-                        "labels": {"disaggregation_mode": "decode"},
-                        "stats": {"total": 2048.0},
-                    }
-                ],
-            },
-            "trtllm_kv_cache_max_blocks": {
-                "type": "gauge",
-                "series": [
-                    {"endpoint_url": prefill_url, "stats": {"max": 100.0}},
-                    {"endpoint_url": decode_url, "stats": {"max": 200.0}},
-                ],
-            },
-            "trtllm_kv_cache_tokens_per_block": {
-                "type": "gauge",
-                "series": [
-                    {"endpoint_url": prefill_url, "stats": {"max": 64.0}},
-                    {"endpoint_url": decode_url, "stats": {"max": 64.0}},
-                ],
-            },
-        }
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    agg = _run_processor(
-        result_dir,
-        tmp_path / "out",
-        env_overrides={"FRAMEWORK": "dynamo-trt", "IS_MULTINODE": "true"},
-    )
-
-    assert agg["server_metrics"]["adapter"] == "trtllm"
-    _assert_stable_server_metrics_schema(agg)
-    assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
-    assert agg["server_metrics"]["tokens"]["generation_total"] == 200
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.8)
-    assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.25)
-    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 19_200
-    assert agg["server_metrics"]["kv_offload"]["bytes_gpu_to_cpu"] == 4096
-    assert agg["server_metrics"]["kv_offload"]["bytes_cpu_to_gpu"] == 2048
-    assert {source["role"] for source in agg["server_metrics"]["sources"]} == {
-        "prefill",
-        "decode",
-    }
-
-
-def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
-    result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "aiperf_artifacts"
-    server_metrics = {
-        "metrics": {
-            "dynamo_frontend_input_sequence_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 900.0}}],
-            },
-            "dynamo_frontend_output_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 300.0}}],
-            },
-            "dynamo_frontend_cached_tokens": {
-                "type": "counter",
-                "series": [{"stats": {"total": 450.0}}],
-            },
-            "dynamo_component_router_shared_cache_hit_rate": {
-                "type": "gauge",
-                "series": [{"stats": {"avg": 0.55}}],
-            },
-            "dynamo_component_gpu_cache_usage_percent": {
-                "type": "gauge",
-                "series": [{"stats": {"max": 75.0}}],
-            },
-            "vllm:prefix_cache_hits": {
-                "type": "counter",
-                "series": [
-                    {
-                        "labels": {"dynamo_component": "prefill", "worker_id": "p0"},
-                        "stats": {"total": 400.0},
-                    }
-                ],
-            },
-            "vllm:prefix_cache_queries": {
-                "type": "counter",
-                "series": [
-                    {
-                        "labels": {"dynamo_component": "prefill", "worker_id": "p0"},
-                        "stats": {"total": 800.0},
-                    }
-                ],
-            },
-            "vllm:prompt_tokens_by_source": {
-                "type": "counter",
-                "series": [
-                    {
-                        "labels": {"source": "local_cache_hit"},
-                        "stats": {"total": 300.0},
-                    },
-                    {
-                        "labels": {"source": "external_kv_transfer"},
-                        "stats": {"total": 150.0},
-                    },
-                    {
-                        "labels": {"source": "local_compute"},
-                        "stats": {"total": 450.0},
-                    },
-                ],
-            },
-        }
-    }
-    with open(artifact / "server_metrics_export.json", "w") as f:
-        json.dump(server_metrics, f)
-
-    agg = _run_processor(
-        result_dir,
-        tmp_path / "out",
-        env_overrides={"FRAMEWORK": "dynamo-vllm", "IS_MULTINODE": "true"},
-    )
-
-    assert agg["server_metrics"]["adapter"] == "dynamo-vllm"
-    _assert_stable_server_metrics_schema(agg)
-    assert agg["server_metrics"]["tokens"]["prompt_total"] == 900
-    assert agg["server_metrics"]["tokens"]["generation_total"] == 300
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.33333)
-    assert agg["server_metrics"]["cache"]["cpu_cache_hit_rate"] == pytest.approx(0.16667)
-    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.75)
-    assert agg["server_metrics"]["cache"]["frontend_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["cache"]["router_shared_cache_hit_rate"] == pytest.approx(0.55)
-    assert any(source["role"] == "prefill" for source in agg["server_metrics"]["sources"])
+    assert agg["request_metrics"]["latency"]["ttft"]["mean"] == 0.01235
 
 
 def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
@@ -1768,23 +1073,15 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
                      start_ns=2_000_000_000, end_ns=4_000_000_000),
     ]
     aggregate = {"metadata": {"dataset": {"hf_dataset_name": "example/traces"}}}
-    server_metrics = {"metrics": {"vllm:prefix_cache_hits": {
-        "series": [{"stats": {"total": 10}}],
-    }, "vllm:prefix_cache_queries": {"series": [{"stats": {"total": 40}}]}}}
     traces = [{"id": "root", "requests": [
         {"type": "n", "out": 11}, {"type": "tool", "out": 999},
         {"type": "s", "output_length": 29},
     ]}]
-    logs = [
-        "INFO (EngineCore_DP0 pid=10) GPU KV cache size: 800 tokens\n"
-        "INFO (EngineCore_DP0 pid=10) GPU KV cache size: 800 tokens",
-        "INFO (EngineCore_DP0 pid=11) GPU KV cache size: 1,200 tokens",
-    ]
     accounting = {"records_total": 4, "records_profiled": 2, "records_dropped_total": 2,
                   "records_warmup_dropped": 1, "records_error_dropped": 1,
                   "error_categories": {"Timeout": 1}}
     env = {"KV_OFFLOADING": "none", "TP": "4", "FRAMEWORK": "vllm"}
-    before = deepcopy((records, aggregate, server_metrics, traces, logs, accounting, env))
+    before = deepcopy((records, aggregate, traces, accounting, env))
 
     def forbidden(*args, **kwargs):
         raise AssertionError("builder accessed ambient environment or filesystem")
@@ -1797,10 +1094,10 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
         isolated.setattr("builtins.open", forbidden)
         isolated.setattr(Path, "open", forbidden)
         result = build_result(
-            records, aggregate, server_metrics, MappingProxyType(env),
-            request_accounting=accounting, traces=iter(traces), server_logs=iter(logs),
+            records, aggregate, MappingProxyType(env),
+            request_accounting=accounting, traces=iter(traces),
         )
-        second = build_result(records, aggregate, {}, {**env, "TP": "2"})
+        second = build_result(records, aggregate, {**env, "TP": "2"})
 
     # 450 tokens over three seconds, divided among four GPUs.
     assert result["request_metrics"]["throughput"]["per_gpu"] == {
@@ -1809,35 +1106,10 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
     assert second["request_metrics"]["throughput"]["per_gpu"]["total_tput_tps"] == 75.0
     assert result["request_metrics"]["tokens"]["output_expected"]["mean"] == 20
     assert second["request_metrics"]["tokens"]["output_expected"] == {}
-    assert result["server_metrics"]["cache"]["gpu_cache_hit_rate"] == 0.25
-    assert result["kv_cache_pool_tokens"] == 2000
     assert result["num_requests_total"] == 4
     assert result["num_requests_successful"] == 2
     assert result["dataset"] == {"hf_dataset_name": "example/traces"}
-    assert (records, aggregate, server_metrics, traces, logs, accounting, env) == before
-
-
-@pytest.mark.parametrize("framework,metric_names", [
-    ("atom", ["atom:prompt_tokens"]),
-    ("trtllm", ["trtllm_kv_cache_max_blocks"]),
-    ("dynamo-sglang", ["sglang:num_requests_total"]),
-])
-def test_builder_does_not_consume_logs_when_backend_does_not_use_them(framework, metric_names):
-    def unavailable_logs():
-        raise OSError("unreadable optional log")
-        yield  # Make failure occur on consumption, as with a file iterator.
-
-    result = build_result(
-        [], {}, {"metrics": {name: {"series": []} for name in metric_names}},
-        {"KV_OFFLOADING": "none", "FRAMEWORK": framework},
-        server_logs=unavailable_logs(),
-    )
-    assert result["kv_cache_pool_tokens"] is None
-    assert result["num_requests_successful"] == 0
-    if framework == "dynamo-sglang":
-        assert result["warnings"] == [
-            "Dynamo-SGLang logical KV capacity is unsupported: rank replicas are not normalized"
-        ]
+    assert (records, aggregate, traces, accounting, env) == before
 
 
 @pytest.mark.parametrize("override,message", [
