@@ -1,12 +1,12 @@
 # Contributing to InferenceX
 
-<div align="center">
-
-**English** | [中文](CONTRIBUTING_zh.md)
-
-</div>
-
 Thanks for contributing! PRs are welcome. This page covers the review process every PR goes through before it can be merged.
+
+## Documentation language
+
+Maintain contributor-facing docs in English. Only READMEs retain Chinese translations: keep existing `README_zh.md` files synchronized with their English READMEs and preserve their language switchers. Do not add or recreate Chinese versions of other docs.
+
+PR titles must still include both English and Simplified Chinese, using `<English title> / <中文标题>`. The existing bilingual requirements for issue titles, PR and issue descriptions, human-authored PR comments, and commit bodies remain unchanged; see [AGENTS.md](AGENTS.md).
 
 ## PR descriptions
 

@@ -574,4 +574,4 @@ jobs:
             - Reject new active entries for retired models, scenarios, or precisions unless `inferencex-e2e/docs/MODELS.md` explicitly documents an exception.
             - Preserve the conditional non-speculative AgentX policy; do not infer retirement from the existence of a speculative counterpart.
             - Retired entries are deleted from the master configs, not archived, following `AGENTS.md`; git history and `inferencex-e2e/perf-changelog.yaml` are the historical record.
-            - For a newly supported model, require matching updates to `inferencex-e2e/docs/MODELS.md` and `inferencex-e2e/docs/MODELS_zh.md` rather than rejecting it against an obsolete model list.
+            - For a newly supported model, require an update to `inferencex-e2e/docs/MODELS.md` rather than rejecting it against an obsolete model list. Only READMEs retain Chinese translations; do not require or recreate Chinese versions of other docs.

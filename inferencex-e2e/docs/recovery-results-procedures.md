@@ -1,11 +1,5 @@
 # Results, Ingest, and Recovery Procedures
 
-<div align="center">
-
-**English** | [中文](recovery-results-procedures_zh.md)
-
-</div>
-
 Use this page after a throughput or eval job starts producing output, or when a sweep, runner, cluster, handoff, or database ingest fails. It separates evidence collection from repair so an infrastructure problem is not mistaken for a benchmark regression and an ingest problem does not trigger another expensive GPU sweep.
 
 ## Safety gates
