@@ -131,6 +131,8 @@ override_1p1d_tp8_c16:
     prefill:
       args:
         max-num-seqs: 32
+        long-prefill-token-threshold: 8192
+        long-prefill-token-threshold-adaptive: true
     decode:
       args:
         max-num-seqs: 32
