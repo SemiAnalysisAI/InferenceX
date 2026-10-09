@@ -183,15 +183,13 @@ LABS = {
         env=dict(FRAMEWORK="dynamo-sglang"),
         paths={"hf:org/Model": "nvme/model"}, preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
         served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
-        recipe=LANE_FRAGMENT + 'environment:\n  UCX_NET_DEVICES: "@fabric.ucx-net-devices"\n',
-        environment={"UCX_NET_DEVICES": "mlx5_0:1,mlx5_1:1"},
     ),
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
         env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", KV_OFFLOADING="none", ISL="0", OSL="0", CONC="4",
                  FAKE_RESULTS="agentic"),
         paths={"hf:org/Model": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
-        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True, environment=None,
+        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
     ),
 }  # fmt: skip
 
@@ -205,8 +203,7 @@ def lab_config(tmp: Path) -> Path:
             "volumes": {"nvme": {"path": str(tmp / "nvme"), "visibility": "node-local"},
                         "cache": {"path": str(tmp / "cache")}},
             "squash": {"dir": str(tmp / "squash"), "import": "submit-host"},
-            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800,
-                          "fabric": {"ucx-net-devices": ["mlx5_0:1", "mlx5_1:1"]}},
+            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800},
         }},
         "lab-b": {**common, "models": {"entries": {"Model": {"root": "models", "dir": "model"}}}, "slurm": {
             "partition": "p", "exclusive": False,
@@ -284,8 +281,6 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         staged["name"], staged["roles"],
         {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"},
     )
-    # Fabric references take the job cluster's facts.
-    assert bound.get("environment") == lab["environment"]
     if env["IS_AGENTIC"] == "1":
         # lab-b mounts no cache volume, so the client keeps its caches in the container.
         assert bound["benchmark"]["env"] == {
