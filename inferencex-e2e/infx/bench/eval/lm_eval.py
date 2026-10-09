@@ -16,7 +16,7 @@ from infx.bench.eval.context import EvalContext, EvalOutcome
 
 REPOSITORY = "https://github.com/EleutherAI/lm-evaluation-harness"
 REF = "b315ef3b05176acc9732bb7fdec116abe1ecc476"  # installed over the lm-eval[api] release
-DEFAULT_TASKS = "infx/evals/lm_eval_tasks/cruxeval_output.yaml infx/evals/lm_eval_tasks/cruxeval_input.yaml"
+DEFAULT_TASKS = "infx/evals/gsm8k.yaml"
 PATCH = "infx/evals/patches/lm_eval_sitecustomize.py"
 FALLBACK_CONTEXT = 16384
 PROMPT_RESERVE = 4096
