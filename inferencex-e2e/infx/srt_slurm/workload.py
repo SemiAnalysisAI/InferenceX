@@ -286,7 +286,7 @@ def bind_multinode(
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
-    agentic = environment.get("IS_AGENTIC") == "1"
+    agentic = environment["IS_AGENTIC"] == "1"
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
         Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
@@ -298,6 +298,8 @@ def bind_multinode(
     return name, bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
+
+
 def dram_budget(
     environment: Mapping[str, str], *, multinode: bool, gpus_per_node: int | None = None
 ) -> dict[str, int] | None:

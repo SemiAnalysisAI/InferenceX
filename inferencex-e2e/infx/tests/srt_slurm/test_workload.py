@@ -312,7 +312,7 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
         },
     })
     output = tmp_path / "bound.yaml"
-    env = {**os.environ, **MULTI_ENV, "INFERENCEX_REPOSITORY_ROOT": str(project),
+    env = {**os.environ, **MULTI_ENV, "IS_AGENTIC": "0", "INFERENCEX_REPOSITORY_ROOT": str(project),
            "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
 
     def bind(*arguments: str) -> subprocess.CompletedProcess[str]:
