@@ -1,8 +1,13 @@
-# DeepSeek-V4.1-Flash AgentX on B300 with SGLang native DSpark. The KV cache
-# is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-b300-sglang-agentic
+  identity:
+    model:
+      revision: dba1be0a40aa45a94ad051997016db3960a90277
+    container: {}
+    frameworks:
+      sglang: 0.0.0.dev1+g295a53c90
+      sglang-router: 0.3.2
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -23,13 +28,13 @@ base:
         trust-remote-code: true
         # Overlap checkpoint reads with weight loading from local NVMe.
         weight-loader-prefetch-checkpoints: true
-        chunked-prefill-size: 4096
+        chunked-prefill-size: 16384
         # Keep active decode requests progressing while long prefixes are queued.
         prefill-decode-interval: 16
         # DSpark is the checkpoint's bundled draft; the block size is its only knob.
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 5
-        # Admission never exceeds the captured decode graph batch.
+        # Capture decode graphs up to batch 64.
         cuda-graph-max-bs-decode: 64
         reasoning-parser: auto
         tool-call-parser: auto
@@ -53,38 +58,21 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC, capped at the graph batch. SWA
-# prefix tails are 64x CONC within [128, 4096]. TP2 raises the static fraction
-# (0.80 from c16, 0.85 from c32) and interleaves decode more often from c32.
-# Saturation points get a longer warmup drain.
+# TP arms admit up to 2x CONC, capped at 64; DP4 C192 admits 384 globally.
+# SWA prefix tails are 64x per-rank CONC, with a minimum of 128.
 override_tp4_c1:
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        expert-parallel-size: 4
+        expert-parallel-size: 1
         mem-fraction-static: 0.7
         swa-prefix-tails: 128
         max-running-requests: 2
   benchmark:
     env:
       CONC: '1'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c2:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 128
-        max-running-requests: 4
-  benchmark:
-    env:
-      CONC: '2'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
 
 override_tp4_c4:
@@ -93,89 +81,15 @@ override_tp4_c4:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        expert-parallel-size: 4
+        expert-parallel-size: 1
         mem-fraction-static: 0.7
         swa-prefix-tails: 256
         max-running-requests: 8
+        prefill-decode-interval: 192
   benchmark:
     env:
       CONC: '4'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c8:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 512
-        max-running-requests: 16
-  benchmark:
-    env:
-      CONC: '8'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c16:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 1024
-        max-running-requests: 32
-  benchmark:
-    env:
-      CONC: '16'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c32:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 2048
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '32'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp4_c64:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 4096
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '64'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp4_c128:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 4096
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '128'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 override_tp2_c1:
   roles:
@@ -183,7 +97,7 @@ override_tp2_c1:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        expert-parallel-size: 2
+        expert-parallel-size: 1
         mem-fraction-static: 0.7
         swa-prefix-tails: 128
         max-running-requests: 2
@@ -192,49 +106,20 @@ override_tp2_c1:
       CONC: '1'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
 
-override_tp2_c2:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        expert-parallel-size: 2
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 128
-        max-running-requests: 4
-  benchmark:
-    env:
-      CONC: '2'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
 override_tp2_c4:
   roles:
     agg:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        expert-parallel-size: 2
+        expert-parallel-size: 1
         mem-fraction-static: 0.7
         swa-prefix-tails: 256
         max-running-requests: 8
+        prefill-decode-interval: 96
   benchmark:
     env:
       CONC: '4'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp2_c8:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        expert-parallel-size: 2
-        mem-fraction-static: 0.7
-        swa-prefix-tails: 512
-        max-running-requests: 16
-  benchmark:
-    env:
-      CONC: '8'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
 
 override_tp2_c16:
@@ -243,14 +128,31 @@ override_tp2_c16:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        expert-parallel-size: 2
+        expert-parallel-size: 1
         mem-fraction-static: 0.8
         swa-prefix-tails: 1024
         max-running-requests: 32
+        prefill-decode-interval: 192
   benchmark:
     env:
       CONC: '16'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c24:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        swa-prefix-tails: 1536
+        max-running-requests: 48
+        prefill-decode-interval: 96
+  benchmark:
+    env:
+      CONC: '24'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 override_tp2_c32:
   roles:
@@ -258,44 +160,62 @@ override_tp2_c32:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        expert-parallel-size: 2
+        expert-parallel-size: 1
         mem-fraction-static: 0.85
         swa-prefix-tails: 2048
         max-running-requests: 64
-        prefill-decode-interval: 4
+        prefill-decode-interval: 64
   benchmark:
     env:
       CONC: '32'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-override_tp2_c64:
+override_tp2_c48:
   roles:
     agg:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        expert-parallel-size: 2
-        mem-fraction-static: 0.85
-        swa-prefix-tails: 4096
+        expert-parallel-size: 1
+        mem-fraction-static: 0.8
+        swa-prefix-tails: 3072
         max-running-requests: 64
-        prefill-decode-interval: 4
+        prefill-decode-interval: 64
   benchmark:
     env:
-      CONC: '64'
+      CONC: '48'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-override_tp2_c128:
+override_dp4_c192:
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
   roles:
     agg:
-      gpus: 2
+      gpus: 4
       args:
-        tensor-parallel-size: 2
-        expert-parallel-size: 2
-        mem-fraction-static: 0.85
-        swa-prefix-tails: 4096
-        max-running-requests: 64
-        prefill-decode-interval: 4
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        load-balance-method: total_requests
+        tokenizer-worker-num: 8
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.76
+        swa-prefix-tails: 3072
+        max-running-requests: 384
   benchmark:
     env:
-      CONC: '128'
+      CONC: '192'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
