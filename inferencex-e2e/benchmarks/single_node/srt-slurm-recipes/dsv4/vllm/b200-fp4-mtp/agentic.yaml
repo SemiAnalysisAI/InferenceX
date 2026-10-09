@@ -6,7 +6,7 @@ base:
   name: dsv4-fp4-b200-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95
+    container: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-20ebb28@sha256:dfdee3dbba3d8d30554d90f723a3a18dac562f8442f2c2e8f81804acd1ec673f
     precision: fp4
   resources:
     gpu_type: b200
