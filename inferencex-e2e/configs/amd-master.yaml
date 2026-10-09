@@ -716,13 +716,13 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
 # decoding. Companion to kimik3-fp4-mi355x-atom-agentic-mtp: same checkpoint and
 # runner. TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU. Three bands:
 #   interactive (1, 4)   GPU-resident, dcp 1, DSpark draft.
-#   mid         (8-14)   dcp 1, DSpark draft, SimpleCPUOffload DRAM tier.
-#   throughput  (44-70)  dcp 8 shards the KV read across all 8 GPUs, DRAM
-#                        offload, mtp with synthetic acceptance (no draft).
+#   mid         (10-16)  dcp 8, DSpark draft, SimpleCPUOffload DRAM tier.
+#   throughput  (44-50)  dcp 8 shards the KV read across all 8 GPUs, DRAM
+#                        offload, 4-token DSpark draft with synthetic acceptance.
 # dram-utilization 0.6 -> TOTAL_CPU_DRAM_GB 1799 at TP8 (node cap 2861022 MiB),
 # split evenly across the eight ranks by the launcher.
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89
+  image: vllm/vllm-openai-rocm:nightly-rocm100-81198e97ba7eee2a22540caaa756b7fdddcb4d93
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -733,9 +733,10 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.6
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 10, 12, 14], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [44, 48, 70], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [44, 48], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/kimik3/vllm/mi355x-fp4-mtp/agentic.yaml }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202610070333

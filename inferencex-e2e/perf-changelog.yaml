@@ -9528,3 +9528,18 @@
     - "TP4 c64: 8K prefill chunks with a 16-step prefill-decode interval instead of 16K chunks with none. Local runs with the fold: 82,586 -> 85,093 tok/s/GPU at 86.8 -> 136.8 tok/s/user median (46.3 -> 72.1 P90); P90 TTFT 5.7 -> 12.5 s."
     - "TP2 c128: admit all 128 sessions (max-running-requests and cuda-graph-max-bs-decode 64 -> 128) with a 4-step prefill-decode interval and mem-fraction-static 0.85. The PR #3421 sweep measured 18,631 tok/s/GPU at 130.9 tok/s/user median at this point; locally the new settings gave 147,763 tok/s/GPU at 37.9 tok/s/user median with a 51 s P90 TTFT (measured before the fold was added)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89 to vllm/vllm-openai-rocm:nightly-rocm100-81198e97ba7eee2a22540caaa756b7fdddcb4d93."
+    - "Sweep dcp1 concurrency 1 and dcp8 concurrency 1 GPU-resident, and dcp8 concurrency 4, 10, 12, 14, 16, 44 and 48 with the SimpleCPUOffloadConnector DRAM tier (224.875 GB/rank). This replaces dcp1 concurrency 1/4, dcp1 DRAM-offload concurrency 8-14 and dcp8 concurrency 44/48/70. The dcp8 points use the a2a DCP backend."
+    - "DSpark draft length per point: 7 at concurrency 1, 5 at 4, 4 at 10, 3 at 12, and 4 at 14, 16, 44 and 48 (concurrency 14 was 3). The throughput band (44, 48) previously had no speculative-config and now runs the 4-token DSpark draft. As at every draft point, agentic runs replace block rejection with the golden acceptance length for that draft length."
+    - "Admission is 2x concurrency. CUDA graphs capture every even size up to 2x concurrency x (1 + draft tokens), replacing the previous every-size lists (up to 8192 in the throughput band)."
+    - "Every point requests cudagraph_mode FULL_AND_PIECEWISE (the mid band was FULL) with breakable CUDA graphs disabled (VLLM_USE_BREAKABLE_CUDAGRAPH=0, previously 1 at concurrency 1 and 4). The AMD Kimi-K3 model has no torch.compile submodule, so vLLM overrides the mode to FULL_DECODE_ONLY at load, as the concurrency 1 and 14 server logs show."
+    - "Add stream-interval 10 and VLLM_ROCM_AITER_MLA_DCP_VERIFY=asm, which routes DCP multi-token verify through the AITER ASM round-robin decode, to every point."
+    - "Concurrency 1 (dcp1 and dcp8) adds quantization-config linear fp8_per_channel: vLLM quantizes the target's linear layers to FP8 W8A8 at load, except kv_b_proj, in_proj_qkvgfab, f_b_proj, fused_qkv_a_proj, self_attn.g_proj and layer 0 mlp.down_proj, which stay BF16. The routed experts stay MXFP4."
+    - "No change to the Inferact/Kimi-K3-DSpark draft's precision: its model config takes the speculative config's own quantization (unset) and never receives quantization-config, and get_draft_quant_config() returns None for K3DSparkModel, so its weights stay BF16 and its KV cache stays fp8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3833
