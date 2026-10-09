@@ -85,7 +85,11 @@ SAMPLES_HEADER = (
 
 # srt-slurm v2 appends optional utilization fields to the power samples.
 SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
+# srt-slurm v3 (NVIDIA/srt-slurm#572) appends the optional exporter temperature.
 SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
+# Every samples.csv generation this consumer replays, keyed by its schema_version.
+# The header is matched exactly: the file is part of the hashed package.
+SAMPLES_HEADERS = {1: SAMPLES_HEADER, 2: SAMPLES_HEADER_V2, 3: SAMPLES_HEADER_V3}
 
 # Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
 # NOT a multiple of the configured sample interval.
@@ -347,8 +351,7 @@ def _check_wire_contract(manifest: dict) -> list[str]:
 
 def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None:
     """Validate the selected CSV generation, including optional utilization and temperature."""
-    header = {1: SAMPLES_HEADER, 2: SAMPLES_HEADER_V2, 3: SAMPLES_HEADER_V3}[expected_version]
-    if len(raw) != len(header):
+    if len(raw) != len(SAMPLES_HEADERS[expected_version]):
         return None
     try:
         schema_version = int(raw[0])
@@ -395,13 +398,11 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
         with open(path, newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            if header == list(SAMPLES_HEADER):
-                expected_version = 1
-            elif header == list(SAMPLES_HEADER_V2):
-                expected_version = 2
-            elif header == list(SAMPLES_HEADER_V3):
-                expected_version = 3
-            else:
+            expected_version = next(
+                (version for version, names in SAMPLES_HEADERS.items() if header == list(names)),
+                None,
+            )
+            if expected_version is None:
                 return (), ("samples_csv_header_mismatch",)
             for raw in reader:
                 row = _parse_sample_row(raw, expected_version)

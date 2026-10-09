@@ -447,7 +447,7 @@ def test_multinode_aggregation_uses_central_package_and_aggregate_topology(
 
     monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
 
-    exit_code = power_adapter.run_multinode_agentic_power(
+    exit_code = power_adapter.run_native_agentic_power(
         result_dir=result_dir,
         agg_result=agg_result,
         power_dir=power_dir,
@@ -501,7 +501,7 @@ def test_multinode_aggregation_maps_aggregate_deployment_to_agg_role(
 
     monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
 
-    assert power_adapter.run_multinode_agentic_power(
+    assert power_adapter.run_native_agentic_power(
         result_dir=result_dir,
         agg_result=agg_result,
         power_dir=power_dir,
@@ -540,7 +540,7 @@ def test_multinode_aggregation_rejects_invalid_aggregate_topology(
     tmp_path: Path,
     payload: dict,
 ):
-    from infx.results.agentic.power_adapter import run_multinode_agentic_power
+    from infx.results.agentic.power_adapter import run_native_agentic_power
 
     logs_root = tmp_path / "logs"
     result_dir = logs_root / "agentic" / "conc_8"
@@ -558,7 +558,7 @@ def test_multinode_aggregation_rejects_invalid_aggregate_topology(
     }
     agg_result.write_text(json.dumps({**stale_metrics, **payload}))
 
-    assert run_multinode_agentic_power(
+    assert run_native_agentic_power(
         result_dir=result_dir,
         agg_result=agg_result,
         power_dir=logs_root / "power",
@@ -577,7 +577,7 @@ def test_multinode_aggregation_rejects_invalid_aggregate_topology(
 def test_multinode_invalid_aggregate_retains_failure_verdict(
     tmp_path: Path, payload: str | None, require_power: bool,
 ) -> None:
-    from infx.results.agentic.power_adapter import run_multinode_agentic_power
+    from infx.results.agentic.power_adapter import run_native_agentic_power
 
     logs_root = tmp_path / "logs"
     result_dir = logs_root / "agentic/conc_8"
@@ -585,7 +585,7 @@ def test_multinode_invalid_aggregate_retains_failure_verdict(
     if payload is not None:
         agg_result.write_text(payload)
 
-    assert run_multinode_agentic_power(
+    assert run_native_agentic_power(
         result_dir=result_dir,
         agg_result=agg_result,
         power_dir=logs_root / "power",
@@ -615,7 +615,7 @@ def test_multinode_failure_clears_stale_metrics_when_verdict_write_fails(
         raise OSError("audit directory unavailable")
 
     monkeypatch.setattr(power_adapter, "_write_multinode_failure_validation", fail_verdict)
-    assert power_adapter.run_multinode_agentic_power(
+    assert power_adapter.run_native_agentic_power(
         result_dir=tmp_path / "logs/agentic/conc_8",
         agg_result=aggregate_path,
         power_dir=tmp_path / "logs/power",

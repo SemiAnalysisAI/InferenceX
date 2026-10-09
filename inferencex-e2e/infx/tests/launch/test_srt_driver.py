@@ -175,10 +175,10 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert lines(harness.logs, "scancel") == []
 
 
+# One cluster per exporter kind; test_srt_config covers the three AMD records rendering alike.
 @pytest.mark.parametrize("require_power", ["0", "1"])
 @pytest.mark.parametrize(("cluster_id", "kind", "port"), [
-    ("mi355x-amds", "custom", 19500), ("mi325x-amd", "custom", 19500),
-    ("mi300x-amd", "custom", 19500), ("h200-cw", "dcgm", 9401),
+    ("mi355x-amds", "custom", 19500), ("h200-cw", "dcgm", 9401),
 ])  # fmt: skip
 def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
     env_file = harness.tmp / "github-env"

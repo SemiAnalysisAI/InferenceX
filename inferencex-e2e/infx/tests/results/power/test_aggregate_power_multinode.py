@@ -433,7 +433,7 @@ class TestValidPackage:
         assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
 
     def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
-        from infx.results.agentic.power_adapter import run_multinode_agentic_power
+        from infx.results.agentic.power_adapter import run_native_agentic_power
 
         pkg = build_package(tmp_path)
         result_dir = pkg.logs_root / "agentic" / "conc_4"
@@ -477,7 +477,7 @@ class TestValidPackage:
             )
         )
 
-        assert run_multinode_agentic_power(
+        assert run_native_agentic_power(
             result_dir=result_dir,
             agg_result=pkg.agg_result,
             power_dir=pkg.power_dir,
