@@ -2,10 +2,10 @@ schema: 2
 
 base:
   dynamo:
+    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
     request_plane: "nats"
     source:
       pypi: 0.8.1
-    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
 
   frontend:
     type: dynamo

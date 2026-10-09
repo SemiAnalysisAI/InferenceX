@@ -88,7 +88,6 @@ base:
         watchdog-timeout: 1000000
         enable-flashinfer-allreduce-fusion: true
         disable-radix-cache: true
-          # disable-chunked-prefix-cache: true
 
   health_check:
     max_attempts: 360
