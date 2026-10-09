@@ -9490,17 +9490,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
 
 - config-keys:
-    - minimaxm3-fp8-mi300x-vllm-agentic-nixl
-    - minimaxm3-fp8-mi300x-vllm-agentic-nixl-baseline
-    - minimaxm3-fp8-mi300x-vllm-agentic-lmcache
-    - minimaxm3-fp8-mi300x-vllm-agentic-hybrid
     - dsv41flash-fp4-mi300x-vllm-agentic-nixl
-    - dsv41flash-fp4-mi300x-vllm-agentic-nixl-baseline
-    - dsv41flash-fp4-mi300x-vllm-agentic-smg-baseline
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
   description:
-    - "Compare MiniMax-M3 MXFP8 and DeepSeek-V4.1-Flash MXFP4 AgentX on MI300X using vLLM NIXL disaggregation and aggregated controls on the October 8 ROCm nightly."
-    - "Use native srt-slurm orchestration, full-context replay, golden acceptance, a matched LMCache aggregate control, and a fresh server deployment per concurrency."
+    - "Refresh DeepSeek-V4.1-Flash MXFP4 AgentX on MI300X with the pinned October 8 vLLM ROCm nightly, NIXL disaggregation, and TP8 or packed aggregate controls."
+    - "Use native SRT Slurm, full 1M context, golden DSpark acceptance, prefix-aware SMG aggregate routing, and a fresh deployment per concurrency; normalize by every allocated GPU."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3842

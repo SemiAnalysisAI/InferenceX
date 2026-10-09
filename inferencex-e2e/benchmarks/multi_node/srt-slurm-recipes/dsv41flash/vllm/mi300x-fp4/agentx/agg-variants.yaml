@@ -1,7 +1,7 @@
 schema: 2
 
 base:
-  name: dsv41flash-mi300x-vllm-nixl-colocated-tp4-agentx
+  name: dsv41flash-mi300x-vllm-agg-agentx
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
     container: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
@@ -10,16 +10,11 @@ base:
     gpu_type: mi300x
     gpus_per_node: 8
   frontend:
-    type: vllm-router
-    container_image: vllm/vllm-router@sha256:9321abfa55f5d75d1bfce51a4a9835824ef6a5c73731d6ea65b3fc5402d85354
+    type: vllm
     enable_multiple_frontends: false
-    args:
-      prefill-policy: consistent_hash
-      decode-policy: consistent_hash
   engine:
     type: vllm
-    connector: nixl
-    allow_prefill_decode_colocation: true
+    connector: null
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -37,16 +32,14 @@ base:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_USE_RUST_FRONTEND: "1"
     PYTHONUNBUFFERED: "1"
-    UCX_LOG_LEVEL: info
   roles:
-    prefill:
+    agg:
       nodes: 1
       workers: 1
-      gpus: 4
-      args: &worker_args
+      gpus: 8
+      args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
-        tensor-parallel-size: 4
-        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail"}'
+        tensor-parallel-size: 8
         language-model-only: true
         tokenizer-mode: deepseek_v41
         tool-call-parser: deepseek_v41
@@ -64,13 +57,6 @@ base:
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         enable-prompt-tokens-details: true
         disable-uvicorn-access-log: true
-    decode:
-      nodes: colocate
-      workers: 1
-      gpus: 4
-      args:
-        <<: *worker_args
-        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail"}'
   srun_options:
     container-remap-root: ""
     container-writable: ""
@@ -87,53 +73,55 @@ base:
       KV_OFFLOADING: none
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
-      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       HF_HUB_CACHE: /hf_hub_cache
 
-override_gpu_engram_c4: {}
+override_tp8_c3:
+  benchmark:
+    env:
+      CONC: "3"
 
-override_cpu_engram_c16:
-  roles:
-    prefill:
-      args:
-        engram-config: '{"cpu_offload":true}'
-    decode:
-      args:
-        engram-config: '{"cpu_offload":true}'
+override_tp8_c8:
+  benchmark:
+    env:
+      CONC: "8"
+
+override_tp8_c16:
   benchmark:
     env:
       CONC: "16"
 
-override_1p3d_cpu_c16: &one_prefill_three_decode
-  engine:
-    allow_prefill_decode_colocation_across_nodes: true
-  roles:
-    prefill:
-      nodes: 2
-      args:
-        engram-config: '{"cpu_offload":true}'
-    decode:
-      workers: 3
-      args:
-        engram-config: '{"cpu_offload":true}'
-  benchmark:
-    env:
-      CONC: "16"
-
-override_1p3d_cpu_c32:
-  <<: *one_prefill_three_decode
+override_tp8_c32:
   benchmark:
     env:
       CONC: "32"
 
-override_1p2d_tp2_cpu_c8:
+override_2x_tp4_cpu_c8: &tp4_cpu
+  frontend:
+    type: smg
+    container_image: lightseekorg/smg:1.11.0@sha256:bf6bf2671df71606b03da98679e65497dc62329a83685f6a4c1ff8dd345fb077
+    args:
+      policy: cache_aware
+      cache-index: tree
+      balance-abs-threshold: 1
+      balance-rel-threshold: 1.5
   roles:
-    prefill:
-      args:
-        engram-config: '{"cpu_offload":true}'
-    decode:
+    agg:
       workers: 2
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: "8"
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_4x_tp2_cpu_c8:
+  <<: *tp4_cpu
+  roles:
+    agg:
+      workers: 4
       gpus: 2
       args:
         tensor-parallel-size: 2
@@ -141,6 +129,3 @@ override_1p2d_tp2_cpu_c8:
         gpu-memory-utilization: 0.95
         max-num-seqs: 32
         max-cudagraph-capture-size: 512
-  benchmark:
-    env:
-      CONC: "8"
