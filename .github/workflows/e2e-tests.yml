@@ -2,7 +2,7 @@ name: End-to-End Tests
 run-name: e2e Test - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
 
 permissions:
-    contents: read
+    contents: write # Private AMD exporter drop: draft release assets (test branch only).
 
 # Independent GPU dispatches queue through the priority scheduler; newer runs must not cancel them.
 on: # zizmor: ignore[concurrency-limits]

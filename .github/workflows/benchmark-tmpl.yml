@@ -139,7 +139,7 @@ env:
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
 permissions:
-  contents: read
+  contents: write # Draft release assets (private AMD exporter drop) need write access to read.
 
 jobs:
   benchmark:
@@ -264,6 +264,45 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
+
+      - name: Stage the private AMD exporter squash
+        if: ${{ !inputs.eval-only && fromJSON(inputs.config).srt-recipe && (startsWith(runner.name, 'mi325x-amd_') || startsWith(runner.name, 'mi355x-amds_')) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: amd-dme-highres-privatedrop-20261008
+          SQSH_NAME: amd-exporter-highres-20261008.sqsh
+          IMAGE_REF: ghcr.io#semianalysisai/amd-device-metrics-exporter:highres-privatedrop-20261008
+          RUNNER_TYPE: ${{ inputs.runner }}
+        run: |
+          set -eo pipefail
+          case "$RUNNER_TYPE" in
+            cluster:mi325x-amd) squash_dir=/home/ext-cjquilici/inferencex-mi325x-amd/squash ;;
+            cluster:mi355x-amds) squash_dir=/it-share/gharunners2/srt-slurm/containers ;;
+            *) echo "no shared squash cache for $RUNNER_TYPE" >&2; exit 1 ;;
+          esac
+          key=$(printf '%s' "$IMAGE_REF" | tr '/:@#' '____')
+          dest="$squash_dir/$key.sqsh"
+          work="$RUNNER_TEMP/amd-dme-privatedrop"; mkdir -p "$work" "$squash_dir"
+          for name in SHA256SUMS "$SQSH_NAME"; do
+            url=$("$INFERENCEX_RESULTS_PYTHON" -I .github/scripts/draft_release_asset.py --tag "$RELEASE_TAG" --find "$name" \
+              | "$INFERENCEX_RESULTS_PYTHON" -I -c 'import json,sys; print(json.load(sys.stdin)["url"])')
+            if [ "$name" = "$SQSH_NAME" ] && [ -r "$dest" ]; then
+              expected=$(awk -v n="$SQSH_NAME" '$2 == n {print $1}' "$work/SHA256SUMS")
+              if [ "$(sha256sum "$dest" | cut -d' ' -f1)" = "$expected" ]; then
+                echo "pre-staged exporter already current: $dest"; continue
+              fi
+            fi
+            curl --fail --location --silent --show-error --output "$work/$name" \
+              --header "Authorization: Bearer $GITHUB_TOKEN" --header "Accept: application/octet-stream" "$url"
+          done
+          if [ -f "$work/$SQSH_NAME" ]; then
+            (cd "$work" && sha256sum --check --ignore-missing SHA256SUMS)
+            tmp="$dest.tmp.$(hostname).$$"
+            cp "$work/$SQSH_NAME" "$tmp" && chmod a+r "$tmp" && mv -f "$tmp" "$dest"
+            rm -f "$work/$SQSH_NAME"
+          fi
+          echo "$(sha256sum "$dest")"
+          if command -v unsquashfs >/dev/null 2>&1; then unsquashfs -s "$dest" | head -n 5; fi
 
       - name: Launch job script
         env:

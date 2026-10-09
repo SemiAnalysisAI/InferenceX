@@ -1,0 +1,110 @@
+name: AMD exporter private drop
+
+# Converts AMD's private high-resolution device-metrics-exporter image (a `docker save`
+# archive held as a DRAFT release asset, visible only to collaborators) into an Enroot
+# squash and stores the squash beside it. No GHCR push, no public artifact: the image is
+# AMD's private drop and must not leave the draft release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: "Draft release tag holding device-metrics-exporter-latest.tar.gz"
+        required: true
+        default: amd-dme-highres-privatedrop-20261008
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amd-exporter-privatedrop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  squash:
+    name: Convert the private drop to an Enroot squash on CPU
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # Draft release assets are readable and writable only with write access.
+    timeout-minutes: 40
+    env:
+      ARCHIVE_NAME: device-metrics-exporter-latest.tar.gz
+      ARCHIVE_SHA256: 183a796231f159dc172cb1c95a50c9d332f0ab22e33215b0f298b160e91c2edf
+      DROP_TAG: registry.test.pensando.io:5000/device-metrics-exporter:latest
+      IMAGE_CONFIG_ID: sha256:bb0ffcde637f2ff05c5b2118e19445f9663d7418aa6affbd202d54a0a78880b7
+      LOCAL_TAG: amd-dme-highres:privatedrop-20261008
+      SQSH_NAME: amd-exporter-highres-20261008.sqsh
+      ENROOT_PACKAGE: enroot_4.2.0-1_amd64.deb
+      ENROOT_PACKAGE_SHA256: 50bfcf8336bfe1a5d19481081d7800ae80300a27795595757f7d20957e079a62
+      WORK: ${{ github.workspace }}/.privatedrop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the archive from the draft release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          set -eo pipefail
+          mkdir -p "$WORK"
+          python3 .github/scripts/draft_release_asset.py --tag "$RELEASE_TAG" --find "$ARCHIVE_NAME" > "$WORK/archive-asset.json"
+          asset_url=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$WORK/archive-asset.json")
+          curl --fail --location --silent --show-error --output "$WORK/$ARCHIVE_NAME" \
+            --header "Authorization: Bearer $GITHUB_TOKEN" --header "Accept: application/octet-stream" "$asset_url"
+          printf '%s  %s\n' "$ARCHIVE_SHA256" "$WORK/$ARCHIVE_NAME" | sha256sum --check -
+      - name: Load the image and check its identity
+        run: |
+          set -eo pipefail
+          docker load --input "$WORK/$ARCHIVE_NAME"
+          loaded=$(docker image inspect "$DROP_TAG" --format '{{.Id}}')
+          test "$loaded" = "$IMAGE_CONFIG_ID"
+          docker tag "$DROP_TAG" "$LOCAL_TAG"
+          docker image inspect "$LOCAL_TAG" > "$WORK/image-inspect.json"
+          docker run --rm --entrypoint /home/amd/bin/server "$LOCAL_TAG" --version > "$WORK/version.txt" 2>&1 || \
+            echo "version probe unavailable on CPU: $(tail -n 1 "$WORK/version.txt")"
+          cat "$WORK/version.txt"
+      - name: Convert to an Enroot squash
+        run: |
+          set -eo pipefail
+          curl --fail --location --output "$WORK/$ENROOT_PACKAGE" \
+            "https://github.com/NVIDIA/enroot/releases/download/v4.2.0/$ENROOT_PACKAGE"
+          printf '%s  %s\n' "$ENROOT_PACKAGE_SHA256" "$WORK/$ENROOT_PACKAGE" | sha256sum --check -
+          sudo apt-get update
+          sudo apt-get install --yes squashfs-tools "$WORK/$ENROOT_PACKAGE"
+          enroot import --output "$WORK/$SQSH_NAME" "dockerd://$LOCAL_TAG"
+          unsquashfs -s "$WORK/$SQSH_NAME"
+          python3 - "$WORK" <<'PY'
+          import hashlib, json, os, sys
+          work = sys.argv[1]
+          inspect = json.load(open(os.path.join(work, "image-inspect.json")))[0]
+          sqsh = os.path.join(work, os.environ["SQSH_NAME"])
+          with open(sqsh, "rb") as handle:
+              sqsh_sha = hashlib.file_digest(handle, "sha256").hexdigest()
+          json.dump({
+              "archive": {"name": os.environ["ARCHIVE_NAME"], "sha256": os.environ["ARCHIVE_SHA256"]},
+              "image": {
+                  "config_id": inspect["Id"], "created": inspect["Created"],
+                  "labels": {k: inspect["Config"]["Labels"].get(k) for k in ("version", "release", "vcs-ref", "ROCM_VERSION")},
+                  "env": inspect["Config"]["Env"], "entrypoint": inspect["Config"]["Entrypoint"],
+              },
+              "squash": {"name": os.environ["SQSH_NAME"], "sha256": sqsh_sha},
+              "workflow": {"run_id": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"], "sha": os.environ["GITHUB_SHA"]},
+          }, open(os.path.join(work, "provenance.json"), "w"), indent=2)
+          print("squash sha256", sqsh_sha)
+          PY
+          cd "$WORK"
+          sha256sum "$SQSH_NAME" provenance.json > SHA256SUMS
+          cat SHA256SUMS
+      - name: Store the squash on the draft release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          set -eo pipefail
+          for name in "$SQSH_NAME" SHA256SUMS provenance.json; do
+            python3 .github/scripts/draft_release_asset.py --tag "$RELEASE_TAG" --put "$WORK/$name" --name "$name"
+          done
+          python3 .github/scripts/draft_release_asset.py --tag "$RELEASE_TAG" --list

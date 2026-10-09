@@ -836,6 +836,8 @@ clusters:
         hf-hub-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/hf-hub-cache}
         aiperf-cache: {path: /home/ext-cjquilici/inferencex-mi325x-amd/aiperf-cache}
       squash:
+        helper-dirs:
+          dcgm-exporter: {import: unchecked} # pre-staged private drop squash, handed to Pyxis as a path
         dir: /home/ext-cjquilici/inferencex-mi325x-amd/squash
         visibility: shared
         import: compute
@@ -851,9 +853,9 @@ clusters:
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_gpu_exporter:
-            container_image: ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:8a3fe70b8a848ca10a7fd90862d1d9e41e9c7b6314669a2e8340c646e6dae15c
+            container_image: ghcr.io#semianalysisai/amd-device-metrics-exporter:highres-privatedrop-20261008
             port: 19500
-            command: env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh
+            command: /home/amd/tools/entrypoint.sh
             kind: custom
             gpu_labels:
               index: gpu_id
@@ -893,6 +895,8 @@ clusters:
         aiperf-cache: {path: /it-share/aiperf-cache}
         it-share-data: {path: /it-share/data}
       squash:
+        helper-dirs:
+          dcgm-exporter: {import: unchecked} # pre-staged private drop squash, handed to Pyxis as a path
         dir: /it-share/gharunners2/srt-slurm/containers
         visibility: shared
         import: compute
@@ -918,9 +922,9 @@ clusters:
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
           default_gpu_exporter:
-            container_image: ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:8a3fe70b8a848ca10a7fd90862d1d9e41e9c7b6314669a2e8340c646e6dae15c
+            container_image: ghcr.io#semianalysisai/amd-device-metrics-exporter:highres-privatedrop-20261008
             port: 19500
-            command: env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh
+            command: /home/amd/tools/entrypoint.sh
             kind: custom
             gpu_labels:
               index: gpu_id
