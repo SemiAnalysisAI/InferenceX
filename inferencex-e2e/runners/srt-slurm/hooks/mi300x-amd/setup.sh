@@ -10,6 +10,3 @@ if [[ -z "$firmware" || "$firmware" -lt "$minimum" ]]; then
     exit 1
 fi
 echo "[$(hostname -s)] MEC firmware $firmware"
-
-# These caches live on compute-node RAID, not on the login node.
-mkdir -p /raid/inferencex/models/hub /raid/inferencex/aiperf-mmap-cache
