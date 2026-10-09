@@ -272,13 +272,15 @@ jobs:
           RELEASE_TAG: amd-dme-highres-privatedrop-20261008
           SQSH_NAME: amd-exporter-highres-20261008.sqsh
           IMAGE_REF: ghcr.io#semianalysisai/amd-device-metrics-exporter:highres-privatedrop-20261008
-          RUNNER_TYPE: ${{ inputs.runner }}
+          RUNNER_NAME: ${{ runner.name }}
         run: |
           set -eo pipefail
-          case "$RUNNER_TYPE" in
-            cluster:mi325x-amd) squash_dir=/home/ext-cjquilici/inferencex-mi325x-amd/squash ;;
-            cluster:mi355x-amds) squash_dir=/it-share/gharunners2/srt-slurm/containers ;;
-            *) echo "no shared squash cache for $RUNNER_TYPE" >&2; exit 1 ;;
+          # Keyed on the concrete runner, not inputs.runner: broad labels (mi325x, mi355x)
+          # schedule onto the same cluster runners as the cluster:* labels.
+          case "$RUNNER_NAME" in
+            mi325x-amd_*) squash_dir=/home/ext-cjquilici/inferencex-mi325x-amd/squash ;;
+            mi355x-amds_*) squash_dir=/it-share/gharunners2/srt-slurm/containers ;;
+            *) echo "no shared squash cache for runner $RUNNER_NAME" >&2; exit 1 ;;
           esac
           key=$(printf '%s' "$IMAGE_REF" | tr '/:@#' '____')
           dest="$squash_dir/$key.sqsh"
