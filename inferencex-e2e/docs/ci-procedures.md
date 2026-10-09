@@ -1,12 +1,6 @@
 # CI Procedures
 
-<div align="center">
-
-**English** | [中文](ci-procedures_zh.md)
-
-</div>
-
-Use this page for matrix generation, CI dispatch, PR sweeps, result staging, artifact reuse, and post-merge publication. English is the source version. Keep the Chinese page structurally synchronized with it. Record the repository, commit SHA, workflow run ID, run attempt, and artifact name whenever CI output is used as evidence.
+Use this page for matrix generation, CI dispatch, PR sweeps, result staging, artifact reuse, and post-merge publication. Record the repository, commit SHA, workflow run ID, run attempt, and artifact name whenever CI output is used as evidence.
 
 ## Procedure index
 

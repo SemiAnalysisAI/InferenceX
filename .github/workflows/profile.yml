@@ -243,20 +243,45 @@ jobs:
             done
           fi
 
+      # A cancelled or crashed job can leave git state in this persistent
+      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
       - name: Checkout code
+        id: checkout
+        continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+        with: &checkout-inputs
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
           clean: false
           persist-credentials: false
 
-      - name: Checkout result tooling
+      - name: Wipe workspace after failed checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Retry checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+        with: *checkout-inputs
+
+      # With clean: false above, nested checkouts also persist between jobs.
+      - name: Checkout result tooling
+        id: checkout-tooling
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: &tooling-inputs
           ref: ${{ github.workflow_sha }}
           path: .result-tooling
           persist-credentials: false
+
+      - name: Wipe result tooling after failed checkout
+        if: ${{ steps.checkout-tooling.outcome == 'failure' }}
+        run: rm -rf "$GITHUB_WORKSPACE/.result-tooling"
+
+      - name: Retry result tooling checkout
+        if: ${{ steps.checkout-tooling.outcome == 'failure' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: *tooling-inputs
 
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -384,9 +409,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Checkout storage repo
+        id: checkout-storage
         if: ${{ steps.run.outputs.trace != '' }}
+        continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+        with: &storage-inputs
           repository: SemiAnalysisAI/InferenceX-trace-storage
           path: storage
           ref: master
@@ -395,6 +422,15 @@ jobs:
           fetch-depth: 0
           # This separate storage checkout pushes trace commits using its scoped deploy key.
           persist-credentials: true # zizmor: ignore[artipacked]
+
+      - name: Wipe storage repo after failed checkout
+        if: ${{ steps.checkout-storage.outcome == 'failure' }}
+        run: rm -rf "$GITHUB_WORKSPACE/storage"
+
+      - name: Retry storage repo checkout
+        if: ${{ steps.checkout-storage.outcome == 'failure' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: *storage-inputs # zizmor: ignore[artipacked]
 
       - name: Push profile to storage repo
         if: ${{ steps.run.outputs.trace != '' }}
