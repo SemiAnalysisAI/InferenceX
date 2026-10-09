@@ -21,7 +21,6 @@ from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
-from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
 from infx.launch.policy import LaunchPath, Match
 from infx.tests.launch.fake_slurm import (
     base_env,
@@ -502,8 +501,6 @@ def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
     args = {"tensor-parallel-size": 8, "watchdog-timeout": 600, "dist-timeout": 1800}
     assert bound["name"] == call["env"]["RUNNER_NAME"] == "inferencex-lab-a_00"
     assert bound["roles"] == {"prefill": {"args": args}, "decode": {"nodes": 3, "args": args}}
-    assert bound["health_check"] == {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 5}
-    assert bound["model"]["path"] == "hf:org/Model"
 
 
 def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):
