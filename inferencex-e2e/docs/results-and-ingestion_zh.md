@@ -456,7 +456,10 @@ socket 总功耗也不等于各组件供电轨之和
 
 在 GB300 tray 上，socket 总功耗约为每 socket 95 W，而 CPU 与 SysIO 两条供电轨之和约为 51 W；差值是
 LPDDR5X 与稳压损耗，因此供电轨读数永远不会与总功耗相加或相减。CI 集群的 NVL72 固件目前只绑定 Grace、CPU
-和 SysIO 三个功耗计：GB200 上没有发现模块功耗计，DRAM 供电轨为空。
+和 SysIO 三个功耗计：GB200 上的模块 ACPI 功耗计未绑定，DRAM 供电轨为空。模块读数在那里改由 NVML 提供
+（`nvidia-smi --query-gpu=module.power.draw.average`），同一颗 superchip 的两颗 GPU 报出相同的模块值，空闲时
+约 475 W，对应约 95 W 的 Grace 加两颗各约 170 W 的 GPU。srt-slurm 的 CPU 采集环节尚未读取 NVML，因此目前
+没有任何产物包带有模块序列。
 
 每个 socket 的主序列按模块、Grace socket 总功耗、DCGM CPU 供电轨的顺序选取，且所有 socket 必须具备
 同一种传感器类型。每条参与计算的序列都在与 GPU 能耗相同的正式测量窗口内积分，采用同样的梯形法、

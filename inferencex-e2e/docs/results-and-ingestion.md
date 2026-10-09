@@ -473,7 +473,11 @@ total is not the sum of its component rails
 On a GB300 tray the socket total reads about 95 W per socket while its CPU and SysIO rails sum
 to about 51 W; the remainder is LPDDR5X and regulator loss, so rails are never added to or
 subtracted from a total. The CI clusters' NVL72 firmware currently binds the Grace, CPU, and
-SysIO meters only: no module meter was found on GB200, and the DRAM rail is blank.
+SysIO meters only: the module ACPI meters on GB200 are unbound, and the DRAM rail is blank. The
+module reading is available there through NVML instead (`nvidia-smi
+--query-gpu=module.power.draw.average`), where both GPUs of one superchip report the same module
+value, about 475 W at idle against roughly 95 W Grace plus two GPUs near 170 W each. srt-slurm's
+CPU leg does not read NVML yet, so no package carries a module series today.
 
 Per socket the headline series is chosen in the order module, Grace socket total, DCGM CPU rail,
 and one kind must be present for every socket. Every fed series is integrated over the same bound
