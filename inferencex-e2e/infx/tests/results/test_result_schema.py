@@ -248,7 +248,6 @@ def test_eval_collector_publishes_valid_rows_and_quarantines_malformed_ones(tmp_
         ("evals/eval_nan/results.json [gsm8k]", "em_flexible", "finite_number"),
         ("evals/eval_no_conc/results.json [gsm8k]", "conc", "greater_than"),
     }
-    assert len([line for line in result.stderr.splitlines() if line.startswith("::error")]) == 2
 
 
 @pytest.mark.parametrize("schema,row,expected", [

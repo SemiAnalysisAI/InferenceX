@@ -144,8 +144,7 @@ def main() -> int:
     exp_name = sys.argv[2]
 
     accepted, rejected = quarantine(
-        (f"{row.get('source')} [{row.get('task')}]", row, EVAL_ROW)
-        for row in collect_eval_rows(root)
+        (f"{row['source']} [{row['task']}]", row, EVAL_ROW) for row in collect_eval_rows(root)
     )
     rows = [row for _, row in accepted]
 
