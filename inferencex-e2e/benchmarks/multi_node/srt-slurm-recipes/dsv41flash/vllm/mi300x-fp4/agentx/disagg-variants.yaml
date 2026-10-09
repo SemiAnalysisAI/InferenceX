@@ -93,6 +93,11 @@ base:
 
 override_cpu_engram_c4: {}
 
+override_cpu_engram_c8:
+  benchmark:
+    env:
+      CONC: "8"
+
 override_cpu_engram_c16:
   benchmark:
     env:
