@@ -9495,7 +9495,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Refresh DeepSeek-V4.1-Flash MXFP4 AgentX on MI300X with the pinned October 8 vLLM ROCm nightly, NIXL disaggregation, and TP8 or packed aggregate controls."
+    - "Refresh DeepSeek-V4.1-Flash MXFP4 AgentX on MI300X with the pinned October 8 vLLM ROCm nightly: TP8 and packed TP4 aggregate serving, plus NIXL 1P/1D, 1P/3D, and 2P/2D configurations."
     - "Use native SRT Slurm, full 1M context, golden DSpark acceptance, prefix-aware SMG aggregate routing, and a fresh deployment per concurrency; normalize by every allocated GPU."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3842

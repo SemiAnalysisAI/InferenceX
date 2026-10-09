@@ -91,8 +91,6 @@ base:
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
       HF_HUB_CACHE: /hf_hub_cache
 
-override_cpu_engram_c4: {}
-
 override_cpu_engram_c8:
   benchmark:
     env:
@@ -114,3 +112,18 @@ override_1p3d_cpu_c32:
   benchmark:
     env:
       CONC: "32"
+
+override_2p2d_cpu_c64:
+  slurm:
+    time_limit: "04:00:00"
+  engine:
+    allow_prefill_decode_colocation_across_nodes: true
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+    decode:
+      workers: 2
+  benchmark:
+    env:
+      CONC: "64"
