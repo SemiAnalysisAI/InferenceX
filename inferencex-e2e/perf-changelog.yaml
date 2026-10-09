@@ -9528,3 +9528,12 @@
     - "TP4 c64: 8K prefill chunks with a 16-step prefill-decode interval instead of 16K chunks with none. Local runs with the fold: 82,586 -> 85,093 tok/s/GPU at 86.8 -> 136.8 tok/s/user median (46.3 -> 72.1 P90); P90 TTFT 5.7 -> 12.5 s."
     - "TP2 c128: admit all 128 sessions (max-running-requests and cuda-graph-max-bs-decode 64 -> 128) with a 4-step prefill-decode interval and mem-fraction-static 0.85. The PR #3421 sweep measured 18,631 tok/s/GPU at 130.9 tok/s/user median at this point; locally the new settings gave 147,763 tok/s/GPU at 37.9 tok/s/user median with a 51 s P90 TTFT (measured before the fold was added)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use five EAGLE speculative steps and six draft tokens at concurrency 1, 4, 8, and 20 on GLM-5.2 NVFP4 B300 SGLang."
+    - "Keep three speculative steps and four draft tokens at the other concurrencies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

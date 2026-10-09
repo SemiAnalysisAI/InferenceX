@@ -69,13 +69,16 @@ base:
       TOTAL_CPU_DRAM_GB: '2399'
 
 # One variant per point: admission is 2x CONC and the graph batch matches it,
-# capped at 64.
+# capped at 64. Use K=5 at c1/c4/c8/c20; retain K=3 elsewhere. The connector
+# selects the committed golden acceptance length for each variant.
 override_c1:
   roles:
     agg:
       args:
         max-running-requests: 2
         cuda-graph-max-bs: 2
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '1'
@@ -86,6 +89,8 @@ override_c4:
       args:
         max-running-requests: 8
         cuda-graph-max-bs: 8
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '4'
@@ -96,6 +101,8 @@ override_c8:
       args:
         max-running-requests: 16
         cuda-graph-max-bs: 16
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '8'
@@ -126,6 +133,8 @@ override_c20:
       args:
         max-running-requests: 40
         cuda-graph-max-bs: 40
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '20'
