@@ -36,6 +36,7 @@ from infx.launch.request import (
     RequestError,
     SingleNodeRequest,
 )
+from infx.srt_slurm.workload import BOUND_RECIPE
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -157,7 +158,7 @@ def run_multinode(launch: Launch) -> int:
     prepare_recipe(checkout.root, staged, job_name, run.srt.dist_timeout_s, conc_list)
     recipe = staged
     if not request.is_agentic:
-        recipe = str(checkout.root / submit.BOUND_RECIPE)
+        recipe = str(checkout.root / BOUND_RECIPE)
         if rc := submit.bind_recipe(run, checkout, staged, recipe):
             return rc
     arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)

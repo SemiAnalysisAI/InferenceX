@@ -14,7 +14,7 @@ import yaml
 
 from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
-from infx.srt_slurm.workload import bind_workload, compose_recipe
+from infx.srt_slurm.workload import BOUND_RECIPE, bind_workload, compose_recipe
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
 
@@ -234,7 +234,7 @@ def main() -> None:
             arguments = runtime_arguments(parsed.recipe, os.environ)
             if os.environ["IS_AGENTIC"] == "0":
                 # srtctl gets the bound variant, never the fragment.
-                config = str(parsed.output.with_name("recipe.yaml"))
+                config = str(parsed.output.with_name(BOUND_RECIPE))
                 Path(config).write_text(yaml.safe_dump(recipe, sort_keys=False))
             parsed.output.write_bytes("\0".join([config, *arguments, ""]).encode())
         else:

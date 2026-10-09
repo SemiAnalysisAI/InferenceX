@@ -28,7 +28,6 @@ def _environment(point: Mapping[str, Any]) -> dict[str, str]:
     environment = {
         "IMAGE": point["image"],
         "MODEL": point["model"],
-        "MODEL_PREFIX": point["model-prefix"],
         "PRECISION": point["precision"],
         "FRAMEWORK": point["framework"],
         "SPEC_DECODING": point["spec-decoding"],
@@ -36,7 +35,6 @@ def _environment(point: Mapping[str, Any]) -> dict[str, str]:
         "ISL": str(point["isl"]),
         "OSL": str(point["osl"]),
         "RANDOM_RANGE_RATIO": RANDOM_RANGE_RATIO,
-        "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
     }
     if "prefill" in point:
@@ -65,7 +63,9 @@ def _bound_variant(
     return bind_multinode(str(root / point["srt-recipe"]), environment, root=root)
 
 
-def _validated(recipe: dict[str, Any], environment: Mapping[str, str], source: str) -> None:
+def _apply_acceptance_and_validate(
+    recipe: dict[str, Any], environment: Mapping[str, str], source: str
+) -> None:
     """Apply golden-acceptance cleanup, then load the result as srtctl would."""
     from marshmallow import ValidationError
     from srtctl.core.config import expand_engine_config_defaults, resolve_config_with_defaults
@@ -95,13 +95,14 @@ def generate_recipes(
     """Bind every fixed-sequence point of ``config_keys``; write recipes and a manifest."""
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
-    root = config_root([str(path) for path in config_files])
+    files = [str(path) for path in config_files]
+    root = config_root(files)
     source = root / "utils/srt-slurm/src"
     if not (source / "srtctl").is_dir():
         raise ValueError(f"No srt-slurm checkout at {source}; initialize the submodule")
     if str(source) not in sys.path:
         sys.path.insert(0, str(source))
-    master = load_config_files([str(path) for path in config_files])
+    master = load_config_files(files)
     runners = load_runner_file(str(runner_file))
     recipes: dict[str, dict[str, Any]] = {}
     records = []
@@ -114,7 +115,7 @@ def generate_recipes(
         for point in points:
             environment = _environment(point)
             variant, recipe = _bound_variant(point, environment, root)
-            _validated(recipe, environment, point["srt-recipe"])
+            _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
             digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
             name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"
