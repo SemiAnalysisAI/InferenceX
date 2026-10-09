@@ -196,7 +196,7 @@ qwen3.5-fp8-mi355x-sglang:
       search-space:
       - tp: 4
         ep: 1
-        conc-start: 4
+        conc-start: 1
         conc-end: 256
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8/8k1k.yaml
 
