@@ -1042,39 +1042,158 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 6, 8, 10], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi300x-fp8-mtp/agentic.yaml }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/mi300x-fp8-mtp/agentic.yaml }
 
-# DeepSeek-V4.1-Flash AgentX on MI300X (gfx942), a copy of the validated MI355X vLLM
-# arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
-# hardware table (h100, h200, b200, gb200, gb300, mi350x); TP8 rather than TP4
-# because a 192 GB card must hold its share of the 511 GB checkpoint, the
-# GPU-resident Engram tables and a 1M-context KV pool. Native five-token DSpark,
-# golden AL 3.51 for throughput, real block verification for evals, adaptive
-# verification off on ROCm.
-dsv41flash-fp4-mi300x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984
+dsv41flash-fp4-mi300x-vllm-agentic-nixl:
+  image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi300x-amd
   precision: fp4
   framework: vllm
-  multinode: false
+  router: {name: vllm-router, version: "0.1.15"}
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.60
-      search-space:
-      # The recipe sets engram cpu_offload per TP: off at TP8 so this curve stays
-      # comparable with the validated concurrency 1-32 run, on below TP8 where
-      # the tables would not fit beside the checkpoint share on a 192 GB card.
-      # vllm-project/vllm#57491 widened the two is_cuda() gates to
-      # is_cuda_alike(), so engram_config resolves on gfx942 in this image.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi300x-fp4-mtp/agentic.yaml }
-      # TP4 halves the GPUs per server. With the Engram tables in pinned host
-      # memory the resident weights are ~81 GiB per rank.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi300x-fp4-mtp/agentic.yaml }
-      # No TP2 arm on this SKU. Measured in run 35671005506: at TP2 the resident
-      # weights are ~145 GiB per rank, and even with the indexer buffer halved
-      # to 4096 batched tokens the engine reported "Available KV cache memory:
-      # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
-      # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/disagg-variants.yaml:override_cpu_engram_c8
+        decode: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/disagg-variants.yaml:override_cpu_engram_c16
+        decode: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/disagg-variants.yaml:override_1p3d_cpu_c32
+        decode: {num-worker: 3, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [64]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/disagg-variants.yaml:override_2p2d_cpu_c64
+        decode: {num-worker: 2, tp: 4, ep: 1, dp-attn: false}
+
+dsv41flash-fp4-mi300x-vllm-agentic-dspark:
+  image: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi300x-amd
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-variants.yaml:override_tp8_c1
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [3]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-variants.yaml:override_tp8_c3
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [32]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-variants.yaml:override_tp8_c32
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [2]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-variants.yaml:override_2x_tp4_cpu_c2_abs0
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-variants.yaml:override_2x_tp4_cpu_c4
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-variants.yaml:override_2x_tp4_cpu_c8
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [64]
+        num-nodes: 1
+        router: {name: smg, version: "1.11.0"}
+        worker:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - CONFIG_FILE=recipes/dsv41flash/vllm/mi300x-fp4/agentx/agg-variants.yaml:override_2x_tp4_cpu_c64
 
 # GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
