@@ -205,7 +205,6 @@ override_dpa8_c256_lmcache:
             max_pending_saves: 8
             slot_sidecar_staging_slots: 4
             lmcache.local_cpu: true
-            # total-cpu-dram-gb 1499 (dram-utilization 0.5) over the eight prefill ranks.
             lmcache.max_local_cpu_size: '@dram.per-gpu-gb'
             lmcache.local_disk: null
             lmcache.max_local_disk_size: 0

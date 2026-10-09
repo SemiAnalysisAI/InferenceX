@@ -104,7 +104,7 @@ Klaud Cold 调度 `e2e-tests.yml` 时显式设置布尔输入 `klaud-run: true`�
 
 ## 修改范围与 PR 策略
 
-权威[候选指令](../../.github/klaud-candidate-prompt.md)仅允许修改所选 master 镜像，以及其已引用且未共享的单节点 recipe 或 srt-slurm YAML 中有源码依据的兼容性参数/环境变量。模型、精度、拓扑、推测解码、工作负载/数据集、时长、资源、全部配置点和 eval 保持不变。`model.container` 和 `identity.container.image` 必须一致。Klaud 不进行广泛调优，也不修改共享脚本、launcher、库或工作流。运行时引擎/serving 技术栈补丁必须为零，包括选定路径已有的补丁：禁止改写源码、容器、site-packages，禁止 overlay、monkey patch 或重建/fork 的 wheel。选择可原样运行的镜像，否则报告不兼容。
+权威[候选指令](../../.github/klaud-candidate-prompt.md)仅允许修改所选 master 镜像，以及其已引用且未共享的单节点 recipe 或 srt-slurm YAML 中有源码依据的兼容性参数/环境变量。模型、精度、拓扑、推测解码、工作负载/数据集、时长、资源、全部配置点和 eval 保持不变。Klaud 不进行广泛调优，也不修改共享脚本、launcher、库或工作流。运行时引擎/serving 技术栈补丁必须为零，包括选定路径已有的补丁：禁止改写源码、容器、site-packages，禁止 overlay、monkey patch 或重建/fork 的 wheel。选择可原样运行的镜像，否则报告不兼容。
 
 smoke benchmark 和代表性 eval 都通过后，在 changelog 物理末尾追加条目并保留历史字节，推送精确 head，生成/检查完整矩阵并重新检查容量。保持草稿，只添加 `full-sweep-fail-fast`。最终失败后，先移除 sweep 标签并保持草稿，再修复。仅 `finish` 在结果验证和最终报告发布后标记就绪；就绪触发审查，不启动新 sweep。随后 Klaud 用 `/use` 记录已验证的最终运行；审查、staging 和合并仍由维护者决定。
 

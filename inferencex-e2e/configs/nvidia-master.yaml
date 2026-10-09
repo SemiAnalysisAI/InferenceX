@@ -7361,8 +7361,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 2
-        # Shared deployment GPU power telemetry.
         srt-recipe: agg.yaml
+        # Shared deployment GPU power telemetry.
         power: true
         worker:
           num-worker: 1

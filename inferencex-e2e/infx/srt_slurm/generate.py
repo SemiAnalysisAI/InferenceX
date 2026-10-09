@@ -15,6 +15,10 @@ import yaml
 
 from infx.clusters import load_inventory
 from infx.clusters.slurm import slurm_settings
+from infx.launch.context import LaunchError
+from infx.launch.drivers.srt import config, lanes, power
+from infx.launch.policy import launch_path
+from infx.launch.request import MultiNodeRequest
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
@@ -59,6 +63,11 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             else ""
         ),
     }
+    if agentic:
+        environment.update(
+            KV_OFFLOADING=str(point["kv-offloading"]),
+            TOTAL_CPU_DRAM_GB=str(point["total-cpu-dram-gb"]),
+        )
     if "prefill" in point:
         prefill = point["prefill"]
         environment.update(
@@ -69,8 +78,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             PREFILL_TP=str(prefill["tp"]),
             PREFILL_PP_SIZE=str(prefill["pp"]),
             PREFILL_PCP_SIZE=str(prefill["pcp-size"]),
-            KV_OFFLOADING=str(point["kv-offloading"]) if agentic else "",
-            TOTAL_CPU_DRAM_GB=str(point["total-cpu-dram-gb"]) if agentic else "",
         )
         if agentic:
             # A multi-node AgentX job serves its one concurrency.
@@ -86,8 +93,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         "PCP_SIZE": str(point["pcp-size"]),
         "DP_ATTENTION": str(point["dp-attn"]).lower(),
         "GPU_COUNT": str(point["tp"] * point["pp"] * point["pcp-size"]),
-        "KV_OFFLOADING": str(point["kv-offloading"]) if agentic else "",
-        "TOTAL_CPU_DRAM_GB": str(point["total-cpu-dram-gb"]) if agentic else "0",
     }
 
 
@@ -118,10 +123,6 @@ def _binder_inputs(
             f"runner {point['runner']!r} must schedule on one cluster to bind the cluster's "
             "power telemetry and AgentX client paths"
         )
-    from infx.launch.context import LaunchError
-    from infx.launch.drivers.srt import config, lanes, power
-    from infx.launch.policy import launch_path
-    from infx.launch.request import MultiNodeRequest
 
     runner, cluster = placement
     srt = slurm_settings(cluster).srt_slurm
@@ -138,10 +139,9 @@ def _binder_inputs(
         path = launch_path(cluster.id, request)
         lane = lanes.srt_lane(cluster.id, path)
         decision = power.decide_power(cluster.id, path, request)
-        client_env = config.agentic_client_env(cluster, srt, lane, request) if agentic else {}
+        return config.binder_inputs(cluster, srt, lane, request, decision)
     except LaunchError as error:
         raise ValueError(f"cluster {cluster.id!r}: {error}") from error
-    return (srt.power_exporter_port if decision.dcgm else None), client_env
 
 
 def bound_variant(
@@ -213,11 +213,8 @@ def generate_recipes(
 ) -> dict[str, Any]:
     """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
 
-    A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
-    paths, a DRAM point's ``'@dram.<name>'`` values take its budget over the GPUs it covers
-    there, and ``'@fabric.<name>'`` values take its cluster's facts; the manifest names that
-    cluster, the one its runner label schedules on. A label on several clusters leaves fabric
-    references as written and the manifest's ``cluster`` null.
+    A runner label on several clusters leaves ``'@fabric.<name>'`` values as written and the
+    manifest's ``cluster`` null.
     """
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")

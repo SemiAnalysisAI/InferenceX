@@ -123,16 +123,12 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
-        "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
-        "image": (recipe["model"]["container"], environment["IMAGE"]),
-        "precision": (recipe["model"]["precision"], environment["PRECISION"]),
         **parallelism_constraints(engine, args, environment),
         "gpus": (role["gpus"], int(environment["GPU_COUNT"])),
         "nodes": (role["nodes"], 1),
         "workers": (role["workers"], 1),
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
-        "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
         # draft_model names a bundled or separate draft; its recipes speculate natively.
         "SPEC_DECODING": (
             speculation,

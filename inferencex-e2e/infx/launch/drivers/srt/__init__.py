@@ -184,12 +184,7 @@ def run_multinode(launch: Launch) -> int:
         run.env["INFMAX_WORKSPACE"] = str(infmax)
 
         recipe = str(checkout.root / BOUND_RECIPE)
-        client_env = (
-            config.agentic_client_env(run.cluster, run.srt, lane, request)
-            if request.is_agentic
-            else {}
-        )
-        power_port = run.srt.power_exporter_port if decision.dcgm else None
+        power_port, client_env = config.binder_inputs(run.cluster, run.srt, lane, request, decision)
         if rc := submit.bind_recipe(run, checkout, staged, recipe, power_port, client_env):
             return rc
         # Only the bound recipe is flat: a bundle keeps its names and roles under base and
