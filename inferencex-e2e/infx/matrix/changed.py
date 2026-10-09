@@ -80,7 +80,7 @@ def base_matrix(ref: str, config_files: list[str]) -> Matrix:
 
 
 def _sorted(points: Iterable[dict]) -> list[dict]:
-    return sorted(points, key=lambda point: (str(point.get("exp-name")), point["conc"]))
+    return sorted(points, key=lambda point: (point["exp-name"], point["conc"]))
 
 
 def _keys(base: Matrix, head: Matrix) -> list[str]:
@@ -114,7 +114,7 @@ def _label(point: dict) -> str:
         shape = f"tp{point['tp']} ep{point['ep']}"
     fingerprint = point["recipe-fingerprint"]
     recipe = fingerprint[:12] if fingerprint else "no fingerprint"
-    return f"{point.get('exp-name')} {shape} conc {point['conc']} {recipe}"
+    return f"{point['exp-name']} {shape} conc {point['conc']} {recipe}"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -149,7 +149,8 @@ def main(argv: list[str] | None = None) -> None:
             f"{len(change['added'])} added, {len(change['removed'])} removed"
         )
         for sign, points in (("+", change["added"]), ("-", change["removed"])):
-            print("".join(f"  {sign} {_label(point)}\n" for point in points), end="")
+            for point in points:
+                print(f"  {sign} {_label(point)}")
     print(f"{len(changed)} of {len(keys)} config keys changed since {args.base}.")
     # Planning a row without a fingerprint fails; --json carries every message in full.
     for key in keys:

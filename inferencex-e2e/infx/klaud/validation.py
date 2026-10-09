@@ -126,17 +126,16 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
             )
         with snapshot(head) as producer:
             rows = producer.generate([family.split(":", 1)[1]], ["--no-evals"])
-            listed = isinstance(rows, list) and all(isinstance(row, dict) for row in rows)
+            if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+                raise ValueError("the generator did not print a list of matrix rows")
             # Published results carry the fingerprints the producer's own planner assigned.
-            fingerprints = producer.fingerprints(rows) if listed else []
+            fingerprints = producer.fingerprints(rows)
     except subprocess.SubprocessError as error:
         stderr = getattr(error, "stderr", None) or b""
         text = stderr.decode(errors="replace") if isinstance(stderr, bytes) else stderr
         raise ProducerRegenerationError(text) from error
     except (OSError, ValueError) as error:
         raise ProducerRegenerationError(str(error)) from error
-    if not listed:
-        raise ProducerRegenerationError("the generator did not print a list of matrix rows")
     return {
         "single_node": {
             "all": [
