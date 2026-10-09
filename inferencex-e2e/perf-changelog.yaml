@@ -9418,6 +9418,6 @@
   description:
     - "Update the image from rocm/atom-dev:nightly_202609291501 to nightly_202610071700 (digest sha256:bb3912c372dda0c82fc6831afdd76e366a372d5e9fe223373499db63b06cce65, ROCm 7.2.4)."
     - "Run every DEP point (C48 to C384) on ATOM's MegaMoE backend instead of RCCL, with EPLB at every point except C64."
-    - "Run C256 and the new C384 with ATOM's lmcache_mp CPU KV tier, backed by one LMCache server per node that the new dsv4-atom-lmcache-mp-server.sh setup script starts from the LMCache build in the image, within a 1019 GB budget (dram-utilization 0.34)."
+    - "Run C256 and the new C384 with ATOM's lmcache_mp CPU KV tier, backed by srtctl's lmcache-server service (one LMCache server per node, from the LMCache build in the image), within a 1019 GB budget (dram-utilization 0.34)."
     - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4-Pro-0813 runs as shipped."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3819
