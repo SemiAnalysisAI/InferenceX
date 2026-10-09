@@ -149,4 +149,5 @@ override_tp8_c16_lmcache:
     env:
       CONC: "16"
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: "1298"
+      # The LMCache 1296 GiB allocation is 1391.57 decimal GB.
+      TOTAL_CPU_DRAM_GB: "1394"

@@ -1154,7 +1154,8 @@ minimaxm3-fp8-mi300x-vllm-agentic-lmcache:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Matrix memory is decimal GB; LMCache's 1296 GiB is 1391.57 GB.
+    - dram-utilization: 0.859
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
