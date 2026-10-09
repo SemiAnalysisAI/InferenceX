@@ -71,8 +71,7 @@ base:
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC. The DRAM point runs one
-# lmcache-server service on the node with an L1 of one 160 GB share of the
-# 1284 GB budget per TP rank (8 x 160 GB).
+# lmcache-server service on the node with the whole 1280 GB DRAM budget as L1.
 override_tp8_c2:
   roles:
     agg:

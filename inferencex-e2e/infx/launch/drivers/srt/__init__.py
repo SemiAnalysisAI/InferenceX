@@ -48,10 +48,9 @@ def run_single_node(launch: Launch) -> int:
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
     checkout = prepare_checkout(run, root / "checkout", power=False)
     install_srtctl(run, checkout)
-    # Shared nodes give the job and its srun step only the serving GPUs' share of node DRAM. An
-    # exclusive job asks for --mem=0, all the memory Slurm has, which can be below
-    # available-cpu-dram-mib, and leaves the step uncapped: a share cap leaves host pools sized
-    # to the share no room for the engine and page cache.
+    # Shared nodes cap the job and its srun step at the serving GPUs' share of node DRAM.
+    # Exclusive jobs take --mem=0, all Slurm has, and an uncapped step, so host pools sized to
+    # the share leave room for the engine and page cache.
     step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
     if run.srt.single_node_exclusive and job_mib is not None:
         step_mib, job_mib = None, 0
