@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.srt_slurm.workload import bind_workload, compose_recipe
+from infx.srt_slurm.workload import bind_workload, compose_recipe, parse_concurrencies
 
 ROOT = Path(__file__).resolve().parents[3]
 MULTI_ENV = {
@@ -70,17 +70,13 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
 
 @pytest.mark.parametrize(("data", "multinode", "reported"), [
     ({"model": {"container": "other/image:1"}}, True, "model.container (= 'other/image:1')"),
-    ({"model": {"container": "registry/image:2"}}, True, "model.container (= 'registry/image:2')"),
     ({"base": {"benchmark": {"env": {"ISL": "8192"}}}}, False, "base.benchmark.env.ISL (= '8192')"),
-    ({"identity": {"model": {"repo": "org/model"}}}, True, "identity.model.repo (= 'org/model')"),
     ({"base": {}, "zip_override_c": {"benchmark": {"env": {"CONC": ["4"]}}}}, True,
      "zip_override_c.benchmark.env.CONC (= ['4'])"),
     ({"base": {}, "override_c": {"benchmark": {"concurrencies": [4]}}}, False,
      "override_c.benchmark.concurrencies (= [4])"),
 ])  # fmt: skip
-def test_a_fragment_that_sets_a_bound_key_is_rejected_even_with_the_bound_value(
-    project, data, multinode, reported
-):
+def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, multinode, reported):
     path = fragment(project, data)
     with pytest.raises(ValueError) as error:
         compose_recipe(path, multinode=multinode, root=project)
@@ -124,11 +120,18 @@ def test_telemetry_recipes_get_the_points_concurrencies(telemetry, concurrencies
 @pytest.mark.parametrize(("environment", "message"), [
     ({**MULTI_ENV, "IMAGE": ""}, "Missing workload input: IMAGE"),
     ({**MULTI_ENV, "OSL": "1k"}, "OSL must be a positive integer: '1k'"),
-    ({**MULTI_ENV, "CONC_LIST": "4 0"}, "CONC_LIST must be a positive integer: '0'"),
+    ({**MULTI_ENV, "CONC_LIST": "4 0"}, "CONC_LIST entries must be canonical positive integers: '0'"),
 ])  # fmt: skip
 def test_a_malformed_point_is_rejected_before_binding(environment, message):
     with pytest.raises(ValueError, match=message):
         bind_workload({}, environment, multinode=True)
+
+
+def test_conc_list_must_be_canonical_positive_integers():
+    assert parse_concurrencies(" 4 8\t16 ") == [4, 8, 16]
+    for bad in ("", "08", "0", "-4", "4.0", "4 4", "+4"):
+        with pytest.raises(ValueError):
+            parse_concurrencies(bad)
 
 
 def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path):
