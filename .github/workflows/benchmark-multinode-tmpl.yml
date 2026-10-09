@@ -230,38 +230,26 @@ jobs:
             done
           fi
 
-      - name: Repair stale git state (pre-run)
-        run: |
-          # Interrupted runs leave index.lock files and corrupt submodule git
-          # dirs behind in the persistent self-hosted workspace, and both make
-          # actions/checkout fail before any benchmark starts. The runner
-          # executes one job at a time, so any lock found here is stale by
-          # definition. Grouping dirs (e.g. .git/modules/utils) hold only
-          # nested module dirs, so any dir carrying top-level files is a
-          # module git dir — a truncated clone may lack HEAD entirely, and a
-          # git dir whose HEAD does not resolve to a commit is dropped
-          # together with its worktree so checkout re-clones it.
-          repo_dir="${GITHUB_WORKSPACE}"
-          if [ -d "${repo_dir}/.git" ]; then
-            find "${repo_dir}/.git" -name index.lock -type f -delete || true
-            for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
-              [ -d "${gitdir}" ] || continue
-              [ -n "$(find "${gitdir}" -maxdepth 1 -type f -print -quit)" ] || continue
-              if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
-                rel="${gitdir##*/.git/modules/}"
-                echo "[git-repair] Removing corrupt submodule state: ${rel}"
-                rm -rf "${gitdir}" "${repo_dir:?}/${rel}" "${repo_dir:?}/inferencex-e2e/${rel}"
-              fi
-            done
-          fi
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+      # A cancelled or crashed job can leave git state in this persistent
+      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
+      - id: checkout
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: &checkout-inputs
           fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
           persist-credentials: false
+
+      - name: Wipe workspace after failed checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Retry checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: *checkout-inputs
 
       - name: Checkout result tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
