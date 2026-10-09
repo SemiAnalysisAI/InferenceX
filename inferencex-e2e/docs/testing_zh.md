@@ -22,7 +22,6 @@
 ## 事实来源
 
 - [`.github/AGENT_OPERATIONS.md`](../../.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) 定义扫描标签与修饰标签；其[派发章节](../../.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring)定义手动运行与产物检查。
-- [`docs/configuration-procedures.md`](configuration-procedures.md#validate) 是聚焦配置验证的操作流程。
 - [`.github/workflows/README.md`](../../.github/workflows/README.md) 记录矩阵生成、`e2e-tests.yml`、PR 扫描和复用。
 - [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) 是可执行的 PR 扫描门禁，[`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) 是推送到 `main` 时的复用与入库门禁；[`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) 是手动分发的端到端路径。
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) 是合并评审标准。[验证器提示词](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) 说明如何独立核验扫描和评测证据。
@@ -48,16 +47,10 @@ Tests 使用四个 pytest worker 运行 `infx/tests/`、`utils/`、`runners/`、
 
 ## 测试质量
 
-测试应保护实际行为，而不是凑覆盖率。评审时，要明确每个测试能发现什么实际缺陷，以及它是否运行了真正交付的实现。
+强制性的测试规则（禁止的测试类型、保留测试应满足的要求以及四个评审问题）位于 [`AGENTS.md`](../../AGENTS.md#test-quality)。此处另有两点补充：
 
-- 优先使用小规模输入和人工推导的预期结果，覆盖相关边界、无效输入或失败场景。不要照搬实现中的计算过程，也不要调用同一个辅助函数生成预期结果。
-- 不要把当前配方数量、模型或硬件清单、镜像 pin、枚举定义或源码文本写成快照断言。新增有效配方或进行等价重构，不应迫使开发者修改无关断言。
 - 保留真正的契约：数值结果、无效输入拒绝行为、稳定的产物格式，以及由不同组件独立读取的配置之间的一致性。只断言使用方真正依赖的部分。
-- 必要时可以模拟外部服务或进程，但必须运行被测行为本身。测试里复制的解析器、过滤逻辑或假实现，无法发现真实实现中的回归。
 - 在涉及时间的测试中控制时钟和长时间等待，以可观察到的就绪状态进行同步。测试进程终止或产物写入契约时，应保留真实操作，并为等待和清理设置上限，避免回归导致测试进程一直挂起。
-- 冗余测试应直接删除，不必一一补上。只有存在实质性覆盖缺口时才扩展已有 fixture；不要为了维持测试数量而新建测试框架。
-
-参见 [Randy Coulman 的 Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/)，了解独立预期结果与仅仅重复实现的断言之间的区别。
 
 ## 本地检查
 
@@ -162,7 +155,7 @@ python3 -m infx.workflows.validate_perf_changelog \
 
 其契约实现在 [`validate_perf_changelog.py`](../infx/workflows/validate_perf_changelog.py) 中。该检查会验证生成矩阵并拒绝禁止的内容变更，但其差异读取器可能看不到仅空白的历史删除。应把精确字节差异检查作为独立证据门禁；不要改写或规范化 `perf-changelog.yaml` 历史字节。
 
-本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行；详见[配置验证](configuration-procedures.md#validate)。
+本地矩阵不能证明 Slurm 分配或 llm-d 端点发现。多节点配方变更仍然需要上游配方检查器，并在目标集群上实际执行。
 
 ### 并行运行完整本地测试套件
 

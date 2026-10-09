@@ -234,7 +234,7 @@ jobs:
 
             ## Updating perf-changelog.yaml
 
-            See `inferencex-e2e/docs/configuration-procedures.md` → "Update an image" and "Append the changelog safely" for entry format and rules. Required whenever you change image tags, env vars, or perf-affecting params in `inferencex-e2e/configs/*-master.yaml` or `inferencex-e2e/benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
+            See `AGENTS.md` → "Non-negotiable benchmark invariants" for changelog rules and `inferencex-e2e/perf-changelog.yaml` for entry format. Required whenever you change image tags, env vars, or perf-affecting params in `inferencex-e2e/configs/*-master.yaml` or `inferencex-e2e/benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
 
             If an entry uses `append-only: true`, require the generated base matrix to remain an immutable subset of the generated head matrix. New concurrency values or new recipe variants may be added inside a selected existing config/scenario, but no existing generated point may be removed or modified, and every addition must retain the target visual curve's single non-null image. Do not enforce a file allowlist: supporting code, benchmark scripts, launchers, helpers, and other files may change when their benchmark effect is exclusive to the corresponding newly appended points. All added changelog entries must be append-only, and eval modifiers are forbidden. Trace behavior through the complete diff; unguarded changes or paths reachable by an existing point are blocking.
 
@@ -266,7 +266,6 @@ jobs:
 
             ### Additional Knowledge
             - MI355 is gfx950 not gfx1201
-            - STP/MTP terminology: see `inferencex-e2e/docs/configuration-procedures.md` → "Add a model + hardware recipe"
 
             ### Expert Parallelism in Benchmark Scripts
             vLLM and SGLang handle expert parallelism differently. When writing or reviewing benchmark scripts for MoE models:
