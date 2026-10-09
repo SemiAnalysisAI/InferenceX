@@ -9217,6 +9217,7 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
   precision: fp4
   framework: sglang
   multinode: false
+  srt-recipe-dir: qwen3.8next/sglang/gb300-fp4-mtp
   scenarios:
     agentic-coding:
     # Use the GB300 profile's proportional per-worker host DRAM allowance.
@@ -9230,7 +9231,7 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [1, 2, 4, 8, 16, 32, 48, 64]
-        srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/gb300-fp4-mtp/agentic.yaml
+        srt-recipe: agentic.yaml
 
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
   image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
@@ -9245,6 +9246,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
+  srt-recipe-dir: qwen3.5/sglang/gb300-fp8/agentx
   scenarios:
     agentic-coding:
     - dram-utilization: 0.9
@@ -9255,14 +9257,13 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
           name: hicache
         conc-list:
         - 1000
+        srt-recipe: disagg-gb300-5p3d-pp4-dep4-c1000-mtp-hicache-nightly-20260913.yaml
         prefill:
           num-worker: 5
           tp: 1
           pp: 4
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-gb300-5p3d-pp4-dep4-c1000-mtp-hicache-nightly-20260913.yaml
         decode:
           num-worker: 3
           tp: 4
@@ -9275,14 +9276,13 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
           name: hicache
         conc-list:
         - 200
+        srt-recipe: disagg-gb300-1p1d-pp4-dep4-c200-mtp-hicache-nightly-20260913.yaml
         prefill:
           num-worker: 1
           tp: 1
           pp: 4
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-gb300-1p1d-pp4-dep4-c200-mtp-hicache-nightly-20260913.yaml
         decode:
           num-worker: 1
           tp: 4
@@ -9295,14 +9295,13 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
           name: hicache
         conc-list:
         - 400
+        srt-recipe: disagg-dep16-mtp6-variants.yaml:override_3p1d
         prefill:
           num-worker: 3
           tp: 1
           pp: 4
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-dep16-mtp6-variants.yaml:override_3p1d
         decode:
           num-worker: 1
           tp: 16
@@ -9315,14 +9314,13 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
           name: hicache
         conc-list:
         - 300
+        srt-recipe: disagg-dep16-mtp6-variants.yaml:override_2p1d
         prefill:
           num-worker: 2
           tp: 1
           pp: 4
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-dep16-mtp6-variants.yaml:override_2p1d
         decode:
           num-worker: 1
           tp: 16
@@ -9335,14 +9333,13 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
           name: hicache
         conc-list:
         - 180
+        srt-recipe: disagg-dep16-mtp6-variants.yaml:override_1p1d
         prefill:
           num-worker: 1
           tp: 1
           pp: 4
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/disagg-dep16-mtp6-variants.yaml:override_1p1d
         decode:
           num-worker: 1
           tp: 16
@@ -9358,6 +9355,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve:
   framework: dynamo-sglang
   multinode: true
   disagg: false
+  srt-recipe-dir: qwen3.5/sglang/gb300-fp8/agentx
   scenarios:
     agentic-coding:
     - dram-utilization: 0.9
@@ -9369,14 +9367,13 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve:
         conc-list:
         - 44
         num-nodes: 1
+        srt-recipe: agg-gb300-tp4-c44-b1-mtp-hicache-nightly-20260913.yaml
         worker:
           num-worker: 1
           tp: 4
           pp: 1
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-gb300-tp4-c44-b1-mtp-hicache-nightly-20260913.yaml
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend:
@@ -9384,14 +9381,13 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve:
         conc-list:
         - 1
         num-nodes: 1
+        srt-recipe: agg-gb300-tp4-c1-b1-mtp-hicache-nightly-20260913.yaml
         worker:
           num-worker: 1
           tp: 4
           pp: 1
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-gb300-tp4-c1-b1-mtp-hicache-nightly-20260913.yaml
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend:
@@ -9399,11 +9395,10 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve:
         conc-list:
         - 1
         num-nodes: 2
+        srt-recipe: agg-gb300-tp8-c1-b1-mtp-hicache-nightly-20260913.yaml
         worker:
           num-worker: 1
           tp: 8
           pp: 1
           ep: 1
           dp-attn: false
-          additional-settings:
-          - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-gb300-tp8-c1-b1-mtp-hicache-nightly-20260913.yaml
