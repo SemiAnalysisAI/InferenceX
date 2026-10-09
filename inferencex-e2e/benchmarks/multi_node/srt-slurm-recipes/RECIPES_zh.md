@@ -70,7 +70,7 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 | `@dram.per-gpu-gb` | 预算除以所覆盖的 GPU 数，取整 GB |
 | `@dram.per-gpu-bytes` | 预算除以所覆盖的 GPU 数，单位字节 |
 
-引用替换为整数；作为环境变量值或参数列表项（例如 `--l1-size-gb` 之后的一项）时替换为十进制字符串；也可以作为 JSON 对象字符串（例如 `kv-transfer-config`）中的完整取值。按 rank 分配的内存池使用 `per-gpu` 取值：SGLang `hicache-size`、LMCache `LMCACHE_MAX_LOCAL_CPU_SIZE`、vLLM SimpleCPU `cpu_bytes_to_use_per_rank`、TRT-LLM `host_cache_size`，以及以字节表示的 Mooncake `global_segment_size`（Mooncake 将 `GB` 视为 GiB）。没有 DRAM 预算的测试点遇到任何引用都会失败，未知名称和嵌在更长字符串中的引用同样失败。SimpleCPU、LMCache CPU 和 `--l1-size-gb` 的大小必须使用引用；实测得到的 HiCache、TRT-LLM 主机缓存或 Mooncake 段大小只要不超过节点份额，可以保留字面值。若后端从预算中分配多个内存池（例如混合模型的 HiCache KV 池和 Mamba 池），由主配置的 `dram-utilization` 确定其中一个池的大小。
+引用替换为整数；作为环境变量值或参数列表项（例如 `--l1-size-gb` 之后的一项）时替换为十进制字符串，JSON 对象字符串（例如 `kv-transfer-config`）中的完整取值同样适用。按 rank 分配的内存池使用 `per-gpu` 取值；Mooncake `global_segment_size` 使用字节，因为 Mooncake 将 `GB` 视为 GiB。未知名称、嵌在更长字符串中的引用，以及没有 DRAM 预算的测试点上的引用都会失败。SimpleCPU、LMCache CPU 和 `--l1-size-gb` 的大小必须使用引用；实测得到的 HiCache、TRT-LLM 主机缓存和 Mooncake 大小只要不超过节点份额，可以保留字面值。若后端从预算中分配多个内存池（例如混合模型的 HiCache KV 池和 Mamba 池），由主配置的 `dram-utilization` 确定其中一个池的大小。
 
 无需集群即可查看启动器实际提交的内容：
 
@@ -78,7 +78,7 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-该命令为每个定长序列或 AgentX 测试点写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`）、AgentX 客户端路径，以及 DRAM 预算所覆盖的每节点 GPU 数。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
+该命令为每个定长序列或 AgentX 测试点写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点使用该集群的绑定器输入（DCGM 导出器端口、AgentX 客户端路径、每节点 GPU 数）；需要这些输入的测试点，除非其运行器标签指向唯一集群且通道接受该行的 `power`，否则会失败。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
 ## 迁移与验证
 
@@ -99,7 +99,7 @@ python -m infx.matrix.generate full-sweep \
 
 - SGLang Model Gateway 配置使用 `frontend.type: sglang-router`；在 v2.36.0 中，`sglang` 表示不经过路由器的独立工作进程。
 - 对重复的 YAML 键，保留原 PyYAML 加载器实际采用的值。
-- DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。保留原配置中服务发现进程的专用节点部署方式。固定的上游版本不支持在专用基础设施节点上启用遥测；该功耗兼容性问题仍待解决，不通过改变原有拓扑来绕过校验。对于功耗测量行，绑定器根据测试点设置 `benchmark.concurrencies`。
+- DCGM 遥测使用 `collect_interval_ms: 1000`，替代 `provider` 和 `default_frequency`。采集器自动推导退出等待时间；原先显式设置的十秒不满足当前校验要求。保留原配置中服务发现进程的专用节点部署方式。固定的上游版本不支持在专用基础设施节点上启用遥测；该功耗兼容性问题仍待解决，不通过改变原有拓扑来绕过校验。
 - DeepSeek-V4 vLLM 基准测试使用受支持的 `custom_tokenizer` 加载器。删除已废弃的 `warmup_req_rate: inf` 字段；当前上游客户端的预热速率固定为每秒 250 个请求。
 - 功耗读取器兼容两代 samples CSV，校验利用率字段，并继续根据瓦特数计算 GPU 板级能耗。
 - 评估选择通过原生 `post_eval.command` 和 `post_eval.passthrough_env` 调用 [`srt_eval.sh`](../srt_eval.sh)。TRT AgentX 配置通过 `dynamo.source.git` 声明原有的 Dynamo 分支仓库，启动器不再改写 srt-slurm 源码。
