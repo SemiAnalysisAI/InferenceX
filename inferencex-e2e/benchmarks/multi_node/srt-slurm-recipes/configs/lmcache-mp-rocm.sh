@@ -6,7 +6,6 @@
 set -eo pipefail
 source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars KV_OFFLOAD_BACKEND_VERSION
-version=$KV_OFFLOAD_BACKEND_VERSION
 pip_install=(python3 -m pip install)
 if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
     pip_install+=(--break-system-packages)
@@ -15,6 +14,6 @@ fi
     "sortedcontainers==2.4.0" \
     "opentelemetry-exporter-prometheus==0.61b0" \
     "cupy-rocm-7-0==14.1.1" \
-    "lmcache==${version}" \
-    --find-links "https://github.com/LMCache/LMCache/releases/expanded_assets/v${version}-rocm"
+    "lmcache==${KV_OFFLOAD_BACKEND_VERSION}" \
+    --find-links "https://github.com/LMCache/LMCache/releases/expanded_assets/v${KV_OFFLOAD_BACKEND_VERSION}-rocm"
 python3 -c "import cupy; import lmcache.integration.vllm.lmcache_mp_connector; import opentelemetry.exporter.prometheus"
