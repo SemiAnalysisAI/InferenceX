@@ -118,6 +118,75 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       OPERATORX_CLEANUP_SECONDS: '180'
     steps:
+      - name: Repair stale git state (pre-run)
+        shell: bash
+        run: |
+          # Interrupted jobs leave stale locks and damaged submodule git state
+          # in the persistent workspace. actions/checkout only clears the
+          # top-level index.lock/shallow.lock and recreates the repo when the
+          # top-level clean/reset fails, yet every checkout also runs
+          # `git submodule foreach --recursive`, which dies on any damaged
+          # submodule. One job runs per runner, so every lock here is stale.
+          # Keep identical in benchmark-tmpl.yml, benchmark-multinode-tmpl.yml,
+          # operatorx-sweep.yml, profile.yml and speedbench-al.yml.
+          repo_dir="${GITHUB_WORKSPACE}"
+          if [ -d "${repo_dir}/.git" ]; then
+            while IFS= read -r -d '' lock; do
+              echo "[git-repair] Removing stale lock: ${lock#"${repo_dir}/"}"
+              rm -f "${lock}" || true
+            done < <(find "${repo_dir}/.git" -path '*/objects/[0-9a-f][0-9a-f]' -prune \
+              -o -name '*.lock' -type f -print0)
+            # Module git dirs sit at any depth below .git/modules; names may
+            # contain '/', so dirs without HEAD/config/objects/refs only group
+            # them. Every checkout reads each module's remote.origin.url, HEAD
+            # objects and index, so a git dir missing any of them is damaged.
+            is_gitdir() { [ -e "$1/HEAD" ] || [ -e "$1/config" ] || [ -e "$1/objects" ] || [ -e "$1/refs" ]; }
+            gitdir_ok() {
+              git --git-dir="$1" --work-tree="$1" config --local --get remote.origin.url >/dev/null 2>&1 &&
+                git --git-dir="$1" --work-tree="$1" rev-list --objects --no-walk HEAD >/dev/null 2>&1 &&
+                git --git-dir="$1" --work-tree="$1" ls-files --stage >/dev/null 2>&1
+            }
+            drop_damaged_gitdirs() {
+              local d
+              for d in "$1"/*/; do
+                d="${d%/}"
+                [ -d "${d}" ] && [ ! -L "${d}" ] || continue
+                if ! is_gitdir "${d}"; then
+                  drop_damaged_gitdirs "${d}"
+                elif gitdir_ok "${d}"; then
+                  drop_damaged_gitdirs "${d}/modules"
+                else
+                  echo "[git-repair] Removing damaged git dir: ${d#"${repo_dir}/"}"
+                  rm -rf "${d:?}" || true
+                fi
+              done
+            }
+            # `submodule update` re-clones only into an empty worktree, so a
+            # worktree whose git dir is gone or partial, or whose .git file
+            # does not resolve, is removed together with that git dir.
+            drop_orphaned_worktrees() {
+              local entry name path wt gd
+              [ -f "$1/.gitmodules" ] || return 0
+              while IFS= read -r -d '' entry; do
+                name="${entry%%$'\n'*}"
+                name="${name#submodule.}"
+                name="${name%.path}"
+                path="${entry#*$'\n'}"
+                case "/${name}/ /${path}/" in *//*|*/./*|*/../*) continue ;; esac
+                wt="$1/${path}"
+                gd="$2/modules/${name}"
+                if is_gitdir "${gd}" &&
+                  { [ ! -f "${wt}/.git" ] || git -C "${wt}" rev-parse --git-dir >/dev/null 2>&1; }; then
+                  drop_orphaned_worktrees "${wt}" "${gd}"
+                elif [ -e "${gd}" ] || [ -n "$(ls -A "${wt}" 2>/dev/null)" ]; then
+                  echo "[git-repair] Removing damaged submodule: ${wt#"${repo_dir}/"}"
+                  rm -rf "${gd:?}" "${wt:?}" || true
+                fi
+              done < <(git config -z -f "$1/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null)
+            }
+            drop_damaged_gitdirs "${repo_dir:?}/.git/modules"
+            drop_orphaned_worktrees "${repo_dir:?}" "${repo_dir:?}/.git"
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
