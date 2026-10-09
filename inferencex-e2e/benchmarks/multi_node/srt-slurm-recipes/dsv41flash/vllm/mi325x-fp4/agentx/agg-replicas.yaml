@@ -106,3 +106,19 @@ override_cpu_c16:
   benchmark:
     env:
       CONC: '16'
+
+override_cpu_4tp2_c16:
+  frontend: *smg_frontend
+  roles:
+    agg:
+      workers: 4
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 512
+        max-num-batched-tokens: 8192
+  benchmark:
+    env:
+      CONC: '16'
