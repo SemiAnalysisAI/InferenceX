@@ -6801,7 +6801,8 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: dsv4/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes the ~140 GiB Mooncake segment per prefill GPU; the decode stores keep their own.
+    - dram-utilization: 0.6664
       search-space:
       - spec-decoding: draft_model
         conc-list: [120, 480]
@@ -7569,7 +7570,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes the 135 GB HiCache host pool per GPU.
+    - dram-utilization: 0.6
       search-space:
       # aggregated 1-worker TP8 (prefill+decode on the same GPUs), concurrency 1
       - spec-decoding: mtp
@@ -7621,7 +7623,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes the 135 GB HiCache host pool per prefill GPU.
+    - dram-utilization: 0.6
       search-space:
       # low-latency 1P2D DEP4-prefill / TP4-decode (2 decode workers)
       - spec-decoding: mtp
