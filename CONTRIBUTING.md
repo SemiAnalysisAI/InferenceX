@@ -27,7 +27,7 @@ Every PR description must include an **AI model disclosure** section inside a co
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
-**Performance changelog:** Append a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml` only when the PR should produce new published results; the entry is what triggers result collection. Refactors and recipe or config edits that are not meant to produce new results need no entry. Historical entries **MUST NOT** be edited.
+**Performance changelog:** Append a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml` only when the PR should produce new published results, not for every recipe or config edit; the entry triggers result collection. Historical entries **MUST NOT** be edited.
 
 ## Draft-model precision
 
