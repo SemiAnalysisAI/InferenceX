@@ -104,3 +104,25 @@ override_cpu_engram_c16:
   benchmark:
     env:
       CONC: "16"
+
+override_1p3d_cpu_c16: &one_prefill_three_decode
+  engine:
+    allow_prefill_decode_colocation_across_nodes: true
+  roles:
+    prefill:
+      nodes: 2
+      args:
+        engram-config: '{"cpu_offload":true}'
+    decode:
+      workers: 3
+      args:
+        engram-config: '{"cpu_offload":true}'
+  benchmark:
+    env:
+      CONC: "16"
+
+override_1p3d_cpu_c32:
+  <<: *one_prefill_three_decode
+  benchmark:
+    env:
+      CONC: "32"
