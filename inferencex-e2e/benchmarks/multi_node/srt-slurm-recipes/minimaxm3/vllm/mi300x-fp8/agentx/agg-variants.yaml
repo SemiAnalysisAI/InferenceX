@@ -115,3 +115,38 @@ override_tp8_c16:
     env:
       CONC: "16"
       KV_OFFLOADING: none
+
+override_tp8_c16_lmcache:
+  services:
+    - name: lmcache
+      type: lmcache-server
+      readiness:
+        http:
+          port: 8751
+          path: /healthcheck
+        timeout_seconds: 900
+      args:
+        - --l1-size-gb
+        - "1296"
+        - --l1-init-size-gb
+        - "10"
+        - --l1-read-ttl-seconds
+        - "7200"
+        - --chunk-size
+        - "256"
+        - --max-workers
+        - "2"
+        - --eviction-policy
+        - LRU
+        - --supported-transfer-mode
+        - lmcache_driven
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        connector: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://localhost","lmcache.mp.port":8750,"lmcache.mp.mq_timeout":6000.0}}'
+  benchmark:
+    env:
+      CONC: "16"
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: "1298"

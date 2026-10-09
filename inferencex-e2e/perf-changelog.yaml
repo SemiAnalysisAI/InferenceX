@@ -9492,6 +9492,7 @@
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm-agentic-nixl
     - minimaxm3-fp8-mi300x-vllm-agentic-nixl-baseline
+    - minimaxm3-fp8-mi300x-vllm-agentic-lmcache
     - minimaxm3-fp8-mi300x-vllm-agentic-hybrid
     - dsv41flash-fp4-mi300x-vllm-agentic-nixl
     - dsv41flash-fp4-mi300x-vllm-agentic-nixl-baseline
@@ -9499,6 +9500,6 @@
     - agentic-coding
   description:
     - "Compare MiniMax-M3 MXFP8 and DeepSeek-V4.1-Flash MXFP4 AgentX on MI300X using vLLM NIXL disaggregation and aggregated controls on the October 8 ROCm nightly."
-    - "Use native srt-slurm orchestration, full-context replay, EAGLE3 with golden acceptance, and a fresh server deployment per concurrency."
+    - "Use native srt-slurm orchestration, full-context replay, golden acceptance, a matched LMCache aggregate control, and a fresh server deployment per concurrency."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3842
