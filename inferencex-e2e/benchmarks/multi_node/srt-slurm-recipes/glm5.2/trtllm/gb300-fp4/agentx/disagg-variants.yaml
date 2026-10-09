@@ -218,7 +218,7 @@ override_1p1d_tp8_c1_b1_mtp5:
   name: dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5
   dynamo:
     source:
-      wheel: 1.6.0.dev20261007
+      wheel: 1.6.0.dev20261009
   roles:
     prefill:
       nodes: 1
@@ -244,7 +244,7 @@ override_1p1d_tep8_c20_b5_mtp5:
   name: dynamo-disagg-gb300-1p1d-tep8-c20-b5-mtp5
   dynamo:
     source:
-      wheel: 1.6.0.dev20261007
+      wheel: 1.6.0.dev20261009
   roles:
     prefill:
       nodes: 1
@@ -269,7 +269,7 @@ override_1p4d_tep4_c30_b2_mtp5:
   name: dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5
   dynamo:
     source:
-      wheel: 1.6.0.dev20261007
+      wheel: 1.6.0.dev20261009
   roles:
     prefill:
       nodes: 1
@@ -293,7 +293,7 @@ override_3p4d_tep4_c60_b5_mtp5:
   name: dynamo-disagg-gb300-3p4d-tep4-c60-b5-mtp5
   dynamo:
     source:
-      wheel: 1.6.0.dev20261007
+      wheel: 1.6.0.dev20261009
   roles:
     prefill:
       nodes: 3
@@ -319,7 +319,7 @@ override_4p1d_dep8_c227_b16_mtp3:
   name: dynamo-disagg-gb300-4p1d-dep8-c227-b16-mtp3
   dynamo:
     source:
-      wheel: 1.6.0.dev20261007
+      wheel: 1.6.0.dev20261009
   roles:
     prefill:
       nodes: 4
@@ -355,7 +355,7 @@ override_5p1d_dep16_c260_b16_mtp3:
   name: dynamo-disagg-gb300-5p1d-dep16-c260-b16-mtp3
   dynamo:
     source:
-      wheel: 1.6.0.dev20261007
+      wheel: 1.6.0.dev20261009
   roles:
     prefill:
       nodes: 5

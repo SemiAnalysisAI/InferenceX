@@ -7891,7 +7891,7 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-trt
-  router: { name: dynamo-router, version: "1.6.0.dev20261007" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261009" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
