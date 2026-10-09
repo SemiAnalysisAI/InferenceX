@@ -186,14 +186,12 @@ schema; unknown keys fail.
   KV-offload matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`.
 - `available-cpu-dram-mib` is the host DRAM, in MiB, a benchmark job can use on a node:
   the lower of Slurm's `RealMemory - MemSpecLimit` and the node's `MemTotal` less 16 GiB for
-  the OS, over the cluster's GPU nodes. Omit it where unmeasured. Single-node srt-slurm
-  launches cap every srun step at the serving GPUs' share,
-  `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB. When
-  `slurm.srt-slurm.single-node-exclusive` is true (the default) the job requests `--mem=0`,
-  all the memory Slurm has on the node, and a step using every GPU takes that instead of a
-  cap. Otherwise the job requests the share, and a value above what Slurm can give one job
-  makes it reject the job. A recipe's host KV pool and server processes must fit inside the
-  step cap.
+  the OS, over the cluster's GPU nodes. Omit it where unmeasured. When
+  `slurm.srt-slurm.single-node-exclusive` is true (the default), a single-node srt-slurm job
+  requests `--mem=0`, all the memory Slurm has on the node, and its recipe's host KV pools
+  must fit the node. Otherwise the job requests, and its srun step is capped at, the serving
+  GPUs' share, `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB, which the pools and
+  server processes must fit; Slurm rejects a share above what it can give one job.
 - `env` is the workload environment of every launch on the cluster. Like
   `slurm.srt-slurm.env`, it overrides the runner's own environment but never a name the
   point's additional-settings set. Values cannot contain commas: Slurm hands them to jobs

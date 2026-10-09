@@ -5826,7 +5826,7 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml }
-    # Keeps the SimpleCPU pool 32+ GiB under the TP4 srun step's share of node DRAM.
+    # Keeps the SimpleCPU pool below the TP4 share of node DRAM, with headroom for engine processes.
     - dram-utilization: 0.96
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32, 34, 36, 38, 40], srt-recipe: benchmarks/single_node/srt-slurm-recipes/minimaxm3/vllm/b200-fp4-mtp/agentic.yaml }

@@ -172,25 +172,22 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
     assert (harness.workspace / "point-identity.json").is_file()
 
 
-# The point serves on 4 GPUs; a 4-GPU node makes it a whole-node step.
-@pytest.mark.parametrize(("dram", "exclusive", "gpus_per_node", "step", "job"), [
-    # Slurm's node memory can sit below the measured value, so an exclusive job asks for all
-    # of it and a whole-node step takes the job's memory.
-    (8000, True, 8, {"mem": "4000M"}, {"mem": "0"}),
-    (8000, True, 4, {}, {"mem": "0"}),
-    (8000, False, 8, {"mem": "4000M"}, {"mem": "4000M"}),
-    (8000, False, 4, {"mem": "8000M"}, {"mem": "8000M"}),
-    (None, True, 8, {}, {}),
+@pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
+    # An exclusive job asks for all the memory Slurm has, which can sit below the measured
+    # value, and leaves its step uncapped.
+    (8000, True, {}, {"mem": "0"}),
+    (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
+    (None, True, {}, {}),
 ])  # fmt: skip
-def test_single_node_steps_get_their_gpus_share_of_node_dram(
-    harness, dram, exclusive, gpus_per_node, step, job
+def test_single_node_shared_jobs_get_their_gpus_share_of_node_dram(
+    harness, dram, exclusive, step, job
 ):
     slurm = {
         "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
         "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
         "srt-slurm": {"network-interface": "", "single-node-exclusive": exclusive},
     }  # fmt: skip
-    cluster = {"gpus-per-node": gpus_per_node, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
+    cluster = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
     if dram is not None:
         cluster["available-cpu-dram-mib"] = dram
     config = harness.tmp / "dram-runners.yaml"

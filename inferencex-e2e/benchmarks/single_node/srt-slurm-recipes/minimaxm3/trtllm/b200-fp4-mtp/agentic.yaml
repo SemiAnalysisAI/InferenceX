@@ -105,7 +105,7 @@ base:
 
 # One variant per point. The batch cap is CONC; graphs capture every batch up
 # to 20 and a thinned ladder above. The per-rank host pool is 240 GiB at TP4
-# (four must fit the TP4 srun step's share of node DRAM) and 200 GiB at TP8.
+# (four stay under the TP4 share of node DRAM) and 200 GiB at TP8.
 override_tp4_c5:
   roles:
     agg:

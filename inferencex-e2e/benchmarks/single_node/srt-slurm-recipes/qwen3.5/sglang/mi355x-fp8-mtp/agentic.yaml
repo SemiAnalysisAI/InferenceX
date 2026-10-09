@@ -72,7 +72,7 @@ base:
 # One variant per point. Admission is 2x CONC and the decode graph batch follows
 # it up to 128. HiCache skips non-reusable blocks; per-rank hicache-size (which
 # overrides the 1.5x ratio) is 253 GB at CONC 32-56 and 374 GB at CONC 64-80,
-# 32+ GiB under the TP4 srun step's share of node DRAM.
+# within the TP4 share of the 3 TB DRAM policy.
 
 override_tp4_c1:
   roles:
