@@ -9488,3 +9488,15 @@
     - "No data-type or precision change to the EAGLE3 draft model (Inferact/MiniMax-M3-EAGLE3-GQA): online_quant_config (ptpc_fp8), kv_cache_dtype fp8 and index-cache-dtype fp8 are unchanged; mono decode changes the target model's decode kernels, not draft precision."
     - "更新镜像至 rocm/atom-dev:nightly_202610070333（ATOM 0.1.7.dev60+g7fc0926c6，含 ROCm/ATOM#2483 的 mono step fence 修复）；去掉 TP4 C15/C20/C24/C28 的 ATOM_MONO_ENABLE=0，所有 TP4 点位启用 MiniMax-M3 mono decode（每步最多 16 个 token，即 EAGLE3 K3 下 4 个请求，覆盖 C1/C2/C4）；ATOM 只为 TP4 构建 mono，TP2 走非融合路径。新增 TP2 C4，LMCache 版本记录为 0.5.6.dev139+gf22dec28。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi325x-vllm-agentic-nixl
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update DeepSeek-V4.1-Flash FP4 AgentX on MI325X to the pinned October 8 vLLM ROCm nightly with native five-token DSpark, full context, and automatically selected golden acceptance."
+    - "Compare TP8 and packed TP4/TP2 aggregation with colocated and multi-prefill NIXL pools across low-latency and high-throughput settings. Deployments use and account for all eight GPUs on one node or all sixteen GPUs across two nodes."
+    - "Use stock SMG cache-aware routing for aggregate replicas, including stricter low-concurrency load balancing, and session-affinity routing for NIXL pools. Engram tables are GPU-resident at TP8 and CPU-resident in the packed deployments."
+  no-evals: true
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3843
