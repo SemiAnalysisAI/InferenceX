@@ -98,10 +98,10 @@ adjusted for this hardware's quirks."
 Copy the sibling recipe (`base:` plus one `override_*` variant per matrix point) and adjust.
 Engine flags are `roles.agg.args` keys without the leading `--`; env vars go in
 `roles.agg.env`; each variant names its `CONC` (and `KV_OFFLOADING` for AgentX) in
-`benchmark.env`. Fixed-sequence recipes are fragments. Omit `model.path`/`container`/`precision`,
-`benchmark.type`/`command` and the client env, which the shared block and binder supply (see
-`RECIPES.md`). AgentX recipes need `model.container` equal to the master-config `image`. Things
-that vary and must be checked against the sibling /
+`benchmark.env`. Recipes, fixed-sequence and AgentX, are fragments. Omit
+`model.path`/`container`/`precision`, `benchmark.type`/`command` and the client env, which the
+shared block and binder supply (see `RECIPES.md`). Things that vary and must be checked against
+the sibling /
 the model's `recipes.vllm.ai` page:
 - **Mandatory model flags** (carry from the sibling): block size, parser flags
   (`--tool-call-parser` / `--reasoning-parser`), `--language-model-only` for text-only sweeps,

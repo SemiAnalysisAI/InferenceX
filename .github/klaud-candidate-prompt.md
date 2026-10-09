@@ -34,9 +34,10 @@ Check the exact selected launch path for existing engine patches as well as prop
 
 Edit only the family's master image and its already referenced, unshared recipe's
 source-backed compatibility flags/environment or srt-slurm YAML image/backend settings.
-Match model.container and identity.container.image to the master. Preserve model, precision,
-topology, speculation, workload/dataset, duration, resources, recipe references, all points
-and default evals. No broad tuning, shared code/workflows or other-family edits.
+Recipes never set model.container or identity.container.image; the binder writes both from
+the master image. Preserve model, precision, topology, speculation, workload/dataset,
+duration, resources, recipe references, all points and default evals. No broad tuning,
+shared code/workflows or other-family edits.
 ZERO runtime engine/serving-stack patching: no source/site-packages/container rewrites,
 overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing patches.
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
