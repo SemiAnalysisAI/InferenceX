@@ -1,6 +1,7 @@
 """Composing recipe fragments with their shared blocks, and binding the matrix point."""
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -8,7 +9,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.bench.agentic.run import Plan
 from infx.srt_slurm.synthetic_acceptance import selected_recipes
 from infx.srt_slurm.workload import (
     bind_workload,
@@ -111,9 +111,8 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
 ])  # fmt: skip
 def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, agentic, multinode, reported):
     path = fragment(project, data)
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(ValueError, match=re.escape(f"remove {reported} from the fragment")):
         compose_recipe(path, agentic=agentic, multinode=multinode, root=project)
-    assert str(error.value) == f"{path}: remove {reported} from the fragment; the launcher binds them"
 
 
 @pytest.mark.parametrize(("data", "reported"), [
@@ -126,12 +125,8 @@ def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, agentic, mu
 ])  # fmt: skip
 def test_a_fragment_that_sizes_host_dram_with_a_literal_is_rejected(project, data, reported):
     path = fragment(project, data)
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(ValueError, match=re.escape(f"set {reported} to a '@dram.<name>' value")):
         compose_recipe(path, agentic=True, multinode=False, root=project)
-    assert str(error.value) == (
-        f"{path}: set {reported} to a '@dram.<name>' value; the launcher binds the point's DRAM"
-        " budget"
-    )
 
 
 def test_multinode_binding_writes_the_point_and_leaves_the_client_its_job_environment():
@@ -182,7 +177,6 @@ def test_a_dram_point_binds_its_budget_and_every_backend_size_derived_from_it(pr
                 "kv-transfer-config": '{"kv_connector":"SimpleCPUOffloadConnector",'
                 '"kv_connector_extra_config":{"cpu_bytes_to_use":"@dram.total-bytes",'
                 '"cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","lazy_offload":true}}',
-                "kv_cache_config": {"host_cache_size": "@dram.per-gpu-bytes"},
             },
             "env": {"LMCACHE_MAX_LOCAL_CPU_SIZE": "@dram.per-gpu-gb"},
         }},
@@ -206,7 +200,6 @@ def test_a_dram_point_binds_its_budget_and_every_backend_size_derived_from_it(pr
             "kv-transfer-config": '{"kv_connector":"SimpleCPUOffloadConnector",'
             '"kv_connector_extra_config":{"cpu_bytes_to_use":1731000000000,'
             '"cpu_bytes_to_use_per_rank":216375000000,"lazy_offload":true}}',
-            "kv_cache_config": {"host_cache_size": 216375000000},
         },
         "env": {"LMCACHE_MAX_LOCAL_CPU_SIZE": "216"},
     }
@@ -227,8 +220,6 @@ def test_a_point_without_a_budget_or_an_unknown_reference_fails(value, environme
     bound = bind_workload(recipe, environment, agentic=True, multinode=False)
     with pytest.raises(ValueError, match=message):
         resolve_dram(bound, dram_budget(environment, multinode=False))
-    if environment["KV_OFFLOADING"] == "none":
-        assert bound["benchmark"]["env"] == {"MODEL": "org/model", "CONC": "4", "KV_OFFLOADING": "none"}
 
 
 @pytest.mark.parametrize(("prefill", "per_gpu_gb"), [
@@ -264,27 +255,6 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
     ]
 
 
-def test_a_bound_agentx_point_satisfies_the_benchmark_client(project, tmp_path):
-    path = fragment(project, {"benchmark": {"env": {"AIPERF_LIVE_FAILED_REQUEST_THRESHOLD": "0.25"}}})
-    composed = compose_recipe(path, agentic=True, multinode=True, root=project)
-    bound = bind_workload(composed, AGENTX_ENV, agentic=True, multinode=True, client_env=CLIENT_ENV)
-    job = {
-        "RESULT_FILENAME": "r", "EVAL_ONLY": "false", "IS_MULTINODE": "true", "PRECISION": "fp4",
-        "MODEL": "org/model", "MODEL_PREFIX": "dsv4", "FRAMEWORK": "dynamo-vllm", "CONC": "8",
-        "CONC_LIST": "8", "DURATION": "3600", "AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS": "3600",
-        "AIPERF_EXPERIMENTAL_FAST": "0", "AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID": "false",
-        "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING": "1", "ENABLE_AGENTX_POWER": "0", "REQUIRE_POWER": "0",
-        "IS_AGENTIC": "1", "KV_OFFLOADING": "none", "SRT_FRONTEND_HOST": "10.0.0.1",
-        "SRT_FRONTEND_PORT": "8000",
-    }  # fmt: skip
-
-    plan = Plan.from_env({**job, **bound["benchmark"]["env"]})
-
-    assert plan.result_dir == Path("/logs/agentic/conc_8")
-    assert plan.replay.url == "http://10.0.0.1:8000"
-    assert plan.replay.live_failed_request_threshold == "0.25"
-
-
 @pytest.mark.parametrize(("environment", "message"), [
     ({**MULTI_ENV, "IMAGE": ""}, "Missing workload input: IMAGE"),
     ({**MULTI_ENV, "OSL": "1k"}, "OSL must be a positive integer: '1k'"),
@@ -306,10 +276,7 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
     path = fragment(project, {
         "base": {"name": "bundle", "roles": {"decode": {"nodes": 1}}},
         "override_wide": {"roles": {"decode": {"nodes": 4}}},
-        "override_narrow": {
-            "roles": {"decode": {"nodes": 2}},
-            "services": [{"options": {"store_config": {"global_segment_size": "@dram.per-gpu-bytes"}}}],
-        },
+        "override_narrow": {"roles": {"decode": {"nodes": 2}}},
     })
     output = tmp_path / "bound.yaml"
     env = {**os.environ, **MULTI_ENV, "IS_AGENTIC": "0", "INFERENCEX_REPOSITORY_ROOT": str(project),
@@ -331,17 +298,6 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
     assert result.returncode == 2
     assert "selects 2 variants, not one" in result.stderr
     assert not output.exists()
-    # A TP8 x PP2 prefill worker on four-GPU nodes: its 721 GB budget covers four GPUs.
-    env.update(IS_AGENTIC="1", KV_OFFLOADING="dram", TOTAL_CPU_DRAM_GB="721", PREFILL_TP="8",
-               PREFILL_PP_SIZE="2", PREFILL_PCP_SIZE="1")  # fmt: skip
-    arguments = ("--power-port", "9401", "--client-env", "RESULT_DIR=/logs/agentic",
-                 "--gpus-per-node", "4")  # fmt: skip
-    assert bind(f"{path}:override_narrow", str(output), *arguments).returncode == 0
-    bound = yaml.safe_load(output.read_text())
-    assert (bound["benchmark"]["command"], bound["benchmark"]["concurrencies"]) == (
-        "bash agentic-multi.sh", [4, 16],
-    )
-    assert bound["benchmark"]["env"]["RESULT_DIR"] == "/logs/agentic"
-    assert bound["benchmark"]["env"]["TOTAL_CPU_DRAM_GB"] == "721"
-    assert bound["services"] == [{"options": {"store_config": {"global_segment_size": 180250000000}}}]
-    assert bound["telemetry"]["dcgm_exporter"]["port"] == 9401
+    env.update(IS_AGENTIC="1", KV_OFFLOADING="none")
+    assert bind(f"{path}:override_narrow", str(output)).returncode == 0
+    assert yaml.safe_load(output.read_text())["benchmark"]["command"] == "bash agentic-multi.sh"

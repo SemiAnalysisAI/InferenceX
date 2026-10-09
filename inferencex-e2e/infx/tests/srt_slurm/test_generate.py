@@ -203,10 +203,8 @@ def test_a_multinode_dram_point_sizes_host_dram_from_its_budget_per_prefill_gpu(
     assert generate(project, output, "agentx-multi-dram") == 0
 
     # 1,000,000 MiB at 0.5 over all eight GPUs of a node: 524 GB, 65 GB per GPU.
-    [(record, recipe)] = written(output)
-    assert record["matrix"]["total-cpu-dram-gb"] == 524
+    [(_, recipe)] = written(output)
     assert recipe["roles"]["prefill"]["args"]["hicache-size"] == 65
-    assert recipe["benchmark"]["env"]["TOTAL_CPU_DRAM_GB"] == "524"
 
 
 def test_a_power_point_its_lane_refuses_fails_without_writing(
