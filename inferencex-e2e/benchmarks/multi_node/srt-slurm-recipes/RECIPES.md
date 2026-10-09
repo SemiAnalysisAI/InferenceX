@@ -65,7 +65,7 @@ Inspect what the launcher submits without a cluster:
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points get the binder inputs the launcher derives from that cluster: the DCGM telemetry block on its `power-exporter-port` when the lane allows the row's `power: true`, and the AgentX client paths; a point that needs them fails when its runner label does not name one cluster or the lane refuses its power. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
+It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client paths); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
 
 ## Migration and validation
 
@@ -86,7 +86,7 @@ The initial migration also resolves compatibility issues that `srtctl migrate` c
 
 - SGLang Model Gateway recipes use `frontend.type: sglang-router`; in v2.36.0, `sglang` selects a direct worker without a router.
 - Duplicate YAML keys retain the value selected by the former PyYAML loader.
-- DCGM telemetry uses `collect_interval_ms: 1000` instead of `provider` and `default_frequency`. The collector derives its shutdown budget; an explicit ten-second budget is too short for the current validator. Dedicated discovery-service placement is preserved from the original recipes. The pinned upstream runtime rejects telemetry with dedicated infrastructure nodes; this remains a power compatibility blocker rather than changing the original topology to satisfy validation. The binder sets `benchmark.concurrencies` from the point for power rows.
+- DCGM telemetry uses `collect_interval_ms: 1000` instead of `provider` and `default_frequency`. The collector derives its shutdown budget; an explicit ten-second budget is too short for the current validator. Dedicated discovery-service placement is preserved from the original recipes. The pinned upstream runtime rejects telemetry with dedicated infrastructure nodes; this remains a power compatibility blocker rather than changing the original topology to satisfy validation.
 - DeepSeek-V4 vLLM benchmarks use the supported `custom_tokenizer` loader. Retired `warmup_req_rate: inf` fields are removed; the current upstream client uses its fixed warmup rate of 250 requests per second.
 - The power reader accepts both generations of samples CSV while validating utilization values and continuing to compute board energy from watts.
 - Post-eval selection uses native `post_eval.command` and `post_eval.passthrough_env` with [`srt_eval.sh`](../srt_eval.sh). TRT AgentX recipes declare their existing Dynamo fork with `dynamo.source.git`; launchers no longer rewrite the srt-slurm source.
