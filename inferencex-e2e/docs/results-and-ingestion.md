@@ -1,11 +1,5 @@
 # Results and Ingestion
 
-<div align="center">
-
-**English** | [中文](results-and-ingestion_zh.md)
-
-</div>
-
 Use this page to identify benchmark artifacts, inspect their contracts, and decide whether a run is safe to hand to InferenceX-app. The producers and ingest code remain authoritative. InferenceX-app links below are pinned to commit [`3be1c34`](https://github.com/SemiAnalysisAI/InferenceX-app/tree/3be1c34a174f62fea2194f1133210e692e5bf415).
 
 ## Source map
@@ -109,6 +103,8 @@ For multinode fixed-sequence jobs, `python -m infx.results.fixed_sequence --all`
 Processing and, for multinode jobs, diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
 ### SRT multinode window retention
+
+SRT samples CSV versions 1, 2 and 3 are accepted. Version 3 adds optional `temperature_c` in Celsius; temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks. Deploy this reader before a producer that emits version 3.
 
 Power audit sidecars retain independently validated measurements in `selected_window`;
 `package_integrity_valid` records shared evidence checks and `window_validations` records

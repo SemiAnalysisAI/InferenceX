@@ -32,6 +32,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+from importlib import metadata
 
 import torch
 import torch.distributed as dist
@@ -96,6 +97,11 @@ class NCCLEPBackend(EPBackend):
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     zero_copy = True
     _ll_expert_major = False
+
+    @property
+    def library_version(self) -> str:
+        """Installed wheel identity, including the nightly date, for result provenance."""
+        return metadata.version("nccl-extensions")
 
     @property
     def cuda_graph_supported(self) -> bool:
