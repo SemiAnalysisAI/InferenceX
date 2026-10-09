@@ -9490,6 +9490,46 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
 
 - config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with native NEXTN MTP and SGLang HiCache."
+    - "Pin the stock SGLang v0.5.21-cu130 image and checkpoint revision; enable engine metrics and cache reporting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3816
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5 FP8 GB300 AgentX PP4 prefill and DEP16 decode variants with MTP6, HiCache, and decode sequence-length splits 1."
+    - "Select five disaggregated configurations and three existing aggregate configurations using the SGLang nightly image and pinned Dynamo revision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3840
+
+- config-keys:
+    - dsv41flash-fp4-b300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Repin DeepSeek-V4.1-Flash FP4 B300 SGLang AgentX from nightly-dev-cu13-20260922-582389ce to nightly-dev-cu13-20261004-295a53c9, pinned by multiarch digest, and publish nine points: TP4/EP1 at concurrency 1 and 4, TP2/EP1 at concurrency 1, 4, 16, 24, 32 and 48, and aggregated TP4/EP4/DP4 at concurrency 192."
+    - "For the TP arms, switch to EP1, use 16K prefill chunks, and set point-specific prefill-decode scheduling."
+    - "Add an aggregated DP4 C192 point with four internal TP4/EP4 data-parallel ranks behind sglang-router 0.3.2, using cache-aware routing and correlation-ID affinity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3744
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image from lmsysorg/sglang:dev-cu13-nightly-0924 to lmsysorg/sglang:nightly-dev-cu13-20260929-79cafec0 and update model.container to match. With the recipe otherwise unchanged, local GB300 runs on the new image reproduce the PR #3421 sweep (TP4 c1 439.8 vs 436 tok/s/user median, TP4 c32 249.5 vs 250)."
+    - "Set SGLANG_DSPARK_FOLDED_SAMPLING=2 on every point. The AUTO default keeps DSpark draft sampling eager for DeepSeek-V4.1 TP shards; nsys at TP4 c1 shows the decode step drop from 10.98 ms to 6.79 ms and GPU idle per step from 5.98 ms to 1.96 ms when it is folded into the draft graph. Local one-hour runs (synthetic acceptance 3.51): TP4 c1 5,845 -> 6,931 tok/s/GPU at 439.8 -> 649.8 tok/s/user median (386.8 -> 539.2 P90); TP4 c32 56,719 -> 57,704 at 249.5 -> 274.2 median; TP2 c64 147,452 -> 149,666 at 96.3 -> 99.4 median."
+    - "TP4 c64: 8K prefill chunks with a 16-step prefill-decode interval instead of 16K chunks with none. Local runs with the fold: 82,586 -> 85,093 tok/s/GPU at 86.8 -> 136.8 tok/s/user median (46.3 -> 72.1 P90); P90 TTFT 5.7 -> 12.5 s."
+    - "TP2 c128: admit all 128 sessions (max-running-requests and cuda-graph-max-bs-decode 64 -> 128) with a 4-step prefill-decode interval and mem-fraction-static 0.85. The PR #3421 sweep measured 18,631 tok/s/GPU at 130.9 tok/s/user median at this point; locally the new settings gave 147,763 tok/s/GPU at 37.9 tok/s/user median with a 51 s P90 TTFT (measured before the fold was added)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
