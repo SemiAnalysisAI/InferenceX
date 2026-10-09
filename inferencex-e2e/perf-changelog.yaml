@@ -9495,6 +9495,8 @@
     - agentic-coding
   description:
     - "Add native Kimi-K3 PD with FP8 KV and GMU 0.90 on official ROCm nightly 81198e97ba7eee2a22540caaa756b7fdddcb4d93, pinned by digest in master and recipe."
-    - "Use TP8 per worker: 1P1D c1/c48, 1P2D c24/c48 and 1P3D c24, with automatic golden acceptance, default request-ID randomization and default evaluation selection."
-    - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use the registered draft checkpoint and recipe-scoped RDMA device/provider mounts. Carry srt-slurm #508 through the existing job-local patch mechanism until the shared dependency includes it."
+    - "Use TP8 per worker: 1P1D c48/c56, 1P2D c24/c48 and 1P3D c12/c24, with automatic golden acceptance, default request-ID randomization and default evaluation selection."
+    - "Set the prefill sequence limit to twice the global concurrency and divide that capacity across decode workers; 1P1D c56 uses 112 sequences per role with a decode graph capture limit of 280."
+    - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
+    - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Carry srt-slurm #508 through the existing job-local patch mechanism until the shared dependency includes it."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582

@@ -872,9 +872,6 @@ clusters:
         gpus-per-node-directive: true
         segment-directive: false
         outputs: /it-share/gharunners2/srt-slurm/outputs
-        env:
-          K3_DRAFT_PATH: /it-share/data/Inferact-Kimi-K3-DSpark
-          IONIC_PROVIDER_PATH: /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
