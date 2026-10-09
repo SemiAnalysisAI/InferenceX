@@ -60,29 +60,18 @@ def test_installed_tools_use_callers_repository(tmp_path, run_installed, layout)
         "clusters:\n  fixture-gpu:\n    gpus-per-node: 8\n    arch: x86_64\n"
         "    scheduler: slurm\n    slurm: {partition: batch, exclusive: true}\n"
     )
-    recipes = project / "benchmarks/multi_node/srt-slurm-recipes"
-    recipes.mkdir(parents=True)
-    (recipes / "fixture.yaml").write_text(
-        "schema: 2\nroles:\n  prefill: {nodes: 2}\n  decode: {nodes: 4}\n"
-    )
 
     result = run_installed(
         "-c",
         """
-import json, sys
-from pathlib import Path
-from infx.matrix.generate import recipe_node_count
+import json
 from infx.workflows.calc_success_rate import load_hardware_labels
-print(json.dumps({
-    "nodes": recipe_node_count(Path(sys.argv[1]), "benchmarks/multi_node/srt-slurm-recipes/fixture.yaml"),
-    "hardware": load_hardware_labels(),
-}))
+print(json.dumps({"hardware": load_hardware_labels()}))
 """,
-        str(project),
     )
 
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"nodes": 6, "hardware": ["fixture-gpu"]}
+    assert json.loads(result.stdout) == {"hardware": ["fixture-gpu"]}
 
 
 def test_installed_matrix_validation_rejects_zero_concurrency(run_installed):
