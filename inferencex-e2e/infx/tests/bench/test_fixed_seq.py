@@ -162,7 +162,7 @@ def frontend(*models: str):
     )
 
 
-# What benchmarks/multi_node/llm-d/server.sh passes for one concurrency.
+# What a multi-node launcher passes for one concurrency.
 POINT_FLAGS = {
     "--base-url": "http://0.0.0.0:8080",
     "--model": "deepseek-ai/DeepSeek-V4-Pro",
