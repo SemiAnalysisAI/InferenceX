@@ -1,0 +1,55 @@
+diff --git a/src/srtctl/cli/do_sweep.py b/src/srtctl/cli/do_sweep.py
+index 73ea2a7d..7d3ea9db 100644
+--- a/src/srtctl/cli/do_sweep.py
++++ b/src/srtctl/cli/do_sweep.py
+@@ -323,20 +323,43 @@ class SweepOrchestrator(
+         raise RuntimeError(f"host_setup failed on: {', '.join(failures)}")
+ 
+     # One probe per branch; the first that proves synchronisation prints its
+-    # evidence and wins, so clock_sync_<node>.out records *which* daemon
++    # evidence and wins, so clock_sync_<node>.out records *which* source
+     # vouched (and, for chrony/ntp, the offset it reported). Every probe is
+     # read-only and unprivileged on stock images: timedatectl reads the kernel
+-    # STA_UNSYNC flag over D-Bus, chronyc/ntpq ask their daemon. Locked-down
+-    # cmdports print nothing and fall through to the failure line.
++    # STA_UNSYNC flag over D-Bus, chronyc/ntpq ask their daemon. The last
++    # branch reads that same kernel flag directly through adjtimex(2), for
++    # hosts whose clock is disciplined but expose no daemon to ask: no systemd
++    # PID 1 or D-Bus (container-rooted Slurm nodes), no chrony/ntp CLI. Each
++    # probe's stderr is kept and printed on the failure path, so the .out says
++    # why nothing vouched ("Failed to connect to bus", "command not found", ...).
++    CLOCK_SYNC_ADJTIMEX_PROBE = (
++        "import ctypes,sys;"
++        'F=[("modes",ctypes.c_uint),("offset",ctypes.c_long),("freq",ctypes.c_long),("maxerror",ctypes.c_long),'
++        '("esterror",ctypes.c_long),("status",ctypes.c_int),("constant",ctypes.c_long),("precision",ctypes.c_long),'
++        '("tolerance",ctypes.c_long),("time",ctypes.c_long*2),("tick",ctypes.c_long),("ppsfreq",ctypes.c_long),'
++        '("jitter",ctypes.c_long),("shift",ctypes.c_int),("stabil",ctypes.c_long),("jitcnt",ctypes.c_long),'
++        '("calcnt",ctypes.c_long),("errcnt",ctypes.c_long),("stbcnt",ctypes.c_long),("tai",ctypes.c_int),'
++        '("pad",ctypes.c_int*11)];'
++        't=type("timex",(ctypes.Structure,),{"_fields_":F})();'
++        "r=ctypes.CDLL(None,use_errno=True).adjtimex(ctypes.byref(t));"
++        'r<0 and sys.exit("adjtimex failed: errno %d"%ctypes.get_errno());'
++        # TIME_ERROR (5) is what the kernel returns while STA_UNSYNC or STA_CLOCKERR is set.
++        '(r==5 or t.status&64) and sys.exit("kernel clock unsynchronised: state %d status 0x%x maxerror %dus"'
++        "%(r,t.status,t.maxerror));"
++        'print("maxerror %dus status 0x%x"%(t.maxerror,t.status))'
++    )
+     CLOCK_SYNC_SCRIPT = (
+-        "if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qx yes; then "
++        'd=$(timedatectl show -p NTPSynchronized --value 2>&1); if grep -qx yes <<<"$d"; then '
+         'echo "$(hostname): timedatectl NTPSynchronized=yes"; exit 0; fi; '
+-        "if t=$(chronyc -n tracking 2>/dev/null) && grep -Eq '^Leap status *: *Normal' <<<\"$t\"; then "
++        "if t=$(chronyc -n tracking 2>&1) && grep -Eq '^Leap status *: *Normal' <<<\"$t\"; then "
+         'echo "$(hostname): chronyc Leap status Normal"; '
+         "grep -E '^(Reference ID|System time|Last offset)' <<<\"$t\"; exit 0; fi; "
+-        "if n=$(ntpq -pn 2>/dev/null) && grep -q '^[*]' <<<\"$n\"; then "
++        "if n=$(ntpq -pn 2>&1) && grep -q '^[*]' <<<\"$n\"; then "
+         'echo "$(hostname): ntpq has a selected peer"; grep \'^[*]\' <<<"$n"; exit 0; fi; '
+-        'echo "$(hostname): system clock is not NTP-synchronised" >&2; exit 1'
++        f"if k=$(python3 -c '{CLOCK_SYNC_ADJTIMEX_PROBE}' 2>&1); then "
++        'echo "$(hostname): kernel adjtimex STA_UNSYNC clear ($k)"; exit 0; fi; '
++        '{ echo "$(hostname): system clock is not NTP-synchronised"; '
++        'echo "timedatectl: $d"; echo "chronyc: $t"; echo "ntpq: $n"; echo "adjtimex: $k"; } >&2; exit 1'
+     )
+     CLOCK_SYNC_TIMEOUT_SECONDS = 30
+ 
