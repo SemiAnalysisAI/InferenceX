@@ -82,7 +82,7 @@ uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir
 
 ## 配置指纹
 
-规划器为每个基准测试行计算 `recipe-fingerprint`：对该行的矩阵字段（`conc`、`exp-name` 和指纹本身除外）连同启动器为其提交的具体配置计算 SHA-256。该配置是与共享块组合后的片段（`power: true` 的行还包括遥测块）、该行选中的变体，以及绑定的模型、镜像、精度和定长序列的序列长度。并发值（`benchmark.env.CONC`、`CONC_LIST`、`benchmark.concurrencies`）和作业 `name` 不计入指纹，启动器为集群添加的内容（预置检查点和容器路径、挂载、AgentX 客户端缓存路径、导出器端口、网络 fabric 设置）也不计入，因此同一配置在其服务的各个并发数以及运行它的各个集群上保持同一个指纹。`eval-srt-recipe` 只贡献其路径，因为仅评估运行不产生基准测试结果。没有 srt-slurm 配置的行只对其矩阵字段计算哈希。
+规划器为每个基准测试行计算 `recipe-fingerprint`：对其矩阵字段（`conc` 和 `exp-name` 除外）以及启动器提交的已绑定变体（与共享块组合，`power: true` 的行还包括遥测块）计算 SHA-256。并发值、作业 `name` 以及启动器为集群添加的内容均不计入，因此同一配置在各个并发数和集群上保持同一个指纹。`eval-srt-recipe` 只贡献其路径；没有 srt-slurm 配置的行只对其矩阵字段计算哈希。
 
 规划器与启动器一样选择变体，但不依赖 srtctl（[`variants.py`](../../../infx/srt_slurm/variants.py)），因此没有任何变体能服务的行会在规划阶段失败，而不是在启动时失败。编写 `perf-changelog.yaml` 条目前，先列出该变更使其结果失效的配置键：
 
