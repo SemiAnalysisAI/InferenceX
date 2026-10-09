@@ -9411,11 +9411,4 @@
     - "Use NIXL with the LIBFABRIC backend for disaggregated KV transfer over the DSXE EFA fabric. The pinned image runs as shipped, with no setup script, no package changes and no explicit host EFA/OFI mounts."
     - "Use the DSXE cluster's 24 CPUs per GPU, HiCache ratio 3, decode max-running-requests at twice concurrency, and exclude the known degraded DSXE nodes."
     - "Serve B300 DSXE Dynamo+SGLang DeepSeek-V4-Pro-0813 weights from the node-local NVMe copy (DeepSeek-V4-Pro-0813@scratch, as for vLLM) instead of the shared /data/models copy, which slowed startup by hours when several points loaded concurrently."
-    - "新增 DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX 配方：聚合式 TP8 c1、TP4 c4、TP4 c8 和 DEP8 c384，以及分离式 1P1D DEP8 c64/c240 和 1P2D DEP8 c64。"
-    - "由于 TP4 c4 已占用约 60% 的 GPU KV 池，TP4 c8 增加 HiCache DRAM 层（比例 2.75、write_through、direct I/O、page_first_direct，与同一镜像上的 B200 TP8 AgentX 配方相同）。1P2D DEP8 c64 即 1P1D c64 配方增加第二个 decode worker，使每个 decode rank 的负载减半。"
-    - "聚合式 DEP8 c384 配方沿用单节点 SGLang DEP8 c384 测试点（注意力 DP8 + EP8 Mega-MoE、FP4 indexer、间隔为 20 的 prefill delayer、chunked prefill 65536、max-running-requests 768、mem-fraction-static 0.88、HiCache 比例 3 的 write_back DRAM 层），改用更新的镜像，并将 cuda-graph-max-bs-decode 设为每个 rank 96 个请求的上限（768 / 8），并由 Dynamo KV 路由器基于各 DP rank 的 KV 事件和会话亲和性进行路由。"
-    - "所有 DEP8 配方的 Mega-MoE 均使用默认的 FP8xFP4 kernel，不启用 W4A4 MXFP4 Mega-MoE 路径。"
-    - "分离式 KV 传输使用 LIBFABRIC 后端的 NIXL，经由 DSXE 的 EFA 网络传输。固定镜像按原样运行，不使用初始化脚本、不改动软件包，也不显式挂载主机 EFA/OFI 目录。"
-    - "使用 DSXE 集群的每 GPU 24 个 CPU、HiCache 比例 3，decode 的 max-running-requests 为并发数两倍，并排除已知异常 DSXE 节点。"
-    - "B300 DSXE Dynamo+SGLang 的 DeepSeek-V4-Pro-0813 权重改为从节点本地 NVMe 副本（DeepSeek-V4-Pro-0813@scratch，与 vLLM 相同）加载，而非共享的 /data/models 副本；后者在多个测试点并发加载时会使启动慢数小时。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3817
