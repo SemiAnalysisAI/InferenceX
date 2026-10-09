@@ -107,6 +107,17 @@ override_tp8_c2:
     env:
       CONC: '2'
 
+override_tp8_c3:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        engram-config: '{"cpu_offload":false}'
+  benchmark:
+    env:
+      CONC: '3'
+
 override_tp8_c4:
   roles:
     agg:
