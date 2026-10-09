@@ -107,3 +107,4 @@ Finally, we’re grateful to Crusoe, CoreWeave, Nebius, TensorWave, Oracle and T
 Full list of supporters & quotes: https://inferencex.semianalysis.com/quotes
 
 <img width="938" height="487" alt="image" src="https://github.com/user-attachments/assets/aa9b8257-fa7d-4691-97c3-dada8db05cb3" />
+
