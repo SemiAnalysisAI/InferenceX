@@ -47,6 +47,11 @@ def _environment(point: Mapping[str, Any]) -> dict[str, str]:
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
     }
+    if agentic:
+        environment.update(
+            KV_OFFLOADING=str(point["kv-offloading"]),
+            TOTAL_CPU_DRAM_GB=str(point["total-cpu-dram-gb"]),
+        )
     if "prefill" in point:
         environment.update(
             IS_MULTINODE="true",
@@ -68,8 +73,6 @@ def _environment(point: Mapping[str, Any]) -> dict[str, str]:
         "PCP_SIZE": str(point["pcp-size"]),
         "DP_ATTENTION": str(point["dp-attn"]).lower(),
         "GPU_COUNT": str(point["tp"] * point["pp"] * point["pcp-size"]),
-        "KV_OFFLOADING": str(point["kv-offloading"]) if agentic else "",
-        "TOTAL_CPU_DRAM_GB": str(point["total-cpu-dram-gb"]) if agentic else "0",
     }
 
 
