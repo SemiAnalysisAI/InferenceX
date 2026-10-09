@@ -210,124 +210,26 @@ jobs:
           rm -rf "${GITHUB_WORKSPACE}/speedbench_results" \
             "${GITHUB_WORKSPACE}/inferencex-e2e/speedbench_results" 2>/dev/null || true
 
-      - name: Repair stale git state (pre-run)
-        shell: bash
-        run: |
-          # Interrupted jobs leave stale locks and damaged git state behind,
-          # and actions/checkout cannot recover from a damaged submodule or a
-          # ref to an unreadable object. One job runs per runner, so every lock
-          # is stale. Damaged git dirs are removed (a module's with its
-          # worktree) so checkout re-clones them. Top-level remote refs and tags
-          # are deleted as files: checkout fetches the exact SHA, and
-          # `update-ref -d` can silently miss a misordered packed ref. Other
-          # refs stay while their objects parse; srt-slurm reads its version
-          # from module tags. Keep identical in every workflow with this step.
-          repo_dir="${GITHUB_WORKSPACE}"
-          if [ -d "${repo_dir}/.git" ]; then
-            git_in() { local dir="$1"; shift; git --git-dir="${dir}" --work-tree="${dir}" "$@"; }
-            clear_locks() {
-              local lock n=0
-              while IFS= read -r -d '' lock; do
-                rm -f "${lock}" && n=$((n + 1))
-              done < <(find "$1" -path "$1/modules" -prune -o -path '*/objects/[0-9a-f][0-9a-f]' -prune \
-                -o -name '*.lock' -type f -print0)
-              echo "${n}"
-            }
-            prune_refs() {
-              local before refs parsed prune
-              before=$(git_in "$1" for-each-ref --format='%(refname)' | wc -l)
-              if [ "$2" = top-level ]; then
-                rm -rf "$1/refs/remotes" "$1/refs/tags" "$1/logs/refs/remotes" "$1/logs/refs/tags" || return 1
-                if [ -f "$1/packed-refs" ]; then
-                  awk '/^\^/ { if (!skip) print; next } { skip = $2 ~ /^refs\/(remotes|tags)\//; if (!skip) print }' \
-                    "$1/packed-refs" > "$1/packed-refs.new" && mv "$1/packed-refs.new" "$1/packed-refs" || return 1
-                fi
-              fi
-              refs=$(git_in "$1" for-each-ref --format='%(objectname) %(refname)') || return 1
-              parsed=$(cut -d ' ' -f 1 <<<"${refs}" |
-                git_in "$1" rev-list --objects --no-walk --ignore-missing --stdin | cut -d ' ' -f 1) || return 1
-              mapfile -t prune < <(awk 'NR == FNR { ok[$1] = 1; next } NF == 2 && !($1 in ok) && !seen[$2]++ { print $2 }' \
-                <(printf '%s\n' "${parsed}") <(printf '%s\n' "${refs}"))
-              if [ "${#prune[@]}" -gt 0 ]; then
-                printf 'delete %s\n' "${prune[@]}" | git_in "$1" update-ref --no-deref --stdin || return 1
-              fi
-              pruned=$((before - $(git_in "$1" for-each-ref --format='%(refname)' | wc -l)))
-            }
-            check_gitdir() {
-              local locks pruned=0 reason=""
-              locks=$(clear_locks "$1")
-              if [ "$2" = module ] && ! git_in "$1" config --local --get remote.origin.url >/dev/null; then
-                reason="no remote.origin.url"
-              elif ! prune_refs "$1" "$2"; then
-                reason="refs could not be pruned"
-              elif ! git_in "$1" rev-list --objects --no-walk HEAD >/dev/null; then
-                reason="HEAD objects unreadable"
-              elif [ "$2" = top-level ] && [ -n "$(git_in "$1" for-each-ref --format='%(refname)' refs/remotes refs/tags)" ]; then
-                reason="remote refs or tags survived"
-              elif ! git_in "$1" rev-list --no-walk --all >/dev/null; then
-                reason="refs unreadable"
-              elif [ "$2" = module ] && ! git_in "$1" ls-files --stage >/dev/null; then
-                reason="index unreadable"
-              fi
-              echo "[git-repair] ${1#"${repo_dir}/"}: ${locks} locks, ${pruned} refs pruned, ${reason:+dropped: }${reason:-ok}"
-              [ -z "${reason}" ]
-            }
-            is_gitdir() { [ -e "$1/HEAD" ] || [ -e "$1/config" ] || [ -e "$1/objects" ] || [ -e "$1/refs" ]; }
-            drop_damaged_gitdirs() {
-              local d wt root
-              for d in "$1"/*/; do
-                d="${d%/}"
-                [ -d "${d}" ] && [ ! -L "${d}" ] || continue
-                if ! is_gitdir "${d}"; then
-                  drop_damaged_gitdirs "${d}"
-                elif check_gitdir "${d}" module; then
-                  drop_damaged_gitdirs "${d}/modules"
-                else
-                  if wt=$(git config -f "${d}/config" core.worktree) &&
-                    wt=$(cd "${d}" && cd "${wt}" && pwd -P) && root=$(cd "${repo_dir}" && pwd -P) &&
-                    [ -f "${wt}/.git" ] && [ "${wt#"${root}"/}" != "${wt}" ]; then
-                    echo "[git-repair] Removing its worktree: ${wt#"${root}"/}"
-                    rm -rf "${wt:?}" || true
-                  fi
-                  rm -rf "${d:?}" || true
-                fi
-              done
-            }
-            drop_orphaned_worktrees() {
-              local entry name path wt gd
-              [ -f "$1/.gitmodules" ] || return 0
-              while IFS= read -r -d '' entry; do
-                name="${entry%%$'\n'*}"
-                name="${name#submodule.}"
-                name="${name%.path}"
-                path="${entry#*$'\n'}"
-                case "/${name}/ /${path}/" in *//*|*/./*|*/../*) continue ;; esac
-                wt="$1/${path}"
-                gd="$2/modules/${name}"
-                if is_gitdir "${gd}" &&
-                  { [ ! -f "${wt}/.git" ] || git -C "${wt}" rev-parse --git-dir >/dev/null; }; then
-                  drop_orphaned_worktrees "${wt}" "${gd}"
-                elif [ -e "${gd}" ] || [ -n "$(ls -A "${wt}" 2>/dev/null)" ]; then
-                  echo "[git-repair] Removing damaged submodule: ${wt#"${repo_dir}/"} (git dir ${gd#"${repo_dir}/"})"
-                  rm -rf "${gd:?}" "${wt:?}" || true
-                fi
-              done < <(git config -z -f "$1/.gitmodules" --get-regexp '^submodule\..*\.path$')
-            }
-            if check_gitdir "${repo_dir}/.git" top-level; then
-              drop_damaged_gitdirs "${repo_dir:?}/.git/modules"
-              drop_orphaned_worktrees "${repo_dir:?}" "${repo_dir:?}/.git"
-            else
-              rm -rf "${repo_dir:?}/.git" || true
-            fi
-          fi
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+      # A cancelled or crashed job can leave git state in this persistent
+      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
+      - id: checkout
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: &checkout-inputs
           fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
           persist-credentials: false
+
+      - name: Wipe workspace after failed checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Retry checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: *checkout-inputs
 
       - name: Cleanup stale outputs (pre-run)
         run: |
