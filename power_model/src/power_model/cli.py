@@ -47,7 +47,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="GPU electrical power in watts per GPU",
     )
     parser.add_argument(
-        "--cpu-socket-measured-power",
+        "--cpu-and-dram-measured-power-per-socket",
         type=_measured_watts,
         help="ACPI Grace Power Socket average in watts per socket (GB200/GB300 NVL72), "
         "never DCGM field 1130 CPU power; replaces modeled Grace CPU and LPDDR5X",
@@ -97,7 +97,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             systems=args.systems,
         )
         result = model.estimate_breakdown(
-            args.gpu_level_power_per_gpu, cpu_socket_measured_power=args.cpu_socket_measured_power
+            args.gpu_level_power_per_gpu,
+            cpu_and_dram_measured_power_per_socket=args.cpu_and_dram_measured_power_per_socket,
         )
         ratio = (
             result.AllInPower_per_gpu / result.gpu_level_power_per_gpu

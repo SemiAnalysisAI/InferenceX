@@ -46,14 +46,14 @@ class BiancaBoard(FrozenModel):
         self,
         gpu_level_power_per_gpu: float,
         *,
-        cpu_socket_measured_power: float | None = None,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         per_gpu = validate_watts(gpu_level_power_per_gpu)
         state = OperatingState.model_validate(operating_state)
         point = self.workload_profile.resolve(state)
         memory = LPDDR5XMemory(bandwidth_gbps=point.memory_bandwidth_gbps).estimate_breakdown()
-        if cpu_socket_measured_power is None:
+        if cpu_and_dram_measured_power_per_socket is None:
             grace = (
                 GraceCPU(
                     power_w=point.cpu_power_w,
@@ -63,13 +63,13 @@ class BiancaBoard(FrozenModel):
                 memory,
             )
         else:
-            socket_w = validate_watts(cpu_socket_measured_power)
+            socket_w = validate_watts(cpu_and_dram_measured_power_per_socket)
             grace = (
                 PowerComponentBreakdown(
                     name="Grace socket (measured)",
                     power_w=socket_w,
                     provenance=GRACE_SOCKET_INPUT,
-                    details=(("cpu_socket_measured_power", socket_w),),
+                    details=(("cpu_and_dram_measured_power_per_socket", socket_w),),
                 ),
             )
         return PowerComponentBreakdown.group(

@@ -40,10 +40,13 @@ class OSSAllinPowerModel(PowerModel):
         )
 
     def _estimate_it_power(
-        self, gpu_level_power_per_gpu: float, *, cpu_socket_measured_power: float | None
+        self,
+        gpu_level_power_per_gpu: float,
+        *,
+        cpu_and_dram_measured_power_per_socket: float | None,
     ) -> ITPowerBreakdown:
         return self.cluster.estimate_it_power(
             gpu_level_power_per_gpu,
-            cpu_socket_measured_power=cpu_socket_measured_power,
+            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
             operating_state=self.operating_state,
         )

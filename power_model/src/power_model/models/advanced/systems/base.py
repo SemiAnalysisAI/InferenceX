@@ -54,12 +54,13 @@ class GPUSystem(FrozenModel, ABC):
         self,
         gpu_level_power_per_gpu: float,
         *,
-        cpu_socket_measured_power: float | None = None,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         """Evaluate one system without PUE.
 
-        cpu_socket_measured_power is watts per Grace socket; systems without Grace ignore it.
+        cpu_and_dram_measured_power_per_socket is watts per Grace socket; systems without
+        Grace ignore it.
         """
 
     def _configuration(self, state: OperatingState) -> dict[str, JsonValue]:
@@ -84,11 +85,11 @@ class SystemGroup(FrozenModel):
         self,
         gpu_level_power_per_gpu: float,
         *,
-        cpu_socket_measured_power: float | None = None,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         return self.system.estimate_it_power(
             gpu_level_power_per_gpu,
-            cpu_socket_measured_power=cpu_socket_measured_power,
+            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
             operating_state=operating_state,
         ).scaled(self.quantity)

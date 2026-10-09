@@ -348,7 +348,7 @@ def test_rack_tree_scaling_network_and_state(
 def test_measured_grace_socket_replaces_modeled_cpu_and_memory_once(system):
     model = create_power_model(system=system)
     modeled = model.estimate_breakdown(594.191)
-    measured = model.estimate_breakdown(594.191, cpu_socket_measured_power=98.066)
+    measured = model.estimate_breakdown(594.191, cpu_and_dram_measured_power_per_socket=98.066)
     modeled_rack = modeled.components[0].children[0]
     measured_rack = measured.components[0].children[0]
     cpu = named(modeled_rack, "GraceCPU")[0]
@@ -360,8 +360,8 @@ def test_measured_grace_socket_replaces_modeled_cpu_and_memory_once(system):
     socket = named(measured_rack, "Grace socket (measured)")
     assert [(node.quantity, node.provenance.kind) for node in socket] == [(36, "measured")]
     assert socket[0].power_w == pytest.approx(36 * 98.066)
-    assert dict(socket[0].details)["cpu_socket_measured_power"] == 98.066
-    assert measured.cpu_socket_measured_power == 98.066
+    assert dict(socket[0].details)["cpu_and_dram_measured_power_per_socket"] == 98.066
+    assert measured.cpu_and_dram_measured_power_per_socket == 98.066
     assert not named(measured_rack, "GraceCPU") + named(measured_rack, "LPDDR5XMemory")
 
     def tray_load(result):
@@ -378,7 +378,7 @@ def test_tray_air_heat_takes_the_workload_memory_share_but_no_grace_chip_heat(so
     tray = GB200ComputeTray(converter=ideal_converter())
     result = tray.estimate_breakdown(
         400,
-        cpu_socket_measured_power=socket_w,
+        cpu_and_dram_measured_power_per_socket=socket_w,
         operating_state=OperatingState(workload_state="agentic-cpu-offloading"),
     )
     fans = named(result, "Fan module")[0]
@@ -391,7 +391,7 @@ def test_rack_cli_bom_marks_the_measured_grace_socket(capsys):
         [
             "--system=gb200",
             "--gpu-level-power-per-gpu=594.191",
-            "--cpu-socket-measured-power=98.066",
+            "--cpu-and-dram-measured-power-per-socket=98.066",
             "--power-breakdown-per-chassis",
         ]
     )

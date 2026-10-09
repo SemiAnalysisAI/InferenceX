@@ -25,7 +25,7 @@ python -m power_model --gpu-level-power-per-gpu=400 --system=h100 \
 | Option | Meaning |
 | --- | --- |
 | `--gpu-level-power-per-gpu` | Required actual GPU electrical watts per GPU; underscore spelling also accepted |
-| `--cpu-socket-measured-power` | GB200/GB300 NVL72 only: ACPI `Grace Power Socket` watts per socket; see below |
+| `--cpu-and-dram-measured-power-per-socket` | GB200/GB300 NVL72 only: ACPI `Grace Power Socket` watts per socket; see below |
 | `--system` | Required system from the table below |
 | `--model` | `oss` (default) or `example` |
 | `--workload` | `fixed-seq-len` (default), `agentic`, or `agentic-cpu-offloading` |
@@ -36,7 +36,7 @@ python -m power_model --gpu-level-power-per-gpu=400 --system=h100 \
 
 ### Measured Grace socket
 
-`--cpu-socket-measured-power` takes the per-socket average of the ACPI `Grace Power Socket` sensor. A PowerX `avg_cpu_socket_power_w` qualifies only when `power_audit.cpu.sensor_kind` is `grace_socket`. Never pass DCGM field 1130 (`CPU<n>:cpuPowerUsageW`): it is the CPU rail alone and misses SysIO, LPDDR5X and regulator loss, about 50 W per socket on GB300.
+`--cpu-and-dram-measured-power-per-socket` takes the per-socket average of the ACPI `Grace Power Socket` sensor. A PowerX `avg_cpu_socket_power_w` qualifies only when `power_audit.cpu.sensor_kind` is `grace_socket`. Never pass DCGM field 1130 (`CPU<n>:cpuPowerUsageW`): it is the CPU rail alone and misses SysIO, LPDDR5X and regulator loss, about 50 W per socket on GB300.
 
 For Grace Hopper/Blackwell superchips, the [NVIDIA Grace power guide](https://docs.nvidia.com/dccpu/grace-perf-tuning-guide/power-thermals.html) defines this sensor only as "Power of Grace socket." The model treats it as CPU and SysIO rails, LPDDR5X and socket regulator loss. This follows from the guide's statement that the socket total includes DRAM power and regulator loss, and from a measured GB300 remainder of about 42 W above CPU plus SysIO. GB200 firmware that reported the extra regulator rail only in module power under-reports the socket. The model also assumes that the sensor sits downstream of the compute-tray DC/DC converter.
 
@@ -44,5 +44,5 @@ On every Grace socket (36 per rack), the value replaces the modeled `GraceCPU` a
 
 ```bash
 python -m power_model --system=gb200 --gpu-level-power-per-gpu=594.191 \
-  --cpu-socket-measured-power=98.066 --power-breakdown-per-chassis
+  --cpu-and-dram-measured-power-per-socket=98.066 --power-breakdown-per-chassis
 ```

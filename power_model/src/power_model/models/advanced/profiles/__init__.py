@@ -50,7 +50,10 @@ GPU_INPUT = Provenance(
 GRACE_SOCKET_INPUT = Provenance(
     profile_id="grace-socket-input",
     version="1",
-    source="cpu_socket_measured_power argument; ACPI Grace Power Socket average per socket",
+    source=(
+        "cpu_and_dram_measured_power_per_socket argument; "
+        "ACPI Grace Power Socket average per socket"
+    ),
     kind="measured",
     input_boundary="One Grace socket as reported by the ACPI Grace Power Socket sensor",
     assumptions=(

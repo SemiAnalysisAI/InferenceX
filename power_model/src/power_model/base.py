@@ -165,7 +165,7 @@ class PowerEstimate(FrozenModel):
     workload_state: WorkloadState
     using_scale_out: bool
     gpu_level_power_per_gpu: Watts
-    cpu_socket_measured_power: Watts | None = None
+    cpu_and_dram_measured_power_per_socket: Watts | None = None
     AllInPower_per_gpu: Watts
     scope: Scope
     gpu_count: PositiveCount
@@ -201,22 +201,35 @@ class PowerModel(OperatingState, ABC):
         )
 
     def estimate(
-        self, gpu_level_power_per_gpu: float, *, cpu_socket_measured_power: float | None = None
+        self,
+        gpu_level_power_per_gpu: float,
+        *,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
     ) -> float:
         """Return AllInPower_per_gpu in watts per GPU."""
         return self.estimate_breakdown(
-            gpu_level_power_per_gpu, cpu_socket_measured_power=cpu_socket_measured_power
+            gpu_level_power_per_gpu,
+            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
         ).AllInPower_per_gpu
 
     def estimate_breakdown(
-        self, gpu_level_power_per_gpu: float, *, cpu_socket_measured_power: float | None = None
+        self,
+        gpu_level_power_per_gpu: float,
+        *,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
     ) -> PowerEstimate:
-        """cpu_socket_measured_power is watts per Grace socket and replaces its modeled loads."""
+        """cpu_and_dram_measured_power_per_socket is watts per Grace socket and replaces its
+        modeled loads.
+        """
         gpu_power = validate_watts(gpu_level_power_per_gpu)
         socket_power = (
-            None if cpu_socket_measured_power is None else validate_watts(cpu_socket_measured_power)
+            None
+            if cpu_and_dram_measured_power_per_socket is None
+            else validate_watts(cpu_and_dram_measured_power_per_socket)
         )
-        breakdown = self._estimate_it_power(gpu_power, cpu_socket_measured_power=socket_power)
+        breakdown = self._estimate_it_power(
+            gpu_power, cpu_and_dram_measured_power_per_socket=socket_power
+        )
         it_power = breakdown.it_power_w
         facility_power = validate_watts(it_power * self.cooling.pue)
         return PowerEstimate(
@@ -226,7 +239,7 @@ class PowerModel(OperatingState, ABC):
             workload_state=self.workload_state,
             using_scale_out=self.using_scale_out,
             gpu_level_power_per_gpu=gpu_power,
-            cpu_socket_measured_power=socket_power,
+            cpu_and_dram_measured_power_per_socket=socket_power,
             AllInPower_per_gpu=facility_power / breakdown.gpu_count,
             scope=breakdown.scope,
             gpu_count=breakdown.gpu_count,
@@ -240,6 +253,9 @@ class PowerModel(OperatingState, ABC):
 
     @abstractmethod
     def _estimate_it_power(
-        self, gpu_level_power_per_gpu: float, *, cpu_socket_measured_power: float | None
+        self,
+        gpu_level_power_per_gpu: float,
+        *,
+        cpu_and_dram_measured_power_per_socket: float | None,
     ) -> ITPowerBreakdown:
         """Return scoped IT watts and the matching GPU count before PUE."""

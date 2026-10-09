@@ -426,20 +426,22 @@ def test_cli_help_lists_models_and_systems(capsys):
             "unrecognized arguments: --scale-up-fabric-power-w=100",
         ),
         (
-            hgx_args("b300") + ["--cpu-socket-measured-power=98"],
-            "cpu_socket_measured_power requires a system with Grace sockets",
+            hgx_args("b300") + ["--cpu-and-dram-measured-power-per-socket=98"],
+            "cpu_and_dram_measured_power_per_socket requires a system with Grace sockets",
         ),
         (
-            ["--model=example", *rack_args(), "--cpu-socket-measured-power=98"],
-            "cpu_socket_measured_power requires the oss model's Grace inventory",
+            ["--model=example", *rack_args(), "--cpu-and-dram-measured-power-per-socket=98"],
+            "cpu_and_dram_measured_power_per_socket requires the oss model's Grace inventory",
         ),
         (
-            rack_args() + ["--cpu-socket-measured-power=-1"],
-            "argument --cpu-socket-measured-power: expected finite watts >= 0, got '-1'",
+            rack_args() + ["--cpu-and-dram-measured-power-per-socket=-1"],
+            "argument --cpu-and-dram-measured-power-per-socket: "
+            "expected finite watts >= 0, got '-1'",
         ),
         (
-            rack_args() + ["--cpu-socket-measured-power=nan"],
-            "argument --cpu-socket-measured-power: expected finite watts >= 0, got 'nan'",
+            rack_args() + ["--cpu-and-dram-measured-power-per-socket=nan"],
+            "argument --cpu-and-dram-measured-power-per-socket: "
+            "expected finite watts >= 0, got 'nan'",
         ),
         (hgx_args() + ["--dimm-count=32"], "unrecognized arguments: --dimm-count=32"),
         (hgx_args() + ["--dimm-capacity-gb=64"], "unrecognized arguments: --dimm-capacity-gb=64"),
