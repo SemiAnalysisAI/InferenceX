@@ -116,7 +116,7 @@ override_tp8_c5:
 # per rank. The master leaves the 414 GiB checkpoint page cache, the 26 GiB CPU
 # weight offload and the 4 GiB local buffer per GPU outside the budget.
 override_tp8_c6_dram:
-  # The worker's Mooncake client and the master install the master config's release.
+  # The worker's Mooncake client and the mooncake-master both install the master config's release.
   setup_script: vllm-mooncake.sh
   services:
     - name: mooncake-master
@@ -155,7 +155,7 @@ override_tp8_c6_dram:
       KV_OFFLOADING: dram
 
 override_tp8_c8_dram:
-  # The worker's Mooncake client and the master install the master config's release.
+  # The worker's Mooncake client and the mooncake-master both install the master config's release.
   setup_script: vllm-mooncake.sh
   services:
     - name: mooncake-master
