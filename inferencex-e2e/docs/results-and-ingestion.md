@@ -456,11 +456,24 @@ GB200 and GB300 NVL72 recipes that enable srt-slurm's `telemetry.cpu_power_expor
 package. The multinode validator accepts the historical v2.2.1 long format (one row per sensor
 reading, header `schema_version,timestamp_unix,hostname,source,sensor,socket_id,power_w,total_power_w`)
 and the current wide format (one row per scrape, host, and socket, with `cpu_rail_w`, `soc_w`, and
-`dram_w` reference columns). It classifies each row by its `sensor` cell: `Module Power Socket N`
-is the whole-module reading (Grace, both Blackwell GPUs, HBM, LPDDR5X, and regulator loss);
-`Grace Power Socket N` or `CPU<n>:cpuSidePowerUsageW` is the Grace-side socket total (CPU, SoC,
-and LPDDR5X); `CPU<n>:cpuPowerUsageW` is DCGM field 1130, the CPU rail only. Component rails
-(`CPU Power Socket N`, `SysIO Power Socket N`, DRAM) never feed a published metric.
+`dram_w` reference columns). It classifies each row by its `sensor` cell. The firmware meters
+nest inside one another; none of them is a Bianca board or compute-tray figure, and the socket
+total is not the sum of its component rails
+([NVIDIA Grace power guide](https://docs.nvidia.com/dccpu/grace-perf-tuning-guide/power-thermals.html)):
+
+| Sensor (ACPI OEM label) | Contains | Does not contain | Published as |
+| --- | --- | --- | --- |
+| `Module Power Socket N` | The whole GB200/GB300 superchip module: Grace, its two Blackwell GPUs, HBM, LPDDR5X, and on-module regulator loss | Everything else on the tray (NICs, NVMe, fans, the tray converter) | `*_module_*` keys, only when every socket reports it |
+| `Grace Power Socket N` (`CPU<n>:cpuSidePowerUsageW` in the wide format) | The whole Grace socket: CPU rail, SoC rail, LPDDR5X, and regulator loss | The GPUs and HBM | The Grace-side `*_cpu_*` headline keys |
+| `CPU Power Socket N` (`cpu_rail_w`) | The CPU rail only (cores) | SysIO, LPDDR5X, regulator loss | `*_cpu_rail_*` keys |
+| `SysIO Power Socket N` (`soc_w`) | The SoC rail (system I/O) | The CPU rail and LPDDR5X | `*_cpu_sysio_*` keys |
+| `DRAM Power Socket N` (`dram_w`) | The LPDDR5X rail where firmware exposes it | | Never; blank on the current NVL72 firmware |
+| `CPU<n>:cpuPowerUsageW` | DCGM field 1130, the CPU rail only | SysIO and LPDDR5X | The Grace-side keys only when ACPI is unavailable |
+
+On a GB300 tray the socket total reads about 95 W per socket while its CPU and SysIO rails sum
+to about 51 W; the remainder is LPDDR5X and regulator loss, so rails are never added to or
+subtracted from a total. The CI clusters' NVL72 firmware currently binds the Grace, CPU, and
+SysIO meters only: no module meter was found on GB200, and the DRAM rail is blank.
 
 Per socket the headline series is chosen in the order module, Grace socket total, DCGM CPU rail,
 and one kind must be present for every socket. Every fed series is integrated over the same bound

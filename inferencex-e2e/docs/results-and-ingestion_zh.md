@@ -441,10 +441,22 @@ rm -rf -- "$tmp"
 历史版本 v2.2.1 写出的长格式（每个传感器读数一行，表头为
 `schema_version,timestamp_unix,hostname,source,sensor,socket_id,power_w,total_power_w`），以及当前
 版本的宽格式（每次采集、每台主机、每个 socket 一行，另带 `cpu_rail_w`、`soc_w`、`dram_w` 参考列）。
-它按 `sensor` 单元格对每行分类：`Module Power Socket N` 是整模块读数（Grace、两颗 Blackwell GPU、
-HBM、LPDDR5X 及稳压损耗）；`Grace Power Socket N` 或 `CPU<n>:cpuSidePowerUsageW` 是 Grace 侧 socket
-总功耗（CPU、SoC 和 LPDDR5X）；`CPU<n>:cpuPowerUsageW` 是 DCGM 字段 1130，仅含 CPU 供电轨。组件供电轨
-（`CPU Power Socket N`、`SysIO Power Socket N`、DRAM）永远不会进入发布指标。
+它按 `sensor` 单元格对每行分类。这些固件功耗计层层嵌套，都不是 Bianca 板级或 compute tray 级的数字，
+socket 总功耗也不等于各组件供电轨之和
+（[NVIDIA Grace 功耗指南](https://docs.nvidia.com/dccpu/grace-perf-tuning-guide/power-thermals.html)）：
+
+| 传感器（ACPI OEM 标签） | 包含 | 不包含 | 发布为 |
+| --- | --- | --- | --- |
+| `Module Power Socket N` | 整个 GB200/GB300 superchip 模块：Grace、所属的两颗 Blackwell GPU、HBM、LPDDR5X 以及模块内稳压损耗 | tray 上的其他部件（NIC、NVMe、风扇、tray 电源转换器） | `*_module_*` 字段，仅当每个 socket 都有该读数时输出 |
+| `Grace Power Socket N`（宽格式中为 `CPU<n>:cpuSidePowerUsageW`） | 整个 Grace socket：CPU 供电轨、SoC 供电轨、LPDDR5X 及稳压损耗 | GPU 与 HBM | Grace 侧 `*_cpu_*` 主字段 |
+| `CPU Power Socket N`（`cpu_rail_w`） | 仅 CPU 供电轨（核心） | SysIO、LPDDR5X、稳压损耗 | `*_cpu_rail_*` 字段 |
+| `SysIO Power Socket N`（`soc_w`） | SoC 供电轨（系统 I/O） | CPU 供电轨与 LPDDR5X | `*_cpu_sysio_*` 字段 |
+| `DRAM Power Socket N`（`dram_w`） | 固件提供时的 LPDDR5X 供电轨 | | 不发布；当前 NVL72 固件下为空 |
+| `CPU<n>:cpuPowerUsageW` | DCGM 字段 1130，仅 CPU 供电轨 | SysIO 与 LPDDR5X | 仅在没有 ACPI 时作为 Grace 侧字段 |
+
+在 GB300 tray 上，socket 总功耗约为每 socket 95 W，而 CPU 与 SysIO 两条供电轨之和约为 51 W；差值是
+LPDDR5X 与稳压损耗，因此供电轨读数永远不会与总功耗相加或相减。CI 集群的 NVL72 固件目前只绑定 Grace、CPU
+和 SysIO 三个功耗计：GB200 上没有发现模块功耗计，DRAM 供电轨为空。
 
 每个 socket 的主序列按模块、Grace socket 总功耗、DCGM CPU 供电轨的顺序选取，且所有 socket 必须具备
 同一种传感器类型。每条参与计算的序列都在与 GPU 能耗相同的正式测量窗口内积分，采用同样的梯形法、
