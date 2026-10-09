@@ -128,7 +128,7 @@ collx_load_operator_config() {
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
-  unset COLLX_RDMA_RELAXED_ORDERING
+  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -222,8 +222,11 @@ collx_export_gid_index_for_link_layer() {
 # unset: the plugin enumerates and rails the EFA devices itself, and the operator's rdma_devices
 # list is consumed only by the network-profile probe as the set of ports that must be ACTIVE.
 # NVSHMEM (deepep-v2) has its own libfabric transport; point it at EFA the same way.
+# NCCL_GIN_TYPE=2 (proxy): with gdrcopy present the plugin's GIN loads, but NCCL still prefers
+# its built-in GDAKI on the nodes' two ConnectX-7 IB ports, which are not the GPU fabric, and
+# window registration then fails on most ranks (error 6) while the rest wait.
 collx_apply_efa_profile() {
-  export NCCL_NET_PLUGIN=ofi
+  export NCCL_NET_PLUGIN=ofi NCCL_GIN_TYPE=2
   export FI_PROVIDER=efa FI_EFA_FORK_SAFE=1
   export NVSHMEM_REMOTE_TRANSPORT=libfabric NVSHMEM_LIBFABRIC_PROVIDER=efa
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER NVSHMEM_HCA_LIST NVSHMEM_ENABLE_NIC_PE_MAPPING
@@ -235,7 +238,7 @@ collx_apply_network_profile() {
   local selector rdma_name rdma_names="" ep_nic=""
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid network placement"
-  unset NCCL_NET NCCL_NET_PLUGIN NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
+  unset NCCL_NET NCCL_NET_PLUGIN NCCL_GIN_TYPE NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
   unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
   unset NVSHMEM_ENABLE_NIC_PE_MAPPING
   unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL

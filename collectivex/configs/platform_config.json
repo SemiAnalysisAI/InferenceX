@@ -77,7 +77,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8], "nccl-ep": [8]},
+      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
       "ll_backends": {"nccl-ep": [8]},
       "fabric": {"nic": "AWS EFA (p6-b300.48xlarge, 16 x 400G per node)", "switch": "AWS EFA fabric (SRD)"},
       "operator": {
@@ -87,6 +87,7 @@
       },
       "network": {
         "rdma_fabric": "efa",
+        "rdma_gbs": 100,
         "rdma_devices": "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
       }
     },
