@@ -251,40 +251,61 @@ jobs:
           # index.lock/shallow.lock and recreates the repo when the top-level
           # clean/reset fails, yet every checkout also runs
           # `git submodule foreach --recursive` and walks every ref, so a
-          # damaged submodule or a ref to a missing object fails the job. One
-          # job runs per runner, so every lock here is stale. Keep identical in
-          # benchmark-tmpl.yml, benchmark-multinode-tmpl.yml,
+          # damaged submodule or a ref to an unreadable object fails the job.
+          # One job runs per runner, so every lock here is stale. Keep
+          # identical in benchmark-tmpl.yml, benchmark-multinode-tmpl.yml,
           # operatorx-sweep.yml, profile.yml and speedbench-al.yml.
           repo_dir="${GITHUB_WORKSPACE}"
           if [ -d "${repo_dir}/.git" ]; then
-            while IFS= read -r -d '' lock; do
-              echo "[git-repair] Removing stale lock: ${lock#"${repo_dir}/"}"
-              rm -f "${lock}" || true
-            done < <(find "${repo_dir}/.git" -path '*/objects/[0-9a-f][0-9a-f]' -prune \
-              -o -name '*.lock' -type f -print0)
-            # Checkout fetches by SHA, so refs to missing objects are
-            # disposable; a repo whose refs cannot be listed is damaged.
-            drop_dangling_refs() {
-              local refs dangling
-              refs=$(git --git-dir="$1" --work-tree="$1" for-each-ref --format='%(objectname) %(refname)' 2>/dev/null) || return 1
-              [ -n "${refs}" ] || return 0
-              mapfile -t dangling < <(paste -d ' ' <(cut -d ' ' -f 2 <<<"${refs}") \
-                <(cut -d ' ' -f 1 <<<"${refs}" | git --git-dir="$1" --work-tree="$1" cat-file --batch-check 2>/dev/null) |
-                awk '$NF == "missing" { print $1 }')
-              [ "${#dangling[@]}" -gt 0 ] || return 0
-              echo "[git-repair] Removing refs to missing objects in ${1#"${repo_dir}/"}: ${dangling[*]}"
-              printf 'delete %s\n' "${dangling[@]}" | git --git-dir="$1" --work-tree="$1" update-ref --no-deref --stdin
+            git_in() { local dir="$1"; shift; git --git-dir="${dir}" --work-tree="${dir}" "$@"; }
+            # Nested module git dirs are cleared when they are checked.
+            clear_locks() {
+              local lock n=0
+              while IFS= read -r -d '' lock; do
+                rm -f "${lock}" && n=$((n + 1))
+              done < <(find "$1" -path "$1/modules" -prune -o -path '*/objects/[0-9a-f][0-9a-f]' -prune \
+                -o -name '*.lock' -type f -print0)
+              echo "${n}"
+            }
+            # Checkout fetches the exact SHA, so remote-tracking refs and tags
+            # are disposable and always go. Any other ref goes when rev-list,
+            # which reads objects the way checkout's ref walk does, cannot
+            # parse its object. Fails when refs cannot be listed or parsed.
+            prune_refs() {
+              local refs parsed prune
+              refs=$(git_in "$1" for-each-ref --format='%(objectname) %(refname)') || return 1
+              parsed=$(awk '$2 !~ /^refs\/(remotes|tags)\// { print $1 }' <<<"${refs}" |
+                git_in "$1" rev-list --no-walk --ignore-missing --stdin) || return 1
+              mapfile -t prune < <(awk 'NR == FNR { ok[$1] = 1; next }
+                NF == 2 && ($2 ~ /^refs\/(remotes|tags)\// || !($1 in ok)) { print $2 }' \
+                <(printf '%s\n' "${parsed}") <(printf '%s\n' "${refs}"))
+              if [ "${#prune[@]}" -gt 0 ]; then
+                printf 'delete %s\n' "${prune[@]}" | git_in "$1" update-ref --no-deref --stdin || return 1
+              fi
+              echo "${#prune[@]}"
+            }
+            # Prints one summary line per git dir and fails when it is damaged.
+            # Every checkout reads a module's remote.origin.url, HEAD objects
+            # and index; checkout recreates the repo for a bad top-level index.
+            check_gitdir() {
+              local locks pruned="" reason=""
+              locks=$(clear_locks "$1")
+              if [ "$2" = module ] && ! git_in "$1" config --local --get remote.origin.url >/dev/null 2>&1; then
+                reason="no remote.origin.url"
+              elif ! git_in "$1" rev-list --objects --no-walk HEAD >/dev/null 2>&1; then
+                reason="HEAD objects unreadable"
+              elif [ "$2" = module ] && ! git_in "$1" ls-files --stage >/dev/null 2>&1; then
+                reason="index unreadable"
+              elif ! pruned=$(prune_refs "$1" 2>/dev/null); then
+                reason="refs unreadable"
+              fi
+              echo "[git-repair] ${1#"${repo_dir}/"}: ${locks} locks, ${pruned:-0} refs pruned, ${reason:+dropped: }${reason:-ok}"
+              [ -z "${reason}" ]
             }
             # Module git dirs sit at any depth below .git/modules; names may
             # contain '/', so dirs without HEAD/config/objects/refs only group
-            # them. Every checkout reads each module's remote.origin.url, HEAD
-            # objects and index, so a git dir missing any of them is damaged.
+            # them.
             is_gitdir() { [ -e "$1/HEAD" ] || [ -e "$1/config" ] || [ -e "$1/objects" ] || [ -e "$1/refs" ]; }
-            gitdir_ok() {
-              git --git-dir="$1" --work-tree="$1" config --local --get remote.origin.url >/dev/null 2>&1 &&
-                git --git-dir="$1" --work-tree="$1" rev-list --objects --no-walk HEAD >/dev/null 2>&1 &&
-                git --git-dir="$1" --work-tree="$1" ls-files --stage >/dev/null 2>&1
-            }
             drop_damaged_gitdirs() {
               local d wt root
               for d in "$1"/*/; do
@@ -292,10 +313,9 @@ jobs:
                 [ -d "${d}" ] && [ ! -L "${d}" ] || continue
                 if ! is_gitdir "${d}"; then
                   drop_damaged_gitdirs "${d}"
-                elif gitdir_ok "${d}" && drop_dangling_refs "${d}"; then
+                elif check_gitdir "${d}" module; then
                   drop_damaged_gitdirs "${d}/modules"
                 else
-                  echo "[git-repair] Removing damaged git dir: ${d#"${repo_dir}/"}"
                   # Its worktree, even one no longer in .gitmodules, would keep
                   # a .git file pointing at the removed git dir.
                   if wt=$(git config -f "${d}/config" core.worktree 2>/dev/null) &&
@@ -331,14 +351,12 @@ jobs:
                 fi
               done < <(git config -z -f "$1/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null)
             }
-            # A top-level repo with incomplete HEAD objects or unlistable refs
-            # is removed, so checkout re-clones it instead of failing.
-            if git --git-dir="${repo_dir}/.git" --work-tree="${repo_dir}" rev-list --objects --no-walk HEAD >/dev/null 2>&1 &&
-              drop_dangling_refs "${repo_dir}/.git"; then
+            # A damaged top-level repo is removed, so checkout re-clones it
+            # instead of failing.
+            if check_gitdir "${repo_dir}/.git" top-level; then
               drop_damaged_gitdirs "${repo_dir:?}/.git/modules"
               drop_orphaned_worktrees "${repo_dir:?}" "${repo_dir:?}/.git"
             else
-              echo "[git-repair] Removing damaged repository: .git"
               rm -rf "${repo_dir:?}/.git" || true
             fi
           fi
