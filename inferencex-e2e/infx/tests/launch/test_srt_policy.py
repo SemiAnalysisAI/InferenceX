@@ -47,7 +47,6 @@ def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
 
 MULTI = dict(IS_MULTINODE="true")
 SINGLE = dict(IS_MULTINODE="false")
-MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
 
 
 @pytest.mark.parametrize(("cluster_id", "env", "path"), [
