@@ -9528,3 +9528,13 @@
     - "TP4 c64: 8K prefill chunks with a 16-step prefill-decode interval instead of 16K chunks with none. Local runs with the fold: 82,586 -> 85,093 tok/s/GPU at 86.8 -> 136.8 tok/s/user median (46.3 -> 72.1 P90); P90 TTFT 5.7 -> 12.5 s."
     - "TP2 c128: admit all 128 sessions (max-running-requests and cuda-graph-max-bs-decode 64 -> 128) with a 4-step prefill-decode interval and mem-fraction-static 0.85. The PR #3421 sweep measured 18,631 tok/s/GPU at 130.9 tok/s/user median at this point; locally the new settings gave 147,763 tok/s/GPU at 37.9 tok/s/user median with a 51 s P90 TTFT (measured before the fold was added)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
+
+- config-keys:
+    - dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-disagg
+    - dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 DSpark FP4/FP8-KV AgentX on GB200 behind the llm-d router (EPP and pd-sidecar from llm-d-router v0.10.0, Envoy) through srt-slurm's llm-d frontend, porting #2719's llm-d submission: disagg 1P1D DEP8/DEP8 (conc 64/128/160/256) and 2P1D DEP8/DEP16 (conc 256/384/576) with NIXL P/D KV and a Mooncake prefix-cache store on prefill at 66.7% node DRAM; agg TP8 (conc 1-12), DEP8 (conc 12-32), and DEP8 with Mooncake at 45% node DRAM (conc 52/72)."
+    - "Same image, vLLM flags, environment, and EPP schedulers as #2719. Each DEP worker is one vllm serve that balances its DP ranks itself, so the EPP routes to workers. Throughput uses committed golden synthetic acceptance (TP8 K=5, DEP K=3 on both prefill and decode); evals use real verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
