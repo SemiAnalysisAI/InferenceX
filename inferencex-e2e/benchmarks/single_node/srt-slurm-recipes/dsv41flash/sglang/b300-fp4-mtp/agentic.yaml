@@ -3,10 +3,8 @@ base:
   name: dsv41flash-fp4-b300-sglang-agentic
   identity:
     model:
-      repo: deepseek-ai/DeepSeek-V4.1-Flash
       revision: dba1be0a40aa45a94ad051997016db3960a90277
-    container:
-      image: lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9@sha256:7cfd4dd8e0e902d2a3c0560565963c4e172091e1586aaed15ff5a0a131394d34
+    container: {}
     frameworks:
       sglang: 0.0.0.dev1+g295a53c90
       sglang-router: 0.3.2
