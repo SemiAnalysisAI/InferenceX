@@ -1,8 +1,8 @@
-PR titles MUST MUST MUST HAVE CHINESE
-
 # AGENTS.md
 
 Guidance for AI agents working with InferenceX.
+
+> PR titles MUST MUST MUST HAVE CHINESE
 
 ## Start here
 
