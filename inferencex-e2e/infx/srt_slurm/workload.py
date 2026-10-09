@@ -100,12 +100,18 @@ def _is_dram(value: Any) -> bool:
     return isinstance(value, str) and value.startswith(DRAM_REFERENCE)
 
 
+def _json_object(value: Any) -> Any:
+    """``value`` parsed when it is a JSON object string, else ``value`` itself."""
+    if isinstance(value, str) and value.startswith("{"):
+        with contextlib.suppress(ValueError):
+            return json.loads(value)
+    return value
+
+
 def _dram_literals(node: Any, where: str) -> Iterator[str]:
     """Each DRAM_SIZES value in ``node``, a JSON object string included, that is not a
     ``'@dram.<name>'`` value; a size flag in an argument list sizes the next item."""
-    if isinstance(node, str) and node.startswith("{"):
-        with contextlib.suppress(ValueError):
-            node = json.loads(node)
+    node = _json_object(node)
     if isinstance(node, Mapping):
         for key, value in node.items():
             path = f"{where}.{key}" if where else str(key)
@@ -208,12 +214,11 @@ def bind_workload(
     multinode: bool,
     client_env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Write the matrix point's model, image, precision, concurrency, KV offloading and DRAM
-    budget and, for fixed sequences, lengths; ``client_env`` holds the launcher's benchmark
-    client paths.
+    """Write the matrix point's values, and the launcher's client paths (``client_env``), into
+    a selected variant.
 
-    Call after variant selection: binding a zip group would detach its concurrency
-    from the tuning it pairs with. ``resolve_dram`` then sizes the recipe's host DRAM.
+    Call after variant selection: binding a zip group would detach its concurrency from the
+    tuning it pairs with.
     """
     image, model = _required(environment, "IMAGE"), _required(environment, "MODEL")
     # schema, name and model lead the written recipe.
@@ -352,14 +357,10 @@ def resolve_dram(
         ]
     if not isinstance(node, str) or DRAM_REFERENCE not in node:
         return node
-    document = None
-    if node.startswith("{"):
-        with contextlib.suppress(ValueError):
-            document = json.loads(node)
-    if isinstance(document, Mapping):
+    if isinstance(document := _json_object(node), Mapping):
         return json.dumps(resolve_dram(document, budget, where), separators=(",", ":"))
     name = node.removeprefix(DRAM_REFERENCE)
-    if name == node or name not in DRAM_NAMES:
+    if name not in DRAM_NAMES:
         raise ValueError(
             f"{where}: {node!r} is not a whole '@dram.<name>' value naming one of: "
             + ", ".join(DRAM_NAMES)

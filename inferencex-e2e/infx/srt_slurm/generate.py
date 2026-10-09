@@ -186,12 +186,7 @@ def _apply_acceptance_and_validate(
 def generate_recipes(
     *, config_keys: list[str], config_files: list[Path], runner_file: Path, output: Path
 ) -> dict[str, Any]:
-    """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
-
-    A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
-    paths, and a DRAM point's ``'@dram.<name>'`` values take its budget over the GPUs it
-    covers there; the manifest names that cluster, the one its runner label schedules on.
-    """
+    """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest."""
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
     files = [str(path) for path in config_files]
