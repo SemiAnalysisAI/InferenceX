@@ -1,7 +1,6 @@
 # AgentX dsv41flash sglang gb300-fp4 recipes (Dynamo frontend + SGLang, DISAGGREGATED
 # topology with Mooncake KV transfer): shared settings in base, one override per
-# benchmark point. Select one with
-# CONFIG_FILE=recipes/dsv41flash/sglang/gb300-fp4/agentx/disagg-variants.yaml:override_<name>.
+# benchmark point.
 #
 # Prefill and decode are separate TP2/EP2 SGLang workers (two GPUs each) behind the
 # Dynamo KV router; with the DSpark draft in PD-disaggregated mode both sides must
