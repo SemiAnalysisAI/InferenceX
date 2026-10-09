@@ -5911,6 +5911,7 @@
 
 - config-keys:
     - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+    - minimaxm3-fp8-mi325x-vllm-agentic-tep8
   scenario-type:
     - agentic-coding
   description:

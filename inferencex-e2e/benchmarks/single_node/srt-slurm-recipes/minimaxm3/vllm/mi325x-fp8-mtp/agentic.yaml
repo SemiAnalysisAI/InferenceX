@@ -134,6 +134,8 @@ override_tp8_c16:
   roles:
     agg:
       args:
+        long-prefill-token-threshold: 8192
+        long-prefill-token-threshold-adaptive: true
         max-num-seqs: 32
   benchmark:
     env:
