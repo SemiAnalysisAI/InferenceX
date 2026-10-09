@@ -1,4 +1,4 @@
-"""What the launcher submits for master-config points, and ``infx generate``, which writes it."""
+"""Bind master-config points to the recipes the launcher submits; ``infx generate`` writes them."""
 
 from __future__ import annotations
 
@@ -14,15 +14,14 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from infx.clusters import load_inventory
-from infx.clusters.slurm import Fabric, slurm_settings
+from infx.clusters.slurm import slurm_settings
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
 from infx.srt_slurm.workload import (
-    bind_workload,
+    bind_multinode,
     check_setup_script,
-    compose_recipe,
     dram_budget,
     resolve_dram,
     resolve_fabric,
@@ -145,7 +144,7 @@ def _binder_inputs(
     return (srt.power_exporter_port if decision.dcgm else None), client_env
 
 
-def bound_variants(
+def bound_variant(
     point: Mapping[str, Any],
     environment: Mapping[str, str],
     root: Path,
@@ -153,46 +152,39 @@ def bound_variants(
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
     client_env: Mapping[str, str] | None = None,
-) -> list[tuple[str | None, dict[str, Any]]]:
-    """Each variant the launcher submits for ``point``, composed and bound.
+) -> tuple[str | None, dict[str, Any]]:
+    """The variant the launcher submits for ``point``, composed and bound.
 
-    A multi-node point with ``power`` gets the DCGM telemetry block only with the cluster's
-    exporter ``power_port``; ``client_env`` holds the AgentX client paths the launcher binds.
-    ``'@fabric.<name>'`` values stay unresolved: recipe fingerprints hash them as written.
+    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client paths
+    ``client_env``, the binder inputs the launcher computes. ``'@fabric.<name>'`` values stay
+    unresolved: recipe fingerprints hash them as written.
     """
-    path, _, selector = point["srt-recipe"].partition(":")
     if "prefill" not in point:
         selected, recipe = select_recipe(
             str(root / point["srt-recipe"]), environment, root=root, expand=expand
         )
-        return [(selected.partition(":")[2] or None, recipe)]
-    agentic = environment["IS_AGENTIC"] == "1"
-    port = power_port if point.get("power") else None
-    source = root / path
-    composed = compose_recipe(source, agentic=agentic, multinode=True, root=root, power_port=port)
-    return [
-        (
-            name,
-            bind_workload(
-                recipe,
-                environment,
-                agentic=agentic,
-                multinode=True,
-                client_env=client_env,
-                source=source,
-            ),
-        )
-        for name, recipe in expand(composed, selector or None)
-    ]
+        return selected.partition(":")[2] or None, recipe
+    return bind_multinode(
+        str(root / point["srt-recipe"]),
+        environment,
+        root=root,
+        expand=expand,
+        power_port=power_port,
+        client_env=client_env,
+    )
 
 
 def _cluster_fabric(cluster: Cluster) -> dict[str, str | None]:
     """``cluster``'s fabric as recipes read it."""
     srt = slurm_settings(cluster).srt_slurm
-    return (srt.fabric if srt is not None else Fabric()).rendered()
+    if srt is None:
+        raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
+    return srt.fabric.rendered()
 
 
-def _validated(recipe: dict[str, Any], environment: Mapping[str, str], source: str) -> None:
+def _apply_acceptance_and_validate(
+    recipe: dict[str, Any], environment: Mapping[str, str], source: str
+) -> None:
     """Apply golden-acceptance cleanup, then load the result as srtctl would."""
     from marshmallow import ValidationError
     from srtctl.core.config import expand_engine_config_defaults, resolve_config_with_defaults
@@ -229,13 +221,14 @@ def generate_recipes(
     """
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
-    root = config_root([str(path) for path in config_files])
+    files = [str(path) for path in config_files]
+    root = config_root(files)
     source = root / "utils/srt-slurm/src"
     if not (source / "srtctl").is_dir():
         raise ValueError(f"No srt-slurm checkout at {source}; initialize the submodule")
     if str(source) not in sys.path:
         sys.path.insert(0, str(source))
-    master = load_config_files([str(path) for path in config_files])
+    master = load_config_files(files)
     runners = load_runner_file(str(runner_file))
     inventory = load_inventory(runner_file)
     recipes: dict[str, dict[str, Any]] = {}
@@ -250,7 +243,7 @@ def generate_recipes(
             placement = _placement(inventory, point["runner"])
             power_port, client_env = _binder_inputs(point, environment, placement, root)
             fabric = _cluster_fabric(placement[1]) if placement else None
-            variants = bound_variants(
+            variant, recipe = bound_variant(
                 point, environment, root, power_port=power_port, client_env=client_env
             )
             budget = dram_budget(
@@ -258,20 +251,19 @@ def generate_recipes(
                 multinode="prefill" in point,
                 gpus_per_node=placement[1].gpus_per_node if placement else None,
             )
-            for variant, bound in variants:
-                recipe = resolve_dram(bound, budget)
-                if fabric is not None:
-                    recipe = resolve_fabric(recipe, fabric)
-                check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
-                _validated(recipe, environment, point["srt-recipe"])
-                identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
-                digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
-                name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"
-                recipes[name] = recipe
-                records.append({
-                    "file": name, "config-key": key, "variant": variant,
-                    "cluster": placement[1].id if placement else None, "matrix": point,
-                })  # fmt: skip
+            recipe = resolve_dram(recipe, budget)
+            if fabric is not None:
+                recipe = resolve_fabric(recipe, fabric)
+            check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
+            _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
+            identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
+            digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
+            name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"
+            recipes[name] = recipe
+            records.append({
+                "file": name, "config-key": key, "variant": variant,
+                "cluster": placement[1].id if placement else None, "matrix": point,
+            })  # fmt: skip
     output.mkdir(parents=True, exist_ok=True)
     for name, recipe in recipes.items():
         (output / name).write_text(yaml.safe_dump(recipe, sort_keys=False))

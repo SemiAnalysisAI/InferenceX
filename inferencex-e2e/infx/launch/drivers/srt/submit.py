@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
-BOUND_RECIPE = "recipe.yaml"
 ACCEPTANCE_RECORD = "golden-acceptance.json"
 MULTINODE_EVAL_COMMAND = (
     '["env", "HF_HUB_OFFLINE=0", "HF_DATASETS_OFFLINE=0", "TRANSFORMERS_OFFLINE=0", '

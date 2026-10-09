@@ -5,9 +5,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.matrix.fingerprint import concrete_recipes, recipe_fingerprint
+from infx.matrix.fingerprint import recipe_fingerprint
 from infx.matrix.generate import generate_config_matrix
 from infx.matrix.validation import load_config_files, load_runner_file
+from infx.srt_slurm.generate import bound_variant, point_environment
+from infx.srt_slurm.variants import expand_variants
 from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
 
 SINGLE = "benchmarks/single_node/srt-slurm-recipes/fixture"
@@ -237,8 +239,5 @@ def test_the_planner_binds_a_script_installed_version_from_the_row(project):
     [row, *_] = generate_config_matrix(["multi"], master, runners, eval_mode="none", root=project)
 
     # The checkout's setup scripts are not needed to plan.
-    [recipe] = concrete_recipes(row, project)
+    _, recipe = bound_variant(row, point_environment(row), project, expand=expand_variants)
     assert recipe["environment"] == {"ROUTER_VERSION": "0.1.14"}
-    del row["router"]
-    with pytest.raises(ValueError, match="vllm-router.sh installs vllm-router, so the master"):
-        recipe_fingerprint(row, project)

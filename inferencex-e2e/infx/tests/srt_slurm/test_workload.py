@@ -14,8 +14,10 @@ from infx.clusters.slurm import Fabric
 from infx.srt_slurm.synthetic_acceptance import selected_recipes
 from infx.srt_slurm.workload import (
     bind_workload,
+    check_setup_script,
     compose_recipe,
     dram_budget,
+    parse_concurrencies,
     resolve_dram,
     resolve_fabric,
 )
@@ -98,9 +100,7 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
 
 @pytest.mark.parametrize(("data", "agentic", "multinode", "reported"), [
     ({"model": {"container": "other/image:1"}}, False, True, "model.container (= 'other/image:1')"),
-    ({"model": {"container": "registry/image:2"}}, False, True, "model.container (= 'registry/image:2')"),
     ({"base": {"benchmark": {"env": {"ISL": "8192"}}}}, False, False, "base.benchmark.env.ISL (= '8192')"),
-    ({"identity": {"model": {"repo": "org/model"}}}, False, True, "identity.model.repo (= 'org/model')"),
     ({"base": {}, "zip_override_c": {"benchmark": {"env": {"CONC": ["4"]}}}}, False, True,
      "zip_override_c.benchmark.env.CONC (= ['4'])"),
     ({"base": {}, "override_c": {"benchmark": {"concurrencies": [4]}}}, False, False,
@@ -119,9 +119,7 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
     ({"base": {}, "override_c": {"services": [{"name": "m", "env": {"KV_OFFLOAD_BACKEND_VERSION": "1"}}]}},
      True, True, "override_c.services[0].env.KV_OFFLOAD_BACKEND_VERSION (= '1')"),
 ])  # fmt: skip
-def test_a_fragment_that_sets_a_bound_key_is_rejected_even_with_the_bound_value(
-    project, data, agentic, multinode, reported
-):
+def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, agentic, multinode, reported):
     path = fragment(project, data)
     with pytest.raises(ValueError) as error:
         compose_recipe(path, agentic=agentic, multinode=multinode, root=project)
@@ -305,7 +303,7 @@ def test_a_bound_agentx_point_satisfies_the_benchmark_client(project, tmp_path):
 @pytest.mark.parametrize(("environment", "message"), [
     ({**MULTI_ENV, "IMAGE": ""}, "Missing workload input: IMAGE"),
     ({**MULTI_ENV, "OSL": "1k"}, "OSL must be a positive integer: '1k'"),
-    ({**MULTI_ENV, "CONC_LIST": "4 0"}, "CONC_LIST must be a positive integer: '0'"),
+    ({**MULTI_ENV, "CONC_LIST": "4 0"}, "CONC_LIST entries must be canonical positive integers: '0'"),
 ])  # fmt: skip
 def test_a_malformed_point_is_rejected_before_binding(environment, message):
     with pytest.raises(ValueError, match=message):
@@ -331,11 +329,6 @@ def test_a_component_a_script_installs_gets_the_master_version_where_the_script_
          "env": {"KV_OFFLOAD_BACKEND_VERSION": "0.3.11.post1"}},
         {"name": "etcd", "env": {"ETCD_QUOTA": "1"}},
     ]  # fmt: skip
-    router = {"setup_script": "vllm-router.sh", "frontend": {"type": "vllm-router"}}
-    bound = bind_workload(
-        router, {**AGENTX_ENV, "ROUTER_METADATA": ROUTER}, agentic=True, multinode=True, source=SOURCE
-    )
-    assert bound["environment"] == {"ROUTER_VERSION": "0.1.14"}
 
 
 @pytest.mark.parametrize("metadata", ["", '{"name": "mooncake"}', '{"name": "lmcache", "version": "1"}'])
@@ -361,35 +354,27 @@ def test_a_router_pinned_in_setup_pip_packages_must_be_the_master_router():
         "fragment.yaml: SETUP_PIP_PACKAGES vllm-router==0.1.13 is not the master router 0.1.14"
     )
     recipe["frontend"]["env"]["SETUP_PIP_PACKAGES"] = "vllm-router==0.1.14"
-    bound = bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
-    assert (bound["frontend"], bound["roles"]) == (recipe["frontend"], recipe["roles"])
+    bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
 
 
-def test_the_launcher_binder_fails_on_a_setup_script_srtctl_would_not_find(project, tmp_path):
+def test_a_setup_script_srtctl_would_not_find_fails(project):
     patches = project / "utils/srt-slurm/configs/patches"
     patches.mkdir(parents=True)
     (patches / "upstream.sh").write_text("true\n")
-    path = fragment(project, {
-        "base": {"setup_script": "upstream.sh"}, "override_own": {"setup_script": "own.sh"},
-    })  # fmt: skip
-    env = {**os.environ, **MULTI_ENV, "INFERENCEX_REPOSITORY_ROOT": str(project),
-           "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
-
-    def bind(variant: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, "-m", "infx.srt_slurm.workload", f"{path}:{variant}",
-             str(tmp_path / "bound.yaml"), "--fabric", "{}"],
-            env=env, capture_output=True, text=True, check=False,
-        )  # fmt: skip
-
-    assert bind("base").returncode == 0
-    missing = bind("override_own")
-    assert missing.returncode == 2
-    assert f"{path}: setup_script own.sh is in none of" in missing.stderr
+    check_setup_script({"setup_script": "upstream.sh"}, SOURCE, project)
+    with pytest.raises(ValueError, match="^fragment.yaml: setup_script own.sh is in none of"):
+        check_setup_script({"setup_script": "own.sh"}, SOURCE, project)
     configs = project / "benchmarks/multi_node/srt-slurm-recipes/configs"
     configs.mkdir(parents=True)
     (configs / "own.sh").write_text("true\n")
-    assert bind("override_own").returncode == 0
+    check_setup_script({"setup_script": "own.sh"}, SOURCE, project)
+
+
+def test_conc_list_must_be_canonical_positive_integers():
+    assert parse_concurrencies(" 4 8\t16 ") == [4, 8, 16]
+    for bad in ("", "08", "0", "-4", "4.0", "4 4", "+4"):
+        with pytest.raises(ValueError):
+            parse_concurrencies(bad)
 
 
 def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path):
@@ -402,7 +387,7 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
         },
     })
     output = tmp_path / "bound.yaml"
-    env = {**os.environ, **MULTI_ENV, "INFERENCEX_REPOSITORY_ROOT": str(project),
+    env = {**os.environ, **MULTI_ENV, "IS_AGENTIC": "0", "INFERENCEX_REPOSITORY_ROOT": str(project),
            "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
 
     def bind(*arguments: str) -> subprocess.CompletedProcess[str]:

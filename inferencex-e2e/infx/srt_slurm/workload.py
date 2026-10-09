@@ -15,7 +15,7 @@ import json
 import math
 import os
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,8 @@ SHARED_BLOCKS = {
     (True, False): Path("configs/srt-recipes/agentic-single.yaml"),
     (True, True): Path("configs/srt-recipes/agentic-multi.yaml"),
 }
+# The bound variant srtctl gets.
+BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
 # The binder writes these, the master power field owns telemetry, and the launcher hands
 # the benchmark client its cache and result paths.
@@ -87,8 +89,6 @@ INSTALLERS = {
 VERSION_ENV = {"router": "ROUTER_VERSION", "kv-offload-backend": "KV_OFFLOAD_BACKEND_VERSION"}
 # The workflow exports each master field as JSON.
 _METADATA_ENV = {"router": "ROUTER_METADATA", "kv-offload-backend": "KV_OFFLOAD_BACKEND_METADATA"}
-# A pin of these packages in pip-runtime-deps.sh's SETUP_PIP_PACKAGES must be the master's.
-PIP_COMPONENTS = {"vllm-router": ("router", "vllm-router")}
 # srtctl runs setup_script from its checkout's configs/ (these trees staged together) or
 # configs/patches/, and only warns when it finds neither.
 SETUP_SCRIPT_DIRS = (
@@ -146,38 +146,38 @@ def _dram_literals(node: Any, where: str) -> Iterator[str]:
                 yield from _dram_literals(item, f"{where}[{index}]")
 
 
-def _fragment_versions(block: Any, path: str) -> list[str]:
+def _fragment_versions(block: Any, path: str) -> Iterator[str]:
     """Where ``block`` sets a bound component version, in an env mapping at any depth."""
-    found = []
     if isinstance(block, list):
         for index, item in enumerate(block):
-            found += _fragment_versions(item, f"{path}[{index}]")
+            yield from _fragment_versions(item, f"{path}[{index}]")
     elif isinstance(block, Mapping):
         for key, value in block.items():
             where = f"{path}.{key}" if path else str(key)
-            if key in ("env", "environment") and isinstance(value, Mapping):
-                names = [name for name in VERSION_ENV.values() if name in value]
-                found += [f"{where}.{name} (= {value[name]!r})" for name in names]
+            if key in TEXT_MAPPINGS and isinstance(value, Mapping):
+                for name in VERSION_ENV.values():
+                    if name in value:
+                        yield f"{where}.{name} (= {value[name]!r})"
             else:
-                found += _fragment_versions(value, where)
-    return found
+                yield from _fragment_versions(value, where)
 
 
 def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
     """Reject a fragment that sets a bound key, even to the value the binder would write, or
     sizes host DRAM with a literal instead of the point's budget."""
     keys = (*_POINT_KEYS, *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]))
-    blocks = [(name, block) for name, block in raw.items() if name != "schema"]
-    if "base" not in raw:
+    if "base" in raw:
+        blocks = [(name, block) for name, block in raw.items() if name != "schema"]
+    else:
         blocks = [(None, raw)]
     found = []
     for name, block in blocks:
-        variant = name not in (None, "base")
+        single_node_variant = not multinode and name not in (None, "base")
         for key in keys:
             present, value = _lookup(block, key)
-            if present and not (variant and not multinode and key in VARIANT_POINT_KEYS):
+            if present and not (single_node_variant and key in VARIANT_POINT_KEYS):
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
-        found += _fragment_versions(block, name or "")
+        found.extend(_fragment_versions(block, name or ""))
     if found:
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher binds them"
@@ -245,6 +245,18 @@ def _positive(value: str, name: str) -> int:
     return int(value)
 
 
+def parse_concurrencies(conc_list: str) -> list[int]:
+    """Parse a whitespace-separated CONC_LIST of unique, canonical positive integers."""
+    values = []
+    for word in conc_list.split():
+        if not word.isascii() or not word.isdecimal() or str(int(word)) != word or int(word) <= 0:
+            raise ValueError(f"CONC_LIST entries must be canonical positive integers: {word!r}")
+        values.append(int(word))
+    if not values or len(set(values)) != len(values):
+        raise ValueError("concurrencies must be positive unique integers")
+    return values
+
+
 def _master_version(
     environment: Mapping[str, str], component: tuple[str, str], source: Path, installer: str
 ) -> str:
@@ -263,8 +275,8 @@ def _master_version(
 def _bind_components(bound: dict[str, Any], environment: Mapping[str, str], source: Path) -> None:
     """Write the master version of each component a repo script installs where the script
     runs: the top-level environment for setup_script, a service's env for its preamble
-    (services do not inherit environment). A master component that SETUP_PIP_PACKAGES pins
-    must carry the master version."""
+    (services do not inherit environment). A SETUP_PIP_PACKAGES vllm-router pin must be the
+    master router's."""
     if (script := bound.get("setup_script")) in INSTALLERS:
         version = _master_version(environment, INSTALLERS[script], source, script)
         bound.setdefault("environment", {})[VERSION_ENV[INSTALLERS[script][0]]] = version
@@ -278,13 +290,12 @@ def _bind_components(bound: dict[str, Any], environment: Mapping[str, str], sour
     for env in envs:
         for spec in str((env or {}).get("SETUP_PIP_PACKAGES", "")).split():
             package = re.split(r"[^\w.-]", spec, maxsplit=1)[0]
-            component = PIP_COMPONENTS.get(re.sub(r"[-_.]+", "-", package).lower())
-            if component is None:
+            if re.sub(r"[-_.]+", "-", package).lower() != "vllm-router":
                 continue
             pin = f"SETUP_PIP_PACKAGES {spec}"
-            version = _master_version(environment, component, source, pin)
+            version = _master_version(environment, INSTALLERS["vllm-router.sh"], source, pin)
             if spec != f"{package}=={version}":
-                raise ValueError(f"{source}: {pin} is not the master {component[0]} {version}")
+                raise ValueError(f"{source}: {pin} is not the master router {version}")
 
 
 def bind_workload(
@@ -305,6 +316,7 @@ def bind_workload(
     from the tuning it pairs with. ``resolve_dram`` then sizes the recipe's host DRAM.
     """
     image, model = _required(environment, "IMAGE"), _required(environment, "MODEL")
+    # schema, name and model lead the written recipe.
     bound = {key: deepcopy(value) for key, value in recipe.items() if key in ("schema", "name")}
     bound["model"] = {
         **recipe.get("model", {}),
@@ -327,8 +339,7 @@ def bind_workload(
         )
     if multinode:
         # The client reads CONC_LIST from the job environment the workflow exports.
-        words = _required(environment, "CONC_LIST").split()
-        concurrencies = [_positive(word, "CONC_LIST") for word in words]
+        concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
     else:
         conc = _positive(_required(environment, "CONC"), "CONC")
         if "CONC" in workload and str(workload["CONC"]) != str(conc):
@@ -365,6 +376,35 @@ def bind_workload(
         benchmark["concurrencies"] = concurrencies
     _bind_components(bound, environment, source)
     return bound
+
+
+def bind_multinode(
+    recipe: str,
+    environment: Mapping[str, str],
+    *,
+    root: Path,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+    power_port: int | None = None,
+    client_env: Mapping[str, str] | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
+    agentic = environment["IS_AGENTIC"] == "1"
+    path, _, selector = recipe.partition(":")
+    composed = compose_recipe(
+        Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
+    )
+    variants = expand(composed, selector or None)
+    if len(variants) != 1:
+        raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
+    name, selected = variants[0]
+    return name, bind_workload(
+        selected,
+        environment,
+        agentic=agentic,
+        multinode=True,
+        client_env=client_env,
+        source=Path(path),
+    )
 
 
 def dram_budget(
@@ -501,28 +541,19 @@ def main(argv: list[str] | None = None) -> None:
     )
     add_fabric_argument(parser)
     args = parser.parse_args(argv)
-    path, _, selector = args.recipe.partition(":")
-    agentic = os.environ.get("IS_AGENTIC") == "1"
     try:
         root = repository_root()
-        composed = compose_recipe(
-            Path(path), agentic=agentic, multinode=True, root=root, power_port=args.power_port
-        )
-        variants = selected_recipes(composed, selector or None)
-        if len(variants) != 1:
-            raise ValueError(f"{args.recipe} selects {len(variants)} variants, not one")
-        bound = bind_workload(
-            variants[0][1],
+        _, bound = bind_multinode(
+            args.recipe,
             os.environ,
-            agentic=agentic,
-            multinode=True,
+            root=root,
+            power_port=args.power_port,
             client_env=dict(args.client_env),
-            source=Path(path),
         )
         budget = dram_budget(os.environ, multinode=True, gpus_per_node=args.gpus_per_node)
         bound = resolve_dram(bound, budget)
         bound = resolve_fabric(bound, args.fabric)
-        check_setup_script(bound, Path(path), root)
+        check_setup_script(bound, Path(args.recipe.partition(":")[0]), root)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))
     args.output.write_text(yaml.safe_dump(bound, sort_keys=False))

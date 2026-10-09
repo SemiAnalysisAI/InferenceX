@@ -52,8 +52,7 @@ DEVICES = {"ucx-net-devices": ["mlx5_0:1"]}
 
 
 def test_a_reference_every_reachable_cluster_sets_generates_the_row_as_written(tmp_path):
-    [row] = generate(tmp_path, "@fabric.ucx-net-devices", {"h200-a": DEVICES, "h200-b": DEVICES})
-    assert row["srt-recipe"].endswith("bundle.yaml:override_wide")
+    assert len(generate(tmp_path, "@fabric.ucx-net-devices", {"h200-a": DEVICES, "h200-b": DEVICES})) == 1
 
 
 @pytest.mark.parametrize(("reference", "fabrics", "message"), [

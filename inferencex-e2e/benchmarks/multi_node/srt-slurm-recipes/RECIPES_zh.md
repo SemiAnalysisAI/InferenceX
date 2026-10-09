@@ -22,7 +22,7 @@ qwen3.5/trtllm/gb300-fp4/agentx/disagg-variants.yaml
 - 工作负载目录为 `1k1k`、`8k1k` 或 `agentx`。已有的跨序列长度配置集合放在 `fixed-seq-len` 下，保留其覆盖项选择器。
 - 文件名使用小写字母和连字符，以 `agg` 或 `disagg` 开头。包含拓扑及用于区分同目录配置的关键参数，例如并行方式、批大小、并发数、MTP、卸载或缓存设置。避免日期、带序号的延迟/吞吐量标签，以及重复目录中已有的模型或硬件信息。
 - 拓扑名中的 `1p4d` 表示预填充/解码 worker 数，不一定等于物理节点数。`p-tp4` 和 `d-tp8` 分别标识预填充和解码 TP；`b` 表示批大小，`c` 表示并发数。运行参数以 YAML 为准。
-- 主配置条目中若有两行或更多行采用同一配置设计，这些行统一放在一个 `<agg|disagg>[-<axis>]-variants.yaml` 中；`<axis>` 仅用于区分同一目录下的多个配置集合。`base` 保存各测试点共享的全部设置，`schema: 2` 与 `base` 并列；每行对应一个普通的 `override_<topology>_c<conc>` 块（或其他能标识该测试点、且不含日期或硬件信息的名称），只包含该行的差异，包括其 `name`。覆盖项中的 `null` 会删除 `base` 中的对应键，因此测试点需要的 null 值（例如 TensorRT-LLM 的 `cuda_graph_config:`）应保留在 `base` 中。主配置行通过 `srt-recipe: <bundle>.yaml:override_<name>` 选择覆盖项，路径相对于 `srt-recipe-dir`。不要添加 `zip_override_*` 块，也不要跨条目共用配置集合；每行保留一个覆盖项，因为配置引用参与评估分组。以下情况仍保留独立文件：只有一行的条目、`# Source:` 所注明的上游基础配置存在实质差异的改编配置，以及差异过大、无法共用 `base` 的测试点，例如与 wide-EP 配置并列的 TP 低延迟配置。
+- 主配置条目中若有两行或更多行采用同一配置设计，这些行统一放在一个 `<agg|disagg>[-<axis>]-variants.yaml` 中；`<axis>` 仅用于区分同一目录下的多个配置集合。`base` 保存各测试点共享的全部设置，`schema: 2` 与 `base` 并列；每行对应一个普通的 `override_<topology>_c<conc>` 块（或其他能标识该测试点、且不含日期或硬件信息的名称），只包含该行的差异。覆盖项中的 `null` 会删除 `base` 中的对应键，因此测试点需要的 null 值（例如 TensorRT-LLM 的 `cuda_graph_config:`）应保留在 `base` 中。主配置行通过 `srt-recipe: <bundle>.yaml:override_<name>` 选择覆盖项，路径相对于 `srt-recipe-dir`。不要添加 `zip_override_*` 块，也不要跨条目共用配置集合；每行保留一个覆盖项，因为配置引用参与评估分组。以下情况仍保留独立文件：只有一行的条目、`# Source:` 所注明的上游基础配置存在实质差异的改编配置，以及差异过大、无法共用 `base` 的测试点，例如与 wide-EP 配置并列的 TP 低延迟配置。
 - 移动文件时，同步更新主配置中的 `srt-recipe-dir`、`srt-recipe` 和 `eval-srt-recipe` 引用，以及启动器路径规则、工作流过滤器和本地文档。保留上游来源 URL，并保持历史性能变更日志不变。不为旧目录结构提供别名。
 
 共享运行时资源保留在模型目录旁的 `configs/` 中，不属于独立基准测试配置。`configs/dsv4-moe-load-balancer-configs/` 中的四个文件原样取自 NVIDIA/srt-slurm 提交 `deb1dfd9934398664f92d194169c183e009da83b`，保留了此前 DSV4 TRT 配置使用的 EPLB 初始专家分配；目前没有已提交的配置引用这些文件。srt driver（[`infx/launch/drivers/srt/checkout.py`](../../../infx/launch/drivers/srt/checkout.py)）将这些文件复制到作业仓库的 `configs/` 目录，供配置中的绑定挂载使用。将配置文件放入本目录不会启用该配置；实际基准测试矩阵由主配置决定。
@@ -55,12 +55,12 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 
 当前启用的配置（定长序列和 AgentX，单节点和多节点）均为片段：只包含该配置特有设置的原生 srt-slurm YAML。启动时先组合片段，再绑定测试点：
 
-1. 通道的共享块（[`configs/srt-recipes/`](../../../configs/srt-recipes) 中的 `fixed-sequence-{single,multi}.yaml` 或 `agentic-{single,multi}.yaml`）合并到片段之下（配置集合则合并到 `base` 之下）。共享块设置基准测试客户端，多节点定长序列共享块还将 `benchmark.env.TOKENIZER` 指向挂载的检查点 `/model`。`power: true` 的多节点主配置行还会合并 [`telemetry-dcgm.yaml`](../../../configs/srt-recipes/telemetry-dcgm.yaml)，其导出器使用集群的 `srt-slurm.power-exporter-port`；该通道必须允许功耗测量（`POWER_LANES`）。片段优先：映射逐层合并，列表整体替换，因此片段可以保留 `collector_join_timeout_seconds` 等遥测调优参数。
+1. 通道的共享块（[`configs/srt-recipes/`](../../../configs/srt-recipes) 中的 `fixed-sequence-{single,multi}.yaml` 或 `agentic-{single,multi}.yaml`）合并到片段之下（配置集合则合并到 `base` 之下）。`power: true` 的多节点主配置行还会合并 [`telemetry-dcgm.yaml`](../../../configs/srt-recipes/telemetry-dcgm.yaml)，其导出器使用集群的 `srt-slurm.power-exporter-port`；该通道必须允许功耗测量（`POWER_LANES`）。片段优先：映射逐层合并，列表整体替换，因此片段可以保留 `collector_join_timeout_seconds` 等遥测调优参数。
 2. 主配置行的选择器选出变体。单节点变体可以声明自身的 `benchmark.env.CONC` 和 `KV_OFFLOADING`，使该测试点与其调优参数保持配对。
 3. 绑定器（[`workload.py`](../../../infx/srt_slurm/workload.py)）将矩阵测试点写入选中的配置：`model.path: hf:<model>`、`model.container: <image>` 和 `model.precision`；片段声明了 `identity.container`/`identity.model` 时写入 `identity.container.image`（采用镜像仓库引用形式）和 `identity.model.repo`；启用遥测时写入 `benchmark.concurrencies`。定长序列配置还会获得 `benchmark.env.ISL`/`OSL`；单节点配置获得 `MODEL` 和 `CONC`，其中定长序列配置还获得 `RANDOM_RANGE_RATIO` 和 `USE_CHAT_TEMPLATE`（当且仅当配置启用投机解码时为 `true`）。AgentX 配置获得该行的 `KV_OFFLOADING`，DRAM 测试点还获得其预算 `TOTAL_CPU_DRAM_GB`。多节点 AgentX 配置从启动器获得客户端的 `RESULT_DIR`、`AIPERF_DATASET_MMAP_CACHE_DIR` 和 `HF_HUB_CACHE`，启动器根据其挂载的卷（`volume-mounts`、`agentic-volume-mounts` 和通道挂载）推导这些路径；设置了 `HF_HOME` 的片段保留自身的缓存。多节点客户端从作业环境读取 `CONC_LIST`、`CONC`、`MODEL` 等矩阵输入，因此片段无需复制这些值；单节点 AgentX 测试点则通过运行时参数获得它们。
-4. 由仓库 setup 脚本安装的组件使用主配置中的版本。当 `setup_script` 或运行 `/configs/<script>` 的服务 `preamble` 属于绑定器 `INSTALLERS` 中的安装脚本时，绑定器将该测试点的 `router` 或 `kv-offload-backend` 版本以 `ROUTER_VERSION` 或 `KV_OFFLOAD_BACKEND_VERSION` 写入顶层 `environment`（作用于 worker 和静态路由器），或写入该服务的 `env`（服务不继承 `environment`）；脚本通过 `check_env_vars` 读取该值。未声明该版本的测试点会失败；`SETUP_PIP_PACKAGES` 中的 `vllm-router==` 固定版本必须与主配置的路由器版本一致。
+4. 由仓库 setup 脚本安装的组件使用主配置中的版本。当 `setup_script` 或运行 `/configs/<script>` 的服务 `preamble` 属于绑定器 `INSTALLERS` 中的安装脚本时，绑定器将该测试点的 `router` 或 `kv-offload-backend` 版本以 `ROUTER_VERSION` 或 `KV_OFFLOAD_BACKEND_VERSION` 写入顶层 `environment`（作用于 worker 和静态路由器），或写入该服务的 `env`（服务不继承 `environment`）。未声明该版本的测试点会失败；`SETUP_PIP_PACKAGES` 中的 `vllm-router==` 固定版本必须与主配置的路由器版本一致。
 
-片段若设置了上述任一绑定键、`telemetry.enabled`、`benchmark.env.CONC_LIST`、`TOTAL_CPU_DRAM_GB`、在单节点变体之外设置 `KV_OFFLOADING`、任一 env 中的 `ROUTER_VERSION` 或 `KV_OFFLOAD_BACKEND_VERSION`，或设置了 AgentX 客户端路径（`RESULT_DIR`、`AGENTIC_OUTPUT_DIR`、`HF_HUB_CACHE`、`HUGGINGFACE_HUB_CACHE`，多节点还包括 `AIPERF_DATASET_MMAP_CACHE_DIR`），即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），除非 `models.OVERRIDES` 中的某一行改用 Hub 快照；主配置镜像解析为预置的容器，因此配置不再引用别名。
+片段若设置绑定器或启动器写入的键（`workload.py` 中的 `_POINT_KEYS`、`BOUND_ENV`，以及任一 env 中的 `ROUTER_VERSION` 或 `KV_OFFLOAD_BACKEND_VERSION`；单节点变体仍可声明 `CONC` 和 `KV_OFFLOADING`），即使取值相同，也会在提交前失败。`hf:<model>` 解析为集群预置的检查点（`models.entries`），除非 `models.OVERRIDES` 中的某一行改用 Hub 快照；主配置镜像解析为预置的容器。
 
 配置同样不硬编码主机内存大小。DRAM 测试点的预算即矩阵中的 `total-cpu-dram-gb`（十进制 GB），等于集群的 `available-cpu-dram-mib`（上限 3 TB）乘以该行的 `dram-utilization`，再乘以它所覆盖的 GPU 占节点 GPU 的比例：单节点为测试点使用的 GPU，多节点为 prefill（或聚合）worker 在其每个节点上使用的 GPU。绑定后，完整取值为 `'@dram.<name>'` 的值替换为：
 
@@ -73,7 +73,7 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 
 引用替换为整数；作为环境变量值或参数列表项（例如 `--l1-size-gb` 之后的一项）时替换为十进制字符串；也可以作为 JSON 对象字符串（例如 `kv-transfer-config`）中的完整取值。按 rank 分配的内存池使用 `per-gpu` 取值：SGLang `hicache-size`、LMCache `LMCACHE_MAX_LOCAL_CPU_SIZE`、vLLM SimpleCPU `cpu_bytes_to_use_per_rank`、TRT-LLM `host_cache_size`，以及以字节表示的 Mooncake `global_segment_size`（Mooncake 将 `GB` 视为 GiB）。没有 DRAM 预算的测试点遇到任何引用都会失败，未知名称和嵌在更长字符串中的引用同样失败。SimpleCPU、LMCache CPU 和 `--l1-size-gb` 的大小必须使用引用；实测得到的 HiCache、TRT-LLM 主机缓存或 Mooncake 段大小只要不超过节点份额，可以保留字面值。若后端从预算中分配多个内存池（例如混合模型的 HiCache KV 池和 Mamba 池），由主配置的 `dram-utilization` 确定其中一个池的大小。
 
-配置不硬编码集群硬件信息：配置中任意位置的 `'@fabric.<name>'` 值在绑定后替换为作业所在集群的 `srt-slurm.fabric` 字段（列表以逗号连接；字段见 [CONFIGS.md](../../../configs/CONFIGS.md#runners)）。schema 未定义的名称、嵌在更长字符串中的引用，或集群未设置的字段，都会在提交前失败；生成矩阵时，若某行选中的变体所引用的字段在其运行器标签可达的任一集群上未设置，也已失败。启动前不会解析引用：配置指纹按原样对引用计算哈希，因此与集群无关。配置有意选择的值（例如重新排列的 rail 顺序或设备子集）保持字面值。
+配置不硬编码集群硬件信息：配置中任意位置的 `'@fabric.<name>'` 值在绑定后替换为作业所在集群的 `srt-slurm.fabric` 字段（列表以逗号连接；字段见 [CONFIGS.md](../../../configs/CONFIGS.md#runners)）。若选中变体的引用嵌在更长字符串中、名称未定义，或其运行器标签可达的某个集群未设置该字段，矩阵生成即失败。配置指纹按原样对引用计算哈希，因此与集群无关。配置有意选择的值（例如重新排列的 rail 顺序或设备子集）保持字面值。
 
 无需集群即可查看启动器实际提交的内容：
 
@@ -81,11 +81,11 @@ TileRT 使用固定版本的上游 srt-slurm 子模块。配置指定 `roles.pre
 uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir /tmp/recipes
 ```
 
-该命令为每个定长序列或 AgentX 测试点及变体写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`）、AgentX 客户端路径，以及 DRAM 预算所覆盖的每节点 GPU 数。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。fabric 引用取该集群的值；标签跨多个集群时保持引用原样。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
+该命令为每个定长序列或 AgentX 测试点写出一个已绑定的配置，经固定版本的 srtctl 校验，并生成 `manifest.json`，将每个文件映射到对应的矩阵测试点，以及其运行器标签调度到的唯一集群（标签跨多个集群时为 `null`）。多节点测试点会获得启动器根据该集群推导的绑定器输入：通道允许该行的 `power: true` 时加入 DCGM 遥测块（导出器使用该集群的 `power-exporter-port`）、AgentX 客户端路径，以及 DRAM 预算所覆盖的每节点 GPU 数。需要这些输入的测试点，若其运行器标签未指向唯一集群，或通道拒绝其功耗测量，则会失败。fabric 引用取该集群的值；标签跨多个集群时保持引用原样。作业名称、健康检查下限和运行时 `--set` 值等启动时修改不会应用。
 
 ## 配置指纹
 
-规划器为每个基准测试行计算 `recipe-fingerprint`：对该行的矩阵字段（`conc`、`exp-name` 和指纹本身除外）连同启动器为其提交的具体配置计算 SHA-256。该配置是与共享块组合后的片段（`power: true` 的行还包括遥测块）、该行选中的变体，以及绑定的模型、镜像、精度和定长序列的序列长度。并发值（`benchmark.env.CONC`、`CONC_LIST`、`benchmark.concurrencies`）和作业 `name` 不计入指纹，启动器为集群添加的内容（预置检查点和容器路径、挂载、AgentX 客户端缓存路径、导出器端口、网络 fabric 设置）也不计入，因此同一配置在其服务的各个并发数以及运行它的各个集群上保持同一个指纹。`eval-srt-recipe` 只贡献其路径，因为仅评估运行不产生基准测试结果。没有 srt-slurm 配置的行只对其矩阵字段计算哈希。
+规划器为每个基准测试行计算 `recipe-fingerprint`：对其矩阵字段（`conc` 和 `exp-name` 除外）以及启动器提交的已绑定变体（与共享块组合，`power: true` 的行还包括遥测块）计算 SHA-256。并发值、作业 `name` 以及启动器为集群添加的内容均不计入，因此同一配置在各个并发数和集群上保持同一个指纹。`eval-srt-recipe` 只贡献其路径；没有 srt-slurm 配置的行只对其矩阵字段计算哈希。
 
 规划器与启动器一样选择变体，但不依赖 srtctl（[`variants.py`](../../../infx/srt_slurm/variants.py)），因此没有任何变体能服务的行会在规划阶段失败，而不是在启动时失败。编写 `perf-changelog.yaml` 条目前，先列出该变更使其结果失效的配置键：
 

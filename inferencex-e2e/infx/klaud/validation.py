@@ -67,7 +67,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         # Recipes and their shared blocks are head data too: resolve them from the candidate.
         root = Path(temp)
         references = srt_recipe_references(family_config)[key]
-        paths = [reference.partition(":")[0] for reference in references]
+        paths = {reference.partition(":")[0] for reference in references}
         blocks = [block.as_posix() for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK)]
         for path in [*paths, *blocks]:
             (root / path).parent.mkdir(parents=True, exist_ok=True)
@@ -126,17 +126,16 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
             )
         with snapshot(head) as producer:
             rows = producer.generate([family.split(":", 1)[1]], ["--no-evals"])
-            listed = isinstance(rows, list) and all(isinstance(row, dict) for row in rows)
+            if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+                raise ValueError("the generator did not print a list of matrix rows")
             # Published results carry the fingerprints the producer's own planner assigned.
-            fingerprints = producer.fingerprints(rows) if listed else []
+            fingerprints = producer.fingerprints(rows)
     except subprocess.SubprocessError as error:
         stderr = getattr(error, "stderr", None) or b""
         text = stderr.decode(errors="replace") if isinstance(stderr, bytes) else stderr
         raise ProducerRegenerationError(text) from error
     except (OSError, ValueError) as error:
         raise ProducerRegenerationError(str(error)) from error
-    if not listed:
-        raise ProducerRegenerationError("the generator did not print a list of matrix rows")
     return {
         "single_node": {
             "all": [

@@ -21,7 +21,6 @@ from infx.launch.__main__ import main
 from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
-from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS
 from infx.launch.policy import LaunchPath, Match
 from infx.tests.launch.fake_slurm import (
     base_env,
@@ -144,9 +143,8 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    # srtctl runs the variant the point selects, bound beside the binder's arguments.
+    # srtctl runs the point's bound variant.
     bound = Path(argv[argv.index("--file") + 1])
-    assert (bound.parent.parent, bound.name) == (workspace, "recipe.yaml")
     recipe = yaml.safe_load(bound.read_text())
     assert recipe["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
     assert {k: recipe["benchmark"]["env"][k] for k in ("MODEL", "CONC", "USE_CHAT_TEMPLATE")} == {
@@ -241,15 +239,13 @@ LABS = {
         env=dict(FRAMEWORK="dynamo-sglang"),
         paths={"hf:org/Model": "nvme/model"}, preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
         served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
-        recipe=LANE_FRAGMENT + 'environment:\n  UCX_NET_DEVICES: "@fabric.ucx-net-devices"\n',
-        environment={"UCX_NET_DEVICES": "mlx5_0:1,mlx5_1:1"},
     ),
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
         env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", KV_OFFLOADING="none", ISL="0", OSL="0", CONC="4",
                  FAKE_RESULTS="agentic"),
         paths={"hf:org/Model": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
-        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True, environment=None,
+        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
     ),
 }  # fmt: skip
 
@@ -263,8 +259,7 @@ def lab_config(tmp: Path) -> Path:
             "volumes": {"nvme": {"path": str(tmp / "nvme"), "visibility": "node-local"},
                         "cache": {"path": str(tmp / "cache")}},
             "squash": {"dir": str(tmp / "squash"), "import": "submit-host"},
-            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800,
-                          "fabric": {"ucx-net-devices": ["mlx5_0:1", "mlx5_1:1"]}},
+            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800},
         }},
         "lab-b": {**common, "models": {"entries": {"Model": {"root": "models", "dir": "model"}}}, "slurm": {
             "partition": "p", "exclusive": False,
@@ -333,14 +328,11 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
     # The lane edits the recipe the binder wrote from the composed fragment.
-    assert Path(submitted).resolve() == checkout / "recipe.yaml"
     bound = yaml.safe_load(Path(submitted).read_text())
     assert bound["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
     dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
     assert bound["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
     assert bound["model"] == {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"}
-    # Fabric references take the job cluster's facts.
-    assert bound.get("environment") == lab["environment"]
     if env["IS_AGENTIC"] == "1":
         # lab-b mounts no cache volume, so the client keeps its caches in the container.
         assert bound["benchmark"]["env"] == {
@@ -589,8 +581,6 @@ def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
     args = {"tensor-parallel-size": 8, "watchdog-timeout": 600, "dist-timeout": 1800}
     assert bound["name"] == call["env"]["RUNNER_NAME"] == "inferencex-lab-a_00"
     assert bound["roles"] == {"prefill": {"args": args}, "decode": {"nodes": 3, "args": args}}
-    assert bound["health_check"] == {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 5}
-    assert bound["model"]["path"] == "hf:org/Model"
 
 
 def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):

@@ -319,7 +319,7 @@ def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
     for cluster_label, members in labels.items():
         if cluster_label.startswith(CLUSTER_LABEL_PREFIX) and runners & set(members):
             cluster_id = cluster_label.removeprefix(CLUSTER_LABEL_PREFIX)
-            record = runner_data.get("clusters", {}).get(cluster_id) or {}
+            record = runner_data["clusters"][cluster_id]
             srt = (record.get("slurm") or {}).get("srt-slurm") or {}
             fabrics[cluster_id] = Fabric.model_validate(srt.get("fabric") or {})
     return fabrics
@@ -1207,9 +1207,7 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            entry.update(srt_recipe_fields(config, benchmark))
-            if benchmark.get(Fields.POWER.value):
-                entry[Fields.POWER.value] = True
+
             exp_name = multinode_agentic_exp_name(model_code, prefill, decode, conc, offload_suffix)
         else:
             entry.update(
@@ -1224,12 +1222,14 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            entry.update(srt_recipe_fields(config, benchmark))
             exp_name = (
                 f"{model_code}_tp{tp}_conc{conc}_"
                 f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
                 + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
             )
+        entry.update(srt_recipe_fields(config, benchmark))
+        if benchmark.get(Fields.POWER.value):
+            entry[Fields.POWER.value] = True
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,

@@ -42,6 +42,7 @@ from infx.launch.request import (
     RequestError,
     SingleNodeRequest,
 )
+from infx.srt_slurm.workload import BOUND_RECIPE
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -182,7 +183,7 @@ def run_multinode(launch: Launch) -> int:
         infmax = compute_workspace(run, checkout, shared=shared)
         run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-        recipe = str(checkout.root / submit.BOUND_RECIPE)
+        recipe = str(checkout.root / BOUND_RECIPE)
         client_env = (
             config.agentic_client_env(run.cluster, run.srt, lane, request)
             if request.is_agentic
