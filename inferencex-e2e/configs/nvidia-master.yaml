@@ -9174,9 +9174,8 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.8next/sglang/gb300-fp4-mtp
   scenarios:
     agentic-coding:
-    # Use the GB300 profile's proportional per-worker host DRAM allowance.
-    # Generated allowance: 225 GB. Recipe H224 reserves alignment headroom.
-    - dram-utilization: 1.0
+    # Sizes the 224 GB HiCache host pool the KV, Mamba and draft caches share.
+    - dram-utilization: 0.995
       search-space:
       - tp: 1
         ep: 1
