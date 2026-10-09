@@ -5,7 +5,7 @@ base:
   name: dsv41flash-fp4-gb300-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang:dev-cu13-nightly-0924@sha256:d2c9929f8cc9889326203f6cbc46da48b69de42891b167592c9c76cc803d246e
+    container: lmsysorg/sglang:nightly-dev-cu13-20261008-7760d526@sha256:f991a9648fc0a00410bab27d96bf96a0263be9d9b178fe01ee95cffe622fd283
     precision: fp4
   resources:
     gpu_type: gb300
@@ -47,6 +47,10 @@ base:
         SGLANG_DEFAULT_THINKING: '1'
         SGLANG_DSV41_REASONING_EFFORT: high
         SGLANG_DSPARK_OPT_MARKOV_W2_BF16: 'True'
+        # Fold DSpark draft sampling into the draft CUDA graph. AUTO leaves it eager
+        # for V4.1 TP shards, which left c1 decode launch-bound (~6 ms GPU idle per
+        # step in nsys at TP4 c1).
+        SGLANG_DSPARK_FOLDED_SAMPLING: '2'
   # Cold weight loads from the shared HF cache plus graph capture outlast
   # srt-slurm's 1800 s default, as they did the legacy one-hour deadline.
   health_check:
@@ -63,11 +67,13 @@ base:
 
 # One variant per point. Admission is 2x CONC, capped at the graph batch. SWA
 # prefix tails are 64x CONC up to 4096 from c2. TP2 keeps row-sharded Engram
-# tables in host DRAM and doubles the prefill chunk from c64. TP4 uses static
-# ragged verify; pure TP4 c1/c2 keep Engram in HBM, while TP4/EP4 from c4 keeps
-# it in host DRAM with 16K chunks, no prefill-decode interval, 4096 SWA tails
-# and a 128 graph batch, as matched one-hour c64 runs favored. Saturation
-# points get a longer warmup drain.
+# tables in host DRAM and doubles the prefill chunk from c64; TP2 c128 admits
+# 128 requests with a 4-step prefill-decode interval. TP4 uses static ragged
+# verify; pure TP4 c1/c2 keep Engram in HBM, and c1 runs 16K chunks with no
+# prefill-decode interval. TP4/EP4 from c4 keeps Engram in host DRAM with 4096
+# SWA tails and a 128 graph batch, 16K chunks and no prefill-decode interval,
+# except c64, which runs 8K chunks with a 16-step interval. Saturation points
+# get a longer warmup drain.
 override_tp2_c1:
   roles:
     agg:
@@ -202,7 +208,12 @@ override_tp2_c128:
         expert-parallel-size: 2
         chunked-prefill-size: 8192
         swa-prefix-tails: 4096
-        max-running-requests: 64
+        # Admitting 64 of 128 sessions with a 16-step interval collapsed this point
+        # in the PR #3421 sweep; admitting all 128 with a 4-step interval holds it.
+        prefill-decode-interval: 4
+        mem-fraction-static: 0.85
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
       env:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
@@ -218,7 +229,8 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
-        chunked-prefill-size: 4096
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
         max-running-requests: 2
       env:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
@@ -337,8 +349,8 @@ override_tp4_c64:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
-        chunked-prefill-size: 16384
-        prefill-decode-interval: 0
+        chunked-prefill-size: 8192
+        prefill-decode-interval: 16
         swa-prefix-tails: 4096
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
