@@ -15,6 +15,10 @@ import yaml
 
 from infx.clusters import load_inventory
 from infx.clusters.slurm import slurm_settings
+from infx.launch.context import LaunchError
+from infx.launch.drivers.srt import config, lanes, power
+from infx.launch.policy import launch_path
+from infx.launch.request import MultiNodeRequest
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
@@ -107,10 +111,6 @@ def _binder_inputs(
             f"runner {point['runner']!r} must schedule on one cluster to bind the cluster's "
             "power telemetry and AgentX client paths"
         )
-    from infx.launch.context import LaunchError
-    from infx.launch.drivers.srt import config, lanes, power
-    from infx.launch.policy import launch_path
-    from infx.launch.request import MultiNodeRequest
 
     runner, cluster = placement
     srt = slurm_settings(cluster).srt_slurm
@@ -127,10 +127,9 @@ def _binder_inputs(
         path = launch_path(cluster.id, request)
         lane = lanes.srt_lane(cluster.id, path)
         decision = power.decide_power(cluster.id, path, request)
-        client_env = config.agentic_client_env(cluster, srt, lane, request) if agentic else {}
+        return config.binder_inputs(cluster, srt, lane, request, decision)
     except LaunchError as error:
         raise ValueError(f"cluster {cluster.id!r}: {error}") from error
-    return (srt.power_exporter_port if decision.dcgm else None), client_env
 
 
 def _bound_variant(
