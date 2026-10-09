@@ -47,6 +47,23 @@ GPU_INPUT = Provenance(
     kind="input",
     input_boundary="GPU electrical power, excluding board and host overhead",
 )
+GRACE_SOCKET_INPUT = Provenance(
+    profile_id="grace-socket-input",
+    version="1",
+    source="cpu_socket_measured_power argument; ACPI Grace Power Socket average per socket",
+    kind="measured",
+    input_boundary="One Grace socket as reported by the ACPI Grace Power Socket sensor",
+    assumptions=(
+        "Covers CPU and SysIO rails, LPDDR5X and socket regulator loss: inferred from NVIDIA's "
+        "socket-total statement and a ~42 W GB300 remainder above CPU plus SysIO.",
+        "GB200 firmware that reported the extra regulator rail only in module power under-reports.",
+        "DCGM field 1130 is the CPU rail alone and is not a valid input.",
+        "Replaces modeled GraceCPU and LPDDR5XMemory; no Grace-side loss is added.",
+        "Assumed downstream of the compute-tray DC/DC converter, which stays modeled.",
+        "Tray air takes only the modeled LPDDR5X share; the rest, including regulator loss, is "
+        "cold-plate heat. Routing all ~42 W to air would add up to ~0.5 kW of rack IT power.",
+    ),
+)
 NVME_BASELINE = Provenance(
     profile_id="hgx-idle-nvme",
     version="1",

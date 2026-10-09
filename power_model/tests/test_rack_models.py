@@ -344,6 +344,64 @@ def test_rack_tree_scaling_network_and_state(
     }
 
 
+@pytest.mark.parametrize("system", ["gb200", "gb300"])
+def test_measured_grace_socket_replaces_modeled_cpu_and_memory_once(system):
+    model = create_power_model(system=system)
+    modeled = model.estimate_breakdown(594.191)
+    measured = model.estimate_breakdown(594.191, cpu_socket_measured_power=98.066)
+    modeled_rack = modeled.components[0].children[0]
+    measured_rack = measured.components[0].children[0]
+    cpu = named(modeled_rack, "GraceCPU")[0]
+    memory = named(modeled_rack, "LPDDR5XMemory")[0]
+    sockets = cpu.quantity
+    assert sockets == memory.quantity == 36
+    grace_delta = sockets * 98.066 - (cpu.power_w + memory.power_w)
+
+    socket = named(measured_rack, "Grace socket (measured)")
+    assert [(node.quantity, node.provenance.kind) for node in socket] == [(36, "measured")]
+    assert socket[0].power_w == pytest.approx(36 * 98.066)
+    assert dict(socket[0].details)["cpu_socket_measured_power"] == 98.066
+    assert measured.cpu_socket_measured_power == 98.066
+    assert not named(measured_rack, "GraceCPU") + named(measured_rack, "LPDDR5XMemory")
+
+    def tray_load(result):
+        tray = result.components[0].children[0].children[0]
+        return tray.quantity * dict(tray.details)["dc_component_power_w"]
+
+    assert tray_load(measured) - tray_load(modeled) == pytest.approx(grace_delta)
+    # Tray conversion, fans and shelves stay modeled, so IT power moves further than the load.
+    assert measured.it_power_w - modeled.it_power_w < grace_delta < 0
+
+
+@pytest.mark.parametrize("socket_w", [None, 98.066])
+def test_tray_air_heat_takes_the_workload_memory_share_but_no_grace_chip_heat(socket_w):
+    tray = GB200ComputeTray(converter=ideal_converter())
+    result = tray.estimate_breakdown(
+        400,
+        cpu_socket_measured_power=socket_w,
+        operating_state=OperatingState(workload_state="agentic-cpu-offloading"),
+    )
+    fans = named(result, "Fan module")[0]
+    # 2 x 17.44223125 W LPDDR5X at 250 GB/s + 4 x 15 W idle NICs + 4 x 8 W optics + 8 x 5 W NVMe
+    assert dict(fans.details)["air_heat_w"] == pytest.approx(166.8844625)
+
+
+def test_rack_cli_bom_marks_the_measured_grace_socket(capsys):
+    main(
+        [
+            "--system=gb200",
+            "--gpu-level-power-per-gpu=594.191",
+            "--cpu-socket-measured-power=98.066",
+            "--power-breakdown-per-chassis",
+        ]
+    )
+    output = " ".join(capsys.readouterr().out.split())
+    assert "Grace socket input (measured): 98.07 W/socket" in output
+    assert "Grace socket (measured) 98.07 36 3,530.38" in output
+    assert "GraceCPU" not in output
+    assert "LPDDR5XMemory" not in output
+
+
 def test_rack_cli_bom_is_normalized_to_one_rack(capsys):
     main(
         [

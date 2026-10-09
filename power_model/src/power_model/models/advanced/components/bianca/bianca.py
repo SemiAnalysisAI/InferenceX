@@ -16,7 +16,7 @@ from power_model.base import (
 )
 from power_model.models.advanced.components.grace_cpu import GraceCPU, GraceWorkloadProfile
 from power_model.models.advanced.components.lpddr5x import LPDDR5XMemory
-from power_model.models.advanced.profiles import GPU_INPUT
+from power_model.models.advanced.profiles import GPU_INPUT, GRACE_SOCKET_INPUT
 
 
 class BiancaBoard(FrozenModel):
@@ -46,17 +46,32 @@ class BiancaBoard(FrozenModel):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_socket_measured_power: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         per_gpu = validate_watts(gpu_level_power_per_gpu)
         state = OperatingState.model_validate(operating_state)
         point = self.workload_profile.resolve(state)
-        cpu = GraceCPU(
-            power_w=point.cpu_power_w,
-            workload_state=state.workload_state,
-            provenance=self.workload_profile.provenance,
-        ).estimate_breakdown()
         memory = LPDDR5XMemory(bandwidth_gbps=point.memory_bandwidth_gbps).estimate_breakdown()
+        if cpu_socket_measured_power is None:
+            grace = (
+                GraceCPU(
+                    power_w=point.cpu_power_w,
+                    workload_state=state.workload_state,
+                    provenance=self.workload_profile.provenance,
+                ).estimate_breakdown(),
+                memory,
+            )
+        else:
+            socket_w = validate_watts(cpu_socket_measured_power)
+            grace = (
+                PowerComponentBreakdown(
+                    name="Grace socket (measured)",
+                    power_w=socket_w,
+                    provenance=GRACE_SOCKET_INPUT,
+                    details=(("cpu_socket_measured_power", socket_w),),
+                ),
+            )
         return PowerComponentBreakdown.group(
             type(self).__name__,
             (
@@ -72,12 +87,9 @@ class BiancaBoard(FrozenModel):
                         ("input_boundary", "GPU module, after tray DC/DC"),
                     ),
                 ),
-                cpu,
-                memory,
+                *grace,
             ),
             provenance=self.provenance,
+            # GPU and Grace heat is cold-plated; only the modeled LPDDR5X share reaches tray air.
+            details=(("air_heat_w", memory.power_w),),
         )
-
-    def air_heat_w(self, board: PowerComponentBreakdown) -> float:
-        """Baseline cold-plates the GPU and CPU; memory heat reaches air."""
-        return board.children[2].power_w

@@ -39,6 +39,7 @@ def _profile_parameters(model: FrozenModel) -> dict[str, JsonValue]:
 class GPUSystem(FrozenModel, ABC):
     default_cooling: ClassVar[CoolingProfile]
     system_unit: ClassVar[str] = "chassis"
+    has_grace_sockets: ClassVar[bool] = False
     default_networking: ClassVar[tuple[NetworkGroup, ...] | None] = None
     gpu_count: PositiveCount
     provenance: Provenance = COMPONENT_INPUT
@@ -53,9 +54,13 @@ class GPUSystem(FrozenModel, ABC):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_socket_measured_power: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
-        """Evaluate a single complete system without PUE."""
+        """Evaluate one system without PUE.
+
+        cpu_socket_measured_power is watts per Grace socket; systems without Grace ignore it.
+        """
 
     def _configuration(self, state: OperatingState) -> dict[str, JsonValue]:
         return (
@@ -79,8 +84,11 @@ class SystemGroup(FrozenModel):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_socket_measured_power: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         return self.system.estimate_it_power(
-            gpu_level_power_per_gpu, operating_state=operating_state
+            gpu_level_power_per_gpu,
+            cpu_socket_measured_power=cpu_socket_measured_power,
+            operating_state=operating_state,
         ).scaled(self.quantity)

@@ -70,10 +70,15 @@ class ComputeTray(FrozenModel):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_socket_measured_power: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         state = OperatingState.model_validate(operating_state)
-        board = self.board.estimate_breakdown(gpu_level_power_per_gpu, operating_state=state)
+        board = self.board.estimate_breakdown(
+            gpu_level_power_per_gpu,
+            cpu_socket_measured_power=cpu_socket_measured_power,
+            operating_state=state,
+        )
         nics = self.nic_type(state=state.nic_state).estimate_breakdown().scaled(self.nic_count)
         optics = self.optic_type().estimate_breakdown().scaled(self.nic_count)
         drives = NVMeDrive().estimate_breakdown().scaled(self.nvme_count)
@@ -81,7 +86,7 @@ class ComputeTray(FrozenModel):
         load = sum_watts(tuple(component.power_w for component in components))
         air = sum_watts(
             (
-                self.board_count * self.board.air_heat_w(board),
+                self.board_count * dict(board.details)["air_heat_w"],
                 nics.power_w,
                 optics.power_w,
                 drives.power_w,

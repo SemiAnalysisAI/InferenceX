@@ -15,7 +15,11 @@ class ExamplePowerModel(PowerModel):
             raise ValueError("CPU offloading requires OSSAllinPowerModel with DDR5 inventory")
         return self
 
-    def _estimate_it_power(self, gpu_level_power_per_gpu: float) -> ITPowerBreakdown:
+    def _estimate_it_power(
+        self, gpu_level_power_per_gpu: float, *, cpu_socket_measured_power: float | None
+    ) -> ITPowerBreakdown:
+        if cpu_socket_measured_power is not None:
+            raise ValueError("cpu_socket_measured_power requires the oss model's Grace inventory")
         return ITPowerBreakdown(
             scope="per_gpu_reference",
             gpu_count=1,
