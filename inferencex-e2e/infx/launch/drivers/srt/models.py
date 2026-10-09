@@ -166,7 +166,7 @@ def served_path(cluster: Cluster, request: LaunchRequest, model: Checkpoint | No
 
 def model_paths(cluster: Cluster, request: LaunchRequest, served: str | None) -> dict[str, str]:
     """srtslurm.yaml ``model_paths``: the bound ``hf:<MODEL>`` to ``served``."""
-    if not request.model or _override(cluster, request, "hub"):
+    if _override(cluster, request, "hub"):
         return {}
     if served is None:
         if not request.is_agentic:
