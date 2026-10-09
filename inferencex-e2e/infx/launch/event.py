@@ -20,7 +20,6 @@ from infx.launch.request import BATCH_REENTRY_ENV
 from infx.results.collect_events import FILENAME
 
 SCHEMA_VERSION = 1
-PREPARE = "prepare"
 
 
 class Outcome(StrEnum):
@@ -188,7 +187,7 @@ class JobEventBuilder:
 
     @property
     def current_stage(self) -> str:
-        return self._active[-1] if self._active else self._last or PREPARE
+        return self._active[-1] if self._active else self._last or "prepare"
 
     def evidence(self, log: Path) -> None:
         """Point failures recorded from now on at ``log``."""
@@ -238,12 +237,10 @@ class JobEventBuilder:
 
     def finish(self, returncode: int) -> JobEvent:
         self._lap()
+        self.exited(returncode)
         record = self.event.model_copy(deep=True)
         stages = dict(self._stages)
         failure = self._failure
-        if returncode and failure is None:
-            message = f"exited {returncode}"
-            failure = _Failure(self.current_stage, "ExitStatus", message, False, self._evidence)
         if (inner := self._reentry) is not None:
             # The wrapped launch knows the benchmark job; this one only the batch around it.
             outer = record
