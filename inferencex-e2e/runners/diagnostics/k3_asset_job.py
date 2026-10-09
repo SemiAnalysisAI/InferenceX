@@ -47,7 +47,7 @@ def plan():
         "exclude": list(settings.exclude), "outputs": str(settings.srt_slurm.outputs),
         "draft_source": str(settings.path(draft.volume)), "draft_target": draft.target,
         "provider_source": env["IONIC_PROVIDER_PATH"], "provider_mount": provider_mount,
-        "node-count": 1, "gpus": 0, "cpus": 8, "memory": "16G", "walltime": "00:30:00",
+        "node-count": 1, "gpus": 0, "cpus": 8, "memory": "64G", "walltime": "00:30:00",
     }
 
 
@@ -86,6 +86,9 @@ def node(plan_file):
         env[f"ENROOT_{name}_PATH"] = str(path)
     env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONUNBUFFERED="1", HF_HUB_OFFLINE="1",
                TRANSFORMERS_OFFLINE="1", ROCR_VISIBLE_DEVICES="", HIP_VISIBLE_DEVICES="")
+    # Image conversion also runs within the CPU job's memory/processor budget.
+    env.update(ENROOT_MAX_PROCESSORS=str(data["cpus"]),
+               ENROOT_SQUASH_OPTIONS="-comp lzo -noD -exit-on-error -mem 4G")
     outputs = {}
     try:
         for label, extra, payload in (
@@ -96,8 +99,8 @@ def node(plan_file):
             mounts = [f"{work}:/probe:ro", "/dev/infiniband:/dev/infiniband",
                       "/dev/kfd:/dev/kfd", "/dev/dri:/dev/dri",
                       f"{draft}:{data['draft_target']}", *extra]
-            argv = ["srun", "--jobid", job_id, "--nodes=1", "--ntasks=1", "--cpus-per-task=8",
-                    "--gres=gpu:0", "--mem=16G", "--container-image", image,
+            argv = ["srun", "--jobid", job_id, "--nodes=1", "--ntasks=1", f"--cpus-per-task={data['cpus']}",
+                    "--gres=gpu:0", f"--mem={data['memory']}", "--container-image", image,
                     "--container-writable", "--container-remap-root", "--no-container-mount-home",
                     "--no-container-entrypoint", "--container-workdir=/tmp", "--container-mounts",
                     ",".join(mounts), "timeout", "--signal=TERM", "--kill-after=10s", "120s",
@@ -113,20 +116,26 @@ def node(plan_file):
             except (ValueError, RuntimeError) as error:
                 outputs[label]["report_error"] = str(error)
             print(f"END_ASSET_PROBE {label} rc={result.returncode}", flush=True)
-        bound = outputs["host-provider"].get("report", {})
+            if result.returncode and "pyxis: failed to import docker image" in result.stdout:
+                outputs[label]["setup_error"] = "image_import"
+                print("Image import failed before the probe; skipping remaining containers.", flush=True)
+                break
+        bound = outputs.get("host-provider", {}).get("report", {})
         plain = outputs["image-only"].get("report", {})
         loaded = bound.get("loaded_libraries_sha256", {})
-        config = outputs["draft"].get("report", {})
+        config = outputs.get("draft", {}).get("report", {})
         core_before = {k: v for k, v in plain.get("loaded_libraries_sha256", {}).items() if "libibverbs.so" in k}
         core_after = {k: v for k, v in loaded.items() if "libibverbs.so" in k}
         checks = {
-            "bound_devices_open": outputs["host-provider"]["returncode"] == 0 and bound.get("eight_devices_opened_and_closed") is True,
+            "bound_devices_open": outputs.get("host-provider", {}).get("returncode") == 0 and bound.get("eight_devices_opened_and_closed") is True,
             "host_provider_loaded": any("libionic" in path and digest == provider_hash for path, digest in loaded.items()),
             "verbs_core_unchanged": bool(core_before) and core_before == core_after,
-            "draft_config_matches": outputs["draft"]["returncode"] == 0 and config.get("config_loaded") is True and config.get("config_sha256") == config_hash,
+            "draft_config_matches": outputs.get("draft", {}).get("returncode") == 0 and config.get("config_loaded") is True and config.get("config_sha256") == config_hash,
             "host_assets_unchanged": before == metadata() and hashlib.sha256(provider.read_bytes()).hexdigest() == provider_hash,
         }
-        summary = {"checks": checks, "cases": outputs, "traffic_tested": False, "gpu_model_loaded": False}
+        summary = {"checks": checks, "cases": outputs,
+                   "not_run": [label for label in ("image-only", "host-provider", "draft") if label not in outputs],
+                   "traffic_tested": False, "gpu_model_loaded": False}
         (work / "result.json").write_text(json.dumps(summary, indent=2) + "\n")
         print("K3_ASSET_RESULT=" + json.dumps(summary), flush=True)
         return 0 if all(checks.values()) else 1
@@ -147,7 +156,7 @@ def submit():
     plan_file.write_text(json.dumps(data, indent=2) + "\n")
     log = work / "slurm.log"
     argv = ["sbatch", "--parsable", "--partition", data["partition"], "--nodes=1", "--ntasks=1",
-            "--cpus-per-task=8", "--gres=gpu:0", "--mem=16G", "--time", data["walltime"],
+            f"--cpus-per-task={data['cpus']}", "--gres=gpu:0", f"--mem={data['memory']}", "--time", data["walltime"],
             "--job-name", f"k3-assets-{os.environ['GITHUB_RUN_ID']}", "--output", str(log),
             "--chdir", str(work), "--export=ALL"]
     if data["account"]:
