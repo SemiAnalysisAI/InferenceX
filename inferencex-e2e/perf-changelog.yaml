@@ -9477,6 +9477,28 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3745
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202609281543 (ATOM 0.1.7.dev43+gaa0c5c3a1) to nightly_202610070333 (digest sha256:2f605a3e8b459a0385f784edb0335c11892277fee650fe42044e4af39e36dd01; ATOM 0.1.7.dev60+g7fc0926c6, ROCm 7.2.4). ROCm/ATOM#2479 moves MiniMax-M3 mono decode onto the shared mono framework, publishes every mono mailbox flag only after the stores it announces have drained, and rewrites the sparse selection as exact top-k by counting; ROCm/ATOM#2483 rebuilds the per-step mailbox clear and cross-rank fence as one FlyDSL launch, replacing a Triton fence that Triton 3.7 on gfx950 compiled into a loop that could spin for ever; ROCm/ATOM#2422 fixes the mono long-context decision. The upstream recipes/MiniMax-M3-Agentic-InferenceX.md is unchanged."
+    - "Enable MiniMax-M3 mono decode at every TP4 point by removing ATOM_MONO_ENABLE=0 from the indexer-CP points C15, C20, C24 and C28. Mono serves decode steps of up to 16 tokens (four requests with EAGLE3 K3), covering all of TP4 C1, C2 and C4. ATOM builds mono for TP4 only, so TP2 runs the unfused path."
+    - "Add TP2 concurrency 4 (max-num-seqs 8); the GPU-resident TP2 points are now C1, C2 and C4."
+    - "Record LMCache 0.5.6.dev139+gf22dec28, the wheel in the new image, for both DRAM-offload arms; the offload settings are unchanged."
+    - "No data-type or precision change to the EAGLE3 draft model (Inferact/MiniMax-M3-EAGLE3-GQA): online_quant_config (ptpc_fp8), kv_cache_dtype fp8 and index-cache-dtype fp8 are unchanged; mono decode changes the target model's decode kernels, not draft precision."
+    - "更新镜像至 rocm/atom-dev:nightly_202610070333（ATOM 0.1.7.dev60+g7fc0926c6，含 ROCm/ATOM#2483 的 mono step fence 修复）；去掉 TP4 C15/C20/C24/C28 的 ATOM_MONO_ENABLE=0，所有 TP4 点位启用 MiniMax-M3 mono decode（每步最多 16 个 token，即 EAGLE3 K3 下 4 个请求，覆盖 C1/C2/C4）；ATOM 只为 TP4 构建 mono，TP2 走非融合路径。新增 TP2 C4，LMCache 版本记录为 0.5.6.dev139+gf22dec28。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with native NEXTN MTP and SGLang HiCache."
+    - "Pin the stock SGLang v0.5.21-cu130 image and checkpoint revision; enable engine metrics and cache reporting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3816
+
+- config-keys:
     - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve
     - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve
   scenario-type:
