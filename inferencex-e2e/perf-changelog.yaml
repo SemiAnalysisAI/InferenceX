@@ -9497,3 +9497,13 @@
     - "Add Qwen3.8-Flash-Next NVFP4 GB300 TP1/EP1 AgentX with native NEXTN MTP and SGLang HiCache."
     - "Pin the stock SGLang v0.5.21-cu130 image and checkpoint revision; enable engine metrics and cache reporting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3816
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5 FP8 GB300 AgentX PP4 prefill and DEP16 decode variants with MTP6, HiCache, and decode sequence-length splits 1."
+    - "Select five disaggregated configurations and three existing aggregate configurations using the SGLang nightly image and pinned Dynamo revision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3840
