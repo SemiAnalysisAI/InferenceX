@@ -1,19 +1,12 @@
 # Stock ARM64 SGLang, one serving GPU per point. No source/package overlay.
-# Size the host cache against the public GB300 profile's per-worker DRAM allowance.
-# The matrix floors the allowance to 225 GB; H224 leaves pool-alignment headroom.
+# The HiCache host pool takes the point's per-GPU DRAM budget.
 base:
   schema: 2
   name: qwen3.8next-fp4-gb300-sglang-agentic-stock-v0521
   identity:
     model:
-      repo: nvidia/Qwen3.8-Flash-Next-NVFP4
       revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
-    container:
-      image: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
-  model:
-    path: hf:nvidia/Qwen3.8-Flash-Next-NVFP4
-    container: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
-    precision: fp4
+    container: {}
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -82,7 +75,7 @@ base:
         enable-hierarchical-cache: true
         # One combined packed target/draft KV + Mamba host-pool budget.
         # Verify actual allocations, not whole-node Slurm memory reservation.
-        hicache-size: 224
+        hicache-size: '@dram.per-gpu-gb'
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_back
@@ -104,15 +97,8 @@ base:
     mem: '0'
     container-remap-root: ''
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/Qwen3.8-Flash-Next-NVFP4
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
-      # Native single-node binding verifies these against the generated point.
-      TOTAL_CPU_DRAM_GB: '225'
-      KV_OFFLOADING: dram
 
 # Only client concurrency changes; serving/admission/graph/cache settings stay fixed.
 override_c1:
