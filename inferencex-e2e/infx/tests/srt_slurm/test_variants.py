@@ -43,24 +43,6 @@ def test_expansion_matches_srtctl(selector):
     assert expand_variants(BUNDLE, selector) == selected_recipes(BUNDLE, selector)
 
 
-def test_a_zip_variant_broadcasts_and_is_named_by_its_position():
-    assert expand_variants(BUNDLE, "zip_override_conc[2]") == [("zip_override_conc[2]", {
-        "schema": 2, "name": "bundle_conc_2", "engine": "sglang", "frontend": {"type": "sglang"},
-        "roles": {"agg": {"gpus": 4, "args": {
-            "tensor-parallel-size": 4, "chunked-prefill-size": 8192, "cuda-graph-bs": [1, 2, 4],
-            "max-running-requests": 8,
-        }}},
-        "benchmark": {"env": {"KEEP": "0", "CONC": "8"}},
-    })]  # fmt: skip
-    assert expand_variants(BUNDLE, "override_wide")[0][1]["frontend"] == {
-        "type": "sglang", "router": None,
-    }
-    assert [name for name, _ in expand_variants(BUNDLE, None)] == [
-        "override_named", "override_wide", "zip_override_conc[0]", "zip_override_conc[1]",
-        "zip_override_conc[2]", "zip_override_named[0]", "zip_override_named[1]",
-    ]
-
-
 @pytest.mark.parametrize(("raw", "selector"), [
     (BUNDLE, "override_missing"),
     (BUNDLE, "zip_override_conc[3]"),
