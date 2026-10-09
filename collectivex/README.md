@@ -4,8 +4,8 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
 neutral result artifacts.
 
-A second suite, the [vLLM `swap_blocks` benchmark](docs/swap-blocks.md)
-([中文](docs/swap-blocks_zh.md)), measures pinned CPU↔GPU and same-GPU block copies,
+A second suite, the [vLLM `swap_blocks` benchmark](docs/swap-blocks.md),
+measures pinned CPU↔GPU and same-GPU block copies,
 with its own correctness checks and latency/bandwidth JSON output. It runs through the same
 sweep matrix and pool launchers (`suites: swap-blocks`).
 

@@ -1,7 +1,5 @@
 # vLLM block-copy benchmark
 
-**English** | [中文](swap-blocks_zh.md)
-
 `bench/run_swap_blocks.py` measures `from vllm._custom_ops import swap_blocks`
 on one CUDA or ROCm GPU using an installed, compatible vLLM build. Run it directly
 with Python inside that environment, or dispatch the suite through the GitHub Action below.
