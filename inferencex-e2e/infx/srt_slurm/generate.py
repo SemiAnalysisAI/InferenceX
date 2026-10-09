@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from infx.clusters import load_inventory
-from infx.clusters.slurm import Fabric, slurm_settings
+from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt import config, lanes, power
 from infx.launch.policy import launch_path
@@ -165,7 +165,9 @@ def bound_variant(
 def _cluster_fabric(cluster: Cluster) -> dict[str, str | None]:
     """``cluster``'s fabric as recipes read it."""
     srt = slurm_settings(cluster).srt_slurm
-    return (srt.fabric if srt is not None else Fabric()).rendered()
+    if srt is None:
+        raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
+    return srt.fabric.rendered()
 
 
 def _apply_acceptance_and_validate(
