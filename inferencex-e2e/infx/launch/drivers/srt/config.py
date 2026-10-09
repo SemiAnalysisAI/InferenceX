@@ -231,6 +231,18 @@ def agentic_client_env(
     return env
 
 
+def binder_inputs(
+    cluster: Cluster,
+    srt: SrtSlurmSettings,
+    lane: SrtLane,
+    request: SrtRequest,
+    decision: PowerDecision,
+) -> tuple[int | None, dict[str, str]]:
+    """The DCGM exporter port and AgentX client paths a multi-node recipe is bound with."""
+    client_env = agentic_client_env(cluster, srt, lane, request) if request.is_agentic else {}
+    return (srt.power_exporter_port if decision.dcgm else None), client_env
+
+
 def write_lane_config(
     run: SrtRun,
     lane: SrtLane,
