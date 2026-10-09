@@ -6124,7 +6124,7 @@ dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-disagg:
           - "CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-llm-d.yaml:override_2p1d"
         decode:
           num-worker: 1
-          tp: 8
+          tp: 16
           ep: 16
           dp-attn: true
 
