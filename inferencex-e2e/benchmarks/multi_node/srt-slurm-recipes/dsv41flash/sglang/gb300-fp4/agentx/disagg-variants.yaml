@@ -21,9 +21,11 @@
 # c256 1.99x tokens/s/GPU. Other cells measured in earlier tuning runs (1P1D
 # c8/c16/c64, 1P2D c24/c32, 1P4D c64) lay on or under the line through these vertices
 # and are not shipped; the cell-to-cell comparisons below also come from those runs. The
-# multi-decode cells run the Dynamo frontend with a 1 s session-affinity TTL (per-turn
-# load-aware decode pick); the single-decode cells keep the 3600 s default they were
-# measured with. The harness applies the golden acceptance length (3.51 at K=5) itself.
+# single-prefill multi-decode cells run the Dynamo frontend with a 1 s session-affinity
+# TTL (per-turn load-aware decode pick); every cell with two prefill workers keeps the
+# 3600 s default so a session's turns stay on one prefill worker's prefix cache.
+# Cells added after the PR sweep (local GB300 runs, same harness, numbers in each
+# override's comment): 1p3d_c96, 2p5d/2p4d/2p3d/2p2d HiCache, and 2P1D at TTL 3600. The harness applies the golden acceptance length (3.51 at K=5) itself.
 
 schema: 2
 
@@ -89,6 +91,7 @@ base:
         SGLANG_DEFAULT_THINKING: "1"
         SGLANG_DSV41_REASONING_EFFORT: high
         SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        SGLANG_DSPARK_FOLDED_SAMPLING: "2"
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
@@ -133,6 +136,7 @@ base:
         SGLANG_DEFAULT_THINKING: "1"
         SGLANG_DSV41_REASONING_EFFORT: high
         SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        SGLANG_DSPARK_FOLDED_SAMPLING: "2"
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
@@ -277,21 +281,21 @@ override_1p1d_hicache_c160:
       CONC: "160"
 
 # Two HiCache prefill workers (one per node) feeding one decode worker (6 GPUs, 3 nodes),
-# 128 sessions per prefill worker, decode admission and graph batch 256, session-affinity
-# TTL 1 s: 179,107 tokens/s/GPU @ 68.3 tok/s/user, P90 TTFT 15.2 s (GSM8K 0.9750) - the
-# lowest-interactivity point of the curve (in tuning, the same cell without HiCache:
-# 151,671 @ 70.8 with a 36 s P90 TTFT).
+# 128 sessions per prefill worker, decode admission and graph batch 256. Sessions keep
+# the 3600 s affinity TTL: with a 1 s TTL a session's next turn can land on the other
+# prefill worker, which misses its prefix cache (server-side hit rate 90.9% vs 96.3%).
+# Prefill mem-fraction-static 0.80 leaves room for the sparse-prefill workspace. Local
+# run: 196.0k tokens/s/GPU @ 62.1 tok/s/user, P90 TTFT 7.0 s (TTL 1 s: 129.2k @ 84.2,
+# 43.8 s).
 override_2p1d_hicache_c256:
   name: disagg-gb300-2p1d-hicache-tp2ep2-c256
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 2
       workers: 2
       args:
         max-running-requests: 128
+        mem-fraction-static: 0.80
         enable-hierarchical-cache: true
         hicache-ratio: 1
         hicache-write-policy: write_back
@@ -300,6 +304,129 @@ override_2p1d_hicache_c256:
       args:
         max-running-requests: 256
         cuda-graph-max-bs-decode: 256
+  benchmark:
+    env:
+      CONC: "256"
+
+# 1 prefill + 3 decode workers (8 GPUs, 3 nodes), 32 sessions per decode worker, 1 s
+# session-affinity TTL like the other single-prefill multi-decode cells. Local run:
+# 79.9k tokens/s/GPU @ 218.5 tok/s/user, P90 TTFT 4.9 s.
+override_1p3d_c96:
+  name: disagg-gb300-1p3d-tp2ep2-c96
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    decode:
+      nodes: 2
+      workers: 3
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: "96"
+
+# Two HiCache prefill workers + 5 decode workers (14 GPUs, 5 nodes), 48 sessions per
+# decode worker, 3600 s TTL. Local run: 104.3k tokens/s/GPU @ 193.2 tok/s/user, P90
+# TTFT 9.2 s.
+override_2p5d_hicache_c240:
+  name: disagg-gb300-2p5d-hicache-tp2ep2-c240
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 128
+        mem-fraction-static: 0.80
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      nodes: 3
+      workers: 5
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: "240"
+
+# Two HiCache prefill workers on one node + 4 decode workers (12 GPUs, 3 nodes), 64
+# sessions per decode worker. Local run: 123.5k tokens/s/GPU @ 173.6 tok/s/user, P90
+# TTFT 11.0 s.
+override_2p4d_hicache_c256:
+  name: disagg-gb300-2p4d-hicache-tp2ep2-c256
+  roles:
+    prefill:
+      nodes: 1
+      workers: 2
+      args:
+        max-running-requests: 128
+        mem-fraction-static: 0.80
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      nodes: 2
+      workers: 4
+      args:
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+  benchmark:
+    env:
+      CONC: "256"
+
+# Two HiCache prefill workers on one node + 3 decode workers (10 GPUs, 3 nodes), 80
+# sessions per decode worker. Both prefill workers share a node so no allocated node sits
+# idle. Local run: 142.3k tokens/s/GPU @ 154.8 tok/s/user, P90 TTFT 7.8 s.
+override_2p3d_hicache_c240:
+  name: disagg-gb300-2p3d-hicache-tp2ep2-c240
+  roles:
+    prefill:
+      nodes: 1
+      workers: 2
+      args:
+        max-running-requests: 128
+        mem-fraction-static: 0.80
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      nodes: 2
+      workers: 3
+      args:
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+  benchmark:
+    env:
+      CONC: "240"
+
+# Two HiCache prefill workers + 2 decode workers on one node (8 GPUs, 3 nodes), 128
+# sessions per decode worker. Local run: 174.0k tokens/s/GPU @ 122.4 tok/s/user, P90
+# TTFT 9.7 s.
+override_2p2d_hicache_c256:
+  name: disagg-gb300-2p2d-hicache-tp2ep2-c256
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 128
+        mem-fraction-static: 0.80
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      nodes: 1
+      workers: 2
+      args:
+        max-running-requests: 160
+        cuda-graph-max-bs-decode: 160
   benchmark:
     env:
       CONC: "256"
