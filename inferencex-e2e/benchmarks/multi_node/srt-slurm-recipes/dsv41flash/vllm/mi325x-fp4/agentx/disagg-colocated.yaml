@@ -107,3 +107,20 @@ override_cpu_c16:
   benchmark:
     env:
       CONC: '16'
+
+override_cpu_p4_2d2_c16:
+  roles:
+    prefill:
+      args:
+        engram-config: '{"cpu_offload":true}'
+    decode:
+      workers: 2
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 512
+  benchmark:
+    env:
+      CONC: '16'

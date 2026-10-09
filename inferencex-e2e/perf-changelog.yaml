@@ -9502,6 +9502,6 @@
   description:
     - "Compare MiniMax-M3 MXFP8 and DeepSeek-V4.1-Flash FP4 AgentX aggregation and NIXL disaggregation on MI325X using the same pinned October 8 vLLM ROCm nightly."
     - "Explore MiniMax TP8, TP8/EP8, and TP4/DP2/EP8 deployments, with native session-affinity routing for the DP pools and three-token EAGLE3."
-    - "Compare DeepSeek TP8 aggregation with colocated TP4 prefill and TP4 decode, CPU- or GPU-resident Engram tables, and five-token DSpark. Use full native context and automatically selected golden acceptance."
+    - "Compare DeepSeek TP8 and replicated TP4 aggregation with colocated TP4 prefill and TP4 or replicated TP2 decode, CPU- or GPU-resident Engram tables, and five-token DSpark. Use native SMG cache-aware aggregate routing, full context, and automatically selected golden acceptance."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3843
