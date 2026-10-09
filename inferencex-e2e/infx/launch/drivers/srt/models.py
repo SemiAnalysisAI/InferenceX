@@ -191,7 +191,7 @@ def model_paths(
     if served is None:
         return {}
     paths = dict.fromkeys(sorted(aliases), served)
-    if not request.is_agentic and request.model:
+    if not request.is_agentic:
         paths[f"hf:{request.model}"] = served
     return paths
 

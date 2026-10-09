@@ -22,6 +22,8 @@ SHARED_BLOCKS = {
     False: Path("configs/srt-recipes/fixed-sequence-single.yaml"),
     True: Path("configs/srt-recipes/fixed-sequence-multi.yaml"),
 }
+# The bound variant srtctl gets.
+BOUND_RECIPE = "recipe.yaml"
 # The binder writes these, or the workflow exports them to the benchmark client.
 BOUND_KEYS = (
     ("model", "path"),
@@ -37,8 +39,6 @@ BOUND_KEYS = (
         )
     ),
 )  # fmt: skip
-# A single-node variant may name its point, pairing that concurrency with its tuning.
-VARIANT_CONCURRENCY = ("benchmark", "env", "CONC")
 
 
 def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict[str, Any]:
@@ -66,15 +66,17 @@ def _lookup(block: Any, key: tuple[str, ...]) -> tuple[bool, Any]:
 
 def check_fragment(raw: Mapping[str, Any], source: Path, *, multinode: bool) -> None:
     """Reject a fragment that sets a bound key, even to the value the binder would write."""
-    blocks = [(name, block) for name, block in raw.items() if name != "schema"]
-    if "base" not in raw:
+    if "base" in raw:
+        blocks = [(name, block) for name, block in raw.items() if name != "schema"]
+    else:
         blocks = [(None, raw)]
     found = []
     for name, block in blocks:
-        variant = name not in (None, "base")
+        # A single-node variant may name its point, pairing that concurrency with its tuning.
+        conc_allowed = not multinode and name not in (None, "base")
         for key in BOUND_KEYS:
             present, value = _lookup(block, key)
-            if present and not (variant and not multinode and key == VARIANT_CONCURRENCY):
+            if present and not (conc_allowed and key == ("benchmark", "env", "CONC")):
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
     if found:
         raise ValueError(
@@ -108,6 +110,18 @@ def _positive(value: str, name: str) -> int:
     return int(value)
 
 
+def parse_concurrencies(conc_list: str) -> list[int]:
+    """Parse a whitespace-separated CONC_LIST of unique, canonical positive integers."""
+    values = []
+    for word in conc_list.split():
+        if not word.isascii() or not word.isdecimal() or str(int(word)) != word or int(word) <= 0:
+            raise ValueError(f"CONC_LIST entries must be canonical positive integers: {word!r}")
+        values.append(int(word))
+    if not values or len(set(values)) != len(values):
+        raise ValueError("concurrencies must be positive unique integers")
+    return values
+
+
 def bind_workload(
     recipe: Mapping[str, Any], environment: Mapping[str, str], *, multinode: bool
 ) -> dict[str, Any]:
@@ -118,6 +132,7 @@ def bind_workload(
     """
     image, model = _required(environment, "IMAGE"), _required(environment, "MODEL")
     lengths = {name: _positive(_required(environment, name), name) for name in ("ISL", "OSL")}
+    # schema, name and model lead the written recipe.
     bound = {key: deepcopy(value) for key, value in recipe.items() if key in ("schema", "name")}
     bound["model"] = {
         **recipe.get("model", {}),
@@ -136,8 +151,7 @@ def bind_workload(
     workload.update((name, str(value)) for name, value in lengths.items())
     if multinode:
         # The client reads CONC_LIST from the job environment the workflow exports.
-        words = _required(environment, "CONC_LIST").split()
-        concurrencies = [_positive(word, "CONC_LIST") for word in words]
+        concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
     else:
         conc = _positive(_required(environment, "CONC"), "CONC")
         if "CONC" in workload and str(workload["CONC"]) != str(conc):
