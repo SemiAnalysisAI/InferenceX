@@ -6,6 +6,10 @@ name: AMD exporter private drop
 # AMD's private drop and must not leave the draft release.
 
 on:
+  # Dispatch by file name only resolves workflows on the default branch, so the test
+  # branch runs this on push; the job skips itself until the draft release exists.
+  push:
+    branches: [feat/powerx-amd-highres-privatedrop]
   workflow_dispatch:
     inputs:
       release-tag:
@@ -44,18 +48,25 @@ jobs:
         with:
           persist-credentials: false
       - name: Download the archive from the draft release
+        id: download
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_TAG: ${{ inputs.release-tag || 'amd-dme-highres-privatedrop-20261008' }}
         run: |
           set -eo pipefail
           mkdir -p "$WORK"
+          if ! python3 .github/scripts/draft_release_asset.py --tag "$RELEASE_TAG" --list; then
+            echo "::notice::draft release $RELEASE_TAG does not exist yet; nothing to convert"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           python3 .github/scripts/draft_release_asset.py --tag "$RELEASE_TAG" --find "$ARCHIVE_NAME" > "$WORK/archive-asset.json"
           asset_url=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$WORK/archive-asset.json")
           curl --fail --location --silent --show-error --output "$WORK/$ARCHIVE_NAME" \
             --header "Authorization: Bearer $GITHUB_TOKEN" --header "Accept: application/octet-stream" "$asset_url"
           printf '%s  %s\n' "$ARCHIVE_SHA256" "$WORK/$ARCHIVE_NAME" | sha256sum --check -
       - name: Load the image and check its identity
+        if: steps.download.outputs.skip != 'true'
         run: |
           set -eo pipefail
           docker load --input "$WORK/$ARCHIVE_NAME"
@@ -67,6 +78,7 @@ jobs:
             echo "version probe unavailable on CPU: $(tail -n 1 "$WORK/version.txt")"
           cat "$WORK/version.txt"
       - name: Convert to an Enroot squash
+        if: steps.download.outputs.skip != 'true'
         run: |
           set -eo pipefail
           curl --fail --location --output "$WORK/$ENROOT_PACKAGE" \
@@ -99,9 +111,10 @@ jobs:
           sha256sum "$SQSH_NAME" provenance.json > SHA256SUMS
           cat SHA256SUMS
       - name: Store the squash on the draft release
+        if: steps.download.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_TAG: ${{ inputs.release-tag || 'amd-dme-highres-privatedrop-20261008' }}
         run: |
           set -eo pipefail
           for name in "$SQSH_NAME" SHA256SUMS provenance.json; do
