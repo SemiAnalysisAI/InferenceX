@@ -1,8 +1,8 @@
-"""Validate and aggregate multinode srt-slurm DCGM power artifacts.
+"""Validate and aggregate srt-slurm GPU power artifacts.
 
 Consumes the srt-slurm ``dcgm-power`` artifact package (v1 wire contract:
 ``power/{manifest.json, samples.csv, windows/*.json}``) produced for
-multinode runs, re-validates it independently, and patches whole-deployment
+single- or multi-node runs, re-validates it independently, and patches whole-deployment
 energy metrics plus role-level metrics for disaggregated deployments into the
 aggregate JSON.
 
@@ -66,9 +66,7 @@ from .common import (
 
 SCHEMA_VERSION = 1
 PRODUCER = "srt-slurm.dcgm-power"
-POWER_METRIC = "DCGM_FI_DEV_POWER_USAGE"
 POWER_UNIT = "W"
-POWER_SCOPE = "gpu_device_board_as_reported_by_dcgm"
 CLOCK_SOURCE = "head_node_unix_clock"
 
 MANIFEST_FILENAME = "manifest.json"
@@ -92,6 +90,9 @@ SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
 # Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
 # NOT a multiple of the configured sample interval.
 MAX_SAMPLE_GAP_SECONDS = 3.0
+# Fixed by the producer contract (srt-slurm contract.MAX_TEMPERATURE_C); exporter
+# blank and error sentinels sit far above it.
+MAX_TEMPERATURE_C = 200.0
 
 WORKER_ROLES = ("prefill", "decode", "agg")
 
@@ -285,13 +286,17 @@ def _check_wire_contract(manifest: dict) -> list[str]:
     for key, expected in (
         ("schema_version", SCHEMA_VERSION),
         ("producer", PRODUCER),
-        ("source_metric", POWER_METRIC),
         ("unit", POWER_UNIT),
-        ("power_scope", POWER_SCOPE),
         ("timestamp_source", CLOCK_SOURCE),
     ):
         if manifest.get(key) != expected:
             failures.append(f"{key} is {manifest.get(key)!r}, expected {expected!r}")
+    # The exporter block chooses the metric, so any recorded metric and scope are
+    # valid; the producer pin, not a vendor table, guards the energy contract.
+    for key in ("source_metric", "power_scope"):
+        value = manifest.get(key)
+        if not (isinstance(value, str) and value):
+            failures.append(f"{key} is not a non-empty string")
 
     status = manifest.get("status")
     if status != STATUS_COMPLETE:
@@ -359,7 +364,7 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
                         return None
         if expected_version == 3 and raw[9]:
             temperature = float(raw[9])
-            if not math.isfinite(temperature) or not -273.15 <= temperature < 0x7FFFFFF0:
+            if not math.isfinite(temperature) or not -273.15 <= temperature <= MAX_TEMPERATURE_C:
                 return None
     except ValueError:
         return None
@@ -880,6 +885,21 @@ def _check_stored_evidence(
     ):
         if len(set(keys)) != len(keys):
             failures.append(f"{label} contains duplicate keys")
+
+    # The producer's pre-server NTP probe is runtime-only, but the hosts it
+    # flagged are persisted; an unverified clock stays unpublishable offline.
+    # Packages from before the probe existed carry no field and never ran it.
+    clock_sync_failures = manifest.get("clock_sync_failures", [])
+    if not isinstance(clock_sync_failures, list) or not all(
+        isinstance(node, str) for node in clock_sync_failures
+    ):
+        failures.append("clock_sync_failures is not a list of strings")
+    elif clock_sync_failures:
+        failures.append(
+            "clock_sync_unverified: "
+            + ", ".join(clock_sync_failures)
+            + " did not prove NTP synchronisation"
+        )
 
     return failures
 

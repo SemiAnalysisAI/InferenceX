@@ -143,7 +143,7 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
     # Exclusive nodes include idle GPUs. Restrict each server/client step to
-    # the serving GPU count.
+    # the serving GPU count so each step sees the participating devices.
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
@@ -175,7 +175,20 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
         if name == "CONC" and name in recipe["benchmark"]["env"]:
             continue
         overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
+    # One power policy for srtctl and the in-container clients: the recipe or the
+    # job may require valid power; an unset REQUIRE_POWER keeps best-effort.
+    required = recipe.get("telemetry", {}).get("required", False) or environment.get(
+        "REQUIRE_POWER", "0"
+    ) in {"1", "true", "TRUE", "yes", "YES"}
+    if environment["EVAL_ONLY"] != "true":
+        overrides += ["--set", f"benchmark.concurrencies=[{int(environment['CONC'])}]"]
+        overrides += ["--set", f"telemetry.required={json.dumps(required)}"]
     if agentic:
+        overrides += ["--set", 'benchmark.env.ENABLE_AGENTX_POWER="1"']
+        overrides += [
+            "--set",
+            f"benchmark.env.REQUIRE_POWER={json.dumps('1' if required else '0')}",
+        ]
         # The aggregated result lands where fixed-sequence results do.
         overrides += ["--set", 'benchmark.env.AGENTIC_OUTPUT_DIR="/logs"']
         return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs/agentic"']

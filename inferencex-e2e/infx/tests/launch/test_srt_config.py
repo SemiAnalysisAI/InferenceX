@@ -23,6 +23,37 @@ from infx.launch.request import SrtRequest
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
+from srtctl.core.schema import ClusterConfig  # noqa: E402
+
+# The exporter block every AMD cluster record carries: our fixed device-metrics-exporter
+# build, read by srt-slurm's `kind: custom` power collector. The `scope` string keeps
+# manifests comparable with earlier AMD runs.
+AMD_EXPORTER = {
+    "container_image": "ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:"
+    "8a3fe70b8a848ca10a7fd90862d1d9e41e9c7b6314669a2e8340c646e6dae15c",
+    "port": 19500,
+    "command": "env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh",
+    "kind": "custom",
+    "gpu_labels": {"index": "gpu_id", "identity": "serial_number"},
+    "gpu_metrics": {
+        "power": {
+            "metric": "gpu_power_usage",
+            "scope": "gpu_device_power_as_reported_by_amd_device_metrics_exporter",
+        },
+        "gpu_util": {"metric": "gpu_gfx_activity"},
+        "temperature": {"metric": "gpu_junction_temperature"},
+    },
+}
+DCGM_EXPORTER = {
+    "container_image": "nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless",
+    "port": 9401,
+    "command": "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv",
+}
+
+
+def inventory_cluster(cluster_id: str) -> Cluster:
+    """The repository's own record of ``cluster_id``."""
+    return load_inventory(yaml.safe_load((ROOT / "configs/runners.yaml").read_text())).clusters[cluster_id]
 
 
 def cluster(slurm: dict | None = None, srt: dict | None = None, entries: dict | None = None) -> Cluster:
@@ -80,6 +111,26 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
     assert (config["visible_devices_env"], config["default_gpu_exporter"]) == ("ROCR_VISIBLE_DEVICES", None)
     assert (config["network_interface"], config["use_exclusive_sbatch_directive"]) == ("eno0", True)
     assert config["cluster"] == "c"
+
+
+@pytest.mark.parametrize("cluster_id", ["mi355x-amds", "mi325x-amd", "mi300x-amd"])
+def test_amd_clusters_render_the_custom_exporter_and_mount_its_config(cluster_id):
+    config = render(inventory_cluster(cluster_id), job(single_node=True))
+
+    assert config["default_gpu_exporter"] == AMD_EXPORTER
+    assert config["default_mounts"]["/ws/runners/srt-slurm/exporters/amd-power.json"] == "/etc/metrics/config.json"
+    # The pinned srt-slurm reads this file; a key it does not know fails here.
+    ClusterConfig.Schema().load(config)
+    recipe = {"schema": 2, "name": "point", "telemetry": {"enabled": True}}
+    assert resolve_config_with_defaults(recipe, config)["telemetry"]["dcgm_exporter"] == AMD_EXPORTER
+
+
+def test_nvidia_clusters_keep_the_dcgm_exporter_and_mount_no_exporter_config():
+    config = render(inventory_cluster("h200-cw"), job(single_node=True))
+
+    assert config["default_gpu_exporter"] == DCGM_EXPORTER
+    assert "/etc/metrics/config.json" not in config.get("default_mounts", {}).values()
+    ClusterConfig.Schema().load(config)
 
 
 def test_a_host_directory_cannot_be_mounted_at_three_targets():

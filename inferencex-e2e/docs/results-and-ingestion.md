@@ -85,9 +85,9 @@ The fixed-sequence transformer requires runner, framework, precision, speculativ
 | Multinode topology | `prefill_tp`, `prefill_pp`, `prefill_dcp_size`, `prefill_pcp_size`, `prefill_ep`, `prefill_dp_attention`, `prefill_num_workers`, matching `decode_*` fields, `num_prefill_gpu`, `num_decode_gpu`, and optional `prefill_hw`/`decode_hw` |
 | Primary derived metrics | `tput_per_gpu`, `input_tput_per_gpu`, `output_tput_per_gpu` |
 | Latency and interactivity | Each benchmark input key ending in `ms` is converted from milliseconds to seconds with `_ms` removed. Keys containing `tpot` also produce an `intvty` reciprocal. |
-| Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and, for multinode results, measured power from the srt-slurm telemetry package |
+| Optional runtime metadata | `router` as exactly `{name, version}`, `kv_p2p_transfer`, and measured power from a retained srt-slurm telemetry package |
 
-Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Only multinode results are power-aggregated; single-node results carry no power fields or verdict. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
+Single-node GPU count is `tp * pp * pcp_size`. DCP does not multiply the physical GPU count. Multinode per-GPU denominators use the declared prefill and decode GPU counts. Invalid or missing required metadata fails transformation. Single-node results with a retained native power package and multinode results are power-aggregated. Power aggregation is best effort by default; `REQUIRE_POWER=1` fails the job after preserving available results and audits when power validation fails.
 
 InferenceX-app treats routing fields as columns or config dimensions and stores numeric measurements in `benchmark_results.metrics` JSONB. The mapper supports v1 shared topology, v2 split prefill/decode topology, and nested v3 AgentX metrics. Unknown numeric metrics are retained and warned about, which permits schema growth without silently losing numeric data.
 
@@ -95,16 +95,36 @@ InferenceX-app treats routing fields as columns or config dimensions and stores 
 
 The serving client records `benchmark_outcome` before saving its raw result. It retains the existing maximum request-failure rate of 5%, including the requested/completed/failed counts. The processor verifies this record, copies it to the aggregate, and returns failure even when telemetry is valid. Zero successful requests retain a diagnostic aggregate without fabricated reciprocal latency. Invalid request counts retain a failed diagnostic outcome with the raw `requested`/`completed` values and an `error`, without a fabricated failed count or rate; the client saves the raw JSON before exiting and the processor still rejects it. Legacy results without outcome metadata remain distinguishable; power validity alone never establishes benchmark success or answer quality.
 
-`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Device identifiers retain the collector's semantics.
+`power_invalid_reasons` and `power_audit` carry a bounded summary alongside numeric metrics. The summary includes the available measurement window, expected/observed GPU counts, sampling diagnostics, observed device identifiers and producer pin. Its `source` names the retained `power_validation_*.json` sidecar. Single-node AgentX points publish the same shape: the adapter writes `power_validation_<RESULT_FILENAME>.json` beside the result and the audit names it, so their `power_audit_*` bundles read like fixed-sequence points; multi-node AgentX keeps one `LOGS/agentic/conc_<N>/power_validation.json` per concurrency. Device identifiers retain the collector's semantics.
 
 For multinode fixed-sequence jobs, `python -m infx.results.fixed_sequence --all` processes every available result before returning failure. It accepts `_c<N>_gpus_...`, `_conc<N>_gpus_...`, and AMD `_concurrency_<N>_req_rate_<R>_gpus_...` filenames, including `inf` request rates. It compares result concurrencies with `CONC_LIST`, rejects duplicate or contradictory point identities, and records omissions/errors in `result_processing_<RESULT_FILENAME>.json`. Aggregate workers pass `AGGREGATE_GPUS` with zero role GPU counts to telemetry validation; separate prefill/decode energy remains absent. For a `DISAGG=true` group with zero decode workers, the aggregate row intentionally sets `disagg: false` and reports `num_aggregate_gpu`; the filename, artifact name, and workflow inputs retain the group identity. Downstream consumers should use the row topology to interpret the measurement.
 
 
 Processing and, for multinode jobs, diagnostic power-audit uploads run after launcher or validation failure, retaining raw and aggregate JSON. Normal `bmk_*` upload requires successful benchmark and processing steps, so an incomplete batch or failed Slurm job does not publish diagnostic rows. The main-branch ingest trigger can still publish other successful configurations from a partially failed sweep; it does not establish complete fleet coverage. Downstream importers can use the retained outcome to reject explicitly failed benchmarks.
 
+### SRT single-node power artifacts
+
+The launcher enables native telemetry for single-node fixed-sequence and AgentX jobs.
+It retains `LOGS/power` (`samples.csv`, `manifest.json`, `windows/`), the result JSON
+referenced by each measurement window, the producer revision and exporter provenance
+in `power_audit_<RESULT_FILENAME>`.
+AgentX also retains `LOGS/agentic/agentic_power_concurrency_*.json` and its validation
+sidecar. Available diagnostics are staged even when the job fails; eval-only jobs
+do not enable power collection.
+
+NVIDIA DCGM and AMD device-metrics-exporter packages share one validator. It reads
+the vendor-neutral manifest fields the pinned producer writes (`source_metric`,
+`power_scope`, `temperature_metric`, the `dcgm_exporter` identity and
+`producer_git_commit`) instead of a vendor profile, then checks the measurement
+boundary, producer pin, GPU count and result binding. AgentX validates single-node
+`num_gpus` against the launcher's expected count before adding power metrics and a
+bounded audit summary. Invalid measurements omit energy metrics; `REQUIRE_POWER=1`
+also fails the job. The historical CSV reader remains available for previously
+captured artifacts.
+
 ### SRT multinode window retention
 
-SRT samples CSV versions 1, 2 and 3 are accepted. Version 3 adds optional `temperature_c` in Celsius; temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks. Deploy this reader before a producer that emits version 3.
+SRT samples CSV versions 1, 2 and 3 are accepted for single-node and multinode packages alike. The pinned producer (srt-slurm `641a07f2`, NVIDIA/srt-slurm#572) writes version 3 with the header `schema_version,timestamp_unix,scrape_seq,hostname,gpu_index,gpu_uuid,power_w,gpu_util_pct,sm_active,temperature_c`; versions 1 and 2 from retained runs remain readable. `temperature_c` is optional Celsius from the exporter's temperature metric (`DCGM_FI_DEV_GPU_TEMP` on NVIDIA, `gpu_junction_temperature` on AMD); temperature is retained in the uploaded artifact for the app and does not enter the GPU-energy calculation. Missing values stay empty. Malformed temperature cells invalidate the package under the existing strict artifact checks.
 
 Power audit sidecars retain independently validated measurements in `selected_window`;
 `package_integrity_valid` records shared evidence checks and `window_validations` records
@@ -179,16 +199,16 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
-AgentX power applies only to replays with `IS_MULTINODE=true`. Single-node
-replays, including aggregated srt-slurm recipes that set `IS_MULTINODE: false`,
-publish no power fields or verdict, whatever `ENABLE_AGENTX_POWER` says.
-Multinode runs retain the deployment telemetry under `LOGS/power/` and
-per-concurrency window/validation files under `LOGS/agentic/` in their
-`power_audit_<RESULT_FILENAME>` artifact. Available audits and AgentX aggregates
-upload even when a benchmark fails. Missing files do not establish power support: a
-multinode recipe also needs `telemetry` enabled so the pinned srt-slurm exports
-`SRT_MEASUREMENT_WINDOW_DIR` to its custom benchmark command; InferenceX derives
-the result root and concurrency from that directory and the replay itself.
+AgentX power applies to multinode replays and to single-node replays, for which
+the launcher enables native telemetry and sets `ENABLE_AGENTX_POWER`. Both retain
+the deployment telemetry under `LOGS/power/` and per-concurrency window/validation
+files under `LOGS/agentic/` in their `power_audit_<RESULT_FILENAME>` artifact.
+Available audits and AgentX aggregates upload even when a benchmark fails. Missing
+files do not establish power support: the job also needs `telemetry` enabled so the
+pinned srt-slurm exports `SRT_MEASUREMENT_WINDOW_DIR` to its custom benchmark
+command. Multinode recipes opt in themselves; the launcher opts single-node jobs in.
+InferenceX derives the result root and concurrency from that directory and the
+replay itself.
 When that measurement-window contract is absent, the aggregate records
 `power_valid: 0` and the audit names `multinode_power_contract_missing`;
 `REQUIRE_POWER=1` also fails the job after preserving available results.

@@ -9528,3 +9528,11 @@
     - "TP4 c64: 8K prefill chunks with a 16-step prefill-decode interval instead of 16K chunks with none. Local runs with the fold: 82,586 -> 85,093 tok/s/GPU at 86.8 -> 136.8 tok/s/user median (46.3 -> 72.1 P90); P90 TTFT 5.7 -> 12.5 s."
     - "TP2 c128: admit all 128 sessions (max-running-requests and cuda-graph-max-bs-decode 64 -> 128) with a 4-step prefill-decode interval and mem-fraction-static 0.85. The PR #3421 sweep measured 18,631 tok/s/GPU at 130.9 tok/s/user median at this point; locally the new settings gave 147,763 tok/s/GPU at 37.9 tok/s/user median with a 51 s P90 TTFT (measured before the fold was added)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
+
+- config-keys:
+    - "*"
+  description:
+    - "Enable native srt-slurm power collection for single-node fixed-sequence and AgentX jobs (eval-only stays disabled), replacing client-side GPU sampling with srt-slurm measurement windows; single-node AgentX points publish power_validation_<RESULT_FILENAME>.json beside the result, and require-power reaches single-node jobs."
+    - "Configure the AMD device-metrics-exporter on mi300x-amd, mi325x-amd and mi355x-amds through srt-slurm's kind: custom exporter schema (NVIDIA/srt-slurm#572, included in the v2.46.0 pin; gpu_id/serial_number labels; gpu_power_usage, gpu_gfx_activity and gpu_junction_temperature metrics) with the public ghcr.io#semianalysisai/amd-device-metrics-exporter image by digest; drop the AMD power-profile patch and the prepared-exporter staging step."
+    - "Carry NVIDIA/srt-slurm#573 as a local patch so worker-node exporters report only the job's GPUs; accept #572 manifests and samples v3 with temperature_c in the single-node and multinode power_audit consumers, and keep packages whose producer recorded clock_sync_failures unpublishable."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3781

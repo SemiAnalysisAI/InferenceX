@@ -79,11 +79,11 @@ def served_model(base_url: str) -> str:
 
 
 def srt_single(args: argparse.Namespace) -> int:
-    """One srt-slurm single-node point; srt-slurm owns the server."""
+    """One single-node point; srt-slurm owns the server and power sampling."""
     values = env.require(
         "MODEL", "CONC", "ISL", "OSL", "RANDOM_RANGE_RATIO", "RESULT_FILENAME", "RESULT_DIR",
-        "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY", "USE_CHAT_TEMPLATE",
-        "FRAMEWORK",
+        "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY",
+        "USE_CHAT_TEMPLATE", "FRAMEWORK",
     )  # fmt: skip
     env.flag("RUN_EVAL")
     eval_only = env.flag("EVAL_ONLY")
@@ -110,7 +110,13 @@ def srt_single(args: argparse.Namespace) -> int:
     if eval_only:
         print("EVAL_ONLY mode: skipping throughput benchmark", flush=True)
         return 0
-    return _run_client(point)
+    # Removing the local sampler must not silently turn measured points into unmeasured ones.
+    env.require("SRT_MEASUREMENT_WINDOW_DIR")
+    with proc.RelaySignals() as relay:
+        rc = relay.run(client_argv(point))
+        if rc:
+            return rc
+        return relay.run([PYTHON, "-m", "infx.results.power.window", str(point.result), str(conc)])
 
 
 def srt_sweep(args: argparse.Namespace) -> int:

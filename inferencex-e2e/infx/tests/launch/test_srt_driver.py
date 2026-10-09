@@ -7,6 +7,7 @@ in-process, so the lane table it patches applies.
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -22,7 +23,9 @@ from infx.launch.drivers.srt import lanes, models
 from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
 from infx.launch.drivers.srt.models import Override
 from infx.launch.policy import LaunchPath, Match
+from infx.srt_slurm.synthetic_acceptance import selected_recipes
 from infx.tests.launch.fake_slurm import (
+    ROOT,
     base_env,
     install_fakes,
     launch,
@@ -32,6 +35,13 @@ from infx.tests.launch.fake_slurm import (
     sandbox_runner_config,
     srtctl_calls,
 )
+
+sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
+from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
+from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides  # noqa: E402
+from srtctl.core.schema import ClusterConfig  # noqa: E402
+
+QWEN35_RECIPE = ROOT / "benchmarks/single_node/srt-slurm-recipes/qwen3.5/sglang/mi355x-fp8/8k1k.yaml"
 
 POINT_RECIPE = {
     "engine": "sglang",
@@ -100,6 +110,20 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), **overrides}
 
 
+def qwen35_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
+    """Environment of the Qwen3.5 FP8 8k1k concurrency-4 point on the repository's MI355X recipe."""
+    shutil.copyfile(QWEN35_RECIPE, harness.workspace / "recipe.yaml")
+    recipe = yaml.safe_load(QWEN35_RECIPE.read_text())["base"]
+    role, workload = recipe["roles"]["agg"], recipe["benchmark"]["env"]
+    point = {
+        "MODEL": recipe["model"]["path"].removeprefix("hf:"), "IMAGE": recipe["model"]["container"],
+        "PRECISION": recipe["model"]["precision"], "MODEL_PREFIX": "qwen3.5",
+        "TP": str(role["args"]["tensor-parallel-size"]), "GPU_COUNT": str(role["gpus"]), "CONC": "4",
+        "ISL": workload["ISL"], "OSL": workload["OSL"], "RANDOM_RANGE_RATIO": workload["RANDOM_RANGE_RATIO"],
+    }  # fmt: skip
+    return {**harness.env, **POINT_ENV, **point, "RUNNER_NAME": runner_for(cluster_id), **overrides}
+
+
 def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: str) -> dict[str, str]:
     """Environment of a multi-node point whose recipe lives in the workspace mirror.
 
@@ -149,6 +173,51 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     applied = [line.split()[-1] for line in lines(harness.logs, "git") if line.split()[2:3] == ["apply"]]
     assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
     assert lines(harness.logs, "scancel") == []
+
+
+@pytest.mark.parametrize("require_power", ["0", "1"])
+@pytest.mark.parametrize(("cluster_id", "kind", "port"), [
+    ("mi355x-amds", "custom", 19500), ("mi325x-amd", "custom", 19500),
+    ("mi300x-amd", "custom", 19500), ("h200-cw", "dcgm", 9401),
+])  # fmt: skip
+def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
+    env_file = harness.tmp / "github-env"
+    env = qwen35_env(harness, cluster_id, REQUIRE_POWER=require_power, GITHUB_ENV=str(env_file))
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    workspace = harness.workspace
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_concurrency[0]"
+    rendered = srtslurm(workspace)
+    ClusterConfig.Schema().load(rendered)  # what the pinned srtctl reads as srtslurm.yaml
+    [(_, variant)] = selected_recipes(yaml.safe_load(QWEN35_RECIPE.read_text()), "zip_override_concurrency[0]")
+    sets = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"]
+    apply_overrides_to_recipe(variant, parse_overrides(sets, []))
+    resolved = resolve_config_with_defaults(variant, rendered)
+    telemetry = resolved["telemetry"]
+    assert telemetry["enabled"] is True
+    assert telemetry["required"] is (require_power == "1")
+    assert telemetry["storage_subdir"] == "power"
+    assert telemetry["startup_timeout_seconds"] == 300.0
+    assert resolved["benchmark"]["concurrencies"] == [4]
+    # The job measures with the cluster's exporter, started from the image the launcher staged.
+    cluster_exporter = rendered["default_gpu_exporter"]
+    staged = rendered["containers"][cluster_exporter["container_image"]]
+    assert telemetry["dcgm_exporter"] == {**cluster_exporter, "container_image": staged}
+    assert (cluster_exporter.get("kind", "dcgm"), cluster_exporter["port"]) == (kind, port)
+    exporter_config = rendered["default_mounts"].get(str(workspace / "runners/srt-slurm/exporters/amd-power.json"))
+    assert (exporter_config == "/etc/metrics/config.json") is (kind == "custom")
+    assert "AMD_DME" not in yaml.safe_dump(rendered) + " ".join(argv)
+    assert (workspace / "exporter-image.sha256").read_text().rstrip("\n").endswith(staged)
+    assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
+    assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
+    assert (workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
+    assert (workspace / "LOGS/point-identity.json").is_file()
+    assert dict(line.split("=", 1) for line in env_file.read_text().splitlines()) == {
+        "POWER_ARTIFACT_DIR": "LOGS/power", "POWER_RESULT_ROOT": "LOGS",
+        "POWER_PRODUCER_SHA": env["FAKE_SRT_COMMIT"],
+    }
 
 
 def test_single_node_eval_requires_a_successful_eval(harness):
@@ -353,17 +422,24 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
                        MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
     command = [sys.executable, "-m", "infx.launch", "--runner-config", str(harness.config), "run"]
-    process = subprocess.Popen(
-        command, cwd=harness.workspace, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-    deadline = time.monotonic() + 120
-    while not tailing.exists():
-        assert process.poll() is None, process.communicate()
-        assert time.monotonic() < deadline, "the launcher never started streaming"
-        time.sleep(0.1)
-    process.send_signal(signal.SIGTERM)
-    stdout, stderr = process.communicate(timeout=60)
-    assert process.returncode == 143, stdout[-2000:] + stderr[-4000:]
+    output = harness.tmp / "launcher.log"
+    with output.open("w") as stream:
+        process = subprocess.Popen(
+            command,
+            cwd=harness.workspace,
+            env=env,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        deadline = time.monotonic() + 120
+        while not tailing.exists():
+            assert process.poll() is None, output.read_text()[-4000:]
+            assert time.monotonic() < deadline, "the launcher never started streaming"
+            time.sleep(0.1)
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=60)
+    assert process.returncode == 143, output.read_text()[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
     staged = "srt-single-node-logs.tar.gz" if shape == "single" else "multinode_server_logs.tar.gz"
     assert (harness.workspace / staged).stat().st_size > 0
@@ -385,7 +461,14 @@ def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     [submit] = lines(harness.logs, "sbatch")
     assert {"--nodes=1", "--ntasks=1", f"--chdir={harness.workspace}", "--time=10"} <= set(submit.split())
     assert (harness.logs / "batch-rc").read_text() == "0"
-    assert json.loads((harness.workspace / "point-identity.json").read_text()) == {"completed": 2}
+    aggregate = json.loads((harness.workspace / "point-identity.json").read_text())
+    assert aggregate["completed"] == 2
+    assert aggregate["power_valid"] == 0
+    assert "agentic_gpu_topology_invalid" in aggregate["power_invalid_reasons"]
+    assert aggregate["power_audit"]["source"] == "power_validation_point-identity.json"
+    sidecar = json.loads((harness.workspace / "power_validation_point-identity.json").read_text())
+    assert sidecar["power_valid"] is False
+    assert "agentic_gpu_topology_invalid" in sidecar["reasons"]
     assert len(srtctl_calls(harness.logs)) == 1
     assert "4242" in lines(harness.logs, "scancel")
     assert list(runner_temp.glob("srt-batch.*.sh")) == []

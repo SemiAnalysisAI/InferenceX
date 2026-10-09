@@ -229,3 +229,27 @@ schema; unknown keys fail.
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
   itself uses.
+- `slurm.srt-slurm.extra.default_gpu_exporter` is the cluster's native power exporter.
+  srtctl inherits it as the recipe's `telemetry.dcgm_exporter` for multi-node recipes that
+  enable telemetry and for every single-node throughput and AgentX job; eval-only jobs
+  collect no power, a cluster without the block stops preparation before the benchmark
+  starts, and an invalid measurement fails the job under `REQUIRE_POWER=1` or otherwise
+  records an invalid verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`
+  on port `9401`. AMD clusters use srt-slurm's
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/641a07f2d465847fe51d8d8db275366651d9ebef/docs/power-telemetry.md#gpu-exporter-labels-and-metrics):
+  `gpu_labels` names the index and identity labels (`gpu_id`, `serial_number`) and
+  `gpu_metrics` the power, utilization and temperature metrics (`gpu_power_usage` with its
+  recorded `scope`, `gpu_gfx_activity`, `gpu_junction_temperature`); unknown keys such as
+  the former `power_profile` are rejected. The image is the public
+  `ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:8a3fe70b8a848ca10a7fd90862d1d9e41e9c7b6314669a2e8340c646e6dae15c`,
+  AMD nightly `build-dme-10.2.0a20261001` with AMD's 255 W power-reading fix plus our
+  cache-TTL patch, started with `env AMD_GPU_GET_CACHE_TTL=0s /home/amd/tools/entrypoint.sh`
+  on port `19500` and resolved by digest through the cluster's `squash` settings like any
+  other image. It reads
+  [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json),
+  which the driver mounts at `/etc/metrics/config.json`. Until NVIDIA/srt-slurm#573 merges,
+  [`573-participating-gpus.patch`](../runners/srt-slurm/patches/README.md) keeps
+  worker-node sample rows to the GPUs the job uses; without it a TP4 job on an eight-GPU
+  node records `unexpected_device`. Single-node matrix rows still reject `require-power`; a
+  manual `e2e-tests.yml` dispatch passes its `require-power` input to the single-node
+  throughput and AgentX jobs.
