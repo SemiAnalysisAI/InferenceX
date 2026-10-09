@@ -155,8 +155,7 @@ class FlashInferCombineModelSwitch(unittest.TestCase):
 
 
 class NcclLowLatencyLadderSizing(unittest.TestCase):
-    """The measured ladder and the receive buffer are separate knobs; under nccl-ep v0.2 (combine
-    fence shipped) the ladder is restored to the full buffer, and must never exceed it."""
+    """LL keeps every requested point and allocates receive space for the full ladder."""
 
     def _module(self):
         return _import_stubbed("ep_nccl")
@@ -244,28 +243,23 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         self.assertEqual(rm._layout, module.Layout.RANK_MAJOR)
         self.assertEqual(rm.combine_reduction, "rank-fp32")
 
-    def test_ladder_cap_drops_only_oversized_measurement_points(self):
+    def test_ll_ladder_keeps_512_and_larger_points(self):
         module = self._module()
         backend = self._backend(module, low_latency=True)
-        backend.args.tokens_ladder = "32 64 128"
+        backend.mode = "low-latency"
+        backend.args.tokens_ladder = "32 256 512 1024"
         backend._build_rank_inputs = mock.Mock(return_value=None)
-        with mock.patch.object(module, "_LL_LADDER_CAP", 64):
-            spec = backend.make_inputs(backend.args)
-        self.assertEqual(spec.ladder, [32, 64])
-        self.assertEqual(spec.dropped, [128])
+        spec = backend.make_inputs(backend.args)
+        self.assertEqual(spec.ladder, [32, 256, 512, 1024])
+        self.assertEqual(spec.dropped, [])
 
-    def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
-        # The regression this guards would silently re-baseline every low-latency row: clamping
-        # the MEASURED ladder must not shrink the receive the remaining rungs are measured
-        # against. Driven through create_buffer, so it fails on the allocation the kernel gets
-        # rather than on the shape of the source line that computes it.
+    def test_ll_receive_grows_with_requested_ladder(self):
         module = self._module()
         spec = types.SimpleNamespace(max_tokens_per_rank=99)
-        with mock.patch.object(module, "_LL_BUFFER_CAP", 512), \
-                mock.patch.object(module, "_LL_LADDER_CAP", 64):
+        for requested, expected in [(99, 256), (512, 512), (1024, 1024)]:
             sized = self._backend(module, low_latency=True)
-            sized.create_buffer(spec)
-            self.assertEqual(sized.max_dispatch, 512)
+            sized.create_buffer(types.SimpleNamespace(max_tokens_per_rank=requested))
+            self.assertEqual(sized.created_configs[0].max_dispatch_tokens_per_rank, expected)
         # Throughput mode is unclamped and keeps taking its size from the ladder spec.
         throughput = self._backend(module, low_latency=False)
         throughput.create_buffer(spec)
@@ -327,19 +321,21 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
                 captured["layout"] = kwargs
 
         handle = types.SimpleNamespace(dispatch=mock.Mock())
-        h = types.SimpleNamespace(in_tokens_t="tokens", in_weights_t="weights", handle=handle)
         module.DispatchInputs = DispatchInputs
         module.DispatchOutputs = DispatchOutputs
         module.LayoutInfo = LayoutInfo
-        backend._ensure_handle = lambda _: h
+        backend._handle = None
+        backend._bound = None
+        backend._ep_group = types.SimpleNamespace(create_handle=mock.Mock(return_value=handle))
         backend._dispatch_cfg = object()
         backend._stream = lambda: 0
-        backend._finish = lambda *_: None
 
-        backend.dispatch(object())
+        p = types.SimpleNamespace(T=1, dispatch_x="tokens", topk_idx="indices", topk_weights="weights")
+        backend.dispatch(p)
 
         self.assertIs(backend._layout, module.Layout.RANK_MAJOR)
-        self.assertEqual(captured["inputs"], {"tokens": "tokens", "topk_weights": "weights"})
+        self.assertEqual(captured["inputs"]["tokens"].buffer, "tokens")
+        self.assertEqual(captured["inputs"]["topk_weights"].buffer, "weights")
         self.assertEqual(captured["outputs"]["tokens"].window, backend._recv_window)
         self.assertIs(captured["outputs"]["topk_weights"], backend._recv_w_t)
         self.assertIs(captured["outputs"]["topk_idx"], backend._recv_idx_t)
