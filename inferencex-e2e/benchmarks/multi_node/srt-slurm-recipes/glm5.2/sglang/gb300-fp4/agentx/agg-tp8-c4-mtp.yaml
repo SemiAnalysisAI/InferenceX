@@ -64,7 +64,7 @@ roles:
       mem-fraction-static: 0.8
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
-      hicache-size: 135
+      hicache-size: '@dram.per-gpu-gb'
       hicache-io-backend: direct
       enable-metrics: true
       enable-cache-report: true

@@ -71,7 +71,7 @@ roles:
       context-length: 1048576
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
-      hicache-size: 135
+      hicache-size: '@dram.per-gpu-gb'
       hicache-io-backend: direct
       speculative-algorithm: EAGLE
       speculative-moe-runner-backend: flashinfer_trtllm
