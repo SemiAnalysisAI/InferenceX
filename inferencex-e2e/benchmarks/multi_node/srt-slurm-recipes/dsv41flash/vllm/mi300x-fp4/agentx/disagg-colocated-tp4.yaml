@@ -52,7 +52,7 @@ roles:
       reasoning-parser: deepseek_v41
       moe-backend: aiter
       gpu-memory-utilization: 0.9
-      engram-config: '{"cpu_offload":true}'
+      engram-config: '{"cpu_offload":false}'
       speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
       max-model-len: 1048576
       max-num-seqs: 128
