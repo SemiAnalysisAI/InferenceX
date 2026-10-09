@@ -71,7 +71,7 @@ jobs:
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           cache-dependency-glob: |
             pyproject.toml
@@ -122,7 +122,7 @@ jobs:
       - name: Verify sign-off with Claude
         id: claude
         if: steps.resolve.outputs.proceed == 'true'
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@ed670b4cf9de2a5a570d130d2f6197b9e543cd64 # v1.0.240
         env:
           # Read-only job token: the agent reads untrusted PR content and never publishes.
           GH_TOKEN: ${{ github.token }}
@@ -207,7 +207,7 @@ jobs:
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           cache-dependency-glob: |
             pyproject.toml

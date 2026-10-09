@@ -54,7 +54,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: '3.12'
           cache-dependency-glob: |
@@ -102,7 +102,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           # Never save a cache the agent's job could have poisoned for credentialed jobs to restore.
           enable-cache: false
@@ -143,7 +143,7 @@ jobs:
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@ed670b4cf9de2a5a570d130d2f6197b9e543cd64 # v1.0.240
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
@@ -243,7 +243,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: '3.12'
           cache-dependency-glob: |
