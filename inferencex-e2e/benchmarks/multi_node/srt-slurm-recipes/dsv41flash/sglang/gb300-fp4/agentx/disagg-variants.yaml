@@ -1,0 +1,272 @@
+# AgentX dsv41flash sglang gb300-fp4 recipes (Dynamo frontend + SGLang, DISAGGREGATED
+# topology with Mooncake KV transfer): shared settings in base, one override per
+# benchmark point.
+#
+# Prefill and decode are separate TP2/EP2 SGLang workers (two GPUs each) behind the
+# Dynamo KV router; with the DSpark draft in PD-disaggregated mode both sides must
+# use the same TP, so capacity is added with more TP2 workers: one prefill worker
+# feeds one or two decode workers (1P1D, 1P2D), which sets the sessions per decode
+# worker and with it the interactivity band, and two prefill workers feed one decode
+# worker (2P1D) at the throughput end. Measured on GB300 NVL72 in the PR sweep
+# (tokens/s/GPU @ P90 interactivity, P90 TTFT; GSM8K strict-match):
+#   override_1p2d_spread_c16    :  19,305 @ 331.6 tok/s/user,  0.7 s  (6 GPUs, 3 nodes; 0.9704)
+#   override_1p2d_c48           :  59,243 @ 251.3 tok/s/user,  1.4 s  (6 GPUs, 2 nodes; 0.9750)
+#   override_1p2d_c64           :  80,750 @ 210.4 tok/s/user,  2.0 s  (6 GPUs, 2 nodes; 0.9757)
+#   override_1p1d_c96           : 143,459 @ 132.7 tok/s/user,  4.1 s  (4 GPUs, 2 nodes; 0.9750)
+#   override_1p1d_hicache_c160  : 187,463 @  99.0 tok/s/user, 14.0 s  (4 GPUs, 2 nodes; 0.9735)
+#   override_2p1d_hicache_c256  : 179,107 @  68.3 tok/s/user, 15.2 s  (6 GPUs, 3 nodes; 0.9750)
+# Against the published MI355X ATOM curve at matched P90 interactivity: 1P2D spread
+# c16 1.76x, c48 2.21x, c64 2.26x; 1P1D c96 2.71x, HiCache c160 2.62x; 2P1D HiCache
+# c256 1.99x tokens/s/GPU. Other cells measured in earlier tuning runs (1P1D
+# c8/c16/c64, 1P2D c24/c32, 1P4D c64) lay on or under the line through these vertices
+# and are not shipped; the cell-to-cell comparisons below also come from those runs. The
+# multi-decode cells run the Dynamo frontend with a 1 s session-affinity TTL (per-turn
+# load-aware decode pick); the single-decode cells keep the 3600 s default they were
+# measured with. The harness applies the golden acceptance length (3.51 at K=5) itself.
+
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg
+  identity:
+    model: {}
+  dynamo:
+    install: true
+    source:
+      wheel: "1.5.0.dev20260914"
+  slurm:
+    # c96 AgentX runs take ~2.5 h including the 60 min profiling phase and the gate.
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  # Dynamo 1.5 discovers workers through etcd and also needs NATS; both run with the
+  # frontend on the prefill node (two nodes total for 1P1D).
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+    args:
+      router-mode: kv
+      # Session-affinity TTL as measured for the single-decode 1P1D cells; the
+      # multi-decode overrides below set it to 1 s (per-turn load-aware decode pick).
+      router-session-affinity-ttl-secs: "3600"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        SGLANG_DEFAULT_THINKING: "1"
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+        SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        disaggregation-transfer-backend: mooncake
+        # Long-context first turns (P90 ISL ~250k tokens): one 16k-token chunk per step.
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        max-running-requests: 64
+        swa-prefix-tails: 4096
+        mem-fraction-static: 0.85
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+      # KV events for the Dynamo KV router; srtctl allocates the ZMQ ports per worker.
+      kv_events: true
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        SGLANG_DEFAULT_THINKING: "1"
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        disaggregation-transfer-backend: mooncake
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        mem-fraction-static: 0.85
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+      kv_events: true
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      AGENTIC_WARMUP_GRACE_PERIOD: "3600"
+
+# 1 prefill TP2/EP2 + 1 decode TP2/EP2 (4 GPUs, 2 nodes). The decode worker alone
+# sets the interactivity (96 sessions give 133 tok/s/user); the single prefill worker
+# holds P90 TTFT near 4 s up to c96 and saturates between c96 and c128, where the
+# HiCache override below takes over. 143,459 tokens/s/GPU @ 132.7 tok/s/user with a
+# 4.09 s P90 TTFT.
+override_1p1d_c96:
+  name: disagg-gb300-1p1d-tp2ep2-c96
+
+# 1 prefill TP2/EP2 + 2 decode TP2/EP2 (6 GPUs). Two decode workers halve the sessions
+# per decode worker at a given concurrency, which sets the interactivity band. The
+# frontend's session-affinity TTL is 1 s, so every turn takes a load-aware decode pick
+# instead of pinning the session to one decode worker for an hour: +4% P90
+# interactivity at 8 sessions per decode worker, neutral at 12 and more (c24 31,465 @
+# 299.0 vs 31,339 @ 298.1; c32 41,910 @ 276.1 vs 41,768 @ 277.3 at TTL 3600).
+#
+# Same-node layout (both decode workers on one node, 2 nodes total):
+#   c48: 59,243 tokens/s/GPU @ 251.3 tok/s/user, P90 TTFT 1.36 s (GSM8K 0.9750)
+#   c64: 80,750 tokens/s/GPU @ 210.4 tok/s/user, P90 TTFT 1.95 s (GSM8K 0.9757)
+override_1p2d_c48:
+  name: disagg-gb300-1p2d-tp2ep2-c48
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    decode:
+      workers: 2
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+override_1p2d_c64:
+  name: disagg-gb300-1p2d-tp2ep2-c64
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    decode:
+      workers: 2
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+# Spread layout (one decode worker per node, 3 nodes total), 8 sessions per decode
+# worker: 19,305 tokens/s/GPU @ 331.6 tok/s/user, P90 TTFT 0.69 s (GSM8K 0.9704) -
+# the highest-interactivity disaggregated point (in tuning, the same cell on one node
+# at TTL 3600 gave 19,227 @ 308.9).
+override_1p2d_spread_c16:
+  name: disagg-gb300-1p2d-spread-tp2ep2-c16
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+# Throughput end. The prefill worker keeps its KV prefix cache in a host-memory tier
+# (SGLang HiCache: ratio 1 = one host copy of the device pool, write-back, direct I/O),
+# which removes the LRU evictions that pushed P90 TTFT past the 25 s ceiling beyond c96
+# (1P1D c128 without it, in tuning: 25.4 s). 1P1D c160: 187,463 tokens/s/GPU @ 99.0
+# tok/s/user, P90 TTFT 14.0 s (GSM8K 0.9735). In tuning, c192 breached the ceiling
+# (29.2 s): the single prefill worker saturates, so the next step is a second prefill
+# worker (below).
+override_1p1d_hicache_c160:
+  name: disagg-gb300-1p1d-hicache-tp2ep2-c160
+  roles:
+    prefill:
+      args:
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      args:
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 192
+
+# Two HiCache prefill workers (one per node) feeding one decode worker (6 GPUs, 3 nodes),
+# 128 sessions per prefill worker, decode admission and graph batch 256, session-affinity
+# TTL 1 s: 179,107 tokens/s/GPU @ 68.3 tok/s/user, P90 TTFT 15.2 s (GSM8K 0.9750) - the
+# lowest-interactivity point of the curve (in tuning, the same cell without HiCache:
+# 151,671 @ 70.8 with a 36 s P90 TTFT).
+override_2p1d_hicache_c256:
+  name: disagg-gb300-2p1d-hicache-tp2ep2-c256
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 256

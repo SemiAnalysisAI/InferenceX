@@ -95,25 +95,12 @@ base:
   benchmark:
     env:
       IS_MULTINODE: "false"
+      # The AgentX power path checks the GPU topology (TP from each variant) before replay.
+      PP_SIZE: "1"
+      PCP_SIZE: "1"
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-
-# Low-latency AgentX aggregate topology: one TP4 worker occupies one
-# four-GPU GB300 node and serves both prefill and decode with DSpark K=6.
-override_tp4:
-  name: "agg-gb300-tp4-mtp-lowlatency"
-  roles:
-    agg:
-      nodes: 1
-      gpus: 4
-      args:
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        tp-size: 4
-  benchmark:
-    env:
-      TP: "4"
 
 # Low-latency AgentX aggregate topology: one TP8 worker spans two
 # four-GPU GB300 nodes and serves both prefill and decode with DSpark K=6.
