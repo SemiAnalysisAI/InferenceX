@@ -1170,7 +1170,6 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            entry.update(srt_recipe_fields(config, benchmark))
             exp_name = multinode_agentic_exp_name(model_code, prefill, decode, conc, offload_suffix)
         else:
             entry.update(
@@ -1185,12 +1184,12 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            entry.update(srt_recipe_fields(config, benchmark))
             exp_name = (
                 f"{model_code}_tp{tp}_conc{conc}_"
                 f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
                 + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
             )
+        entry.update(srt_recipe_fields(config, benchmark))
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,
