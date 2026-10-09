@@ -16,6 +16,10 @@ base:
     mem: '0'
   container_mounts:
     /dev/infiniband: /dev/infiniband
+  extra_mount:
+    - $K3_DRAFT_PATH:/models/Inferact-Kimi-K3-DSpark
+    # Match the host's Ionic provider without replacing the image's verbs core.
+    - $IONIC_PROVIDER_PATH:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
   resources:
     gpu_type: mi355x
     gpus_per_node: 8

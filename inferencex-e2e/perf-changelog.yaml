@@ -9496,5 +9496,5 @@
   description:
     - "Add native Kimi-K3 PD with FP8 KV and GMU 0.90 on official ROCm nightly 81198e97ba7eee2a22540caaa756b7fdddcb4d93, pinned by digest in master and recipe."
     - "Use TP8 per worker: 1P1D c1/c48, 1P2D c24/c48 and 1P3D c24, with automatic golden acceptance, default request-ID randomization and default evaluation selection."
-    - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments; keep NIC selection and RDMA device mounts recipe-local without changing cluster process limits or image-import policy. Carry srt-slurm #508 through the existing job-local patch mechanism until the shared dependency includes it. Use the worker image without engine patches."
+    - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use the registered draft checkpoint and recipe-scoped RDMA device/provider mounts. Carry srt-slurm #508 through the existing job-local patch mechanism until the shared dependency includes it."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
