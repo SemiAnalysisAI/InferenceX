@@ -195,14 +195,13 @@ schema; unknown keys fail.
   master config's `cluster:<id>` label names; broad SKU labels use the GPU family when its
   clusters agree. Agentic master configs must use a `cluster:<id>` label; their DRAM
   KV-offload matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`.
-- `available-cpu-dram-mib` is the host DRAM, in MiB, a benchmark job can use on a node.
-  Measure it as the lower of Slurm's `RealMemory - MemSpecLimit` and the node's `MemTotal`
-  less 16 GiB for the OS, over the cluster's GPU nodes; omit it where unmeasured. When
-  `slurm.srt-slurm.single-node-exclusive` is true (the default), a single-node srt-slurm job
-  requests `--mem=0`, all the memory Slurm has on the node, and its recipe's host KV pools
-  must fit the node. Otherwise the job requests, and its srun step is capped at, the serving
+- `available-cpu-dram-mib` is the host DRAM a benchmark job can use on a node: the lower of
+  Slurm's `RealMemory - MemSpecLimit` and `MemTotal` less 16 GiB for the OS, over the
+  cluster's GPU nodes; omit it where unmeasured. With `slurm.srt-slurm.single-node-exclusive`
+  (the default), a single-node srt-slurm job requests `--mem=0`, all the memory Slurm has,
+  so its host KV pools must fit the node. Otherwise the job and its srun step get the serving
   GPUs' share, `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB, which the pools and
-  server processes must fit; Slurm rejects a share above what it can give one job.
+  server processes must fit; Slurm rejects a share above what it can allocate.
 - `env` is the workload environment of every launch on the cluster. Like
   `slurm.srt-slurm.env`, it overrides the runner's own environment but never a name the
   point's additional-settings set. Values cannot contain commas: Slurm hands them to jobs

@@ -209,15 +209,11 @@ def test_single_node_failed_allocation_fails_the_launch(harness):
 
 
 @pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
-    # An exclusive job asks for all the memory Slurm has, which can sit below the measured
-    # value, and leaves its step uncapped.
     (8000, True, {}, {"mem": "0"}),
     (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
     (None, True, {}, {}),
 ])  # fmt: skip
-def test_single_node_shared_jobs_get_their_gpus_share_of_node_dram(
-    harness, dram, exclusive, step, job
-):
+def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive, step, job):
     slurm = {
         "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
         "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
