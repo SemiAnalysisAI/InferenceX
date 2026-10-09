@@ -9490,18 +9490,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3750
 
 - config-keys:
-    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
-    - minimaxm3-fp8-mi325x-vllm-agentic-tep8
-    - minimaxm3-fp8-mi325x-vllm-agentic-hybrid-agg
-    - minimaxm3-fp8-mi325x-vllm-agentic-disagg
     - dsv41flash-fp4-mi325x-vllm-agentic-dspark
-    - dsv41flash-fp4-mi325x-vllm-agentic-replicas
     - dsv41flash-fp4-mi325x-vllm-agentic-nixl
   scenario-type:
     - agentic-coding
   description:
-    - "Compare MiniMax-M3 MXFP8 and DeepSeek-V4.1-Flash FP4 AgentX aggregation and NIXL disaggregation on MI325X using the same pinned October 8 vLLM ROCm nightly."
-    - "Explore MiniMax TP8, TP8/EP8, and TP4/DP2/EP8 deployments, with native session-affinity routing for the DP pools and three-token EAGLE3."
-    - "Compare DeepSeek TP8 and replicated TP4/TP2 aggregation with colocated TP4 or TP2 prefill/decode pools, CPU- or GPU-resident Engram tables, and five-token DSpark. Use native SMG cache-aware aggregate routing, full context, and automatically selected golden acceptance."
+    - "Update DeepSeek-V4.1-Flash FP4 AgentX on MI325X to the pinned October 8 vLLM ROCm nightly with native five-token DSpark, full context, and automatically selected golden acceptance."
+    - "Compare TP8 and packed TP4 aggregation with colocated NIXL prefill/decode pools. Every deployment uses and accounts for all eight GPUs on one node."
+    - "Use stock SMG cache-aware routing for aggregate replicas and session-affinity routing for NIXL pools. Engram tables are GPU-resident at TP8 and CPU-resident in the packed deployments."
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3843

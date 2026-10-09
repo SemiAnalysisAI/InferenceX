@@ -5,7 +5,7 @@ base:
   name: minimaxm3-fp8-mi325x-vllm-agentic
   model:
     path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai-rocm:nightly-81198e97ba7eee2a22540caaa756b7fdddcb4d93@sha256:a401e4f46872dcde77e07ae3d7fa2d3a71b7f2773714316116532e2b39deb179
+    container: vllm/vllm-openai-rocm:v0.27.1
     precision: fp8
   resources:
     gpu_type: mi325x
@@ -20,8 +20,6 @@ base:
   engine:
     type: vllm
     connector: null
-  sbatch_directives:
-    mem: '0'
   # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
@@ -39,9 +37,7 @@ base:
         block-size: 128
         language-model-only: true
         attention-backend: TRITON_ATTN
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         enable-prefix-caching: true
-        enable-prompt-tokens-details: true
         enable-chunked-prefill: true
         max-num-batched-tokens: 32768
         # Three-token EAGLE3; throughput runs replace verification with the
@@ -134,8 +130,6 @@ override_tp8_c16:
   roles:
     agg:
       args:
-        long-prefill-token-threshold: 8192
-        long-prefill-token-threshold-adaptive: true
         max-num-seqs: 32
   benchmark:
     env:
@@ -149,13 +143,3 @@ override_tp8_c18:
   benchmark:
     env:
       CONC: '18'
-
-override_tep8_c16:
-  roles:
-    agg:
-      args:
-        enable-expert-parallel: true
-        max-num-seqs: 32
-  benchmark:
-    env:
-      CONC: '16'
