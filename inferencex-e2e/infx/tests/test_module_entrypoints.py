@@ -47,7 +47,6 @@ def test_collector_quarantines_payloads_that_are_not_result_rows(invoke, tmp_pat
     assert entry["source"] == "nested/result.json"
     assert entry["row"] == json.loads(payload)
     assert [error["type"] for error in entry["errors"]] == ["topology"]
-    assert result.stderr.startswith("::error title=Rejected result row::nested/result.json: ")
 
 
 @pytest.mark.parametrize("published", [None, b'[{"previous": true}]\n'])

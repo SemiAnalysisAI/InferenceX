@@ -61,24 +61,20 @@
 
 ## 结果记录契约
 
-[`infx/results/schema/models.py`](../infx/results/schema/models.py) 为每类已发布的聚合记录定义 Pydantic 模型：`results_<prefix>` 中的固定序列记录和 AgentX 记录（只有 AgentX 记录带有 `scenario_type`）、`eval_results_<prefix>` 中的评测记录，以及 `run-stats` 中按硬件划分的条目。身份和拓扑字段采用严格类型；字符串、整数和布尔值从不进行类型强制转换。
+[`infx/results/schema/models.py`](../infx/results/schema/models.py) 为每类已发布的聚合记录定义严格的 Pydantic 模型：`results_<prefix>` 中的固定序列记录和 AgentX 记录（只有 AgentX 记录带有 `scenario_type`）、`eval_results_<prefix>` 中的评测记录，以及 `run-stats` 中按硬件划分的条目。字符串、整数和布尔值从不进行类型强制转换，所有数值（包括嵌套的 AgentX 指标）都必须是有限值。未声明的顶层字段必须是属于某个指标族的数值：固定序列的延迟和交互性统计量（`mean_`、`median_`、`std_` 或 `p<N>_` 后接 `ttft`、`tpot`、`itl`、`e2el` 或 `intvty`），或 [`infx.results.power`](../infx/results/power/__init__.py) 定义的功耗键。AgentX 记录将请求指标和服务器指标嵌套存放，因此其顶层只允许功耗键。
 
-其他数值字段必须属于某个指标族。固定序列记录接受延迟和交互性统计量（`mean_`、`median_`、`std_` 或 `p<N>_` 后接 `ttft`、`tpot`、`itl`、`e2el` 或 `intvty`），以及 [`infx.results.power`](../infx/results/power/__init__.py) 定义的功耗键。AgentX 记录将请求指标和服务器指标嵌套存放，顶层只接受功耗键。所有数值（包括嵌套的 AgentX 指标）都必须是有限值。
-
-这些模型描述生产端的实际输出，包括以下特殊情况：
+这些模型接受以下生产端特殊情况：
 
 - 在吞吐量和 AgentX 记录中，`dp_attention`、`prefill_dp_attention` 和 `decode_dp_attention` 是字符串 `"true"` 和 `"false"`。
 - 多节点 AgentX 的 `tp` 为 prefill TP 与 decode TP 之和，`ep` 取两个角色 EP 中的较大值。没有 decode GPU 的多节点记录将 `decode_tp` 和 `decode_ep` 报告为 `0`。
 - 分发的配置没有 `recipe_fingerprint` 时，该字段为空。
 - 评测记录将 `hw` 转为大写，缺少 `isl` 或 `osl` 时使用 `0`，保留 `build_row` 的默认值（如 `"unknown"`），两个角色的 DP-attention 设置不同时写入 `prefill=<flag>,decode=<flag>`，并且可能带有 lm-eval 的 `"N/A"` 标准误差。
 
-生产端会在每条记录上标记 `result_schema_version: 1`：固定序列和 AgentX 记录由 `build_result` 标记，评测记录由 `build_row` 标记，运行统计由 `calc_success_rate` 标记。该常量位于仅依赖标准库的 `infx.results.schema` 包中，因为固定序列处理运行在 runner 的裸 Python 解释器上，而 AgentX 聚合运行在推理服务容器内。两者都不做校验。
+生产端通过仅依赖标准库的 `infx.results.schema` 包标记 `result_schema_version: 1`，但不做校验。收集器 `collect_results`、`collect_eval_results` 和 `calc_success_rate` 会校验每条记录。来自较旧 checkout 的未标记记录按版本 1 校验，通过后加上标记再发布；带有其他任何版本号的记录会以 `unsupported_version` 为原因被隔离。
 
-早于该标记的 checkout（例如仍在进行中的 PR 分支，或使用较旧 `ref` 的 e2e 运行）仍会输出未标记的记录。收集器按版本 1 校验此类记录，通过后加上标记再发布。带有其他任何版本号的记录会以 `unsupported_version` 为原因被隔离。
+被拒记录不会进入聚合结果，而是连同其来源和校验错误一起写入 `rejected_rows.json`；其中的非有限数值会写成 `"NaN"` 这类字符串，使文件保持为标准 JSON。收集器为每条被拒记录输出一条 `::error::` 注解，并在写出有效聚合结果后以非零状态退出，使该 sweep 无法被默认复用。收集任务仍会上传聚合结果；存在被拒记录时，还会上传 `rejected_rows_<prefix>`、`rejected_rows_eval_<prefix>` 或 `rejected_rows_run_stats`。InferenceX-app 也会直接读取单配置 `bmk_*` 和 `eval_*` 工件，因此只有当应用执行相同的契约时，被拒记录才不会进入数据库。
 
-执行校验的收集器有 `collect_results`、`collect_eval_results` 和 `calc_success_rate`。违反契约的记录不会进入聚合结果，而是连同其来源和校验错误一起写入 `rejected_rows.json`。该记录中的非有限数值会写成 `"NaN"` 这类字符串，使文件保持为标准 JSON。收集器为每条被拒记录向 stderr 输出一条 `::error::` 注解，并在写出有效聚合结果后以非零状态退出。收集任务仍会上传聚合结果；存在被拒记录时，还会上传 `rejected_rows_<prefix>`、`rejected_rows_eval_<prefix>` 或 `rejected_rows_run_stats`。失败的任务会使该 sweep 无法被默认复用。InferenceX-app 也会直接读取单配置 `bmk_*` 和 `eval_*` 工件，因此只有当应用执行相同的契约时，被拒记录才不会进入数据库。
-
-四种记录模型的 JSON Schema 已提交到 [`schemas/`](../schemas/)；它们与模型不一致时，测试会失败。修改模型后，在本项目目录中重新生成：
+[`schemas/`](../schemas/) 存放由四种记录模型生成的 JSON Schema；它们与模型不一致时，测试会失败。在本项目目录中重新生成：
 
 ```bash
 uv run python -m infx.results.schema export schemas

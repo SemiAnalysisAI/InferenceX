@@ -61,24 +61,20 @@ The distinction matters because every official ingest reuses a PR sweep. Artifac
 
 ## Result row contract
 
-[`infx/results/schema/models.py`](../infx/results/schema/models.py) defines Pydantic models for every published aggregate row: fixed-sequence and AgentX rows in `results_<prefix>` (only AgentX rows carry `scenario_type`), eval rows in `eval_results_<prefix>`, and the per-hardware entries of `run-stats`. Identity and topology fields are strictly typed; strings, integers, and booleans are never coerced.
+[`infx/results/schema/models.py`](../infx/results/schema/models.py) defines strict Pydantic models for every published aggregate row: fixed-sequence and AgentX rows in `results_<prefix>` (only AgentX rows carry `scenario_type`), eval rows in `eval_results_<prefix>`, and the per-hardware entries of `run-stats`. Strings, integers, and booleans are never coerced, and every number, including nested AgentX metrics, must be finite. Undeclared top-level fields must be numbers in a metric family: fixed-sequence latency and interactivity statistics (`mean_`, `median_`, `std_`, or `p<N>_` followed by `ttft`, `tpot`, `itl`, `e2el`, or `intvty`) or the power keys of [`infx.results.power`](../infx/results/power/__init__.py). AgentX rows nest their request and server metrics, so only power keys are allowed at their top level.
 
-Other numeric fields must match a metric family. Fixed-sequence rows accept latency and interactivity statistics (`mean_`, `median_`, `std_`, or `p<N>_` followed by `ttft`, `tpot`, `itl`, `e2el`, or `intvty`) and the power keys of [`infx.results.power`](../infx/results/power/__init__.py). AgentX rows nest their request and server metrics and accept only the power keys at top level. Every number, including nested AgentX metrics, must be finite.
-
-The models describe what the producers emit, including these quirks:
+The models accept these producer quirks:
 
 - `dp_attention`, `prefill_dp_attention`, and `decode_dp_attention` are the strings `"true"` and `"false"` on throughput and AgentX rows.
 - Multinode AgentX `tp` adds prefill and decode TP, and `ep` is the larger role's EP. Multinode rows without decode GPUs report `decode_tp` and `decode_ep` as `0`.
 - `recipe_fingerprint` is empty when the dispatched config has none.
 - Eval rows upper-case `hw`, use `0` for an absent `isl` or `osl`, keep `build_row` defaults such as `"unknown"`, write `prefill=<flag>,decode=<flag>` when the roles' DP-attention settings differ, and may carry lm-eval's `"N/A"` standard errors.
 
-Producers stamp `result_schema_version: 1` on every row: `build_result` for fixed-sequence and AgentX, `build_row` for evals, and `calc_success_rate` for run stats. The constant lives in the stdlib-only `infx.results.schema` package because fixed-sequence processing runs on a bare runner interpreter and AgentX aggregation runs inside serving containers. Neither validates.
+Producers stamp `result_schema_version: 1` from the stdlib-only `infx.results.schema` package and do not validate. The collectors `collect_results`, `collect_eval_results`, and `calc_success_rate` validate every row. An unstamped row from an older checkout is validated as version 1 and published stamped; a row with any other version is quarantined as `unsupported_version`.
 
-Checkouts that predate the stamp, such as in-flight PR branches or e2e runs of an older `ref`, still emit unstamped rows. A collector validates such a row as version 1 and publishes it with the stamp when it passes. A row that carries any other version is quarantined as `unsupported_version`.
+A rejected row is left out of the aggregate and written to `rejected_rows.json` with its source and validation errors; non-finite numbers become strings such as `"NaN"` so the file stays standard JSON. The collector prints one `::error::` annotation per rejected row and exits non-zero after writing the valid aggregate, which keeps the sweep from default reuse. The collect job still uploads the aggregate and, when rows were rejected, `rejected_rows_<prefix>`, `rejected_rows_eval_<prefix>`, or `rejected_rows_run_stats`. InferenceX-app also reads the per-config `bmk_*` and `eval_*` artifacts directly, so a rejected row stays out of the database only when the app enforces the same contract.
 
-The collectors validate: `collect_results`, `collect_eval_results`, and `calc_success_rate`. A row that breaks the contract is left out of the aggregate and written to `rejected_rows.json` with its source and validation errors. Non-finite numbers in that row are written as strings such as `"NaN"`, so the file stays standard JSON. The collector prints one `::error::` annotation per rejected row to stderr and exits non-zero after writing the valid aggregate. The collect jobs still upload the aggregate and, when rows were rejected, `rejected_rows_<prefix>`, `rejected_rows_eval_<prefix>`, or `rejected_rows_run_stats`. The failed job keeps the sweep from default reuse. InferenceX-app also reads the per-config `bmk_*` and `eval_*` artifacts directly, so a rejected row stays out of the database only when the app applies the same contract.
-
-JSON Schemas for the four row models are committed in [`schemas/`](../schemas/), and a test fails when they drift from the models. After changing a model, regenerate them from this project directory:
+[`schemas/`](../schemas/) holds the JSON Schemas generated from the four row models, and a test fails when they drift. Regenerate them from this project directory:
 
 ```bash
 uv run python -m infx.results.schema export schemas

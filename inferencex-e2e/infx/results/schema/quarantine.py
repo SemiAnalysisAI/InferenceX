@@ -13,7 +13,7 @@ from pydantic_core import ErrorDetails
 from . import RESULT_SCHEMA_VERSION
 
 REJECTED_ROWS = Path("rejected_rows.json")
-VERSION = "result_schema_version"
+VERSION_FIELD = "result_schema_version"
 
 
 def row_errors(schema: TypeAdapter[Any], row: object) -> list[ErrorDetails]:
@@ -27,13 +27,13 @@ def row_errors(schema: TypeAdapter[Any], row: object) -> list[ErrorDetails]:
 def _versioned(row: object) -> tuple[object, list[dict[str, Any]]]:
     if not isinstance(row, dict):
         return row, []
-    if VERSION not in row:
+    if VERSION_FIELD not in row:
         # Checkouts that predate the stamp still publish rows that satisfy version 1.
-        return {VERSION: RESULT_SCHEMA_VERSION, **row}, []
-    version = row[VERSION]
+        return {VERSION_FIELD: RESULT_SCHEMA_VERSION, **row}, []
+    version = row[VERSION_FIELD]
     if type(version) is int and version != RESULT_SCHEMA_VERSION:
         message = f"Unsupported result_schema_version {version}; expected {RESULT_SCHEMA_VERSION}"
-        return row, [{"type": "unsupported_version", "loc": [VERSION], "msg": message}]
+        return row, [{"type": "unsupported_version", "loc": [VERSION_FIELD], "msg": message}]
     return row, []
 
 
@@ -68,11 +68,11 @@ def _standard_json(value: Any) -> Any:
     return value
 
 
-def report(rejected: list[dict[str, Any]], path: Path = REJECTED_ROWS) -> int:
+def report(rejected: list[dict[str, Any]]) -> int:
     """Write and annotate rejections; return the collector's exit status."""
     if not rejected:
         return 0
-    path.write_text(json.dumps(_standard_json(rejected), indent=2, allow_nan=False) + "\n")
+    REJECTED_ROWS.write_text(json.dumps(_standard_json(rejected), indent=2, allow_nan=False) + "\n")
     for entry in rejected:
         problems = "; ".join(
             f"{'.'.join(map(str, error['loc'])) or 'row'}: {error['msg']}"
@@ -80,5 +80,7 @@ def report(rejected: list[dict[str, Any]], path: Path = REJECTED_ROWS) -> int:
         )
         message = _escape(f"{entry['source']}: {problems}")
         print(f"::error title=Rejected result row::{message}", file=sys.stderr)
-    print(f"{len(rejected)} row(s) failed the result contract; see {path}", file=sys.stderr)
+    print(
+        f"{len(rejected)} row(s) failed the result contract; see {REJECTED_ROWS}", file=sys.stderr
+    )
     return 1
