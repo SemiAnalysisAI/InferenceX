@@ -6078,13 +6078,13 @@ minimaxm3-fp4-gb200-dynamo-trt-agentic-agg-mtp:
 
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 GB200 behind the llm-d router (srt-slurm
 # frontend.type: llm-d). The image bundles epp and pd-sidecar from llm-d-router v0.10.0.
-dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-disagg:
+dsv4-fp4-gb200-llmd-vllm-agentic-mtp-disagg:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb200-nv
   precision: fp4
-  framework: vllm
+  framework: llmd-vllm
   router: { name: llm-d-router, version: "0.10.0" }
   kv-p2p-transfer: nixl
   multinode: true
@@ -6129,13 +6129,13 @@ dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-disagg:
           dp-attn: true
 
 # Aggregated TP8 and DEP8 over two trays; only the Mooncake arm offloads KV to DRAM.
-dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-agg:
+dsv4-fp4-gb200-llmd-vllm-agentic-mtp-agg:
   image: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb200-nv
   precision: fp4
-  framework: vllm
+  framework: llmd-vllm
   router: { name: llm-d-router, version: "0.10.0" }
   multinode: true
   disagg: false

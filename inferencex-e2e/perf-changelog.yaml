@@ -9530,8 +9530,8 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
 
 - config-keys:
-    - dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-disagg
-    - dsv4-fp4-gb200-vllm-llm-d-agentic-mtp-agg
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-agg
   scenario-type:
     - agentic-coding
   description:
