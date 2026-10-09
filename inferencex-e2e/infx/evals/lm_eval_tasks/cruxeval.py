@@ -73,7 +73,8 @@ def _assertion(generation: str) -> ast.Compare | None:
             line = f"assert {line}"
         try:
             node = ast.parse(line).body[0]
-        except (SyntaxError, IndexError):
+        # ValueError: an integer literal past Python's int-to-str digit limit.
+        except (SyntaxError, IndexError, ValueError, RecursionError, MemoryError):
             continue
         test = node.test if isinstance(node, ast.Assert) else None
         if (
@@ -114,7 +115,10 @@ def passes(program: str) -> bool:
             result = subprocess.run(
                 [sys.executable, "-I", "-c", _RUNNER.format(memory=MEMORY_BYTES)],
                 input=program,
-                capture_output=True,
+                # Only the exit status matters; discarding output keeps a model that
+                # prints in a loop from growing this unsandboxed process's memory.
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 cwd=workdir,
                 env={"PATH": os.environ.get("PATH", ""), "PYTHONHASHSEED": "0"},
