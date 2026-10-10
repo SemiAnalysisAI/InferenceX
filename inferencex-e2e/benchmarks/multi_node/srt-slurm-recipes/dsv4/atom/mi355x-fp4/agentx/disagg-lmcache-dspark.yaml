@@ -1,8 +1,8 @@
 # DeepSeek-V4-Pro-0813 AgentX on MI355X: 1P1D ATOM disaggregation over Mooncake
 # RDMA behind AToMesh, with DSpark (three draft tokens). Three tiers:
-# TP8 at concurrency 1-16, DP attention at 64-128, and DP attention plus ATOM's
-# in-process LMCache CPU offload on prefill at 256. srtctl generates the Mooncake
-# P/D connector; the offload tier adds lmcache_offload next to it through
+# TP8 at concurrency 1-16, DP attention at 64, and at 128-512 an EP8 Mega MoE
+# prefill offloading to a node-wide LMCache MP server. srtctl generates the
+# Mooncake P/D connector; the offload tier adds lmcache_mp next to it through
 # extra-kv-connectors.
 base:
   schema: 2
@@ -102,7 +102,7 @@ base:
 
 # One variant per point; each point runs in its own allocation. Admission is
 # 2x CONC on both roles. Decode captures every batch up to min(64, 2x CONC) on
-# TP, or CONC/4 per rank under DP attention. DP attention adds TBO on prefill.
+# TP, or CONC/4 per rank under DP attention. c64 adds TBO on prefill.
 
 override_tp8_c1:
   frontend:
@@ -171,97 +171,17 @@ override_dpa8_c64:
     env:
       CONC: '64'
 
-override_dpa8_c128:
-  frontend:
-    args:
-      dp-aware: true
-      prefill-policy: cache_aware
-      decode-policy: cache_aware
-      cache-threshold: 0.8
-      balance-abs-threshold: 20
-      balance-rel-threshold: 2.0
-      eviction-interval: 300
-      atom-pd-rank-mapping-policy: none
-  roles:
-    prefill:
-      env:
-        ATOM_ENABLE_PREFILL_DELAYER: '0'
-        GPU_MAX_HW_QUEUES: '5'
-      args:
-        max-num-seqs: 256
-        enable-dp-attention: true
-        enable-tbo: true
-    decode:
-      env:
-        ATOM_ENABLE_PREFILL_DELAYER: '0'
-      args:
-        max-num-seqs: 256
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
-        enable-dp-attention: true
-  benchmark:
-    env:
-      CONC: '128'
 
-override_dpa8_c256_lmcache:
-  frontend:
-    args:
-      dp-aware: true
-      prefill-policy: dp_sticky
-      decode-policy: dp_sticky
-      atom-pd-rank-mapping-policy: none
-  roles:
-    prefill:
-      env:
-        ATOM_ENABLE_PREFILL_DELAYER: '0'
-        GPU_MAX_HW_QUEUES: '5'
-        PYTHONHASHSEED: '0'
-        OFFLOAD_COPY_WORKERS: '1'
-        OFFLOAD_MIN_LOAD_TOKENS: '8192'
-        OFFLOAD_SLOT_STAGING_SLOTS: '4'
-      args:
-        max-num-seqs: 512
-        enable-dp-attention: true
-        enable-tbo: true
-        extra-kv-connectors:
-          - kv_connector: lmcache_offload
-            kv_role: offload
-            offload_layout: hybrid
-            max_pending_saves: 8
-            slot_sidecar_staging_slots: 4
-            lmcache.local_cpu: true
-            # total-cpu-dram-gb 1499 (dram-utilization 0.5) over the eight prefill ranks.
-            lmcache.max_local_cpu_size: 187
-            lmcache.local_disk: null
-            lmcache.max_local_disk_size: 0
-            lmcache.remote_url: null
-            lmcache.chunk_size: 256
-            lmcache.cache_policy: LRU
-            lmcache.lookup_server_worker_ids: []
-            lmcache.store_location: LocalCPUBackend
-            lmcache.retrieve_locations: [LocalCPUBackend]
-    decode:
-      env:
-        ATOM_ENABLE_PREFILL_DELAYER: '0'
-      args:
-        max-num-seqs: 512
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'
-        enable-dp-attention: true
-  benchmark:
-    env:
-      CONC: '256'
-      # dp_sticky keys sessions on the correlation id.
-      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
-
-# Concurrency 256 per ROCm/ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md at
-# codex/v4-pd-ep8-mega-mp-sticky-recipe-20261008: prefill runs EP8 with the
+# Concurrency 128, 256 and 512 per ROCm/ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md
+# at codex/v4-pd-ep8-mega-mp-sticky-recipe-20261008: prefill runs EP8 with the
 # Mega MoE backend and EPLB, without TBO, and offloads to one node-wide LMCache
-# MP server (lazy 1000 GB L1 shared by the eight prefill ranks) instead of the
-# in-process lmcache_offload tier. Decode is unchanged from the c256 point above.
-# Run by its own master-config key on a newer nightly, so it sets the image.
-override_ep8_c256_mega_mp:
+# MP server (lazy 1000 GB L1 shared by the eight prefill ranks); decode is DP
+# attention without offload. Both roles route dp_sticky. Run by their own
+# master-config key on a newer nightly, so they set the image.
+override_ep8_c128_mega_mp:
   model:
-    container: rocm/atom-dev:nightly_202610080328
-  services:
+    container: &mega_mp_image rocm/atom-dev:nightly_202610080328
+  services: &mega_mp_services
     - name: lmcache
       type: lmcache-server
       placement:
@@ -283,7 +203,7 @@ override_ep8_c256_mega_mp:
         - LRU
         - --eviction-trigger-watermark
         - '0.98'
-  frontend:
+  frontend: &mega_mp_frontend
     args:
       dp-aware: true
       prefill-policy: dp_sticky
@@ -291,7 +211,7 @@ override_ep8_c256_mega_mp:
       atom-pd-rank-mapping-policy: none
   roles:
     prefill:
-      env:
+      env: &mega_mp_prefill_env
         ATOM_ENABLE_PREFILL_DELAYER: '0'
         GPU_MAX_HW_QUEUES: '5'
         PYTHONHASHSEED: '0'
@@ -305,8 +225,8 @@ override_ep8_c256_mega_mp:
         ATOM_MEGA_DECODE_MTPR: '512'
         AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
         ATOM_EPLB_MAX_REBALANCES: '4'
-      args:
-        max-num-seqs: 512
+      args: &mega_mp_prefill_args
+        max-num-seqs: 256
         enable-dp-attention: true
         enable-expert-parallel: true
         all2all-backend: high-throughput
@@ -321,8 +241,31 @@ override_ep8_c256_mega_mp:
               lmcache.mp.host: tcp://127.0.0.1
               lmcache.mp.tp_rank_collapse: true
     decode:
-      env:
+      env: &mega_mp_decode_env
         ATOM_ENABLE_PREFILL_DELAYER: '0'
+      args:
+        max-num-seqs: 256
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
+        enable-dp-attention: true
+  benchmark:
+    env:
+      CONC: '128'
+      # dp_sticky keys sessions on the correlation id.
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_ep8_c256_mega_mp:
+  model:
+    container: *mega_mp_image
+  services: *mega_mp_services
+  frontend: *mega_mp_frontend
+  roles:
+    prefill:
+      env: *mega_mp_prefill_env
+      args:
+        <<: *mega_mp_prefill_args
+        max-num-seqs: 512
+    decode:
+      env: *mega_mp_decode_env
       args:
         max-num-seqs: 512
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'
@@ -330,5 +273,26 @@ override_ep8_c256_mega_mp:
   benchmark:
     env:
       CONC: '256'
-      # dp_sticky keys sessions on the correlation id.
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_ep8_c512_mega_mp:
+  model:
+    container: *mega_mp_image
+  services: *mega_mp_services
+  frontend: *mega_mp_frontend
+  roles:
+    prefill:
+      env: *mega_mp_prefill_env
+      args:
+        <<: *mega_mp_prefill_args
+        max-num-seqs: 1024
+    decode:
+      env: *mega_mp_decode_env
+      args:
+        max-num-seqs: 1024
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128]'
+        enable-dp-attention: true
+  benchmark:
+    env:
+      CONC: '512'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
