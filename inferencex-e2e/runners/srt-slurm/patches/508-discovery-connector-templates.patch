@@ -1,0 +1,76 @@
+Subject: [PATCH] Bind discovery endpoints in srt-slurm connector templates
+Upstream: https://github.com/NVIDIA/srt-slurm/pull/508
+
+This launcher-side configuration fix binds allocated discovery addresses and ports inside explicit connector templates while preserving sibling connectors, including CPU offload. The target file, src/srtctl/backends/vllm.py, belongs to srt-slurm's launcher backend, not the vLLM engine. It does not modify inference-engine/runtime code, kernels, model computation, or the serving image.
+
+diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
+index 284e3b38..4bc8b8f6 100644
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -521,7 +521,9 @@ class VLLMBackend(Backend):
+         """``--kv-transfer-config`` JSON for a worker mode, or None when the mode has no connector.
+ 
+         Table connectors expand to their preset for the mode; a raw JSON string
+-        from the recipe passes through unchanged. A discovery connector also needs
++        in ``connector`` passes through unchanged. A discovery connector uses an
++        explicit ``kv-transfer-config`` as a template, binding its unique matching
++        child without modifying the recipe or sibling connectors. It also needs
+         the realized topology (``process`` and ``runtime``) for its
+         ``kv_connector_extra_config``: the router's address and discovery port,
+         this worker's HTTP port and routable IP, and the handshake and notify
+@@ -530,7 +532,10 @@ class VLLMBackend(Backend):
+         connector = self._effective_connector_for_mode(mode, use_default=use_default)
+         if not connector or connector.lower() in ("null", "none"):
+             return None
+-        row = kv_connector_row(connector)
++        config = self.get_config_for_mode(mode)
++        row = self.kv_connector_for_mode(mode)
++        if not use_default and config.get("connector") is None:
++            row = None
+         if row is None or not row.discovery:
+             return _connector_to_kv_transfer_config(connector, mode)
+         if process is None or runtime is None:
+@@ -538,8 +543,41 @@ class VLLMBackend(Backend):
+                 f"connector {connector!r} registers workers with the vLLM Router and needs the worker topology; "
+                 "it is only available with frontend.type: vllm-router"
+             )
+-        payload = row.transfer_config(mode)
+-        payload["kv_connector_extra_config"] = self._discovery_extra_config(process, runtime)
++        if "kv-transfer-config" in config and "kv_transfer_config" in config:
++            raise ValueError("discovery template must not set both kv-transfer-config and kv_transfer_config")
++        payload = json.loads(_connector_to_kv_transfer_config(connector, mode))
++        targets: list[dict[str, Any]] = []
++
++        def visit(node: Any) -> None:
++            if not isinstance(node, dict):
++                raise TypeError("discovery kv-transfer-config and its connectors must be JSON objects")
++            if node.get("kv_connector") == row.kv_connector:
++                targets.append(node)
++            extra = node.get("kv_connector_extra_config", {})
++            if not isinstance(extra, dict):
++                raise TypeError("kv_connector_extra_config must be a JSON object")
++            children = extra.get("connectors", [])
++            if not isinstance(children, list):
++                raise TypeError("connectors must be a list")
++            for child in children:
++                visit(child)
++
++        visit(payload)
++        if len(targets) != 1:
++            raise ValueError(f"discovery kv-transfer-config requires exactly one {row.kv_connector}")
++        target = targets[0]
++        expected_role = row.transfer_config(mode)["kv_role"]
++        if target.get("kv_role", expected_role) != expected_role:
++            raise ValueError(f"discovery kv_role must be {expected_role} for {mode}")
++        target["kv_role"] = expected_role
++        extra = target.setdefault("kv_connector_extra_config", {})
++        for key, value in self._discovery_extra_config(process, runtime).items():
++            configured = extra.get(key, value)
++            if key.endswith("_port") and type(configured) is int:
++                configured = str(configured)
++            if configured != value:
++                raise ValueError(f"discovery {key} conflicts with the allocated worker topology")
++            extra[key] = value
+         return json.dumps(payload)
+ 
+     def _discovery_extra_config(self, process: Process, runtime: RuntimeContext) -> dict[str, Any]:

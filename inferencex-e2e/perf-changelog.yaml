@@ -9538,3 +9538,16 @@
     - "Run prefill context parallelism on the TP-only arms at conc 16, 32 and 48; conc 1 and 4 keep BCG."
     - "Enable SGLANG_OPT_FP8_WO_A_FUSED_INVROPE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3778
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native Kimi-K3 PD with FP8 KV and GMU 0.90 on official ROCm nightly 81198e97ba7eee2a22540caaa756b7fdddcb4d93, pinned by digest in master and recipe."
+    - "Use TP8 per worker: 1P1D c48/c56, 1P2D c24/c48 and 1P3D c12/c24, with automatic golden acceptance, default request-ID randomization and default evaluation selection."
+    - "Use the AgentX scenario's default 10% live failure threshold, retaining a stream interval of 10 on both roles and optional server-metrics validation."
+    - "Set the prefill sequence limit to twice the global concurrency and divide that capacity across decode workers; 1P1D c56 uses 112 sequences per role with a decode graph capture limit of 280."
+    - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
+    - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Carry srt-slurm #508 through the existing job-local patch mechanism until the shared dependency includes it."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582

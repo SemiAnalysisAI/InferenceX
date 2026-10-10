@@ -845,6 +845,7 @@ clusters:
       MORI_RDMA_TC: "104"
     models:
       entries:
+        Kimi-K3: {root: it-share-data, dir: Kimi-K3}
         DeepSeek-V4-Pro-0813: {root: it-share-data, dir: DeepSeek-V4-Pro-0813}
         GLM-5.3: {root: it-share-data, dir: GLM-5.3}
         Qwen3.5-397B-A17B-FP8: {root: it-share-data, dir: Qwen3.5-397B-A17B-FP8}
