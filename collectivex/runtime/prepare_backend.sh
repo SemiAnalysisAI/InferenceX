@@ -16,7 +16,7 @@ collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${
 readonly -a RANK_ENV_VARS=(
   PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
-  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
+  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -487,6 +487,43 @@ nccl_ep_prepare() {
   collx_log "NCCL EP ready ($COLLX_NCCL_EP_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
 }
 
+# Multi-node EFA shards build aws-ofi-nccl against the host libfabric the enroot hook mounts, from
+# a hash-pinned release tarball; the rank wrapper's EFA profile then loads it in place of the
+# host's (see COLLX_OFI_NCCL_VERSION). Proxy GIN only: configure finds no libfabric GDA ops.
+ofi_nccl_ready() { [ -f "$1/.ready" ] && [ -r "$1/lib/libnccl-net-ofi.so" ]; }
+
+ofi_nccl_install() {
+  local root="$1" version="$COLLX_OFI_NCCL_VERSION" tarball cuda_home
+  rm -rf "$root" && mkdir -m 700 "$root" \
+    || { collx_log "ERROR: aws-ofi-nccl cache-create failed"; return 1; }
+  tarball="aws-ofi-nccl-$version.tar.gz"
+  curl -sSfL --retry 3 -o "$root/$tarball" \
+      "https://github.com/aws/aws-ofi-nccl/releases/download/v$version/$tarball" \
+    && printf '%s  %s\n' "$COLLX_OFI_NCCL_SHA256" "$root/$tarball" | sha256sum -c --quiet \
+    && tar -xzf "$root/$tarball" -C "$root" \
+    || { collx_log "ERROR: aws-ofi-nccl source fetch failed"; return 1; }
+  IFS=$'\t' read -r cuda_home _ <<< "$(cuda_toolchain_paths)" && [ -n "$cuda_home" ] || return 1
+  collx_log "aws-ofi-nccl: building $version"
+  (
+    cd "$root/aws-ofi-nccl-$version" \
+      && ./configure -q --prefix="$root" --with-libfabric=/opt/amazon/efa --with-cuda="$cuda_home" \
+        --enable-platform-aws --disable-tests \
+      && make -s -j"$(nproc)" && make -s install
+  ) >&2 2>&1 || { collx_log "ERROR: aws-ofi-nccl build failed"; return 1; }
+  rm -rf "${root:?}/aws-ofi-nccl-$version" "${root:?}/$tarball"
+  : > "$root/.ready"
+}
+
+ofi_nccl_prepare() {
+  local root
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] && [ "${COLLX_NODES:-1}" -gt 1 ] || return 0
+  root="$(backend_cache_root ofi-nccl efa "$COLLX_OFI_NCCL_VERSION")" \
+    || root="/tmp/collectivex-ofi-nccl-$COLLX_OFI_NCCL_VERSION"
+  with_cache_lock "aws-ofi-nccl" "$root" ofi_nccl_ready ofi_nccl_install || return 1
+  export COLLX_OFI_NCCL_LIB_DIR="$root/lib"
+  collx_log "aws-ofi-nccl $COLLX_OFI_NCCL_VERSION ready"
+}
+
 # container boundary
 
 write_rank_env() {
@@ -570,6 +607,7 @@ FICHECK
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
   validate_container_network || return 1
+  ofi_nccl_prepare || return 1
   case "$COLLX_BENCH" in
     deepep-v2) deepep_prepare || return 1 ;;
     mori)

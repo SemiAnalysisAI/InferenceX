@@ -38,6 +38,11 @@ COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 # whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
 # string keys the shared cache dir.
 COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
+# aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards. The hosts mount 1.20, whose
+# proxy thread applies every GIN signal with an inline gdrcopy read-modify-write of device memory;
+# 1.21 hands signals to a worker and drops the read (1.3-4.5x on b300 EP16).
+COLLX_OFI_NCCL_VERSION="1.21.1"
+COLLX_OFI_NCCL_SHA256="2533d1ec179a86dcf0470fc39800b06cd9169cd854c0c913cc4782a42f36cff4"
 
 collx_log_tail() {
   local log_path="$1"
@@ -128,7 +133,7 @@ collx_load_operator_config() {
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
-  unset COLLX_RDMA_RELAXED_ORDERING
+  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -217,13 +222,22 @@ collx_export_gid_index_for_link_layer() {
 # HCA: its ports report link_layer Unspecified, it has no GID table, service level or traffic
 # class, and NCCL reaches it only through the aws-ofi-nccl libfabric plugin, which the cluster's
 # enroot hook bind-mounts into every container (/opt/amazon/{efa,ofi-nccl} on the ld path). GIN
-# rides the plugin's ncclGinPlugin export (proxy or GDAKI; OFI_NCCL_GIN_TYPE selects). So the
+# rides the plugin's ncclGinPlugin export through its CPU proxy: GPU-initiated GIN on EFA needs
+# libfabric GDA ops and a counting-event efa.ko the hosts lack (EFA installer 1.50.0). So the
 # whole IB/RoCE selector family (NCCL_IB_*, NVSHMEM_HCA_LIST/IBGDA, MORI_*, UCCL_IB_*) stays
 # unset: the plugin enumerates and rails the EFA devices itself, and the operator's rdma_devices
 # list is consumed only by the network-profile probe as the set of ports that must be ACTIVE.
 # NVSHMEM (deepep-v2) has its own libfabric transport; point it at EFA the same way.
+# NCCL_GIN_TYPE=2 (proxy): with gdrcopy present the plugin's GIN loads, but NCCL still prefers
+# its built-in GDAKI on the nodes' two ConnectX-7 IB ports, which are not the GPU fabric, and
+# window registration then fails on most ranks (error 6) while the rest wait.
+# Ranks load the plugin build their rank env names (COLLX_OFI_NCCL_LIB_DIR); otherwise the host's.
 collx_apply_efa_profile() {
-  export NCCL_NET_PLUGIN=ofi
+  export NCCL_NET_PLUGIN=ofi NCCL_GIN_TYPE=2
+  if [ -n "${COLLX_OFI_NCCL_LIB_DIR:-}" ]; then
+    export NCCL_NET_PLUGIN="$COLLX_OFI_NCCL_LIB_DIR/libnccl-net-ofi.so" \
+      NCCL_TUNER_PLUGIN="$COLLX_OFI_NCCL_LIB_DIR/libnccl-ofi-tuner.so"
+  fi
   export FI_PROVIDER=efa FI_EFA_FORK_SAFE=1
   export NVSHMEM_REMOTE_TRANSPORT=libfabric NVSHMEM_LIBFABRIC_PROVIDER=efa
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER NVSHMEM_HCA_LIST NVSHMEM_ENABLE_NIC_PE_MAPPING
@@ -235,7 +249,8 @@ collx_apply_network_profile() {
   local selector rdma_name rdma_names="" ep_nic=""
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid network placement"
-  unset NCCL_NET NCCL_NET_PLUGIN NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
+  unset NCCL_NET NCCL_NET_PLUGIN NCCL_TUNER_PLUGIN NCCL_GIN_TYPE NCCL_SOCKET_IFNAME
+  unset GLOO_SOCKET_IFNAME NCCL_IB_HCA
   unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
   unset NVSHMEM_ENABLE_NIC_PE_MAPPING
   unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL

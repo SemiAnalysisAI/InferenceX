@@ -228,11 +228,17 @@ probe accepts the unspecified link layer for the listed `rdma_devices` (which mu
 on every node), the IB selector family (`NCCL_IB_*`, `NVSHMEM_HCA_LIST`/IBGDA, MoRI, UCCL) stays
 unset, `NCCL_NET_PLUGIN=ofi` and `FI_PROVIDER=efa` select the plugin, NVSHMEM is pointed at its
 libfabric transport, and backend setup fails unless the plugin library is present in the container.
-NCCL GIN then rides the plugin's own GIN implementation (`OFI_NCCL_GIN_TYPE` selects proxy or GDAKI),
-which requires GDRCopy 2.5+ (`gdrdrv` loaded, `libgdrapi` present) on the node: without it the plugin's
-GIN init fails, NCCL disables the Device API for the communicator, and `ncclEpCreateGroup` returns
-`ncclInvalidUsage` (verified on b300-dsxe 2026-09-11; that pool ships no gdrcopy, so its EP16 legs are
-withheld from the registry until it does). DeepEP V2 low-latency is also withheld there: its legacy
+NCCL GIN then rides the plugin's GIN through its CPU proxy (`NCCL_GIN_TYPE=2`), which requires
+GDRCopy 2.5+ (`gdrdrv` loaded, `libgdrapi` present) on the node: without it the plugin's GIN init fails,
+NCCL disables the Device API for the communicator, and `ncclEpCreateGroup` returns `ncclInvalidUsage`.
+The type is pinned because NCCL otherwise prefers its built-in GDAKI on the nodes' two ConnectX-7 IB
+ports, which are not the GPU fabric, and most ranks then fail window registration while the rest hang.
+Multi-node shards build aws-ofi-nccl 1.21.1 into the backend cache and load it in place of the hosts'
+1.20, whose proxy applies every signal with an inline GPU read-modify-write (1.3-4.5x on b300 EP16).
+Proxy GIN still bounds these rows well below the IB pools: GPU-initiated GIN on EFA needs EFA
+installer 1.50.0 on the hosts (efa.ko 3.3.0 completion counters, libfabric 2.6) and NCCL 2.31.
+DeepEP sizes its SMs from an `ibstat` rate probe that cannot see EFA, so `network.rdma_gbs` supplies
+the per-GPU scale-out rate instead. DeepEP V2 low-latency stays withheld there: its legacy
 Buffer initialises NVSHMEM with an RDMA transport even single-node, and on that pool NVSHMEM aborts
 with "nvshmem detect topo failed" (status 28) with and without `NVSHMEM_REMOTE_TRANSPORT=none`
 (runs 34521825749, 34523594787); the HT ElasticBuffer path, which needs no NVSHMEM, passes.
