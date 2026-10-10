@@ -26,3 +26,16 @@ qwen3.5-397b-a17b-nvfp4:
     6: 4.48
     7: 4.73
     8: 4.71
+
+# SPEED-Bench client settings of this collection; the acceptance-length gate replays them
+# (README.md#collection-settings).
+collection:
+  concurrency: 1
+  renderer: chat_template
+  modes:
+    thinking_on:
+      chat_template_kwargs: {enable_thinking: true}
+      sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0.0, repetition_penalty: 1.0}
+    thinking_off:
+      chat_template_kwargs: {enable_thinking: false}
+      sampling: {temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, repetition_penalty: 1.0}

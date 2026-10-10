@@ -2,8 +2,10 @@
 
 import json
 import math
+from pathlib import Path
 
 import pytest
+import yaml
 
 from infx.golden_al_distribution import (
     GOLDEN_DIR,
@@ -11,6 +13,7 @@ from infx.golden_al_distribution import (
     curve_name,
     golden_length,
     list_curves,
+    load_curve,
 )
 from infx.golden_al_distribution.__main__ import main
 
@@ -26,6 +29,27 @@ def test_every_committed_curve_is_valid() -> None:
                 value = curve.acceptance(mode, tokens)
                 assert math.isfinite(value)
                 assert 1 <= value <= tokens + 1
+
+
+def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
+    collection = {
+        "concurrency": 32,
+        "renderer": "deepseek_v4",
+        "modes": {"thinking_on": {"chat_template_kwargs": None, "sampling": {"temperature": 1.0}}},
+    }
+    curves = {
+        "recorded": {"deepseek-v4-pro": {"thinking_on": {3: 3.01}}, "collection": collection},
+        "unrecorded": {"kimi-k3": {"thinking_on": {7: 3.78}}},
+        "two_models": {"a": {"thinking_on": {1: 1.5}}, "b": {}, "collection": collection},
+    }
+    for name, document in curves.items():
+        (tmp_path / f"{name}.yaml").write_text(yaml.safe_dump(document))
+    recorded = load_curve("recorded", tmp_path)
+    assert (recorded.model, recorded.acceptance("thinking_on", 3)) == ("deepseek-v4-pro", 3.01)
+    assert recorded.collection == collection
+    assert load_curve("unrecorded", tmp_path).collection is None
+    with pytest.raises(ValueError, match="Expected one model in golden curve two_models.yaml"):
+        load_curve("two_models", tmp_path)
 
 
 @pytest.mark.parametrize(

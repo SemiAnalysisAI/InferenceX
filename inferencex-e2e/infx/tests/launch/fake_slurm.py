@@ -128,6 +128,11 @@ elif mode == "agentic":
     for conc in os.environ["CONC_LIST"].split():
         (workspace / f"{result}_conc{conc}.json").write_text(json.dumps({"conc": int(conc)}))
         (logs / "agentic" / f"conc_{conc}").mkdir(parents=True)
+elif mode == "gate":
+    # What the acceptance gate writes to AL_GATE_OUTPUT_DIR (/logs in the container).
+    (logs / f"al_gate_{result}.json").write_text(json.dumps({"status": "below", "result_filename": result}))
+    (logs / "al_gate" / "aiperf_artifacts").mkdir(parents=True)
+    (logs / "al_gate" / "aiperf_artifacts" / "server_metrics_export.json").write_text("{}")
 if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true":
     (logs / "eval_results").mkdir()
     (logs / "eval_results" / "results_gsm8k.json").write_text("{}")

@@ -197,6 +197,18 @@ cancels siblings within each matrix family, not every independent family.
 Find the first actual failure before treating a cancelled run as a flake.
 Manual `e2e-tests.yml` has no canary and defaults `fail-fast` to false.
 
+## Speculative acceptance gate
+
+AgentX throughput forces speculative acceptance to the committed golden acceptance length (AL). The acceptance gate, milestone M1 of [#1651](https://github.com/SemiAnalysisAI/InferenceX/issues/1651), first measures each deployment's real AL. Only `run-sweep.yml` PR sweeps run it; `e2e-tests.yml` has no gate.
+
+1. `al-gate-select` starts right after `setup`, alongside the canary. The planning and canary execution jobs explicitly check cancellation and dependency success, so a skipped optional reuse job does not suppress them. [`infx.srt_slurm.al_gate plan`](../../inferencex-e2e/infx/srt_slurm/al_gate.py) groups the AgentX speculative points by deployment topology and drafting configuration (method, draft length, draft model, and draft and rejection samplers). Each group gets one gate, on its representative point: the smallest concurrency at or above the curve's golden collection concurrency, otherwise the largest.
+2. The hosted job removes unused preinstalled SDKs to make room for the pinned resolver's source datasets. When the plan has gates, it prepares the SPEED-Bench `coding` prompts once for the run with `python -m infx.bench.speedbench`. It runs the pinned NeMo-Skills `prepare.py` on a pinned dataset revision and fails unless the prompts match the pinned digest. The prompts are uploaded as the `al_gate_dataset` artifact; GPU nodes never prepare them.
+3. Each point the planner cannot gate is listed as unresolved, with the reason, and gets no GPU time. These deployments are exempt for now: `dynamo-trt`, whose recipes turn TensorRT-LLM metrics off; `tilert`, whose router rejects streaming `/v1/completions` and serves no metrics; and Dynamo vLLM data-parallel generation workers that span more than one node, because the benchmark receives only the leader's metrics URL. DeepSeek V4.1 Flash points stay unresolved until a follow-up PR restores the V4.1 prompt renderer.
+4. After the canary, `al-gate` and `al-gate-multinode` launch each representative's recipe with real verification and replace the AgentX benchmark with `python3 -m infx.bench al-gate`. It replays the prompts with the client settings in the curve's `collection` block and computes AL from the generation engine's acceptance counters, scraped before and after the replay. Each gate uploads `algate_<gate id>`.
+5. `al-gate-collect` publishes measured AL, golden AL, ratio, and status in the run summary, followed by planned gates without a result and the unresolved points. The status is `pass`, `below` (under 0.95x golden), `above` (over 1.05x), `no-counters`, `no-drafting`, or `error`.
+
+The gate is report-only. Every step that can fail in a gate job continues on error, so gate jobs stay green, and AgentX throughput waits for `al-gate-collect` but ignores the verdicts. The AgentX canary point runs its throughput before its gate, and fixed-sequence speculative points are not gated. Re-running a gate job also re-runs every job that depends on it, including all AgentX throughput jobs.
+
 ## Changelog Conflict Recovery
 
 Run from `inferencex-e2e/`. After fetching and merging `origin/main`, if the

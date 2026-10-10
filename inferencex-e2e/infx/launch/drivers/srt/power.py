@@ -148,7 +148,7 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
 
     Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
-    if not request.power:
+    if not request.power or request.al_gate:
         return NO_POWER
     lane = POWER_LANES.get((cluster_id, path))
     if lane is None:

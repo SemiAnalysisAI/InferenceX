@@ -63,6 +63,9 @@ on:
         required: false
         type: string
         default: ""
+      al-gate:
+        description: "Run the report-only acceptance gate of config['al-gate'] instead of AgentX throughput"
+        type: boolean
       require-power:
         description: "Fail fixed-sequence result processing when GPU power is invalid"
         type: boolean
@@ -143,6 +146,10 @@ env:
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   POWER: ${{ fromJSON(inputs.config).power && '1' || '0' }}
+  AL_GATE: ${{ inputs.al-gate }}
+  AL_GATE_CURVE: ${{ inputs.al-gate && fromJSON(inputs.config)['al-gate'].curve || '' }}
+  AL_GATE_DRAFT_TOKENS: ${{ inputs.al-gate && format('{0}', fromJSON(inputs.config)['al-gate']['draft-tokens']) || '' }}
+  AL_GATE_DATASET: ${{ inputs.al-gate && 'al_gate_dataset/speedbench_coding.jsonl' || '' }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
@@ -220,6 +227,7 @@ jobs:
 
     steps:
       - name: Slurm cleanup (pre-run)
+        continue-on-error: ${{ inputs.al-gate }}
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
@@ -244,14 +252,17 @@ jobs:
 
       - name: Wipe workspace after failed checkout
         if: ${{ steps.checkout.outcome == 'failure' }}
+        continue-on-error: ${{ inputs.al-gate }}
         run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
       - name: Retry checkout
         if: ${{ steps.checkout.outcome == 'failure' }}
+        continue-on-error: ${{ inputs.al-gate }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: *checkout-inputs
 
       - name: Checkout result tooling
+        continue-on-error: ${{ inputs.al-gate }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
@@ -260,11 +271,13 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
+        continue-on-error: ${{ inputs.al-gate }}
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
 
       - name: Prepare result-processing Python
+        continue-on-error: ${{ inputs.al-gate }}
         env: &uv-setup-env
           UV_CACHE_DIR: ${{ github.workspace }}/../.infx-uv-cache
           UV_PYTHON_INSTALL_DIR: ${{ github.workspace }}/../.infx-uv-python
@@ -275,6 +288,7 @@ jobs:
           echo "INFERENCEX_RESULTS_PYTHON=$result_python" >> "$GITHUB_ENV"
 
       - name: Prepare launcher Python
+        continue-on-error: ${{ inputs.al-gate }}
         env: *uv-setup-env
         run: |
           launch_venv="$(mktemp -d "$RUNNER_TEMP/infx-launch-venv.XXXXXX")"
@@ -284,12 +298,22 @@ jobs:
           echo "INFERENCEX_LAUNCH_PYTHON=$launch_venv/bin/python" >> "$GITHUB_ENV"
 
       - name: Launcher cleanup (pre-run)
+        continue-on-error: ${{ inputs.al-gate }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: &launcher-cleanup |
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
+      - name: Download acceptance gate prompts
+        if: ${{ inputs.al-gate }}
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: al_gate_dataset
+          path: ${{ github.workspace }}/inferencex-e2e/al_gate_dataset
+
       - name: Launch multi-node job script
+        continue-on-error: ${{ inputs.al-gate }}
         env:
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
@@ -303,6 +327,7 @@ jobs:
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -x
           RESULT_FILENAME=$(python3 -m infx.results.result_filename)
+          if [ "${AL_GATE}" = "true" ]; then RESULT_FILENAME="${RESULT_FILENAME}_algate"; fi  # apart from the point's throughput artifacts
           export RESULT_FILENAME
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
           echo "EVAL_ARTIFACT_RECIPE=${RECIPE_FINGERPRINT:0:16}" >> "$GITHUB_ENV"
@@ -326,7 +351,9 @@ jobs:
           export EVAL_CONC
           export IS_MULTINODE=true
           "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
-          if [ "${EVAL_ONLY}" = "true" ]; then
+          if [ "${AL_GATE}" = "true" ]; then
+            test -f "al_gate_${RESULT_FILENAME}.json" || { echo "Run failed: no acceptance gate result." >&2; exit 1; }
+          elif [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             if ! ls results*.json 1>/dev/null 2>&1; then
               echo "Eval-only run failed: no results*.json files found." >&2
@@ -408,8 +435,19 @@ jobs:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
 
+      - name: Upload acceptance gate result
+        if: ${{ always() && inputs.al-gate }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: algate_${{ fromJSON(inputs.config)['al-gate'].id }}
+          overwrite: true
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/al_gate_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/al_gate/
+
       - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only }}
+        if: ${{ always() && !inputs.eval-only && !inputs.al-gate }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
@@ -427,6 +465,7 @@ jobs:
 
       - name: Upload server logs
         if: always()
+        continue-on-error: ${{ inputs.al-gate }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
@@ -447,7 +486,7 @@ jobs:
 
       - name: Upload agentic aggregated result
         id: upload-agentic-aggregated
-        if: ${{ always() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ always() && !inputs.eval-only && !inputs.al-gate && inputs.scenario-type == 'agentic-coding' }}
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -482,7 +521,7 @@ jobs:
 
       - name: Upload agentic raw results
         id: upload-agentic-raw
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ always() && !inputs.al-gate && inputs.scenario-type == 'agentic-coding' }}
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -618,10 +657,12 @@ jobs:
 
       - name: Slurm cleanup (post-run)
         if: always()
+        continue-on-error: ${{ inputs.al-gate }}
         run: *slurm-cleanup
 
       - name: Launcher cleanup (post-run)
         if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
+        continue-on-error: ${{ inputs.al-gate }}
         env:
           PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
         run: *launcher-cleanup

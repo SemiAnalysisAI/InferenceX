@@ -2,7 +2,7 @@
 
 English | [中文](README_zh.md)
 
-This directory contains the golden acceptance-length (AL) curves used to standardize speculative decoding moving forward in InferenceX. Each YAML maps a model, thinking mode, and draft length (`num_speculative_tokens`) to a mean AL measured on the **coding** category of the SPEED-Bench Qualitative split.
+This directory contains the golden acceptance-length (AL) curves used to standardize speculative decoding moving forward in InferenceX. Each YAML maps a model, thinking mode, and draft length (`num_speculative_tokens`) to a mean AL measured on the **coding** category of the SPEED-Bench Qualitative split, and records the [collection settings](#collection-settings) that produced those values.
 
 ## Why SPEED-Bench
 
@@ -98,9 +98,28 @@ The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.y
    The `1` is the target model's guaranteed verification token. Values are rounded to two decimal places.
 6. The collector emits a YAML matrix. The workflow publishes it in the GitHub Actions step summary and uploads it as a `speedbench-reference-al-<model-prefix>` artifact.
 7. Server logs and detailed per-request results are retained so reviewers can confirm sensible output, correct thinking mode, and the absence of silent server or chat-template failures.
-8. After review, the matrix is committed here with its exact sampling metadata and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `dsv4_mtp`), the workflow writes `<curve stem>.yaml` here with the source run URL on its first line. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
+8. After review, the matrix is committed here with its exact sampling metadata, its [collection settings](#collection-settings), and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `dsv4_mtp`), the workflow writes `<curve stem>.yaml` here with the source run URL on its first line. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
 
 The collection measures real head quality only to establish the golden curve. AgentX then uses that committed curve as the synthetic acceptance target for every comparable submission.
+
+## Collection settings
+
+Each curve YAML records the SPEED-Bench client settings of its collection in a reserved top-level `collection` key beside the model key, and `load_curve(name).collection` returns them (`None` for a curve without the block). In `run-sweep.yml` PR sweeps, the report-only acceptance-length gate replays these settings with real verification against each speculative AgentX deployment and compares the measured AL with the golden AL; see [the speculative acceptance gate](../../docs/ci-procedures.md#speculative-acceptance-gate).
+
+```yaml
+collection:
+  concurrency: 1           # maximum in-flight requests (--max-concurrency)
+  renderer: chat_template  # or deepseek_v4
+  modes:                   # one entry per thinking mode with AL values
+    thinking_on:
+      chat_template_kwargs: {enable_thinking: true}  # null when the collector passed none
+      sampling: {temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0.0, repetition_penalty: 1.0}
+```
+
+- `renderer` is how the client turned each prompt into text. `chat_template` applies the served model's Hugging Face chat template to one user message, with the generation prompt and `chat_template_kwargs`. `deepseek_v4` is vLLM's tokenizer mode of that name; the gate uses the equivalent [encoder](../bench_serving/encoding_dsv4.py) in this repository, with `chat_template_kwargs` as its thinking options.
+- `sampling` lists every sampling parameter the requests carried, including the `repetition_penalty: 1.0` that `vllm bench serve` adds. A parameter that is not listed was not sent, so the server used its own default.
+- Everything else is the same for every collection: the 80 prompts of the SPEED-Bench Qualitative `coding` category, in the order vLLM's loader sends them, as streaming `/v1/completions` requests with `max_tokens` 4096 and no `ignore_eos`.
+- New curves must include the block. [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) has none yet: until a DeepSeek V4.1 renderer lands, the gate cannot render its prompts, so it lists those points as unresolved. [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) is provisional and carries GLM-5.2's settings.
 
 ## Reproducing a collection
 
@@ -127,6 +146,7 @@ Before accepting an updated curve, reviewers should verify:
 - Detailed outputs are coherent and use the intended thinking mode.
 - Server logs contain no fallback, draft-disable, or chat-template errors.
 - The YAML metadata matches the dispatched image, sampling settings, model, and speculative method.
+- The `collection` block matches the collector's concurrency, prompt rendering, and per-mode settings.
 - The source Actions run is linked at the first line of the YAML.
 - The committed values exactly match the workflow artifact.
 
