@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+_SECRET_NAME = re.compile(r"TOKEN|SECRET", re.IGNORECASE)
 
 
 def status(returncode: int) -> int:
@@ -24,10 +26,19 @@ def status(returncode: int) -> int:
     return 128 - returncode if returncode < 0 else returncode
 
 
-def echo(argv: Sequence[str]) -> None:
-    """Print ``argv`` like a ``set -x`` shell line, after any pending output."""
+def echo(argv: Sequence[str | os.PathLike[str]], env: Mapping[str, str] | None = None) -> None:
+    """Print ``+ <argv>`` to stderr, masking the values of ``*TOKEN*`` and ``*SECRET*`` variables."""
+    text = shlex.join(map(os.fspath, argv))
+    secrets = {
+        value
+        for source in (os.environ, env or {})
+        for name, value in source.items()
+        if _SECRET_NAME.search(name) and len(value) >= 4
+    }
+    for value in sorted(secrets, key=len, reverse=True):
+        text = text.replace(value, "***")
     sys.stdout.flush()
-    print(f"+ {shlex.join(argv)}", file=sys.stderr, flush=True)
+    print(f"+ {text}", file=sys.stderr, flush=True)
 
 
 def call(
@@ -38,7 +49,7 @@ def call(
     timeout: float | None = None,
 ) -> int:
     """Run ``argv`` echoed like ``set -x``; 127 if it cannot start, 124 past ``timeout``."""
-    echo(argv)
+    echo(argv, env)
     try:
         return status(
             subprocess.run(argv, env=env, cwd=cwd, timeout=timeout, check=False).returncode
@@ -53,7 +64,7 @@ def call(
 
 def tee(argv: Sequence[str], log: Path, env: Mapping[str, str] | None = None) -> int:
     """``argv 2>&1 | tee log``; return argv's status."""
-    echo(argv)
+    echo(argv, env)
     with (
         log.open("wb") as sink,
         subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env) as child,

@@ -54,25 +54,27 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     if job is None:
         return 0
     run.backend.cancel(job)
-    output = run.backend.fetch_outputs(job, fetched)
-    if not output.is_dir():
-        return 0
-    rc = 0
-    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
-    logs = output / "logs"
-    result = logs / f"{run.request.result_filename}.json"
-    if result.is_file():
-        try:
-            copy_to_workspace(result, run.workspace / result.name)
-        except ArtifactError as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            rc = 1
-    if (logs / "agentic").is_dir():
-        try:
-            _copy_tree_into(logs / "agentic", run.workspace / "results")
-        except OSError as error:
-            print(f"ERROR: failed to stage AgentX artifacts: {error}", file=sys.stderr)
-            rc = 1
+    event = run.life.event
+    with event.stage("collect"):
+        output = run.backend.fetch_outputs(job, fetched)
+        if not output.is_dir():
+            return 0
+        rc = 0
+        bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
+        logs = output / "logs"
+        result = logs / f"{run.request.result_filename}.json"
+        if result.is_file():
+            try:
+                copy_to_workspace(result, run.workspace / result.name)
+            except ArtifactError as error:
+                event.error(error)
+                rc = 1
+        if (logs / "agentic").is_dir():
+            try:
+                _copy_tree_into(logs / "agentic", run.workspace / "results")
+            except OSError as error:
+                event.fail("ArtifactError", f"failed to stage AgentX artifacts: {error}")
+                rc = 1
     return rc
 
 
@@ -81,16 +83,16 @@ def check_single_node(run: SrtRun, logs: Path) -> int:
 
     srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
     """
-    request = run.request
+    request, event = run.request, run.life.event
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
-            print(f"ERROR: eval did not succeed (see {exit_file})", file=sys.stderr)
+            event.fail("EvalFailed", f"eval did not succeed (see {exit_file})")
             return 1
     if not request.eval_only:
         result = logs / f"{request.result_filename}.json"
         if not result.is_file() or result.stat().st_size == 0:
-            print(f"ERROR: benchmark result {result} is missing or empty", file=sys.stderr)
+            event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
             return 1
     return 0
 
@@ -119,7 +121,7 @@ def collect(
     run: SrtRun, lane: SrtLane, checkout: Checkout, job: Job, power: PowerDecision, infmax: Path
 ) -> int:
     """Stream the job, then stage power, logs, results and evals; return the first failure."""
-    backend, request = run.backend, run.request
+    backend, request, event = run.backend, run.request, run.life.event
     fetched = checkout.root / "fetched-outputs"
     logs_staged = False
 
@@ -136,51 +138,52 @@ def collect(
     status = backend.state(job)
     if not status.succeeded:
         rc = 1
-    print(f"Job {job.id} completed!\nCollecting results...", flush=True)
-    logs = backend.fetch_outputs(job, fetched) / "logs"
-    if not logs.is_dir():
-        print(f"ERROR: Logs directory not found at {logs}", file=sys.stderr)
-        return 1
-    if not request.eval_only and (power.agentx or power.adapter):
-        require(request, "CONC_LIST")
-        audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)
-        python = request.inferencex_results_python
-        if power.agentx:
-            power_rc = collect_agentic_power_results(
-                status, job.id, logs, infmax, *audit, results_python=python
-            )
+    with event.stage("collect"):
+        print(f"Job {job.id} completed!\nCollecting results...", flush=True)
+        logs = backend.fetch_outputs(job, fetched) / "logs"
+        if not logs.is_dir():
+            event.fail("LogsMissing", f"Logs directory not found at {logs}")
+            return 1
+        if not request.eval_only and (power.agentx or power.adapter):
+            require(request, "CONC_LIST")
+            audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)
+            python = request.inferencex_results_python
+            if power.agentx:
+                power_rc = collect_agentic_power_results(
+                    status, job.id, logs, infmax, *audit, results_python=python
+                )
+            else:
+                power_rc = validate_agentic_power(
+                    logs, *audit, results_python=python, require_power=request.require_power
+                )
+            if power_rc:
+                event.fail(
+                    "PowerValidationFailed",
+                    "AgentX power validation failed; staging audit and server artifacts",
+                )
+            rc = rc or power_rc
+        logs_staged = True
+        _stage_logs(run, logs, power)
+        if request.eval_only:
+            print("EVAL_ONLY=true: Skipping benchmark result collection", flush=True)
         else:
-            power_rc = validate_agentic_power(
-                logs, *audit, results_python=python, require_power=request.require_power
-            )
-        if power_rc:
-            print(
-                "ERROR: AgentX power validation failed; staging audit and server artifacts",
-                file=sys.stderr,
-            )
-        rc = rc or power_rc
-    logs_staged = True
-    _stage_logs(run, logs, power)
-    if request.eval_only:
-        print("EVAL_ONLY=true: Skipping benchmark result collection", flush=True)
-    else:
-        try:
-            if not request.is_agentic:
-                copy_fixed_sequence_results(logs, run.workspace, request.result_filename)
-            elif not power.agentx:
-                copy_agentic_results(infmax, run.workspace, request.result_filename)
-        except ArtifactError as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            rc = rc or 1
-    if request.run_eval or request.eval_only:
-        try:
-            copy_eval_artifacts(logs / "eval_results", run.workspace)
-        except ArtifactError as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            rc = rc or 1
-        if lane.write_eval_meta:
-            rc = rc or _write_eval_meta(run)
-    cleanup_outputs(checkout.root)
+            try:
+                if not request.is_agentic:
+                    copy_fixed_sequence_results(logs, run.workspace, request.result_filename)
+                elif not power.agentx:
+                    copy_agentic_results(infmax, run.workspace, request.result_filename)
+            except ArtifactError as error:
+                event.error(error)
+                rc = rc or 1
+        if request.run_eval or request.eval_only:
+            try:
+                copy_eval_artifacts(logs / "eval_results", run.workspace)
+            except ArtifactError as error:
+                event.error(error)
+                rc = rc or 1
+            if lane.write_eval_meta:
+                rc = rc or _write_eval_meta(run)
+        cleanup_outputs(checkout.root)
     return rc
 
 
@@ -197,7 +200,7 @@ def _write_eval_meta(run: SrtRun) -> int:
     try:
         eval_meta.refresh(path, {**run.env, "IS_MULTINODE": "true"})
     except (OSError, ValueError, KeyError, InputError) as error:
-        print(f"ERROR: failed to refresh {path}: {error}", file=sys.stderr)
+        run.life.event.fail("EvalMetaFailed", f"failed to refresh {path}: {error}")
         return 1
     print(f"Refreshed meta_env.json (prefix={run.request.model_prefix})")
     return 0

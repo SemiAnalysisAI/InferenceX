@@ -12,6 +12,7 @@ import shlex
 import sys
 import tempfile
 from collections.abc import Mapping
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,36 +40,39 @@ if TYPE_CHECKING:
 
 def run_single_node(launch: Launch) -> int:
     """One native single-node point: bind its recipe variant, submit, follow, verify."""
-    request = SingleNodeRequest.from_env(launch.request.env)
-    model_path = models.single_node_model_path(launch.cluster, request)
-    staged = {"MODEL_PATH": model_path} if model_path.startswith("/") else {}
-    run = SrtRun.create(launch, request, staged)
-    hf_cache = models.single_node_hf_cache(run.cluster, request)
-    time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
-    root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
-    checkout = prepare_checkout(run, root / "checkout", power=False)
-    install_srtctl(run, checkout)
-    if (options := config.srun_options(run.backend.settings)) is not None:
-        run.env["SRT_SRUN_OPTIONS"] = options
-    if rc := submit.bind_point(run, checkout, root / "arguments"):
-        return rc
-    selected, runtime_args = submit.bound_arguments(root / "arguments")
-    job_config = config.SrtJob(
-        srtctl_root=checkout.root,
-        workspace=run.workspace,
-        time_limit=time_limit,
-        image=request.image,
-        container=run.backend.stage_image(request.image, single_node=True).reference,
-        nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
-        model_paths={f"hf:{request.model}": model_path},
-        mounts=[(str(hf_cache), request.hf_hub_cache)],
-        single_node=True,
-        account=run.account,
-    )
-    config.create_volume_mounts(run)
-    config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
-    if rc := run_setup(run, checkout):
-        return rc
+    event = launch.life.event
+    with event.stage("prepare"):
+        request = SingleNodeRequest.from_env(launch.request.env)
+        model_path = models.single_node_model_path(launch.cluster, request)
+        staged = {"MODEL_PATH": model_path} if model_path.startswith("/") else {}
+        run = SrtRun.create(launch, request, staged)
+        hf_cache = models.single_node_hf_cache(run.cluster, request)
+        time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
+        root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
+        checkout = prepare_checkout(run, root / "checkout", power=False)
+        install_srtctl(run, checkout)
+        if (options := config.srun_options(run.backend.settings)) is not None:
+            run.env["SRT_SRUN_OPTIONS"] = options
+        if rc := submit.bind_point(run, checkout, root / "arguments"):
+            return rc
+        selected, runtime_args = submit.bound_arguments(root / "arguments")
+        event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
+        job_config = config.SrtJob(
+            srtctl_root=checkout.root,
+            workspace=run.workspace,
+            time_limit=time_limit,
+            image=request.image,
+            container=run.backend.stage_image(request.image, single_node=True).reference,
+            nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
+            model_paths={f"hf:{request.model}": model_path},
+            mounts=[(str(hf_cache), request.hf_hub_cache)],
+            single_node=True,
+            account=run.account,
+        )
+        config.create_volume_mounts(run)
+        config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
+        if rc := run_setup(run, checkout):
+            return rc
 
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
@@ -86,11 +90,16 @@ def run_single_node(launch: Launch) -> int:
         return 1
     if not run.backend.state(job).succeeded:
         return 1
-    return collect.check_single_node(run, run.backend.fetch_outputs(job, fetched) / "logs")
+    with event.stage("collect"):
+        return collect.check_single_node(run, run.backend.fetch_outputs(job, fetched) / "logs")
 
 
 def run_batch(launch: Launch) -> int:
-    """Re-run this launch's command line inside a batch allocation and follow its log."""
+    """Re-run this launch's command line inside a batch allocation and follow its log.
+
+    The re-run's own job record, if it left one, becomes this launch's.
+    """
+    event = launch.life.event
     request = SingleNodeRequest.from_env(launch.request.env)
     backend = slurm_backend(launch)
     minutes = policy.salloc_time_limit(launch.cluster.id, request)
@@ -104,54 +113,64 @@ def run_batch(launch: Launch) -> int:
     with os.fdopen(descriptor, "w") as handle:
         handle.write(f"#!/usr/bin/env bash\nexport {BATCH_REENTRY_ENV}=1\nexec {command}\n")
     log = script.with_suffix(".log")
-    try:
-        job = backend.submit_batch(script, gpus=request.gpu_count, time_min=minutes, log=log)
-    except BackendError as error:
-        print(f"ERROR: batch allocation unavailable: {error}", file=sys.stderr)
-        return 1
+    with event.stage("submit"):
+        try:
+            job = backend.submit_batch(script, gpus=request.gpu_count, time_min=minutes, log=log)
+        except BackendError as error:
+            message = f"batch allocation unavailable: {error}"
+            event.fail(type(error).__name__, message, retriable=error.retriable)
+            return 1
     print(f"Batch job {job.id}; log: {log}", flush=True)
     try:
         backend.stream_logs(job)
     except BackendError:
         return 1
-    return 0 if backend.state(job).succeeded else 1
+    succeeded = backend.state(job).succeeded
+    event.adopt_reentry()
+    return 0 if succeeded else 1
 
 
 def run_multinode(launch: Launch) -> int:
     """One job on the cluster's lane for the launch path: prepare, submit, follow, collect."""
-    lane = lanes.srt_lane(launch.cluster.id, launch.path)
-    request = SrtRequest.from_env(launch.request.env)
-    lanes.check_request(lane, request)
-    config_file = lanes.config_file(request)
-    decision = power.resolve_power(launch.cluster.id, launch.path, request)
-    model = models.checkpoint(launch.cluster, request)
-    served = models.served_path(launch.cluster, request, model)
-    model_paths = models.model_paths(launch.cluster, request, config_file, served)
-    run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
-    preflight = run.srt.preflight and not (model_paths and model and model.node_local)
-    if request.framework == "tilert":
-        require(request, "PREFILL_IMAGE")
-    shared = any(match(request) for match in lane.shared_run_root)
+    event = launch.life.event
+    with event.stage("prepare"):
+        lane = lanes.srt_lane(launch.cluster.id, launch.path)
+        request = SrtRequest.from_env(launch.request.env)
+        lanes.check_request(lane, request)
+        config_file = lanes.config_file(request)
+        event.set(recipe=config_file)
+        decision = power.resolve_power(launch.cluster.id, launch.path, request)
+        event.set(power=asdict(decision))
+        model = models.checkpoint(launch.cluster, request)
+        served = models.served_path(launch.cluster, request, model)
+        model_paths = models.model_paths(launch.cluster, request, config_file, served)
+        run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
+        preflight = run.srt.preflight and not (model_paths and model and model.node_local)
+        if request.framework == "tilert":
+            require(request, "PREFILL_IMAGE")
+        shared = any(match(request) for match in lane.shared_run_root)
 
-    checkout = prepare_checkout(run, checkout_dir(run, shared=shared), power=decision.dcgm)
-    overrides = eval_overrides(checkout.root / "recipes", lane, request)
-    system_python = (
-        "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
-    )
-    install_srtctl(run, checkout, python=system_python)
-    config.write_lane_config(run, lane, checkout, decision, model_paths)
-    if rc := run_setup(run, checkout):
-        return rc
-    infmax = compute_workspace(run, checkout, shared=shared)
-    run.env["INFMAX_WORKSPACE"] = str(infmax)
+        checkout = prepare_checkout(run, checkout_dir(run, shared=shared), power=decision.dcgm)
+        overrides = eval_overrides(checkout.root / "recipes", lane, request)
+        system_python = (
+            "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
+        )
+        install_srtctl(run, checkout, python=system_python)
+        config.write_lane_config(run, lane, checkout, decision, model_paths)
+        if rc := run_setup(run, checkout):
+            return rc
+        infmax = compute_workspace(run, checkout, shared=shared)
+        run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-    conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
-    job_name = srtctl_job_name(request.runner_name)
-    prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
-    arguments = submit.multinode_arguments(run, lane, config_file, overrides, preflight=preflight)
-    manifest = run.workspace / submit.MULTINODE_SUBMISSION
-    submitted = submit.Submitted(manifest=manifest)
-    run.life.callback(submitted.cancel, run.backend)
+        conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
+        job_name = srtctl_job_name(request.runner_name)
+        prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
+        arguments = submit.multinode_arguments(
+            run, lane, config_file, overrides, preflight=preflight
+        )
+        manifest = run.workspace / submit.MULTINODE_SUBMISSION
+        submitted = submit.Submitted(manifest=manifest)
+        run.life.callback(submitted.cancel, run.backend)
     if rc := submit.submit_lane(run, submitted, checkout, config_file, arguments):
         return rc
     return collect.collect(run, lane, checkout, submitted.adopted(), decision, infmax)

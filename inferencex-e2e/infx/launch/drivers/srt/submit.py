@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from infx.bench.proc import echo
 from infx.launch import proc
 from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import LaunchError
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
 SINGLE_NODE_SUBMISSION = "srt-single-node-submission.json"
 MULTINODE_SUBMISSION = "srt-submission.json"
+ACCEPTANCE_RECORD = "golden-acceptance.json"
 MULTINODE_EVAL_COMMAND = (
     '["env", "HF_HUB_OFFLINE=0", "HF_DATASETS_OFFLINE=0", "TRANSFORMERS_OFFLINE=0", '
     '"MODEL_PATH=/model", "bash", "{infmax_workspace}/benchmarks/multi_node/srt_eval.sh", "{endpoint}", '
@@ -87,19 +89,30 @@ def apply(
 ) -> subprocess.CompletedProcess[str]:
     """Run ``srtctl apply`` for ``config``, through the golden AgentX acceptance planner.
 
-    Every container starts in the workspace mount, as the legacy launchers did:
-    PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
-    ``arguments`` still win. ``stdout`` receives srtctl's JSON manifest.
+    Containers start in the workspace mount: PyTorch's generated module imports fail from /
+    with PYTHONPYCACHEPREFIX set. ``arguments`` still win. ``stdout`` receives srtctl's JSON
+    manifest; the planner's golden acceptance length goes into the launch's record.
     """
+    record = checkout.root / ACCEPTANCE_RECORD
     argv = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
-        config, run.request.framework, "--",
+        "--record", str(record), config, run.request.framework, "--",
         "--set", 'srun_options.container-workdir="/infmax-workspace"', *arguments,
     ]  # fmt: skip
     env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
-    proc.echo(argv, env)
-    with stdout.open("w") as handle:
-        rc = subprocess.run(argv, env=env, cwd=checkout.root, stdout=handle, check=False).returncode
+    event = run.life.event
+    event.evidence(stdout)
+    with event.stage("submit"):
+        echo(argv, env)
+        with stdout.open("w") as handle:
+            rc = subprocess.run(
+                argv, env=env, cwd=checkout.root, stdout=handle, check=False
+            ).returncode
+    with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
+        length = json.loads(record.read_text())["golden_acceptance_length"]
+        event.set(golden_acceptance_length=length)
+    if rc:
+        event.fail("SubmitFailed", f"srtctl apply exited {rc}")
     return subprocess.CompletedProcess(argv, rc, stdout.read_text(errors="replace"), "")
 
 

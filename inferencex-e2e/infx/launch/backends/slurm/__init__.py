@@ -13,12 +13,14 @@ from __future__ import annotations
 import hashlib
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, override
 
+from infx.bench.proc import echo
 from infx.clusters.slurm import HelperImage, SquashPolicy, slurm_settings
 from infx.launch import proc
 from infx.launch.backends.base import (
@@ -46,6 +48,8 @@ if TYPE_CHECKING:
     from infx.launch.request import LaunchRequest
 
 CANCEL_POLL_S = 10.0
+# End states that lose the job to the cluster rather than fail its workload.
+_LOST_STATES = frozenset({"BOOT_FAIL", "CANCELLED", "NODE_FAIL", "PREEMPTED"})
 
 
 def srtctl_job_name(runner: str) -> str:
@@ -112,21 +116,25 @@ class SlurmBackend(Backend):
     @override
     def run_container(self, container: Container) -> SlurmJob:
         """Allocate one node, finish staging, check readiness, and start the ``srun`` step."""
+        event = self.life.event
         mounts = [(container.workspace, container.workdir)]
         for mount in container.mounts:
             source = self._volume_path(mount.volume)
             if mount.create:
                 source.mkdir(parents=True, exist_ok=True)
             mounts.append((source, mount.target))
-        allocation = self._allocate(container.gpus, container.time_limit_min)
+        with event.stage("queue_wait"):
+            allocation = self._allocate(container.gpus, container.time_limit_min)
+        event.set(slurm_job_id=allocation.id)
         squash = self.settings.squash
-        if squash is not None and squash.policy().needs_job():
-            ensure_image(container.image.name, squash.policy(), job=allocation)
-        for path in container.required_paths:
-            if cli.srun(allocation, ["test", "-r", str(_host_path(mounts, path))]) != 0:
-                raise BackendError(
-                    f"readiness-blocked: {path} is unavailable on the allocated node"
-                )
+        with event.stage("prepare"):
+            if squash is not None and squash.policy().needs_job():
+                ensure_image(container.image.name, squash.policy(), job=allocation)
+            for path in container.required_paths:
+                if cli.srun(allocation, ["test", "-r", str(_host_path(mounts, path))]) != 0:
+                    raise BackendError(
+                        f"readiness-blocked: {path} is unavailable on the allocated node"
+                    )
         spec = cli.ContainerSpec(
             image=container.image.reference,
             mounts=[(str(source), str(target)) for source, target in mounts],
@@ -136,7 +144,7 @@ class SlurmBackend(Backend):
         rendered = spec.srun_args()
         extra = ["--mpi=none", *(arg for arg in self.settings.srun_args if arg not in rendered)]
         argv = cli.srun_argv(allocation, container.command, container=spec, extra=extra)
-        proc.echo(argv)
+        echo(argv)
         step = subprocess.Popen(argv)
         self.life.callback(_stop, step)
         return SlurmJob(allocation.id, outputs=container.workspace, step=step)
@@ -145,28 +153,57 @@ class SlurmBackend(Backend):
     def stream_logs(self, job: Job) -> None:
         """Follow the job's log file; a container step already streams to our output."""
         job = _slurm_job(job)
+        event = self.life.event
         if job.step is not None:
-            job.step.wait()
+            with event.stage("run"):
+                job.step.wait()
         elif job.log is None:
             raise BackendError(f"Slurm job {job.id} has no log to follow")
         else:
-            cli.stream_log(job, job.log)
+            with event.stage("queue_wait"):
+                cli.wait_for_log(job, job.log)
+            with event.stage("run"):
+                cli.follow_log(job, job.log)
 
     @override
     def state(self, job: Job) -> JobStatus:
-        """A container step's exit code; other jobs from squeue while listed, then accounting."""
+        """A container step's exit code; other jobs from squeue while listed, then accounting.
+
+        An ended job's failure is reported and recorded as the launch's.
+        """
         job = _slurm_job(job)
         if job.step is not None:
             rc = job.step.poll()
             if rc is None:
                 return JobStatus(JobState.RUNNING, "srun step running")
             state = JobState.SUCCEEDED if rc == 0 else JobState.FAILED
-            return JobStatus(state, f"srun exit {rc}", rc if rc >= 0 else 128 - rc)
-        queued = cli.queue_state(job)
-        if queued is None:
-            return cli.final_status(job)
-        pending = queued in {"PENDING", "CONFIGURING"}
-        return JobStatus(JobState.PENDING if pending else JobState.RUNNING, queued)
+            status = JobStatus(state, f"srun exit {rc}", rc if rc >= 0 else 128 - rc)
+        elif (queued := cli.queue_state(job)) is not None:
+            pending = queued in {"PENDING", "CONFIGURING"}
+            return JobStatus(JobState.PENDING if pending else JobState.RUNNING, queued)
+        else:
+            status = cli.final_status(job)
+        self._record_end(job, status)
+        return status
+
+    def _record_end(self, job: SlurmJob, status: JobStatus) -> None:
+        event = self.life.event
+        if status.nodes:
+            event.set(nodes=status.nodes)
+        if status.succeeded:
+            return
+        if job.step is not None:
+            message = f"container step in Slurm job {job.id} exited {status.exit_code}"
+            event.fail("JobFailed", message, stage="run")
+        elif status.state in {JobState.FAILED, JobState.CANCELLED}:
+            state, _, exit_code = status.raw.partition("|")
+            ended = state.split(" ", 1)[0]
+            kind = "JobFailed" if ended == "COMPLETED" else "Job" + ended.title().replace("_", "")
+            message = f"Slurm job {job.id} ended with state={state} exit_code={exit_code}"
+            event.fail(kind, message, stage="run", retriable=ended in _LOST_STATES)
+        else:
+            message = f"could not verify terminal Slurm status for job {job.id}"
+            event.fail("JobStatusUnknown", message, stage="run", retriable=True)
 
     @override
     def fetch_outputs(self, job: Job, dest: Path) -> Path:
@@ -185,7 +222,11 @@ class SlurmBackend(Backend):
         while wait_s and cli.is_active(job):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                print(f"WARNING: job {job.id} still present after {wait_s:.0f}s", flush=True)
+                print(
+                    f"WARNING: job {job.id} still present after {wait_s:.0f}s",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 return
             print(
                 f"Waiting for job {job.id} to leave the queue ({remaining:.0f}s left)", flush=True
@@ -265,13 +306,20 @@ class SlurmBackend(Backend):
             extra=[*extra, *settings.salloc_args],
         )
         self.life.callback(cli.cancel, job)
-        return SlurmJob(job.id, log=log)
+        return self._followed(SlurmJob(job.id, log=log))
 
     def attach(
         self, job_id: str, *, log: Path | None = None, outputs: Path | None = None
     ) -> SlurmJob:
         """Follow a job another tool submitted; the caller decides when to cancel it."""
-        return SlurmJob(job_id, log=log, outputs=outputs)
+        return self._followed(SlurmJob(job_id, log=log, outputs=outputs))
+
+    def _followed(self, job: SlurmJob) -> SlurmJob:
+        """``job`` as the launch's recorded Slurm job; its log explains later failures."""
+        self.life.event.set(slurm_job_id=job.id)
+        if job.log is not None:
+            self.life.event.evidence(job.log)
+        return job
 
     def stage_workspace(self, workspace: Path, staging: Path, *, exclude: Sequence[str]) -> Path:
         """A copy of ``workspace`` that compute nodes see: itself on Lustre, else rsynced into ``staging``."""

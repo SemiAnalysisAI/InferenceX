@@ -454,6 +454,15 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
           if-no-files-found: ignore
 
+      - name: Upload job event
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: job_event_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/job_event.json
+          if-no-files-found: ignore
+
       - name: Upload eval results (if any)
         id: upload-eval
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
