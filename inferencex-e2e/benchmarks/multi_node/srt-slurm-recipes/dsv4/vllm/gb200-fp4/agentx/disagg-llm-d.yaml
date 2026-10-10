@@ -187,6 +187,9 @@ base:
         VLLM_LOG_STATS_INTERVAL: "1"
         VLLM_DSV4_MEGA_FP8_COMBINE: "1"
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+        # Outlast the decode sidecar's 90 s idle-connection timeout, so it never reuses a
+        # connection the server has already closed (connection reset, 502).
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
         VLLM_USE_DEEP_GEMM: "1"
         VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
