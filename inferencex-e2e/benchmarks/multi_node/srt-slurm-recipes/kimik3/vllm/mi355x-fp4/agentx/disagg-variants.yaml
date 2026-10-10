@@ -130,8 +130,6 @@ base:
       IS_MULTINODE: 'true'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1799'
-      # Live abort only; the shared collector owns the completed-profile threshold.
-      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: '0.01'
       AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
 
 override_1p3d_c12:
