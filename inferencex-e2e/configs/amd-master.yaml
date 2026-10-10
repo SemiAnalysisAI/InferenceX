@@ -1472,7 +1472,7 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
        - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.2/atom/mi355x-fp4-mtp/agentic.yaml }
 
 dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261007
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
