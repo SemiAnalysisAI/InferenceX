@@ -25,6 +25,7 @@ from .nvswitch_tray import NVSwitchTray
 class RackScaleSystem(GPUSystem):
     default_cooling: ClassVar[CoolingProfile] = CoolingProfile(mode="liquid")
     system_unit: ClassVar[str] = "rack"
+    has_grace_sockets: ClassVar[bool] = True
     gpu_count: PositiveCount = Field(default=72, ge=72, le=72)
     compute_tray_count: PositiveCount = Field(default=18, ge=18, le=18)
     switch_tray_count: PositiveCount = Field(default=9, ge=9, le=9)
@@ -50,13 +51,16 @@ class RackScaleSystem(GPUSystem):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         per_gpu = validate_watts(gpu_level_power_per_gpu)
         state = OperatingState.model_validate(operating_state)
-        compute = self.compute_tray.estimate_breakdown(per_gpu, operating_state=state).scaled(
-            self.compute_tray_count
-        )
+        compute = self.compute_tray.estimate_breakdown(
+            per_gpu,
+            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
+            operating_state=state,
+        ).scaled(self.compute_tray_count)
         switches = self.switch_tray.estimate_breakdown().scaled(self.switch_tray_count)
         bus_w = sum_watts((compute.power_w, switches.power_w))
         shelves = self.power_supply.estimate_overhead(bus_w)
