@@ -33,7 +33,7 @@ roles:
 
     env:
       VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
-      MC_GID_INDEX: "3"
+      MC_GID_INDEX: "@fabric.mooncake-gid-index"
       MC_STORE_MEMCPY: "1"
       MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
       MC_SLICE_SIZE: "1048576"
@@ -56,7 +56,7 @@ roles:
       TILELANG_CLEANUP_TEMP_FILES: "1"
       UCX_MEMTYPE_CACHE: "n"
       UCX_MEMTYPE_REG_WHOLE: "n"
-      UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+      UCX_NET_DEVICES: "@fabric.ucx-net-devices"
       HF_HUB_CACHE: "/hf_hub_cache"
       HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
     args:
@@ -96,7 +96,7 @@ services:
         global_segment_size: "200GB"
         local_buffer_size: "4GB"
         protocol: "rdma"
-        device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        device_name: "@fabric.rdma-devices"
         mode: "embedded"
         enable_offload: false
 sbatch_directives:

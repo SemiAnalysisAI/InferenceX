@@ -123,6 +123,13 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
     env = single_node_env(harness, "h200-cw")
+    # The binder takes the job cluster's fabric facts.
+    records = yaml.safe_load(harness.config.read_text())
+    records["clusters"]["h200-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
+    harness.config.write_text(yaml.safe_dump(records))
+    fragment = yaml.safe_load((workspace / "recipe.yaml").read_text())
+    fragment["base"]["roles"]["agg"]["env"] = {"NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}
+    (workspace / "recipe.yaml").write_text(yaml.safe_dump(fragment))
     assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
@@ -137,6 +144,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert {k: recipe["benchmark"]["env"][k] for k in ("MODEL", "CONC", "USE_CHAT_TEMPLATE")} == {
         "MODEL": "test/model", "CONC": "2", "USE_CHAT_TEMPLATE": "false",
     }
+    assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth9"}
     assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"

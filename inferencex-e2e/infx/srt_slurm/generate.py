@@ -23,7 +23,7 @@ from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_multinode, dram_budget, resolve_dram
+from infx.srt_slurm.workload import bind_multinode, dram_budget, resolve_dram, resolve_fabric
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
@@ -144,7 +144,8 @@ def bound_variant(
     """The variant the launcher submits for ``point``, composed and bound.
 
     Multi-node variants get the DCGM telemetry block on ``power_port`` and the client paths
-    ``client_env``, the binder inputs the launcher computes.
+    ``client_env``, the binder inputs the launcher computes. ``'@fabric.<name>'`` values stay
+    unresolved: recipe fingerprints hash them as written.
     """
     if "prefill" not in point:
         selected, recipe = select_recipe(
@@ -159,6 +160,14 @@ def bound_variant(
         power_port=power_port,
         client_env=client_env,
     )
+
+
+def _cluster_fabric(cluster: Cluster) -> dict[str, str | None]:
+    """``cluster``'s fabric as recipes read it."""
+    srt = slurm_settings(cluster).srt_slurm
+    if srt is None:
+        raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
+    return srt.fabric.rendered()
 
 
 def _apply_acceptance_and_validate(
@@ -190,7 +199,11 @@ def _apply_acceptance_and_validate(
 def generate_recipes(
     *, config_keys: list[str], config_files: list[Path], runner_file: Path, output: Path
 ) -> dict[str, Any]:
-    """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest."""
+    """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
+
+    A runner label on several clusters leaves ``'@fabric.<name>'`` values as written and the
+    manifest's ``cluster`` null.
+    """
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
     files = [str(path) for path in config_files]
@@ -214,6 +227,7 @@ def generate_recipes(
             environment = point_environment(point)
             placement = _placement(inventory, point["runner"])
             power_port, client_env = _binder_inputs(point, environment, placement, root)
+            fabric = _cluster_fabric(placement[1]) if placement else None
             variant, recipe = bound_variant(
                 point, environment, root, power_port=power_port, client_env=client_env
             )
@@ -223,6 +237,8 @@ def generate_recipes(
                 gpus_per_node=placement[1].gpus_per_node if placement else None,
             )
             recipe = resolve_dram(recipe, budget)
+            if fabric is not None:
+                recipe = resolve_fabric(recipe, fabric)
             _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
             digest = hashlib.sha256(identity.encode()).hexdigest()[:12]

@@ -510,6 +510,8 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          socket-ifname: [eth0]
         job-tag: h200
         gpus-per-node-directive: true
         segment-directive: false
@@ -607,6 +609,11 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          ucx-net-devices: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1, mlx5_4:1, mlx5_5:1, mlx5_10:1,
+                            mlx5_11:1]
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3, mlx5_4, mlx5_5, mlx5_10, mlx5_11]
+          mooncake-gid-index: 3
         job-tag: b200
         default-time-limit: "4:00:00"
         single-node-models: staged
@@ -669,6 +676,10 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          ucx-net-devices: [mlx5_0:1, mlx5_1:1, mlx5_10:1, mlx5_11:1, mlx5_16:1, mlx5_17:1,
+                            mlx5_20:1, mlx5_21:1, mlx5_22:1, mlx5_23:1, mlx5_4:1, mlx5_5:1,
+                            mlx5_8:1, mlx5_9:1, mlx5_2:1, mlx5_3:1]
         job-tag: b300
         single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
@@ -718,6 +729,10 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          ucx-net-devices: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
+          mooncake-gid-index: 3
         job-tag: gb200
         default-time-limit: "6:00:00"
         preflight: false
@@ -773,6 +788,9 @@ clusters:
             port: 9402
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          ucx-net-devices: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
         job-tag: gb300
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, v0.5.11, v0.5.13.post1]
@@ -853,7 +871,7 @@ clusters:
     available-cpu-dram-mib: 3_095_781
     arch: x86_64
     env:
-      MORI_RDMA_TC: "104"
+      MORI_RDMA_TC: '@fabric.mori-rdma-tc'
     models:
       entries:
         DeepSeek-R1-0528-MXFP4-v2: {root: it-share-data, dir: DeepSeek-R1-0528-MXFP4-v2}
@@ -879,6 +897,12 @@ clusters:
         multi-node-import: false
       srt-slurm:
         network-interface: eno0
+        fabric:
+          rdma-devices: [rdma0, rdma1, rdma2, rdma3, rdma4, rdma5, rdma6, rdma7]
+          socket-ifname: [eno0]
+          mooncake-gid-index: 1
+          mori-rdma-tc: 104
+          mori-io-tc: 104
         single-node-time-limit: 500
         gpus-per-node-directive: true
         segment-directive: false
@@ -886,7 +910,7 @@ clusters:
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
-            IBDEVICES: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+            IBDEVICES: '@fabric.rdma-devices'
           timeout-s: 1200
           nodes: all
         volume-mounts:

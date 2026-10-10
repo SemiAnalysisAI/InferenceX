@@ -41,11 +41,11 @@ roles:
       HF_HUB_CACHE: "/hf_hub_cache/hub"
       HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
       PYTHONUNBUFFERED: "1"
-      IBDEVICES: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
-      GLOO_SOCKET_IFNAME: "eno0"
-      NCCL_SOCKET_IFNAME: "eno0"
-      MORI_RDMA_TC: "104"
-      MORI_IO_TC: "104"
+      IBDEVICES: "@fabric.rdma-devices"
+      GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+      NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
+      MORI_RDMA_TC: "@fabric.mori-rdma-tc"
+      MORI_IO_TC: "@fabric.mori-io-tc"
       MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
       MORI_IO_QP_MAX_SEND_WR: "16384"
       MORI_IO_QP_MAX_CQE: "32768"
@@ -64,7 +64,7 @@ roles:
       served-model-name: "amd/Qwen3.5-397B-A17B-MXFP4"
       tensor-parallel-size: 8
       disaggregation-transfer-backend: mori
-      disaggregation-ib-device: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+      disaggregation-ib-device: "@fabric.rdma-devices"
       kv-cache-dtype: "fp8_e4m3"
       attention-backend: aiter
       moe-dense-tp-size: 1

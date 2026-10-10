@@ -12,7 +12,9 @@ from typing import Any, Literal
 import yaml
 
 from infx.clusters import CLUSTER_LABEL_PREFIX
-from infx.srt_slurm.variants import deep_merge
+from infx.clusters.slurm import Fabric
+from infx.srt_slurm.variants import deep_merge, expand_variants
+from infx.srt_slurm.workload import FABRIC_REFERENCE
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -295,6 +297,51 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
         )
         return worker_nodes + recipe_auxiliary_node_count(recipe)
     raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+
+
+def _strings(node: Any, where: str = "") -> Iterable[tuple[str, str]]:
+    """Every string value under ``node``, with its dotted path."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield from _strings(value, f"{where}.{key}" if where else str(key))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _strings(value, f"{where}[{index}]")
+    elif isinstance(node, str):
+        yield where, node
+
+
+def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
+    """The fabric of each cluster that runs ``label``: a scheduling label or one runner."""
+    labels = runner_labels(runner_data)
+    runners = set(labels.get(label, [label]))
+    fabrics = {}
+    for cluster_label, members in labels.items():
+        if cluster_label.startswith(CLUSTER_LABEL_PREFIX) and runners & set(members):
+            cluster_id = cluster_label.removeprefix(CLUSTER_LABEL_PREFIX)
+            record = runner_data["clusters"][cluster_id]
+            srt = (record.get("slurm") or {}).get("srt-slurm") or {}
+            fabrics[cluster_id] = Fabric.model_validate(srt.get("fabric") or {})
+    return fabrics
+
+
+def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data: dict) -> None:
+    """Fail a recipe whose ``'@fabric.<name>'`` values name no fabric field, or one that a
+    cluster ``label`` runs on does not set. The launcher still resolves them; this only reads."""
+    path, _, selector = srt_recipe.partition(":")
+    fabrics = _label_fabrics(label, runner_data)
+    for _, recipe in expand_variants(yaml.safe_load((root / path).read_text()), selector or None):
+        for where, value in _strings(recipe):
+            if FABRIC_REFERENCE not in value:
+                continue
+            name = Fabric.field_name(value, f"{srt_recipe}: {where}")
+            if unset := sorted(
+                c for c, fabric in fabrics.items() if fabric.rendered()[name] is None
+            ):
+                raise ValueError(
+                    f"{srt_recipe}: {where}: runner {label!r} reaches clusters {unset} "
+                    f"that set no srt-slurm.fabric.{name}"
+                )
 
 
 def worker_node_count(
@@ -1520,6 +1567,16 @@ def _expand_configs(
                         root=root,
                     )
                 )
+    if root is not None:
+        # A recipe's fabric references fail here rather than on the cluster that launches it.
+        selected = {
+            (row[field.value], row[Fields.RUNNER.value])
+            for row in rows
+            for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE)
+            if row.get(field.value)
+        }
+        for srt_recipe, label in sorted(selected):
+            check_fabric_references(root, srt_recipe, label, runner_data)
     return rows
 
 
