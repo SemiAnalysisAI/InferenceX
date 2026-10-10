@@ -3,7 +3,7 @@ base:
   name: qwen3.5-fp4-mi355x-atom-8k1k
   model:
     path: hf:amd/Qwen3.5-397B-A17B-MXFP4
-    container: rocm/atom-dev:nightly_202610080328
+    container: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
     precision: fp4
   resources:
     gpu_type: mi355x
