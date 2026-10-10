@@ -248,16 +248,15 @@ result = build_result(raw_benchmark, runtime_env)
 
 New formats should expose their own typed builder under `infx/results/`, accepting the inputs that format needs and returning a dictionary. Compose shared transformations as ordinary function calls; keep file discovery, environment defaults, error presentation, and serialization in the format's CLI adapter. Existing AgentX topology and request/server processing retain their own policies.
 
-[`infx.results.agentic.build_result`](../infx/results/agentic/__init__.py) owns AgentX aggregate construction, including request metrics, backend selection, server metrics, and per-GPU throughput. It accepts loaded AIPerf records, profile and server-metric mappings, and an explicit environment mapping. Optional `traces` are raw trace objects from the declared dataset; optional `server_logs` contain one decoded file head per item. The builder does not open files or read process environment. It returns unrounded metrics and does not mutate inputs; dataset and request-accounting mappings remain shared with the result.
+[`infx.results.agentic.build_result`](../infx/results/agentic/__init__.py) owns AgentX aggregate construction, including request metrics and per-GPU throughput. It accepts loaded AIPerf records, the profile mapping, and an explicit environment mapping. Optional `traces` are raw trace objects from the declared dataset. Server-side metrics (cache hit rates, KV usage, token totals, KV pool size) are not aggregated here; InferenceX-app derives them from the raw `server_metrics_export.*` and server logs. The builder does not open files or read process environment. It returns unrounded metrics and does not mutate inputs; dataset and request-accounting mappings remain shared with the result.
 
 ```python
 from infx.results.agentic import build_result
 
-result = build_result(records, profile, server_metrics, runtime_env,
-                      traces=trace_objects, server_logs=log_texts)
+result = build_result(records, profile, runtime_env, traces=trace_objects)
 ```
 
-The existing `python -m infx.results.agentic.process_agentic_result` command retains artifact discovery, record filtering/accounting, trace-cache lookup, bounded log reads, rounding, diagnostics, and output writes. It supplies lazy trace and log iterators so metadata validation still precedes trace reads and backends only read logs they use. Request/server algorithms and backend precedence remain inside the package. Dataset matching, cache precedence, and ambiguous-snapshot handling remain in the CLI's shared artifact loader, which also serves the power adapter. Internal Python imports use `infx.results.agentic`; command paths, environment variables, and artifact schemas are unchanged.
+The existing `python -m infx.results.agentic.process_agentic_result` command retains artifact discovery, record filtering/accounting, trace-cache lookup, rounding, diagnostics, and output writes. It supplies a lazy trace iterator so metadata validation still precedes trace reads. Request algorithms remain inside the package. Dataset matching, cache precedence, and ambiguous-snapshot handling remain in the CLI's shared artifact loader, which also serves the power adapter. Internal Python imports use `infx.results.agentic`; command paths, environment variables, and artifact schemas are unchanged.
 
 The current processing paths share these helpers:
 
