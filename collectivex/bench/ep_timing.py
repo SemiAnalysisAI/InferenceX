@@ -32,18 +32,16 @@ def time_us(torch, fn, iters: int, pre=None, post=None) -> list[float]:
     return [sample() for _ in range(iters)]
 
 
-def time_cuda_graph_phase_us(torch, fn, warmup: int, iters: int, interval, align) -> list[float]:
+def time_cuda_graph_phase_us(torch, fn, warmup: int, iters: int, interval) -> list[float]:
     """Time one event-record interval captured inside graph replay.
 
-    `align()` enqueues a device-side rank barrier before each replay, so replays start together
-    rather than ~75us apart (b200 EP16), which the cross-rank MAX would report as latency.
+    The graph contains an all-reduce before the timing events to reduce rank entry skew.
     """
     for _ in range(max(0, warmup)):
         fn()
         torch.cuda.synchronize()
     samples = []
     for _ in range(iters):
-        align()
         fn()
         torch.cuda.synchronize()
         samples.append(interval[0].elapsed_time(interval[1]) * 1000.0)
@@ -223,9 +221,12 @@ def poison(tensor):
 
 
 class GraphTiming:
-    """Captured dispatch -> combine pairs timed by event nodes inside the graph, each timed replay
-    started behind a device-side rank barrier so the cross-rank MAX is the operation, not launch
-    skew."""
+    """Measure dispatch/combine latency with CUDA events inside a replayed CUDA graph.
+
+    Each replay first runs an all-reduce to bring ranks closer together before timed work
+    begins. The all-reduce is part of the graph but precedes the timing events, so its cost
+    is excluded from the reported latency.
+    """
 
     graph = True
     # Handle attributes dispatch writes; the replay value check poisons them.
@@ -233,42 +234,10 @@ class GraphTiming:
 
     def __init__(self, backend):
         self.backend = backend
-        self.align_cycles = None
         self._align_token = None
 
     def components(self):
         return ["roundtrip", "dispatch", "combine"]
-
-    def calibrate_align_spin(self, spin_us=100.0):
-        """Size the post-barrier spin to `spin_us` of wall time on this GPU.
-
-        The spin lets every host enqueue its replay before the stream reaches it. `_sleep` counts
-        SM cycles, so a fixed count left ~15us of skew between differently clocked gb200 ranks.
-        """
-        import torch
-
-        probe = 200_000
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-        torch.cuda._sleep(probe // 10)  # ramp clocks before the measured spin
-        start.record()
-        torch.cuda._sleep(probe)
-        end.record()
-        torch.cuda.synchronize()
-        elapsed_us = max(start.elapsed_time(end) * 1000.0, 1e-3)
-        self.align_cycles = max(1, int(probe * spin_us / elapsed_us))
-
-    def align(self):
-        """Enqueue a device-side rank barrier on the current stream, without a host sync."""
-        import torch
-        import torch.distributed as dist
-
-        if self._align_token is None:
-            self._align_token = torch.zeros(1, device=self.backend.device)
-        if self.align_cycles is None:
-            self.calibrate_align_spin()
-        dist.all_reduce(self._align_token)
-        torch.cuda._sleep(self.align_cycles)
 
     def capture_pairs(self, problem, staged, pairs, marks):
         """Capture `pairs` back-to-back pairs into one graph; `marks` picks the windows that get
@@ -278,6 +247,9 @@ class GraphTiming:
         import torch.distributed as dist
 
         b = self.backend
+        if self._align_token is None:
+            self._align_token = torch.zeros(1, device=b.device)
+            dist.all_reduce(self._align_token)
         stamps = {mark: ([graph_event() for _ in range(pairs)], [graph_event() for _ in range(pairs)])
                   for mark in marks}
 
@@ -290,6 +262,14 @@ class GraphTiming:
         graph = torch.cuda.CUDAGraph()
         combined = handle = None
         with torch.cuda.graph(graph, capture_error_mode="relaxed"):
+            # A separate all-reduce followed by a host-launched graph can let CPU launch
+            # delays spread the ranks apart again, inflating the measured communication time.
+            # Capture the all-reduce and its stream dependencies in this graph so each replay
+            # reaches the timed work without another host launch after alignment. Place it
+            # before the first timing event to exclude alignment cost, and only once per graph
+            # to preserve back-to-back dispatch/combine pairs. This reduces entry skew; it
+            # does not guarantee that every rank starts the timed work simultaneously.
+            dist.all_reduce(self._align_token)
             for i in range(pairs):
                 record("pair", 0, i)
                 record("dispatch", 0, i)
@@ -313,10 +293,9 @@ class GraphTiming:
         staged = self.backend.warm_and_hoist_stage(problem, warmup)
         mark = "pair" if name == "roundtrip" else name
         graph, stamps, combined, _ = self.capture_pairs(problem, staged, 1, (mark,))
-        self.calibrate_align_spin()  # clocks move with load and temperature: per timed series
         starts, ends = stamps[mark]
         samples = time_cuda_graph_phase_us(
-            torch, graph.replay, warmup, iters, (starts[0], ends[0]), align=self.align
+            torch, graph.replay, warmup, iters, (starts[0], ends[0])
         )
         combined.fill_(float("nan"))
         torch.cuda.synchronize()
@@ -329,16 +308,14 @@ class GraphTiming:
 
     def chain(self, problem, staged, iters, drop):
         """Each sibling is ONE graph of `iters` unrolled pairs, the shape of a decode graph, replayed
-        once untimed (upload) and once aligned and timed."""
+        once untimed (upload) and once timed, with alignment captured before the first event."""
         import torch
 
         floors, floor_stamps, _, _ = self.capture_pairs(problem, staged, iters, ("dispatch", "combine"))
         period, period_stamps, combined, _ = self.capture_pairs(problem, staged, iters, ("pair",))
-        self.calibrate_align_spin()
         for graph in (floors, period):
             graph.replay()
             torch.cuda.synchronize()
-            self.align()
             graph.replay()
             torch.cuda.synchronize()
         return _chain_result(period_stamps["pair"], floor_stamps, drop, combined)
