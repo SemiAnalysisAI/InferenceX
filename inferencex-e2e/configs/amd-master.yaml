@@ -1494,9 +1494,9 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # Repinned to a nightly build that includes vllm-project/vllm#58671,
-  # #58655 and #53492 (see agentic.yaml).
-  image: vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516
+  # The first ROCm 10.0 nightly carrying vllm-project/vllm#60397 (see
+  # agentic.yaml).
+  image: vllm/vllm-openai-rocm:nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1507,11 +1507,9 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # The recipe only changes the memory split where a point ran short of KV:
-      # the prefill chunk shrinks at TP=2 c64. c128 is excluded for both TP=2
-      # and TP=4. Every point is measured here rather than combined from the
-      # earlier run: the image move leaves concurrency 1-32 measured only on
-      # the superseded nightly-eed1f3d0 pin.
+      # Concurrency 1-64 on both TP arms, every point re-measured on the new
+      # image. c128 and c192 are excluded: c128 did not raise the scored
+      # metric at TP=2 (150,683 against 151,896 tok/s/chip at c64).
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
 
