@@ -184,7 +184,7 @@ jobs:
             - Only wait for the final successful run to complete before analyzing benchmark results
             - Do NOT claim completion until the most recent job finishes and results are analyzed
             - If jobs cannot be run, say exactly what you could not run and why
-            - **Important** Modify inferencex-e2e/perf-changelog.yaml for any config changes affecting performance
+            - **Important** Append an inferencex-e2e/perf-changelog.yaml entry only when the change should produce new published results (see "Updating perf-changelog.yaml" below)
 
             ## Profiling (SGLang only)
             When asked to profile a config, dispatch the `profile.yml` workflow. **Only SGLang configs can be profiled** — the profiler uses SGLang's `/start_profile` and `/stop_profile` HTTP endpoints. Reject profiling requests for vLLM, TRT, or other frameworks.
@@ -234,7 +234,7 @@ jobs:
 
             ## Updating perf-changelog.yaml
 
-            See `AGENTS.md` → "Non-negotiable benchmark invariants" for changelog rules and `inferencex-e2e/perf-changelog.yaml` for entry format. Required whenever you change image tags, env vars, or perf-affecting params in `inferencex-e2e/configs/*-master.yaml` or `inferencex-e2e/benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
+            See `AGENTS.md` → "Non-negotiable benchmark invariants" for changelog rules and `inferencex-e2e/perf-changelog.yaml` for entry format. Add an entry only when the change should produce new published results, not for every config, recipe, or script edit; the entry triggers result collection. If the request does not say whether to collect new results, ask before adding one. Use `XXX` as the PR-link placeholder until the PR exists.
 
             If an entry uses `append-only: true`, require the generated base matrix to remain an immutable subset of the generated head matrix. New concurrency values or new recipe variants may be added inside a selected existing config/scenario, but no existing generated point may be removed or modified, and every addition must retain the target visual curve's single non-null image. Do not enforce a file allowlist: supporting code, benchmark scripts, launchers, helpers, and other files may change when their benchmark effect is exclusive to the corresponding newly appended points. All added changelog entries must be append-only, and eval modifiers are forbidden. Trace behavior through the complete diff; unguarded changes or paths reachable by an existing point are blocking.
 
@@ -397,15 +397,16 @@ jobs:
             - For re-reviews, prefix summary with "Re-review:" and note what changed
 
             ## Master Config and Perf Changelog Validation:
+            A PR adds an `inferencex-e2e/perf-changelog.yaml` entry only when it should produce new published results, not for every config edit; the entry triggers result collection.
+
             When reviewing a PR, check if any of the following master config files were modified:
             - `inferencex-e2e/configs/amd-master.yaml`
             - `inferencex-e2e/configs/nvidia-master.yaml`
 
             If either master config file was edited AND `inferencex-e2e/perf-changelog.yaml` was NOT edited in the same PR:
-            - This is a 🔴 **BLOCKING** issue
-            - Comment that `inferencex-e2e/perf-changelog.yaml` must also be updated when master config files are changed
-            - The perf-changelog entry should document what changed in the config and include the PR link
-            - Format: "Master config files were modified but `inferencex-e2e/perf-changelog.yaml` was not updated. When changing `inferencex-e2e/configs/amd-master.yaml` or `inferencex-e2e/configs/nvidia-master.yaml`, you must add a corresponding entry to `inferencex-e2e/perf-changelog.yaml` documenting the changes."
+            - It is NOT 🔴 **BLOCKING** or 🟡 **WARNING**; do not post an inline comment for it
+            - Ask once in the summary comment whether the author intends to collect results; append the question even to "LGTM - no blocking issues found"
+            - Format: "Master config files changed without a new `inferencex-e2e/perf-changelog.yaml` entry. Do you intend to collect new results for these configs? If so, append an entry for the affected config keys to the end of `inferencex-e2e/perf-changelog.yaml`; if not, no entry is needed."
 
             ### Perf Changelog Entry Position:
             `inferencex-e2e/perf-changelog.yaml` is read in chronological order — oldest entries at the top, newest at the bottom. New entries MUST be appended to the END of the file. Never insert in the middle or prepend.
