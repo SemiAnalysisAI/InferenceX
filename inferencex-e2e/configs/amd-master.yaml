@@ -1494,10 +1494,9 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # Repinned to the current ROCm 10.0 nightly, which adds vllm-project/vllm
-  # #56720, #57947, #58560 and #59794 on top of #58671, #58655 and #53492
-  # (see agentic.yaml).
-  image: vllm/vllm-openai-rocm:nightly-rocm100-21d93d0d8c0e9627900020382bfce4730e61cab7
+  # TBD: the first ROCm 10.0 nightly with vllm-project/vllm#60397 (see
+  # agentic.yaml).
+  image: vllm/vllm-openai-rocm:TBD
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1508,14 +1507,9 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # The prefill chunk stays at the upstream 16384 across the whole ladder,
-      # which tops out at c64. c128 and c192 are excluded: at c128 the scored
-      # metric did not move (TP=2 measured 150,683 tok/s/chip against 151,896
-      # at c64, prompt tokens within 0.5%) because the extra concurrency bought
-      # real prefill work rather than scored tokens, and both points need a
-      # smaller chunk that costs KV room. Every point is measured here rather
-      # than combined from the earlier run: the image move leaves concurrency
-      # 1-32 measured only on the superseded nightly-eed1f3d0 pin.
+      # Concurrency 1-64 on both TP arms, every point re-measured on the new
+      # image. c128 and c192 are excluded: c128 did not raise the scored
+      # metric at TP=2 (150,683 against 151,896 tok/s/chip at c64).
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
 
