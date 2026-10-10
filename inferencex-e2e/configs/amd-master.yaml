@@ -946,8 +946,10 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
 # DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using ATOM DSpark K6.
 # Both throughput bands use thinking_on golden AL 3.77; eval uses real
 # acceptance. Keep the historical config key for changelog compatibility.
+# C256 and C384 offload KV to an LMCache MP server whose 1000 GB L1 fits the
+# 1019 GB budget of dram-utilization 0.34.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202609291501
+  image: rocm/atom-dev:nightly_202610071700
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -956,9 +958,11 @@ dsv4-fp4-mi355x-atom-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.34
+      search-space:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128, 256], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [48, 64, 96, 128], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, spec-decoding: draft_model, conc-list: [256, 384], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4-mtp/agentic.yaml }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
