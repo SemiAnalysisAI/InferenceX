@@ -1,15 +1,12 @@
-# B200-FP4 8k1k — STP and MTP in one file
+# B200-FP4 8k1k STP variants
 #
 # Three modes distinguished by override key names:
-#   override_stp_tp4 / override_mtp_tp4:  TP4 prefill (DP=1, EP=1) — low-latency single-node
-#   zip_override_stp_lowlat / zip_override_mtp_lowlat:  dep4 prefill + tep8 decode (DP=1)
-#   override_stp_maxtpt_7p2d / override_mtp_maxtpt_7p2d:  dep4 prefill + dep8 decode, 7p2d
-#   override_mtp_maxtpt_4p1d:  MTP-only 4p1d, no frontends, env-var FP4 backend
+#   override_stp_tp4:  TP4 prefill (DP=1, EP=1), low-latency single-node
+#   zip_override_stp_lowlat:  dep4 prefill + tep8 decode (DP=1)
+#   override_stp_maxtpt_7p2d:  dep4 prefill + dep8 decode, 7p2d
 #
 # Usage:
-#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                              # all 11 variants
-#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:*stp*                        # all STP variants
-#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:*mtp*                        # all MTP variants
+#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                              # all variants
 #   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:override_stp_tp4             # STP tp4 only
 #   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:zip_override_stp_lowlat[0]   # STP 1p1d only
 #   srtctl dry-run -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                             # preview
@@ -185,31 +182,6 @@ override_stp_tp4:
         expert-parallel-size: 1
 
 
-# MTP TP4 prefill mode: same as STP tp4 but adds EAGLE speculative decoding
-override_mtp_tp4:
-  name: "b200-fp4-mtp-low-latency-tp4-1p-tp8-1d"
-  frontend:
-    num_additional_frontends: 2
-  roles:
-    prefill:
-      env:
-        SGLANG_ENABLE_SPEC_V2: "1"
-      args:
-        data-parallel-size: 1
-        expert-parallel-size: 1
-        enable-dp-attention:
-        enable-dp-lm-head:
-    decode:
-      env:
-        SGLANG_ENABLE_SPEC_V2: "1"
-      args:
-        expert-parallel-size: 1
-        speculative-algorithm: "EAGLE"
-        speculative-num-steps: 2
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 3
-
-
 # STP low-latency: dep4 prefill + tep8 decode (DP=1), scale sweep 1p1d/1p5d/2p5d
 zip_override_stp_lowlat:
   name:
@@ -224,31 +196,6 @@ zip_override_stp_lowlat:
     decode:
       nodes: [1, 5, 5]
       workers: [1, 5, 5]
-
-
-# MTP low-latency: same scales as STP, adds EAGLE speculative decoding
-zip_override_mtp_lowlat:
-  name:
-    - "b200-fp4-mtp-low-latency-dep4-1p-tep8-1d"
-    - "b200-fp4-mtp-low-latency-dep4-1p-tep8-5d"
-    - "b200-fp4-mtp-low-latency-dep4-2p-tep8-5d"
-  resources: {}
-  roles:
-    prefill:
-      nodes: [1, 1, 2]
-      workers: [1, 1, 2]
-      env:
-        SGLANG_ENABLE_SPEC_V2: "1"
-    decode:
-      nodes: [1, 5, 5]
-      workers: [1, 5, 5]
-      env:
-        SGLANG_ENABLE_SPEC_V2: "1"
-      args:
-        speculative-algorithm: "EAGLE"
-        speculative-num-steps: 2
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 3
 
 
 # STP max-throughput 7p2d: dep4 prefill + dep8 decode, flashinfer_cutlass backend
@@ -277,81 +224,3 @@ override_stp_maxtpt_7p2d:
         max-running-requests: 2048
         cuda-graph-max-bs: 1024
         fp4-gemm-backend: "flashinfer_cutlass"
-
-
-# MTP max-throughput 7p2d: same as STP but adds EAGLE speculative decoding
-override_mtp_maxtpt_7p2d:
-  name: "b200-fp4-mtp-max-tpt-dep4-7p-dep8-2d"
-  resources: {}
-  roles:
-    prefill:
-      nodes: 7
-      workers: 7
-      env:
-        SGLANG_ENABLE_SPEC_V2: "1"
-      args:
-        max-prefill-tokens: 65536
-        chunked-prefill-size: 65536
-        max-running-requests: 1024
-        fp4-gemm-backend: "flashinfer_cutlass"
-    decode:
-      nodes: 2
-      workers: 2
-      env:
-        SGLANG_MOE_NVFP4_DISPATCH: "1"
-        SGLANG_ENABLE_SPEC_V2: "1"
-      args:
-        data-parallel-size: 8
-        enable-dp-attention: true
-        enable-dp-lm-head: true
-        moe-dense-tp-size: 1
-        max-running-requests: 2048
-        cuda-graph-max-bs: 1024
-        fp4-gemm-backend: "flashinfer_cutlass"
-        speculative-algorithm: "EAGLE"
-        speculative-num-steps: 2
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 3
-
-
-# MTP-only: 4p1d, no frontends, SGLANG_FLASHINFER_FP4_GEMM_BACKEND env var (fp4-gemm-backend: null
-# removes the sglang_config key), mem-fraction=0.75 for decode
-override_mtp_maxtpt_4p1d:
-  name: "b200-fp4-mtp-max-tpt-dep4-4p-dep8-1d"
-  dynamo:
-    # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
-    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
-    request_plane: "nats"
-    source:
-      pypi: "0.8.0"
-  frontend:
-  resources: {}
-  roles:
-    prefill:
-      nodes: 4
-      workers: 4
-      env:
-        SGLANG_ENABLE_SPEC_V2: "1"
-      args:
-        max-running-requests: 1024
-        fp4-gemm-backend:
-    decode:
-      nodes: 1
-      workers: 1
-      env:
-        SGLANG_MOE_NVFP4_DISPATCH: "1"
-        SGLANG_FLASHINFER_FP4_GEMM_BACKEND: "cutlass"
-        SGLANG_ENABLE_SPEC_V2: "1"
-      args:
-        mem-fraction-static: 0.75
-        data-parallel-size: 8
-        enable-dp-attention: true
-        enable-dp-lm-head: true
-        moe-dense-tp-size: 1
-        max-running-requests: 1024
-        cuda-graph-max-bs: 1024
-        fp4-gemm-backend:
-        speculative-algorithm: "EAGLE"
-        speculative-num-steps: 2
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 3
