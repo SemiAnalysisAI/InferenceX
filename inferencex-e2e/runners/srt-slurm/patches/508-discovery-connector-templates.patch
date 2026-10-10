@@ -1,3 +1,8 @@
+Subject: [PATCH] Bind discovery endpoints in srt-slurm connector templates
+Upstream: https://github.com/NVIDIA/srt-slurm/pull/508
+
+This launcher-side configuration fix binds allocated discovery addresses and ports inside explicit connector templates while preserving sibling connectors, including CPU offload. The target file, src/srtctl/backends/vllm.py, belongs to srt-slurm's launcher backend, not the vLLM engine. It does not modify inference-engine/runtime code, kernels, model computation, or the serving image.
+
 diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
 index 284e3b38..4bc8b8f6 100644
 --- a/src/srtctl/backends/vllm.py
