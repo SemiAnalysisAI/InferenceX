@@ -78,6 +78,18 @@ uv run --extra recipes infx generate --config-key 'dsr1-fp8-h200-*' --output-dir
 
 It writes one bound recipe per fixed-sequence or AgentX point, validated by the pinned srtctl, plus a `manifest.json` that maps each file to its matrix point and to the one cluster its runner label schedules on (`null` when the label spans several). Multi-node points take their cluster's binder inputs (DCGM exporter port, AgentX client paths, GPUs per node); a point that needs them fails unless its runner label names one cluster and the lane accepts the row's `power`. Launch-time edits such as the job name, health-check floor and runtime `--set` values are not applied.
 
+## Recipe fingerprints
+
+The planner gives every benchmark row a `recipe-fingerprint`: a SHA-256 of its matrix fields (except `conc` and `exp-name`) and the bound variant the launcher submits, composed with its shared block (and the telemetry block for `power: true`). Concurrency values, the job `name` and everything the launcher adds for a cluster stay out, so a recipe keeps one fingerprint across concurrencies and clusters. An `eval-srt-recipe` contributes only its path; rows without an srt-slurm recipe hash their matrix fields alone.
+
+The planner selects variants without srtctl ([`variants.py`](../../../infx/srt_slurm/variants.py)), the way the launcher does, so a row that no variant serves fails planning instead of its launch. Before writing a `perf-changelog.yaml` entry, list the config keys whose results the change invalidates:
+
+```bash
+uv run python -m infx.matrix.changed --base origin/main
+```
+
+The base matrix comes from the base revision's own generator, and both sides are fingerprinted under their own recipes. Each listed key shows its point counts and the points (fingerprint and concurrency) that were added or removed. `--config-files` limits the comparison, and `--json` prints a machine-readable report.
+
 ## Migration and validation
 
 Install the shared pin in an isolated environment, then use its CLI:

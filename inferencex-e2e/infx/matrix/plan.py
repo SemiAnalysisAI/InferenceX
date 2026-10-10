@@ -2,8 +2,6 @@
 
 import argparse
 import copy
-import hashlib
-import json
 import re
 import subprocess
 import traceback
@@ -14,6 +12,7 @@ import yaml
 
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
+from .fingerprint import recipe_fingerprint
 from .generate import (
     EvalMode,
     drop_app_colliding_evals,
@@ -110,22 +109,6 @@ def _matrix_curve_key(entry: dict) -> tuple:
             if key not in {"conc", "exp-name", "recipe-fingerprint"}
         )
     )
-
-
-def recipe_fingerprint(entry: dict) -> str:
-    """Hash the generated recipe independently of point-level concurrency/name."""
-    recipe = {
-        key: value
-        for key, value in entry.items()
-        if key not in {"conc", "exp-name", "recipe-fingerprint"}
-    }
-    canonical = json.dumps(
-        recipe,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _matrix_visual_series_key(entry: dict) -> tuple:
@@ -476,7 +459,7 @@ def build_plan(
             all_benchmark_results = trim_conc(all_benchmark_results)
 
         for result in all_benchmark_results:
-            result["recipe-fingerprint"] = recipe_fingerprint(result)
+            result["recipe-fingerprint"] = recipe_fingerprint(result, root)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             scenario = (
                 "agentic"

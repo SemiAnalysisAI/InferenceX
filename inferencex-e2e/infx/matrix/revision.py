@@ -38,6 +38,8 @@ class Tool:
 GENERATOR = Tool("infx.matrix.generate", "utils/matrix_logic/generate_sweep_configs.py")
 PLANNER = Tool("infx.matrix.plan", "utils/process_changelog.py")
 TOOLS = {"generate": GENERATOR, "plan": PLANNER}
+# Fingerprints a revision's rows as its planner does; revisions without it hashed the row alone.
+FINGERPRINTER = "infx.matrix.fingerprint"
 CONFIG_DIRS = ("configs", ".github/configs")
 NESTED_PROJECT = "inferencex-e2e/"
 SNAPSHOT_PATHS = (
@@ -87,13 +89,24 @@ class Revision:
             entrypoint, imports = [str(script)], [script.parent, self.root]
         else:
             raise ValueError(f"{self.root} has neither {tool.module_path} nor {tool.legacy_script}")
+        return [sys.executable, *entrypoint, *args], self._environment(imports)
+
+    def _environment(self, imports: Sequence[Path]) -> dict[str, str]:
         env = {name: os.environ[name] for name in INHERITED_ENV if name in os.environ}
         env["PYTHONPATH"] = os.pathsep.join(map(str, imports))
         env["INFERENCEX_REPOSITORY_ROOT"] = str(self.root)
-        return [sys.executable, *entrypoint, *args], env
+        return env
 
-    def generate(self, config_keys: Sequence[str], flags: Sequence[str]) -> list[dict]:
-        """Decode this revision's ``test-config`` matrix; raise CalledProcessError on failure."""
+    def generate(
+        self,
+        config_keys: Sequence[str],
+        flags: Sequence[str],
+        config_files: Sequence[str] | None = None,
+    ) -> list[dict]:
+        """Decode this revision's ``test-config`` matrix; raise CalledProcessError on failure.
+
+        ``config_files`` default to the revision's master configs.
+        """
         command, env = self.invocation(
             GENERATOR,
             [
@@ -101,7 +114,7 @@ class Revision:
                 "--config-keys",
                 *config_keys,
                 "--config-files",
-                *self.master_configs,
+                *(self.master_configs if config_files is None else config_files),
                 "--runner-config",
                 self.runner_config,
                 *flags,
@@ -111,6 +124,26 @@ class Revision:
             command, cwd=self.root, env=env, capture_output=True, text=True, check=True
         )
         return json.loads(result.stdout)
+
+    def fingerprints(self, rows: list[dict]) -> list[str]:
+        """Each benchmark row's ``recipe-fingerprint`` as this revision's planner assigns it."""
+        if not (self.root / f"{FINGERPRINTER.replace('.', '/')}.py").is_file():
+            from infx.matrix.fingerprint import row_fingerprint
+
+            return [row_fingerprint(row) for row in rows]
+        result = subprocess.run(
+            [sys.executable, "-m", FINGERPRINTER],
+            cwd=self.root,
+            env=self._environment([self.root]),
+            input=json.dumps(rows),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        fingerprints = json.loads(result.stdout)
+        if not isinstance(fingerprints, list) or len(fingerprints) != len(rows):
+            raise ValueError(f"{FINGERPRINTER} did not print one fingerprint per row")
+        return fingerprints
 
 
 @contextmanager

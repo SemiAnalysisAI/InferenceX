@@ -1,4 +1,4 @@
-"""Write the bound srt-slurm recipes of master-config points for inspection."""
+"""Bind master-config points to the recipes the launcher submits; ``infx generate`` writes them."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -22,7 +22,7 @@ from infx.launch.request import MultiNodeRequest
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
-from infx.srt_slurm.synthetic_acceptance import build_overrides
+from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
 from infx.srt_slurm.workload import bind_multinode, dram_budget, resolve_dram
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ RANDOM_RANGE_RATIO = "0.8"
 THINKING_MODE = "thinking_on"
 
 
-def _environment(point: Mapping[str, Any]) -> dict[str, str]:
+def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
     """The workflow environment the launcher reads for ``point``."""
     agentic = point.get("scenario-type") == "agentic-coding"
     environment = {
@@ -132,26 +132,30 @@ def _binder_inputs(
         raise ValueError(f"cluster {cluster.id!r}: {error}") from error
 
 
-def _bound_variant(
+def bound_variant(
     point: Mapping[str, Any],
     environment: Mapping[str, str],
     root: Path,
     *,
-    power_port: int | None,
-    client_env: Mapping[str, str],
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+    power_port: int | None = None,
+    client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
-    """The variant the launcher submits for ``point``, bound.
+    """The variant the launcher submits for ``point``, composed and bound.
 
-    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client
-    paths ``client_env``, the binder inputs the launcher computes.
+    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client paths
+    ``client_env``, the binder inputs the launcher computes.
     """
     if "prefill" not in point:
-        selected, recipe = select_recipe(str(root / point["srt-recipe"]), environment, root=root)
+        selected, recipe = select_recipe(
+            str(root / point["srt-recipe"]), environment, root=root, expand=expand
+        )
         return selected.partition(":")[2] or None, recipe
     return bind_multinode(
         str(root / point["srt-recipe"]),
         environment,
         root=root,
+        expand=expand,
         power_port=power_port,
         client_env=client_env,
     )
@@ -207,10 +211,10 @@ def generate_recipes(
         if not points:
             raise ValueError(f"{key} has no srt-slurm points")
         for point in points:
-            environment = _environment(point)
+            environment = point_environment(point)
             placement = _placement(inventory, point["runner"])
             power_port, client_env = _binder_inputs(point, environment, placement, root)
-            variant, recipe = _bound_variant(
+            variant, recipe = bound_variant(
                 point, environment, root, power_port=power_port, client_env=client_env
             )
             budget = dram_budget(
