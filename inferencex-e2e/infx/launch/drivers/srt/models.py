@@ -47,11 +47,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
     ),
     "gb200-nv": (
         Override(
-            Match(any_of("dsv4"), any_of("fp4"), any_of("llmd-vllm")),
-            entry="DeepSeek-V4-Pro@numa1",
-            served_name="deepseek-ai/DeepSeek-V4-Pro",
-        ),
-        Override(
             Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-sglang")),
             entry="deepseek-r1-0528-fp4-v2",
         ),
