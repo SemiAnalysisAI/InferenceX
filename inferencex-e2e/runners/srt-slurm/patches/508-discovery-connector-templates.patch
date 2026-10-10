@@ -1,8 +1,8 @@
 diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
-index c14b4cd..1a2f1cb 100644
+index 284e3b38..4bc8b8f6 100644
 --- a/src/srtctl/backends/vllm.py
 +++ b/src/srtctl/backends/vllm.py
-@@ -486,7 +486,9 @@ class VLLMBackend(Backend):
+@@ -521,7 +521,9 @@ class VLLMBackend(Backend):
          """``--kv-transfer-config`` JSON for a worker mode, or None when the mode has no connector.
  
          Table connectors expand to their preset for the mode; a raw JSON string
@@ -13,7 +13,7 @@ index c14b4cd..1a2f1cb 100644
          the realized topology (``process`` and ``runtime``) for its
          ``kv_connector_extra_config``: the router's address and discovery port,
          this worker's HTTP port and routable IP, and the handshake and notify
-@@ -495,7 +497,10 @@ class VLLMBackend(Backend):
+@@ -530,7 +532,10 @@ class VLLMBackend(Backend):
          connector = self._effective_connector_for_mode(mode, use_default=use_default)
          if not connector or connector.lower() in ("null", "none"):
              return None
@@ -25,7 +25,7 @@ index c14b4cd..1a2f1cb 100644
          if row is None or not row.discovery:
              return _connector_to_kv_transfer_config(connector, mode)
          if process is None or runtime is None:
-@@ -503,8 +508,41 @@ class VLLMBackend(Backend):
+@@ -538,8 +543,41 @@ class VLLMBackend(Backend):
                  f"connector {connector!r} registers workers with the vLLM Router and needs the worker topology; "
                  "it is only available with frontend.type: vllm-router"
              )
