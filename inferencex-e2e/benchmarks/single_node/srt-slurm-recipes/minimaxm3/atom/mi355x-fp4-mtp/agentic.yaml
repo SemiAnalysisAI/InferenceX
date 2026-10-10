@@ -5,10 +5,6 @@
 base:
   schema: 2
   name: minimaxm3-fp4-mi355x-atom-agentic
-  model:
-    path: hf:amd/MiniMax-M3-MXFP4
-    container: rocm/atom-dev:nightly_202610070333
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -50,10 +46,7 @@ base:
         ATOM_PA_FLYDSL: '1'
         ATOM_PA_FLYDSL_PLAN: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: amd/MiniMax-M3-MXFP4
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
@@ -227,7 +220,7 @@ override_tp2_c20_lmcache:
       env:
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
@@ -237,7 +230,6 @@ override_tp2_c20_lmcache:
     env:
       CONC: '20'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '515'
 
 override_tp2_c25_lmcache:
   roles:
@@ -251,7 +243,7 @@ override_tp2_c25_lmcache:
       env:
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
@@ -261,7 +253,6 @@ override_tp2_c25_lmcache:
     env:
       CONC: '25'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '515'
 
 override_tp2_c30_lmcache:
   roles:
@@ -275,7 +266,7 @@ override_tp2_c30_lmcache:
       env:
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1'
@@ -285,7 +276,6 @@ override_tp2_c30_lmcache:
     env:
       CONC: '30'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '515'
 
 override_tp4_c40_lmcache:
   roles:
@@ -300,7 +290,7 @@ override_tp4_c40_lmcache:
         ATOM_M3_INDEXER_CP: '1'
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
@@ -310,7 +300,6 @@ override_tp4_c40_lmcache:
     env:
       CONC: '40'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c48_lmcache:
   roles:
@@ -325,7 +314,7 @@ override_tp4_c48_lmcache:
         ATOM_M3_INDEXER_CP: '1'
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         LMCACHE_CHUNK_SIZE: '256'
         LMCACHE_CACHE_POLICY: ATOM_SLRU
         LMCACHE_LOOKUP_SERVER_WORKER_IDS: '0,1,2,3'
@@ -335,4 +324,3 @@ override_tp4_c48_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1030'

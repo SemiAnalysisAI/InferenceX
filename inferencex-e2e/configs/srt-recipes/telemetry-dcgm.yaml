@@ -1,0 +1,12 @@
+# Merged under the fragment of a point whose master row sets `power: true`. The launcher
+# adds the cluster's power-exporter-port and stages the dcgm-exporter image.
+telemetry:
+  enabled: true
+  collect_interval_ms: 1000
+  storage_subdir: power
+  required: true
+  startup_timeout_seconds: 120
+  request_timeout_seconds: 2
+  dcgm_exporter:
+    container_image: dcgm-exporter
+    command: "dcgm-exporter --collect-interval=100 --address :{port} -f /configs/dcgm-counters-noprof.csv"

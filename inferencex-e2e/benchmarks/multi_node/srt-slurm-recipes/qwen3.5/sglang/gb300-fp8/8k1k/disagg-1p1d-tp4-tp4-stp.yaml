@@ -108,17 +108,3 @@ roles:
       decode-log-interval: 1
       stream-interval: 50
       disaggregation-mode: "decode"
-
-telemetry:
-  enabled: true
-  collect_interval_ms: 1000
-  storage_subdir: power
-  required: true
-  startup_timeout_seconds: 120
-  request_timeout_seconds: 2
-  dcgm_exporter:
-    container_image: dcgm-exporter
-    # 9401 is already bound by the cluster-level exporter on im-gb300 nodes;
-    # use a port outside that range.
-    port: 19401
-    command: "dcgm-exporter --collect-interval=100 --address :{port} -f /configs/dcgm-counters-noprof.csv"

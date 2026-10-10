@@ -1,4 +1,4 @@
-"""Write the bound fixed-sequence srt-slurm recipes of master-config points for inspection."""
+"""Write the bound srt-slurm recipes of master-config points for inspection."""
 
 from __future__ import annotations
 
@@ -9,36 +9,67 @@ import sys
 from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from infx.clusters import load_inventory
+from infx.clusters.slurm import slurm_settings
+from infx.launch.context import LaunchError
+from infx.launch.drivers.srt import config, lanes, power
+from infx.launch.policy import launch_path
+from infx.launch.request import MultiNodeRequest
 from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides
-from infx.srt_slurm.workload import bind_multinode
+from infx.srt_slurm.workload import bind_multinode, dram_budget, resolve_dram
+
+if TYPE_CHECKING:
+    from infx.clusters import Cluster, RunnerInventory
 
 # What benchmark-tmpl.yml and benchmark-multinode-tmpl.yml export.
 RANDOM_RANGE_RATIO = "0.8"
+THINKING_MODE = "thinking_on"
 
 
 def _environment(point: Mapping[str, Any]) -> dict[str, str]:
     """The workflow environment the launcher reads for ``point``."""
+    agentic = point.get("scenario-type") == "agentic-coding"
     environment = {
         "IMAGE": point["image"],
         "MODEL": point["model"],
+        "MODEL_PREFIX": point["model-prefix"],
         "PRECISION": point["precision"],
         "FRAMEWORK": point["framework"],
         "SPEC_DECODING": point["spec-decoding"],
-        "IS_AGENTIC": "0",
-        "ISL": str(point["isl"]),
-        "OSL": str(point["osl"]),
+        "IS_AGENTIC": "1" if agentic else "0",
+        "ISL": "0" if agentic else str(point["isl"]),
+        "OSL": "0" if agentic else str(point["osl"]),
         "RANDOM_RANGE_RATIO": RANDOM_RANGE_RATIO,
+        "THINKING_MODE": THINKING_MODE,
+        "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
     }
+    if agentic:
+        environment.update(
+            KV_OFFLOADING=str(point["kv-offloading"]),
+            TOTAL_CPU_DRAM_GB=str(point["total-cpu-dram-gb"]),
+        )
     if "prefill" in point:
-        environment["CONC_LIST"] = " ".join(map(str, point["conc"]))
+        prefill = point["prefill"]
+        environment.update(
+            IS_MULTINODE="true",
+            SRT_RECIPE=point["srt-recipe"],
+            POWER="1" if point.get("power") else "0",
+            CONC_LIST=" ".join(map(str, point["conc"])),
+            PREFILL_TP=str(prefill["tp"]),
+            PREFILL_PP_SIZE=str(prefill["pp"]),
+            PREFILL_PCP_SIZE=str(prefill["pcp-size"]),
+        )
+        if agentic:
+            # A multi-node AgentX job serves its one concurrency.
+            environment["CONC"] = str(point["conc"][0])
         return environment
     return {
         **environment,
@@ -53,14 +84,77 @@ def _environment(point: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
+def _placement(inventory: RunnerInventory, label: str) -> tuple[str, Cluster] | None:
+    """A runner of ``label`` and its cluster, when every runner of ``label`` is on one cluster."""
+    runners = inventory.labels.get(label, [])
+    if len({inventory.cluster_for(runner).id for runner in runners}) != 1:
+        return None
+    return runners[0], inventory.cluster_for(runners[0])
+
+
+def _binder_inputs(
+    point: Mapping[str, Any],
+    environment: Mapping[str, str],
+    placement: tuple[str, Cluster] | None,
+    root: Path,
+) -> tuple[int | None, dict[str, str]]:
+    """The DCGM exporter port and AgentX client paths the launcher binds a multi-node point with.
+
+    Raises ``ValueError`` when they depend on a cluster the runner label does not single out,
+    or the cluster's lanes refuse the point.
+    """
+    agentic = environment["IS_AGENTIC"] == "1"
+    if "prefill" not in point or not (agentic or point.get("power")):
+        return None, {}
+    if placement is None:
+        raise ValueError(
+            f"runner {point['runner']!r} must schedule on one cluster to bind the cluster's "
+            "power telemetry and AgentX client paths"
+        )
+
+    runner, cluster = placement
+    srt = slurm_settings(cluster).srt_slurm
+    if srt is None:
+        raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
+    # The job reads these; the binder inputs depend on none of them.
+    runtime = {
+        "RUNNER_NAME": runner,
+        "GITHUB_WORKSPACE": str(root),
+        "RESULT_FILENAME": point["exp-name"],
+    }
+    request = MultiNodeRequest.from_env({**environment, **runtime})
+    try:
+        path = launch_path(cluster.id, request)
+        lane = lanes.srt_lane(cluster.id, path)
+        decision = power.decide_power(cluster.id, path, request)
+        return config.binder_inputs(cluster, srt, lane, request, decision)
+    except LaunchError as error:
+        raise ValueError(f"cluster {cluster.id!r}: {error}") from error
+
+
 def _bound_variant(
-    point: Mapping[str, Any], environment: Mapping[str, str], root: Path
+    point: Mapping[str, Any],
+    environment: Mapping[str, str],
+    root: Path,
+    *,
+    power_port: int | None,
+    client_env: Mapping[str, str],
 ) -> tuple[str | None, dict[str, Any]]:
-    """The variant the launcher submits for ``point``, bound."""
+    """The variant the launcher submits for ``point``, bound.
+
+    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client
+    paths ``client_env``, the binder inputs the launcher computes.
+    """
     if "prefill" not in point:
         selected, recipe = select_recipe(str(root / point["srt-recipe"]), environment, root=root)
         return selected.partition(":")[2] or None, recipe
-    return bind_multinode(str(root / point["srt-recipe"]), environment, root=root)
+    return bind_multinode(
+        str(root / point["srt-recipe"]),
+        environment,
+        root=root,
+        power_port=power_port,
+        client_env=client_env,
+    )
 
 
 def _apply_acceptance_and_validate(
@@ -92,7 +186,7 @@ def _apply_acceptance_and_validate(
 def generate_recipes(
     *, config_keys: list[str], config_files: list[Path], runner_file: Path, output: Path
 ) -> dict[str, Any]:
-    """Bind every fixed-sequence point of ``config_keys``; write recipes and a manifest."""
+    """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest."""
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output directory must be empty: {output}")
     files = [str(path) for path in config_files]
@@ -104,23 +198,36 @@ def generate_recipes(
         sys.path.insert(0, str(source))
     master = load_config_files(files)
     runners = load_runner_file(str(runner_file))
+    inventory = load_inventory(runner_file)
     recipes: dict[str, dict[str, Any]] = {}
     records = []
     for key in expand_config_keys(config_keys, master):
-        points = generate_config_matrix(
-            [key], master, runners, scenario_types=["fixed-seq-len"], eval_mode="none", root=root
-        )
+        points = generate_config_matrix([key], master, runners, eval_mode="none", root=root)
+        points = [point for point in points if point.get("srt-recipe")]
         if not points:
-            raise ValueError(f"{key} has no fixed-sequence points")
+            raise ValueError(f"{key} has no srt-slurm points")
         for point in points:
             environment = _environment(point)
-            variant, recipe = _bound_variant(point, environment, root)
+            placement = _placement(inventory, point["runner"])
+            power_port, client_env = _binder_inputs(point, environment, placement, root)
+            variant, recipe = _bound_variant(
+                point, environment, root, power_port=power_port, client_env=client_env
+            )
+            budget = dram_budget(
+                environment,
+                multinode="prefill" in point,
+                gpus_per_node=placement[1].gpus_per_node if placement else None,
+            )
+            recipe = resolve_dram(recipe, budget)
             _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
             digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
             name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"
             recipes[name] = recipe
-            records.append({"file": name, "config-key": key, "variant": variant, "matrix": point})
+            records.append({
+                "file": name, "config-key": key, "variant": variant,
+                "cluster": placement[1].id if placement else None, "matrix": point,
+            })  # fmt: skip
     output.mkdir(parents=True, exist_ok=True)
     for name, recipe in recipes.items():
         (output / name).write_text(yaml.safe_dump(recipe, sort_keys=False))

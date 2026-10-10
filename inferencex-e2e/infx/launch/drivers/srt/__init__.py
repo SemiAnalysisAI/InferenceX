@@ -19,7 +19,7 @@ from infx.clusters.slurm import SlurmSettings
 from infx.launch import policy
 from infx.launch.backends.base import BackendError
 from infx.launch.backends.slurm import srtctl_job_name
-from infx.launch.context import Launch
+from infx.launch.context import Launch, LaunchError
 from infx.launch.drivers.srt import collect, config, lanes, models, power, submit
 from infx.launch.drivers.srt.checkout import (
     checkout_dir,
@@ -28,7 +28,12 @@ from infx.launch.drivers.srt.checkout import (
     prepare_checkout,
     run_setup,
 )
-from infx.launch.drivers.srt.recipe import eval_overrides, prepare_recipe, staged_recipe
+from infx.launch.drivers.srt.recipe import (
+    eval_overrides,
+    prepare_recipe,
+    recipe_mirror_path,
+    staged_recipe,
+)
 from infx.launch.drivers.srt.run import SrtRun, require, slurm_backend
 from infx.launch.request import (
     BATCH_REENTRY_ENV,
@@ -130,10 +135,12 @@ def run_multinode(launch: Launch) -> int:
     lanes.check_request(lane, request)
     srt_recipe = lanes.srt_recipe(request)
     staged = staged_recipe(srt_recipe)
-    decision = power.resolve_power(launch.cluster.id, launch.path, request)
+    if not recipe_mirror_path(request.workspace, srt_recipe).is_file():
+        raise LaunchError(f"{srt_recipe} is not in the recipe mirror")
+    decision = power.decide_power(launch.cluster.id, launch.path, request)
     model = models.checkpoint(launch.cluster, request)
     served = models.served_path(launch.cluster, request, model)
-    model_paths = models.model_paths(launch.cluster, request, srt_recipe, served)
+    model_paths = models.model_paths(launch.cluster, request, served)
     run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
     preflight = run.srt.preflight and not (model_paths and model and model.node_local)
     if request.framework == "tilert":
@@ -152,15 +159,12 @@ def run_multinode(launch: Launch) -> int:
     infmax = compute_workspace(run, checkout, shared=shared)
     run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-    # The binder writes a fixed-sequence recipe's telemetry concurrencies.
-    conc_list = request.env.get("CONC_LIST", "") if decision.dcgm and request.is_agentic else None
     job_name = srtctl_job_name(request.runner_name)
-    prepare_recipe(checkout.root, staged, job_name, run.srt.dist_timeout_s, conc_list)
-    recipe = staged
-    if not request.is_agentic:
-        recipe = str(checkout.root / BOUND_RECIPE)
-        if rc := submit.bind_recipe(run, checkout, staged, recipe):
-            return rc
+    prepare_recipe(checkout.root, staged, job_name, run.srt.dist_timeout_s)
+    recipe = str(checkout.root / BOUND_RECIPE)
+    power_port, client_env = config.binder_inputs(run.cluster, run.srt, lane, request, decision)
+    if rc := submit.bind_recipe(run, checkout, staged, recipe, power_port, client_env):
+        return rc
     arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
     manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
@@ -202,11 +206,14 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             problems.append(f"{where}: no srt-slurm.shared-run-root")
         if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):
             problems.append(f"{where}: its time limits are shadowed by default-time-limit")
-    problems.extend(
-        f"POWER_LANES[{cluster_id!r}, {path}]: no SRT_LANES row"
-        for cluster_id, path in power.POWER_LANES
-        if scoped(cluster_id) and (cluster_id, path) not in lanes.SRT_LANES
-    )
+    for cluster_id, path in power.POWER_LANES:
+        where = f"POWER_LANES[{cluster_id!r}, {path}]"
+        if not scoped(cluster_id):
+            continue
+        if (cluster_id, path) not in lanes.SRT_LANES:
+            problems.append(f"{where}: no SRT_LANES row")
+        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.power_exporter_port is None:
+            problems.append(f"{where}: no srt-slurm.power-exporter-port")
     for cluster_id, overrides in models.OVERRIDES.items():
         if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:
             entries = clusters[cluster_id].models.entries

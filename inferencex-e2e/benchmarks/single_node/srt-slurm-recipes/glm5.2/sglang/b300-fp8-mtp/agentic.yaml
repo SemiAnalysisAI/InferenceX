@@ -5,10 +5,6 @@
 base:
   schema: 2
   name: glm5.2-fp8-b300-sglang-agentic
-  model:
-    path: hf:zai-org/GLM-5.2-FP8
-    container: lmsysorg/sglang:nightly-dev-cu13-20260908-20ca564b
-    precision: fp8
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -60,15 +56,10 @@ base:
         # Keep FlashInfer, Triton and JIT caches allocation-local.
         SGLANG_CACHE_DIR: /tmp/sglang-cache
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: zai-org/GLM-5.2-FP8
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2399'
 
 # One variant per point: admission is 2x CONC and the graph batch matches it,
 # capped at 64.

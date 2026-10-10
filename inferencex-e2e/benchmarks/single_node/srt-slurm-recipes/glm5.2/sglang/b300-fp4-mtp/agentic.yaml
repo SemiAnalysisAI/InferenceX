@@ -5,10 +5,6 @@
 base:
   schema: 2
   name: glm5.2-fp4-b300-sglang-agentic
-  model:
-    path: hf:nvidia/GLM-5.2-NVFP4
-    container: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -58,15 +54,10 @@ base:
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/GLM-5.2-NVFP4
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2399'
 
 # One variant per point: admission is 2x CONC and the graph batch matches it,
 # capped at 64.

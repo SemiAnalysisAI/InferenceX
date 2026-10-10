@@ -4,10 +4,6 @@
 base:
   schema: 2
   name: dsv4-fp4-b200-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-591bb95
-    precision: fp4
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -59,10 +55,7 @@ base:
         PYTHONNOUSERSITE: '1'
         VLLM_FLOAT32_MATMUL_PRECISION: high
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. Graphs capture every decode batch of up to
@@ -194,7 +187,7 @@ override_dep8_c32:
         max-num-batched-tokens: 8248
         max-num-seqs: 8
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -202,7 +195,6 @@ override_dep8_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c64:
@@ -230,7 +222,7 @@ override_dep8_c64:
         max-num-batched-tokens: 8304
         max-num-seqs: 16
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -238,7 +230,6 @@ override_dep8_c64:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c96:
@@ -266,7 +257,7 @@ override_dep8_c96:
         max-num-batched-tokens: 8360
         max-num-seqs: 24
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -274,7 +265,6 @@ override_dep8_c96:
     env:
       CONC: '96'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c128:
@@ -302,7 +292,7 @@ override_dep8_c128:
         max-num-batched-tokens: 8416
         max-num-seqs: 32
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -310,7 +300,6 @@ override_dep8_c128:
     env:
       CONC: '128'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c160:
@@ -338,7 +327,7 @@ override_dep8_c160:
         max-num-batched-tokens: 8472
         max-num-seqs: 40
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -346,7 +335,6 @@ override_dep8_c160:
     env:
       CONC: '160'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
 
 override_dep8_c192:
@@ -374,7 +362,7 @@ override_dep8_c192:
         max-num-batched-tokens: 8528
         max-num-seqs: 48
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336],"mode":0}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":243375000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":"@dram.per-gpu-bytes","enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
         PYTHONHASHSEED: '42'
@@ -382,5 +370,4 @@ override_dep8_c192:
     env:
       CONC: '192'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1947'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'

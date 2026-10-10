@@ -8,10 +8,6 @@
 base:
   schema: 2
   name: kimik3-fp4-mi355x-atom-agentic
-  model:
-    path: hf:moonshotai/Kimi-K3
-    container: rocm/atom-dev:nightly_202609251613
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -73,10 +69,7 @@ base:
         # FlyDSL FP8 prefill attention; ATOM defaults it off.
         ATOM_USE_FLYDSL_FP8_PREFILL_ATTN: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: moonshotai/Kimi-K3
       HTTP_PROXY: ''
       HTTPS_PROXY: ''
       http_proxy: ''
@@ -139,13 +132,12 @@ override_tp8_dcp8_c14_lmcache:
           # One K3 state entry is 54.78 MiB; the default 8 MiB staging buffer
           # cannot hold it.
           OFFLOAD_GPU_STAGING_CHUNKS: '32'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         ATOM_ENABLE_REPLAYSSM: '1'
   benchmark:
     env:
       CONC: '14'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
 
 override_tp8_dcp8_c16_lmcache:
   roles:
@@ -157,7 +149,7 @@ override_tp8_dcp8_c16_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         ATOM_ENABLE_REPLAYSSM: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
         ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
@@ -165,7 +157,6 @@ override_tp8_dcp8_c16_lmcache:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
 
 # Throughput band: past the knee the draft no longer pays for itself, and
 # max-num-seqs tracks 2x CONC. 56 and 72 need the 192 GB/rank pool and reuse
@@ -183,7 +174,7 @@ override_tp8_dcp8_c48_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
         ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
   benchmark:
@@ -191,7 +182,6 @@ override_tp8_dcp8_c48_lmcache:
       CONC: '48'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
 
 override_tp8_dcp8_c56_lmcache:
   roles:
@@ -206,7 +196,7 @@ override_tp8_dcp8_c56_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
         ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
@@ -215,7 +205,6 @@ override_tp8_dcp8_c56_lmcache:
       CONC: '56'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'
 
 override_tp8_dcp8_c72_lmcache:
   roles:
@@ -230,7 +219,7 @@ override_tp8_dcp8_c72_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '@dram.per-gpu-gb'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
         ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
@@ -239,4 +228,3 @@ override_tp8_dcp8_c72_lmcache:
       CONC: '72'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'

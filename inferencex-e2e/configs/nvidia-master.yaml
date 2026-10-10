@@ -1165,7 +1165,8 @@ qwen3.5-fp8-b200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; KV, Mamba and the NEXTN draft take 31/15 of it.
+    - dram-utilization: 0.385
       search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 62, 64], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72, 76], srt-recipe: agentic.yaml }
@@ -1383,6 +1384,7 @@ kimik3-fp4-h200-vllm-agentic-latency:
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
         num-nodes: 4
         srt-recipe: agg-tp16dp2ep32-latency.yaml
+        power: true
         worker:
           num-worker: 2
           tp: 16
@@ -1409,6 +1411,7 @@ kimik3-fp4-h200-vllm-agentic-balanced:
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16]
         num-nodes: 4
         srt-recipe: agg-tp8dp4ep32-balanced.yaml
+        power: true
         worker:
           num-worker: 4
           tp: 8
@@ -1436,6 +1439,7 @@ kimik3-fp4-h200-vllm-agentic-simple:
         conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
         num-nodes: 4
         srt-recipe: agg-tp8dp4ep32-vllm-simple.yaml
+        power: true
         worker:
           num-worker: 4
           tp: 8
@@ -1632,6 +1636,7 @@ dsv4-fp8-h200-dynamo-sglang-agentic-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-tp8-mtp-kvoffload.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -3970,6 +3975,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         srt-recipe: disagg-1p1d-tp4-tp4-stp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -3984,6 +3990,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1024]
         srt-recipe: disagg-4p1d-dep4-dep16-stp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -4078,6 +4085,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: mooncake
         conc-list: [1, 4, 8, 16, 32, 64, 256]
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-b128-c1x4x8x16x32x64x256-stp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -4094,6 +4102,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: nixl
         conc-list: [2048]
         srt-recipe: disagg-5p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b4096-c2048-stp.yaml
+        power: true
         prefill:
           num-worker: 5
           tp: 4
@@ -4110,6 +4119,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: mooncake
         conc-list: [5120]
         srt-recipe: disagg-6p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b5120-c5120-stp.yaml
+        power: true
         prefill:
           num-worker: 6
           tp: 4
@@ -4126,6 +4136,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
         kv-p2p-transfer: mooncake
         conc-list: [5120]
         srt-recipe: disagg-7p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b5120-c5120-stp.yaml
+        power: true
         prefill:
           num-worker: 7
           tp: 4
@@ -5052,7 +5063,8 @@ qwen3.5-fp8-b300-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b300-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; KV, Mamba and the NEXTN draft take 31/15 of it.
+    - dram-utilization: 0.385
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 64, 68, 72], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
@@ -5069,7 +5081,8 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; KV, Mamba and the NEXTN draft take 31/15 of it.
+    - dram-utilization: 0.385
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 64, 68, 72], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
@@ -5172,7 +5185,8 @@ qwen3.5-fp8-h100-sglang-agentic:
   srt-recipe-dir: qwen3.5/sglang/h100-fp8
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; the KV and Mamba pools take twice it.
+    - dram-utilization: 0.4
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42], srt-recipe: agentic.yaml }
@@ -5208,7 +5222,8 @@ qwen3.5-fp8-h200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/h200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; the KV and Mamba pools take twice it.
+    - dram-utilization: 0.4
       search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
@@ -5245,7 +5260,8 @@ qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
   srt-recipe-dir: qwen3.5/sglang/h200-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; the KV and Mamba pools take twice it.
+    - dram-utilization: 0.4
       search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [2, 4, 8, 10, 12, 16, 20, 24], srt-recipe: agentic.yaml }
 
@@ -5260,7 +5276,8 @@ qwen3.5-fp8-h100-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/h100-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; the KV and Mamba pools take twice it.
+    - dram-utilization: 0.4
       search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
@@ -5376,7 +5393,8 @@ minimaxm3-fp8-h100-vllm-agentic-mtp:
   scenarios:
     agentic-coding:
     # The fast sweep places the resident HBM cliff between c5 and c6.
-    - dram-utilization: 0.80
+    # Sizes the ~119 GiB Mooncake segment per GPU; weights and page cache use the rest.
+    - dram-utilization: 0.4725
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 3, 4, 5], srt-recipe: agentic.yaml }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [6, 8], srt-recipe: agentic.yaml }
@@ -5408,7 +5426,8 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.5/sglang/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes one HiCache host pool per GPU; KV, Mamba and the NEXTN draft take 31/15 of it.
+    - dram-utilization: 0.385
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 62, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72], srt-recipe: agentic.yaml }
@@ -5622,7 +5641,8 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
   srt-recipe-dir: minimaxm3/trtllm/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
+    # TP2/TP4 host caches take the 3 TB policy share per GPU.
+    - dram-utilization: 1.0
       search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [20, 25, 30], srt-recipe: agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30], srt-recipe: agentic.yaml }
@@ -6366,7 +6386,8 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   srt-recipe-dir: kimik3/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1065
+    # Sizes the ~96 GiB Mooncake segment per GPU.
+    - dram-utilization: 0.457
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -6374,6 +6395,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
         conc-list: [1, 2, 4, 8, 16]
         num-nodes: 4
         srt-recipe: agg-dcp16-dspark4-maxseq2-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 16
@@ -6393,13 +6415,15 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
   srt-recipe-dir: kimik3/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1065
+    # Sizes the ~96 GiB Mooncake segment per GPU.
+    - dram-utilization: 0.457
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
         conc-list: [8, 40, 48]
         num-nodes: 4
         srt-recipe: agg-dcp16-nospec-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 16
@@ -6421,7 +6445,8 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
   srt-recipe-dir: dsv4/trtllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.21429
+    # Sizes the ~180 GiB TRT-LLM host cache per prefill GPU.
+    - dram-utilization: 0.8572
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -6535,6 +6560,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [16]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c16.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6548,6 +6574,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [32]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c32.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6560,6 +6587,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [48]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c48.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6572,6 +6600,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [72]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c72.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6584,6 +6613,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         conc-list: [96]
         num-nodes: 4
         srt-recipe: agg-tp8pp2-mooncake-c96.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6771,7 +6801,8 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: dsv4/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes the ~140 GiB Mooncake segment per prefill GPU; the decode stores keep their own.
+    - dram-utilization: 0.6664
       search-space:
       - spec-decoding: draft_model
         conc-list: [120, 480]
@@ -6854,6 +6885,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         srt-recipe: disagg-1p1d-tp4-tp4-stp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -6868,6 +6900,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [1024]
         srt-recipe: disagg-4p1d-dep4-dep16-stp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -6916,6 +6949,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
         conc-list: [8]
         kv-offloading: none
         srt-recipe: disagg-2p2d-pcp8-tp8-dp8-mtp.yaml
+        power: true
         prefill:
           num-worker: 2
           tp: 1
@@ -6931,6 +6965,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
         conc-list: [12]
         kv-offloading: none
         srt-recipe: disagg-2p2d-pcp8-tp8-dp8-mtp.yaml
+        power: true
         prefill:
           num-worker: 2
           tp: 1
@@ -6946,6 +6981,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
         conc-list: [16]
         kv-offloading: none
         srt-recipe: disagg-2p2d-pcp8-tp8-dp8-mtp.yaml
+        power: true
         prefill:
           num-worker: 2
           tp: 1
@@ -6982,6 +7018,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 1
@@ -6998,6 +7035,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 1
@@ -7014,6 +7052,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1p1d-pcp8-tp8-dp8-mtp6-hicache.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 1
@@ -7050,6 +7089,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c2.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7061,6 +7101,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c4.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7072,6 +7113,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c8.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7083,6 +7125,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c12.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7094,6 +7137,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
         kv-offload-backend: { name: hicache }
         num-nodes: 1
         srt-recipe: agg-h200-tp8-mtp-c16.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7343,8 +7387,9 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         num-nodes: 2
-        # Shared deployment GPU power telemetry.
         srt-recipe: agg.yaml
+        # Shared deployment GPU power telemetry.
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7525,7 +7570,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes the 135 GB HiCache host pool per GPU.
+    - dram-utilization: 0.6
       search-space:
       # aggregated 1-worker TP8 (prefill+decode on the same GPUs), concurrency 1
       - spec-decoding: mtp
@@ -7577,7 +7623,8 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes the 135 GB HiCache host pool per prefill GPU.
+    - dram-utilization: 0.6
       search-space:
       # low-latency 1P2D DEP4-prefill / TP4-decode (2 decode workers)
       - spec-decoding: mtp
@@ -7660,7 +7707,8 @@ glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
   srt-recipe-dir: glm5.2/trtllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.15239
+    # Sizes the ~128 GiB TRT-LLM host cache per prefill GPU.
+    - dram-utilization: 0.61
       search-space:
       - spec-decoding: mtp
         conc-list: [1]
@@ -7774,6 +7822,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1, 2, 8]
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-b128-c1x2x8-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -7788,6 +7837,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [32, 48, 80]
         srt-recipe: disagg-1p1d-p-tp8-ep8-d-tp8-ep8-b1024-c32x48x80-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7802,6 +7852,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [480]
         srt-recipe: disagg-3p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c480-mtp.yaml
+        power: true
         prefill:
           num-worker: 3
           tp: 4
@@ -7816,6 +7867,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [768]
         srt-recipe: disagg-4p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c768-mtp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -7830,6 +7882,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1280]
         srt-recipe: disagg-6p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c1280-mtp.yaml
+        power: true
         prefill:
           num-worker: 6
           tp: 4
@@ -7844,6 +7897,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1344]
         srt-recipe: disagg-7p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1344-mtp.yaml
+        power: true
         prefill:
           num-worker: 7
           tp: 4
@@ -7858,6 +7912,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1920, 2304]
         srt-recipe: disagg-8p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1920x2304-mtp.yaml
+        power: true
         prefill:
           num-worker: 8
           tp: 4
@@ -7885,15 +7940,15 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   srt-recipe-dir: kimik3/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    # 0.1775 resolves to 160 GB of host DRAM per 4-GPU server node on
-    # cluster:gb300-nv, matching the recipe's Mooncake segment size.
-    - dram-utilization: 0.1775
+    # Sizes the ~160 GiB Mooncake segment per GPU.
+    - dram-utilization: 0.762
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48, 56]
         srt-recipe: disagg-1p1d-dcp8-dcp8-dspark4-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7906,6 +7961,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48, 64]
         srt-recipe: disagg-1p2d-dcp8-dcp8-dspark4-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7918,6 +7974,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [1]
         srt-recipe: disagg-1p3d-dcp8-dcp8-dspark7-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7930,6 +7987,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         conc-list: [48]
         srt-recipe: disagg-1p3d-dcp8-dcp8-dspark4-mooncake.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7950,7 +8008,8 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
   srt-recipe-dir: kimik3/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1775
+    # Sizes the ~160 GiB Mooncake segment per GPU.
+    - dram-utilization: 0.762
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -7958,6 +8017,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         conc-list: [1, 4]
         num-nodes: 2
         srt-recipe: agg-dcp8-dspark7-maxseq2-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7970,6 +8030,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         conc-list: [48, 52, 56]
         num-nodes: 2
         srt-recipe: agg-dcp8-dspark4-mooncake.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8010,6 +8071,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [1]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c1.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8022,6 +8084,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [4]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c4.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8034,6 +8097,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [8]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c8.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8046,6 +8110,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [14]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c14.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8058,6 +8123,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [24]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c24.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8070,6 +8136,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [48]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c48.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8081,6 +8148,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [96]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c96.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8093,6 +8161,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [32]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c32.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8105,6 +8174,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [56]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c56.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8117,6 +8187,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [72]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c72.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8129,6 +8200,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
         conc-list: [80]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-mooncake-c80.yaml
+        power: true
         worker:
           num-worker: 1
           tp: 8
@@ -8157,6 +8229,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1, 2, 8]
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-b1024-c1x2x8-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8171,6 +8244,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [32, 48, 80]
         srt-recipe: disagg-1p1d-p-tp8-ep8-d-tp8-ep8-b1024-c32x48x80-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -8185,6 +8259,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [480]
         srt-recipe: disagg-3p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c480-mtp.yaml
+        power: true
         prefill:
           num-worker: 3
           tp: 4
@@ -8199,6 +8274,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [768]
         srt-recipe: disagg-4p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c768-mtp.yaml
+        power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -8213,6 +8289,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1280]
         srt-recipe: disagg-6p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b1024-c1280-mtp.yaml
+        power: true
         prefill:
           num-worker: 6
           tp: 4
@@ -8227,6 +8304,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1344]
         srt-recipe: disagg-7p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1344-mtp.yaml
+        power: true
         prefill:
           num-worker: 7
           tp: 4
@@ -8241,6 +8319,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
       - spec-decoding: "mtp"
         conc-list: [1920, 2304]
         srt-recipe: disagg-8p1d-p-tp4-ep4-dp4-d-tp16-ep16-dp16-b2048-c1920x2304-mtp.yaml
+        power: true
         prefill:
           num-worker: 8
           tp: 4
@@ -8642,6 +8721,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 8
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c8-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8659,6 +8739,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 16
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c16-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8676,6 +8757,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 24
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c24-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8693,6 +8775,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 32
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c32-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8710,6 +8793,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 48
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c48-write-through-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -8727,6 +8811,7 @@ qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp:
         conc-list:
         - 64
         srt-recipe: disagg-1p1d-p-tp4-d-tp4-hicache-c64-write-through-mtp.yaml
+        power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -9089,9 +9174,8 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.8next/sglang/gb300-fp4-mtp
   scenarios:
     agentic-coding:
-    # Use the GB300 profile's proportional per-worker host DRAM allowance.
-    # Generated allowance: 225 GB. Recipe H224 reserves alignment headroom.
-    - dram-utilization: 1.0
+    # Sizes the 224 GB HiCache host pool the KV, Mamba and draft caches share.
+    - dram-utilization: 0.995
       search-space:
       - tp: 1
         ep: 1
