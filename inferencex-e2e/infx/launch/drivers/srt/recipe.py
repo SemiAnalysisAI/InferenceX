@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from infx.launch.context import LaunchError
+from infx.srt_slurm.workload import parse_concurrencies
 
 if TYPE_CHECKING:
     from infx.launch.drivers.srt.lanes import SrtLane
@@ -122,18 +123,6 @@ def eval_overrides(recipes: Path, lane: SrtLane, request: LaunchRequest) -> list
         for key in lane.eval_unsets:
             overrides += ["--unset", key]
     return overrides
-
-
-def parse_concurrencies(conc_list: str) -> list[int]:
-    """Parse a whitespace-separated CONC_LIST of unique, canonical positive integers."""
-    values = []
-    for word in conc_list.split():
-        if not word.isascii() or not word.isdecimal() or str(int(word)) != word or int(word) <= 0:
-            raise ValueError(f"CONC_LIST entries must be canonical positive integers: {word!r}")
-        values.append(int(word))
-    if not values or len(set(values)) != len(values):
-        raise ValueError("concurrencies must be positive unique integers")
-    return values
 
 
 def inject_concurrencies(recipe_path: Path, concurrencies: Sequence[int]) -> None:

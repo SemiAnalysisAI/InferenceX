@@ -9,11 +9,6 @@
 schema: 2
 name: "gb300-fp4-qwen3.5_8k1k_lowlat_0"
 
-model:
-  path: "qwen3.5-fp4"
-  container: "dynamo-sglang"
-  precision: "fp4"
-
 dynamo:
   source:
     pypi: "1.1.0"
@@ -167,15 +162,6 @@ roles:
       page-size: 64
       watchdog-timeout: 1000000
       decode-log-interval: 50
-
-benchmark:
-  type: custom
-  concurrencies: "1x4x8x16x32x64x256"
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
 
 telemetry:
   enabled: true

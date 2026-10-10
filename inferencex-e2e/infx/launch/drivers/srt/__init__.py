@@ -36,6 +36,7 @@ from infx.launch.request import (
     RequestError,
     SingleNodeRequest,
 )
+from infx.srt_slurm.workload import BOUND_RECIPE
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -151,14 +152,20 @@ def run_multinode(launch: Launch) -> int:
     infmax = compute_workspace(run, checkout, shared=shared)
     run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-    conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
+    # The binder writes a fixed-sequence recipe's telemetry concurrencies.
+    conc_list = request.env.get("CONC_LIST", "") if decision.dcgm and request.is_agentic else None
     job_name = srtctl_job_name(request.runner_name)
     prepare_recipe(checkout.root, staged, job_name, run.srt.dist_timeout_s, conc_list)
-    arguments = submit.multinode_arguments(run, lane, staged, overrides, preflight=preflight)
+    recipe = staged
+    if not request.is_agentic:
+        recipe = str(checkout.root / BOUND_RECIPE)
+        if rc := submit.bind_recipe(run, checkout, staged, recipe):
+            return rc
+    arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
     manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
     run.life.callback(submitted.cancel, run.backend)
-    if rc := submit.submit_lane(run, submitted, checkout, staged, arguments):
+    if rc := submit.submit_lane(run, submitted, checkout, recipe, arguments):
         return rc
     return collect.collect(run, lane, checkout, submitted.adopted(), decision, infmax)
 

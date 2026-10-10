@@ -25,11 +25,6 @@ frontend:
   num_additional_frontends: 4
   nginx_container: nginx
 
-model:
-  path: "qwen3.5-fp8"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260918-20518d85"
-  precision: "fp8"
-
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
@@ -157,11 +152,3 @@ roles:
 
       decode-log-interval: 1
       stream-interval: 50
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'

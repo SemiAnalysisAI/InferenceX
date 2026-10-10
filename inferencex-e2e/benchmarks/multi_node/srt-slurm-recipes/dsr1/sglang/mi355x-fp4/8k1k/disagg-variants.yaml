@@ -1,15 +1,9 @@
 schema: 2
 base:
   name: mi355x-dsr1-fp4-disagg-fixed-seq
-  model:
-    path: /it-share/data/DeepSeek-R1-0528-MXFP4-v2
-    container: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
-    precision: fp4
   identity:
-    model:
-      repo: amd/DeepSeek-R1-0528-MXFP4-v2
-    container:
-      image: lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809
+    model: {}
+    container: {}
     frameworks:
       sglang: 0.5.17.dev20260809+g7120f3ee13
       sglang-router: 0.3.2
@@ -156,12 +150,7 @@ base:
     max_attempts: 720
     interval_seconds: 5
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
     env:
-      TOKENIZER: /model
-      ISL: '8192'
-      OSL: '1024'
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache/hub
       HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub

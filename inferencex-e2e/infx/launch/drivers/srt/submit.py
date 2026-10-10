@@ -77,6 +77,12 @@ def bound_arguments(arguments: Path) -> tuple[str, list[str]]:
     return selected, runtime_args
 
 
+def bind_recipe(run: SrtRun, checkout: Checkout, staged: str, output: str) -> int:
+    """Compose and bind the staged fixed-sequence fragment into ``output``."""
+    bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
+    return proc.run(bind, env=run.env, cwd=checkout.root).returncode
+
+
 def apply(
     run: SrtRun,
     checkout: Checkout,

@@ -1,11 +1,6 @@
 schema: 2
 name: "bs16-1p3d-h200-fp8"
 
-model:
-  path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.8.post1-cu130"
-  precision: "fp8"
-
 frontend:
   nginx_container: nginx
 
@@ -106,11 +101,3 @@ roles:
       mem-fraction-static: 0.82
       max-running-requests: 32
       cuda-graph-max-bs: 32
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'

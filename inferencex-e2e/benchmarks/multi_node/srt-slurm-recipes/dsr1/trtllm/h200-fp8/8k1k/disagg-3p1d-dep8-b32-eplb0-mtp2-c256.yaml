@@ -1,11 +1,6 @@
 schema: 2
 name: "c256_ctx3_gen1_dep8_batch32_eplb0_mtp2"
 
-model:
-  path: "dsr1"
-  container: "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1"
-  precision: "fp8"
-
 sbatch_directives:
   cpus-per-gpu: "16"
 
@@ -105,14 +100,6 @@ roles:
       speculative_config:
         decoding_type: MTP
         num_nextn_predict_layers: 2
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
 
 frontend:
   type: "dynamo"

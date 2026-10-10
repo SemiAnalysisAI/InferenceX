@@ -1,11 +1,6 @@
 schema: 2
 name: ctx1_gen8_tp8_batch2_eplb0_mtp0_16
 
-model:
-  path: "dsr1-fp8"
-  container: "dynamo-trtllm"
-  precision: "fp8"
-
 resources:
   gpu_type: "b300"
   gpus_per_node: 8
@@ -110,14 +105,6 @@ roles:
       stream_interval: 20
       tensor_parallel_size: 8
 
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
 
 frontend:
   type: "dynamo"

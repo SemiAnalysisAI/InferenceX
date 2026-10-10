@@ -10,11 +10,6 @@
 schema: 2
 name: "gb300-fp4-qwen3.5_8k1k_maxtpt_1"
 
-model:
-  path: "qwen3.5-fp4"
-  container: "dynamo-sglang"
-  precision: "fp4"
-
 dynamo:
   source:
     pypi: "1.1.0"
@@ -167,15 +162,6 @@ roles:
 
       decode-log-interval: 50
       stream-interval: 50
-
-benchmark:
-  type: custom
-  concurrencies: "5120"
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
 
 telemetry:
   enabled: true

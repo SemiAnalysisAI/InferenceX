@@ -3,11 +3,6 @@
 schema: 2
 name: "gb300-8k1k-fp8-max"
 
-model:
-  path: "dsr1-fp8"
-  container: "dynamo-sglang"
-  precision: "fp8"
-
 frontend:
   nginx_container: nginx
 
@@ -171,11 +166,3 @@ roles:
             168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336,
         344, 352, 360, 368, 376, 384, 416, 448, 480, 512, 544, 576, 608, 640, 672, 704, 736, 768]
       cuda-graph-max-bs: 768
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'

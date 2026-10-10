@@ -1,11 +1,6 @@
 schema: 2
 name: "bs4-1p7d-h200-fp8-mtp"
 
-model:
-  path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.8.post1-cu130"
-  precision: "fp8"
-
 frontend:
   nginx_container: nginx
 
@@ -115,11 +110,3 @@ roles:
       speculative-num-steps: 2
       speculative-eagle-topk: 1
       speculative-num-draft-tokens: 3
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'

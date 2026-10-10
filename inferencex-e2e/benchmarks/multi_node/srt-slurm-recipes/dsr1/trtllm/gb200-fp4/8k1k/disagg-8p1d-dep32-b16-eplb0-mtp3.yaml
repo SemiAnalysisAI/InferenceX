@@ -1,11 +1,6 @@
 schema: 2
 name: "ctx8_gen1_dep32_batch16_eplb0_mtp3"
 
-model:
-  path: "dsr1"
-  container: "dynamo-trtllm"
-  precision: "fp4"
-
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
@@ -104,14 +99,6 @@ roles:
       speculative_config:
         decoding_type: MTP
         num_nextn_predict_layers: 3
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'
 
 frontend:
   type: "dynamo"
