@@ -7503,7 +7503,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
           - "CONFIG_FILE=recipes/glm5.2/sglang/b200-fp4/agentx/agg-variants.yaml:override_c8"
 
 glm5.2-fp4-b200-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-20260910-00840301
+  image: lmsysorg/sglang:nightly-dev-20261010-961bcf48@sha256:e03dd310dc72e64ac709ceb244a79f20fd5e05448c811ab33cc777d8040061ff
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:b200-nscale

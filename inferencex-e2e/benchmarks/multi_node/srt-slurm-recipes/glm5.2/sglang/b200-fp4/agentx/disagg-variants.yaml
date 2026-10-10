@@ -7,17 +7,17 @@ schema: 2
 base:
   model:
     path: glm-5.2-fp4
-    container: dynamo-sglang
+    container: lmsysorg/sglang:nightly-dev-20261010-961bcf48@sha256:e03dd310dc72e64ac709ceb244a79f20fd5e05448c811ab33cc777d8040061ff
     precision: fp4
   identity:
     model:
       repo: nvidia/GLM-5.2-NVFP4
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
     container:
-      image: lmsysorg/sglang:nightly-dev-20260910-00840301
+      image: lmsysorg/sglang:nightly-dev-20261010-961bcf48@sha256:e03dd310dc72e64ac709ceb244a79f20fd5e05448c811ab33cc777d8040061ff
     frameworks:
-      dynamo: 1.5.0.dev20260909
-      sglang: 0.0.0.dev1+g008403017
+      dynamo: 1.6.0.dev20261009
+      sglang: 0.0.0.dev1+g961bcf481
   resources:
     gpu_type: b200
     gpus_per_node: 8
