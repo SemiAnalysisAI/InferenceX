@@ -9,7 +9,7 @@ base:
   name: dsv4-fp4-mi355x-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261007
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261009@sha256:3d9129547126641ff0397a66e2ea16e87d897cc67ddd50a0fde38ef4b58287f9
     precision: fp4
   resources:
     gpu_type: mi355x
