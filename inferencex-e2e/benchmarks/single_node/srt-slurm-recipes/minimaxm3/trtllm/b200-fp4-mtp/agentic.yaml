@@ -104,8 +104,8 @@ base:
       KV_OFFLOADING: dram
 
 # One variant per point. The batch cap is CONC; graphs capture every batch up
-# to 20 and a thinned ladder above. The host pool is 250 GiB at TP4 and
-# 200 GiB at TP8.
+# to 20 and a thinned ladder above. The per-rank host pool is 240 GiB at TP4
+# (four stay under the TP4 share of node DRAM) and 200 GiB at TP8.
 override_tp4_c5:
   roles:
     agg:
@@ -121,11 +121,11 @@ override_tp4_c5:
             - 4
             - 5
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '5'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c10:
   roles:
@@ -147,11 +147,11 @@ override_tp4_c10:
             - 9
             - 10
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '10'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c15:
   roles:
@@ -178,11 +178,11 @@ override_tp4_c15:
             - 14
             - 15
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '15'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c20:
   roles:
@@ -214,11 +214,11 @@ override_tp4_c20:
             - 19
             - 20
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '20'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c25:
   roles:
@@ -250,11 +250,11 @@ override_tp4_c25:
             - 23
             - 25
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '25'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c30:
   roles:
@@ -286,11 +286,11 @@ override_tp4_c30:
             - 27
             - 30
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '30'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c35:
   roles:
@@ -321,11 +321,11 @@ override_tp4_c35:
             - 32
             - 35
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '35'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c40:
   roles:
@@ -357,11 +357,11 @@ override_tp4_c40:
             - 38
             - 40
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '40'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp4_c45:
   roles:
@@ -391,11 +391,11 @@ override_tp4_c45:
             - 42
             - 45
         kv_cache_config:
-          host_cache_size: 268435456000
+          host_cache_size: 257698037760
   benchmark:
     env:
       CONC: '45'
-      TOTAL_CPU_DRAM_GB: '865'
+      TOTAL_CPU_DRAM_GB: '858'
 
 override_tp8_c1:
   roles:
@@ -412,7 +412,7 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: '1'
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'
 
 override_tp8_c5:
   roles:
@@ -433,4 +433,4 @@ override_tp8_c5:
   benchmark:
     env:
       CONC: '5'
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1717'

@@ -149,14 +149,14 @@ override_tp4_c15_dram:
         tensor-parallel-size: 4
         max-num-seqs: 30
         max-cudagraph-capture-size: 120
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '15'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c20_dram:
   roles:
@@ -166,14 +166,14 @@ override_tp4_c20_dram:
         tensor-parallel-size: 4
         max-num-seqs: 40
         max-cudagraph-capture-size: 160
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '20'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c25_dram:
   roles:
@@ -183,14 +183,14 @@ override_tp4_c25_dram:
         tensor-parallel-size: 4
         max-num-seqs: 50
         max-cudagraph-capture-size: 200
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '25'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c30_dram:
   roles:
@@ -200,14 +200,14 @@ override_tp4_c30_dram:
         tensor-parallel-size: 4
         max-num-seqs: 60
         max-cudagraph-capture-size: 240
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '30'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c32_dram:
   roles:
@@ -217,14 +217,14 @@ override_tp4_c32_dram:
         tensor-parallel-size: 4
         max-num-seqs: 64
         max-cudagraph-capture-size: 256
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c34_dram:
   roles:
@@ -234,14 +234,14 @@ override_tp4_c34_dram:
         tensor-parallel-size: 4
         max-num-seqs: 68
         max-cudagraph-capture-size: 272
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '34'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c36_dram:
   roles:
@@ -251,14 +251,14 @@ override_tp4_c36_dram:
         tensor-parallel-size: 4
         max-num-seqs: 72
         max-cudagraph-capture-size: 288
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '36'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c38_dram:
   roles:
@@ -268,14 +268,14 @@ override_tp4_c38_dram:
         tensor-parallel-size: 4
         max-num-seqs: 76
         max-cudagraph-capture-size: 304
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '38'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
 
 override_tp4_c40_dram:
   roles:
@@ -285,11 +285,11 @@ override_tp4_c40_dram:
         tensor-parallel-size: 4
         max-num-seqs: 80
         max-cudagraph-capture-size: 320
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1030000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '40'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1030'
