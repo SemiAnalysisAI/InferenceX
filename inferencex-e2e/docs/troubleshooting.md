@@ -1,9 +1,3 @@
-<div align="center">
-
-**English** | [中文](troubleshooting_zh.md)
-
-</div>
-
 # Troubleshooting
 
 Classify a failure by the first layer that did not establish its contract. Preserve evidence before rerunning, repair only the owning layer, and stop when the evidence is insufficient for a scoped and reversible action. Downstream jobs may run under `always()` or aggregate an empty set, so their green status does not prove that an upstream benchmark or eval succeeded.
