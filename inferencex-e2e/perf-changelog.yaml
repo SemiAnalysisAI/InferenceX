@@ -9538,3 +9538,9 @@
     - "Run prefill context parallelism on the TP-only arms at conc 16, 32 and 48; conc 1 and 4 keep BCG."
     - "Enable SGLANG_OPT_FP8_WO_A_FUSED_INVROPE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3778
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-atom
+  description:
+    - "Update the ATOM image from atom0.1.2.post to the ATOM v0.1.7 nightly_202610080328 build."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3898
