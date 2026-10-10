@@ -1,9 +1,3 @@
-<div align="center">
-
-**English** | [中文](testing_zh.md)
-
-</div>
-
 # Testing
 
 Use the narrowest check that can falsify the change, then widen only when the changed contract crosses more layers. Local checks are fast proof of syntax, schema, generation, and transformation behavior. GPU execution is proof of allocation, serving, workload, and artifact behavior. A smoke run reduces feedback time, but it is not the full-sweep-and-eval evidence required for merge review.
@@ -26,7 +20,7 @@ Use the narrowest check that can falsify the change, then widen only when the ch
 - [`run-sweep.yml`](../../.github/workflows/run-sweep.yml) is the executable PR sweep gate, and [`merge-ingest.yml`](../../.github/workflows/merge-ingest.yml) is the push-to-`main` reuse and ingest gate. [`e2e-tests.yml`](../../.github/workflows/e2e-tests.yml) is the manually dispatched end-to-end path.
 - [`docs/PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) is the merge-review standard. [The verifier prompt](../../.github/codeowner-signoff-verify-prompt.md#check-1--a-passing-sweep--evals-ran-on-a-commit-in-this-pr) states how sweep and eval evidence is independently checked.
 
-These sources outrank this guide when behavior changes. Update the English page first, then translate the same structure and evidence into this page's Chinese counterpart.
+These sources outrank this guide when behavior changes. Update this English guide to match them.
 
 ## Testing layers
 
