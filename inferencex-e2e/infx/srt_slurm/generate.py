@@ -23,7 +23,13 @@ from infx.matrix.generate import expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
-from infx.srt_slurm.workload import bind_multinode, dram_budget, resolve_dram, resolve_fabric
+from infx.srt_slurm.workload import (
+    bind_multinode,
+    check_setup_script,
+    dram_budget,
+    resolve_dram,
+    resolve_fabric,
+)
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
@@ -50,6 +56,12 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         "THINKING_MODE": THINKING_MODE,
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
+        "ROUTER_METADATA": json.dumps(point["router"]) if point.get("router") else "",
+        "KV_OFFLOAD_BACKEND_METADATA": (
+            json.dumps(point["kv-offload-backend"])
+            if agentic and point.get("kv-offload-backend")
+            else ""
+        ),
     }
     if agentic:
         environment.update(
@@ -239,6 +251,7 @@ def generate_recipes(
             recipe = resolve_dram(recipe, budget)
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
+            check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
             _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
             digest = hashlib.sha256(identity.encode()).hexdigest()[:12]

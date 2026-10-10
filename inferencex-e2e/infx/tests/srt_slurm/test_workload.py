@@ -14,6 +14,7 @@ from infx.clusters.slurm import Fabric
 from infx.srt_slurm.synthetic_acceptance import selected_recipes
 from infx.srt_slurm.workload import (
     bind_workload,
+    check_setup_script,
     compose_recipe,
     dram_budget,
     parse_concurrencies,
@@ -37,6 +38,9 @@ DRAM_ENV = {
     "KV_OFFLOADING": "dram", "TOTAL_CPU_DRAM_GB": "1731",
 }  # fmt: skip
 CLIENT_ENV = {"RESULT_DIR": "/logs/agentic", "HF_HUB_CACHE": "/hf_hub_cache"}
+SOURCE = Path("fragment.yaml")
+MOONCAKE = '{"name": "mooncake", "version": "0.3.11.post1"}'
+ROUTER = '{"name": "vllm-router", "version": "0.1.14"}'
 
 
 @pytest.fixture
@@ -111,6 +115,9 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
      "override_c.benchmark.env.TOTAL_CPU_DRAM_GB (= '1731')"),
     ({"base": {"benchmark": {"env": {"KV_OFFLOADING": "dram"}}}}, True, False,
      "base.benchmark.env.KV_OFFLOADING (= 'dram')"),
+    ({"environment": {"ROUTER_VERSION": "0.1.14"}}, True, False, "environment.ROUTER_VERSION (= '0.1.14')"),
+    ({"base": {}, "override_c": {"services": [{"name": "m", "env": {"KV_OFFLOAD_BACKEND_VERSION": "1"}}]}},
+     True, True, "override_c.services[0].env.KV_OFFLOAD_BACKEND_VERSION (= '1')"),
 ])  # fmt: skip
 def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, agentic, multinode, reported):
     path = fragment(project, data)
@@ -140,7 +147,7 @@ def test_multinode_binding_writes_the_point_and_leaves_the_client_its_job_enviro
         "benchmark": {"type": "custom", "env": {"TOKENIZER": "/model"}},
     }  # fmt: skip
 
-    bound = bind_workload(recipe, MULTI_ENV, agentic=False, multinode=True)
+    bound = bind_workload(recipe, MULTI_ENV, agentic=False, multinode=True, source=SOURCE)
 
     assert bound == {
         "schema": 2, "name": "job",
@@ -152,13 +159,15 @@ def test_multinode_binding_writes_the_point_and_leaves_the_client_its_job_enviro
         "identity": {"container": {"image": "registry/image:2"}, "frameworks": {"sglang": "0.5"}},
         "benchmark": {"type": "custom", "env": {"TOKENIZER": "/model", "ISL": "8192", "OSL": "1024"}},
     }  # fmt: skip
-    assert "identity" not in bind_workload({}, MULTI_ENV, agentic=False, multinode=True)
+    assert "identity" not in bind_workload({}, MULTI_ENV, agentic=False, multinode=True, source=SOURCE)
 
 
 def test_agentx_binding_writes_the_launchers_client_paths_without_lengths():
     recipe = {"identity": {"container": {}}, "benchmark": {"env": {"AIPERF_X": "1"}}}
 
-    bound = bind_workload(recipe, AGENTX_ENV, agentic=True, multinode=True, client_env=CLIENT_ENV)
+    bound = bind_workload(
+        recipe, AGENTX_ENV, agentic=True, multinode=True, client_env=CLIENT_ENV, source=SOURCE
+    )
 
     assert bound == {
         "model": {"path": "hf:org/model", "container": "nvcr.io#org/image:3", "precision": "fp4"},
@@ -166,7 +175,9 @@ def test_agentx_binding_writes_the_launchers_client_paths_without_lengths():
         "benchmark": {"env": {"AIPERF_X": "1", "KV_OFFLOADING": "none", **CLIENT_ENV}},
     }
     own_layout = {"benchmark": {"env": {"HF_HOME": "/logs/hf"}}}
-    bound = bind_workload(own_layout, AGENTX_ENV, agentic=True, multinode=True, client_env=CLIENT_ENV)
+    bound = bind_workload(
+        own_layout, AGENTX_ENV, agentic=True, multinode=True, client_env=CLIENT_ENV, source=SOURCE
+    )
     assert bound["benchmark"]["env"] == {
         "HF_HOME": "/logs/hf", "KV_OFFLOADING": "none", "RESULT_DIR": "/logs/agentic",
     }  # fmt: skip
@@ -190,7 +201,7 @@ def test_a_dram_point_binds_its_budget_and_every_backend_size_derived_from_it(pr
     })
     composed = compose_recipe(path, agentic=True, multinode=False, root=project)
 
-    bound = bind_workload(composed, DRAM_ENV, agentic=True, multinode=False)
+    bound = bind_workload(composed, DRAM_ENV, agentic=True, multinode=False, source=path)
     resolved = resolve_dram(bound, dram_budget(DRAM_ENV, multinode=False))
 
     assert resolved["benchmark"]["env"] == {
@@ -220,7 +231,7 @@ def test_a_dram_point_binds_its_budget_and_every_backend_size_derived_from_it(pr
 ])  # fmt: skip
 def test_a_point_without_a_budget_or_an_unknown_reference_fails(value, environment, message):
     recipe = {"roles": {"agg": {"args": {"size": value}}}}
-    bound = bind_workload(recipe, environment, agentic=True, multinode=False)
+    bound = bind_workload(recipe, environment, agentic=True, multinode=False, source=SOURCE)
     with pytest.raises(ValueError, match=message):
         resolve_dram(bound, dram_budget(environment, multinode=False))
 
@@ -245,7 +256,7 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
 
     composed = compose_recipe(path, agentic=True, multinode=True, root=project, power_port=19401)
     [(_, variant)] = selected_recipes(composed, "override_c8")
-    bound = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
+    bound = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True, source=SOURCE)
 
     assert bound["telemetry"] == {
         "collector_join_timeout_seconds": 12, "enabled": True, "required": True,
@@ -253,9 +264,8 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
     }  # fmt: skip
     assert bound["benchmark"]["concurrencies"] == [8]
     unpowered = compose_recipe(path, agentic=True, multinode=True, root=project)["base"]
-    assert "concurrencies" not in bind_workload(unpowered, AGENTX_ENV, agentic=True, multinode=True)[
-        "benchmark"
-    ]
+    bound = bind_workload(unpowered, AGENTX_ENV, agentic=True, multinode=True, source=SOURCE)
+    assert "concurrencies" not in bound["benchmark"]
 
 
 @pytest.mark.parametrize(("environment", "message"), [
@@ -265,7 +275,67 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
 ])  # fmt: skip
 def test_a_malformed_point_is_rejected_before_binding(environment, message):
     with pytest.raises(ValueError, match=message):
-        bind_workload({}, environment, agentic=False, multinode=True)
+        bind_workload({}, environment, agentic=False, multinode=True, source=SOURCE)
+
+
+def test_a_component_a_script_installs_gets_the_master_version_where_the_script_runs():
+    recipe = {
+        "setup_script": "vllm-mooncake.sh",
+        "environment": {"NCCL_DEBUG": "WARN"},
+        "services": [
+            {"name": "mooncake-master", "preamble": "bash /configs/vllm-mooncake.sh"},
+            {"name": "etcd", "env": {"ETCD_QUOTA": "1"}},
+        ],
+    }
+    environment = {**AGENTX_ENV, "KV_OFFLOAD_BACKEND_METADATA": MOONCAKE}
+
+    bound = bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
+
+    assert bound["environment"] == {"NCCL_DEBUG": "WARN", "KV_OFFLOAD_BACKEND_VERSION": "0.3.11.post1"}
+    assert bound["services"] == [
+        {"name": "mooncake-master", "preamble": "bash /configs/vllm-mooncake.sh",
+         "env": {"KV_OFFLOAD_BACKEND_VERSION": "0.3.11.post1"}},
+        {"name": "etcd", "env": {"ETCD_QUOTA": "1"}},
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize("metadata", ["", '{"name": "mooncake"}', '{"name": "lmcache", "version": "1"}'])
+def test_a_point_that_does_not_declare_an_installed_components_version_is_rejected(metadata):
+    recipe = {"services": [{"name": "mooncake-master", "preamble": "bash /configs/vllm-mooncake.sh"}]}
+    environment = {**AGENTX_ENV, "KV_OFFLOAD_BACKEND_METADATA": metadata}
+    message = "^fragment.yaml: vllm-mooncake.sh installs mooncake, so the master config must declare"
+
+    with pytest.raises(ValueError, match=message):
+        bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
+
+
+def test_a_router_pinned_in_setup_pip_packages_must_be_the_master_router():
+    recipe = {
+        "frontend": {"type": "vllm-router", "env": {"SETUP_PIP_PACKAGES": "vllm-router==0.1.13"}},
+        "roles": {"agg": {"env": {"SETUP_PIP_PACKAGES": "Pillow fastapi"}}},
+    }
+    environment = {**AGENTX_ENV, "ROUTER_METADATA": ROUTER}
+
+    with pytest.raises(ValueError) as error:
+        bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
+    assert str(error.value) == (
+        "fragment.yaml: SETUP_PIP_PACKAGES vllm-router==0.1.13 is not the master router 0.1.14"
+    )
+    recipe["frontend"]["env"]["SETUP_PIP_PACKAGES"] = "vllm-router==0.1.14"
+    bind_workload(recipe, environment, agentic=True, multinode=True, source=SOURCE)
+
+
+def test_a_setup_script_srtctl_would_not_find_fails(project):
+    patches = project / "utils/srt-slurm/configs/patches"
+    patches.mkdir(parents=True)
+    (patches / "upstream.sh").write_text("true\n")
+    check_setup_script({"setup_script": "upstream.sh"}, SOURCE, project)
+    with pytest.raises(ValueError, match="^fragment.yaml: setup_script own.sh is in none of"):
+        check_setup_script({"setup_script": "own.sh"}, SOURCE, project)
+    configs = project / "benchmarks/multi_node/srt-slurm-recipes/configs"
+    configs.mkdir(parents=True)
+    (configs / "own.sh").write_text("true\n")
+    check_setup_script({"setup_script": "own.sh"}, SOURCE, project)
 
 
 def test_conc_list_must_be_canonical_positive_integers():
