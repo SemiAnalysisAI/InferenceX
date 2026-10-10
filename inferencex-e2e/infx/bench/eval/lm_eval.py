@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -21,6 +22,7 @@ FALLBACK_CONTEXT = 16384
 PROMPT_RESERVE = 4096
 MAX_OUTPUT_TOKENS = 16384
 CONTEXT_FIELDS = ("max_position_embeddings", "max_sequence_length", "seq_length", "n_positions")
+_UNSAFE_CODE = re.compile(r"^unsafe_code:\s*true\s*$", re.MULTILINE)
 
 
 def install(environ: Mapping[str, str]) -> None:
@@ -102,6 +104,24 @@ def tasks(environ: Mapping[str, str]) -> str:
     return env.optional("EVAL_TASKS_DIR", env=environ) or DEFAULT_TASKS
 
 
+def task_args(task: str) -> list[str]:
+    """``--tasks`` for ``task``, plus what a repo task YAML needs to load and run.
+
+    The pinned lm-eval looks every task up in its index by name, so a YAML path whose
+    task it does not bundle raises KeyError unless its directory is an include path.
+    A task that executes model output declares ``unsafe_code: true`` and runs only
+    with ``--confirm_run_unsafe_code``.
+    """
+    args = ["--tasks", task]
+    path = proc.REPO_ROOT / task
+    if path.suffix not in (".yaml", ".yml") or not path.is_file():
+        return args
+    args = ["--include_path", str(Path(task).parent), *args]
+    if _UNSAFE_CODE.search(path.read_text()):
+        args.append("--confirm_run_unsafe_code")
+    return args
+
+
 def suite(environ: Mapping[str, str]) -> str:
     """The task YAML's stem, or the task name."""
     name = Path(tasks(environ)).name
@@ -135,7 +155,7 @@ def run(ctx: EvalContext) -> EvalOutcome:
     ]
     argv = [
         sys.executable, "-m", "lm_eval", "--model", "local-chat-completions",
-        "--apply_chat_template", "--tasks", tasks(ctx.env),
+        "--apply_chat_template", *task_args(tasks(ctx.env)),
         "--output_path", str(ctx.results_dir), "--log_samples",
         "--model_args", ",".join(model_args),
         "--gen_kwargs", f"max_tokens={max_tokens},temperature=0,top_p=1",

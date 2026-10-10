@@ -400,6 +400,18 @@ def test_request_budget_is_the_benchmark_context_capped_at_the_checkpoint(
     assert lm_eval.max_output_tokens(context) == max_tokens
 
 
+@pytest.mark.parametrize(("task", "expected"), [
+    ("infx/evals/gsm8k.yaml", ["--include_path", "infx/evals", "--tasks", "infx/evals/gsm8k.yaml"]),
+    ("infx/evals/lm_eval_tasks/cruxeval_output.yaml", [
+        "--include_path", "infx/evals/lm_eval_tasks",
+        "--tasks", "infx/evals/lm_eval_tasks/cruxeval_output.yaml", "--confirm_run_unsafe_code",
+    ]),
+    ("gsm8k", ["--tasks", "gsm8k"]),
+])  # fmt: skip
+def test_repo_task_yamls_load_by_name_and_confirm_unsafe_code(task, expected):
+    assert lm_eval.task_args(task) == expected
+
+
 def uv_step(argv: list[str]) -> str:
     """Name one recorded ``uv`` call of the lm-eval install into this interpreter."""
     assert argv[0] == "pip" and argv[-2:] == ["--python", sys.executable]
