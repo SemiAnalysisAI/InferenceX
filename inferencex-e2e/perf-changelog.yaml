@@ -9538,3 +9538,13 @@
     - "Run prefill context parallelism on the TP-only arms at conc 16, 32 and 48; conc 1 and 4 keep BCG."
     - "Enable SGLANG_OPT_FP8_WO_A_FUSED_INVROPE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3778
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 DSpark FP4/FP8-KV AgentX on GB200 behind the llm-d router (EPP and pd-sidecar from llm-d-router v0.10.0, Envoy) through srt-slurm's llm-d frontend: disagg 1P1D DEP8/DEP8 (conc 64/128/160/256) and 2P1D DEP8/DEP16 (conc 256/384/576) with NIXL P/D KV and a Mooncake prefix-cache store on prefill at 66.7% node DRAM; agg TP8 (conc 1-12), DEP8 (conc 12-32), and DEP8 with Mooncake at 45% node DRAM (conc 52/72)."
+    - "Each DEP worker is one vllm serve that balances its DP ranks itself, so the EPP routes to workers. Throughput uses committed golden synthetic acceptance (TP8 K=5, DEP K=3 on both prefill and decode); evals use real verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741

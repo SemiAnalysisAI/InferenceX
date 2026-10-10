@@ -1,0 +1,241 @@
+# DeepSeek-V4-Pro-0813 (DSpark) FP4 AgentX on GB200 behind the llm-d router
+# (srt-slurm frontend.type: llm-d): one aggregated worker over two trays, as TP8,
+# DEP8, or DEP8 with an embedded Mooncake prefix-cache store. srt-slurm launches a
+# DEP8 worker as one `vllm serve` that balances its eight DP ranks itself, so the EPP
+# routes to the worker rather than to one rank, and VLLM_USE_RUST_FRONTEND is left
+# unset (the Python API server).
+# Select one with CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-llm-d.yaml:override_<name>.
+
+schema: 2
+
+base:
+  model:
+    path: deepseek-v4-pro-0813
+    container: quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95
+    precision: fp4
+  identity:
+    model: {repo: deepseek-ai/DeepSeek-V4-Pro-0813}
+    container: {image: "quay.io/rh-ee-imarkov/llm-d-nokube-vllm:dspark-0814-nightly@sha256:00742fdd10e572172d49559e44c357a68c388933c74db2c4e819bf61377a6a95"}
+  dynamo:
+    install: false
+  slurm: {time_limit: "8:00:00"}
+  health_check: {max_attempts: 2160, interval_seconds: 10}
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  frontend:
+    type: llm-d
+    enable_multiple_frontends: false
+    # srtctl adds the file-discovery plugin.
+    epp_config:
+      plugins:
+        - type: inflight-load-producer
+        - type: approx-prefix-cache-producer
+          parameters:
+            autoTune: false
+            blockSizeTokens: 256
+            maxPrefixTokensToMatch: 1048576
+            maxPrefixBlocksToMatch: 4096
+            lruCapacityPerServer: 5858
+        - type: prefix-cache-affinity-filter
+          parameters:
+            peakPrefillThroughput: 20000
+            maxTTFTPenaltyMs: 30000
+        - type: prefix-cache-scorer
+        - type: token-load-scorer
+          parameters:
+            queueThresholdTokens: 1499703
+        - type: active-request-scorer
+        - type: queue-scorer
+        - type: max-score-picker
+      schedulingProfiles:
+        - name: default
+          plugins:
+            - pluginRef: prefix-cache-affinity-filter
+            - pluginRef: prefix-cache-scorer
+              weight: 6
+            - pluginRef: token-load-scorer
+              weight: 3
+            - pluginRef: active-request-scorer
+              weight: 2
+            - pluginRef: queue-scorer
+              weight: 3
+            - pluginRef: max-score-picker
+  engine:
+    type: vllm
+    connector:
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONHASHSEED: "0"
+        HF_HUB_CACHE: /hf_hub_cache
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_SERVER_DEV_MODE: "1"
+        VLLM_USE_NCCL_SYMM_MEM: "1"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_RPC_TIMEOUT: "600000"
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+        # Outlast Envoy's default 1 h upstream idle timeout, so it never reuses a connection
+        # the server has already closed (503 UC).
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "3900"
+        VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+        VLLM_USE_DEEP_GEMM: "1"
+        TILELANG_CLEANUP_TEMP_FILES: "1"
+        TORCH_SYMMMEM: NVSHMEM
+        DG_JIT_CACHE_DIR: /tmp/dg-cache-dsv4-agentx
+        NVSHMEM_REMOTE_TRANSPORT: "none"
+        NVSHMEM_IB_ENABLE_IBGDA: "false"
+        NVSHMEM_CUMEM_HANDLE_TYPE: FABRIC
+        NVSHMEM_DISABLE_CUDA_VMM: "0"
+        UCX_TLS: cuda_copy,cuda_ipc,rc,tcp
+        UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+        UCX_MEMTYPE_CACHE: "n"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        NCCL_P2P_LEVEL: NVL
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        trust-remote-code: true
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        kv-cache-dtype: fp8
+        gpu-memory-utilization: 0.88
+        max-num-batched-tokens: 8192
+        block-size: 256
+        tokenizer-mode: deepseek_v4
+        tool-call-parser: deepseek_v4
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v4
+        moe-backend: deep_gemm_mega_moe
+        enable-ep-weight-filter: true
+        enable-cumem-allocator: true
+        no-disable-hybrid-kv-cache-manager: true
+        no-enable-flashinfer-autotune: true
+        numa-bind: true
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"enable_adaptive_verification":false,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4"}'
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
+  sbatch_directives: {cpus-per-task: "144", mem: "0"}
+  srun_options: {container-remap-root: ""}
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      RESULT_DIR: /logs/agentic
+      PORT: "8000"
+      IS_MULTINODE: "true"
+      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
+      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+
+# TP8 with five DSpark tokens, no EP, and a load-only scheduler.
+override_tp8:
+  name: dsv4-gb200-vllm-agentic-dspark-agg-tp8-llm-d
+  frontend:
+    epp_config:
+      plugins:
+        - type: active-request-scorer
+        - type: queue-scorer
+        - type: weighted-random-picker
+      schedulingProfiles:
+        - name: default
+          plugins:
+            - pluginRef: active-request-scorer
+              weight: 2
+            - pluginRef: queue-scorer
+              weight: 2
+            - pluginRef: weighted-random-picker
+  roles:
+    agg:
+      env:
+        PYTHONHASHSEED:
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS:
+        VLLM_USE_DEEP_GEMM:
+        NVSHMEM_REMOTE_TRANSPORT:
+        NVSHMEM_IB_ENABLE_IBGDA:
+        NVSHMEM_CUMEM_HANDLE_TYPE:
+        NVSHMEM_DISABLE_CUDA_VMM:
+        VLLM_USE_NCCL_SYMM_MEM: "0"
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+        VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+        VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: auto
+        UCX_TLS: cuda_copy,cuda_ipc,tcp
+        UCX_MEMTYPE_REG_WHOLE: "n"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size:
+        enable-expert-parallel:
+        moe-backend:
+        enable-ep-weight-filter:
+        numa-bind:
+        gpu-memory-utilization: 0.85
+        disable-custom-all-reduce: true
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"enable_adaptive_verification":false,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4"}'
+
+override_dep8:
+  name: dsv4-gb200-vllm-agentic-dspark-agg-dep8-llm-d
+
+# DEP8 with an embedded Mooncake store at 45% of each tray's DRAM (~900 GB over four
+# GPUs); NIXL, SimpleCPUOffloadConnector, and MooncakeStoreConnector in a MultiConnector.
+override_dep8_mooncake:
+  name: dsv4-gb200-vllm-agentic-dspark-agg-dep8-mooncake-llm-d
+  services:
+    - name: mooncake-master
+      type: mooncake-master
+      options:
+        store_config:
+          metadata_server: "P2PHANDSHAKE"
+          global_segment_size: "101GB"
+          local_buffer_size: "4GB"
+          protocol: "rdma"
+          device_name: "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
+          mode: "embedded"
+          enable_offload: false
+  frontend:
+    epp_config:
+      plugins:
+        - type: inflight-load-producer
+        - type: approx-prefix-cache-producer
+          parameters:
+            autoTune: false
+            blockSizeTokens: 256
+            maxPrefixTokensToMatch: 1048576
+            maxPrefixBlocksToMatch: 4096
+            lruCapacityPerServer: 40810
+        - type: prefix-cache-affinity-filter
+          parameters:
+            peakPrefillThroughput: 20000
+            maxTTFTPenaltyMs: 30000
+        - type: prefix-cache-scorer
+        - type: token-load-scorer
+          parameters:
+            queueThresholdTokens: 1499703
+        - type: active-request-scorer
+        - type: queue-scorer
+        - type: max-score-picker
+  roles:
+    agg:
+      env:
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_STORE_CLIENT_METRIC: "1"
+        MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+        MC_TE_METRIC: "0"
+      args:
+        gpu-memory-utilization: 0.87
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":42949672960}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'

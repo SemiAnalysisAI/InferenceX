@@ -24,6 +24,7 @@ ENGINES = {
     "vllm-disagg": "vllm",
     "vllm": "vllm",
     "dynamo-vllm": "vllm",
+    "llmd-vllm": "vllm",
     "dynamo-sglang": "sglang",
     "trt": "trtllm",
     "dynamo-trt": "trtllm",
