@@ -19,6 +19,7 @@ from .power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
+from .schema import RESULT_SCHEMA_VERSION
 from .topology import Parallelism, validate_parallelism
 
 _BASE_ENV_VARS = (
@@ -43,14 +44,11 @@ def require_environment(env: Mapping[str, str], names: Iterable[str]) -> None:
 
 
 def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[str, Any]:
-    """Build fixed-sequence metrics without reading environment or writing files.
-
-    Input mappings are read-only. The returned dictionary is independent and
-    can be enriched by other result transformations before serialization.
-    """
+    """Build fixed-sequence metrics from read-only inputs, without I/O."""
     require_environment(env, (key for key in _BASE_ENV_VARS if key != "RESULT_FILENAME"))
     disagg = env["DISAGG"].lower() == "true"
     data = {
+        "result_schema_version": RESULT_SCHEMA_VERSION,
         "hw": env["RUNNER_TYPE"],
         "conc": int(benchmark["max_concurrency"]),
         "image": env["IMAGE"],

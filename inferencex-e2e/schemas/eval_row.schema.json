@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalRow",
+  "$defs": {
+    "JsonValue": {}
+  },
+  "additionalProperties": false,
+  "description": "One task score; string fields keep build_row defaults such as 'unknown'.",
+  "properties": {
+    "result_schema_version": {
+      "const": 1,
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Result Schema Version",
+      "type": "integer"
+    },
+    "is_multinode": {
+      "title": "Is Multinode",
+      "type": "boolean"
+    },
+    "model_prefix": {
+      "title": "Model Prefix",
+      "type": "string"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "hw": {
+      "description": "Upper-cased runner type.",
+      "title": "Hw",
+      "type": "string"
+    },
+    "framework": {
+      "title": "Framework",
+      "type": "string"
+    },
+    "precision": {
+      "title": "Precision",
+      "type": "string"
+    },
+    "spec_decoding": {
+      "title": "Spec Decoding",
+      "type": "string"
+    },
+    "isl": {
+      "description": "0 when the eval has no fixed lengths.",
+      "minimum": 0,
+      "title": "Isl",
+      "type": "integer"
+    },
+    "osl": {
+      "description": "0 when the eval has no fixed lengths.",
+      "minimum": 0,
+      "title": "Osl",
+      "type": "integer"
+    },
+    "tp": {
+      "minimum": 0,
+      "title": "Tp",
+      "type": "integer"
+    },
+    "ep": {
+      "minimum": 0,
+      "title": "Ep",
+      "type": "integer"
+    },
+    "prefill_tp": {
+      "minimum": 0,
+      "title": "Prefill Tp",
+      "type": "integer"
+    },
+    "prefill_ep": {
+      "minimum": 0,
+      "title": "Prefill Ep",
+      "type": "integer"
+    },
+    "prefill_num_workers": {
+      "minimum": 0,
+      "title": "Prefill Num Workers",
+      "type": "integer"
+    },
+    "decode_tp": {
+      "minimum": 0,
+      "title": "Decode Tp",
+      "type": "integer"
+    },
+    "decode_ep": {
+      "minimum": 0,
+      "title": "Decode Ep",
+      "type": "integer"
+    },
+    "decode_num_workers": {
+      "minimum": 0,
+      "title": "Decode Num Workers",
+      "type": "integer"
+    },
+    "conc": {
+      "exclusiveMinimum": 0,
+      "title": "Conc",
+      "type": "integer"
+    },
+    "dp_attention": {
+      "description": "'true', 'false', 'none' or 'prefill=<flag>,decode=<flag>'.",
+      "title": "Dp Attention",
+      "type": "string"
+    },
+    "prefill_dp_attention": {
+      "title": "Prefill Dp Attention",
+      "type": "string"
+    },
+    "decode_dp_attention": {
+      "title": "Decode Dp Attention",
+      "type": "string"
+    },
+    "task": {
+      "minLength": 1,
+      "title": "Task",
+      "type": "string"
+    },
+    "em_strict": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Em Strict"
+    },
+    "em_strict_se": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "N/A",
+              "type": "string"
+            }
+          ],
+          "description": "lm-eval writes 'N/A' when it cannot estimate a standard error."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Em Strict Se"
+    },
+    "em_flexible": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Em Flexible"
+    },
+    "em_flexible_se": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "N/A",
+              "type": "string"
+            }
+          ],
+          "description": "lm-eval writes 'N/A' when it cannot estimate a standard error."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Em Flexible Se"
+    },
+    "n_eff": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "N Eff"
+    },
+    "source": {
+      "minLength": 1,
+      "title": "Source",
+      "type": "string"
+    },
+    "infrastructure_success": {
+      "title": "Infrastructure Success",
+      "type": "boolean"
+    },
+    "integration_error": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Integration Error"
+    },
+    "eval_suite": {
+      "default": null,
+      "minLength": 1,
+      "title": "Eval Suite",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Score"
+    },
+    "score_name": {
+      "anyOf": [
+        {
+          "enum": [
+            "em_strict",
+            "accuracy",
+            "em_flexible"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Score Name"
+    },
+    "score_se": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "N/A",
+              "type": "string"
+            }
+          ],
+          "description": "lm-eval writes 'N/A' when it cannot estimate a standard error."
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Score Se"
+    }
+  },
+  "required": [
+    "result_schema_version",
+    "is_multinode",
+    "model_prefix",
+    "model",
+    "hw",
+    "framework",
+    "precision",
+    "spec_decoding",
+    "isl",
+    "osl",
+    "tp",
+    "ep",
+    "prefill_tp",
+    "prefill_ep",
+    "prefill_num_workers",
+    "decode_tp",
+    "decode_ep",
+    "decode_num_workers",
+    "conc",
+    "dp_attention",
+    "prefill_dp_attention",
+    "decode_dp_attention",
+    "task",
+    "em_strict",
+    "em_strict_se",
+    "em_flexible",
+    "em_flexible_se",
+    "n_eff",
+    "source",
+    "infrastructure_success",
+    "integration_error",
+    "score",
+    "score_name",
+    "score_se"
+  ],
+  "type": "object"
+}

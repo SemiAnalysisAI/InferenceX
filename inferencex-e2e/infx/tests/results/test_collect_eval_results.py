@@ -207,6 +207,7 @@ def test_build_row_preserves_topology_defaults_and_score_precedence() -> None:
     }, {"task": "task", "strict": 0, "accuracy": 0.5, "flex": 1, "strict_se": 0.01})
 
     assert row == {
+        "result_schema_version": 1,
         "is_multinode": True, "model_prefix": "prefix", "model": "metadata-model",
         "hw": "TEST-HW", "framework": "test-framework", "precision": "fp8",
         "spec_decoding": "unknown", "isl": 0, "osl": 0, "tp": 4, "ep": 1,

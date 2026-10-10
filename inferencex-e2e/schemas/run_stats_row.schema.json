@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunStatsRow",
+  "additionalProperties": false,
+  "description": "Job counts for one hardware key of the run-stats object.",
+  "properties": {
+    "result_schema_version": {
+      "const": 1,
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Result Schema Version",
+      "type": "integer"
+    },
+    "n_success": {
+      "minimum": 0,
+      "title": "N Success",
+      "type": "integer"
+    },
+    "total": {
+      "minimum": 0,
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "result_schema_version",
+    "n_success",
+    "total"
+  ],
+  "type": "object"
+}
