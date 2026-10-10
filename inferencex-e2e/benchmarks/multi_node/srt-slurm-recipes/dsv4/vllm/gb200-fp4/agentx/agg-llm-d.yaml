@@ -82,6 +82,9 @@ base:
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+        # Outlast Envoy's default 1 h upstream idle timeout, so it never reuses a connection
+        # the server has already closed (503 UC).
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "3900"
         VLLM_DSV4_MEGA_FP8_COMBINE: "1"
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
