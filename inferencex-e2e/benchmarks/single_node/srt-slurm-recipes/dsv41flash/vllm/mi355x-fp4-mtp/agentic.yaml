@@ -6,9 +6,13 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # TBD: the first ROCm 10.0 nightly with vllm-project/vllm#60397 (DSv4.1
-    # mono decode kernels).
-    container: vllm/vllm-openai-rocm:TBD
+    # The first ROCm 10.0 nightly carrying vllm-project/vllm#60397 (DSv4.1
+    # mono decode kernels), which the environment below enables. It also
+    # brings #59685 (AITER MegaMoEV2 for DeepSeek V4), #56638 (shared
+    # combine_topk_swa_indices kernel in place of the Torch prefill combine),
+    # #60159 (native merge_attn_states on gfx950) and #60389 (MLA derived
+    # weights kept in place on weight reload).
+    container: vllm/vllm-openai-rocm:nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe
     precision: fp4
   resources:
     gpu_type: mi355x

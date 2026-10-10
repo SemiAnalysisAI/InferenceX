@@ -9544,7 +9544,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Repin MI355X DeepSeek-V4.1-Flash DSpark to the first ROCm 10.0 nightly with vllm-project/vllm#60397 (image TBD) and enable its mono decode kernels (VLLM_ROCM_MONO_DECODE=1): two persistent launches a layer for decode steps of up to 48 rows, i.e. concurrency 8 with five DSpark drafts, at TP2 and TP4. Larger steps take the regular path."
+    - "Repin MI355X DeepSeek-V4.1-Flash DSpark to the first ROCm 10.0 nightly with vllm-project/vllm#60397 (nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe) and enable its mono decode kernels (VLLM_ROCM_MONO_DECODE=1): two persistent launches a layer for decode steps of up to 48 rows, i.e. concurrency 8 with five DSpark drafts, at TP2 and TP4. Larger steps take the regular path."
     - "Enable VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 (vllm-project/recipes#1061) for all-reduces above the quick-reduce size threshold."
     - "Restore --max-num-batched-tokens 16384 at TP2 c64: vllm-project/vllm#58014 removed the profiling over-reservation the 8192 cap worked around. The ladder stays at concurrency 1-64."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3690
