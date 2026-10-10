@@ -425,6 +425,24 @@ def test_cli_help_lists_models_and_systems(capsys):
             rack_args() + ["--scale-up-fabric-power-w=100"],
             "unrecognized arguments: --scale-up-fabric-power-w=100",
         ),
+        (
+            hgx_args("b300") + ["--cpu-and-dram-measured-power-per-socket=98"],
+            "cpu_and_dram_measured_power_per_socket requires a system with Grace sockets",
+        ),
+        (
+            ["--model=example", *rack_args(), "--cpu-and-dram-measured-power-per-socket=98"],
+            "cpu_and_dram_measured_power_per_socket requires the oss model's Grace inventory",
+        ),
+        (
+            rack_args() + ["--cpu-and-dram-measured-power-per-socket=-1"],
+            "argument --cpu-and-dram-measured-power-per-socket: "
+            "expected finite watts >= 0, got '-1'",
+        ),
+        (
+            rack_args() + ["--cpu-and-dram-measured-power-per-socket=nan"],
+            "argument --cpu-and-dram-measured-power-per-socket: "
+            "expected finite watts >= 0, got 'nan'",
+        ),
         (hgx_args() + ["--dimm-count=32"], "unrecognized arguments: --dimm-count=32"),
         (hgx_args() + ["--dimm-capacity-gb=64"], "unrecognized arguments: --dimm-capacity-gb=64"),
     ],
