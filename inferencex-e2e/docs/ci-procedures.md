@@ -1,12 +1,6 @@
 # CI Procedures
 
-<div align="center">
-
-**English** | [中文](ci-procedures_zh.md)
-
-</div>
-
-Use this page for matrix generation, CI dispatch, PR sweeps, result staging, artifact reuse, and post-merge publication. English is the source version. Keep the Chinese page structurally synchronized with it. Record the repository, commit SHA, workflow run ID, run attempt, and artifact name whenever CI output is used as evidence.
+Use this page for matrix generation, CI dispatch, PR sweeps, result staging, artifact reuse, and post-merge publication. Record the repository, commit SHA, workflow run ID, run attempt, and artifact name whenever CI output is used as evidence.
 
 ## Procedure index
 
@@ -582,4 +576,3 @@ four-GPU Arm nodes; the other pools use eight-GPU x86 nodes. GEMM and attention
 use one GPU per measurement. AMD attention supports both torch and AITER.
 See [OperatorX GitHub Actions](../../operatorx/CI.md) for dispatch,
 coverage, artifacts, cancellation, and validation.
-

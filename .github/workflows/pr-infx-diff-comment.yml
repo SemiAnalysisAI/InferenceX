@@ -1,0 +1,104 @@
+name: PR infx diff
+
+# synchronize covers pushes to PR branches, including branches in forks.
+# Use API data only: never check out or execute code from the PR.
+on:
+  # Control plane only: reads PR metadata through the API, never executes PR code.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened, ready_for_review, synchronize, edited]
+
+permissions: {}
+
+# Serialize comment writes; each run reads the current PR rather than old event data.
+concurrency:
+  group: pr-infx-diff-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: comment
+    if: ${{ !github.event.pull_request.draft }}
+    permissions:
+      pull-requests: write # Publish PR feedback.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Maintain infx diff comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const params = { ...context.repo, pull_number: context.issue.number };
+            const { data: pr } = await github.rest.pulls.get(params);
+            if (pr.draft || pr.state !== 'open') return;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...params,
+              per_page: 100,
+            });
+            // GitHub caps this endpoint at 3,000 files. Never publish partial totals.
+            if (files.length !== pr.changed_files) {
+              throw new Error('The PR file list is incomplete or changed during the run.');
+            }
+            const prefix = 'inferencex-e2e/infx/';
+            const sourceFiles = files.filter(file =>
+              file.filename.startsWith(prefix) ||
+              file.previous_filename?.startsWith(prefix)
+            );
+            const additions = sourceFiles.reduce((total, file) => total + file.additions, 0);
+            const deletions = sourceFiles.reduce((total, file) => total + file.deletions, 0);
+            const marker = '<!-- infx-source-diff -->';
+            const body = [
+              marker,
+              `\`inferencex-e2e/infx diff: +${additions} -${deletions}\``,
+              '',
+              'Generally most InferenceX submissions don\'t need to add changes to the infx package. ' +
+                'On the off chance they do, generally the diff is small. ' +
+                'Please prompt your agent to clean your PR to keep your diff to only necessary & minimal changes too. ' +
+                'We have an increased code quality bar for changes to the infx package.',
+              '',
+              '<details>',
+              '<summary>中文</summary>',
+              '',
+              '大多数 InferenceX 提交通常不需要修改 infx 包。即使确实需要，改动通常也很小。' +
+                '请让你的 agent 清理 PR，使改动只包含必要且最小的内容。infx 包的改动有更高的代码质量要求。',
+              '',
+              '</details>',
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+            const comment = comments.find(comment =>
+              comment.user?.login === 'github-actions[bot]' &&
+              comment.body?.startsWith(marker)
+            );
+
+            // A push, retarget, close, or return to draft can happen while paginating.
+            const { data: current } = await github.rest.pulls.get(params);
+            if (current.draft || current.state !== 'open' ||
+                current.head.sha !== pr.head.sha || current.base.sha !== pr.base.sha ||
+                current.base.ref !== pr.base.ref) {
+              core.info('PR changed while calculating its diff; leaving the comment unchanged.');
+              return;
+            }
+
+            if (additions === 0 && deletions === 0) {
+              if (comment) {
+                await github.rest.issues.deleteComment({
+                  ...context.repo, comment_id: comment.id,
+                });
+              }
+              return;
+            }
+
+            if (!comment) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: pr.number, body,
+              });
+            } else if (comment.body !== body) {
+              await github.rest.issues.updateComment({
+                ...context.repo, comment_id: comment.id, body,
+              });
+            }
