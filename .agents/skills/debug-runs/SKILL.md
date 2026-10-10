@@ -109,7 +109,7 @@ Steps:
    the canvas, then SSH in with `ssh -A` when a jumpbox or agent forwarding is involved.
 2. Reproduce the exact benchmark the launcher runs. Single-node jobs go through the srt driver
    of `python -m infx.launch run` (`inferencex-e2e/infx/launch/drivers/srt/`): it binds the
-   master row's `srt-recipe:` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/<engine>/<sku>-<precision>[-mtp]/<scenario>.yaml`)
+   matrix row's `srt-recipe` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<srt-recipe-dir>/<srt-recipe>`)
    with `python -m infx.srt_slurm.single_node prepare`, renders the job-local `srtslurm.yaml`
    from the cluster's record, then submits it through srtctl. Read the recipe for the image
    (`model.container`), server args and env, and the cluster record for mounts and the job env

@@ -266,7 +266,10 @@ def test_append_only_delta_rejects_removed_existing_point():
         raise AssertionError("removing an existing point should reject append-only mode")
 
 
-def test_append_only_scope_allows_additive_top_level_restructuring():
+def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
+    recipe = tmp_path / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("{}\n")
     router_a = {"name": "router-a", "version": "1"}
     router_b = {"name": "router-b", "version": "2"}
     base = {
@@ -278,13 +281,16 @@ def test_append_only_scope_allows_additive_top_level_restructuring():
             "framework": "vllm",
             "runner": "b200",
             "multinode": False,
+            "srt-recipe-dir": "fixture",
             "router": router_a,
             "scenarios": {
                 "fixed-seq-len": [
                     {
                         "isl": 8192,
                         "osl": 1024,
-                        "search-space": [{"tp": 4, "conc-list": [1, 4, 8]}],
+                        "search-space": [
+                            {"tp": 4, "conc-list": [1, 4, 8], "srt-recipe": "recipe.yaml"}
+                        ],
                     }
                 ]
             },
@@ -297,11 +303,11 @@ def test_append_only_scope_allows_additive_top_level_restructuring():
     ]
     search_space[0]["router"] = router_a
     search_space.append(
-        {"tp": 8, "conc-list": [12, 16], "router": router_b}
+        {"tp": 8, "conc-list": [12, 16], "router": router_b, "srt-recipe": "recipe.yaml"}
     )
 
-    validate_master_config(base)
-    validate_master_config(head)
+    validate_master_config(base, tmp_path)
+    validate_master_config(head, tmp_path)
     args = SimpleNamespace(
         config_keys=["test-config"],
         seq_lens=None,
@@ -394,12 +400,14 @@ def planning_inputs() -> tuple[dict, dict]:
             "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
             "multinode": multinode, "disagg": multinode,
             **({"kv-p2p-transfer": "nixl"} if multinode else {}),
+            "srt-recipe-dir": "fixture",
             "scenarios": {
                 "fixed-seq-len": [{"isl": 8192, "osl": 1024, "search-space": [
-                    {**shape, "conc-list": [16, 32, 64]},
+                    {**shape, "conc-list": [16, 32, 64], "srt-recipe": "recipe.yaml"},
                 ]}],
                 "agentic-coding": [{"search-space": [
-                    {**shape, "conc-list": [16, 32], **({} if multinode else {"kv-offloading": "none"})},
+                    {**shape, "conc-list": [16, 32], "srt-recipe": "recipe.yaml",
+                     **({} if multinode else {"kv-offloading": "none"})},
                 ]}],
             },
         }
@@ -416,6 +424,10 @@ def planning_repo(tmp_path, monkeypatch):
     master, runners = planning_inputs()
     (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
     (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
+    for node in ("single_node", "multi_node"):
+        recipe = tmp_path / f"benchmarks/{node}/srt-slurm-recipes/fixture/recipe.yaml"
+        recipe.parent.mkdir(parents=True)
+        recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\n")
     monkeypatch.chdir(tmp_path)
     return tmp_path, master, runners
 
@@ -451,12 +463,11 @@ def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
     root, base, head = committed_planning_repo
     master_path = root / "configs/nvidia-master.yaml"
     master = yaml.safe_load(master_path.read_text())
-    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
-        "additional-settings"
-    ] = ["CONFIG_FILE=recipes/recovery-fixture.yaml"]
+    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0][
+        "srt-recipe"
+    ] = "recovery-fixture.yaml"
     master_path.write_text(yaml.safe_dump(master, sort_keys=False))
-    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/recovery-fixture.yaml"
-    recipe.parent.mkdir(parents=True)
+    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/recovery-fixture.yaml"
     recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
     changelog = root / "perf-changelog.yaml"
     entries = yaml.safe_load(changelog.read_text())
@@ -494,19 +505,18 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     planning_repo, monkeypatch, nested_layout
 ):
     root, master, _ = planning_repo
-    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"][
-        "additional-settings"
-    ] = ["CONFIG_FILE=recipes/snapshot.yaml"]
+    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0][
+        "srt-recipe"
+    ] = "snapshot.yaml"
     (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
-    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/snapshot.yaml"
-    recipe.parent.mkdir(parents=True)
+    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/snapshot.yaml"
     recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
     if nested_layout:
         project = root / "inferencex-e2e"
         project.mkdir()
         for name in ("infx", "configs", "benchmarks"):
             shutil.move(root / name, project / name)
-        recipe = project / "benchmarks/multi_node/srt-slurm-recipes/snapshot.yaml"
+        recipe = project / "benchmarks/multi_node/srt-slurm-recipes/fixture/snapshot.yaml"
     for command in (
         ["init", "-q"],
         ["config", "user.name", "Test"],
@@ -682,11 +692,13 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, 
 
 def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, changelog_run, capsys):
     # Single-node generation succeeds before multinode scheduling fails.
-    (planning_repo[0] / "configs/runners.yaml").write_text("labels: {}\nclusters: {}\n")
+    (planning_repo[0] / "benchmarks/multi_node/srt-slurm-recipes/fixture/recipe.yaml").write_text(
+        "schema: 2\n"
+    )
     with pytest.raises(subprocess.CalledProcessError):
         changelog_run([{"config-keys": ["single", "multi"]}])
     captured = capsys.readouterr()
-    assert "Cannot resolve gpus-per-node" in captured.out
+    assert "Recipe has no worker roles" in captured.out
     assert '\"single_node\":' not in captured.out
 
 
@@ -736,16 +748,16 @@ def test_generation_api_preserves_inputs_and_returns_independent_nested_rows(pla
     import copy
     from infx.matrix.generate import generate_config_matrix
 
-    _, master, runners = planning_repo
+    root, master, runners = planning_repo
     master["multi"]["router"] = {"name": "fixture-router", "version": "1.0"}
     original = copy.deepcopy((master, runners))
-    rows = generate_config_matrix(["multi"], master, runners, eval_mode="all")
+    rows = generate_config_matrix(["multi"], master, runners, eval_mode="all", root=root)
     assert [(r["conc"], r.get("eval-conc")) for r in rows] == [([16, 32, 64], None), ([16, 32], 32)]
     rows[0]["router"]["name"] = "mutated"
     rows[0]["prefill"]["tp"] = 999
     rows[0]["conc"].append(999)
     assert (master, runners) == original
-    repeated = generate_config_matrix(["multi"], master, runners, eval_mode="none")
+    repeated = generate_config_matrix(["multi"], master, runners, eval_mode="none", root=root)
     assert repeated[0]["prefill"]["tp"] == 8
     assert repeated[0]["conc"] == [16, 32, 64]
 
@@ -782,14 +794,14 @@ def test_plan_rejects_empty_changelog_before_reading_inputs():
 
 def test_generation_api_preserves_json_rejection_for_yaml_sets(planning_repo):
     from infx.matrix.generate import generate_config_matrix
-    _, master, runners = planning_repo
+    root, master, runners = planning_repo
     # Pydantic accepts this YAML set as a list, but validation returns the raw
     # config. The generator CLI has always rejected it at JSON serialization.
     worker = master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"]
     worker["additional-settings"] = {"A=1"}
-    validate_master_config(master)
+    validate_master_config(master, root)
     with pytest.raises(TypeError, match="set is not JSON serializable"):
-        generate_config_matrix(["multi"], master, runners, eval_mode="none")
+        generate_config_matrix(["multi"], master, runners, eval_mode="none", root=root)
 
 
 def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, monkeypatch):

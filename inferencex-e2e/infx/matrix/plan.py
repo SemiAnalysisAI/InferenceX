@@ -26,6 +26,7 @@ from .revision import GENERATOR, snapshot
 from .validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
+    config_root,
     load_config_files,
     load_runner_file,
 )
@@ -366,6 +367,7 @@ def build_plan(
 
         config_files = MASTER_CONFIGS if config_files is None else config_files
         master_config = load_config_files(config_files)
+        root = config_root(config_files)
         runner_data = None
 
         def generate_current(
@@ -383,6 +385,7 @@ def build_plan(
                     runner_data,
                     scenario_types=scenarios,
                     eval_mode=mode,
+                    root=root,
                 )
             except Exception as error:
                 command = [

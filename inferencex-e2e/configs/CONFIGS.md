@@ -15,12 +15,14 @@ entry-name:
   # Optional defaults for every search-space entry in this config.
   router: { name: string, version: string }
   kv-p2p-transfer: string
+  # Recipe directory under benchmarks/<single|multi>_node/srt-slurm-recipes/.
+  srt-recipe-dir: string
   scenarios:
     fixed-seq-len:
     - isl: int
       osl: int
       search-space:
-      - { tp: int, conc-start: int, conc-end: int }
+      - { tp: int, conc-start: int, conc-end: int, srt-recipe: string }
       # Optionally, specify pipeline/expert/data-attention/context parallelism.
       - { tp: int, pp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
       # Optionally, declare router metadata and the P2P KV transfer engine.
@@ -142,7 +144,8 @@ jobs to 3600 seconds. Reusable workflow callers may override the `duration`
 input.
 
 Notes:
-- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `srt-recipe`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
+- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
+- srt-slurm entries require `srt-recipe-dir`. Every row requires `srt-recipe: <file>[:<selector>]` under it (selector: `base`, `override_<name>` or `zip_override_<name>[<i>]`). Multinode rows may add `eval-srt-recipe`. Validation rejects missing files or variants, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` settings. Only `llmd-vllm` keeps `CONFIG_FILE`. Generated rows carry the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
 ## Runners

@@ -3,6 +3,7 @@ import os
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -512,10 +513,11 @@ def family_configs():
             "framework": "sglang",
             "runner": "fixture",
             "multinode": False,
+            "srt-recipe-dir": "fixture",
             "scenarios": {
                 "fixed-seq-len": [{
                     "isl": 1024, "osl": 1024,
-                    "search-space": [{"tp": 1, "conc-list": [2, 6]}],
+                    "search-space": [{"tp": 1, "conc-list": [2, 6], "srt-recipe": "recipe.yaml"}],
                 }],
             },
         },
@@ -530,12 +532,20 @@ def family_configs():
     return master, runners
 
 
+def write_fixture_recipe(root: Path) -> None:
+    recipe = root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+    recipe.parent.mkdir(parents=True, exist_ok=True)
+    recipe.write_text("{}\n")
+
+
 @pytest.mark.parametrize("prefix", ["", "inferencex-e2e/"])
 def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_configs, prefix):
     master, runners = family_configs
+    # The candidate's recipe exists only at the candidate head, not in this checkout.
     files = {
         prefix + "configs/nvidia-master.yaml": yaml.safe_dump(master),
         prefix + "configs/runners.yaml": yaml.safe_dump(runners),
+        prefix + "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml": b"{}\n",
     }
     monkeypatch.setattr(
         github, "read",
@@ -1139,6 +1149,7 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
     configs.mkdir(parents=True)
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(project)
 
     families = klaud.live_families(tmp_path if from_repository_root else project)
 
@@ -1154,6 +1165,7 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
     configs.mkdir()
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(tmp_path)
 
     def git(*args):
         return subprocess.check_output(

@@ -30,7 +30,7 @@ def test_generator_uses_requested_checkout_with_safe_path(tmp_path, monkeypatch,
         script.parent.mkdir(parents=True)
         script.write_text(
             "import json, sys\nfrom validation import model\n"
-            "assert sys.argv[1:] == ['full-sweep', '--config-files', 'master.yaml', '--no-evals']\n"
+            "assert sys.argv[1:] == ['full-sweep', '--config-files', 'configs/master.yaml', '--no-evals']\n"
             "print(json.dumps([{'model': model, 'conc': 2}]))\n"
         )
         script.with_name("validation.py").write_text("model = 'legacy revision'\n")
@@ -45,22 +45,25 @@ def test_generator_uses_requested_checkout_with_safe_path(tmp_path, monkeypatch,
             "clusters: {fixture: {gpus-per-node: 8, arch: x86_64, scheduler: slurm,"
             " slurm: {partition: p, exclusive: false}}}\n"
         )
-        (root / "master.yaml").write_text(yaml.safe_dump({"fixture": {
+        (root / "configs/master.yaml").write_text(yaml.safe_dump({"fixture": {
             "image": "example/image:stable", "model": "selected revision",
             "model-prefix": "dsr1", "precision": "fp8", "framework": "sglang",
-            "runner": "fixture", "multinode": False,
+            "runner": "fixture", "multinode": False, "srt-recipe-dir": "fixture",
             "scenarios": {"fixed-seq-len": [{
                 "isl": 1024, "osl": 1024,
-                "search-space": [{"tp": 1, "conc-list": [2]}],
+                "search-space": [{"tp": 1, "conc-list": [2], "srt-recipe": "recipe.yaml"}],
             }]},
         }}))
+        recipe = root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+        recipe.parent.mkdir(parents=True)
+        recipe.write_text("{}\n")
         expected = "selected revision"
 
     if layout == "nested":
         nested = root / "inferencex-e2e"
         nested.mkdir()
-        for name in ("infx", "configs", "master.yaml"):
+        for name in ("infx", "configs", "benchmarks"):
             (root / name).rename(nested / name)
 
-    rows = _run_inferencex_generator(os.path.relpath(root), ["master.yaml"], ["--no-evals"])
+    rows = _run_inferencex_generator(os.path.relpath(root), ["configs/master.yaml"], ["--no-evals"])
     assert [(row["model"], row["conc"]) for row in rows] == [(expected, 2)]
