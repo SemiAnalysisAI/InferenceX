@@ -68,10 +68,6 @@ base:
         # INT4 quick all-reduce above its size threshold
         # (vllm-project/recipes#1061).
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
-        # Shared-expert stream overlap for every decode step on the ladder
-        # (c64 x 6 tokens = 384, above the 256 default); below the prefill
-        # chunk so memory profiling does not overlap.
-        VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD: '1024'
         AITER_TRITON_LOG_LEVEL: ERROR
         VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
