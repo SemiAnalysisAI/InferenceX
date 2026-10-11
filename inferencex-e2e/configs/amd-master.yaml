@@ -532,7 +532,7 @@ dsr1-fp8-mi355x-atom:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/atom/mi355x-fp8/8k1k.yaml
 
 dsr1-fp8-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3
+  image: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
