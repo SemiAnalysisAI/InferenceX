@@ -9538,3 +9538,9 @@
     - "Run prefill context parallelism on the TP-only arms at conc 16, 32 and 48; conc 1 and 4 keep BCG."
     - "Enable SGLANG_OPT_FP8_WO_A_FUSED_INVROPE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3778
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image to upstream nightly 2eb491e and switch DEP8 to the deep_gemm_mega_moe backend."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3917
