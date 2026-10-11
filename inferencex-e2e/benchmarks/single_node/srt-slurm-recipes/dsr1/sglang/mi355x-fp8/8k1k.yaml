@@ -53,6 +53,11 @@ zip_override_tp4_ep1:
   roles:
     agg:
       args:
+        # On ROCm 7.2, SGLang routes the TP4 gate_up_proj (N=9216, K=7168) to AITER's
+        # bpreshuffle CK-tile GEMM, which rejects tensors of 2^31 bytes or more; cap the
+        # prefill batch so its bf16 output stays below that limit.
+        chunked-prefill-size: 98304
+        max-prefill-tokens: 98304
         cuda-graph-max-bs-decode: [32, 64]
   benchmark:
     env:
