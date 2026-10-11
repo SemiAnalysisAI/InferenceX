@@ -122,7 +122,7 @@ dsr1-fp8-mi325x-sglang:
         srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsr1/sglang/mi325x-fp8/8k1k.yaml
 
 dsr1-fp8-mi355x-sglang:
-  image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
+  image: lmsysorg/sglang:v0.5.21-rocm720-mi35x@sha256:eccce4c0c3a359c9501096699a37c5483d6fc3a5f0cfd4a2ff06164bde05a745
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x

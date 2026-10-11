@@ -3,7 +3,7 @@ base:
   name: dsr1-fp8-mi355x-sglang-8k1k
   model:
     path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: lmsysorg/sglang:v0.5.12-rocm700-mi35x
+    container: lmsysorg/sglang:v0.5.21-rocm720-mi35x@sha256:eccce4c0c3a359c9501096699a37c5483d6fc3a5f0cfd4a2ff06164bde05a745
     precision: fp8
   resources:
     gpu_type: mi355x
@@ -31,7 +31,7 @@ base:
         num-continuous-decode-steps: 8
         max-prefill-tokens: 196608
         kv-cache-dtype: fp8_e4m3
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         data-parallel-size: 1
         expert-parallel-size: 1
         served-model-name: deepseek-ai/DeepSeek-R1-0528
@@ -53,7 +53,7 @@ zip_override_tp4_ep1:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [32, 64]
+        cuda-graph-max-bs-decode: [32, 64]
   benchmark:
     env:
       CONC: ['32', '64']
@@ -62,7 +62,7 @@ zip_override_tp8_ep1:
     agg:
       gpus: 8
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64]
         tensor-parallel-size: 8
   benchmark:
     env:
