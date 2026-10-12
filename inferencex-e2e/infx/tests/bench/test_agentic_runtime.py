@@ -92,6 +92,7 @@ def test_bootstrap_builds_a_fresh_venv_with_the_client_requirements(
     assert re.fullmatch(r"3\.\d+", calls[2])
     install = calls[4:]
     assert install[:4] == ["pip", "install", "--python", str(venv / "bin/python")]
+    assert "--no-config" in install
     assert not (venv / "stale").exists()
     caches = set((tmp_path / "uv-caches").read_text().splitlines())
     assert caches == {str(tmp_path / "runtime" / "uv-cache")}

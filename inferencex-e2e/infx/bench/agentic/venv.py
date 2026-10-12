@@ -74,7 +74,8 @@ def bootstrap(runtime: Runtime) -> int:
     if rc:
         return rc
     install = [uv_exe, "pip", "install", "--python", str(runtime.python)]
-    install += ["-r", str(REQUIREMENTS)]
+    # This runtime must not inherit the tooling project's dependency age cutoff.
+    install += ["--no-config", "-r", str(REQUIREMENTS)]
     if proc.call(install, {**env, "UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}):
         raise BenchError(
             "benchmark client dependency bootstrap failed; inspect network/package "
