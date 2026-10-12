@@ -85,7 +85,6 @@ base:
     install: false
 
 override_1p6d_tp8_b1_mtp3_c8:
-  name: ctx1_gen6_tp8_batch8_eplb0_mtp3_8
   roles:
     prefill:
       nodes: 1
@@ -123,7 +122,6 @@ override_1p6d_tp8_b1_mtp3_c8:
           num_nextn_predict_layers: 3
 
 override_1p2d_tp8_b4_mtp3_c8:
-  name: ctx1_gen2_tp8_batch32_eplb0_mtp3_8
   roles:
     prefill:
       nodes: 1
@@ -161,7 +159,6 @@ override_1p2d_tp8_b4_mtp3_c8:
           num_nextn_predict_layers: 3
 
 override_1p6d_tp8_b8_mtp3_c48:
-  name: ctx1_gen6_tp8_batch8_eplb0_mtp3_48
   roles:
     prefill:
       nodes: 1
@@ -199,7 +196,6 @@ override_1p6d_tp8_b8_mtp3_c48:
           num_nextn_predict_layers: 3
 
 override_1p4d_tp8_b16_mtp3_c64:
-  name: ctx1_gen4_tp8_batch16_eplb0_mtp3_64
   roles:
     prefill:
       nodes: 1
@@ -237,7 +233,6 @@ override_1p4d_tp8_b16_mtp3_c64:
           num_nextn_predict_layers: 3
 
 override_2p3d_dep8_b8_mtp3_c224:
-  name: ctx2_gen3_dep8_batch8_eplb0_mtp3_224
   roles:
     prefill:
       nodes: 2
@@ -277,7 +272,6 @@ override_2p3d_dep8_b8_mtp3_c224:
           num_nextn_predict_layers: 3
 
 override_2p1d_dep8_b32_mtp3_c288:
-  name: ctx2_gen1_dep8_batch32_eplb0_mtp3_288
   roles:
     prefill:
       nodes: 2
@@ -317,7 +311,6 @@ override_2p1d_dep8_b32_mtp3_c288:
           num_nextn_predict_layers: 3
 
 override_4p1d_dep8_b128_mtp2_c1088:
-  name: ctx4_gen1_dep8_batch128_eplb0_mtp2_1088
   roles:
     prefill:
       nodes: 4
@@ -357,7 +350,6 @@ override_4p1d_dep8_b128_mtp2_c1088:
           num_nextn_predict_layers: 2
 
 override_1p1d_tp8_b1_mtp0_c1:
-  name: ctx1_gen1_tp8_batch1_eplb0_mtp0_1
   roles:
     prefill:
       nodes: 1
@@ -390,7 +382,6 @@ override_1p1d_tp8_b1_mtp0_c1:
         moe_expert_parallel_size: 1
 
 override_1p4d_tp8_b8_mtp0_c32:
-  name: ctx1_gen4_tp8_batch32_eplb0_mtp0_32
   roles:
     prefill:
       nodes: 1
@@ -422,7 +413,6 @@ override_1p4d_tp8_b8_mtp0_c32:
         moe_expert_parallel_size: 1
 
 override_1p4d_tp8_b32_mtp0_c128:
-  name: ctx1_gen4_tp8_batch32_eplb0_mtp0_128
   roles:
     prefill:
       nodes: 1
@@ -454,7 +444,6 @@ override_1p4d_tp8_b32_mtp0_c128:
         moe_expert_parallel_size: 1
 
 override_1p6d_tp8_b16_mtp0_c96:
-  name: ctx1_gen6_tp8_batch16_eplb0_mtp0_96
   roles:
     prefill:
       nodes: 1
@@ -486,7 +475,6 @@ override_1p6d_tp8_b16_mtp0_c96:
         moe_expert_parallel_size: 1
 
 override_1p1d_dep8_b128_mtp0_c128:
-  name: ctx1_gen1_dep8_batch128_eplb0_mtp0_128
   roles:
     prefill:
       nodes: 1
@@ -516,7 +504,6 @@ override_1p1d_dep8_b128_mtp0_c128:
         moe_expert_parallel_size: 8
 
 override_1p2d_dep8_b64_mtp0_c128:
-  name: ctx1_gen2_dep8_batch64_eplb0_mtp0_128
   roles:
     prefill:
       nodes: 1
@@ -546,7 +533,6 @@ override_1p2d_dep8_b64_mtp0_c128:
         moe_expert_parallel_size: 8
 
 override_1p1d_dep8_b256_mtp0_c256:
-  name: ctx1_gen1_dep8_batch256_eplb0_mtp0_256
   roles:
     prefill:
       nodes: 1
@@ -576,7 +562,6 @@ override_1p1d_dep8_b256_mtp0_c256:
         moe_expert_parallel_size: 8
 
 override_2p1d_dep8_b640_mtp0_c640:
-  name: ctx2_gen1_dep8_batch640_eplb0_mtp0_640
   roles:
     prefill:
       nodes: 2

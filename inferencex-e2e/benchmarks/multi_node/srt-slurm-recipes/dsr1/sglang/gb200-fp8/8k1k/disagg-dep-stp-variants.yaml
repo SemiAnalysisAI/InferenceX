@@ -116,7 +116,6 @@ base:
         disaggregation-transfer-backend: nixl
 
 override_5p1d_p_tp8_ep8_dp8_d_tp32_ep32_dp32_c512x1024x2048x6144:
-  name: "gb200-8k1k-fp8-mid-tpt"
   roles:
     prefill:
       nodes: 10
@@ -132,7 +131,6 @@ override_5p1d_p_tp8_ep8_dp8_d_tp32_ep32_dp32_c512x1024x2048x6144:
         cuda-graph-max-bs: 256
 
 override_6p1d_p_tp8_ep8_dp8_d_tp24_ep24_dp24_c2048x4096x6144:
-  name: "gb200-8k1k-fp8-max-tpt"
   roles:
     prefill:
       nodes: 12

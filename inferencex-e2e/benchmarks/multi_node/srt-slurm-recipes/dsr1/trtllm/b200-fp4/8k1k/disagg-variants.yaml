@@ -83,7 +83,6 @@ base:
     request_plane: "nats"
 
 override_1p1d_dep8_b8_mtp3:
-  name: "ctx1_gen1_dep8_batch8_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -118,7 +117,6 @@ override_1p1d_dep8_b8_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p3d_tep8_b16_mtp3:
-  name: "ctx1_gen3_tep8_batch16_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -161,7 +159,6 @@ override_1p3d_tep8_b16_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p5d_tep8_b1_mtp3:
-  name: "ctx1_gen5_tep8_batch1_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -193,7 +190,6 @@ override_1p5d_tep8_b1_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p5d_tep8_b8_mtp3:
-  name: "ctx1_gen5_tep8_batch8_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -232,7 +228,6 @@ override_1p5d_tep8_b8_mtp3:
           num_nextn_predict_layers: 3
 
 override_3p1d_dep8_b64_mtp3:
-  name: "ctx3_gen1_dep8_batch64_eplb0_mtp3"
   roles:
     prefill:
       nodes: 2
@@ -271,7 +266,6 @@ override_3p1d_dep8_b64_mtp3:
           num_nextn_predict_layers: 3
 
 override_5p1d_dep8_b192_mtp1:
-  name: "ctx5_gen1_dep8_batch192_eplb0_mtp1"
   roles:
     prefill:
       nodes: 3
@@ -314,7 +308,6 @@ override_5p1d_dep8_b192_mtp1:
           num_nextn_predict_layers: 1
 
 override_5p2d_dep8_b32_mtp3:
-  name: "ctx5_gen2_dep8_batch32_eplb0_mtp3"
   roles:
     prefill:
       nodes: 3
@@ -352,7 +345,6 @@ override_5p2d_dep8_b32_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p5d_tep8_b1_mtp0:
-  name: "ctx1_gen5_tep8_batch1_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -377,7 +369,6 @@ override_1p5d_tep8_b1_mtp0:
         allreduce_strategy: MNNVL
 
 override_1p5d_tep8_b16_mtp0:
-  name: "ctx1_gen5_tep8_batch8_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -416,7 +407,6 @@ override_1p5d_tep8_b16_mtp0:
         allreduce_strategy: MNNVL
 
 override_2p5d_tep8_b64_mtp0:
-  name: "ctx2_gen5_tep8_batch64_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -450,7 +440,6 @@ override_2p5d_tep8_b64_mtp0:
         allreduce_strategy: MNNVL
 
 override_4p1d_dep8_b192_mtp0:
-  name: "ctx4_gen1_dep8_batch192_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -486,7 +475,6 @@ override_4p1d_dep8_b192_mtp0:
           backend: CUTLASS
 
 override_4p3d_dep8_b32_mtp0:
-  name: "ctx4_gen3_dep8_batch32_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -515,7 +503,6 @@ override_4p3d_dep8_b32_mtp0:
           backend: CUTLASS
 
 override_7p2d_dep8_b128_mtp0:
-  name: "ctx7_gen2_dep8_batch128_eplb0_mtp0"
   roles:
     prefill:
       nodes: 4

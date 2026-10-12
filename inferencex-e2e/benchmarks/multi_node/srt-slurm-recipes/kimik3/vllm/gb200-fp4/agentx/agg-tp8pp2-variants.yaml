@@ -117,7 +117,6 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
 
 override_tp8pp2_c16:
-  name: "kimik3-vllm-agg-gb200-tp8pp2-mooncake-c16-agentic"
   roles:
     agg:
       args:
@@ -126,7 +125,6 @@ override_tp8pp2_c16:
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,40,56,64,80,104,128,256,512,1024,2048,4096,8192]}'
 
 override_tp8pp2_c32:
-  name: "kimik3-vllm-agg-gb200-tp8pp2-mooncake-c32-agentic"
   roles:
     agg:
       args:
@@ -135,7 +133,6 @@ override_tp8pp2_c32:
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
 override_tp8pp2_c48:
-  name: "kimik3-vllm-agg-gb200-tp8pp2-mooncake-c48-agentic"
   roles:
     agg:
       args:
@@ -143,7 +140,6 @@ override_tp8pp2_c48:
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
 override_tp8pp2_c72:
-  name: "kimik3-vllm-agg-gb200-tp8pp2-mooncake-c72-agentic"
   roles:
     agg:
       args:
@@ -151,7 +147,6 @@ override_tp8pp2_c72:
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,7,18,34,53,64,75,100,128,256,512,1024,2048,4096,8192]}'
 
 override_tp8pp2_c96:
-  name: "kimik3-vllm-agg-gb200-tp8pp2-mooncake-c96-agentic"
   roles:
     agg:
       args:

@@ -152,7 +152,6 @@ base:
 
 # Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c8:
-  name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c8-mtp
   roles:
     prefill:
       args:
@@ -167,7 +166,6 @@ override_1p1d_p_tp4_d_tp4_c8:
 
 # Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c16:
-  name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c16-mtp
   roles:
     prefill:
       args:
@@ -182,7 +180,6 @@ override_1p1d_p_tp4_d_tp4_c16:
 
 # Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c24:
-  name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c24-mtp
   roles:
     prefill:
       args:
@@ -197,7 +194,6 @@ override_1p1d_p_tp4_d_tp4_c24:
 
 # Fast replay improves the published frontier; canonical sweep qualification is pending.
 override_1p1d_p_tp4_d_tp4_c32:
-  name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c32-mtp
   roles:
     prefill:
       args:
@@ -212,7 +208,6 @@ override_1p1d_p_tp4_d_tp4_c32:
 
 # Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c48_write_through:
-  name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c48-write-through-mtp
   roles:
     prefill:
       args:
@@ -228,7 +223,6 @@ override_1p1d_p_tp4_d_tp4_c48_write_through:
 
 # Short replay improves the published frontier; full official qualification remains required.
 override_1p1d_p_tp4_d_tp4_c64_write_through:
-  name: qwen35-b200-fp8-agentx-disagg-1p1d-p-tp4-d-tp4-hicache-c64-write-through-mtp
   roles:
     prefill:
       args:

@@ -93,7 +93,6 @@ base:
         node: dedicated
 
 override_1p4d_tep8_b8_eplb0_mtp3:
-  name: "ctx1_gen4_tep8_batch8_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -132,7 +131,6 @@ override_1p4d_tep8_b8_eplb0_mtp3:
           num_nextn_predict_layers: 3
 
 override_3p1d_dep32_b4_eplb0_mtp3:
-  name: "ctx3_gen1_dep32_batch4_eplb0_mtp3"
   roles:
     prefill:
       nodes: 3
@@ -165,7 +163,6 @@ override_3p1d_dep32_b4_eplb0_mtp3:
           num_nextn_predict_layers: 3
 
 override_7p1d_dep16_b64_eplb256_mtp1:
-  name: "ctx7_gen1_dep16_batch64_eplb256_mtp1"
   roles:
     prefill:
       nodes: 7
@@ -209,7 +206,6 @@ override_7p1d_dep16_b64_eplb256_mtp1:
           num_nextn_predict_layers: 1
 
 override_8p1d_dep32_b16_eplb0_mtp3:
-  name: "ctx8_gen1_dep32_batch16_eplb0_mtp3"
   roles:
     prefill:
       nodes: 8
@@ -244,7 +240,6 @@ override_8p1d_dep32_b16_eplb0_mtp3:
           num_nextn_predict_layers: 3
 
 override_11p1d_dep16_b256_eplb256_mtp1:
-  name: "ctx11_gen1_dep16_batch256_eplb256_mtp1"
   roles:
     prefill:
       nodes: 11
@@ -312,7 +307,6 @@ override_11p1d_dep16_b256_eplb256_mtp1:
           num_nextn_predict_layers: 1
 
 override_1p4d_tep8_b16_eplb0_mtp0:
-  name: "ctx1_gen4_tep8_batch16_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -348,7 +342,6 @@ override_1p4d_tep8_b16_eplb0_mtp0:
         allreduce_strategy: MNNVL
 
 override_1p4d_tep8_b1_eplb0_mtp0:
-  name: "ctx1_gen4_tep8_batch1_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -373,7 +366,6 @@ override_1p4d_tep8_b1_eplb0_mtp0:
         allreduce_strategy: MNNVL
 
 override_2p1d_dep32_b8_eplb0_mtp0:
-  name: "ctx2_gen1_dep32_batch8_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -400,7 +392,6 @@ override_2p1d_dep32_b8_eplb0_mtp0:
           backend: WIDEEP
 
 override_7p1d_dep32_b32_eplb0_mtp0:
-  name: "ctx7_gen1_dep32_batch32_eplb0_mtp0"
   roles:
     prefill:
       nodes: 7
@@ -430,7 +421,6 @@ override_7p1d_dep32_b32_eplb0_mtp0:
           backend: CUTEDSL
 
 override_8p1d_dep16_b128_eplb0_mtp0:
-  name: "ctx8_gen1_dep16_batch128_eplb0_mtp0"
   roles:
     prefill:
       nodes: 8
@@ -472,7 +462,6 @@ override_8p1d_dep16_b128_eplb0_mtp0:
           backend: CUTEDSL
 
 override_10p1d_dep16_b256_eplb256_mtp0:
-  name: "ctx10_gen1_dep16_batch256_eplb256_mtp0"
   roles:
     prefill:
       nodes: 10

@@ -240,7 +240,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 override_5p3d_pp4_dep4_c1000:
-  name: disagg-gb300-5p3d-pp4-dep4-c1000-mtp-hicache-nightly-20260913
   roles:
     prefill:
       nodes: 5
@@ -250,7 +249,6 @@ override_5p3d_pp4_dep4_c1000:
       workers: 3
 
 override_3p2d_pp4_dep4_c600:
-  name: disagg-gb300-3p2d-pp4-dep4-c600-mtp-hicache-nightly-20260913
   roles:
     prefill:
       nodes: 3
@@ -260,7 +258,6 @@ override_3p2d_pp4_dep4_c600:
       workers: 2
 
 override_1p1d_pp4_dep4_c200:
-  name: disagg-gb300-1p1d-pp4-dep4-c200-mtp-hicache-nightly-20260913
   roles:
     prefill:
       nodes: 1
@@ -270,7 +267,6 @@ override_1p1d_pp4_dep4_c200:
       workers: 1
 
 override_1p1d_pp4_dep4_c100:
-  name: disagg-gb300-1p1d-pp4-dep4-c100-mtp-hicache-nightly-20260913
   roles:
     prefill:
       nodes: 1

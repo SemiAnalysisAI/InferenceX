@@ -174,7 +174,6 @@ base:
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
 
 override_1p1d_dcp8_dcp8_dspark4:
-  name: "kimi-k3-vllm-disagg-gb300-1p1d-dcp8-dcp8-dspark4-mooncake-agentic"
   roles:
     prefill:
       args:
@@ -186,7 +185,6 @@ override_1p1d_dcp8_dcp8_dspark4:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
 
 override_1p2d_dcp8_dcp8_dspark4:
-  name: "kimi-k3-vllm-disagg-gb300-1p2d-dcp8-dcp8-dspark4-mooncake-agentic"
   roles:
     prefill:
       args:
@@ -198,7 +196,6 @@ override_1p2d_dcp8_dcp8_dspark4:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
 
 override_1p3d_dcp8_dcp8_dspark7:
-  name: "kimi-k3-vllm-disagg-gb300-1p3d-dcp8-dcp8-dspark7-mooncake-agentic"
   roles:
     prefill:
       args:
@@ -210,7 +207,6 @@ override_1p3d_dcp8_dcp8_dspark7:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
 
 override_1p3d_dcp8_dcp8_dspark4:
-  name: "kimi-k3-vllm-disagg-gb300-1p3d-dcp8-dcp8-dspark4-mooncake-agentic"
   roles:
     prefill:
       args:

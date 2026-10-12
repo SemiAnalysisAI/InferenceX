@@ -89,7 +89,6 @@ base:
     request_plane: "nats"
 
 override_1p7d_tep8_b1_mtp3_c9:
-  name: "c1_ctx1_gen7_tep8_batch1_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -112,7 +111,6 @@ override_1p7d_tep8_b1_mtp3_c9:
           num_nextn_predict_layers: 3
 
 override_1p7d_tep8_b32_mtp3_c28:
-  name: "c4_ctx1_gen7_tep8_batch32_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -135,7 +133,6 @@ override_1p7d_tep8_b32_mtp3_c28:
           num_nextn_predict_layers: 3
 
 override_1p6d_tep8_b32_mtp3_c48:
-  name: "c8_ctx1_gen6_tep8_batch32_eplb0_mtp3"
   roles:
     prefill:
       nodes: 1
@@ -158,7 +155,6 @@ override_1p6d_tep8_b32_mtp3_c48:
           num_nextn_predict_layers: 3
 
 override_1p3d_tep8_b32_mtp2_c48:
-  name: "c16_ctx1_gen3_tep8_batch32_eplb0_mtp2"
   roles:
     prefill:
       nodes: 1
@@ -181,7 +177,6 @@ override_1p3d_tep8_b32_mtp2_c48:
           num_nextn_predict_layers: 2
 
 override_3p5d_tep8_b32_mtp3_c160:
-  name: "c32_ctx3_gen5_tep8_batch32_eplb0_mtp3"
   roles:
     prefill:
       nodes: 3
@@ -204,7 +199,6 @@ override_3p5d_tep8_b32_mtp3_c160:
           num_nextn_predict_layers: 3
 
 override_1p1d_dep8_b32_mtp2_c64:
-  name: "c64_ctx1_gen1_dep8_batch32_eplb0_mtp2"
   roles:
     prefill:
       nodes: 1
@@ -227,7 +221,6 @@ override_1p1d_dep8_b32_mtp2_c64:
           num_nextn_predict_layers: 2
 
 override_2p1d_dep8_b32_mtp2_c128:
-  name: "c128_ctx2_gen1_dep8_batch32_eplb0_mtp2"
   roles:
     prefill:
       nodes: 2
@@ -250,7 +243,6 @@ override_2p1d_dep8_b32_mtp2_c128:
           num_nextn_predict_layers: 2
 
 override_3p1d_dep8_b32_mtp2_c256:
-  name: "c256_ctx3_gen1_dep8_batch32_eplb0_mtp2"
   roles:
     prefill:
       nodes: 3
@@ -273,7 +265,6 @@ override_3p1d_dep8_b32_mtp2_c256:
           num_nextn_predict_layers: 2
 
 override_3p1d_dep8_b64_mtp1_c512:
-  name: "c512_ctx3_gen1_dep8_batch64_eplb0_mtp1"
   roles:
     prefill:
       nodes: 3
@@ -296,7 +287,6 @@ override_3p1d_dep8_b64_mtp1_c512:
           num_nextn_predict_layers: 1
 
 override_1p7d_tep8_b1_mtp0_c9:
-  name: "c1_ctx1_gen7_tep8_batch1_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -312,7 +302,6 @@ override_1p7d_tep8_b1_mtp0_c9:
           batch_sizes: [1]
 
 override_1p7d_tep8_b32_mtp0_c28:
-  name: "c4_ctx1_gen7_tep8_batch32_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -328,7 +317,6 @@ override_1p7d_tep8_b32_mtp0_c28:
           batch_sizes: [1, 2, 4, 8, 16, 32]
 
 override_1p6d_tep8_b16_mtp0_c48:
-  name: "c8_ctx1_gen6_tep8_batch16_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -344,7 +332,6 @@ override_1p6d_tep8_b16_mtp0_c48:
           batch_sizes: [1, 2, 4, 8, 16]
 
 override_1p3d_tep8_b32_mtp0_c48:
-  name: "c16_ctx1_gen3_tep8_batch32_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -360,7 +347,6 @@ override_1p3d_tep8_b32_mtp0_c48:
           batch_sizes: [1, 2, 4, 8, 16, 32]
 
 override_2p5d_tep8_b128_mtp0_c160:
-  name: "c32_ctx2_gen5_tep8_batch128_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -376,7 +362,6 @@ override_2p5d_tep8_b128_mtp0_c160:
           batch_sizes: [1, 2, 4, 8, 16, 32, 64, 128]
 
 override_2p3d_dep8_b128_mtp0_c192:
-  name: "c64_ctx2_gen3_dep8_batch128_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -392,7 +377,6 @@ override_2p3d_dep8_b128_mtp0_c192:
           batch_sizes: [1, 2, 4, 8, 16, 32, 64, 128]
 
 override_1p1d_dep8_b256_mtp0_c128:
-  name: "c128_ctx1_gen1_dep8_batch256_eplb0_mtp0"
   roles:
     prefill:
       nodes: 1
@@ -408,7 +392,6 @@ override_1p1d_dep8_b256_mtp0_c128:
           batch_sizes: [1, 2, 4, 8, 16, 32, 64, 128, 256]
 
 override_5p3d_dep8_b256_mtp0_c768:
-  name: "c256_ctx5_gen3_dep8_batch256_eplb0_mtp0"
   roles:
     prefill:
       nodes: 5
@@ -424,7 +407,6 @@ override_5p3d_dep8_b256_mtp0_c768:
           batch_sizes: [1, 2, 4, 8, 16, 32, 64, 128, 256]
 
 override_3p1d_dep8_b512_mtp0_c512:
-  name: "c512_ctx3_gen1_dep8_batch512_eplb0_mtp0"
   roles:
     prefill:
       nodes: 3

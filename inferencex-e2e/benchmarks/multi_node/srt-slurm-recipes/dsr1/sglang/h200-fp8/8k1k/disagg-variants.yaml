@@ -61,7 +61,6 @@ base:
         disaggregation-transfer-backend: nixl
 
 override_bs4_1p7d_stp:
-  name: "bs4-1p7d-h200-fp8"
   roles:
     prefill:
       nodes: 1
@@ -81,7 +80,6 @@ override_bs4_1p7d_stp:
         cuda-graph-max-bs: 8
 
 override_bs8_1p6d_stp:
-  name: "bs8-1p6d-h200-fp8"
   roles:
     prefill:
       nodes: 1
@@ -101,7 +99,6 @@ override_bs8_1p6d_stp:
         cuda-graph-max-bs: 16
 
 override_bs16_1p3d_stp:
-  name: "bs16-1p3d-h200-fp8"
   roles:
     prefill:
       nodes: 1
@@ -121,7 +118,6 @@ override_bs16_1p3d_stp:
         cuda-graph-max-bs: 32
 
 override_bs64_2p3d_stp:
-  name: "bs64-2p3d-h200-fp8"
   roles:
     prefill:
       nodes: 2
@@ -141,7 +137,6 @@ override_bs64_2p3d_stp:
         cuda-graph-max-bs: 128
 
 override_bs128_1p1d_dep_stp:
-  name: "bs128-1p1d-dep-h200-fp8"
   roles:
     prefill:
       nodes: 1
@@ -162,7 +157,6 @@ override_bs128_1p1d_dep_stp:
         cuda-graph-max-bs: 256
 
 override_bs4_1p7d_mtp:
-  name: "bs4-1p7d-h200-fp8-mtp"
   roles:
     prefill:
       nodes: 1
@@ -190,7 +184,6 @@ override_bs4_1p7d_mtp:
         speculative-num-draft-tokens: 3
 
 override_bs8_1p6d_mtp:
-  name: "bs8-1p6d-h200-fp8-mtp"
   roles:
     prefill:
       nodes: 1
@@ -218,7 +211,6 @@ override_bs8_1p6d_mtp:
         speculative-num-draft-tokens: 3
 
 override_bs16_1p3d_mtp:
-  name: "bs16-1p3d-h200-fp8-mtp"
   roles:
     prefill:
       nodes: 1
@@ -246,7 +238,6 @@ override_bs16_1p3d_mtp:
         speculative-num-draft-tokens: 3
 
 override_bs64_2p3d_mtp:
-  name: "bs64-2p3d-h200-fp8-mtp"
   roles:
     prefill:
       nodes: 2
@@ -276,7 +267,6 @@ override_bs64_2p3d_mtp:
         speculative-num-draft-tokens: 3
 
 override_bs128_1p1d_dep_mtp:
-  name: "bs128-1p1d-dep-h200-fp8-mtp"
   roles:
     prefill:
       nodes: 1

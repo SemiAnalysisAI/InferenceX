@@ -104,7 +104,6 @@ base:
         timeout_seconds: 1200
 
 override_1p3d_tep16_b1_mtp3:
-  name: h100_8k1k_ctx1dep16_gen3tep16_batch1_eplb0_mtp3
   roles:
     prefill:
       nodes: 2
@@ -134,7 +133,6 @@ override_1p3d_tep16_b1_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p3d_tep16_b2_mtp3:
-  name: h100_8k1k_ctx1dep16_gen3tep16_batch2_eplb0_mtp3
   roles:
     prefill:
       nodes: 2
@@ -164,7 +162,6 @@ override_1p3d_tep16_b2_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p3d_tep16_b8_mtp3:
-  name: h100_8k1k_ctx1dep16_gen3tep16_batch8_eplb0_mtp3
   roles:
     prefill:
       nodes: 2
@@ -195,7 +192,6 @@ override_1p3d_tep16_b8_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p1d_dep16_b4_mtp3:
-  name: h100_8k1k_ctx1dep16_gen1dep16_batch4_eplb0_mtp3
   roles:
     prefill:
       nodes: 2
@@ -228,7 +224,6 @@ override_1p1d_dep16_b4_mtp3:
           num_nextn_predict_layers: 3
 
 override_2p1d_dep16_b8_mtp3:
-  name: h100_8k1k_ctx2dep16_gen1dep16_batch8_eplb0_mtp3
   roles:
     prefill:
       nodes: 4
@@ -262,7 +257,6 @@ override_2p1d_dep16_b8_mtp3:
           num_nextn_predict_layers: 3
 
 override_1p3d_tep16_b1_mtp0:
-  name: h100_8k1k_ctx1dep16_gen3tep16_batch1_eplb0_mtp0
   roles:
     prefill:
       nodes: 2
@@ -288,7 +282,6 @@ override_1p3d_tep16_b1_mtp0:
           backend: CUTLASS
 
 override_1p3d_tep16_b2_mtp0:
-  name: "h100_8k1k_ctx1dep16_gen3tep16_batch2_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -309,7 +302,6 @@ override_1p3d_tep16_b2_mtp0:
           backend: CUTLASS
 
 override_1p3d_tep16_b8_mtp0:
-  name: "h100_8k1k_ctx1dep16_gen3tep16_batch8_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -330,7 +322,6 @@ override_1p3d_tep16_b8_mtp0:
           backend: CUTLASS
 
 override_1p2d_tep16_b64_mtp0:
-  name: "h100_8k1k_ctx1dep16_gen2tep16_batch64_eplb0_mtp0"
   roles:
     prefill:
       nodes: 2
@@ -351,7 +342,6 @@ override_1p2d_tep16_b64_mtp0:
           backend: CUTLASS
 
 override_2p1d_dep16_b16_mtp0:
-  name: h100_8k1k_ctx2dep16_gen1dep16_batch16_eplb0_mtp0
   roles:
     prefill:
       nodes: 4

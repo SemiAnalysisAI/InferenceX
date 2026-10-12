@@ -96,7 +96,6 @@ base:
     container-remap-root: ''
 
 override_tp8_c1:
-  name: agg-tp8-c1-mtp
   roles:
     agg:
       args:
@@ -104,7 +103,6 @@ override_tp8_c1:
         cuda-graph-max-bs-decode: 2
 
 override_tp8_c2:
-  name: agg-tp8-c2-mtp
   roles:
     agg:
       args:
@@ -112,7 +110,6 @@ override_tp8_c2:
         cuda-graph-max-bs-decode: 4
 
 override_tp8_c4:
-  name: agg-tp8-c4-mtp
   roles:
     agg:
       args:

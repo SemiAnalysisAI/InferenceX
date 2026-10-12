@@ -118,7 +118,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
 override_tp8_c1:
-  name: "agg-gb200-tp8-c1-mtp-hicache"
   roles:
     agg:
       args:
@@ -126,7 +125,6 @@ override_tp8_c1:
         cuda-graph-max-bs-decode: 2
 
 override_tp8_c4:
-  name: "agg-gb200-tp8-c4-mtp-hicache"
   roles:
     agg:
       args:

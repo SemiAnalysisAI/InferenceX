@@ -162,21 +162,18 @@ base:
     container-remap-root: ''
 
 override_1p2d_c48:
-  name: disagg-1p2d-p-dep4-d-tp4-c48-mtp
   roles:
     decode:
       nodes: 2
       workers: 2
 
 override_1p4d_c45:
-  name: disagg-1p4d-p-dep4-d-tp4-c45-mtp
   roles:
     decode:
       nodes: 4
       workers: 4
 
 override_1p6d_c45:
-  name: disagg-1p6d-p-dep4-d-tp4-c45-mtp
   roles:
     decode:
       nodes: 6

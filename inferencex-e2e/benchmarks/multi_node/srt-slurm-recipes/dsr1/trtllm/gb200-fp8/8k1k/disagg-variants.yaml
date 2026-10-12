@@ -92,7 +92,6 @@ base:
         node: dedicated
 
 override_3p1d_dep8_b64_mtp3_c666:
-  name: ctx3_gen1_dep8_batch64_eplb0_mtp3_666
   roles:
     prefill:
       nodes: 6
@@ -134,7 +133,6 @@ override_3p1d_dep8_b64_mtp3_c666:
         tensor_parallel_size: 8
 
 override_5p1d_dep16_b32_mtp3_c666:
-  name: ctx5_gen1_dep16_batch32_eplb0_mtp3_666
   roles:
     prefill:
       nodes: 10
@@ -172,7 +170,6 @@ override_5p1d_dep16_b32_mtp3_c666:
         tensor_parallel_size: 16
 
 override_3p1d_dep16_b16_mtp3_c333:
-  name: ctx3_gen1_dep16_batch16_eplb0_mtp3_333
   roles:
     prefill:
       nodes: 6
@@ -208,7 +205,6 @@ override_3p1d_dep16_b16_mtp3_c333:
         tensor_parallel_size: 16
 
 override_4p1d_dep32_b8_mtp3_c333:
-  name: ctx4_gen1_dep32_batch8_eplb0_mtp3_333
   roles:
     prefill:
       nodes: 8
@@ -243,7 +239,6 @@ override_4p1d_dep32_b8_mtp3_c333:
         tensor_parallel_size: 32
 
 override_2p1d_dep32_b2_mtp3_c90:
-  name: ctx2_gen1_dep32_batch2_eplb0_mtp3_90
   roles:
     prefill:
       nodes: 4
@@ -277,7 +272,6 @@ override_2p1d_dep32_b2_mtp3_c90:
         tensor_parallel_size: 32
 
 override_1p3d_tep8_b4_mtp3_c15:
-  name: ctx1_gen3_tep8_batch4_eplb0_mtp3_15
   roles:
     prefill:
       nodes: 2
@@ -312,7 +306,6 @@ override_1p3d_tep8_b4_mtp3_c15:
         tensor_parallel_size: 8
 
 override_1p3d_tep8_b2_mtp3_c6:
-  name: ctx1_gen3_tep8_batch2_eplb0_mtp3_6
   roles:
     prefill:
       nodes: 2
@@ -347,7 +340,6 @@ override_1p3d_tep8_b2_mtp3_c6:
         tensor_parallel_size: 8
 
 override_5p1d_dep16_b64_mtp0_c1229:
-  name: ctx5_gen1_dep16_batch64_eplb0_mtp0_1229
   roles:
     prefill:
       nodes: 10
@@ -382,7 +374,6 @@ override_5p1d_dep16_b64_mtp0_c1229:
         tensor_parallel_size: 16
 
 override_4p1d_dep32_b16_mtp0_c666:
-  name: ctx4_gen1_dep32_batch16_eplb0_mtp0_666
   roles:
     prefill:
       nodes: 8
@@ -411,7 +402,6 @@ override_4p1d_dep32_b16_mtp0_c666:
         tensor_parallel_size: 32
 
 override_3p1d_dep16_b32_mtp0_c615:
-  name: ctx3_gen1_dep16_batch32_eplb0_mtp0_615
   roles:
     prefill:
       nodes: 6
@@ -442,7 +432,6 @@ override_3p1d_dep16_b32_mtp0_c615:
         tensor_parallel_size: 16
 
 override_2p1d_dep32_b8_mtp0_c333:
-  name: ctx2_gen1_dep32_batch8_eplb0_mtp0_333
   roles:
     prefill:
       nodes: 4
@@ -470,7 +459,6 @@ override_2p1d_dep32_b8_mtp0_c333:
         tensor_parallel_size: 32
 
 override_1p3d_tep8_b16_mtp0_c63:
-  name: ctx1_gen3_tep8_batch16_eplb0_mtp0_63
   roles:
     prefill:
       nodes: 2
@@ -500,7 +488,6 @@ override_1p3d_tep8_b16_mtp0_c63:
         tensor_parallel_size: 8
 
 override_1p3d_tep8_b4_mtp0_c18:
-  name: ctx1_gen3_tep8_batch4_eplb0_mtp0_18
   roles:
     prefill:
       nodes: 2
@@ -528,7 +515,6 @@ override_1p3d_tep8_b4_mtp0_c18:
         tensor_parallel_size: 8
 
 override_1p3d_tep8_b1_mtp0_c6:
-  name: ctx1_gen3_tep8_batch1_eplb0_mtp0_6
   roles:
     prefill:
       nodes: 2

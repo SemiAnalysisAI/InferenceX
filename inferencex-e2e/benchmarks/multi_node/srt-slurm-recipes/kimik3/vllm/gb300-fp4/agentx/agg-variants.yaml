@@ -128,7 +128,6 @@ base:
       node: head
 
 override_dcp8_dspark7_maxseq2:
-  name: "kimi-k3-vllm-agg-gb300-dcp8-dspark7-maxseq2-mooncake-agentic"
   roles:
     agg:
       env:
@@ -140,7 +139,6 @@ override_dcp8_dspark7_maxseq2:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
 
 override_dcp8_dspark4:
-  name: "kimi-k3-vllm-agg-gb300-dcp8-dspark4-mooncake-agentic"
   roles:
     agg:
       env:

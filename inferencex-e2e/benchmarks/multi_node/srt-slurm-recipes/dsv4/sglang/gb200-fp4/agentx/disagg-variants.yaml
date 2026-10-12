@@ -263,7 +263,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
 override_1p1d_dep8_dep16_c64:
-  name: "disagg-gb200-1p1d-dep8-dep16-c64-mtp-kvoffload"
   identity:
     frameworks:
       dynamo: "1.5.0.dev20260910"
@@ -289,7 +288,6 @@ override_1p1d_dep8_dep16_c64:
         cuda-graph-max-bs-decode: 256
 
 override_1p1d_dep8_dep16_c128:
-  name: "disagg-gb200-1p1d-dep8-dep16-c128-mtp-kvoffload"
   identity:
     frameworks:
       dynamo: "1.5.0.dev20260910"
@@ -315,7 +313,6 @@ override_1p1d_dep8_dep16_c128:
         cuda-graph-max-bs-decode: 256
 
 override_1p1d_dep16_dep32_c256:
-  name: disagg-gb200-1p1d-dep16-dep32-c256-mtp-kvoffload
   slurm:
     time_limit: '8:00:00'
   roles:
@@ -342,7 +339,6 @@ override_1p1d_dep16_dep32_c256:
         cuda-graph-max-bs-decode: 64
 
 override_2p1d_dep16_dep32_c768:
-  name: disagg-gb200-2p1d-dep16-dep32-c768-mtp-kvoffload
   slurm:
     time_limit: '8:00:00'
   roles:
@@ -369,7 +365,6 @@ override_2p1d_dep16_dep32_c768:
         cuda-graph-max-bs-decode: 64
 
 override_2p1d_dep16_dep32_c1024:
-  name: disagg-gb200-2p1d-dep16-dep32-c1024-mtp-kvoffload
   slurm:
     time_limit: '8:00:00'
   roles:
@@ -396,7 +391,6 @@ override_2p1d_dep16_dep32_c1024:
         cuda-graph-max-bs-decode: 64
 
 override_2p1d_dep16_dep32_c1280:
-  name: disagg-gb200-2p1d-dep16-dep32-c1280-mtp-kvoffload
   slurm:
     time_limit: '8:00:00'
   roles:
