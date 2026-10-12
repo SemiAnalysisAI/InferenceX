@@ -147,6 +147,61 @@ def test_thinking_mode_and_decode_priority(golden_dir: Path) -> None:
     assert result["roles"]["prefill"] == {"args": {"tensor-parallel-size": 8}}
 
 
+def test_adaptive_dspark_skips_golden_acceptance_on_throughput(golden_dir: Path) -> None:
+    recipe = {
+        "roles": {
+            "prefill": {
+                "args": {
+                    "speculative-config": json.dumps(
+                        {
+                            "method": "dspark",
+                            "num_speculative_tokens": 1,
+                            "enable_adaptive_verification": True,
+                        }
+                    )
+                }
+            },
+            "decode": {
+                "args": {
+                    "speculative-config": json.dumps(
+                        {
+                            "method": "dspark",
+                            "num_speculative_tokens": 3,
+                            "enable_adaptive_verification": True,
+                        }
+                    )
+                }
+            },
+        }
+    }
+    original = copy.deepcopy(recipe)
+    result = apply_native(
+        recipe,
+        build_overrides(
+            recipe,
+            "llmd-vllm",
+            {**ENV, "SPEC_DECODING": "dspark"},
+            golden_dir=golden_dir,
+        ),
+    )
+    assert result == original
+    tp8_recipe = vllm_recipe(
+        "dspark", num_speculative_tokens=3, enable_adaptive_verification=False
+    )
+    tp8 = apply_native(
+        tp8_recipe,
+        build_overrides(
+            tp8_recipe,
+            "vllm",
+            {**ENV, "SPEC_DECODING": "dspark"},
+            golden_dir=golden_dir,
+        ),
+    )
+    spec = json.loads(tp8["roles"]["agg"]["args"]["speculative-config"])
+    assert spec["synthetic_acceptance_length"] == 2.7
+    assert spec["rejection_sample_method"] == "synthetic"
+
+
 @pytest.mark.parametrize("sampling", [None, "unknown"])
 def test_kimi_curve_requires_an_explicit_supported_sampler(
     golden_dir: Path, sampling: str | None

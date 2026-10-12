@@ -124,7 +124,7 @@ base:
         no-enable-flashinfer-autotune: true
         numa-bind: true
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"enable_adaptive_verification":false,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"enable_adaptive_verification":true,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4"}'
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
   sbatch_directives: {cpus-per-task: "144", mem: "0"}
   srun_options: {container-remap-root: ""}

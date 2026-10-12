@@ -3,8 +3,8 @@
 # DEP8 or DEP16 decode worker. KV moves over NIXL and the prefill workers share prefix
 # cache through an embedded Mooncake store. srt-slurm launches each worker as one
 # `vllm serve` over its trays that balances its DP ranks itself, so the EPP routes to the
-# worker rather than to one rank. Prefill drafts three DSpark tokens like decode: the srt
-# launch planner gives both roles the decode role's golden acceptance length.
+# worker rather than to one rank. Prefill drafts one DSpark token and decode three, both with
+# adaptive verification on throughput (golden synthetic acceptance applies only to agg TP8).
 # VLLM_USE_RUST_FRONTEND is left unset (the Python API server).
 # Select one with CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-llm-d.yaml:override_<name>.
 
@@ -158,7 +158,7 @@ base:
         long-prefill-token-threshold: 1024
         max-num-seqs: 16
         max-model-len: 1048576
-        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":1,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}'
         enable-cumem-allocator: true
         block-size: 256
         tokenizer-mode: deepseek_v4
@@ -224,7 +224,7 @@ base:
         max-num-seqs: 32
         max-cudagraph-capture-size: 256
         max-model-len: 1048576
-        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":false}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","attention_backend":"FLASHINFER_MLA_SPARSE_DSV4","enable_adaptive_verification":true}'
         enable-cumem-allocator: true
         block-size: 256
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
