@@ -9628,4 +9628,4 @@
     - agentic-coding
   description:
     - "Install the pinned agentx-harness 1.0.7 PyPI release in each isolated client runtime instead of building the editable AgentX submodule. Invoke agentx profile, which selects the AgentX scenario by default."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3940
