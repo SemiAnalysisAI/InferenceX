@@ -1,11 +1,5 @@
 # Pipeline Architecture
 
-<div align="center">
-
-**English** | [中文](architecture_zh.md)
-
-</div>
-
 This page explains how a declared benchmark becomes a validated job, a runtime result, a GitHub Actions artifact, and finally a row consumed by InferenceX-app. It describes boundaries and invariants. The linked implementation remains authoritative for field-level behavior.
 
 

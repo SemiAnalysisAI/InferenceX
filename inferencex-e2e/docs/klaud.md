@@ -1,11 +1,5 @@
 # Klaud Cold auto-sweep
 
-<div align="center">
-
-**English** | [中文](klaud_zh.md)
-
-</div>
-
 [`klaud-plan.yml`](../../.github/workflows/klaud-plan.yml) reconciles recorded interrupted sessions, prepares candidates with Python, uses a read-only Claude review to exclude overlapping PRs, then calls [`klaud-candidate.yml`](../../.github/workflows/klaud-candidate.yml). One autonomous Klaud Cold session owns each candidate’s edits, diagnosis and repairs. The `finish` command verifies validation or performs cleanup and posts its completion receipt; the read-only Stop hook and diagnostics verify that receipt against GitHub. Recovery uses the next existing autosweep, with no second agent or additional workflow.
 
 The PR review resolves overlaps, target clusters and public baseline model names for a bounded candidate batch. Candidate execution owns upstream image research. Models and turn limits are set in `klaud-plan.yml` and `klaud-candidate.yml`. The agent's display name is **Klaud Cold**; workflow filenames, CLI, artifacts, branches and runtime environment variables use `klaud` / `KLAUD`. Existing candidate branches with the previous spelling still block duplicate selection. Configure `DASH_API_KEY` before dispatching; workflows pass it to the existing `KLAUD_DASHBOARD_API_KEY` runtime variable.
