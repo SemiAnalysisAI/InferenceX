@@ -9597,4 +9597,4 @@
     - "Add Qwen3.8-Flash-Next FP8 (Qwen/Qwen3.8-Flash-Next-FP8) AgentX on MI355X with vLLM native MTP, mirroring the B200 qwen3.8next-fp4-b200-sglang-agentic-mtp sweep: TP1, concurrency 1/4/8/16, no KV offloading, 256k-capped corpus."
     - "Use vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945. Three draft tokens, admission 2x concurrency, 262144 max model length, 16384 prefill chunk. VLLM_ROCM_USE_AITER is left unset: with it enabled the Qwen3.8 full-attention path loads an AITER MHA varlen JIT module that is not built in the tested environment."
     - "The 176B checkpoint is 124 GiB resident, so it runs on a single 288 GB MI355X."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3925
