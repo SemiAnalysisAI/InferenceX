@@ -320,10 +320,14 @@ jobs:
         name: canary-select
         needs: setup
         if: >-
-            (
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
-            )
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              (
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
+              )
+            }}
         runs-on: ubuntu-latest
         outputs:
             canary-config: ${{ steps.pick.outputs.canary-config }}
@@ -425,8 +429,12 @@ jobs:
         needs: setup
         if: >-
             ${{
-              (toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]') ||
-              (toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]')
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              (
+                (toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]') ||
+                (toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]')
+              )
             }}
         runs-on: ubuntu-latest
         outputs:
