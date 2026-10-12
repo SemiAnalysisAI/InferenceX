@@ -9567,7 +9567,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Repin MI355X DeepSeek-V4.1-Flash DSpark to the first ROCm 10.0 nightly with vllm-project/vllm#60397 (nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe) and enable its mono decode kernels (VLLM_ROCM_MONO_DECODE=1): two persistent launches a layer for decode steps of up to 48 rows, i.e. concurrency 8 with five DSpark drafts, at TP2 and TP4. Larger steps take the regular path."
-    - "Enable VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 (vllm-project/recipes#1061) for all-reduces above the quick-reduce size threshold."
-    - "Restore --max-num-batched-tokens 16384 at TP2 c64: vllm-project/vllm#58014 removed the profiling over-reservation the 8192 cap worked around. The ladder stays at concurrency 1-64."
+    - "Update the image from nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516 to nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe, the first ROCm 10.0 nightly with the DeepSeek-V4.1 mono decode kernels of vllm-project/vllm#60397, and update model.container to match. The image also brings vllm-project/vllm#59685, #56638, #60159 and #60389."
+    - "Enable the mono decode kernels (VLLM_ROCM_MONO_DECODE=1) at TP2 and TP4: a decode step of up to 48 rows, i.e. concurrency 1-8 with five DSpark drafts, runs each backbone layer as two persistent launches (30 of 40 layers whole, the other 10 the FFN launch only). Larger steps take the regular path, so C16-C64 are expected unchanged."
+    - "Enable VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 (vllm-project/recipes#1061) for tensor-parallel all-reduces above the quick-reduce size threshold."
+    - "Restore --max-num-batched-tokens 16384 at TP2 c64: vllm-project/vllm#58014 removed the profiling over-reservation the 8192 cap worked around. The prefill chunk is now 16384 at every point and the ladder stays at concurrency 1-64."
+    - "No data-type or precision change to the DSpark draft: vllm-project/vllm#60397 skips the draft layers (layer id >= num_hidden_layers), so the bundled DSpark draft of deepseek-ai/DeepSeek-V4.1-Flash runs on vLLM's regular path as shipped."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3690
