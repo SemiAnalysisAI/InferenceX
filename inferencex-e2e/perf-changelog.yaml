@@ -9540,6 +9540,56 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3778
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202610070333 to nightly_202610100929 (digest sha256:cc60ba06b28050a7fdec71e21f1853c782a9ec8850f031e84ebf0e49f3180974; ATOM 0.1.8.dev14+g73defd9b8, ROCm 7.2.4) and update model.container to match. The recipe, points and server settings are unchanged; upstream recipes/DeepSeek-V4.1-Flash-Agentic.md is unchanged between 7fc0926c6 and 73defd9b8."
+    - "ROCm/ATOM#2507 turns decoder SWA bounded replay on by default for DeepSeek-V4.1: a prefill runs layers 21..39 on each request's last 133 rows only, the same approximation as SGLang's --enable-decoder-swa-bounded-replay. Upstream reports +10.7% / +22.7% / +38.1% P90 interactivity at TP2 c16 / c32 / c64 on this AgentX workload, with no GSM8K or long-context retrieval change beyond noise."
+    - "ROCm/ATOM#2512 samples the DSpark Markov block from each TP rank's vocab shard instead of all-gathering the full logits (bit-identical ids; draft head 657 -> 302 us per decode step at TP2 c32). ROCm/ATOM#2513 packs the FP4 index logits by row visibility and moves BF16 decode to the two-source paged kernel (needs ROCm/aiter#6334). ROCm/ATOM#2495 fixes the FP4 sparse indexer output contract."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3901
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202609291501 to rocm/atom-dev:nightly_202610071700 (digest sha256:bb3912c372dda0c82fc6831afdd76e366a372d5e9fe223373499db63b06cce65)."
+    - "Move the C48, C64, C96 and C128 DEP points from RCCL expert parallelism to ATOM's MegaMoE backend (all2all-backend high-throughput, moe-backend mega), with EPLB at every point except C64."
+    - "Cap max-num-seqs at 128 from C128 up (C128 was 256, C256 was 512); C48, C64 and C96 keep admission at 2x CONC."
+    - "Run C256 and the new C384 on the same MegaMoE DEP setup with ATOM's lmcache_mp CPU KV tier: one LMCache server per node (1000 GB L1, LMCache 0.5.6.dev139+gf22dec28 as shipped in the image), started by srtctl's lmcache-server service, within a 1019 GB budget (dram-utilization 0.34)."
+    - "C1 to C16 are unchanged."
+    - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4-Pro-0813 runs as shipped."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3819
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516 to nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe, the first ROCm 10.0 nightly with the DeepSeek-V4.1 mono decode kernels of vllm-project/vllm#60397, and update model.container to match. The image also brings vllm-project/vllm#59685, #56638, #60159 and #60389."
+    - "Enable the mono decode kernels (VLLM_ROCM_MONO_DECODE=1) at TP2 and TP4: a decode step of up to 48 rows, i.e. concurrency 1-8 with five DSpark drafts, runs each backbone layer as two persistent launches (30 of 40 layers whole, the other 10 the FFN launch only). Larger steps take the regular path, so C16-C64 are expected unchanged."
+    - "Enable VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 (vllm-project/recipes#1061) for tensor-parallel all-reduces above the quick-reduce size threshold."
+    - "Restore --max-num-batched-tokens 16384 at TP2 c64: vllm-project/vllm#58014 removed the profiling over-reservation the 8192 cap worked around. The prefill chunk is now 16384 at every point and the ladder stays at concurrency 1-64."
+    - "No data-type or precision change to the DSpark draft: vllm-project/vllm#60397 skips the draft layers (layer id >= num_hidden_layers), so the bundled DSpark draft of deepseek-ai/DeepSeek-V4.1-Flash runs on vLLM's regular path as shipped."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3690
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-36768d1bfd39094681cdbc8cb37d4b31c0729c89 to vllm/vllm-openai-rocm:nightly-rocm100-81198e97ba7eee2a22540caaa756b7fdddcb4d93."
+    - "Sweep dcp1 concurrency 1 and dcp8 concurrency 1 GPU-resident, and dcp8 concurrency 4, 10, 12, 14, 16, 44 and 48 with the SimpleCPUOffloadConnector DRAM tier (224.875 GB/rank). This replaces dcp1 concurrency 1/4, dcp1 DRAM-offload concurrency 8-14 and dcp8 concurrency 44/48/70. The dcp8 points use the a2a DCP backend."
+    - "DSpark draft length per point: 7 at concurrency 1, 5 at 4, 4 at 10, 3 at 12, and 4 at 14, 16, 44 and 48 (concurrency 14 was 3). The throughput band (44, 48) previously had no speculative-config and now runs the 4-token DSpark draft. As at every draft point, agentic runs replace block rejection with the golden acceptance length for that draft length."
+    - "Admission is 2x concurrency. CUDA graphs capture every even size up to 2x concurrency x (1 + draft tokens), replacing the previous every-size lists (up to 8192 in the throughput band)."
+    - "Every point requests cudagraph_mode FULL_AND_PIECEWISE (the mid band was FULL) with breakable CUDA graphs disabled (VLLM_USE_BREAKABLE_CUDAGRAPH=0, previously 1 at concurrency 1 and 4). The AMD Kimi-K3 model has no torch.compile submodule, so vLLM overrides the mode to FULL_DECODE_ONLY at load, as the concurrency 1 and 14 server logs show."
+    - "Add stream-interval 10 and VLLM_ROCM_AITER_MLA_DCP_VERIFY=asm, which routes DCP multi-token verify through the AITER ASM round-robin decode, to every point."
+    - "Concurrency 1 (dcp1 and dcp8) adds quantization-config linear fp8_per_channel: vLLM quantizes the target's linear layers to FP8 W8A8 at load, except kv_b_proj, in_proj_qkvgfab, f_b_proj, fused_qkv_a_proj, self_attn.g_proj and layer 0 mlp.down_proj, which stay BF16. The routed experts stay MXFP4."
+    - "No change to the Inferact/Kimi-K3-DSpark draft's precision: its model config takes the speculative config's own quantization (unset) and never receives quantization-config, and get_draft_quant_config() returns None for K3DSparkModel, so its weights stay BF16 and its KV cache stays fp8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3833
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
   scenario-type:
     - agentic-coding
