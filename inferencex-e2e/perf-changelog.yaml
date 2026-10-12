@@ -9611,3 +9611,13 @@
     - "Concurrency 1 (dcp1 and dcp8) adds quantization-config linear fp8_per_channel: vLLM quantizes the target's linear layers to FP8 W8A8 at load, except kv_b_proj, in_proj_qkvgfab, f_b_proj, fused_qkv_a_proj, self_attn.g_proj and layer 0 mlp.down_proj, which stay BF16. The routed experts stay MXFP4."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: its model config takes the speculative config's own quantization (unset) and never receives quantization-config, and get_draft_quant_config() returns None for K3DSparkModel, so its weights stay BF16 and its KV cache stays fp8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3833
+
+- config-keys:
+    - qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a Qwen3.5 NVFP4 B300 Dynamo-SGLang AgentX configuration with aggregate MTP recipes for TP2/EP2, TP2, and TP4 worker layouts."
+    - "Use the pinned lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729 image and validate each recipe's MTP step count against the committed Qwen3.5 thinking-on golden acceptance-length curve."
+    - "Remove the SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE environment override from all four source recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3931
