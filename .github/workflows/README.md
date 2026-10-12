@@ -164,40 +164,11 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 `run-sweep.yml` sweeps only same-repository PRs that change
 `inferencex-e2e/perf-changelog.yaml`, using the appended entries as the matrix.
-Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc)
-instead. Apply exactly one primary sweep label; more than one fails
-`check-changelog`.
-
-| Label | Canary | Per-matrix fail-fast |
-| --- | --- | --- |
-| `full-sweep-fail-fast` (recommended) | Yes | Yes |
-| `full-sweep-enabled` | Yes | No |
-| `non-canary-full-sweep-enabled` | No | No |
-
-No label trims concurrency. For canary selection (some sweeps have no
-candidate) and label-change cancellation, see
+Apply exactly one primary label, normally `full-sweep-fail-fast`. Primary labels,
+the `all-evals` / `evals-only` / `agentx-fast` modifiers, canary selection, and
+label-change cancellation are owned by
 [CI procedures](../../inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels).
-
-## PR Eval Modifiers
-
-Use `all-evals` and/or `evals-only` with one primary sweep label. `full-sweep-fail-fast` is the strongly recommended primary. Use `full-sweep-enabled` only when jobs must keep running past a failure. `all-evals`
-covers every fixed-sequence config. Each multi-node topology runs all
-`conc-list` values on one engine. `evals-only` suppresses throughput. Together
-they run all evals only. The primary label still controls canary/fail-fast.
-Default full sweeps, including their default evals, and `all-evals` sweeps are
-reusable; [reuse is rejected](#reusing-an-approved-pr-full-sweep) while the PR
-carries `evals-only`, alone or with `all-evals`. Either modifier fails
-`check-changelog` when the changelog additions include `append-only: true` or
-`no-evals: true` entries.
-
-## AgentX Fast Mode
-
-Add `agentx-fast` alongside one primary sweep label to run one additional
-warmup request per AgentX lane after mandatory primers and a 20-minute profile
-for single- and multi-node AgentX throughput jobs. Fixed-sequence throughput
-and eval jobs retain their canonical settings. Adding or removing the modifier
-restarts the active sweep. [Reuse is rejected](#reusing-an-approved-pr-full-sweep)
-while the PR carries `agentx-fast`.
+Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc).
 
 ## Trusted External-Fork Sweep Dispatch (PoC)
 

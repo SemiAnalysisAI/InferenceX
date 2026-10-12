@@ -728,16 +728,19 @@ class TestManifestGates:
 
 
 @pytest.mark.parametrize("utilization", [("", ""), ("75.5", "0.9")])
-def test_v2_samples_preserve_energy(tmp_path, utilization):
-    """The pinned producer's optional utilization columns preserve board energy."""
+@pytest.mark.parametrize("temperature", [None, "", "0", "65.5"])
+def test_optional_samples_preserve_energy(tmp_path, utilization, temperature):
+    """Optional utilization and temperature columns preserve board energy."""
     pkg = build_package(tmp_path)
     path = pkg.power_dir / "samples.csv"
     with path.open(newline="") as handle:
         rows = list(csv.reader(handle))
     with path.open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(rows[0] + ["gpu_util_pct", "sm_active"])
-        writer.writerows([[2, *row[1:], *utilization] for row in rows[1:]])
+        writer.writerow(rows[0] + ["gpu_util_pct", "sm_active"] + (["temperature_c"] if temperature is not None else []))
+        version = 3 if temperature is not None else 2
+        extra = [temperature] if temperature is not None else []
+        writer.writerows([[version, *row[1:], *utilization, *extra] for row in rows[1:]])
     assert pkg.run(require_power=True) == 0
     assert pkg.agg()["power_valid"] == 1
     assert pkg.agg()["total_gpu_energy_j"] == pytest.approx(84000)
@@ -759,4 +762,16 @@ def test_v2_samples_reject_mixed_versions_and_invalid_utilization(tmp_path, row)
         writer.writerow(row)
     rows, reasons = apm.read_samples(path)
     assert not rows
+    assert reasons == ("samples_csv_malformed",)
+
+
+@pytest.mark.parametrize("temperature", ["nan", "inf", "bad", "-300", "9223372036854775794"])
+def test_v3_samples_reject_invalid_temperature(tmp_path, temperature):
+    path = tmp_path / "samples.csv"
+    path.write_text(
+        "schema_version,timestamp_unix,scrape_seq,hostname,gpu_index,gpu_uuid,power_w,gpu_util_pct,sm_active,temperature_c\n"
+        f"3,1000,0,node-a,0,GPU-a,400,,,{temperature}\n"
+    )
+    rows, reasons = apm.read_samples(path)
+    assert rows == ()
     assert reasons == ("samples_csv_malformed",)

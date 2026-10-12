@@ -183,11 +183,9 @@ Conventions:
 
   Recipes touched: `key1`, `key2`
 
-  ## Test plan
-  - [ ] full-sweep-fail-fast sweep passes.
-
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
+
+  Follow [PR descriptions](../../CONTRIBUTING.md#pr-descriptions): keep administrative sections collapsed by default, omit pending-validation boilerplate, and add validation evidence only after an actual integration or end-to-end run.
 
 ## Step 5 — finish
 

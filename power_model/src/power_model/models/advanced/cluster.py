@@ -29,9 +29,16 @@ class Cluster(FrozenModel):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> ITPowerBreakdown:
         per_gpu = validate_watts(gpu_level_power_per_gpu)
+        if cpu_and_dram_measured_power_per_socket is not None and not any(
+            group.system.has_grace_sockets for group in self.systems
+        ):
+            raise ValueError(
+                "cpu_and_dram_measured_power_per_socket requires a system with Grace sockets"
+            )
         return ITPowerBreakdown(
             scope="cluster",
             gpu_count=self.gpu_count,
@@ -39,7 +46,11 @@ class Cluster(FrozenModel):
                 PowerComponentBreakdown.group(
                     "GPU systems",
                     tuple(
-                        group.estimate_it_power(per_gpu, operating_state=operating_state)
+                        group.estimate_it_power(
+                            per_gpu,
+                            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
+                            operating_state=operating_state,
+                        )
                         for group in self.systems
                     ),
                 ),

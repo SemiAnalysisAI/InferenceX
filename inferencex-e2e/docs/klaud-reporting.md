@@ -1,11 +1,5 @@
 # Klaud Cold reports
 
-<div align="center">
-
-**English** | [中文](klaud-reporting_zh.md)
-
-</div>
-
 [`infx/klaud/reporting.py`](../infx/klaud/reporting.py) owns the schemas, arithmetic and rendering. The agent supplies concise observations and verified evidence, not hand-calculated deltas. The PR body contains only the goal and baseline. Comments own attempts; the lifecycle receipt owns verified completion. Keep English visible and put Simplified Chinese in one collapsed `<details><summary>中文</summary>` section. Numeric tables appear once; Chinese prose refers to those tables. Apply this layout to lifecycle comments too. No mentions, review requests, raw logs, private telemetry or limitations section.
 
 ## Commands

@@ -5,7 +5,7 @@ file with envsubst, substituting REPO, PR_NUMBER, HEAD_SHA, SIGNOFF_AUTHOR,
 SIGNOFF_KIND and SIGNOFF_FETCH_CMD (write them as shell-style placeholders).
 It lives outside the workflow YAML because GitHub caps a workflow expression
 at 21000 characters and this prompt outgrew it. Keep the checks here in sync
-with inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md, per inferencex-e2e/docs/documentation-procedures.md.
+with inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md.
 -->
 
 REPO: ${REPO}

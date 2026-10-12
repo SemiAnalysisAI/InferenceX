@@ -466,6 +466,7 @@ nccl_ep_install() {
   # unquoted on purpose: it carries two whitespace-separated pip specs.
   # shellcheck disable=SC2086
   python3 -m pip install -q --disable-pip-version-check --no-input \
+      --pre --extra-index-url https://pypi.nvidia.com \
       --target "$site" $COLLX_NCCL_EP_SPEC >&2 2>&1 \
     || { collx_log "ERROR: NCCL EP wheel install failed"; return 1; }
   nccl_ep_activate "$root" \
