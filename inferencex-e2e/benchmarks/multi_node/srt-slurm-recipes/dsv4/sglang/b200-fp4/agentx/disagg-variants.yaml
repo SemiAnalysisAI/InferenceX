@@ -13,7 +13,7 @@ base:
     model:
       repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
     container:
-      image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
+      image: "lmsysorg/sglang:nightly-dev-20260929-79cafec0@sha256:0f075735a6bf913a7cc1cd7ece4f526ae8af70fc5b88fdc02d9efe92a61cf3ae"
     frameworks:
       dynamo: "1.5.0.dev20260914"
   dynamo:
