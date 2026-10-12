@@ -9618,5 +9618,5 @@
     - agentic-coding
   description:
     - "Update the image from rocm/atom-dev:nightly_202610100929 to nightly_202610121516 (digest sha256:a60811a8467b43e3e50e9e9eb8cec34f68b7bca03f8c6dbd6a0ff813dde49d4c; ATOM 0.1.8.dev29+ga0527c9db, ROCm 7.2.4) and update model.container and the AToMesh frontend image to match. Upstream recipes/DeepSeek-V4.1-Flash-Agentic.md is unchanged between 73defd9b8 and a0527c9db, so server settings are unchanged. The image adds ROCm/ATOM#2545 (DeepSeek-V4.1 SWA bounded replay per the V4.1 report and mono token-parallel decode)."
-    - "Drop TP2 concurrency 5 and 128 and TP4 concurrency 4 and 6. TP2 runs concurrency [1, 2, 4, 6, 8, 16, 32, 64] and TP4 runs [1, 5, 8, 32]."
+    - "Drop TP2 concurrency 5 and 128 and TP4 concurrency 4, 5 and 6. TP2 runs concurrency [1, 2, 4, 6, 8, 16, 32, 64] and TP4 runs [1, 8, 32]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3928

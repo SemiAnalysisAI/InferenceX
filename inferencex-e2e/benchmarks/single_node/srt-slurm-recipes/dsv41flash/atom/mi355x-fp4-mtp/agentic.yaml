@@ -144,14 +144,6 @@ override_tp4_c1:
     env:
       CONC: '1'
 
-override_tp4_c5:
-  roles:
-    agg:
-      gpus: 4
-  benchmark:
-    env:
-      CONC: '5'
-
 override_tp4_c8:
   roles:
     agg:
