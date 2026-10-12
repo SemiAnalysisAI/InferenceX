@@ -21,9 +21,6 @@ import yaml
 from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
-# Defined here: srtctl's venv runs this module on Python 3.10, so it cannot import infx.clusters.
-FABRIC_REFERENCE = "@fabric."
-
 # Keyed by (agentic, multinode).
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
@@ -78,6 +75,7 @@ BOUND_ENV = {
         "ENABLE_AGENTX_POWER",
     ),
 }
+FABRIC_REFERENCE = "@fabric."
 
 
 def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict[str, Any]:

@@ -14,7 +14,7 @@ import yaml
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
 from infx.srt_slurm.variants import deep_merge, expand_variants
-from infx.srt_slurm.workload import FABRIC_REFERENCE
+from infx.srt_slurm.workload import resolve_fabric
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
@@ -299,18 +299,6 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
     raise ValueError(f"Recipe has no worker roles: {recipe_path}")
 
 
-def _strings(node: Any, where: str = "") -> Iterable[tuple[str, str]]:
-    """Every string value under ``node``, with its dotted path."""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            yield from _strings(value, f"{where}.{key}" if where else str(key))
-    elif isinstance(node, list):
-        for index, value in enumerate(node):
-            yield from _strings(value, f"{where}[{index}]")
-    elif isinstance(node, str):
-        yield where, node
-
-
 def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
     """The fabric of each cluster that runs ``label``: a scheduling label or one runner."""
     labels = runner_labels(runner_data)
@@ -327,21 +315,21 @@ def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
 
 def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data: dict) -> None:
     """Fail a recipe whose ``'@fabric.<name>'`` values name no fabric field, or one that a
-    cluster ``label`` runs on does not set. The launcher still resolves them; this only reads."""
+    cluster ``label`` runs on does not set."""
     path, _, selector = srt_recipe.partition(":")
-    fabrics = _label_fabrics(label, runner_data)
-    for _, recipe in expand_variants(yaml.safe_load((root / path).read_text()), selector or None):
-        for where, value in _strings(recipe):
-            if FABRIC_REFERENCE not in value:
-                continue
-            name = Fabric.field_name(value, f"{srt_recipe}: {where}")
-            if unset := sorted(
-                c for c, fabric in fabrics.items() if fabric.rendered()[name] is None
-            ):
-                raise ValueError(
-                    f"{srt_recipe}: {where}: runner {label!r} reaches clusters {unset} "
-                    f"that set no srt-slurm.fabric.{name}"
-                )
+    variants = expand_variants(yaml.safe_load((root / path).read_text()), selector or None)
+    fabrics = {
+        f"cluster {cluster_id!r}": fabric.rendered()
+        for cluster_id, fabric in _label_fabrics(label, runner_data).items()
+    }
+    # A runner no cluster label lists, such as a bare cluster id, still has its names checked.
+    fabrics = fabrics or {f"runner {label!r}": dict.fromkeys(Fabric().rendered(), "")}
+    for reach, fabric in fabrics.items():
+        for _, recipe in variants:
+            try:
+                resolve_fabric(recipe, fabric)
+            except ValueError as error:
+                raise ValueError(f"{srt_recipe}: {error} ({reach})") from None
 
 
 def worker_node_count(

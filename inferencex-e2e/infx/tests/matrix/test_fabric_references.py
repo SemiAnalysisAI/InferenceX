@@ -17,8 +17,8 @@ MASTER = {"fixture": {
 }}  # fmt: skip
 
 
-def generate(project, reference: str, fabrics: dict[str, dict]) -> list[dict]:
-    """The fixture rows, the selected variant's prefill UCX devices set to ``reference``."""
+def generate(project, reference: str, fabrics: dict[str, dict], runner: str = "h200") -> list[dict]:
+    """The fixture rows on ``runner``, the selected variant's prefill UCX devices set to ``reference``."""
     recipe = {
         "base": {"schema": 2, "engine": "sglang", "roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 1}}},
         # The unselected variant's typo does not concern this row.
@@ -27,7 +27,7 @@ def generate(project, reference: str, fabrics: dict[str, dict]) -> list[dict]:
     }  # fmt: skip
     files = {
         "benchmarks/multi_node/srt-slurm-recipes/fixture/bundle.yaml": recipe,
-        "configs/master.yaml": MASTER,
+        "configs/master.yaml": {"fixture": {**MASTER["fixture"], "runner": runner}},
     }
     for path, data in files.items():
         (project / path).parent.mkdir(parents=True, exist_ok=True)
@@ -58,12 +58,17 @@ def test_a_reference_every_reachable_cluster_sets_generates_the_row_as_written(t
 @pytest.mark.parametrize(("reference", "fabrics", "message"), [
     ("@fabric.ucx-net-device", {"h200-a": DEVICES},
      r"override_wide: roles\.prefill\.env\.UCX_NET_DEVICES: '@fabric\.ucx-net-device' is not a whole"),
-    ("mlx5_0:1,@fabric.ucx-net-devices", {"h200-a": DEVICES}, "is not a whole '@fabric"),
     ("@fabric.ucx-net-devices", {"h200-a": DEVICES, "h200-b": {}},
-     r"runner 'h200' reaches clusters \['h200-b'\] that set no srt-slurm\.fabric\.ucx-net-devices"),
+     r"this cluster sets no srt-slurm\.fabric\.ucx-net-devices \(cluster 'h200-b'\)"),
 ])  # fmt: skip
 def test_a_reference_no_fabric_field_or_reachable_cluster_serves_fails_generation(
     tmp_path, reference, fabrics, message
 ):
     with pytest.raises(ValueError, match=message):
         generate(tmp_path, reference, fabrics)
+
+
+def test_a_runner_no_cluster_label_lists_still_has_its_reference_names_checked(tmp_path):
+    # Master configs may name a bare cluster id as the runner; no label maps it to a fabric.
+    with pytest.raises(ValueError, match=r"'@fabric\.ucx-net-device' is not a whole .* \(runner 'h200-a'\)"):
+        generate(tmp_path, "@fabric.ucx-net-device", {"h200-a": DEVICES}, runner="h200-a")

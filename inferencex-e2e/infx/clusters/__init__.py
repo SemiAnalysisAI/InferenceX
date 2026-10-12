@@ -24,6 +24,7 @@ from pydantic import (
 from infx.clusters.base import Record, SchedulerSettings
 from infx.clusters.slurm import Fabric, SlurmSettings
 from infx.config import RUNNER_CONFIG, repository_root
+from infx.srt_slurm.workload import resolve_fabric
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 
@@ -115,11 +116,9 @@ class Cluster(Record):
         # Env values may take the srt-slurm profile's fabric: '@fabric.<name>'.
         srt = getattr(settings, "srt_slurm", None)
         fabric = srt.fabric if srt is not None else Fabric()
-        env = {
-            name: fabric.resolve(value, f"env.{name}") if isinstance(value, str) else value
-            for name, value in (data.get("env") or {}).items()
-        }
-        return {**data, "env": env, "scheduler_settings": settings}
+        if "env" in data:
+            data["env"] = resolve_fabric(data["env"], fabric.rendered(), "env")
+        return {**data, "scheduler_settings": settings}
 
     @model_validator(mode="after")
     def _known_references(self) -> Self:

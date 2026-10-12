@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 from pydantic import AfterValidator, Field, PlainSerializer, field_validator, model_validator
 
 from infx.clusters.base import Record, SchedulerSettings, Visibility, Volume
-from infx.srt_slurm.workload import FABRIC_REFERENCE
+from infx.srt_slurm.workload import resolve_fabric
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -175,27 +175,6 @@ class Fabric(Record):
         """Every field as a recipe reads it, by name; None where the cluster sets none."""
         return self.model_dump(by_alias=True)
 
-    @classmethod
-    def field_name(cls, value: str, where: str) -> str:
-        """The field a whole ``'@fabric.<name>'`` ``value`` names; anything else is an error."""
-        names = [field.alias for field in cls.model_fields.values()]
-        name = value.removeprefix(FABRIC_REFERENCE)
-        if name == value or name not in names:
-            raise ValueError(
-                f"{where}: {value!r} is not a whole '@fabric.<name>' value naming one of: "
-                + ", ".join(names)
-            )
-        return name
-
-    def resolve(self, value: str, where: str) -> str:
-        """``value``, or this fabric's rendering of the field it references."""
-        if FABRIC_REFERENCE not in value:
-            return value
-        name = self.field_name(value, where)
-        if (resolved := self.rendered()[name]) is None:
-            raise ValueError(f"{where}: srt-slurm.fabric sets no {name}")
-        return resolved
-
 
 class SrtSlurmSettings(Record):
     """Cluster-owned srtslurm.yaml facts; job-specific values are added by the driver."""
@@ -236,12 +215,7 @@ class SrtSlurmSettings(Record):
         if not isinstance(setup, dict) or not isinstance(setup.get("env"), dict):
             return data
         fabric = Fabric.model_validate(data.get("fabric") or {})
-        env = {
-            name: fabric.resolve(value, f"host-setup.env.{name}")
-            if isinstance(value, str)
-            else value
-            for name, value in setup["env"].items()
-        }
+        env = resolve_fabric(setup["env"], fabric.rendered(), "host-setup.env")
         return {**data, "host-setup": {**setup, "env": env}}
 
 
