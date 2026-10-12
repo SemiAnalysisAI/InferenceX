@@ -7332,10 +7332,10 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg:
 
 # GLM-5.2 B300 NVFP4 AgentX with EAGLE/MTP speculative decoding, following the
 # AgentX speculative-decoding policy in docs/MODELS.md. SGLang EAGLE runs off
-# GLM-5.2's built-in nextn head (num-steps 3,
-# eagle-topk 1, 4 draft tokens = 3 speculative tokens), with acceptance pinned
-# to the golden AL 2.99 (infx/golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
-# K=3) through SGLANG_SIMULATE_ACC_*. The pinned nightly includes FlashInfer
+# GLM-5.2's built-in nextn head (eagle-topk 1): K=5 / 6 draft tokens at
+# c1/c4/c8/c20, K=3 / 4 draft tokens elsewhere. The connector selects golden
+# AL 3.61 or 2.99 respectively from infx/golden_al_distribution/glm5.2_mtp.yaml
+# for thinking_on; evals retain real verification. The pinned nightly includes FlashInfer
 # 0.6.18's BF16 TRTLLM MoE allocation fix for small-batch Blackwell execution
 # in GLM-5.2's unquantized EAGLE draft head.
 #
