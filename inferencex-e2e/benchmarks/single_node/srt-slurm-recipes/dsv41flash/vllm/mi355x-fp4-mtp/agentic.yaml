@@ -6,10 +6,13 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # Repinned to a nightly build that includes vllm-project/vllm#58671
-    # (paged MXFP4 sparse indexer), #58655 (mHC fused Triton seams) and
-    # #53492 (sparse MLA Gluon kernel).
-    container: vllm/vllm-openai-rocm:nightly-rocm100-ac9126e58aa7bbab1856ba6593ba4d5003fea516
+    # The first ROCm 10.0 nightly carrying vllm-project/vllm#60397 (DSv4.1
+    # mono decode kernels), which the environment below enables. It also
+    # brings #59685 (AITER MegaMoEV2 for DeepSeek V4), #56638 (shared
+    # combine_topk_swa_indices kernel in place of the Torch prefill combine),
+    # #60159 (native merge_attn_states on gfx950) and #60389 (MLA derived
+    # weights kept in place on weight reload).
+    container: vllm/vllm-openai-rocm:nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -62,6 +65,13 @@ base:
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
+        # Mono decode kernels (vllm-project/vllm#60397): two persistent
+        # launches a layer for decode steps of up to 48 rows (c8 with five
+        # drafts); larger steps take the regular path.
+        VLLM_ROCM_MONO_DECODE: '1'
+        # INT4 quick all-reduce above its size threshold
+        # (vllm-project/recipes#1061).
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_TRITON_LOG_LEVEL: ERROR
         VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
@@ -80,11 +90,10 @@ base:
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point (c128 excluded for both TP2 and TP4). Engram tables
-# move to pinned host memory at TP2, where resident tables leave too little
-# KV. Graph capture covers 2x CONC x (1 + 5 drafts). The prefill chunk shrinks
-# at TP2 from c64 to buy KV room, and where it drops below 1024 x 6 slots the
-# scheduler is capped at the captured shape.
+# One variant per point, concurrency 1 through 64 on both TP arms (c128 and
+# c192 excluded). Engram tables move to pinned host memory at TP2, where
+# resident tables leave too little KV. Graph capture covers 2x CONC x
+# (1 + 5 drafts). The prefill chunk is the upstream 16384 everywhere.
 override_tp4_c1:
   roles:
     agg:
@@ -262,7 +271,7 @@ override_tp2_c64:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 16384
   benchmark:
     env:
       CONC: '64'
