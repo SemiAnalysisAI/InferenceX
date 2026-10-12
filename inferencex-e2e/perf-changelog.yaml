@@ -9611,3 +9611,18 @@
     - "Concurrency 1 (dcp1 and dcp8) adds quantization-config linear fp8_per_channel: vLLM quantizes the target's linear layers to FP8 W8A8 at load, except kv_b_proj, in_proj_qkvgfab, f_b_proj, fused_qkv_a_proj, self_attn.g_proj and layer 0 mlp.down_proj, which stay BF16. The routed experts stay MXFP4."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: its model config takes the speculative config's own quantization (unset) and never receives quantization-config, and get_draft_quant_config() returns None for K3DSparkModel, so its weights stay BF16 and its KV cache stays fp8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3833
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1, TP4 c4, TP4 c8 and DEP8 c384 recipes, plus disaggregated 1P1D DEP8 c64/c240 and 1P2D DEP8 c64 recipes."
+    - "TP4 c8 adds a HiCache DRAM tier (ratio 2.75, write_through, direct I/O, page_first_direct, as in the B200 TP8 AgentX recipe on the same image) because TP4 c4 already fills about 60% of the GPU KV pool. 1P2D DEP8 c64 is the 1P1D c64 recipe with a second decode worker, which halves each decode rank's load."
+    - "The aggregate DEP8 c384 recipe follows the single-node SGLang DEP8 c384 point (attention DP8 + EP8 Mega-MoE, FP4 indexer, prefill delayer with interval 20, chunked prefill 65536, max-running-requests 768, mem-fraction-static 0.88, HiCache ratio 3 write_back DRAM tier) on the newer image, with cuda-graph-max-bs-decode set to the 96-request per-rank cap (768 / 8), behind the Dynamo KV router with per-DP-rank KV events and session affinity."
+    - "Mega-MoE uses the default FP8xFP4 kernels in every DEP8 recipe; the W4A4 MXFP4 Mega-MoE path is not enabled."
+    - "Use NIXL with the LIBFABRIC backend for disaggregated KV transfer over the DSXE EFA fabric. The pinned image runs as shipped, with no setup script, no package changes and no explicit host EFA/OFI mounts."
+    - "Use the DSXE cluster's 24 CPUs per GPU, HiCache ratio 3, decode max-running-requests at twice concurrency, and exclude the known degraded DSXE nodes."
+    - "Serve B300 DSXE Dynamo+SGLang DeepSeek-V4-Pro-0813 weights from the node-local NVMe copy (DeepSeek-V4-Pro-0813@scratch, as for vLLM) instead of the shared /data/models copy, which slowed startup by hours when several points loaded concurrently."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3932
