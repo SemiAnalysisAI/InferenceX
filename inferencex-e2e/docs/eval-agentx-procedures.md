@@ -1,11 +1,5 @@
 # Evaluation and AgentX Procedures
 
-<div align="center">
-
-**English** | [中文](eval-agentx-procedures_zh.md)
-
-</div>
-
 
 Use this page to add and run graded evals, operate AgentX trace replays, preserve evidence, and decide whether a long run should continue. Commands assume `inferencex-e2e/` as the working directory and replace values in `<ANGLE_BRACKETS>`.
 
