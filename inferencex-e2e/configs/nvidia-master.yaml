@@ -6858,7 +6858,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [64]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
         prefill:
           num-worker: 1
           tp: 8
@@ -6874,7 +6874,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [128]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
         prefill:
           num-worker: 1
           tp: 8
@@ -6890,7 +6890,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [256]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
         prefill:
           num-worker: 1
           tp: 16
@@ -6906,7 +6906,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [768]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
         prefill:
           num-worker: 2
           tp: 16
@@ -6922,7 +6922,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [1024]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
         prefill:
           num-worker: 2
           tp: 16
@@ -6938,7 +6938,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
       - spec-decoding: draft_model
         conc-list: [1280]
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
         prefill:
           num-worker: 2
           tp: 16
