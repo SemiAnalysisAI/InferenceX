@@ -19,8 +19,8 @@ from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 @pytest.fixture
 def point(tmp_path, monkeypatch):
     """A fixed-sequence fragment, the point binding its first variant, and the shared blocks."""
-    for workload, client in (("fixed-sequence", "client.sh"), ("agentic", "srt_agentic.sh")):
-        shared = tmp_path / f"configs/srt-recipes/{workload}-single.yaml"
+    for block, client in (("fixed-sequence-single", "client.sh"), ("agentic", "srt_agentic.sh")):
+        shared = tmp_path / f"configs/srt-recipes/{block}.yaml"
         shared.parent.mkdir(parents=True, exist_ok=True)
         shared.write_text(yaml.safe_dump({"benchmark": {"type": "custom", "command": f"bash {client}"}}))
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))

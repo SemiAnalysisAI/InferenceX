@@ -54,8 +54,7 @@ MASTER = {
 }  # fmt: skip
 SHARED = {
     "fixed-sequence-single.yaml": {"benchmark": {"type": "custom", "command": "bash client.sh"}},
-    "agentic-single.yaml": {"benchmark": {"type": "custom", "command": "bash srt_agentic.sh"}},
-    "agentic-multi.yaml": {"benchmark": {"type": "custom", "command": "bash srt_agentic.sh"}},
+    "agentic.yaml": {"benchmark": {"type": "custom", "command": "bash srt_agentic.sh"}},
     "telemetry-dcgm.yaml": {"telemetry": {"enabled": True, "dcgm_exporter": {
         "container_image": "dcgm-exporter", "command": "dcgm-exporter --address :{port}",
     }}},
