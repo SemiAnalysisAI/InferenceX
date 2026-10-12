@@ -135,7 +135,7 @@ AGENTX_POINTS = {("agentx", "agentx.yaml:override_bench", 2)}
         MULTI_POINTS, id="multi-node-shared-block",
     ),
     pytest.param(
-        "configs/srt-recipes/agentic-multi.yaml",
+        "configs/srt-recipes/agentic.yaml",
         lambda block: block["benchmark"].update(env={"EXTRA": "1"}),
         AGENTX_POINTS, id="agentx-shared-block",
     ),
