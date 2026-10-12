@@ -87,9 +87,7 @@ def select_recipe(
     errors = []
     for name, recipe in recipes:
         try:
-            recipe = bind_workload(
-                recipe, environment, agentic=agentic, multinode=False, source=Path(path)
-            )
+            recipe = bind_workload(recipe, environment, agentic=agentic, multinode=False)
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")

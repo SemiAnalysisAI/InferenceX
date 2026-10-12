@@ -229,7 +229,7 @@ def parse_concurrencies(conc_list: str) -> list[int]:
 
 
 def _master_version(
-    environment: Mapping[str, str], component: tuple[str, str], source: Path, installer: str
+    environment: Mapping[str, str], component: tuple[str, str], installer: str
 ) -> str:
     """The master version of the component ``installer`` installs; the point must declare it."""
     field, name = component
@@ -237,24 +237,24 @@ def _master_version(
     metadata = parse_component_metadata(environment.get(variable), variable, version_optional=True)
     if metadata is None or metadata["name"] != name or "version" not in metadata:
         raise ValueError(
-            f"{source}: {installer} installs {name}, so the master config must declare "
+            f"{installer} installs {name}, so the master config must declare "
             f"{field} {{name: {name}, version: ...}}; the point has {metadata or 'none'}"
         )
     return metadata["version"]
 
 
-def _bind_components(bound: dict[str, Any], environment: Mapping[str, str], source: Path) -> None:
+def _bind_components(bound: dict[str, Any], environment: Mapping[str, str]) -> None:
     """Write the master version of each component a repo script installs where the script
     runs: the top-level environment for setup_script, a service's env for its preamble
     (services do not inherit environment). A SETUP_PIP_PACKAGES vllm-router pin must be the
     master router's."""
     if (script := bound.get("setup_script")) in INSTALLERS:
-        version = _master_version(environment, INSTALLERS[script], source, script)
+        version = _master_version(environment, INSTALLERS[script], script)
         bound.setdefault("environment", {})[VERSION_ENV[INSTALLERS[script][0]]] = version
     for service in bound.get("services") or []:
         for script, component in INSTALLERS.items():
             if f"/configs/{script}" in str(service.get("preamble") or ""):
-                version = _master_version(environment, component, source, script)
+                version = _master_version(environment, component, script)
                 service.setdefault("env", {})[VERSION_ENV[component[0]]] = version
     envs = [bound.get("environment"), (bound.get("frontend") or {}).get("env")]
     envs += [(role or {}).get("env") for role in (bound.get("roles") or {}).values()]
@@ -264,9 +264,9 @@ def _bind_components(bound: dict[str, Any], environment: Mapping[str, str], sour
             if re.sub(r"[-_.]+", "-", package).lower() != "vllm-router":
                 continue
             pin = f"SETUP_PIP_PACKAGES {spec}"
-            version = _master_version(environment, INSTALLERS["vllm-router.sh"], source, pin)
+            version = _master_version(environment, INSTALLERS["vllm-router.sh"], pin)
             if spec != f"{package}=={version}":
-                raise ValueError(f"{source}: {pin} is not the master router {version}")
+                raise ValueError(f"{pin} is not the master router {version}")
 
 
 def bind_workload(
@@ -275,12 +275,10 @@ def bind_workload(
     *,
     agentic: bool,
     multinode: bool,
-    source: Path,
     client_env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Write the matrix point's values, the master versions of the components repo scripts
-    install, and the launcher's client paths (``client_env``) into a selected variant;
-    ``source`` names the fragment in errors.
+    install, and the launcher's client paths (``client_env``) into a selected variant.
 
     Call after variant selection: binding a zip group would detach its concurrency
     from the tuning it pairs with.
@@ -334,7 +332,7 @@ def bind_workload(
     # srtctl derives power-telemetry windows from benchmark.concurrencies.
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
-    _bind_components(bound, environment, source)
+    _bind_components(bound, environment)
     return bound
 
 
@@ -358,12 +356,7 @@ def bind_multinode(
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]
     return name, bind_workload(
-        selected,
-        environment,
-        agentic=agentic,
-        multinode=True,
-        client_env=client_env,
-        source=Path(path),
+        selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
 
 
