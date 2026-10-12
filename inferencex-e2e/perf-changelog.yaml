@@ -9530,6 +9530,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3782
 
 - config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use five EAGLE speculative steps and six draft tokens at concurrency 1, 4, 8, and 20 on GLM-5.2 NVFP4 B300 SGLang."
+    - "Keep three speculative steps and four draft tokens at the other concurrencies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3890
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
