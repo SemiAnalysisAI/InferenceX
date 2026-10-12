@@ -1518,6 +1518,20 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/vllm/mi355x-fp4-mtp/agentic.yaml }
 
+qwen3.8next-fp8-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945
+  model: Qwen/Qwen3.8-Flash-Next-FP8
+  model-prefix: qwen3.8next
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.6
+      search-space:
+      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16], srt-recipe: benchmarks/single_node/srt-slurm-recipes/qwen3.8next/vllm/mi355x-fp8-mtp/agentic.yaml }
+
 # DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.
 # Five-token DSpark uses golden AL 3.51 for throughput and real acceptance for eval.
 dsv41flash-fp4-mi355x-atom-agentic-dspark:

@@ -1,0 +1,94 @@
+# Qwen3.8-Flash-Next FP8 AgentX on MI355X via vLLM with native MTP. The 176B
+# fine-grained FP8 checkpoint (124 GiB resident) fits on one 288 GB GPU, so the
+# recipe is TP1, matching the B200 NVFP4 SGLang recipe.
+base:
+  schema: 2
+  name: qwen3.8next-fp8-mi355x-vllm-agentic
+  model:
+    path: hf:Qwen/Qwen3.8-Flash-Next-FP8
+    container: vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945
+    precision: fp8
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      args:
+        served-model-name: Qwen/Qwen3.8-Flash-Next-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 1
+        gpu-memory-utilization: 0.9
+        # 256k-capped corpus, within the model's 262144 context.
+        max-model-len: 262144
+        max-num-batched-tokens: 16384
+        reasoning-parser: qwen3
+        enable-auto-tool-choice: true
+        tool-call-parser: qwen3_coder
+        # Native MTP, 3 draft tokens (mean acceptance length about 2.3 on GSM8K).
+        speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+        disable-uvicorn-access-log: true
+      env:
+        OMP_NUM_THREADS: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+        PYTHONUNBUFFERED: '1'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      MODEL: Qwen/Qwen3.8-Flash-Next-FP8
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point; admission is 2x CONC.
+
+override_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+  benchmark:
+    env:
+      CONC: '16'

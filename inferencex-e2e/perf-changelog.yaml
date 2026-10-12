@@ -9588,3 +9588,13 @@
     - "Concurrency 1 (dcp1 and dcp8) adds quantization-config linear fp8_per_channel: vLLM quantizes the target's linear layers to FP8 W8A8 at load, except kv_b_proj, in_proj_qkvgfab, f_b_proj, fused_qkv_a_proj, self_attn.g_proj and layer 0 mlp.down_proj, which stay BF16. The routed experts stay MXFP4."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: its model config takes the speculative config's own quantization (unset) and never receives quantization-config, and get_draft_quant_config() returns None for K3DSparkModel, so its weights stay BF16 and its KV cache stays fp8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3833
+
+- config-keys:
+    - qwen3.8next-fp8-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next FP8 (Qwen/Qwen3.8-Flash-Next-FP8) AgentX on MI355X with vLLM native MTP, mirroring the B200 qwen3.8next-fp4-b200-sglang-agentic-mtp sweep: TP1, concurrency 1/4/8/16, no KV offloading, 256k-capped corpus."
+    - "Use vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945. Three draft tokens, admission 2x concurrency, 262144 max model length, 16384 prefill chunk. VLLM_ROCM_USE_AITER is left unset: with it enabled the Qwen3.8 full-attention path loads an AITER MHA varlen JIT module that is not built in the tested environment."
+    - "The 176B checkpoint is 124 GiB resident, so it runs on a single 288 GB MI355X."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
