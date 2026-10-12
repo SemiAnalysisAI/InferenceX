@@ -2,31 +2,27 @@
 
 import yaml
 
-from infx.launch.drivers.srt.recipe import add_dist_timeout, rename_job
-
-RECIPE = """name: "upstream"
-roles:
-  prefill:
-    name: keep-me
-    args:
-      watchdog-timeout: 600
-      tp: 4
-health_check:
-  max_attempts: 1440
-
-  interval_seconds: 10
-benchmark:
-  type: sa-bench
-"""
+from infx.launch.drivers.srt.recipe import prepare_recipe
 
 
-def test_rename_touches_only_the_top_level_name():
-    renamed = yaml.safe_load(rename_job(RECIPE, "runner_00"))
-    assert renamed["name"] == "runner_00"
-    assert renamed["roles"]["prefill"]["name"] == "keep-me"
+def test_the_job_names_the_run_and_gives_each_watchdog_role_the_dist_timeout(tmp_path):
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(yaml.safe_dump({
+        "schema": 2, "name": "upstream",
+        "roles": {
+            "prefill": {"name": "keep-me", "args": {"watchdog-timeout": 600, "tp": 4}},
+            "decode": {"args": {"tp": 4}},
+        },
+        "benchmark": {"type": "sa-bench"},
+    }, sort_keys=False))  # fmt: skip
 
+    prepare_recipe(recipe, "runner_00", 1800)
 
-def test_dist_timeout_follows_each_role_watchdog_timeout():
-    edited = yaml.safe_load(add_dist_timeout(RECIPE, 1800))
-    assert edited["roles"]["prefill"]["args"] == {"watchdog-timeout": 600, "dist-timeout": 1800, "tp": 4}
-    assert add_dist_timeout("watchdog-timeout: 1\n", 1800) == "watchdog-timeout: 1\n"
+    assert yaml.safe_load(recipe.read_text()) == {
+        "schema": 2, "name": "runner_00",
+        "roles": {
+            "prefill": {"name": "keep-me", "args": {"watchdog-timeout": 600, "tp": 4, "dist-timeout": 1800}},
+            "decode": {"args": {"tp": 4}},
+        },
+        "benchmark": {"type": "sa-bench"},
+    }  # fmt: skip

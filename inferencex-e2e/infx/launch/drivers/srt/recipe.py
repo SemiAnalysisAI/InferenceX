@@ -1,4 +1,4 @@
-"""The workspace recipe mirror, and the text edits multi-node lanes make to the job's copies.
+"""The workspace recipe mirror, and the edits multi-node lanes make to the job's copies.
 
 Only disposable copies in the job's srt-slurm checkout are edited: the staged mirror and the
 recipe the binder writes.
@@ -7,9 +7,10 @@ recipe the binder writes.
 from __future__ import annotations
 
 import fnmatch
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 from infx.launch.context import LaunchError
 
@@ -19,8 +20,6 @@ if TYPE_CHECKING:
 
 RECIPES_MIRROR = Path("benchmarks/multi_node/srt-slurm-recipes")
 HEALTH_ATTEMPTS = 720
-_HEALTH_CHECK = re.compile(r"( *)health_check:")
-_MAX_ATTEMPTS = re.compile(r"(\bmax_attempts:\s*)(\d+)")
 FORCED_ACCEPTANCE_MARKER = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 
 
@@ -37,47 +36,20 @@ def staged_recipe(srt_recipe: str) -> str:
     return f"recipes/{relative}"
 
 
-def rename_job(text: str, name: str) -> str:
-    """Set the top-level ``name:``, srtctl's run name."""
-    return re.sub(r"(?m)^name:.*$", lambda _: f'name: "{name}"', text)
-
-
-def raise_health_attempts(text: str) -> str:
-    """Raise each ``health_check`` block's ``max_attempts`` to at least HEALTH_ATTEMPTS."""
-    lines = text.splitlines(keepends=True)
-    block: int | None = None
-    for index, line in enumerate(lines):
-        content = line.strip()
-        indent = len(line) - len(line.lstrip(" "))
-        if block is not None and content and not content.startswith("#") and indent <= block:
-            block = None
-        if heading := _HEALTH_CHECK.match(line):
-            block = len(heading[1])
-        if block is not None:
-            lines[index] = _MAX_ATTEMPTS.sub(_at_least_the_floor, line)
-    return "".join(lines)
-
-
-def _at_least_the_floor(match: re.Match[str]) -> str:
-    return f"{match[1]}{max(int(match[2]), HEALTH_ATTEMPTS)}"
-
-
-def add_dist_timeout(text: str, seconds: int) -> str:
-    """Insert ``dist-timeout: seconds`` after each role's ``watchdog-timeout``."""
-    lines = []
-    for line in text.splitlines(keepends=True):
-        lines.append(line if line.endswith("\n") else line + "\n")
-        if line.startswith("      watchdog-timeout:"):
-            lines.append(f"      dist-timeout: {seconds}\n")
-    return "".join(lines)
-
-
 def prepare_recipe(recipe: Path, job_name: str, dist_timeout_s: int | None) -> None:
-    """Edit the bound recipe, the variant srtctl submits, for this job."""
-    text = raise_health_attempts(rename_job(recipe.read_text(), job_name))
-    if dist_timeout_s is not None:
-        text = add_dist_timeout(text, dist_timeout_s)
-    recipe.write_text(text)
+    """Edit the bound recipe, the variant srtctl submits, for this job: ``job_name`` becomes
+    srtctl's run name, the health check waits at least HEALTH_ATTEMPTS attempts, and each role
+    with a ``watchdog-timeout`` gets the cluster's ``dist-timeout``."""
+    bound = yaml.safe_load(recipe.read_text())
+    if "name" in bound:
+        bound["name"] = job_name
+    if "max_attempts" in (health := bound.get("health_check") or {}):
+        health["max_attempts"] = max(health["max_attempts"], HEALTH_ATTEMPTS)
+    for role in (bound.get("roles") or {}).values():
+        args = (role or {}).get("args") or {}
+        if dist_timeout_s is not None and "watchdog-timeout" in args:
+            args["dist-timeout"] = dist_timeout_s
+    recipe.write_text(yaml.safe_dump(bound, sort_keys=False))
 
 
 def strip_forced_acceptance(recipes: Path) -> None:
