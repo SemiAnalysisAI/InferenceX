@@ -1,11 +1,5 @@
 # Run AgentX-Harness Standalone
 
-<div align="center">
-
-**English** | [中文](agentx-standalone_zh.md)
-
-</div>
-
 Run the AgentX client against an already-running OpenAI-compatible server.
 
 ## Install
