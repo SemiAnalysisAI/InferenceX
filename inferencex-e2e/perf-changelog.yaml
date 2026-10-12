@@ -9595,7 +9595,7 @@
     - agentic-coding
   description:
     - "Bump to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261012."
-    - "Trade TTFT for P90 ITL with a longer prefill-decode interval: 192 with lpm scheduling at concurrency 1-8 (TP2 and TP4), 96 at concurrency 16 and 32 at TP2 concurrency 32. TP2 concurrency 64 keeps 4."
-    - "Enable SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL and INT8 quick-reduce all-reduces (ROCM_QUICK_REDUCE_QUANTIZATION=INT8, previously NONE)."
-    - "Add DP2 attention with TP MoE (gathered MoE input, reduce-scatter back) at TP2 concurrency 32 and 64 behind a cache-aware sglang-router, keeping decoder SWA bounded replay (sgl-project/sglang#43077, in the 1012 image) with SGLANG_AITER_CAPTURE_COPY_IN=1. PDI is 32 at concurrency 32 and 16 at 64; the TP-only arms at those points stay."
+    - "Trade TTFT for P90 ITL with a longer prefill-decode interval: 192 with lpm scheduling at concurrency 1-8 (TP2 and TP4) and 96 at concurrency 16."
+    - "Enable SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL and ROCM_QUICK_REDUCE_QUANTIZATION=INT8, previously NONE."
+    - "Run TP2 concurrency 32 and 64 on DP2 attention with TP MoE instead of TP-only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

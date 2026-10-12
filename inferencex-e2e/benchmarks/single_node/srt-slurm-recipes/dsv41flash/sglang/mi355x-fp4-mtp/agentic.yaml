@@ -72,7 +72,7 @@ base:
 
 # One variant per point; the saturation point gets a longer warmup drain. A longer
 # prefill-decode interval trades TTFT for P90 ITL: 192 with lpm up to c8, 96 at c16
-# and 32 at c32.
+# and 32 at c32. amd-master.yaml runs c32 and c64 on the DP2 variants only.
 override_tp2_c1:
   roles:
     agg:
@@ -185,11 +185,7 @@ override_tp2_c64:
       CONC: '64'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-# DP2 attention with TP MoE (gathered MoE input, reduce-scatter back) behind a
-# cache-aware router that pins each AIPerf session to one rank. The prefill chunk
-# and admission are engine-wide and split across the two ranks. Bounded replay
-# under DP needs sgl-project/sglang#43077, whose decode graphs stage the aiter
-# all-gather / reduce-scatter inputs through the IPC pool (CAPTURE_COPY_IN).
+# DP2 attention with TP MoE.
 override_tp2_c32_dp:
   frontend:
     type: sglang-router
