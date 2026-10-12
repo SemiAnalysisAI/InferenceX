@@ -9573,3 +9573,23 @@ qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve:
           dp-attn: false
           additional-settings:
           - CONFIG_FILE=recipes/qwen3.5/sglang/gb300-fp8/agentx/agg-gb300-tp8-c1-b1-mtp-hicache-nightly-20260913.yaml
+
+# GLM-5.3 NVFP4 AgentX on upstream SGLang v0.5.20: TP8, NEXTN off the built-in
+# MTP head at K=3 (golden AL from infx/golden_al_distribution/glm5.3_mtp.yaml).
+# c8-c14 keep the working set in HBM; c22-c28 add a 300 GB/rank HiCache tier
+# (plus the DSA indexer pool), about 2.95 TB of host DRAM per node.
+glm5.3-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
+  model: nvidia/GLM-5.3-NVFP4
+  model-prefix: glm5.3
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 10, 13, 14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/b300-fp4-mtp/agentic.yaml }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/b300-fp4-mtp/agentic.yaml }
