@@ -9551,3 +9551,9 @@
     - "C1 to C16 are unchanged."
     - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4-Pro-0813 runs as shipped."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3819
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Update ATOM to v0.1.7 (rocm/atom-dev:nightly_202610080328) and keep prefix caching disabled as in the old image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3918
