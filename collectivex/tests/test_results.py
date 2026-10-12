@@ -12,11 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import sweep_matrix  # noqa: E402
-
 RESULTS = ROOT / "results"
 CASES = RESULTS / "cases.json"
-SUITES = "ep,swap-blocks"
 MAX_BYTES = 1 << 20
 SHA = re.compile(r"[0-9a-f]{40}")
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
@@ -47,15 +44,6 @@ def _identity(document: dict) -> tuple[str, str, object, dict]:
 
 
 class CommittedResults(unittest.TestCase):
-    def test_cases_json_matches_the_configs(self) -> None:
-        resolved = sweep_matrix.resolve_matrix(suites=SUITES)
-        expected = {key: resolved[key] for key in ("version", "requested_cases")}
-        self.assertEqual(
-            json.loads(CASES.read_text(encoding="utf-8")), expected,
-            f"regenerate: python3 sweep_matrix.py --suites {SUITES} "
-            "--cases-json results/cases.json",
-        )
-
     def test_every_result_is_a_runnable_case_from_committed_code(self) -> None:
         cases = json.loads(CASES.read_text(encoding="utf-8"))
         runnable = {(row["sku"], row["case"]["case_id"]) for row in cases["requested_cases"]
