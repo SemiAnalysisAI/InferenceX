@@ -17,79 +17,16 @@ jobs:
     name: Comment on source pull request
     runs-on: ubuntu-latest
     permissions:
+      contents: read # Read trusted callback implementation
       pull-requests: write # Post the staging result as github-actions
     steps:
-      - name: Validate callback and comment
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      - name: Checkout trusted callback code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          github-token: ${{ github.token }}
-          script: |
-            const payload = context.payload.client_payload;
-            const runId = String(payload['run-id'] ?? '');
-            const runDate = String(payload['run-date'] ?? '');
-            const pullNumber = String(payload['pr-number'] ?? '');
-            const requestedBy = String(payload['requested-by'] ?? '');
-            const appRunId = String(payload['app-run-id'] ?? '');
-            const commentId = String(payload['comment-id'] ?? '');
-            const succeeded = String(payload['stage-succeeded'] ?? '');
-            const callbackType = context.payload.action;
-
-            if (payload['source-repository'] !== 'SemiAnalysisAI/InferenceX-app') {
-              core.setFailed('Unsupported staging callback source');
-              return;
-            }
-            if (!/^\d+$/u.test(runId) || !/^\d+$/u.test(pullNumber) || !/^\d+$/u.test(appRunId)) {
-              core.setFailed('Callback run and PR identifiers must be numeric');
-              return;
-            }
-            if (commentId && !/^\d+$/u.test(commentId)) {
-              core.setFailed('Callback comment identifier must be numeric');
-              return;
-            }
-            if (!/^\d{4}-\d{2}-\d{2}$/u.test(runDate)) {
-              core.setFailed('Callback run date must use YYYY-MM-DD');
-              return;
-            }
-            if (!/^[A-Za-z0-9-]+$/u.test(requestedBy)) {
-              core.setFailed('Callback requester is not a valid GitHub login');
-              return;
-            }
-            if (!['stage-results-started', 'stage-results-completed'].includes(callbackType)) {
-              core.setFailed('Unsupported staging callback type');
-              return;
-            }
-            if (callbackType === 'stage-results-completed' && !['true', 'false'].includes(succeeded)) {
-              core.setFailed('Callback stage-succeeded value must be true or false');
-              return;
-            }
-
-            const appRunUrl = `${context.serverUrl}/SemiAnalysisAI/InferenceX-app/actions/runs/${appRunId}`;
-            const sourceRunUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}`;
-            const stagingSite = 'https://inferencemax-app-git-staging-semianalysisai.vercel.app';
-            const entry = encodeURIComponent(`${runDate}~r${runId}`);
-            const chartUrl = `${stagingSite}/inference?i_dates=${entry}`;
-            const body = callbackType === 'stage-results-started'
-              ? `@${requestedBy} staging [run ${runId}](${sourceRunUrl}). [InferenceX-app staging workflow](${appRunUrl}) is now running. Existing staged runs will be preserved; this comment will be updated when staging completes.`
-              : succeeded === 'true'
-              ? [
-                  `@${requestedBy} staged run ${runId}: ${chartUrl}`,
-                  '',
-                  `This run remains available across future \`/stage-results\` requests. Staging the same run ID again updates its staged data. [Staging workflow](${appRunUrl})`,
-                ].join('\n')
-              : `@${requestedBy} staging run ${runId} failed. [Inspect the staging workflow](${appRunUrl}).`;
-
-            if (commentId) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: Number(commentId),
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: Number(pullNumber),
-                body,
-              });
-            }
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate callback and comment
+        working-directory: inferencex-e2e
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m infx.workflows.stage_results_callback
