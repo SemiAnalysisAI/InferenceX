@@ -5,7 +5,12 @@ from pydantic import ValidationError
 
 from infx.bench.eval.meta import build
 from infx.launch.drivers.srt.submit import eval_args
-from infx.matrix.generate import worker_gpus_per_node, worker_node_count
+from infx.matrix.generate import (
+    filter_exp_names,
+    multinode_agentic_exp_name,
+    worker_gpus_per_node,
+    worker_node_count,
+)
 from infx.matrix.validation import WorkerConfig
 from infx.results.agentic import _gpu_shape
 from infx.results.artifacts import agentic_key, benchmark_key
@@ -88,6 +93,32 @@ def test_eval_metadata_keeps_dwdp():
 def test_eval_passthrough_keeps_dwdp():
     args = eval_args({"PREFILL_DWDP_SIZE": "8"}, "run-eval")
     assert 'post_eval.passthrough_env=["PREFILL_DWDP_SIZE"]' in args
+
+
+def test_agentic_names_select_dwdp_variants_without_ambiguity():
+    decode = {"num-worker": 1, "tp": 8, "ep": 8, "dp-attn": True}
+
+    def name(size):
+        return multinode_agentic_exp_name(
+            "r1", worker(**{"dwdp-size": size}), decode, [16], "kvnone"
+        )
+
+    legacy = worker()
+    del legacy["dwdp-size"]
+    assert name(1) == multinode_agentic_exp_name("r1", legacy, decode, [16], "kvnone")
+    entries = [
+        {"exp-name": name(size), "prefill": worker(**{"dwdp-size": size})} for size in (1, 4, 8)
+    ]
+    assert len({entry["exp-name"] for entry in entries}) == 3
+    assert "dwdp4" in name(4)
+    assert "dwdp8" in name(8)
+    assert filter_exp_names(entries, [name(8)]) == [entries[2]]
+
+
+@pytest.mark.parametrize("size", [3, 10])
+def test_allocation_errors_name_the_dwdp_factor(size):
+    with pytest.raises(ValueError, match=rf"tp\*pp\*pcp-size\*dwdp-size={size}"):
+        worker_gpus_per_node(worker(**{"dwdp-size": size}), 8)
 
 
 @pytest.mark.parametrize("key", [benchmark_key, agentic_key, eval_key])
