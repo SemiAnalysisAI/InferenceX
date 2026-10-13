@@ -95,6 +95,21 @@ def test_multinode_explicit_gpu_counts_control_decode_fields_and_denominators(
     assert result["output_tput_per_gpu"] == 100
 
 
+def test_multinode_dwdp_metadata_keeps_explicit_allocation(
+    multinode_env_vars, sample_benchmark_result,
+):
+    from infx.results.fixed_sequence import build_result
+
+    result = build_result(sample_benchmark_result, {
+        **multinode_env_vars,
+        "PREFILL_TP": "1", "PREFILL_EP": "1", "PREFILL_DP_ATTN": "false",
+        "PREFILL_DWDP_SIZE": "8", "PREFILL_NUM_WORKERS": "2", "PREFILL_GPUS": "16",
+    })
+    assert result["prefill_tp"] == 1
+    assert result["prefill_dwdp_size"] == 8
+    assert result["num_prefill_gpu"] == 16
+
+
 @pytest.mark.parametrize("overrides,message", [
     ({"DECODE_HARDWARE": "", "PREFILL_TP": "invalid"},
      "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."),
