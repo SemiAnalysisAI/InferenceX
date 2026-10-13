@@ -1,11 +1,10 @@
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 AgentX on GB200 behind the llm-d router
 # (srt-slurm frontend.type: llm-d): DEP8 prefill workers over two trays each and one
 # DEP8 or DEP16 decode worker. KV moves over NIXL and the prefill workers share prefix
-# cache through an embedded Mooncake store. srt-slurm launches each worker as one
-# `vllm serve` over its trays that balances its DP ranks itself, so the EPP routes to the
-# worker rather than to one rank. Prefill drafts one DSpark token and decode three, both with
-# adaptive verification on throughput (golden synthetic acceptance applies only to agg TP8).
-# VLLM_USE_RUST_FRONTEND is left unset (the Python API server).
+# cache through an embedded Mooncake store. DEP8 roles use data-parallel-external-lb so
+# srtctl launches one `vllm serve` per DP rank (Rust frontend) and the EPP routes to each
+# rank. Prefill drafts one DSpark token and decode three, both with adaptive verification on
+# throughput (golden synthetic acceptance applies only to agg TP8).
 # Select one with CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-llm-d.yaml:override_<name>.
 
 schema: 2
@@ -104,6 +103,7 @@ base:
         PYTHONHASHSEED: "0"
         HF_HUB_CACHE: /hf_hub_cache
         VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_USE_RUST_FRONTEND: "1"
         VLLM_SERVER_DEV_MODE: "1"
         VLLM_USE_NCCL_SYMM_MEM: "1"
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -149,6 +149,7 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 1
         data-parallel-size: 8
+        data-parallel-external-lb: true
         enable-expert-parallel: true
         # NIXL hands KV to decode; the Mooncake store shares prefix cache across prefill ranks.
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false,"kv_lease_duration":1800}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
@@ -179,6 +180,7 @@ base:
         PYTHONHASHSEED: "0"
         HF_HUB_CACHE: /hf_hub_cache
         VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_USE_RUST_FRONTEND: "1"
         VLLM_SERVER_DEV_MODE: "1"
         VLLM_USE_NCCL_SYMM_MEM: "1"
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -216,6 +218,7 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 1
         data-parallel-size: 8
+        data-parallel-external-lb: true
         enable-expert-parallel: true
         kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false,"kv_lease_duration":1800}}'
         kv-cache-dtype: fp8

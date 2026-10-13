@@ -1,9 +1,8 @@
 # DeepSeek-V4-Pro-0813 (DSpark) FP4 AgentX on GB200 behind the llm-d router
 # (srt-slurm frontend.type: llm-d): one aggregated worker over two trays, as TP8,
-# DEP8, or DEP8 with an embedded Mooncake prefix-cache store. srt-slurm launches a
-# DEP8 worker as one `vllm serve` that balances its eight DP ranks itself, so the EPP
-# routes to the worker rather than to one rank, and VLLM_USE_RUST_FRONTEND is left
-# unset (the Python API server).
+# DEP8, or DEP8 with an embedded Mooncake prefix-cache store. DEP8 uses
+# data-parallel-external-lb so srtctl launches one Rust-fronted `vllm serve` per DP rank
+# and the EPP routes to each rank (agg TP8 stays a single TP8 worker).
 # Select one with CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-llm-d.yaml:override_<name>.
 
 schema: 2
@@ -77,6 +76,7 @@ base:
         PYTHONHASHSEED: "0"
         HF_HUB_CACHE: /hf_hub_cache
         VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_USE_RUST_FRONTEND: "1"
         VLLM_SERVER_DEV_MODE: "1"
         VLLM_USE_NCCL_SYMM_MEM: "1"
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -108,6 +108,7 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 1
         data-parallel-size: 8
+        data-parallel-external-lb: true
         enable-expert-parallel: true
         kv-cache-dtype: fp8
         gpu-memory-utilization: 0.88
@@ -179,6 +180,7 @@ override_tp8:
       args:
         tensor-parallel-size: 8
         data-parallel-size:
+        data-parallel-external-lb:
         enable-expert-parallel:
         moe-backend:
         enable-ep-weight-filter:

@@ -10797,3 +10797,12 @@
   description:
     - "Match the Sep 28 standalone llm-d AgentX speculative policy: disagg and agg DEP8 (including Mooncake) use adaptive verification with prefill K=1 and decode/agg K=3; only agg TP8 keeps golden synthetic acceptance at K=5 (3.61). The srt-slurm synthetic-acceptance connector skips golden AL injection when enable_adaptive_verification is true."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route llm-d DEP8 disagg and agg workers with data-parallel-external-lb (one vLLM API per DP rank for the EPP) and VLLM_USE_RUST_FRONTEND=1, matching the Sep 28 standalone llm-d wide-EP launch; agg TP8 keeps a single TP8 worker without external LB. Drop 2P×1D disagg agentic concurrency 576 from the master search space after repeated warmup stalls."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
