@@ -9646,3 +9646,14 @@
     - "ATOM's mono decode path (on by default) now takes any decode step of up to 48 rows, i.e. concurrency 1-8 with five DSpark drafts, not only DSpark verify steps. Steps of 12 or more rows that are a multiple of TP run its sublayers token-parallel, with reduce-scatters instead of all-reduces. The draft runner never runs token-parallel."
     - "No data-type or precision change to the DSpark draft. The checkpoint's bundled mtp.0-2 stages are stored like the target's layers: FP8 E4M3 weights with 32x32 UE8M0 block scales for the attention projections, shared experts and main_proj; MXFP4 routed experts; BF16 norms, router gate, Markov head and confidence head; F32 attention sinks and hc mixers. ATOM builds the draft with the target's native_quant_config() and make_v4_quant_config(), with no online quantization in this recipe, so it runs as shipped: FP8 activations on the FP8 GEMMs and the target's BF16 KV cache. Between 73defd9b8 and a0527c9db only the rows the draft reads under bounded replay change."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3928
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe to nightly-rocm100-5555a2d8f7116b2b4877f66516f4128176cf722a, the 2026-10-13 ROCm 10.0 nightly, which contains vllm-project/vllm#59039 and #61082. Update model.container to match."
+    - "Remove --no-swa-bounded-replay. vllm-project/vllm#59039 enables decoder SWA bounded replay on ROCm: in eager prefill steps, layer 20 writes its KV for every token and layers 20-39 run on each request's last 128 tokens only. It is on by default again; the memory fault that motivated the flag came from the ROCm sparse SWA path lacking the replay window clamp (vllm-project/vllm#56638 bounds the prefill SWA indices at the replay start)."
+    - "Replace VLLM_ROCM_MONO_DECODE=1 with --monokernel. vllm-project/vllm#61082 turns the mono decode switch into KernelConfig.monokernel and removes the environment variable, so the old setting would be ignored. It also runs all 40 backbone layers whole as two persistent launches (30 before, with the other 10 keeping vLLM's attention plus the FFN launch). The step-size limit is unchanged: a decode step of up to 48 rows, i.e. concurrency 1-8 with five DSpark drafts."
+    - "Re-sweep concurrency 1-64 on TP2 and TP4. No other server setting changes, and there is no data-type or precision change to the DSpark draft."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3958
