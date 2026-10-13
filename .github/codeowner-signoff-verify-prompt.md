@@ -727,7 +727,8 @@ The publisher adds the prominent `❗❗ WARNING ❗❗` banner for this warning
 Do not add Pareto-reviewer mentions or duplicate the banner yourself.
 
 ## Verdict and output
-Decide PASS only if Checks 0-16 ALL pass. A check reported as `N/A` counts as a pass.
+Decide PASS only if Checks 0-16 ALL pass. A check reported as `N/A` counts as a pass,
+but its row still starts with ➖, never ✅.
 Checks 4, 14, 15, and 16 may WARN but never FAIL. If any warns and no other check fails,
 use the WARN header below. If any other check fails, use REJECTED even when
 Check 4, 14, 15, or 16 also warns.
@@ -778,6 +779,11 @@ single terse line. Rules:
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
     `⚠️ Check 15 (PR description): WARN — <claim versus actual configuration/evidence; correction needed>`
     `⚠️ Check 16 (NVIDIA overview): WARN — <model/framework, NVIDIA SKUs, missing or unverified listing; upstream and overview links>`
+  The status word alone selects the emoji. An N/A row starts with ➖ even when it is the
+  only N/A row among PASS rows; Check 12 is N/A on most PRs. Keep each row on one line,
+  with its reason after ` — `. Never end a row at its status and continue the reason on
+  later lines or in sub-bullets; the publisher rejects such rows. Before writing the file,
+  recheck every row's emoji and ` — <reason>` against these formats.
   Never hide Check 4, 14, 15, or 16 WARN inside the collapsed group.
   Check 4, 15, and 16 warnings must not trigger the Pareto-coverage escalation.
   For Check 14 WARN, the publisher adds the

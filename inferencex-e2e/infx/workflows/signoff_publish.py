@@ -19,6 +19,11 @@ CHECK_ROW = re.compile(
 )
 CHECK_PREFIX = re.compile(r"(?:[-*+] )?(?:✅|❌|➖|⚠️)\s*Check\b")  # noqa: RUF001 - verifier's N/A emoji
 STATUS_EMOJI = {"PASS": "✅", "FAIL": "❌", "N/A": "➖", "WARN": "⚠️"}  # noqa: RUF001 - verifier's N/A emoji
+# The verifier sometimes marks an N/A row with the PASS emoji. N/A already counts as a pass, so
+# this one mismatch cannot change the verdict; normalize it instead of discarding the verdict.
+NA_ROW_WITH_PASS_EMOJI = re.compile(
+    r"^([ \t]*(?:[-*+] )?)✅( Check [0-9]+ \([^\r\n]+\): N/A — \S.*)$", re.MULTILINE
+)
 ESCALATION = (
     "⚠️ Pareto coverage needs additional review: @functionstackx @cquil11 @Oseltamivir @adibarra. "
     "At least 5 points per affected throughput-versus-E2EL frontier are highly recommended. "
@@ -64,6 +69,7 @@ def _is_verdict_for(comment: dict[str, Any], signoff_key: str) -> bool:
 
 
 def verdict_body(verdict: str, head_sha: str, signoff_key: str) -> tuple[str, str]:
+    verdict = NA_ROW_WITH_PASS_EMOJI.sub(r"\1➖\2", verdict)  # noqa: RUF001 - verifier's N/A emoji
     lines = verdict.splitlines()
     headers = [line for line in lines if line in (SUCCESS_HEADER, REJECT, WARN)]
     checks = check_statuses(lines)
