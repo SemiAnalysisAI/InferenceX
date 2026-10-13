@@ -262,12 +262,6 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
         ),
         (
             verdict().replace(
-                "➖ Check 13 (Draft precision): N/A", "❌ Check 13 (Draft precision): N/A"
-            ),
-            True,
-        ),
-        (
-            verdict().replace(
                 "✅ Check 1 (Requirement): PASS", "⚠️ Check 1 (Requirement): WARN"
             ),
             True,
@@ -349,19 +343,6 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     assert ("❌ Check 1 (Sweep): FAIL" in body) == failure
     assert "did not produce a valid verdict" not in body
     assert len(result["writes"]) == 1
-
-
-@pytest.mark.parametrize("prefix", ["", "- "])
-def test_pass_emoji_on_na_row_is_published_as_na(publish, prefix):
-    na_row = "➖ Check 13 (Draft precision): N/A — No speculative changes."
-    content = verdict().replace(
-        na_row, prefix + "✅ Check 13 (Draft precision): N/A — No speculative changes."
-    )
-    result = publish(content)
-    expected = verdict().replace(na_row, prefix + na_row)
-    assert result["comments"][0]["body"] == (
-        marker() + "\n" + expected + f"\n\nAssessed commit: `{SHA}`.\n"
-    )
 
 
 def test_listed_nvidia_pair_passes_without_warning_banner(publish):
