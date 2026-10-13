@@ -26,6 +26,9 @@ base:
     install: true
     source:
       wheel: "1.6.0.dev20261010"
+    # TCP request plane and ZMQ event plane: no broker hop at high request rates; NATS is not needed.
+    request_plane: tcp
+    event_plane: zmq
     sidecar: true
     sidecar_args:
       - --grpc-startup-deadline-secs
@@ -49,19 +52,20 @@ base:
       type: etcd
       placement:
         node: infra
-    - name: nats
-      type: nats
-      placement:
-        node: infra
-      options:
-        max_payload_mb: 32
   frontend:
     type: dynamo
     enable_multiple_frontends: false
     args:
       router-mode: "kv"
       router-session-affinity-ttl-secs: 14400
+      # Every request goes prefill then decode: never let the router prefill locally on a decode rank.
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
     env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_LOG: warn
       DYN_TOKENIZER: "fastokens"
       DYN_TOKENIZER_CACHE: "1"
       DYN_TOKENIZER_CACHE_BYTES: "8000000000"
@@ -102,6 +106,8 @@ base:
         served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
         language-model-only: true
         tokenizer-mode: "deepseek_v41"
+        # The Dynamo frontend applies the deepseek_v41 parsers (published by the sidecar); vLLM must not parse too.
+        reasoning-parser: None
         kv-cache-dtype: "fp8"
         max-model-len: 1048576
         tensor-parallel-size: 1
@@ -152,6 +158,8 @@ base:
         served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
         language-model-only: true
         tokenizer-mode: "deepseek_v41"
+        # The Dynamo frontend applies the deepseek_v41 parsers (published by the sidecar); vLLM must not parse too.
+        reasoning-parser: None
         kv-cache-dtype: "fp8"
         max-model-len: 1048576
         tensor-parallel-size: 1
