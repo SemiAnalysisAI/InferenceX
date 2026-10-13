@@ -51,12 +51,10 @@ base:
     - name: etcd
       type: etcd
       placement:
-        node: dedicated   # one extra CPU-only node for etcd and the frontend; keeps them off the prefill ranks
+        node: infra
   frontend:
     type: dynamo
     enable_multiple_frontends: false
-    placement:
-      node: infra
     args:
       router-mode: "kv"
       router-session-affinity-ttl-secs: 14400
