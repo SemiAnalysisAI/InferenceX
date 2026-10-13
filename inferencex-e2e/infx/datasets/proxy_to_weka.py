@@ -3,7 +3,7 @@
 Reads <in-dir>/<session_id>.jsonl produced by `sample_proxy_traces.py`
 and writes <in-dir>/../<out-dir>/<session_id>.json in the v1 weka trace
 format consumed by the kv-cache-tester replayer (see
-utils/aiperf/src/aiperf/dataset/loader/weka_trace_models.py).
+agentx-harness: src/aiperf/dataset/loader/weka_trace_models.py).
 
 Subagent grouping mirrors the conversation-view algorithm from the
 SemiAnalysis claude-code-proxy:
