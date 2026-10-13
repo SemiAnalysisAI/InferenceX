@@ -349,6 +349,7 @@ def worker_node_count(
         * worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
         * worker.get(Fields.PCP_SIZE.value, 1)
+        * worker.get(Fields.DWDP_SIZE.value, 1)
     )
     return math.ceil(total_gpus / gpus_per_node)
 
@@ -441,7 +442,7 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
     are rejected rather than silently truncated, keeping parity with the
     single-node "must fit the node" rule:
 
-    * A replica larger than one node (tp*pp*pcp > gpus-per-node) must fill whole
+    * A replica larger than one node (tp*pp*pcp*dwdp > gpus-per-node) must fill whole
       nodes, i.e. be an exact multiple of gpus-per-node; each of its nodes is
       then fully occupied (fraction 1).
     * A replica within one node must divide it evenly so co-located replicas of
@@ -451,18 +452,22 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
         worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
         * worker.get(Fields.PCP_SIZE.value, 1)
+        * worker.get(Fields.DWDP_SIZE.value, 1)
     )
+    factors = f"{Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+    if worker.get(Fields.DWDP_SIZE.value, 1) > 1:
+        factors += f"*{Fields.DWDP_SIZE.value}"
     if gpus_per_replica > gpus_per_node:
         if gpus_per_replica % gpus_per_node != 0:
             raise ValueError(
-                f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+                f"worker {factors}"
                 f"={gpus_per_replica} spans multiple nodes but is not a multiple "
                 f"of {Fields.GPUS_PER_NODE.value}={gpus_per_node}"
             )
         return gpus_per_node
     if gpus_per_node % gpus_per_replica != 0:
         raise ValueError(
-            f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+            f"worker {factors}"
             f"={gpus_per_replica} does not divide "
             f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} evenly"
         )
@@ -540,6 +545,9 @@ def multinode_agentic_exp_name(
             tag += f"ep{ep}"
         if dpa:
             tag += "dpa"
+        dwdp = worker.get(Fields.DWDP_SIZE.value, 1)
+        if dwdp > 1:
+            tag += f"dwdp{dwdp}"
         return tag
 
     return (

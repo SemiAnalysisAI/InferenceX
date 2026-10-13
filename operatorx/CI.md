@@ -1,7 +1,5 @@
 # OperatorX GitHub Actions
 
-**English** | [中文](CI_zh.md)
-
 [OperatorX Sweep](../.github/workflows/operatorx-sweep.yml) runs manually on
 `h100-dgxc` (default), `h200-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
 `mi300x`, `mi325x`, or `mi355x`.

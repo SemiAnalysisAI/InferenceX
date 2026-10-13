@@ -1,14 +1,15 @@
 # DeepSeek-V4-Pro-0813 AgentX on MI355X with SGLang DSpark. Low concurrency
 # keeps KV on GPU; higher concurrency extends it to host DRAM through HiCache,
 # and the widest band runs DP attention behind a cache-aware SGLang router.
-# FP8 unified KV is on for every arm. BCG is limited to conc 1/4. Grouped ASM
-# is on for TP-only arms at conc >= 16. EP8 DP arms use MegaMoE+EPLB.
+# FP8 unified KV is on for every arm. BCG is limited to conc 1 and 4; the other
+# TP-only arms run prefill context parallelism. Grouped ASM is on for TP-only
+# arms at conc >= 16. EP8 DP arms use MegaMoE+EPLB.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260926
+    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261007
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -70,6 +71,7 @@ base:
         HSA_NO_SCRATCH_RECLAIM: '0'
         # aiter batched GEMM for the absorbed MLA projections.
         SGLANG_OPT_USE_AITER_BATCHED_GEMM: '1'
+        SGLANG_OPT_FP8_WO_A_FUSED_INVROPE: '1'
         # Unified radix tree that releases out-of-window SWA slots, so cached
         # sessions keep their trailing window under multi-turn load.
         SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
@@ -88,6 +90,9 @@ base:
 # up to 128. HiCache pins 1.5x the device KV pool per rank. DP attention keeps
 # 8192 prefill tokens per rank, and the router pins each AIPerf session to the
 # rank holding its prefix. Saturation points get a longer warmup drain.
+# TP-only arms from conc 16 split each prompt across all eight ranks for prefill.
+# HIP CP replaces breakable prefill graphs, so conc 1 and 4, where CP trails
+# TP8, keep BCG instead.
 override_tp8_c1:
   roles:
     agg:
@@ -118,6 +123,9 @@ override_tp8_c16:
       args:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
+        enable-prefill-cp: true
+        cp-strategy: interleave
+        enable-cp-decode-attn-tp: true
       env:
         SGLANG_DSV4_GROUPED_ASM: '1'
   benchmark:
@@ -131,6 +139,9 @@ override_tp8_c32_hicache:
       args:
         max-running-requests: 64
         cuda-graph-max-bs-decode: 64
+        enable-prefill-cp: true
+        cp-strategy: interleave
+        enable-cp-decode-attn-tp: true
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
         hicache-write-policy: write_through
@@ -150,6 +161,9 @@ override_tp8_c48_hicache:
       args:
         max-running-requests: 96
         cuda-graph-max-bs-decode: 96
+        enable-prefill-cp: true
+        cp-strategy: interleave
+        enable-cp-decode-attn-tp: true
         enable-hierarchical-cache: true
         hicache-ratio: 1.5
         hicache-write-policy: write_through

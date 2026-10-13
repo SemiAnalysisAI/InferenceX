@@ -1,11 +1,5 @@
 # PR Review Checklist
 
-<div align="center">
-
-**English** | [中文](PR_REVIEW_CHECKLIST_zh.md)
-
-</div>
-
 When [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) from the respective hardware AI chip company is reviewing & approving their respective PRs, please fill in the following form in your approval comment before pinging an core maintainer for final approval
 
 **Only one eligible CODEOWNER reviewer needs to post the checklist for each PR.** Check for an existing checklist before posting; additional reviewers do not need to post their own copies. For corrections, missing evidence, or verification retries, the original reviewer must **edit their existing checklist comment** instead of adding a new one. Create a replacement only if the original comment was deleted.
@@ -38,6 +32,12 @@ Assess every affected production serving variant in a mixed submission. One upst
 InferenceX-only harness plumbing, result collection, and synthetic benchmark controls do not need to be upstreamed. Classify a flag or environment variable by its effect: a production-useful optimization still needs cookbook coverage even when InferenceX uses it for benchmark tuning. Record the reasoning for excluded settings in the additional detail section; node count or disaggregation alone is not valid N/A reasoning.
 
 Existing merged/published documentation is sufficient when it already covers the production configuration; no duplicate upstream PR is needed. Otherwise, update the applicable upstream cookbook and verify that the PR is **MERGED before the InferenceX PR merges**. Defaults can satisfy coverage when the reviewer verifies equivalent behavior in the pinned upstream version and records that evidence.
+
+### NVIDIA overview warning
+
+For affected NVIDIA configurations with merged/published vLLM Recipes or SGLang Cookbook coverage, [verifier Check 16](../../.github/codeowner-signoff-verify-prompt.md#check-16--nvidia-official-overview-coverage-advisory) also checks the model/framework pair against [NVIDIA's official recipes overview](https://docs.nvidia.com/llm-inference-quick-start-recipes/overview). It checks the same model version/variant and underlying engine across both overview tables, including Dynamo deployments; another engine's listing does not count. This checks listing presence, not SKU or topology equivalence, which remains part of the upstream recipe requirement.
+
+Missing pairs produce a visible `❗❗ WARNING ❗❗` banner with upstream/overview links and the affected NVIDIA SKUs. Unreadable or ambiguous evidence is reported as unverified, not as a confirmed omission. This warning is advisory and does not relax Check 3. It excludes all non-NVIDIA hardware, including AMD MI300/MI325/MI355/MI455 families, TPUv7/TPUv6e, Trainium3, and SambaNova SN50; mixed-vendor submissions are checked only for their NVIDIA configurations. No additional reviewer checkbox or Pareto-reviewer escalation is required.
 
 ## Template
 ```

@@ -25,6 +25,10 @@ ESCALATION = (
     "Below 5, or when coverage cannot be verified, merge only with an explicit, recorded admin bypass "
     "for the assessed commit; this advisory comment does not grant or enforce a bypass."
 )
+NVIDIA_OVERVIEW_WARNING = (
+    "❗❗ WARNING ❗❗ NVIDIA official recipes overview: "
+    "model/framework coverage is missing or unverified. See Check 16."
+)
 INVALID = (
     f"{REJECT}\n\nThe verifier did not produce a valid verdict. Retry the sign-off verification."
 )
@@ -40,11 +44,11 @@ def check_statuses(lines: list[str]) -> dict[int, str]:
             continue
         emoji, number, status = match.groups()
         check = int(number)
-        allowed = {"PASS", "N/A", "WARN"} if check in {4, 14, 15} else {"PASS", "N/A", "FAIL"}
+        allowed = {"PASS", "N/A", "WARN"} if check in {4, 14, 15, 16} else {"PASS", "N/A", "FAIL"}
         if check in statuses or status not in allowed or emoji != STATUS_EMOJI[status]:
             return {}
         statuses[check] = status
-    return statuses if statuses.keys() == set(range(16)) else {}
+    return statuses if statuses.keys() == set(range(17)) else {}
 
 
 def marker(signoff_key: str) -> str:
@@ -68,9 +72,16 @@ def verdict_body(verdict: str, head_sha: str, signoff_key: str) -> tuple[str, st
     valid = bool(checks) and headers == [expected] and lines[0] == expected
     if not valid:
         verdict = INVALID
-    elif checks.get(14) == "WARN":
-        header, _, rest = verdict.partition("\n")
-        verdict = f"{header}\n\n{ESCALATION}\n\n{rest}"
+    else:
+        notices = []
+        if checks.get(14) == "WARN":
+            notices.append(ESCALATION)
+        if checks.get(16) == "WARN":
+            notices.append(NVIDIA_OVERVIEW_WARNING)
+        if notices:
+            header, _, rest = verdict.partition("\n")
+            notice = "\n\n".join(notices)
+            verdict = f"{header}\n\n{notice}\n\n{rest}"
     status = (
         "success"
         if verdict.startswith(SUCCESS_HEADER)
