@@ -148,10 +148,10 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
 
 
 def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
-    """The ``aiperf profile`` argv for ``cfg``; ``cli`` is the ``aiperf`` executable."""
+    """The ``agentx profile`` argv for ``cfg``; ``cli`` is the ``agentx`` executable."""
     # The agentx scenario owns the endpoint, streaming, seed, start ratios, warmup and failure
     # defaults, trace idle cap, token counts, telemetry, dataset size, and metric slices.
-    argv = [str(cli), "profile", "--scenario", "agentx", "--url", cfg.url]
+    argv = [str(cli), "profile", "--url", cfg.url]
     argv += ["--model", cfg.model, "--tokenizer", cfg.tokenizer]
     argv += ["--concurrency", str(cfg.concurrency), "--benchmark-duration", str(cfg.duration)]
     if cfg.live_failed_request_threshold is not None:

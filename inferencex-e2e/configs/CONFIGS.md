@@ -145,6 +145,22 @@ Notes:
 - The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `srt-recipe`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
+### DWDP prefill groups
+
+Multi-node prefill workers may set `dwdp-size` to the number of ranks in a
+distributed weight-data parallel group. It defaults to 1 (disabled). For DWDP,
+`tp`, `ep`, `pp`, `dcp-size`, and `pcp-size` must all be 1 and `dp-attn` must be
+false. `num-worker` counts groups, not ranks: two workers with `dwdp-size: 8`
+allocate 16 prefill GPUs. Decode workers cannot enable DWDP.
+
+The native TensorRT-LLM recipe must enable the corresponding DWDP mode and match
+the declared group layout. This field records topology and sizes allocations;
+it does not inject backend launch flags or enable a benchmark recipe. Results
+carry `prefill_dwdp_size` when greater than 1; TP remains 1. Existing result
+identities are unchanged when DWDP is disabled.
+
+See NVIDIA's [DWDP implementation notes](https://raw.githubusercontent.com/NVIDIA/TensorRT-LLM/main/docs/source/blogs/tech_blog/blog19_DWDP_Distributed_Weight_Data_Parallelism_for_High_Performance_LLM_Inference_on_NVL72.md).
+
 ## Runners
 
 `runners.yaml` holds the schedulable runner labels and the static facts of each

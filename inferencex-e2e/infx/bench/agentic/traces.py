@@ -7,7 +7,7 @@ from infx.bench.env import InputError
 UNCAPPED = "semianalysis_cc_traces_weka_062126"
 CAPPED = "semianalysis_cc_traces_weka_062126_256k"
 # Each loader's corpus is the ``hf_dataset_name`` AIPerf registers for it in
-# utils/aiperf/src/aiperf/plugin/plugins.yaml; the run pre-downloads exactly that dataset.
+# agentx-harness's src/aiperf/plugin/plugins.yaml; the run pre-downloads exactly that dataset.
 LOADERS = {
     UNCAPPED: "semianalysisai/cc-traces-weka-062126",
     CAPPED: "semianalysisai/cc-traces-weka-062126-256k",
