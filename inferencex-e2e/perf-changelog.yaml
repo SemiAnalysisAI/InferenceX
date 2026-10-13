@@ -9646,3 +9646,18 @@
     - "ATOM's mono decode path (on by default) now takes any decode step of up to 48 rows, i.e. concurrency 1-8 with five DSpark drafts, not only DSpark verify steps. Steps of 12 or more rows that are a multiple of TP run its sublayers token-parallel, with reduce-scatters instead of all-reduces. The draft runner never runs token-parallel."
     - "No data-type or precision change to the DSpark draft. The checkpoint's bundled mtp.0-2 stages are stored like the target's layers: FP8 E4M3 weights with 32x32 UE8M0 block scales for the attention projections, shared experts and main_proj; MXFP4 routed experts; BF16 norms, router gate, Markov head and confidence head; F32 attention sinks and hc mixers. ATOM builds the draft with the target's native_quant_config() and make_v4_quant_config(), with no online quantization in this recipe, so it runs as shipped: FP8 activations on the FP8 GEMMs and the target's BF16 KV cache. Between 73defd9b8 and a0527c9db only the rows the draft reads under bounded replay change."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3928
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "DEP4 c128: admit new prefills every 48 engine steps (prefill-schedule-interval 48). DEP4 c64 is unchanged."
+    - "DEP2 c32: extend piecewise CUDA graph capture to 4096 tokens (max-cudagraph-capture-size 4096) and set prefill-schedule-interval 64. DEP2 c8 and c16 are unchanged."
+    - "Add a TP2 c1 row that runs the TP4 c1 settings on two GPUs."
+    - "Add a DEP2 c24 row with the DEP2 c32 settings (piecewise graphs to 4096 tokens, prefill-schedule-interval 64) at concurrency 24."
+    - "Add a DEP4 c96 row with the DEP4 c128 settings (prefill-schedule-interval 48) and max-num-seqs 96."
+    - "Add a DEP2 c64 host-KV row with the DEP2 c128 host-KV settings at concurrency 64."
+    - "Add a DEP2 c128 row with vLLM native CPU KV offloading (kv-offloading: dram, backend native), 32 GiB per DP rank, gpu-memory-utilization 0.955 and max-num-seqs 48."
+    - "Image, DSpark settings and all other points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3837
