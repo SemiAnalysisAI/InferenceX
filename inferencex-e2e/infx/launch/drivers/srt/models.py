@@ -35,6 +35,8 @@ class Override:
     entry: str | None = None
     served_name: str | None = None
     require_config: bool = False
+    # Load the Hub snapshot of MODEL, whether or not a checkpoint is staged.
+    hub: bool = False
 
 
 OVERRIDES: dict[str, tuple[Override, ...]] = {
@@ -89,6 +91,11 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
             served_name="DeepSeek-R1-0528",
         ),
+    ),
+    "mi355x-amds": (
+        # The cluster stages neither checkpoint; these lanes load the Hub snapshot.
+        Override(Match(any_of("dsr1"), any_of("fp8"), any_of("sglang-disagg")), hub=True),
+        Override(Match(any_of("qwen3.5"), any_of("fp4"), any_of("sglang-disagg")), hub=True),
     ),
 }
 
@@ -188,10 +195,17 @@ def model_paths(
             f"cluster {cluster.id!r} stages no checkpoint for MODEL={request.model}, "
             f"which recipe aliases {sorted(aliases)} name"
         )
+    # A fixed-sequence recipe is bound to hf:<MODEL>; only a hub lane loads it from the Hub.
+    bound = not request.is_agentic and not _override(cluster, request, "hub")
     if served is None:
+        if bound:
+            raise LaunchError(
+                f"cluster {cluster.id!r} stages no checkpoint for MODEL={request.model}, "
+                f"which the fixed-sequence recipe binds as hf:{request.model}"
+            )
         return {}
     paths = dict.fromkeys(sorted(aliases), served)
-    if not request.is_agentic:
+    if bound:
         paths[f"hf:{request.model}"] = served
     return paths
 

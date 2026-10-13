@@ -56,7 +56,7 @@ Fixed-sequence recipes, single- and multi-node, are fragments: native srt-slurm 
 2. The row's selector picks the variant. A single-node variant may name its `benchmark.env.CONC`, which keeps that concurrency paired with its tuning.
 3. The binder ([`workload.py`](../../../infx/srt_slurm/workload.py)) writes the matrix point into the selected recipe: `model.path: hf:<model>`, `model.container: <image>`, `model.precision`, `benchmark.env.ISL`/`OSL`, `identity.container.image` and `identity.model.repo` when the fragment declares `identity.container`/`identity.model`, and `benchmark.concurrencies` when telemetry is enabled. Single-node recipes also get `MODEL`, `CONC`, `RANDOM_RANGE_RATIO` and `USE_CHAT_TEMPLATE` (`true` exactly when the recipe speculates). The multi-node client reads `CONC_LIST` from the job environment.
 
-A fragment that sets any of these bound keys, or `benchmark.env.CONC_LIST`, fails before submission, even when the value matches. `hf:<model>` resolves to the cluster's staged checkpoint (`models.entries`), and the master image to its staged container. AgentX recipes stay complete and are not composed.
+A fragment that sets any of these bound keys, or `benchmark.env.CONC_LIST`, fails before submission, even when the value matches. `hf:<model>` resolves to the cluster's staged checkpoint (`models.entries`) unless a `models.OVERRIDES` row serves the Hub snapshot, and the master image to its staged container. A multi-node point with neither checkpoint nor Hub row fails before submission. AgentX recipes stay complete and are not composed.
 
 Inspect what the launcher submits without a cluster:
 

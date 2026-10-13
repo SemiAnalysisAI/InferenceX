@@ -131,11 +131,15 @@ zip_override_y:
     (BUNDLE, "org/M", "1", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
     ("model: {path: /abs/m}\n", "org/Unstaged", "1", {}),
     ("model: {path: alias-a}\n", "org/Unstaged", "1", LaunchError),
-    # A fixed-sequence fragment is bound to hf:<MODEL>, which serves the staged checkpoint.
+    # A fixed-sequence fragment is bound to hf:<MODEL>, which needs a staged checkpoint.
     ("roles: {}\n", "org/M", "0", {"hf:org/M": "nvme/m"}),
-    ("roles: {}\n", "org/Unstaged", "0", {}),
+    ("roles: {}\n", "org/Unstaged", "0", LaunchError),
+    # A hub lane loads the Hub snapshot, staged or not.
+    ("roles: {}\n", "hub/S", "0", {}),
+    ("roles: {}\n", "hub/Unstaged", "0", {}),
 ])  # fmt: skip
-def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, recipe, model, agentic, paths):
+def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, monkeypatch, recipe, model, agentic, paths):
+    monkeypatch.setitem(models.OVERRIDES, "c", (Override(Match(model_glob="hub/*"), hub=True),))
     mirror = tmp_path / "ws/benchmarks/multi_node/srt-slurm-recipes/r.yaml"
     mirror.parent.mkdir(parents=True)
     mirror.write_text(recipe)
