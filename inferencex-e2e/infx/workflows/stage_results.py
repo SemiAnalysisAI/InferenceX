@@ -140,15 +140,21 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | No
             "两者都必须是 write、maintain 或 admin 才能暂存结果。",
         )
     pull = github.api(repo, f"/pulls/{pr_number}", token)
-    labels = {label if isinstance(label, str) else label.get("name") for label in pull["labels"]}
-    if not labels.intersection(FULL_SWEEP_LABELS):
-        reject(
-            "PR does not have a full-sweep label",
-            f"@{actor} staging requires a completed run from a PR using one of: "
-            + ", ".join(f"`{label}`" for label in FULL_SWEEP_LABELS)
-            + ".",
-        )
-    run = resolve_run(repo, pr_number, pull, token, command[1])
+    # Eligibility comes from the label history when the run was created, not current labels.
+    try:
+        run = resolve_run(repo, pr_number, pull, token, command[1])
+    except RuntimeError as exc:
+        if command[1] is None and str(exc).startswith("No stageable"):
+            reject(
+                str(exc),
+                f"@{actor} {exc}. Staging requires a completed `run-sweep.yml` run "
+                "triggered while one of "
+                + ", ".join(f"`{label}`" for label in FULL_SWEEP_LABELS)
+                + " was applied.",
+            )
+        if command[1] is not None and str(exc).startswith(f"Run {command[1]} cannot"):
+            reject(str(exc), f"@{actor} {exc}.")
+        raise
     attempt = run.get("run_attempt")
     return {
         "run-id": str(run["id"]),

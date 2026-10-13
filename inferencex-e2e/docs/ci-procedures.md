@@ -377,8 +377,7 @@ Each request, including all its pages, has a 60-second timeout.
 A request is stageable only when all of the following hold:
 
 - The commenter has `write`, `maintain`, or `admin` repository permission.
-- The PR currently has one of the three full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`).
-- The candidate is a completed `pull_request` run of `run-sweep.yml`, created while a full-sweep label was active, with conclusion `success`, `failure`, or `cancelled`.
+- The candidate is a completed `pull_request` run of `run-sweep.yml`, created while one of the three full-sweep labels (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, or `full-sweep-fail-fast`) was applied. The PR's current labels do not matter, so removing a label after the sweep does not block staging. The run must have conclusion `success`, `failure`, or `cancelled`.
 - The candidate is associated with the PR under the workflow's current-head/historical-pin rules.
 - Unexpired `changelog-metadata` and at least one of `results_bmk`, `eval_results_all`, or `bmk_agentic_*` exist. Failed/cancelled runs may therefore stage useful partial data, but empty or metadata-only runs cannot.
 
