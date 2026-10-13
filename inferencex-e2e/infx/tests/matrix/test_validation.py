@@ -190,6 +190,12 @@ def valid_multinode_master_config():
 
 
 class TestWorkerConfig:
+    def test_rejects_decode_dwdp(self, valid_multinode_matrix_entry):
+        row = copy.deepcopy(valid_multinode_matrix_entry)
+        row["decode"].update({"tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8})
+        with pytest.raises(ValidationError, match="only on prefill"):
+            MultiNodeMatrixEntry.model_validate(row)
+
 
     @pytest.mark.parametrize("field", ["pp", "dcp-size", "pcp-size"])
     def test_worker_parallelism_fields_must_be_positive(self, field):
