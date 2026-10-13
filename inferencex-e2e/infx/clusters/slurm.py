@@ -164,12 +164,11 @@ class Fabric(Record):
     """The hosts' network facts; a value ``'@fabric.<name>'`` takes one: a recipe's at bind
     time, a cluster ``env`` or ``host-setup.env`` value when its record loads."""
 
-    ucx_net_devices: FabricList | None = Field(default=None, alias="ucx-net-devices")
     rdma_devices: FabricList | None = Field(default=None, alias="rdma-devices")
+    rdma_device_ports: FabricList | None = Field(default=None, alias="rdma-device-ports")
     socket_ifname: FabricList | None = Field(default=None, alias="socket-ifname")
-    mooncake_gid_index: FabricNumber | None = Field(default=None, alias="mooncake-gid-index")
-    mori_rdma_tc: FabricNumber | None = Field(default=None, alias="mori-rdma-tc")
-    mori_io_tc: FabricNumber | None = Field(default=None, alias="mori-io-tc")
+    rdma_gid_index: FabricNumber | None = Field(default=None, alias="rdma-gid-index")
+    rdma_tc: FabricNumber | None = Field(default=None, alias="rdma-tc")
 
     def rendered(self) -> dict[str, str | None]:
         """Every field as a recipe reads it, by name; None where the cluster sets none."""

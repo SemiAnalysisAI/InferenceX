@@ -59,7 +59,7 @@ base:
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
         UCX_MEMTYPE_CACHE: "n"
-        UCX_NET_DEVICES: "@fabric.ucx-net-devices"
+        UCX_NET_DEVICES: "@fabric.rdma-device-ports"
         UCX_TLS: "rc,cuda_copy"
         NCCL_IB_HCA: "@fabric.rdma-devices"
       args:
@@ -102,7 +102,7 @@ base:
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
         UCX_MEMTYPE_CACHE: "n"
-        UCX_NET_DEVICES: "@fabric.ucx-net-devices"
+        UCX_NET_DEVICES: "@fabric.rdma-device-ports"
         UCX_TLS: "rc,cuda_copy"
         NCCL_IB_HCA: "@fabric.rdma-devices"
       args:

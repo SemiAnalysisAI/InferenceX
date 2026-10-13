@@ -252,9 +252,12 @@ schema; unknown keys fail.
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
   itself uses.
 - `slurm.srt-slurm.fabric` holds the hosts' network facts that recipes take as
-  `'@fabric.<name>'` values: the lists `ucx-net-devices`, `rdma-devices` (the RDMA HCAs
-  that NCCL, Mooncake, SGLang `disaggregation-ib-device` and `IBDEVICES` use) and
-  `socket-ifname` (NCCL and Gloo), rendered comma-joined, and the numbers
-  `mooncake-gid-index`, `mori-rdma-tc` and `mori-io-tc`. The cluster's own `env` and
-  `srt-slurm.host-setup.env` values may take a field the same way; they resolve when the
-  record loads, and `env` still rejects the commas of a list.
+  `'@fabric.<name>'` values: the lists `rdma-devices` (the RDMA HCAs, as NCCL, Mooncake,
+  SGLang `disaggregation-ib-device` and `IBDEVICES` read them), `rdma-device-ports` (the
+  HCAs as `device:port`, as UCX reads them) and `socket-ifname` (NCCL and Gloo), rendered
+  comma-joined, and the numbers `rdma-gid-index` and `rdma-tc` (the RDMA GID index and
+  traffic class). Fields name cluster facts, not the software that reads them; a recipe
+  maps one onto its engine's setting, as in `MC_GID_INDEX: '@fabric.rdma-gid-index'`.
+  The cluster's own `env` and `srt-slurm.host-setup.env` values may take a field the
+  same way; they resolve when the record loads, and `env` still rejects the commas of a
+  list.

@@ -29,7 +29,7 @@ roles:
       UCX_RNDV_SCHEME: "put_zcopy"
       OMPI_MCA_btl: "tcp,self"
       OMPI_MCA_pml: "ob1"
-      TRTLLM_UCX_INTERFACE: "@fabric.ucx-net-devices"
+      TRTLLM_UCX_INTERFACE: "@fabric.rdma-device-ports"
 
     args:
       max_batch_size: 2
@@ -72,7 +72,7 @@ roles:
       UCX_RNDV_SCHEME: "put_zcopy"
       OMPI_MCA_btl: "tcp,self"
       OMPI_MCA_pml: "ob1"
-      TRTLLM_UCX_INTERFACE: "@fabric.ucx-net-devices"
+      TRTLLM_UCX_INTERFACE: "@fabric.rdma-device-ports"
 
 
     args:

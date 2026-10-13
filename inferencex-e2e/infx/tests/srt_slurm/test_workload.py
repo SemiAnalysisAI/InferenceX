@@ -190,14 +190,14 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
     path = fragment(project, {
         "base": {"name": "bundle", "roles": {"decode": {"nodes": 1}}},
         "override_wide": {"roles": {"decode": {"nodes": 4}}},
-        "override_narrow": {"roles": {"decode": {"nodes": 2, "env": {"UCX": "@fabric.ucx-net-devices"}}}},
+        "override_narrow": {"roles": {"decode": {"nodes": 2, "env": {"UCX": "@fabric.rdma-device-ports"}}}},
     })
     output = tmp_path / "bound.yaml"
     env = {**os.environ, **MULTI_ENV, "IS_AGENTIC": "0", "INFERENCEX_REPOSITORY_ROOT": str(project),
            "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "utils/srt-slurm/src")])}  # fmt: skip
 
     def bind(*arguments: str) -> subprocess.CompletedProcess[str]:
-        fabric = json.dumps({"ucx-net-devices": "mlx5_0:1,mlx5_1:1", "rdma-devices": None})
+        fabric = json.dumps({"rdma-device-ports": "mlx5_0:1,mlx5_1:1", "rdma-devices": None})
         return subprocess.run(
             [sys.executable, "-m", "infx.srt_slurm.workload", *arguments, "--fabric", fabric],
             env=env, capture_output=True, text=True, check=False,
@@ -223,14 +223,14 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
 
 def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services():
     fabric = Fabric.model_validate({
-        "ucx-net-devices": ["mlx5_0:1", "mlx5_1:1"], "rdma-devices": ["rdma0", "rdma1"],
-        "mooncake-gid-index": 3,
+        "rdma-device-ports": ["mlx5_0:1", "mlx5_1:1"], "rdma-devices": ["rdma0", "rdma1"],
+        "rdma-gid-index": 3,
     })  # fmt: skip
     recipe = {
         "roles": {"prefill": {
             "env": {
-                "UCX_NET_DEVICES": "@fabric.ucx-net-devices",
-                "MC_GID_INDEX": "@fabric.mooncake-gid-index",
+                "UCX_NET_DEVICES": "@fabric.rdma-device-ports",
+                "MC_GID_INDEX": "@fabric.rdma-gid-index",
                 "OWN": "mlx5_9:1",
             },
             "args": {"disaggregation-ib-device": "@fabric.rdma-devices", "tp-size": 8},
@@ -251,7 +251,7 @@ def test_fabric_references_take_the_clusters_rendering_in_env_args_and_services(
     }  # fmt: skip
 
 
-@pytest.mark.parametrize("value", ["@fabric.ucx-net-device", "IBDEVICES=@fabric.rdma-devices bash setup.sh"])
+@pytest.mark.parametrize("value", ["@fabric.rdma-device-port", "IBDEVICES=@fabric.rdma-devices bash setup.sh"])
 def test_an_unknown_or_embedded_fabric_reference_fails(value):
     recipe = {"services": [{"command": [value]}]}
     with pytest.raises(ValueError) as error:
@@ -260,7 +260,7 @@ def test_an_unknown_or_embedded_fabric_reference_fails(value):
 
 
 def test_a_fabric_field_the_cluster_does_not_set_fails():
-    fabric = Fabric.model_validate({"mori-io-tc": 104}).rendered()
-    recipe = {"roles": {"agg": {"env": {"MORI_IO_TC": "@fabric.mori-io-tc", "MORI_RDMA_TC": "@fabric.mori-rdma-tc"}}}}
+    fabric = Fabric.model_validate({"rdma-gid-index": 1}).rendered()
+    recipe = {"roles": {"agg": {"env": {"MC_GID_INDEX": "@fabric.rdma-gid-index", "MORI_RDMA_TC": "@fabric.rdma-tc"}}}}
     with pytest.raises(ValueError, match=r"^roles\.agg\.env\.MORI_RDMA_TC: this cluster sets no srt-slurm"):
         resolve_fabric(recipe, fabric)

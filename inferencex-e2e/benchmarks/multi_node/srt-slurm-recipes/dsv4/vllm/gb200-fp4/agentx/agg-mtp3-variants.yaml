@@ -90,7 +90,7 @@ base:
         VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
         UCX_MEMTYPE_CACHE: "n"
-        UCX_NET_DEVICES: "@fabric.ucx-net-devices"
+        UCX_NET_DEVICES: "@fabric.rdma-device-ports"
         UCX_TLS: "rc,cuda_copy"
         NCCL_IB_HCA: "@fabric.rdma-devices"
         NCCL_P2P_LEVEL: "NVL"

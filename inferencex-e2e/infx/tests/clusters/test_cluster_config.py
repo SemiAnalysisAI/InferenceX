@@ -160,7 +160,7 @@ def test_inventory_rejects_inconsistent_labels(runner_config, message):
         ("slurm.srt-slurm.fabric", {"rdma-devices": ["mlx5_0,mlx5_1"]}, "should match pattern"),
         ("slurm.srt-slurm.volume-mounts", {"hf-hub-cache": "/hf_hub_cache"}, "unknown volumes"),
         # Env values may only reference a field the cluster's own fabric sets.
-        ("env", {"MORI_RDMA_TC": "@fabric.mori-rdma-tc"}, "env.MORI_RDMA_TC: this cluster sets no srt-slurm.fabric.mori-rdma-tc"),
+        ("env", {"MORI_RDMA_TC": "@fabric.rdma-tc"}, "env.MORI_RDMA_TC: this cluster sets no srt-slurm.fabric.rdma-tc"),
         ("slurm.srt-slurm.host-setup", {"script": "setup.sh", "env": {"IBDEVICES": "@fabric.rdma-devices"}},
          "host-setup.env.IBDEVICES: this cluster sets no srt-slurm.fabric.rdma-devices"),
         ("slurm.srt-slurm.host-setup", {"script": "/opt/setup.sh"}, "repository-relative"),
@@ -175,10 +175,10 @@ def test_invalid_cluster_is_rejected(path, value, message):
 def test_env_and_host_setup_env_take_the_clusters_fabric_by_reference():
     record = with_change("slurm.srt-slurm", {
         "network-interface": "",
-        "fabric": {"rdma-devices": ["rdma0", "rdma1"], "mori-rdma-tc": 104},
+        "fabric": {"rdma-devices": ["rdma0", "rdma1"], "rdma-tc": 104},
         "host-setup": {"script": "setup.sh", "env": {"IBDEVICES": "@fabric.rdma-devices"}},
     })  # fmt: skip
-    record["env"] = {"MORI_RDMA_TC": "@fabric.mori-rdma-tc", "KEEP": "literal"}
+    record["env"] = {"MORI_RDMA_TC": "@fabric.rdma-tc", "KEEP": "literal"}
 
     cluster = load_inventory(inventory(alpha=record)).clusters["alpha"]
     assert cluster.env == {"MORI_RDMA_TC": "104", "KEEP": "literal"}

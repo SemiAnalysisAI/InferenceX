@@ -41,7 +41,7 @@ environment:
   # Multi-node TP8 decode spans two GB300 nodes; match the sibling recipes'
   # NCCL/UCX fabric settings (MNNVL/NVLS, IB HCAs).
   UCX_MEMTYPE_CACHE: "n"
-  UCX_NET_DEVICES: "@fabric.ucx-net-devices"
+  UCX_NET_DEVICES: "@fabric.rdma-device-ports"
   UCX_TLS: "rc,cuda_copy"
   NCCL_CUMEM_ENABLE: "1"
   NCCL_MNNVL_ENABLE: "1"

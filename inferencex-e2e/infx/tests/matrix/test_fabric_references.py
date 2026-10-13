@@ -48,18 +48,18 @@ def generate(project, reference: str, fabrics: dict[str, dict], runner: str = "h
     return generate_config_matrix(["fixture"], master, runners, eval_mode="none", root=project)
 
 
-DEVICES = {"ucx-net-devices": ["mlx5_0:1"]}
+DEVICES = {"rdma-device-ports": ["mlx5_0:1"]}
 
 
 def test_a_reference_every_reachable_cluster_sets_generates_the_row_as_written(tmp_path):
-    assert len(generate(tmp_path, "@fabric.ucx-net-devices", {"h200-a": DEVICES, "h200-b": DEVICES})) == 1
+    assert len(generate(tmp_path, "@fabric.rdma-device-ports", {"h200-a": DEVICES, "h200-b": DEVICES})) == 1
 
 
 @pytest.mark.parametrize(("reference", "fabrics", "message"), [
-    ("@fabric.ucx-net-device", {"h200-a": DEVICES},
-     r"override_wide: roles\.prefill\.env\.UCX_NET_DEVICES: '@fabric\.ucx-net-device' is not a whole"),
-    ("@fabric.ucx-net-devices", {"h200-a": DEVICES, "h200-b": {}},
-     r"this cluster sets no srt-slurm\.fabric\.ucx-net-devices \(cluster 'h200-b'\)"),
+    ("@fabric.rdma-device-port", {"h200-a": DEVICES},
+     r"override_wide: roles\.prefill\.env\.UCX_NET_DEVICES: '@fabric\.rdma-device-port' is not a whole"),
+    ("@fabric.rdma-device-ports", {"h200-a": DEVICES, "h200-b": {}},
+     r"this cluster sets no srt-slurm\.fabric\.rdma-device-ports \(cluster 'h200-b'\)"),
 ])  # fmt: skip
 def test_a_reference_no_fabric_field_or_reachable_cluster_serves_fails_generation(
     tmp_path, reference, fabrics, message
@@ -70,5 +70,5 @@ def test_a_reference_no_fabric_field_or_reachable_cluster_serves_fails_generatio
 
 def test_a_runner_no_cluster_label_lists_still_has_its_reference_names_checked(tmp_path):
     # Master configs may name a bare cluster id as the runner; no label maps it to a fabric.
-    with pytest.raises(ValueError, match=r"'@fabric\.ucx-net-device' is not a whole .* \(runner 'h200-a'\)"):
-        generate(tmp_path, "@fabric.ucx-net-device", {"h200-a": DEVICES}, runner="h200-a")
+    with pytest.raises(ValueError, match=r"'@fabric\.rdma-device-port' is not a whole .* \(runner 'h200-a'\)"):
+        generate(tmp_path, "@fabric.rdma-device-port", {"h200-a": DEVICES}, runner="h200-a")

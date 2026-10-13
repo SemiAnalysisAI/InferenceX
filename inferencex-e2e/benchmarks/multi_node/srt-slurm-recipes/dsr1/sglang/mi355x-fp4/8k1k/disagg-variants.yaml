@@ -34,8 +34,8 @@ base:
         IBDEVICES: '@fabric.rdma-devices'
         GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
         NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
-        MORI_RDMA_TC: '@fabric.mori-rdma-tc'
-        MORI_IO_TC: '@fabric.mori-io-tc'
+        MORI_RDMA_TC: '@fabric.rdma-tc'
+        MORI_IO_TC: '@fabric.rdma-tc'
         MORI_SHMEM_MODE: ISOLATION
         MORI_ENABLE_SDMA: 'false'
         MORI_EP_LAUNCH_CONFIG_MODE: AUTO
@@ -88,8 +88,8 @@ base:
         IBDEVICES: '@fabric.rdma-devices'
         GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
         NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
-        MORI_RDMA_TC: '@fabric.mori-rdma-tc'
-        MORI_IO_TC: '@fabric.mori-io-tc'
+        MORI_RDMA_TC: '@fabric.rdma-tc'
+        MORI_IO_TC: '@fabric.rdma-tc'
         MORI_SHMEM_MODE: ISOLATION
         MORI_ENABLE_SDMA: 'false'
         MORI_EP_LAUNCH_CONFIG_MODE: AUTO
