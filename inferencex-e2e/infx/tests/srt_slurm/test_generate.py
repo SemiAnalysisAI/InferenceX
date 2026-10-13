@@ -170,11 +170,27 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     assert recipe["telemetry"] == {"enabled": True, "dcgm_exporter": {
         "container_image": "dcgm-exporter", "command": "dcgm-exporter --address :{port}", "port": 9555,
     }}  # fmt: skip
-    # The lane's result directory, the AgentX-only aiperf mount and the cluster-wide Hub cache.
+    # The lane's result directory, the AgentX-only aiperf mount, the cluster-wide Hub cache and
+    # the launcher's power decision.
     assert recipe["benchmark"]["env"] == {
         "RESULT_DIR": "/results", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf", "HF_HUB_CACHE": "/hf",
+        "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1",
     }  # fmt: skip
     assert recipe["benchmark"]["concurrencies"] == [8]
+
+
+def test_a_multinode_agentx_point_without_power_turns_its_clients_power_off(
+    project, power_lane, tmp_path
+):
+    master = project / "configs/master.yaml"
+    config = yaml.safe_load(master.read_text())
+    del config["agentx-multi"]["scenarios"]["agentic-coding"][0]["search-space"][0]["power"]
+    master.write_text(yaml.safe_dump(config))
+    output = tmp_path / "out"
+    assert generate(project, output, "agentx-multi") == 0
+
+    [(_, recipe)] = written(output)
+    assert recipe["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "0"
 
 
 def test_a_power_point_its_lane_refuses_fails_without_writing(

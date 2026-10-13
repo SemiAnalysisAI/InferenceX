@@ -81,9 +81,6 @@ base:
   srun_options: {mem: "0", container-remap-root: ""}
   benchmark:
     env:
-      IS_MULTINODE: "false"
-      PP_SIZE: "1"
-      PCP_SIZE: "1"
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
@@ -102,9 +99,6 @@ override_tp4:
         mamba-track-interval: 8192
         mem-fraction-static: 0.80
         max-mamba-cache-size: 360
-  benchmark:
-    env:
-      TP: "4"
 
 override_tp4_parity:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-parity
@@ -121,9 +115,6 @@ override_tp4_parity:
         linear-replayssm-cache-len: 8
         mem-fraction-static: 0.80
         max-mamba-cache-size: 360
-  benchmark:
-    env:
-      TP: "4"
 
 override_tp4_no_symm:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-no-symm
@@ -137,9 +128,6 @@ override_tp4_no_symm:
         mamba-track-interval: 8192
         mem-fraction-static: 0.80
         max-mamba-cache-size: 360
-  benchmark:
-    env:
-      TP: "4"
 
 override_tp2ep2_hicache:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-k5
@@ -168,9 +156,6 @@ override_tp2ep2_hicache:
         hicache-mem-layout: page_first_direct
         hicache-write-policy: write_through_selective
         watchdog-timeout: 1000000
-  benchmark:
-    env:
-      TP: "2"
 
 override_tp2ep2_hicache_cap48:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-cap48
@@ -201,9 +186,6 @@ override_tp2ep2_hicache_cap48:
         hicache-mem-layout: page_first_direct
         hicache-write-policy: write_through_selective
         watchdog-timeout: 1000000
-  benchmark:
-    env:
-      TP: "2"
 
 override_tp2ep2_hicache_k3_baseline:
   name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-k3-baseline
@@ -233,6 +215,3 @@ override_tp2ep2_hicache_k3_baseline:
         hicache-mem-layout: page_first_direct
         hicache-write-policy: write_through_selective
         watchdog-timeout: 1000000
-  benchmark:
-    env:
-      TP: "2"

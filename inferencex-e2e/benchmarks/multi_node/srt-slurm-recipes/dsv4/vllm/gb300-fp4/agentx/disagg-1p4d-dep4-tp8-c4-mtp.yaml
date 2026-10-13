@@ -184,11 +184,6 @@ srun_options:
 benchmark:
   env:
     SERVED_MODEL_NAME: "deepseek-ai/DeepSeek-V4-Pro"
-    RUNNER_TYPE: "gb300"
-    OFFLOADING: "none"
-    TP: "8"
-    PREFILL_TP: "1"
-    EP_SIZE: "1"
     AIPERF_MAX_OSL: "none"
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"

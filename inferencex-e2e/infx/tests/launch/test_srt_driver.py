@@ -273,10 +273,11 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"},
     )
     if env["IS_AGENTIC"] == "1":
-        # lab-b mounts no cache volume, so the client keeps its caches in the container.
+        # lab-b mounts no cache volume, so the client keeps its caches in the container, and
+        # measures no power.
         assert bound["benchmark"]["env"] == {
             "RESULT_DIR": "/logs/agentic", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache",
-            "HF_HUB_CACHE": "/hf_hub_cache",
+            "HF_HUB_CACHE": "/hf_hub_cache", "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "0",
         }
 
     config = srtslurm(checkout)
@@ -324,6 +325,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == commit + "\n"
     bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
     assert bound["benchmark"]["concurrencies"] == [4]
+    assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
 

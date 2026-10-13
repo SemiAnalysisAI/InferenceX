@@ -238,9 +238,18 @@ def binder_inputs(
     request: SrtRequest,
     decision: PowerDecision,
 ) -> tuple[int | None, dict[str, str]]:
-    """The DCGM exporter port and AgentX client paths a multi-node recipe is bound with."""
-    client_env = agentic_client_env(cluster, srt, lane, request) if request.is_agentic else {}
-    return (srt.power_exporter_port if decision.dcgm else None), client_env
+    """The DCGM exporter port and AgentX client env a multi-node recipe is bound with.
+
+    The client marks power windows exactly when the launcher collects the point's AgentX power.
+    """
+    port = srt.power_exporter_port if decision.dcgm else None
+    if not request.is_agentic:
+        return port, {}
+    return port, {
+        **agentic_client_env(cluster, srt, lane, request),
+        "IS_MULTINODE": str(request.is_multinode).lower(),
+        "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
+    }
 
 
 def write_lane_config(

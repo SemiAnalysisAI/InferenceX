@@ -166,17 +166,8 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             id="single-node-publishes-no-power",
         ),
         pytest.param(
-            # Multi-node recipes that pin IS_MULTINODE=false still run under the multi-node
-            # workflow, which collects ${RESULT_FILENAME}_conc*.json.
-            {"CONC_LIST": "8", "KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "lmcache",
-             "TOTAL_CPU_DRAM_GB": "2400"},
-            0,
-            ["replay", "aggregate agentx_conc8", "analyze", "validate"],
-            {f"conc_8/{name}" for name in REPLAYED},
-            id="conc-list-point",
-        ),
-        pytest.param(
-            {**WINDOW, "ENABLE_AGENTX_POWER": "0"},
+            {**WINDOW, "ENABLE_AGENTX_POWER": "0", "KV_OFFLOADING": "dram",
+             "KV_OFFLOAD_BACKEND": "lmcache", "TOTAL_CPU_DRAM_GB": "2400"},
             0,
             ["replay", "aggregate agentx_conc8", "analyze", "validate"],
             {f"conc_8/{name}" for name in REPLAYED},

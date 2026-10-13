@@ -113,8 +113,6 @@ base:
     container-remap-root: ''
   benchmark:
     env:
-      IS_MULTINODE: 'false'
-      TP: '2'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
@@ -167,7 +165,3 @@ override_tp8_c7_b1:
         moe-runner-backend: flashinfer_cutedsl
         speculative-moe-runner-backend: flashinfer_cutedsl
         disable-prefill-cuda-graph: true
-  benchmark:
-    env:
-      IS_MULTINODE: 'true'
-      TP: '8'

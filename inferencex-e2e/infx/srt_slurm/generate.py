@@ -94,7 +94,7 @@ def _binder_inputs(
     placement: tuple[str, Cluster] | None,
     root: Path,
 ) -> tuple[int | None, dict[str, str]]:
-    """The DCGM exporter port and AgentX client paths the launcher binds a multi-node point with.
+    """The DCGM exporter port and AgentX client env the launcher binds a multi-node point with.
 
     Raises ``ValueError`` when they depend on a cluster the runner label does not single out,
     or the cluster's lanes refuse the point.

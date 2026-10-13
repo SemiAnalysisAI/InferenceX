@@ -110,8 +110,6 @@ telemetry:
 
 benchmark:
   env:
-    # Aggregated serving uses one TP8 worker for both prefill and decode.
-    TP: "8"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     # Fail the run loudly if the aggregate engine's sglang: metrics never reach

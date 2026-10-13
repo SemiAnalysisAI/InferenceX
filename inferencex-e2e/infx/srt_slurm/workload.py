@@ -30,7 +30,8 @@ SHARED_BLOCKS = {
 BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
 # The binder writes these, the master power field owns telemetry, and the launcher hands
-# the benchmark client its cache and result paths.
+# the benchmark client its cache and result paths and, multi-node, IS_MULTINODE and the
+# AgentX power switch.
 _POINT_KEYS = (
     ("model", "path"),
     ("model", "container"),
@@ -48,7 +49,12 @@ BOUND_ENV = {
     (False, False): _FIXED_ENV,
     (False, True): _FIXED_ENV,
     (True, False): ("MODEL", *_AGENTIC_ENV),
-    (True, True): (*_AGENTIC_ENV, "AIPERF_DATASET_MMAP_CACHE_DIR"),
+    (True, True): (
+        *_AGENTIC_ENV,
+        "AIPERF_DATASET_MMAP_CACHE_DIR",
+        "IS_MULTINODE",
+        "ENABLE_AGENTX_POWER",
+    ),
 }
 
 

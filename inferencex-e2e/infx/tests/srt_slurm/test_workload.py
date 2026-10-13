@@ -88,6 +88,11 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
      "benchmark.env.HF_HUB_CACHE (= '/elsewhere')"),
     ({"base": {"benchmark": {"env": {"RESULT_DIR": "/logs"}}}}, True, False,
      "base.benchmark.env.RESULT_DIR (= '/logs')"),
+    ({"base": {}, "override_tp8": {"benchmark": {"env": {
+        "IS_MULTINODE": "false", "ENABLE_AGENTX_POWER": "0",
+    }}}}, True, True,
+     "override_tp8.benchmark.env.IS_MULTINODE (= 'false'), "
+     "override_tp8.benchmark.env.ENABLE_AGENTX_POWER (= '0')"),
 ])  # fmt: skip
 def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, agentic, multinode, reported):
     path = fragment(project, data)
