@@ -166,6 +166,8 @@ env:
   PREFILL_PP_SIZE: ${{ fromJSON(inputs.config).prefill.pp }}
   PREFILL_DCP_SIZE: ${{ fromJSON(inputs.config).prefill.dcp-size }}
   PREFILL_PCP_SIZE: ${{ fromJSON(inputs.config).prefill.pcp-size }}
+  PREFILL_DWDP_SIZE: ${{ fromJSON(inputs.config).prefill.dwdp-size || 1 }}
+  DWDP_ARTIFACT_SUFFIX: ${{ fromJSON(inputs.config).prefill.dwdp-size > 1 && format('-dwdp{0}', fromJSON(inputs.config).prefill.dwdp-size) || '' }}
   PREFILL_EP: ${{ fromJSON(inputs.config).prefill.ep }}
   PREFILL_DP_ATTN: ${{ fromJSON(inputs.config).prefill.dp-attn }}
 
@@ -296,7 +298,7 @@ jobs:
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
@@ -533,7 +535,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
@@ -558,7 +560,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
@@ -581,7 +583,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
