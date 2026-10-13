@@ -89,43 +89,6 @@ def _error_category(error: Any) -> str:
     return (first_line.split(":", 1)[0] or "unknown")[:120]
 
 
-def load_server_metrics(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def load_server_log_head(path: Path, max_bytes: int = 64 * 1024 * 1024) -> str | None:
-    if not path.exists():
-        return None
-    with open(path, "rb") as f:
-        data = f.read(max_bytes)
-    return data.decode("utf-8", errors="replace").replace("\x00", "")
-
-
-def find_server_log_paths(result_dir: Path) -> list[Path]:
-    paths: list[Path] = []
-    direct = result_dir / "server.log"
-    if direct.is_file():
-        paths.append(direct)
-
-    for root in (result_dir, *result_dir.parents[:3]):
-        if not root.is_dir():
-            continue
-        paths.extend(sorted(root.glob("watchtower-*.out")))
-
-    deduped: list[Path] = []
-    seen: set[Path] = set()
-    for path in paths:
-        resolved = path.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        deduped.append(path)
-    return deduped
-
-
 def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path | None:
     if not hf_dataset_name:
         return None
