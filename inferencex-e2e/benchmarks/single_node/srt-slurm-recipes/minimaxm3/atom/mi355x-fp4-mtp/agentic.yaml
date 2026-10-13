@@ -7,7 +7,7 @@ base:
   name: minimaxm3-fp4-mi355x-atom-agentic
   model:
     path: hf:amd/MiniMax-M3-MXFP4
-    container: rocm/atom-dev:nightly_202610121516@sha256:a60811a8467b43e3e50e9e9eb8cec34f68b7bca03f8c6dbd6a0ff813dde49d4c
+    container: rocm/atom-dev:nightly_202610100929@sha256:cc60ba06b28050a7fdec71e21f1853c782a9ec8850f031e84ebf0e49f3180974
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -48,6 +48,7 @@ base:
         AITER_FLYDSL_STAGE2_FP8: '1'
         ATOM_FORCE_ATTN_TRITON: '1'
         ATOM_PA_FLYDSL: '1'
+        ATOM_PA_FLYDSL_PLAN: '1'
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
