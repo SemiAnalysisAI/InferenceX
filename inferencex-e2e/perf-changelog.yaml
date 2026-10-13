@@ -9628,5 +9628,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX recipes: aggregated TP4 at conc 1 and 8, and disaggregated DEP2 prefill / DEP16 decode at 8P1D, 6P1D and 5P1D."
+    - "Add GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX recipes: aggregated TP4 at conc 1 and 8, and disaggregated DEP2 prefill / DEP16 decode at 10P1D, 8P1D, 6P1D and 5P1D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3941
