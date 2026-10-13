@@ -9613,6 +9613,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3833
 
 - config-keys:
+    - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the GLM-5.2 NVFP4 GB300 TensorRT-LLM AgentX image from 1.3.0rc26.dev202609040000 to 1.3.0rc28.dev202609210001 on all six points."
+    - "Switch NIXL KV transfer to the C++ transfer-agent bounce buffer (max_average_descriptor_size 4MB, min_descriptor_count 1) and lower kv_cache_bounce_size_mb from 5120 to 1024."
+    - "Move Dynamo on all six points to the ai-dynamo 1.6.0.dev20261010 wheel, which includes ai-dynamo/dynamo#15628 (routed node address selection for metadata and transport advertisement)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261012."
+    - "Trade TTFT for P90 ITL with a longer prefill-decode interval: 192 with lpm scheduling at concurrency 1-8 (TP2 and TP4) and 96 at concurrency 16."
+    - "Enable SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL and ROCM_QUICK_REDUCE_QUANTIZATION=INT8, previously NONE."
+    - "Run TP2 concurrency 32 and 64 on DP2 attention with TP MoE instead of TP-only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3926
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
   scenario-type:
     - agentic-coding

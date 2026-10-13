@@ -17,7 +17,14 @@ KEY = "pullrequestreview-42"
 
 
 def verdict(
-    header=PASS, *, failure=False, warning=False, reuse_warning=False, body_warning=False, prefix=""
+    header=PASS,
+    *,
+    failure=False,
+    warning=False,
+    reuse_warning=False,
+    body_warning=False,
+    nvidia_warning=False,
+    prefix="",
 ):
     rows = [
         f"✅ Check {number} (Requirement): PASS — Verified." for number in range(14)
@@ -45,6 +52,12 @@ def verdict(
         )
     else:
         rows.append("✅ Check 15 (PR description): PASS — Claims match the assessed commit.")
+    if nvidia_warning:
+        expanded.append(
+            "⚠️ Check 16 (NVIDIA overview): WARN — Kimi-K3 / vLLM on B300: missing listing."
+        )
+    else:
+        rows.append("➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.")
     return (
         header
         + "\n\n"
@@ -216,7 +229,21 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
             True,
         ),
         (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
-        (verdict() + "\n✅ Check 16 (Unknown): PASS — extra", True),
+        (verdict() + "\n✅ Check 17 (Unknown): PASS — extra", True),
+        (verdict(PASS, nvidia_warning=True), True),
+        (verdict(REJECT, nvidia_warning=True), True),
+        (
+            verdict().replace(
+                "➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.\n", ""
+            ),
+            True,
+        ),
+        (
+            verdict().replace(
+                "➖ Check 16 (NVIDIA overview): N/A", "❌ Check 16 (NVIDIA overview): FAIL"
+            ),
+            True,
+        ),
         (
             verdict().replace(
                 "✅ Check 15 (PR description): PASS — Claims match the assessed commit.\n", ""
@@ -289,26 +316,44 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(
     "failure,coverage_warning",
     [(False, False), (True, False), (False, True), (True, True)],
 )
-@pytest.mark.parametrize("advisory_warning", ["reuse_warning", "body_warning"])
+@pytest.mark.parametrize("advisory_warning", ["reuse_warning", "body_warning", "nvidia_warning"])
 def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     publish, failure, coverage_warning, advisory_warning
 ):
     header = REJECT if failure else WARN
     result = publish(
-        verdict(header, failure=failure, warning=coverage_warning, **{advisory_warning: True})
+        verdict(header, failure=failure, warning=coverage_warning, **{advisory_warning: True}),
+        repeats=2,
     )
     body = result["comments"][0]["body"]
     assert body.startswith(marker() + "\n" + header)
-    expected_warning = (
-        "⚠️ Check 4 (Reuse command): WARN — No authorized reuse command."
-        if advisory_warning == "reuse_warning"
-        else "⚠️ Check 15 (PR description): WARN — Body claims 16 GiB; recipe sets 8 GiB."
-    )
+    expected_warning = {
+        "reuse_warning": "⚠️ Check 4 (Reuse command): WARN — No authorized reuse command.",
+        "body_warning": "⚠️ Check 15 (PR description): WARN — Body claims 16 GiB; recipe sets 8 GiB.",
+        "nvidia_warning": (
+            "⚠️ Check 16 (NVIDIA overview): WARN — Kimi-K3 / vLLM on B300: missing listing."
+        ),
+    }[advisory_warning]
     assert expected_warning in body.split("<details>")[0]
+    assert body.split("<details>")[0].count("❗❗ WARNING ❗❗") == (
+        1 if advisory_warning == "nvidia_warning" else 0
+    )
     assert ("Pareto coverage needs additional review" in body) == coverage_warning
     assert ("@functionstackx" in body) == coverage_warning
     assert ("❌ Check 1 (Sweep): FAIL" in body) == failure
     assert "did not produce a valid verdict" not in body
+    assert len(result["writes"]) == 1
+
+
+def test_listed_nvidia_pair_passes_without_warning_banner(publish):
+    content = verdict().replace(
+        "➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.",
+        "✅ Check 16 (NVIDIA overview): PASS — All affected model/framework pairs are listed.",
+    )
+    result = publish(content)
+    body = result["comments"][0]["body"]
+    assert body == marker() + "\n" + content + f"\n\nAssessed commit: `{SHA}`.\n"
+    assert "❗❗ WARNING ❗❗" not in body
 
 
 @pytest.mark.parametrize(
