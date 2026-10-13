@@ -9623,6 +9623,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261012."
+    - "Trade TTFT for P90 ITL with a longer prefill-decode interval: 192 with lpm scheduling at concurrency 1-8 (TP2 and TP4) and 96 at concurrency 16."
+    - "Enable SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL and ROCM_QUICK_REDUCE_QUANTIZATION=INT8, previously NONE."
+    - "Run TP2 concurrency 32 and 64 on DP2 attention with TP MoE instead of TP-only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3926
+
+- config-keys:
     - dsv41flash-fp4-b300-vllm-agentic-dspark
   description:
     - "Update the B300 DeepSeek-V4.1-Flash vLLM image from nightly-dev ac9126e5 to official nightly fe4df3df."
