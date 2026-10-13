@@ -1,13 +1,14 @@
 # DeepSeek-V4-Pro-0813 AgentX on MI355X with vLLM DSpark K6
 # (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x). Pure
 # TP8 through c64; the wide band runs DP attention (DEP8) behind the vLLM
-# Router. The KV cache is GPU-resident.
+# Router, both with the AITER MoE (EP1) and with AITER MegaMoE (EP8). The KV
+# cache is GPU-resident.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19
+    container: vllm/vllm-openai-rocm:nightly-fe4df3df0eb703862c686b256e9fe44fa94c8945
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -228,4 +229,144 @@ override_dep8_c192:
   benchmark:
     env:
       CONC: '192'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+# DEP8 with AITER MegaMoE: fused EP8 dispatch/GEMM/combine on the MoRI
+# symmetric heap, which vLLM sizes itself. MegaMoE requires TP1, expert
+# parallelism, a MoRI all2all backend and no EPLB. Its shared-expert fusion
+# would requantize the FP8 shared experts of the DSpark draft layers to
+# MXFP4, so it stays off to serve the draft as shipped.
+override_dep8_megamoe_c32:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        all2all-backend: mori_high_throughput
+        moe-backend: aiter_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 32
+      env:
+        VLLM_ROCM_AITER_MEGA_MOE_FUSE_SHARED_EXPERTS: '0'
+  benchmark:
+    env:
+      CONC: '32'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_megamoe_c64:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        all2all-backend: mori_high_throughput
+        moe-backend: aiter_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 64
+      env:
+        VLLM_ROCM_AITER_MEGA_MOE_FUSE_SHARED_EXPERTS: '0'
+  benchmark:
+    env:
+      CONC: '64'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_megamoe_c128:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        all2all-backend: mori_high_throughput
+        moe-backend: aiter_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 128
+      env:
+        VLLM_ROCM_AITER_MEGA_MOE_FUSE_SHARED_EXPERTS: '0'
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_megamoe_c192:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        all2all-backend: mori_high_throughput
+        moe-backend: aiter_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 192
+      env:
+        VLLM_ROCM_AITER_MEGA_MOE_FUSE_SHARED_EXPERTS: '0'
+  benchmark:
+    env:
+      CONC: '192'
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_megamoe_c256:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+    env:
+      SETUP_PIP_PACKAGES: 'vllm-router==0.1.14'
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        all2all-backend: mori_high_throughput
+        moe-backend: aiter_mega_moe
+        prefill-schedule-interval: 8
+        long-prefill-token-threshold: 16384
+        max-num-seqs: 256
+      env:
+        VLLM_ROCM_AITER_MEGA_MOE_FUSE_SHARED_EXPERTS: '0'
+  benchmark:
+    env:
+      CONC: '256'
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'

@@ -9646,3 +9646,14 @@
     - "ATOM's mono decode path (on by default) now takes any decode step of up to 48 rows, i.e. concurrency 1-8 with five DSpark drafts, not only DSpark verify steps. Steps of 12 or more rows that are a multiple of TP run its sublayers token-parallel, with reduce-scatters instead of all-reduces. The draft runner never runs token-parallel."
     - "No data-type or precision change to the DSpark draft. The checkpoint's bundled mtp.0-2 stages are stored like the target's layers: FP8 E4M3 weights with 32x32 UE8M0 block scales for the attention projections, shared experts and main_proj; MXFP4 routed experts; BF16 norms, router gate, Markov head and confidence head; F32 attention sinks and hc mixers. ATOM builds the draft with the target's native_quant_config() and make_v4_quant_config(), with no online quantization in this recipe, so it runs as shipped: FP8 activations on the FP8 GEMMs and the target's BF16 KV cache. Between 73defd9b8 and a0527c9db only the rows the draft reads under bounded replay change."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3928
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19 to vllm/vllm-openai-rocm:nightly-fe4df3df0eb703862c686b256e9fe44fa94c8945, the latest published ROCm nightly, which includes the AITER MegaMoEV2 integration for DeepSeek-V4 (vllm-project/vllm#59685), and update model.container to match."
+    - "Add a DEP8 band with AITER MegaMoE at concurrency 32, 64, 128, 192 and 256: data-parallel-size 8, tensor-parallel-size 1, --enable-expert-parallel, --all2all-backend mori_high_throughput and --moe-backend aiter_mega_moe, behind the same vLLM Router consistent-hash routing, prefill interleaving and max-num-seqs = concurrency as the existing DEP8 band. vLLM sizes the MoRI symmetric heap for MegaMoE (8G)."
+    - "The TP8 band (concurrency 1-64) and the EP1 DEP8 band (concurrency 64, 128, 192) keep their settings on the new image, so the frontier can pick the better MoE at each overlapping concurrency."
+    - "No weight-precision change to the DSpark draft: VLLM_ROCM_AITER_MEGA_MOE_FUSE_SHARED_EXPERTS stays 0, because the shared-expert fusion requantizes the FP8 shared experts of the draft layers to MXFP4. Without it, the routed experts of the target and the bundled DeepSeek-V4-Pro-0813 draft keep their shipped MXFP4 weights and the FP8 shared experts run on their regular path. Like the DeepGEMM MegaMoE backends of the B200/B300 vLLM AgentX configs, the MegaMoE band runs the routed experts with FP8 activations (a8w4) where the default AITER MoE uses BF16; the TP8 and EP1 DEP8 bands keep the default."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3968
