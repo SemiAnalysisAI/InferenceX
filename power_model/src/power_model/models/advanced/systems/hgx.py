@@ -210,6 +210,7 @@ class HGXSystemChassis(GPUSystem):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         state = OperatingState.model_validate(operating_state)

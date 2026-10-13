@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import datetime
+import datetime as dt
 import os
 import shlex
 import sys
@@ -143,7 +143,7 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     rc = _open_power_window(plan, python, env)
     if rc:
         return rc
-    argv = replay_argv(cfg, runtime.aiperf)
+    argv = replay_argv(cfg, runtime.agentx)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
     with proc.DeferSignals() as signals:
@@ -168,7 +168,7 @@ def _open_power_window(plan: Plan, python: str, env: Mapping[str, str]) -> int:
         return 0
     # AIPerf exports naive local datetimes; the adapter needs the offset to convert the
     # profiling window to Unix time.
-    now = datetime.datetime.now(datetime.timezone.utc).astimezone()
+    now = dt.datetime.now(dt.timezone.utc).astimezone()
     (plan.result_dir / "agentic_power_timezone_offset.txt").write_text(f"{now:%z}\n")
     rc = _power_adapter(plan, python, env, *_window(plan, "running"))
     if rc:
@@ -262,8 +262,8 @@ def main(argv: list[str]) -> int:
     plan = Plan.from_env(os.environ)
     runtime = Runtime.for_job(os.environ)
     if not runtime.active():
-        print(f"Preparing the AIPerf runtime in {runtime.venv}", flush=True)
-        rc = bootstrap(runtime, proc.REPO_ROOT / "utils" / "aiperf")
+        print(f"Preparing the AgentX runtime in {runtime.venv}", flush=True)
+        rc = bootstrap(runtime)
         if rc:
             return rc
         # The venv interpreter needs the same safe sys.path as this one had.

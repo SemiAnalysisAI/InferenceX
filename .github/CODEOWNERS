@@ -16,7 +16,6 @@ inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @wzhao18 
 
 # PoR for Models & general direction
 inferencex-e2e/docs/MODELS.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
-inferencex-e2e/docs/MODELS_zh.md @ankur-singh @chunfangamd @SemiAnalysisAI/core
 
 # CollectiveX
 collectivex/ @Oseltamivir @functionstackx

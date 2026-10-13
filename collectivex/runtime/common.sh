@@ -37,7 +37,7 @@ COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 # low-latency ladder clamp. nccl4py is pinned alongside so a rebuild resolves the same tree. Two
 # whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
 # string keys the shared cache dir.
-COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.1.0 nccl4py[cu13]==0.5.0"
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
 
 collx_log_tail() {
   local log_path="$1"

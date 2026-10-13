@@ -1,11 +1,5 @@
 # InferenceX Documentation
 
-<div align="center">
-
-**English** | [中文](index_zh.md)
-
-</div>
-
 This is the mandatory low-context router for InferenceX work. Pick the one page that owns the task, then follow only its source links. Repository source files and workflows remain authoritative.
 
 Paths and shell commands in these guides are relative to `inferencex-e2e/` unless stated otherwise. The Python manifest, lockfile, and `.python-version` live in that project directory. Repository-wide policy and GitHub workflows remain at the repository root.
@@ -33,17 +27,17 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 
 | Page | Open it for |
 | --- | --- |
-| [`index.md`](index.md) / [`index_zh.md`](index_zh.md) | This task router and its Chinese counterpart |
-| [`architecture.md`](architecture.md) / [`architecture_zh.md`](architecture_zh.md) | Config-to-result flow, ownership boundaries, artifacts, and InferenceX-app handoff |
+| [`index.md`](index.md) | This task router |
+| [`architecture.md`](architecture.md) | Config-to-result flow, ownership boundaries, artifacts, and InferenceX-app handoff |
 | [`power_model` README](../../power_model/README.md) | Installation, CLI usage, supported systems, and power-model assumptions |
-| [`ci-procedures.md`](ci-procedures.md) / [`ci-procedures_zh.md`](ci-procedures_zh.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
-| [`eval-agentx-procedures.md`](eval-agentx-procedures.md) / [`eval-agentx-procedures_zh.md`](eval-agentx-procedures_zh.md) | Eval and AgentX selection, execution, scoring, evidence, and live-run diagnosis |
-| [`agentx-standalone.md`](agentx-standalone.md) / [`agentx-standalone_zh.md`](agentx-standalone_zh.md) | Install the pinned AgentX client and replay traces against an existing server without CI or Slurm |
-| [`results-and-ingestion.md`](results-and-ingestion.md) / [`results-and-ingestion_zh.md`](results-and-ingestion_zh.md) | Published-result lookup, artifact identities and schemas, app ingestion, dedupe, and provenance |
-| [`recovery-results-procedures.md`](recovery-results-procedures.md) / [`recovery-results-procedures_zh.md`](recovery-results-procedures_zh.md) | Result processing, ingest verification and recovery, runner cleanup, and failure classification |
-| [`testing.md`](testing.md) / [`testing_zh.md`](testing_zh.md) | Local checks, smoke runs, evidence standards, and review gates |
-| [`troubleshooting.md`](troubleshooting.md) / [`troubleshooting_zh.md`](troubleshooting_zh.md) | Failure-layer diagnosis, known cases, safe remediation, and stop conditions |
-| [`PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) / [`PR_REVIEW_CHECKLIST_zh.md`](PR_REVIEW_CHECKLIST_zh.md) | CODEOWNER review and exact sign-off requirements |
+| [`ci-procedures.md`](ci-procedures.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
+| [`eval-agentx-procedures.md`](eval-agentx-procedures.md) | Eval and AgentX selection, execution, scoring, evidence, and live-run diagnosis |
+| [`agentx-standalone.md`](agentx-standalone.md) | Install the pinned AgentX client and replay traces against an existing server without CI or Slurm |
+| [`results-and-ingestion.md`](results-and-ingestion.md) | Published-result lookup, artifact identities and schemas, app ingestion, dedupe, and provenance |
+| [`recovery-results-procedures.md`](recovery-results-procedures.md) | Result processing, ingest verification and recovery, runner cleanup, and failure classification |
+| [`testing.md`](testing.md) | Local checks, smoke runs, evidence standards, and review gates |
+| [`troubleshooting.md`](troubleshooting.md) | Failure-layer diagnosis, known cases, safe remediation, and stop conditions |
+| [`PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) | CODEOWNER review and exact sign-off requirements |
 
 ## Authoritative references
 
@@ -58,8 +52,8 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`benchmarks/multi_node/srt-slurm-recipes/RECIPES.md`](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md) | Disaggregated recipe registration and master-config coupling |
 | [`utils/runner_setup/RUNNER_SETUP.md`](../utils/runner_setup/RUNNER_SETUP.md) | Runner provisioning and setup |
 | [`MODELS.md`](MODELS.md) | Supported models, hardware coverage, and naming |
-| [`klaud.md`](klaud.md) / [`klaud_zh.md`](klaud_zh.md) | Klaud Cold selection, ownership, validation and recovery |
-| [`klaud-reporting.md`](klaud-reporting.md) / [`klaud-reporting_zh.md`](klaud-reporting_zh.md) | Klaud PR body, progress comments, numeric comparisons and final preflight |
+| [`klaud.md`](klaud.md) | Klaud Cold selection, ownership, validation and recovery |
+| [`klaud-reporting.md`](klaud-reporting.md) | Klaud PR body, progress comments, numeric comparisons and final preflight |
 | [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh) | AgentX trace replay client shared by single- and multi-node srt-slurm recipes |
 
 ## Context rules
@@ -67,4 +61,4 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 1. Open only the focused page and source sections needed for the task.
 2. Do not load large YAML, JSON, logs, generated matrices, or whole reference files when a filtered view answers the question.
 3. Source code, workflow YAML, schemas, launchers, and collectors win over explanatory docs.
-4. When behavior changes, update the nearest English guide first and its `_zh.md` counterpart in the same change.
+4. When behavior changes, update the nearest English guide. Only READMEs retain Chinese translations; update an existing `README_zh.md` alongside its English README, and do not create Chinese counterparts for other docs.
