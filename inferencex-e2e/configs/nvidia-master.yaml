@@ -8842,7 +8842,7 @@ dsv41flash-fp4-b200-sglang-agentic-dspark:
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [48, 128], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: benchmarks/single_node/srt-slurm-recipes/dsv41flash/sglang/b200-fp4-mtp/agentic.yaml }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7
+  image: vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:abdc8f42f4c7cd19e00e06a6582392cb94222575fb3ac0a1512dd6abe51bcdbd
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
