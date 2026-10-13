@@ -36,7 +36,6 @@ base:
       - deepseek_v41
   environment:
     PYTHONHASHSEED: "0"
-  setup_script: vllm-container-deps.sh
   slurm:
     time_limit: "6:00:00"
   health_check:
@@ -115,7 +114,7 @@ base:
         prefill-schedule-interval: 2
         gpu-memory-utilization: 0.95
         data-parallel-size: 2
-        kernel-config: '{"enable_flashinfer_autotune":false,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048],"max_cudagraph_capture_size":2046}'
         max-num-seqs: 64
         max-num-batched-tokens: 16384

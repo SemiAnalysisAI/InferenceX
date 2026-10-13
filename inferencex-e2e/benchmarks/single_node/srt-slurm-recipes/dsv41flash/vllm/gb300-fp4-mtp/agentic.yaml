@@ -6,7 +6,7 @@ base:
   name: dsv41flash-fp4-gb300-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7
+    container: vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4
     precision: fp4
   resources:
     gpu_type: gb300
