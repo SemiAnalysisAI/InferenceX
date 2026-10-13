@@ -7,7 +7,7 @@ base:
   name: minimaxm3-fp4-mi355x-atom-agentic
   model:
     path: hf:amd/MiniMax-M3-MXFP4
-    container: rocm/atom-dev:nightly_202610100929@sha256:cc60ba06b28050a7fdec71e21f1853c782a9ec8850f031e84ebf0e49f3180974
+    container: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
     precision: fp4
   resources:
     gpu_type: mi355x
