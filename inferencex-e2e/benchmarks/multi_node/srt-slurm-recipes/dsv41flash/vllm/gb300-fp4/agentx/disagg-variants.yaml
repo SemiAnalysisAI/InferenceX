@@ -180,7 +180,7 @@ base:
         numa-bind-nodes: [0, 0, 1, 1]
   sbatch_directives:
     mem: "0"
-    cpus-per-task: "72"
+    cpus-per-task: "144"
   srun_options:
     container-remap-root: ""
   benchmark:
