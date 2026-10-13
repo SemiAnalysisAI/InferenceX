@@ -52,9 +52,15 @@ base:
       type: etcd
       placement:
         node: infra
+  # The Dynamo frontend and the AgentX client share one CPU-only node: next to two DEP2 prefill instances (Engram CPU
+  # tables plus 70 GiB host KV per rank) the client and frontend memory at conc 5120 exhausted the head node. The
+  # frontend is pinned to NUMA node 0.
   frontend:
     type: dynamo
     enable_multiple_frontends: false
+    numa_bind: true
+    placement:
+      node: dedicated
     args:
       router-mode: "kv"
       router-session-affinity-ttl-secs: 14400
@@ -186,6 +192,8 @@ base:
   benchmark:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    placement:
+      node: dedicated
     env:
       INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
       RESULT_DIR: "/logs/agentic"
