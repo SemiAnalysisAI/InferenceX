@@ -9623,11 +9623,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
     - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
-    - dsv41flash-fp4-gb300-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
   description:
-    - "Add GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated AgentX recipes (DEP2 prefill, DEP16 decode; 8P1D, 6P1D and 5P1D)."
-    - "Move the GB300 single-node arm to vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4 and run its TP4 points at conc 1 and 8."
+    - "Add GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX recipes: aggregated TP4 at conc 1 and 8, and disaggregated DEP2 prefill / DEP16 decode at 8P1D, 6P1D and 5P1D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3941
