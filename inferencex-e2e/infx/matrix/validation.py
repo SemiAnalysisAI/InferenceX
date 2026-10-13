@@ -49,6 +49,7 @@ class Fields(Enum):
     PP = "pp"
     DCP_SIZE = "dcp-size"
     PCP_SIZE = "pcp-size"
+    DWDP_SIZE = "dwdp-size"
     CONC_START = "conc-start"
     CONC_END = "conc-end"
     CONC_LIST = "conc-list"
@@ -208,6 +209,7 @@ class WorkerConfig(BaseModel):
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
+    dwdp_size: int = Field(default=1, alias=Fields.DWDP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     hardware: str | None = Field(default=None, min_length=1)
@@ -217,6 +219,14 @@ class WorkerConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_worker_topology(self) -> Self:
+        if self.dwdp_size > 1 and (
+            self.num_worker <= 0
+            or (self.tp, self.ep, self.pp, self.dcp_size, self.pcp_size) != (1, 1, 1, 1, 1)
+            or self.dp_attn
+        ):
+            raise ValueError(
+                "DWDP requires active workers with TP=EP=PP=DCP=PCP=1 and dp-attn=false"
+            )
         return _validate_tp_context_topology(self)
 
 
@@ -244,6 +254,8 @@ class AggregateWorkerConfig(BaseModel):
 
 def _validate_worker_hardware_pair(self: Any) -> Any:
     """Require prefill and decode workers to declare hardware together."""
+    if self.decode.dwdp_size > 1:
+        raise ValueError("DWDP is supported only on prefill workers")
     if bool(self.prefill.hardware) != bool(self.decode.hardware):
         raise ValueError(
             f"'{Fields.HARDWARE.value}' must be specified for both "
@@ -700,6 +712,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                         Fields.PP.value,
                         Fields.DCP_SIZE.value,
                         Fields.PCP_SIZE.value,
+                        Fields.DWDP_SIZE.value,
                     )
                 )
                 raise ValueError(

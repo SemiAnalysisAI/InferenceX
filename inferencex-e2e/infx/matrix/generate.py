@@ -349,6 +349,7 @@ def worker_node_count(
         * worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
         * worker.get(Fields.PCP_SIZE.value, 1)
+        * worker.get(Fields.DWDP_SIZE.value, 1)
     )
     return math.ceil(total_gpus / gpus_per_node)
 
@@ -451,6 +452,7 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
         worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
         * worker.get(Fields.PCP_SIZE.value, 1)
+        * worker.get(Fields.DWDP_SIZE.value, 1)
     )
     if gpus_per_replica > gpus_per_node:
         if gpus_per_replica % gpus_per_node != 0:
