@@ -1,15 +1,15 @@
 schema: 2
-name: agg-b300-tp2-c44-b2-k5-mtp-hicache-nightly-20260901
+name: agg-b300-tp2-c44-b2-k5-mtp-hicache-nightly-20261013
 model:
   path: qwen3.5-fp4
-  container: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
+  container: lmsysorg/sglang:nightly-dev-20261013-7224fce1
   precision: fp4
 slurm:
   time_limit: '08:00:00'
 identity:
   model: {repo: nvidia/Qwen3.5-397B-A17B-NVFP4}
-  container: {image: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729}
-  frameworks: {sglang: nightly-dev-cu13-20260901-07c8f729}
+  container: {image: lmsysorg/sglang:nightly-dev-20261013-7224fce1}
+  frameworks: {sglang: nightly-dev-20261013-7224fce1}
 health_check:
   max_attempts: 1440
   interval_seconds: 10
@@ -35,25 +35,15 @@ roles:
       NCCL_MNNVL_ENABLE: '1'
       NCCL_CUMEM_ENABLE: '1'
       NCCL_NVLS_ENABLE: '0'
-      MC_FORCE_MNNVL: '1'
-      NVSHMEM_REMOTE_TRANSPORT: none
-      MC_TE_METRIC: 'true'
-      SGLANG_ENABLE_SPEC_V2: '1'
-      SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
       SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
-      SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
       SGLANG_MOE_NVFP4_DISPATCH: '1'
-      SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
-      SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
-      SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
       FLASHINFER_DISABLE_VERSION_CHECK: '1'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
       SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
       SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
-      SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
     args:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-cache-report: true
@@ -65,11 +55,7 @@ roles:
       pipeline-parallel-size: 1
       data-parallel-size: 1
       expert-parallel-size: 1
-      moe-dense-tp-size: 2
-      enable-dp-attention: false
-      enable-dp-lm-head: false
       moe-a2a-backend: none
-      load-balance-method: round_robin
       mamba-radix-cache-strategy: extra_buffer
       mamba-track-interval: 8192
       mamba-max-states-per-path: 3
@@ -105,7 +91,6 @@ roles:
       weight-loader-prefetch-num-threads: 4
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
-      hicache-io-backend: kernel
       hicache-mem-layout: page_first_direct
       hicache-size: 128
       enable-metrics: true
@@ -113,13 +98,12 @@ roles:
       disable-attn-tp-gather: true
 sbatch_directives:
   mem: '0'
-  cpus-per-task: '144'
 srun_options:
   mem: '0'
   container-remap-root: ''
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
