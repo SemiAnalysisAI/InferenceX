@@ -96,6 +96,7 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
         pp=_env_int(env, "PREFILL_PP_SIZE", 1),
         dcp_size=_env_int(env, "PREFILL_DCP_SIZE", 1),
         pcp_size=_env_int(env, "PREFILL_PCP_SIZE", 1),
+        dwdp_size=_env_int(env, "PREFILL_DWDP_SIZE", 1),
         ep=_env_int(env, "PREFILL_EP", 1),
     )
     prefill_dp_attention = env.get("PREFILL_DP_ATTN", "false")
