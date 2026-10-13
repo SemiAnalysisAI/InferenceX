@@ -9621,3 +9621,9 @@
     - "Switch NIXL KV transfer to the C++ transfer-agent bounce buffer (max_average_descriptor_size 4MB, min_descriptor_count 1) and lower kv_cache_bounce_size_mb from 5120 to 1024."
     - "Move Dynamo on all six points to the ai-dynamo 1.6.0.dev20261010 wheel, which includes ai-dynamo/dynamo#15628 (routed node address selection for metadata and transport advertisement)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-agentic-mtp
+  description:
+    - "Update the ATOM image from nightly_202610070333 to nightly_202610080328 (ATOM v0.1.7)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3945
