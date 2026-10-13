@@ -123,6 +123,7 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
             pp=int(env.get("PREFILL_PP_SIZE", "1")),
             dcp_size=int(env.get("PREFILL_DCP_SIZE", "1")),
             pcp_size=int(env.get("PREFILL_PCP_SIZE", "1")),
+            dwdp_size=int(env.get("PREFILL_DWDP_SIZE", "1")),
             ep=int(env["PREFILL_EP"]),
         )
         prefill_dp_attn = env["PREFILL_DP_ATTN"]
