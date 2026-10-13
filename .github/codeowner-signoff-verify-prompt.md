@@ -741,6 +741,13 @@ unchanged. It records only the assessed commit and does not publish commit statu
 verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
+After writing the file, check it with the publisher's rules:
+```bash
+uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate /tmp/codeowner-signoff-verdict.md
+```
+It lists every row or header the publisher would reject. Fix those and rerun it until it
+prints `Verdict format is valid.` before you finish. It checks format only; never change a
+check's conclusion to satisfy it.
 
 KEEP IT TIGHT. A busy reviewer should get it in ~15 seconds. Do not write a novel or a
 single terse line. Rules:
@@ -782,8 +789,7 @@ single terse line. Rules:
   The status word alone selects the emoji. An N/A row starts with ➖ even when it is the
   only N/A row among PASS rows; Check 12 is N/A on most PRs. Keep each row on one line,
   with its reason after ` — `. Never end a row at its status and continue the reason on
-  later lines or in sub-bullets; the publisher rejects such rows. Before writing the file,
-  recheck every row's emoji and ` — <reason>` against these formats.
+  later lines or in sub-bullets; the publisher rejects such rows.
   Never hide Check 4, 14, 15, or 16 WARN inside the collapsed group.
   Check 4, 15, and 16 warnings must not trigger the Pareto-coverage escalation.
   For Check 14 WARN, the publisher adds the
