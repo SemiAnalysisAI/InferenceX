@@ -1060,7 +1060,10 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
     if path not in recipes:
         if not (root / path).is_file():
             raise ValueError(f"{reference} does not exist")
-        recipes[path] = yaml.safe_load((root / path).read_text())
+        try:
+            recipes[path] = yaml.safe_load((root / path).read_text())
+        except yaml.YAMLError as error:
+            raise ValueError(f"{path} is not valid YAML") from error
     recipe = recipes[path]
     if not selector:
         return

@@ -201,6 +201,7 @@ def recipe_root(tmp_path):
         (recipes / "bundle.yaml").write_text(yaml.safe_dump({
             "base": {}, "override_a": {}, "zip_override_z": {"benchmark": {"c": [1, 2], "d": [3]}},
         }))
+        (recipes / "broken.yaml").write_text("base: [\n")
     return tmp_path
 
 
@@ -1088,6 +1089,7 @@ class TestValidateMasterConfig:
         ("srt-recipe", "bundle.yaml:override_b", "has no variant override_b"),
         ("srt-recipe", "bundle.yaml:zip_override_z[2]", r"has no variant zip_override_z\[2\]"),
         ("srt-recipe", "recipe.yaml:base", "only an override bundle"),
+        ("srt-recipe", "broken.yaml", "fixture/broken.yaml is not valid YAML"),
     ])
     def test_load_time_validation_resolves_the_selected_variant(
         self, recipe_root, valid_multinode_master_config, field, reference, error,
