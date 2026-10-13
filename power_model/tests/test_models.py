@@ -336,6 +336,11 @@ def test_mixed_chassis_and_rack_use_their_actual_gpu_counts():
     assert [node.power_w for node in named(measured, "X86CPU")] == [240]
     assert named(measured, "GraceCPU") == []
     assert [node.power_w for node in named(measured, "Grace socket (measured)")] == [3528]
+    # A per-x86-socket measurement leaves the Grace sockets modeled.
+    measured = model.estimate_breakdown(125, cpu_measured_power_per_socket=180)
+    assert [node.power_w for node in named(measured, "CPU")] == [360]
+    assert named(measured, "X86CPU") == []
+    assert [node.power_w for node in named(measured, "GraceCPU")] == [3600]
 
 
 def test_external_network_power_does_not_heat_the_chassis_fan_model():

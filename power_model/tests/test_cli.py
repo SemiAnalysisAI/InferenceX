@@ -309,6 +309,19 @@ def test_cli_example_formula_uses_the_selected_system_cooling(capsys, system, ex
     assert "facility_to_gpu_power_ratio" not in model_result.model_dump()
 
 
+def test_cli_measured_x86_cpu_input_reaches_json_and_bom_only_when_given(capsys):
+    args = ["--gpu-level-power-per-gpu=612.5", "--system=mi355"]
+    main(args)
+    assert "cpu_measured_power_per_socket" not in json.loads(capsys.readouterr().out)
+    main([*args, "--cpu-measured-power-per-socket=180"])
+    assert json.loads(capsys.readouterr().out)["cpu_measured_power_per_socket"] == 180
+    main([*args, "--cpu-measured-power-per-socket=180", "--power-breakdown-per-chassis"])
+    output = " ".join(capsys.readouterr().out.split())
+    assert "x86 CPU input (measured): 180.00 W/socket" in output
+    assert "├─ CPU 180.00 2 360.00" in output
+    assert "X86CPU" not in output
+
+
 @pytest.mark.parametrize("power", ["0", "5e-324"])
 @pytest.mark.parametrize("bom", [False, True])
 def test_cli_ratio_is_unavailable_for_zero_input_or_unrepresentable_ratio(capsys, power, bom):
@@ -442,6 +455,23 @@ def test_cli_help_lists_models_and_systems(capsys):
             rack_args() + ["--cpu-and-dram-measured-power-per-socket=nan"],
             "argument --cpu-and-dram-measured-power-per-socket: "
             "expected finite watts >= 0, got 'nan'",
+        ),
+        (
+            rack_args() + ["--cpu-measured-power-per-socket=180"],
+            "cpu_measured_power_per_socket requires a system with x86 CPU sockets",
+        ),
+        (
+            [
+                "--model=example",
+                "--gpu_level_power_per_gpu=125",
+                "--system=mi355",
+                "--cpu-measured-power-per-socket=180",
+            ],
+            "cpu_measured_power_per_socket requires the oss model's x86 CPU inventory",
+        ),
+        (
+            hgx_args("mi355") + ["--cpu-measured-power-per-socket=-1"],
+            "argument --cpu-measured-power-per-socket: expected finite watts >= 0, got '-1'",
         ),
         (hgx_args() + ["--dimm-count=32"], "unrecognized arguments: --dimm-count=32"),
         (hgx_args() + ["--dimm-capacity-gb=64"], "unrecognized arguments: --dimm-capacity-gb=64"),

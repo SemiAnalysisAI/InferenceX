@@ -52,6 +52,7 @@ class RackScaleSystem(GPUSystem):
         gpu_level_power_per_gpu: float,
         *,
         cpu_and_dram_measured_power_per_socket: float | None = None,
+        cpu_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         per_gpu = validate_watts(gpu_level_power_per_gpu)

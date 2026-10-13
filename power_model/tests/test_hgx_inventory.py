@@ -132,6 +132,27 @@ def test_extra_components_feed_fans_without_replacing_automatic_inventory():
     ]
 
 
+def test_measured_x86_cpu_replaces_modeled_cpus_and_loads_fans_and_psu_without_resizing_fans():
+    hardware = MI355HGXSystemChassis()
+    modeled_board, modeled_generic, modeled_losses, modeled_fans = hardware.estimate_it_power(
+        612.5
+    ).children
+    board, generic, losses, fans = hardware.estimate_it_power(
+        612.5, cpu_measured_power_per_socket=180
+    ).children
+
+    cpu, *rest = generic.children
+    assert (cpu.name, cpu.quantity, cpu.power_w, cpu.provenance.kind) == ("CPU", 2, 360, "measured")
+    assert rest == list(modeled_generic.children[1:])
+    assert board == modeled_board
+    assert fans.power_w > modeled_fans.power_w
+    assert losses.power_w > modeled_losses.power_w
+    sizing = ("full_cooling_load_w", "design_non_gpu_power_w", "electrical_nameplate_w")
+    assert [dict(fans.details)[key] for key in sizing] == [
+        dict(modeled_fans.details)[key] for key in sizing
+    ]
+
+
 @pytest.mark.parametrize(
     "component, message",
     [

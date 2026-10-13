@@ -53,6 +53,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         "never DCGM field 1130 CPU power; replaces modeled Grace CPU and LPDDR5X",
     )
     parser.add_argument(
+        "--cpu-measured-power-per-socket",
+        type=_measured_watts,
+        help="RAPL package average in watts per x86 CPU socket (HGX only), excluding DIMMs; "
+        "replaces modeled x86 CPU",
+    )
+    parser.add_argument(
         "--system",
         type=system_name,
         choices=tuple(SYSTEMS),
@@ -99,6 +105,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         result = model.estimate_breakdown(
             args.gpu_level_power_per_gpu,
             cpu_and_dram_measured_power_per_socket=args.cpu_and_dram_measured_power_per_socket,
+            cpu_measured_power_per_socket=args.cpu_measured_power_per_socket,
         )
         ratio = (
             result.AllInPower_per_gpu / result.gpu_level_power_per_gpu

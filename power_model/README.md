@@ -26,6 +26,7 @@ python -m power_model --gpu-level-power-per-gpu=400 --system=h100 \
 | --- | --- |
 | `--gpu-level-power-per-gpu` | Required actual GPU electrical watts per GPU; underscore spelling also accepted |
 | `--cpu-and-dram-measured-power-per-socket` | GB200/GB300 NVL72 only: ACPI `Grace Power Socket` watts per socket; see below |
+| `--cpu-measured-power-per-socket` | HGX x86 systems only: RAPL package watts per CPU socket, excluding DIMMs; see below |
 | `--system` | Required system from the table below |
 | `--model` | `oss` (default) or `example` |
 | `--workload` | `fixed-seq-len` (default), `agentic`, or `agentic-cpu-offloading` |
@@ -45,4 +46,17 @@ On every Grace socket (36 per rack), the value replaces the modeled `GraceCPU` a
 ```bash
 python -m power_model --system=gb200 --gpu-level-power-per-gpu=594.191 \
   --cpu-and-dram-measured-power-per-socket=98.066 --power-breakdown-per-chassis
+```
+
+### Measured x86 CPU
+
+`--cpu-measured-power-per-socket` takes the per-socket average of RAPL package power. Compute each socket's `package-N` energy delta over the measurement window, divide it by the window length, and average across sockets. Pass package power only. Do not add a RAPL DRAM domain on Intel hosts, because the model keeps DIMMs modeled. AMD EPYC exposes no RAPL DRAM domain.
+
+On each HGX chassis, the value replaces the modeled `X86CPU` line for both sockets with a `CPU` line of measured provenance. The `DDR5DIMM` line stays modeled, as do NICs, optics, NVMe drives and PCIe switches. The measured CPU is part of the chassis DC load, so fan draw, PSU loss and facility power through PUE respond to it. Fan sizing still uses the modeled design-state CPU. A cluster without x86 sockets, such as `--system=gb200`, rejects the flag, as do `--model=example` and a negative or non-finite value. HGX systems already reject `--cpu-and-dram-measured-power-per-socket`.
+
+AMD Zen RAPL has not been validated against wall power, and Schöne et al. (TU Dresden, 2021) found Zen 2 RAPL inaccurate. The model labels the value as measured with that caveat.
+
+```bash
+python -m power_model --system=mi355 --gpu-level-power-per-gpu=612.5 \
+  --cpu-measured-power-per-socket=180 --power-breakdown-per-chassis
 ```
