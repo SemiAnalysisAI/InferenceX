@@ -9621,3 +9621,16 @@
     - "Switch NIXL KV transfer to the C++ transfer-agent bounce buffer (max_average_descriptor_size 4MB, min_descriptor_count 1) and lower kv_cache_bounce_size_mb from 5120 to 1024."
     - "Move Dynamo on all six points to the ai-dynamo 1.6.0.dev20261010 wheel, which includes ai-dynamo/dynamo#15628 (routed node address selection for metadata and transport advertisement)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-81198e97ba7eee2a22540caaa756b7fdddcb4d93 to vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945, and update model.container to match."
+    - "Sweep dcp1 and dcp8 concurrency 1 GPU-resident, dcp8 concurrency 4, 10, 14 and 16, and dcp8 concurrency 48, 92 and 96 with the SimpleCPUOffloadConnector DRAM tier (224.875 GB/rank). Concurrency 12 and 44 are dropped; 92 and 96 are new."
+    - "Concurrency 1 (dcp1 and dcp8) admits one sequence (max-num-seqs 1, was 2)."
+    - "Concurrency 92 and 96 run without a DSpark draft (no speculative-config) and keep the mtp matrix label. They use dcp8 a2a, the DRAM tier, max-num-seqs 2x concurrency (184, 192), max-num-batched-tokens 24576, async scheduling off (--no-async-scheduling), and FULL_AND_PIECEWISE CUDA graphs at every even size up to 2x concurrency."
+    - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#59591 (latent MoE up-proj stores only the local rank's shards), #59069 (AttnRes output fused with per-token FP8 input quantization), #60717 (vLLM's FP8 max in that fused quantization), #60446 (KDA autotune keys), #59523 (cuMem CUDA-graph pool offload on ROCm) and #59880 (speculative block reservations across KV cache groups with a KV connector)."
+    - "No change to the Inferact/Kimi-K3-DSpark draft's precision: K3DSparkModel and get_draft_quant_config() are unchanged between the two images, so the draft keeps BF16 weights and an fp8 KV cache where it runs; concurrency 92 and 96 load no draft."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

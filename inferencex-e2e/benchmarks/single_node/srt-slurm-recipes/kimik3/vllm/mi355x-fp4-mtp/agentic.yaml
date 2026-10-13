@@ -1,17 +1,18 @@
 # Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
 # (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
 # is ~195 GB per GPU. The KV cache is GPU-resident at c1 and backed by
-# vLLM's SimpleCPUOffloadConnector (dram) from dcp8 c4. Three bands, driven by
+# vLLM's SimpleCPUOffloadConnector (dram) from dcp8 c4. Four bands, driven by
 # kimik3-fp4-mi355x-vllm-agentic-mtp: interactive dcp1/dcp8 c1 (GPU-resident),
 # mid dcp8 c4-c16 and throughput dcp8 c44/c48/c50 (KV read sharded across all
-# 8 GPUs, DRAM offload, DSpark draft with synthetic acceptance). The 1799 GB
-# DRAM budget splits evenly across the eight ranks.
+# 8 GPUs, DRAM offload, DSpark draft with synthetic acceptance), and high
+# concurrency dcp8 c92/c96 (DRAM offload, no draft). The 1799 GB DRAM budget
+# splits evenly across the eight ranks.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
   model:
     path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai-rocm:nightly-rocm100-81198e97ba7eee2a22540caaa756b7fdddcb4d93
+    container: vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -112,7 +113,7 @@ override_tp8_c1_dcp8:
       args:
         decode-context-parallel-size: 8
         dcp-comm-backend: a2a
-        max-num-seqs: 2
+        max-num-seqs: 1
         max-num-batched-tokens: 16384
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16]}'
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
@@ -311,6 +312,54 @@ override_tp8_c50_dcp8_simple:
   benchmark:
     env:
       CONC: '50'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
+      SPEC_DECODING: 'mtp'
+
+# High-concurrency band: dcp8 shards the KV read across all 8 GPUs, backed by
+# the SimpleCPUOffload DRAM tier, with no DSpark draft (no speculative-config)
+# and async scheduling off. The points keep the mtp matrix label. Admission is
+# 2x CONC and graph capture covers every even size up to 2x CONC.
+override_tp8_c92_dcp8_simple:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 184
+        max-num-batched-tokens: 24576
+        no-async-scheduling: true
+        gpu-memory-utilization: 0.9
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":184,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '92'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1799'
+      SPEC_DECODING: 'mtp'
+
+override_tp8_c96_dcp8_simple:
+  roles:
+    agg:
+      args:
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        max-num-seqs: 192
+        max-num-batched-tokens: 24576
+        no-async-scheduling: true
+        gpu-memory-utilization: 0.9
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":192,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184,186,188,190,192]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+      env:
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        PYTHONHASHSEED: '42'
+  benchmark:
+    env:
+      CONC: '96'
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
       SPEC_DECODING: 'mtp'
