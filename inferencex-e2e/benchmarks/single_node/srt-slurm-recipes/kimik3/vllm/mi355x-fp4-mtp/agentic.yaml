@@ -93,7 +93,7 @@ override_tp8_c1:
   roles:
     agg:
       args:
-        max-num-seqs: 2
+        max-num-seqs: 1
         max-num-batched-tokens: 16384
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16]}'
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
