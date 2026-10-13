@@ -9621,3 +9621,9 @@
     - "Switch NIXL KV transfer to the C++ transfer-agent bounce buffer (max_average_descriptor_size 4MB, min_descriptor_count 1) and lower kv_cache_bounce_size_mb from 5120 to 1024."
     - "Move Dynamo on all six points to the ai-dynamo 1.6.0.dev20261010 wheel, which includes ai-dynamo/dynamo#15628 (routed node address selection for metadata and transport advertisement)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3707
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Update the B300 DeepSeek-V4.1-Flash vLLM image from nightly-dev ac9126e5 to official nightly fe4df3df."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3947
