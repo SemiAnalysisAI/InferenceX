@@ -511,6 +511,7 @@ clusters:
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         job-tag: h200
+        single-node-launcher: docker
         gpus-per-node-directive: true
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm, latest]

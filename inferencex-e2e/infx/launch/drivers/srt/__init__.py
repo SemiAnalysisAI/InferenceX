@@ -8,7 +8,9 @@ driver also uses the Slurm backend's own operations.
 from __future__ import annotations
 
 import os
+import re
 import shlex
+import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping
@@ -16,12 +18,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from infx.clusters.slurm import SlurmSettings
-from infx.launch import policy
+from infx.launch import policy, proc
 from infx.launch.backends.base import BackendError
-from infx.launch.backends.slurm import srtctl_job_name
+from infx.launch.backends.slurm import cli, srtctl_job_name
 from infx.launch.context import Launch
 from infx.launch.drivers.srt import collect, config, lanes, models, power, submit
 from infx.launch.drivers.srt.checkout import (
+    Checkout,
     checkout_dir,
     compute_workspace,
     install_srtctl,
@@ -35,6 +38,14 @@ from infx.launch.request import BATCH_REENTRY_ENV, RequestError, SingleNodeReque
 if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.clusters.slurm import SrtSlurmSettings
+
+
+# Host-specific names; docker gets every other launch variable, as pyxis would.
+DOCKER_HOST_ENV = re.compile(
+    r"PATH|HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|SHLVL|HOSTNAME|TERM|TMPDIR|MAIL|_|"
+    r"PYTHONPATH|PYTHONHOME|VIRTUAL_ENV|CUDA_VISIBLE_DEVICES|INVOCATION_ID|JOURNAL_STREAM|"
+    r"(LD|LC|XDG|SSH|DBUS|UV|SLURM|SBATCH|SALLOC|SRUN|GITHUB|RUNNER|ACTIONS|NVIDIA)_\w*"
+)
 
 
 def run_single_node(launch: Launch) -> int:
@@ -53,12 +64,15 @@ def run_single_node(launch: Launch) -> int:
     if rc := submit.bind_point(run, checkout, root / "arguments"):
         return rc
     selected, runtime_args = submit.bound_arguments(root / "arguments")
+    docker = run.srt.single_node_launcher == "docker"
     job_config = config.SrtJob(
         srtctl_root=checkout.root,
         workspace=run.workspace,
         time_limit=time_limit,
         image=request.image,
-        container=run.backend.stage_image(request.image, single_node=True).reference,
+        container=request.image
+        if docker
+        else run.backend.stage_image(request.image, single_node=True).reference,
         nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
         model_paths={f"hf:{request.model}": model_path},
         mounts=[(str(hf_cache), request.hf_hub_cache)],
@@ -66,9 +80,19 @@ def run_single_node(launch: Launch) -> int:
         account=run.account,
     )
     config.create_volume_mounts(run)
-    config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
+    rendered = config.render(run.cluster, job_config)
+    if docker:
+        # Pyxis hands a container the whole submit environment; docker only what it is told.
+        names = sorted(n for n in run.env if n.isidentifier() and not DOCKER_HOST_ENV.fullmatch(n))
+        rendered["launcher"] = "docker"
+        rendered["docker_args"] = [
+            "-w", "/infmax-workspace", *(arg for name in names for arg in ("-e", name)),
+        ]  # fmt: skip
+    config.write(checkout.root / "srtslurm.yaml", rendered)
     if rc := run_setup(run, checkout):
         return rc
+    if docker:
+        return _run_single_node_docker(run, checkout, root, selected, runtime_args, time_limit)
 
     fetched = root / "fetched-outputs"
     submitted = submit.Submitted(manifest=run.workspace / submit.SINGLE_NODE_SUBMISSION)
@@ -87,6 +111,45 @@ def run_single_node(launch: Launch) -> int:
     if not run.backend.state(job).succeeded:
         return 1
     return collect.check_single_node(run, run.backend.fetch_outputs(job, fetched) / "logs")
+
+
+def _run_single_node_docker(
+    run: SrtRun,
+    checkout: Checkout,
+    root: Path,
+    selected: str,
+    runtime_args: list[str],
+    time_limit: str,
+) -> int:
+    """Hold one whole node with ``salloc`` and run ``srtctl apply`` (launcher: docker) on it.
+
+    srtctl runs the job in the foreground on the allocated node, its containers under the
+    node's docker daemon, so the step's exit code is the job's.
+    """
+    allocation = run.backend.allocate_node(int(time_limit))
+    image = run.request.image.replace("#", "/", 1)
+    if cli.srun(allocation, ["docker", "pull", "--quiet", image]):
+        return 1
+    outputs = root / "outputs"
+    # Containers run as root: hand their outputs back so the runner can clean its workspace.
+    owner = f"{os.getuid()}:{os.getgid()}"
+    chown = ["docker", "run", "--rm", "--entrypoint", "chown", "-v", f"{root}:{root}", image]
+    run.life.callback(cli.srun, allocation, [*chown, "-R", owner, str(root)])
+    manifest = run.workspace / submit.SINGLE_NODE_SUBMISSION
+    eval_args = submit.eval_args(run.env, submit.SINGLE_NODE_EVAL_COMMAND)
+    arguments = ["--json", "--yes", "--output", str(outputs), *runtime_args, *eval_args]
+    argv = submit.apply_argv(run, checkout, selected, arguments)
+    env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
+    step = cli.srun_argv(allocation, argv)
+    proc.echo(step, env)
+    with manifest.open("w") as handle:
+        rc = subprocess.run(step, env=env, cwd=checkout.root, stdout=handle, check=False).returncode
+    jobs = sorted(outputs.glob("docker-*"), key=lambda path: path.stat().st_mtime)
+    if not jobs:
+        print(f"ERROR: srtctl wrote no job under {outputs} (exit {rc})", file=sys.stderr)
+        return rc or 1
+    run.life.callback(collect.stage_single_node, run, jobs[-1])
+    return rc or collect.check_single_node(run, jobs[-1] / "logs")
 
 
 def run_batch(launch: Launch) -> int:

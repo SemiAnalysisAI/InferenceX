@@ -160,6 +160,10 @@ class SrtSlurmSettings(Record):
     )
     single_node_time_limit: int | None = Field(default=None, alias="single-node-time-limit", gt=0)
     single_node_models: Literal["staged", "hub"] = Field(default="hub", alias="single-node-models")
+    # docker: single-node points run srtctl's launcher: docker inside an exclusive salloc.
+    single_node_launcher: Literal["slurm", "docker"] = Field(
+        default="slurm", alias="single-node-launcher"
+    )
     preflight: bool = True
     dist_timeout_s: int | None = Field(default=None, alias="dist-timeout-s", gt=0)
     gpus_per_node_directive: bool | None = Field(default=None, alias="gpus-per-node-directive")

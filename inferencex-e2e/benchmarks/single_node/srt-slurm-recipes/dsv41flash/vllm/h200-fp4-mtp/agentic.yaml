@@ -6,7 +6,7 @@ base:
   name: dsv41flash-fp4-h200-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
+    container: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7
     precision: fp4
   resources:
     gpu_type: h200
@@ -217,7 +217,15 @@ override_tp4_c16:
     env:
       CONC: '16'
 
+# DNM: c32 runs behind a separate vllm-router frontend container.
 override_tp4_c32:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router-0.1.14.sh
   roles:
     agg:
       gpus: 4

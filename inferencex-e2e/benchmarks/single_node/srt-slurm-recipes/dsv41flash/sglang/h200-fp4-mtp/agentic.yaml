@@ -6,7 +6,7 @@ base:
   name: dsv41flash-fp4-h200-sglang-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17
+    container: lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9@sha256:7cfd4dd8e0e902d2a3c0560565963c4e172091e1586aaed15ff5a0a131394d34
     precision: fp4
   resources:
     gpu_type: h200
@@ -140,7 +140,16 @@ override_tp4_c16:
       CONC: '16'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
 
+# DNM: c32 runs behind a separate sglang-router frontend container.
 override_tp4_c32:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-retries: true
   roles:
     agg:
       gpus: 4

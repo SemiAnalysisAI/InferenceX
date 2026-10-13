@@ -329,6 +329,13 @@ class SlurmBackend(Backend):
         self.life.callback(cli.cancel, job)
         return job
 
+    def allocate_node(self, time_min: int) -> Job:
+        """``salloc`` one whole node, exclusively, and cancel it when the launch ends."""
+        resources = self._resources(self.cluster.gpus_per_node, time_min)
+        job = cli.salloc(resources, extra=["--exclusive", *self.settings.salloc_args])
+        self.life.callback(cli.cancel, job)
+        return job
+
     def _ensure(self, image: str, policy: SquashPolicy) -> str:
         """Stage ``image`` before any allocation exists (a ``compute`` import runs its own step)."""
         alloc_args = self._import_step_args() if policy.import_mode == "compute" else ()

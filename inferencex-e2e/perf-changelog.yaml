@@ -9632,3 +9632,12 @@
     - "Enable SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL and ROCM_QUICK_REDUCE_QUANTIZATION=INT8, previously NONE."
     - "Run TP2 concurrency 32 and 64 on DP2 attention with TP MoE instead of TP-only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3926
+
+- config-keys:
+    - dsv41flash-fp4-h200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "DNM: 20-minute AgentX points through srt-slurm launcher: docker on h200-dgxc."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3942

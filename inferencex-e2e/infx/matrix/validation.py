@@ -14,7 +14,7 @@ from pydantic import (
 
 from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 
-DEFAULT_AGENTIC_DURATION_SECONDS = 3600
+DEFAULT_AGENTIC_DURATION_SECONDS = 1200
 
 """
     The below class defines the field names expected to be present in the JSON entries

@@ -54,7 +54,11 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     if job is None:
         return 0
     run.backend.cancel(job)
-    output = run.backend.fetch_outputs(job, fetched)
+    return stage_single_node(run, run.backend.fetch_outputs(job, fetched))
+
+
+def stage_single_node(run: SrtRun, output: Path) -> int:
+    """Stage a single-node job's server logs, result, and AgentX artifacts from ``output``."""
     if not output.is_dir():
         return 0
     rc = 0
