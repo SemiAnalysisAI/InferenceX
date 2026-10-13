@@ -9633,4 +9633,4 @@
     - "Concurrency 92 and 96 run without a DSpark draft (no speculative-config) and keep the mtp matrix label. They use dcp8 a2a, the DRAM tier, max-num-seqs 2x concurrency (184, 192), max-num-batched-tokens 24576, async scheduling off (--no-async-scheduling), and FULL_AND_PIECEWISE CUDA graphs at every even size up to 2x concurrency."
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#59591 (latent MoE up-proj stores only the local rank's shards), #59069 (AttnRes output fused with per-token FP8 input quantization), #60717 (vLLM's FP8 max in that fused quantization), #60446 (KDA autotune keys), #59523 (cuMem CUDA-graph pool offload on ROCm) and #59880 (speculative block reservations across KV cache groups with a KV connector)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: K3DSparkModel and get_draft_quant_config() are unchanged between the two images, so the draft keeps BF16 weights and an fp8 KV cache where it runs; concurrency 92 and 96 load no draft."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3951
