@@ -389,7 +389,9 @@ An authorized maintainer comments exactly one of:
 /stage-results <run-id>
 ```
 
-Without an ID, the workflow selects the latest stageable completed run on the PR branch whose head SHA remains in the PR commit list. A pinned ID permits an explicitly associated historical run. The workflow acknowledges the run, dispatches the `stage-results` event to InferenceX-app, and [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) replaces the acknowledgement with a success chart or failure link.
+Without an ID, the workflow selects the latest stageable completed run on the PR branch whose head SHA remains in the PR commit list. A pinned ID permits an explicitly associated historical run. The workflow acknowledges the run, dispatches the `stage-results` event to InferenceX-app, and [`stage-results-callback.yml`](../../.github/workflows/stage-results-callback.yml) replaces the acknowledgement with links to the staged Pareto lines or a failure link.
+
+After ingest, InferenceX-app supplies a `chart-links` list containing a label and URL for each staged model/workload/precision/hardware series. Each link selects that series with `i_gpus` and the exact run with `i_dates=YYYY-MM-DD~rRUN_ID`, together with its model, workload, and precision. Multiple staged lines receive separate links; evaluation-only runs with no performance curves do not get an invented chart link. The callback validates the staging origin and run selection before posting. Older app callbacks without `chart-links` retain the run/date-only link during rollout.
 
 A well-formed `/use <run-id>` reuse request also triggers this workflow and stages that pinned run under the same rules, in addition to the normal reuse handling. Malformed `/use` comments are left to the reuse workflow and do not stage.
 
