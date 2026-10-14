@@ -144,8 +144,6 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
         "CONC": "4", "ISL": "1024", "OSL": "128", "MODEL": "org/model",
         "RANDOM_RANGE_RATIO": "0.8", "USE_CHAT_TEMPLATE": "true",
     }}  # fmt: skip
-    # Fixed-sequence runs verify real drafts; simulated acceptance is unset. The runner
-    # label names one cluster, whose fabric the reference takes.
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth7"}
 
 
@@ -190,8 +188,6 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     assert recipe["telemetry"] == {"enabled": True, "dcgm_exporter": {
         "container_image": "dcgm-exporter", "command": "dcgm-exporter --address :{port}", "port": 9555,
     }}  # fmt: skip
-    # The lane's result directory, the AgentX-only aiperf mount, the cluster-wide Hub cache and
-    # the launcher's power decision.
     assert recipe["benchmark"]["env"] == {
         "RESULT_DIR": "/results", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf", "HF_HUB_CACHE": "/hf",
         "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "0",

@@ -263,9 +263,6 @@ def write_multinode_power_window(
         duration=float(boundary["duration"]),
     )
     try:
-        # The collector validates the result referenced by a completed window.
-        # Publish that result first so it can never observe a completed window
-        # that points to a missing or partially written result.
         _write_json_atomic(formal_result, formal_result_payload)
         _write_json_atomic(formal_window, completed)
     except OSError as exc:
@@ -295,7 +292,6 @@ def _record_multinode_adapter_failure(
         )
         _write_json_atomic(agg_result, aggregate)
     finally:
-        # Preserve the verdict even when the aggregate is missing or malformed.
         _write_multinode_failure_validation(validation_result, reasons)
 
 
@@ -439,7 +435,6 @@ def main() -> int:
                 f"[agentx_power] Failed to record multinode adapter failure: {exc}",
                 file=sys.stderr,
             )
-            # Preserve the invalid verdict even when there is no usable aggregate.
             try:
                 _write_multinode_failure_validation(validation_result, reasons)
             except (OSError, ValueError) as validation_exc:

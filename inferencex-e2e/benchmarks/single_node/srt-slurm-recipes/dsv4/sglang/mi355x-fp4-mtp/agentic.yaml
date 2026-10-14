@@ -1,9 +1,3 @@
-# DeepSeek-V4-Pro-0813 AgentX on MI355X with SGLang DSpark. Low concurrency
-# keeps KV on GPU; higher concurrency extends it to host DRAM through HiCache,
-# and the widest band runs DP attention behind a cache-aware SGLang router.
-# FP8 unified KV is on for every arm. BCG is limited to conc 1 and 4; the other
-# TP-only arms run prefill context parallelism. Grouped ASM is on for TP-only
-# arms at conc >= 16. EP8 DP arms use MegaMoE+EPLB.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-sglang-agentic
@@ -170,7 +164,6 @@ override_tp8_c48_hicache:
       KV_OFFLOADING: dram
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-# EP1 DP-attention reference point (no MegaMoE).
 override_tp8_c128_dp_hicache:
   frontend:
     type: sglang-router

@@ -1,4 +1,3 @@
-# GLM-5.2 FP4 AgentX on MI355X with SGLang EAGLE MTP.
 base:
   schema: 2
   name: glm5.2-fp4-mi355x-sglang-agentic

@@ -52,8 +52,6 @@ UPSTREAM_LICENSE_URL = f"{UPSTREAM_REPOSITORY}/blob/{SOURCE_REVISION}/LICENSE"
 UPSTREAM_LICENSE_FILENAME = "BFCL_LICENSE.apache-2.0.txt"
 UPSTREAM_ATTRIBUTION_FILENAME = "BFCL_ATTRIBUTION.json"
 
-# Dict insertion order is intentional: smoke reports and the upstream run-ID
-# file remain byte-for-byte stable.
 SMOKE_CASE_IDS: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
         "simple_python": ("simple_python_141",),
@@ -489,7 +487,7 @@ def _write_id_map(project_root: Path, case_ids_by_category: Mapping[str, tuple[s
 
 def _function_defaults(function: Callable[..., Any]) -> dict[str, Any]:
     """Resolve Typer OptionInfo defaults before directly calling a command function."""
-    import typer  # Lazy: only the real BFCL path needs this third-party dependency.
+    import typer
 
     defaults: dict[str, Any] = {}
     for name, parameter in inspect.signature(function).parameters.items():
@@ -874,7 +872,7 @@ def run_evaluation(
         scores = _collect_scores(bfcl_project_root, selected_case_ids)
         if sum(score.total_count for score in scores) != suite.expected_sample_count:
             raise ValueError(f"{suite.name} evaluated an unexpected total number of cases")
-    except Exception as exc:  # noqa: BLE001 - artifact publication is the boundary
+    except Exception as exc:  # noqa: BLE001
         _write_json(
             native_path,
             _native_report(
@@ -949,8 +947,6 @@ def install_runtime(download_dir: Path, uv: str) -> None:
     except BaseException:
         wheel_path.unlink(missing_ok=True)
         raise
-    # uv ignores system site packages (astral-sh/uv#4466); excluding what this interpreter
-    # already has reuses the image's stack, so image versions win over BFCL's pins.
     names = {re.sub(r"[-_.]+", "-", d.metadata.get("Name") or "").lower() for d in distributions()}
     provided = download_dir / "provided-packages.txt"
     provided.write_text("".join(f"{name}\n" for name in sorted(names - {"", BFCL_PACKAGE})))

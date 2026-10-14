@@ -1,4 +1,3 @@
-# GB200 TP16/DCP16 aggregate profile without speculative decoding.
 schema: 2
 name: "kimi-k3-vllm-agg-gb200-dcp16-nospec-mooncake-agentic"
 

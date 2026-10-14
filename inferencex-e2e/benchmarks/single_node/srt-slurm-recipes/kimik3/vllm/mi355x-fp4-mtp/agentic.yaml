@@ -1,11 +1,3 @@
-# Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
-# (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
-# is ~195 GB per GPU. The KV cache is GPU-resident at c1 and backed by
-# vLLM's SimpleCPUOffloadConnector (dram) from dcp8 c4. Three bands, driven by
-# kimik3-fp4-mi355x-vllm-agentic-mtp: interactive dcp1/dcp8 c1 (GPU-resident),
-# mid dcp8 c4-c16 and throughput dcp8 c44/c48/c50 (KV read sharded across all
-# 8 GPUs, DRAM offload, DSpark draft with synthetic acceptance). The 1799 GB
-# DRAM budget splits evenly across the eight ranks.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
@@ -98,7 +90,6 @@ override_tp8_c1:
       CONC: '1'
       KV_OFFLOADING: 'none'
 
-# c1 with dcp8: the KV read sharded across all 8 GPUs, still GPU-resident.
 override_tp8_c1_dcp8:
   roles:
     agg:
@@ -132,7 +123,6 @@ override_tp8_c4:
       CONC: '4'
       KV_OFFLOADING: 'none'
 
-# c4 with dcp8: the KV read sharded across all 8 GPUs, backed by the DRAM tier.
 override_tp8_c4_dcp8_simple:
   roles:
     agg:
@@ -153,8 +143,6 @@ override_tp8_c4_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
-# Mid band: dcp-size 8 shards the KV read across all 8 GPUs, backed by
-# vLLM's SimpleCPUOffloadConnector DRAM tier, with the DSpark draft.
 override_tp8_c10_dcp8_simple:
   roles:
     agg:
@@ -239,9 +227,6 @@ override_tp8_c16_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
-# Throughput band: same dcp8 DRAM-offload layout with a 4-token DSpark draft.
-# Synthetic acceptance replaces block rejection with the golden acceptance
-# length. FULL_AND_PIECEWISE graphs cover every even size up to 2x CONC x 5.
 override_tp8_c44_dcp8_simple:
   roles:
     agg:

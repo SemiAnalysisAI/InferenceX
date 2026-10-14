@@ -1,5 +1,3 @@
-# AgentX dsv4 vllm gb200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -178,8 +176,6 @@ base:
       # Avoid concurrent readers observing a mismatched mmap data/index pair.
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"
 
-# GB200 AgentX MTP3 topology: one DEP8 prefill worker feeds one
-# DEP8 decode worker at concurrency 128.
 override_1p1d_c128:
   name: "svf-vllm-disagg-gb200-1p1d-dep8-dep8-c128-mtp2-agentic"
   roles:
@@ -203,8 +199,6 @@ override_1p1d_c128:
         max-cudagraph-capture-size: 512
         gpu-memory-utilization: 0.92
 
-# GB200 AgentX MTP3 topology: one DEP8 prefill worker feeds one
-# DEP8 decode worker at concurrency 256.
 override_1p1d_c256:
   name: "svf-vllm-disagg-gb200-1p1d-dep8-dep8-c256-mtp2-agentic"
   roles:
@@ -228,9 +222,6 @@ override_1p1d_c256:
         max-cudagraph-capture-size: 512
         gpu-memory-utilization: 0.92
 
-# GB200 AgentX MTP3 topology: two DEP8 prefill workers feed one
-# DEP16 decode worker at concurrency 512. Decode consumes P/D KV through NIXL
-# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 override_2p1d_dep16_c512:
   name: "svf-vllm-disagg-gb200-2p1d-dep8-dep16-c512-mtp2-agentic"
   roles:
@@ -256,9 +247,6 @@ override_2p1d_dep16_c512:
   sbatch_directives:
     mem: "0"
 
-# GB200 AgentX MTP3 topology: two DEP8 prefill workers feed one
-# DEP12 decode worker at concurrency 576. Decode consumes P/D KV through NIXL
-# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 override_2p1d_dep12_c576:
   name: "svf-vllm-disagg-gb200-2p1d-dep8-dep12-c576-mtp2-agentic"
   roles:

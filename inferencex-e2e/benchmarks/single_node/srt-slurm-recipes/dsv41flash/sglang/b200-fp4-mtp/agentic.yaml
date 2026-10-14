@@ -1,5 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on B200 with SGLang native DSpark. The KV cache
-# is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-b200-sglang-agentic

@@ -1,7 +1,3 @@
-# GLM-5.2 FP8 AgentX on B300 with SGLang EAGLE off the checkpoint's nextn
-# head: the low-latency TP8 arm (fp8 KV, cutedsl bf16 GEMM). HiCache spills
-# evicted prefixes to host DRAM; without it the working set outgrows HBM past
-# c8 and the radix hit rate collapses.
 base:
   schema: 2
   name: glm5.2-fp8-b300-sglang-agentic

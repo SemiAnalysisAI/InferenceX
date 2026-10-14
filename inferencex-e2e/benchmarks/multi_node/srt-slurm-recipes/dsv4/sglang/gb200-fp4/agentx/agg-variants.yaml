@@ -1,6 +1,3 @@
-# GB200 AgentX aggregate topology: one TP8 worker spans two four-GPU nodes
-# and serves both prefill and decode with bundled DSpark speculation (K=6)
-# and HiCache.
 
 schema: 2
 

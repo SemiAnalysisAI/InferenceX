@@ -1,5 +1,3 @@
-# AgentX qwen3.5 sglang gb200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 

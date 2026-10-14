@@ -113,8 +113,6 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
                 raise ValueError(
                     "Aggregate GPUs require non-disaggregated topology without role GPUs"
                 )
-            # Preserve the existing multinode layout fields for consumers, but
-            # expose the actual shared role and validate telemetry as `agg`.
             prefill_gpus = aggregate_gpus
             data["num_aggregate_gpu"] = aggregate_gpus
         prefill_num_workers = int(env["PREFILL_NUM_WORKERS"])
@@ -283,7 +281,7 @@ def aggregate_power_result(
             validation_result=validation_path,
             require_power=require_power,
         )
-    except Exception as exc:  # noqa: BLE001 — preserve ordinary benchmark behavior
+    except Exception as exc:  # noqa: BLE001
         print(f"[process_result] power aggregation failed: {exc}", file=sys.stderr)
         record_power_internal_error(
             telemetry_source=source,
@@ -307,8 +305,6 @@ def process_result(env: Mapping[str, str]) -> int:
     with open(agg_path, "w") as f:
         json.dump(data, f, indent=2)
     status = 0
-    # Only multinode srt-slurm runs carry a power package; single-node results
-    # publish no power fields or verdict.
     if data["is_multinode"]:
         status = aggregate_power_result(env, bench_path, agg_path)
         validation_path = Path(f"power_validation_{result_filename}.json")
@@ -321,7 +317,6 @@ def process_result(env: Mapping[str, str]) -> int:
         except (OSError, ValueError, TypeError) as exc:
             print(f"[process_result] audit summary unavailable: {exc}", file=sys.stderr)
             result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
-            # A required run must preserve its audit as well as numeric metrics.
             if env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}:
                 status = 1
         agg_path.write_text(json.dumps(result, indent=2))
@@ -362,9 +357,6 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
             point["concurrency"] = concurrency
             point_env = {**env, "RESULT_FILENAME": path.stem, "IS_MULTINODE": "true"}
             disagg = env["DISAGG"].lower() == "true"
-            # Some disaggregated recipe groups include a shared-worker point.
-            # Its zero decode workers and filename must both describe aggregate
-            # execution; the group-level flag cannot manufacture role energy.
             aggregate = not disagg or int(env["DECODE_NUM_WORKERS"]) == 0
             if aggregate:
                 if match[3] is not None and (int(match[3]) != total or int(match[4]) != 0):

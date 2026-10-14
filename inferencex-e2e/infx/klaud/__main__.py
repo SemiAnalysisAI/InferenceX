@@ -73,7 +73,6 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
                     SimpleNamespace(config_keys=[key]), configs, runners, root
                 )
             except ValueError:
-                # One unrenderable family must not hide unrelated working recipes.
                 print(f"::warning::Klaud live-family-unrenderable: {family}")
                 continue
             for entry in entries:
@@ -100,15 +99,10 @@ def choose(
     occupied: set[str],
     families: dict[tuple, set[str]],
 ) -> list[dict]:
-    # Preserve claims made before the agent's spelling was corrected.
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     seen = set()
-    # The public feed is benchmark history, not an image-release authority.
-    # Every current family with an exact published baseline is eligible for
-    # independent upstream inspection by Klaud.
     valid = [item for item in items if item["source-status"] == "baseline"]
-    # Prefer the latest matching baseline within each live family before shuffling.
     for item in sorted(
         valid,
         key=lambda item: (item["source"]["date"], item["source-id"]),
@@ -291,7 +285,6 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
         json.dumps(contexts, indent=2, allow_nan=False) + "\n"
     )
     (directory / "open-prs.json").write_text(json.dumps(open_prs, indent=2) + "\n")
-    # Private selection hints for the read-only reviewer; excluded from artifacts.
     (directory / "capacity.json").write_text(json.dumps(capacity) + "\n")
     if filename := os.environ.get("GITHUB_OUTPUT"):
         schema = PRReview.model_json_schema(by_alias=True)
@@ -502,7 +495,6 @@ def save_diagnostics(
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 failure = "lifecycle-unverified"
     if failure is not None:
-        # Never echo invalid structured output, which could contain private data.
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
             outcome="unexpected-error",
@@ -659,8 +651,6 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-            # The final sweep must reproduce every unretired frozen point; an agent cannot fix a
-            # roster that the current family no longer generates.
             missing = missing_baseline_points(
                 validation.canonical_matrix(
                     os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
@@ -885,7 +875,7 @@ def main() -> int:
             if args.command == "prepare-baseline":
                 if args.output.exists():
                     Baseline.model_validate_json(args.output.read_text())
-                    return 0  # A retry never silently refreshes the baseline.
+                    return 0
                 session = current_session()
                 context = json.loads(
                     (Path(os.environ["KLAUD_EVIDENCE"]) / "candidate.json").read_text()
@@ -929,11 +919,8 @@ def main() -> int:
             try:
                 reconcile(session)
             except PendingCleanup:
-                # Healthy child work keeps its claim for the next recovery pass.
                 pass
             else:
-                # This trusted step also releases no-PR/no-run sessions whose SDK
-                # response was missing or unverifiable.
                 claims.release_family(
                     session.repository,
                     session.candidate,
@@ -995,7 +982,6 @@ def main() -> int:
         return 0 if set(args.cluster) <= fetch_capacity(Policy()) else 1
     except ReadError as error:
         if args.command == "plan":
-            # ReadError contains fixed codes only, never response bodies or credentials.
             message = f"Klaud Cold preparation failed: {error}"
             print(f"::error::{message}")
             if filename := os.environ.get("GITHUB_STEP_SUMMARY"):

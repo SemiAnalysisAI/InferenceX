@@ -100,8 +100,6 @@ def load_session_rows(path: Path) -> list[dict]:
                 rows.append(json.loads(line))
     rows.sort(key=lambda r: r["timestamp"])
 
-    # Proxy duplicates inflate token counts and appear to overlap themselves.
-    # Treat matching nanosecond timestamps, counts, duration, model and agent as duplicates.
     seen: set[tuple] = set()
     deduped: list[dict] = []
     for r in rows:
@@ -216,8 +214,6 @@ def compute_think_times(rows: list[dict]) -> list[float | None]:
     return out
 
 
-# From this CLI version, x-claude-code-agent-id identifies subagents.
-# Labelled rows without it are utility calls and become main turns.
 MIN_CLI_FOR_HEADER_AS_TRUTH = (2, 1, 139)
 
 
@@ -279,9 +275,6 @@ def build_subagent_entry(
     duration_ms = round((end_t - first_row["t_sec"]) * 1000)
     total_tokens = sum(r["in"] + r["out"] for r in inner)
     models = sorted({row["model"] for row, _ in items})
-    # agent_id suffix priority: Claude Code agent-id (canonical when
-    # present) > Codex thread-id. Matches the dashboard's
-    # getSubagentRunLabel which suffixes with the last 8 chars.
     cc_agent_id = first_row.get("agent_id")
     thread_id = first_row.get("thread_id")
     agent_id = f"{slugify(label)}_{instance_idx:03d}"
@@ -295,8 +288,6 @@ def build_subagent_entry(
         "subagent_type": label,
         "duration_ms": duration_ms,
         "total_tokens": total_tokens,
-        # tool_use_count is not tracked in the proxy DB; leave as None
-        # (the model field defaults to None).
         "tool_use_count": None,
         "status": "completed",
         "requests": inner,
@@ -338,8 +329,6 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
     instance_count: dict[str, int] = {}
     models_seen: set[str] = set()
 
-    # Group by header ID across main turns so background subagents stay intact.
-    # Matches subagent-runs.ts:buildRequestRuns.
     id_groups: dict[str, list[tuple[dict, float | None]]] = {}
     for r, tt in zip(rows, think_times, strict=False):
         key = _id_group_key(r)
@@ -362,8 +351,6 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             if key not in emitted:
                 emitted.add(key)
                 items = id_groups[key]
-                # Claude Code agent-id groups use the flat 'Subagent'
-                # label since per-request system-prompt labels drift.
                 use_label = "Subagent" if row.get("agent_id") else row["subagent_label"]
                 instance_count[use_label] = instance_count.get(use_label, 0) + 1
                 entry = build_subagent_entry(use_label, instance_count[use_label], items, hash_map)
@@ -372,7 +359,6 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
             i += 1
             continue
 
-        # Without header IDs, group by label within stretches bounded by main turns.
         stretch_rows: list[tuple[dict, float | None]] = []
         while (
             i < len(rows)

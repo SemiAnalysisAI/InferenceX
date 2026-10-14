@@ -1,5 +1,3 @@
-# GB200 AgentX SGLang disaggregated recipes for DeepSeek-V4-Pro-0813 with bundled
-# DSpark K=6 speculation and Mooncake unified-cache KV offload.
 
 schema: 2
 

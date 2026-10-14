@@ -150,7 +150,6 @@ def test_rows_are_fingerprinted_with_the_revisions_own_rule(generation_repo, own
     with revision.snapshot("HEAD") as producer:
         fingerprints = producer.fingerprints(rows)
 
-    # Revisions without a fingerprinter hashed the row alone: {"image":"img","model":"m"}.
     assert fingerprints == (
         ["own m"] if own else ["adfebb88b80b867b258d2e9f972eb51f9f8c8bb2ae2bef10ab80ca8226913878"]
     )

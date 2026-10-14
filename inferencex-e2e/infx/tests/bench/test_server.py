@@ -38,7 +38,6 @@ def test_wait_streams_new_server_log_until_health_answers(http_server, tmp_path,
 
     server.wait_ready(f"{http_server(respond)}/health", pid=os.getpid(), log=log, poll_s=0.01)
 
-    # Each line once; the ready poll's own line lands after the last read.
     assert capsys.readouterr().out == "loading\nGET /health\n"
 
 

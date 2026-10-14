@@ -15,12 +15,10 @@ SUCCESS_HEADER = "## ✅✅✅ **Verdict: PASS** ✅✅✅"
 REJECT = "## ❌❌❌ **REJECTED** ❌❌❌"
 WARN = "## ⚠️ **Verdict: WARN** ⚠️"
 CHECK_ROW = re.compile(
-    r"(?:[-*+] )?(✅|❌|➖|⚠️) Check ([0-9]+) \([^\r\n]+\): (PASS|FAIL|N/A|WARN) — \S.*"  # noqa: RUF001 - verifier's N/A emoji
+    r"(?:[-*+] )?(✅|❌|➖|⚠️) Check ([0-9]+) \([^\r\n]+\): (PASS|FAIL|N/A|WARN) — \S.*"  # noqa: RUF001
 )
-CHECK_PREFIX = re.compile(r"(?:[-*+] )?(?:✅|❌|➖|⚠️)\s*Check\b")  # noqa: RUF001 - verifier's N/A emoji
-STATUS_EMOJI = {"PASS": "✅", "FAIL": "❌", "N/A": "➖", "WARN": "⚠️"}  # noqa: RUF001 - verifier's N/A emoji
-# The verifier sometimes marks an N/A row with the PASS emoji. N/A already counts as a pass, so
-# this one mismatch cannot change the verdict; normalize it instead of discarding the verdict.
+CHECK_PREFIX = re.compile(r"(?:[-*+] )?(?:✅|❌|➖|⚠️)\s*Check\b")  # noqa: RUF001
+STATUS_EMOJI = {"PASS": "✅", "FAIL": "❌", "N/A": "➖", "WARN": "⚠️"}  # noqa: RUF001
 NA_ROW_WITH_PASS_EMOJI = re.compile(
     r"^([ \t]*(?:[-*+] )?)✅( Check [0-9]+ \([^\r\n]+\): N/A — \S.*)$", re.MULTILINE
 )
@@ -43,7 +41,7 @@ CHECKS = range(17)
 
 
 def normalize_verdict(verdict: str) -> str:
-    return NA_ROW_WITH_PASS_EMOJI.sub(r"\1➖\2", verdict)  # noqa: RUF001 - verifier's N/A emoji
+    return NA_ROW_WITH_PASS_EMOJI.sub(r"\1➖\2", verdict)  # noqa: RUF001
 
 
 def parse_verdict(verdict: str) -> tuple[dict[int, str], list[str]]:
@@ -64,6 +62,8 @@ def parse_verdict(verdict: str) -> tuple[dict[int, str], list[str]]:
         emoji, check_number, status = match.groups()
         check = int(check_number)
         allowed = {"PASS", "N/A", "WARN"} if check in {4, 14, 15, 16} else {"PASS", "N/A", "FAIL"}
+        if check == 13:
+            allowed.add("WARN")
         if check not in CHECKS:
             errors.append(f"Line {number}: Check {check} does not exist; use Checks 0-16.")
         elif check in statuses:

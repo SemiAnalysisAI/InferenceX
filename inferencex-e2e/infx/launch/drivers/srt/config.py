@@ -210,8 +210,6 @@ def lane_mounts(run: SrtRun, lane: SrtLane) -> list[tuple[str, str]]:
     return mounts
 
 
-# Each AgentX client cache is where the job mounts one of its volumes, else a directory
-# inside the container.
 _CLIENT_CACHES = {
     "AIPERF_DATASET_MMAP_CACHE_DIR": (("aiperf-cache",), "/aiperf_mmap_cache"),
     "HF_HUB_CACHE": (("hf-hub-cache", "shared-hf-hub-cache"), "/hf_hub_cache"),

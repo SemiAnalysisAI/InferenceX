@@ -1,5 +1,3 @@
-# AgentX glm5.2 sglang b200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -105,12 +103,6 @@ base:
     mem: '0'
     container-remap-root: ''
 
-# Agentic-coding SGLang aggregated recipe for GLM-5.2-NVFP4 on B200 at concurrency 1.
-#
-# One TP8 worker serves prefill and decode on a single node. The sweep matrix
-# supplies the concurrency list; srt_agentic.sh replays every point against
-# this one server. Acceptance is pinned to the golden thinking-on AL for three
-# speculative tokens (infx/golden_al_distribution/glm5.2_mtp.yaml).
 override_c1:
   name: agg-b200-tp8-c1-mtp
   roles:
@@ -119,12 +111,6 @@ override_c1:
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
 
-# Agentic-coding SGLang aggregated recipe for GLM-5.2-NVFP4 on B200 at concurrency 4.
-#
-# One TP8 worker serves prefill and decode on a single node. The sweep matrix
-# supplies the concurrency list; srt_agentic.sh replays every point against
-# this one server. Acceptance is pinned to the golden thinking-on AL for three
-# speculative tokens (infx/golden_al_distribution/glm5.2_mtp.yaml).
 override_c4:
   name: agg-b200-tp8-c4-mtp
   roles:
@@ -133,12 +119,6 @@ override_c4:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
 
-# Agentic-coding SGLang aggregated recipe for GLM-5.2-NVFP4 on B200 at concurrency 8.
-#
-# One TP8 worker serves prefill and decode on a single node. The sweep matrix
-# supplies the concurrency list; srt_agentic.sh replays every point against
-# this one server. Acceptance is pinned to the golden thinking-on AL for three
-# speculative tokens (infx/golden_al_distribution/glm5.2_mtp.yaml).
 override_c8:
   name: agg-b200-tp8-c8-mtp
   roles:

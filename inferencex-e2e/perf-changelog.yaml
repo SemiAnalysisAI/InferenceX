@@ -9707,11 +9707,23 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4000
 
 - config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native Kimi-K3 PD with FP8 KV and GMU 0.90 on official ROCm nightly 81198e97ba7eee2a22540caaa756b7fdddcb4d93, pinned by digest in master and recipe."
+    - "Use TP8 per worker: 1P1D c48/c56, 1P2D c24/c48 and 1P3D c12/c24, with automatic golden acceptance, default request-ID randomization and default evaluation selection."
+    - "Use the AgentX scenario's default 10% live failure threshold, retaining a stream interval of 10 on both roles and optional server-metrics validation."
+    - "Set the prefill sequence limit to twice the global concurrency and divide that capacity across decode workers; 1P1D c56 uses 112 sequences per role with a decode graph capture limit of 280."
+    - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
+    - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
   scenario-type:
     - agentic-coding
   description:
     - "Bump the image from lmsysorg/sglang:nightly-dev-cu13-20261012-e6072935 to nightly-dev-cu13-20261013-7224fce1 (digest sha256:20d36eeb32df0418a165641b51399fd4dc5239dad57f9b8d1f9974c4c9263ca6), which ships the fastokens 0.3.2 tokenizer (sgl-project/sglang#43104)."
     - "Every point uses tokenizer-backend fastokens. The chat endpoint re-encodes the whole conversation each turn, 300K-600K tokens on AgentX; HF tokenizers takes about 0.6 s on Grace, on the TTFT path and the API server event loop, and fastokens about 0.03 s. Local one-hour runs, 20261012 without fastokens to 20261013 with it: TP4 c1 TTFT p50/p90 0.87/1.38 s to 0.24/0.28 s and 7,314 to 7,850 tok/s/GPU at 625.7 to 610.0 tok/s/user P90; TP2 c32 113,613 to 115,868 tok/s/GPU at 183.1 to 190.9 tok/s/user P90; DEP2 c128 271,364 to 271,676 tok/s/GPU at 81.6 to 86.6 tok/s/user P90."
-    - "Add DEP2 c160 with the c128 settings (DP attention, MegaMoE, sglang-router, 16-step prefill-decode interval, mem-fraction-static 0.85, admits 256 with a 128 graph batch). A local one-hour run on the 20261012 image without fastokens gave 301,770 tok/s/GPU at 82.4 tok/s/user P90 (TTFT p90 3.9 s), against 278,104 at 84.2 for c128 in the same setup."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4033

@@ -1,6 +1,3 @@
-# Production-scale MI355X port of the existing Qwen3.5 FP8 1P1D recipe.
-# Each role owns one full 8-GPU node; the native SGLang Router provides the
-# request plane and AMD MoRI moves KV directly between the P/D workers.
 
 schema: 2
 name: "mi355x-sglang-qwen3.5-fp8-disagg-1p1d-tp4p-tp8d-fixed-seq"

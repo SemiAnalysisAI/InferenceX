@@ -123,7 +123,6 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
     env = single_node_env(harness, "h200-cw")
-    # The binder takes the job cluster's fabric facts.
     records = yaml.safe_load(harness.config.read_text())
     records["clusters"]["h200-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
     harness.config.write_text(yaml.safe_dump(records))
@@ -137,7 +136,6 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    # srtctl runs the point's bound variant.
     bound = Path(argv[argv.index("--file") + 1])
     recipe = yaml.safe_load(bound.read_text())
     assert recipe["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
@@ -270,15 +268,12 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert argv[argv.index("--setup-script") + 1] == lab["setup_script"]
     assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
-    # The lane edits the recipe the binder wrote from the composed fragment.
     bound = yaml.safe_load(Path(submitted).read_text())
     assert bound["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
     dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
     assert bound["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
     assert bound["model"] == {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"}
     if env["IS_AGENTIC"] == "1":
-        # lab-b mounts no cache volume, so the client keeps its caches in the container, and
-        # measures no power.
         assert bound["benchmark"]["env"] == {
             "RESULT_DIR": "/logs/agentic", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache",
             "HF_HUB_CACHE": "/hf_hub_cache", "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "0",
@@ -331,7 +326,6 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
     assert bound["benchmark"]["concurrencies"] == [4]
     assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
-    # The client fails invalid power when the workflow requires it; h200-dgxc rules never do.
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
@@ -434,7 +428,6 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
     (mirror / "eval.yaml").write_text(LANE_FRAGMENT)
-    # What the in-container eval staged: its own batch record, but not every workflow input.
     staged = {
         "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
         "eval_concs": [4, 8], "completed_eval_concs": [8], "failed_eval_concs": [4],
@@ -459,7 +452,6 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     assert srtslurm(checkout)["default_time_limit"] == "8:00:00"
     workspace = harness.workspace
     assert (workspace / "results_gsm8k.json").read_text() == "{}"
-    # The host refresh keeps the eval's record and restates identity from the workflow.
     meta = json.loads((workspace / "meta_env.json").read_text())
     kept = ("eval_suite", "conc", "eval_concs", "completed_eval_concs", "failed_eval_concs")
     assert {key: meta[key] for key in kept} == {
@@ -582,7 +574,6 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
     [call] = srtctl_calls(harness.logs)
     [command] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
                  if arg.startswith("post_eval.command=")]  # fmt: skip
-    # Stand in for the external evaluator and inspect the environment it receives.
     script = harness.workspace / "benchmarks/multi_node/srt_eval.sh"
     script.write_text(
         'printf "%s\\n" "$HF_HUB_OFFLINE" "$HF_DATASETS_OFFLINE" '
