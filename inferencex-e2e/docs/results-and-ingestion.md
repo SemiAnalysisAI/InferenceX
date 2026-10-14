@@ -179,14 +179,20 @@ The aggregate artifact matches the `bmk_*` collection pattern and therefore also
 
 Server logs are separate `server_logs_<RESULT_FILENAME>` artifacts. The app uses the fully stripped suffix fallback so AgentX rows can find a server log even though the log artifact has no `agentic_` prefix.
 
-AgentX power applies only to replays with `IS_MULTINODE=true`. Single-node
-replays, including aggregated srt-slurm recipes that set `IS_MULTINODE: false`,
-publish no power fields or verdict, whatever `ENABLE_AGENTX_POWER` says.
+AgentX power applies only to replays with `IS_MULTINODE=true`; single-node replays
+publish no power fields or verdict, whatever `ENABLE_AGENTX_POWER` says. The binder
+writes both into every srt-slurm multi-node AgentX recipe: `IS_MULTINODE=true`, and
+`ENABLE_AGENTX_POWER=1` exactly when the launcher collects the point's AgentX power
+(a `power: true` row whose lane rule collects AgentX or adapter power). Other
+multi-node points get `ENABLE_AGENTX_POWER=0` and publish no power fields or verdict.
+`REQUIRE_POWER` is bound beside them: `1` when the workflow requires power or the
+lane's power rule does (GB200 and GB300 Kimi-K3 AgentX), so the client fails a point
+whose power is invalid.
 Multinode runs retain the deployment telemetry under `LOGS/power/` and
 per-concurrency window/validation files under `LOGS/agentic/` in their
 `power_audit_<RESULT_FILENAME>` artifact. Available audits and AgentX aggregates
 upload even when a benchmark fails. Missing files do not establish power support: a
-multinode recipe also needs `telemetry` enabled so the pinned srt-slurm exports
+multinode row also needs `power: true` so the pinned srt-slurm exports
 `SRT_MEASUREMENT_WINDOW_DIR` to its custom benchmark command; InferenceX derives
 the result root and concurrency from that directory and the replay itself.
 When that measurement-window contract is absent, the aggregate records

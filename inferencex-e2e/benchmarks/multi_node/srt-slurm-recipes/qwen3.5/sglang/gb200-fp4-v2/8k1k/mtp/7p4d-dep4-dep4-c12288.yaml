@@ -1,5 +1,7 @@
 # Qwen3.5 NVFP4 V2 benchmark operating point.
 # Seven DEP4 prefill workers feed four DEP4 MTP1 decode workers.
+# srt-slurm's sa-bench ran this point with reuse_http_connections: true; the
+# InferenceX client has no such option and opens a connection per request.
 schema: 2
 name: qwen35-v2-gb200-c12288-7p4d-dep4-mtp1-cap1056
 dynamo:
@@ -12,10 +14,6 @@ frontend:
   enable_multiple_frontends: false
   args:
     enforce-disagg: true
-model:
-  path: qwen3.5-fp4
-  container: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
-  precision: fp4
 resources:
   gpu_type: gb200
   gpus_per_node: 4
@@ -182,14 +180,3 @@ roles:
 health_check:
   max_attempts: 360
   interval_seconds: 10
-benchmark:
-  type: sa-bench
-  isl: 8192
-  osl: 1024
-  concurrencies: '12288'
-  req_rate: inf
-  random_range_ratio: 0.8
-  num_prompts_mult: 10
-  num_warmup_mult: 2
-  use_chat_template: true
-  reuse_http_connections: true

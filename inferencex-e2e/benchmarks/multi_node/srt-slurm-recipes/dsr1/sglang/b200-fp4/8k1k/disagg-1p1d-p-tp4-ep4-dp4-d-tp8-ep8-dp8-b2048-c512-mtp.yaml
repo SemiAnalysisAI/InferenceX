@@ -17,11 +17,6 @@ frontend:
   num_additional_frontends: 3
   nginx_container: nginx-sqsh
 
-model:
-  path: "dsr1"
-  container: "lmsysorg/sglang:v0.5.12.post1"
-  precision: "fp4"
-
 resources:
   gpu_type: "b200"
   gpus_per_node: 8
@@ -137,11 +132,3 @@ roles:
 health_check:
   max_attempts: 360
   interval_seconds: 10
-
-benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_fixed_sequence.sh
-  env:
-    TOKENIZER: /model
-    ISL: '8192'
-    OSL: '1024'

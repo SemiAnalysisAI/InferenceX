@@ -4,10 +4,6 @@
 base:
   schema: 2
   name: kimik3-fp4-b300-vllm-agentic
-  model:
-    path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu13-3696c77
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -26,16 +22,14 @@ base:
     interval_seconds: 10
     max_attempts: 360
   # Embedded Mooncake: each TP rank contributes TOTAL_CPU_DRAM_GB / 8 GB. The
-  # setup script pins the client to the master's version and fills in the
-  # node's active RDMA rail. DSXE rails are InfiniBand without a netdev, so the
-  # transfer engine picks its own GID (a RoCE v2 index 3 does not exist).
+  # setup script installs the master config's Mooncake and fills in the node's
+  # active RDMA rail. DSXE rails are InfiniBand without a netdev, so the transfer
+  # engine picks its own GID (a RoCE v2 index 3 does not exist).
   setup_script: kimik3-b300-mooncake.sh
   services:
     - name: mooncake-master
       type: mooncake-master
-      preamble: >-
-        python3 -m pip install --break-system-packages --quiet --no-cache-dir --no-deps
-        --force-reinstall mooncake-transfer-engine-cuda13==0.3.11.post1
+      preamble: bash /configs/vllm-mooncake.sh
       args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10"]
       options:
         store_config:
@@ -82,7 +76,6 @@ base:
         VLLM_USE_DIRECT_DCP_A2A: '1'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
         VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_RPC_TIMEOUT: '600000'
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
         VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: '0'
@@ -99,10 +92,7 @@ base:
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: moonshotai/Kimi-K3
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       KV_OFFLOADING: dram

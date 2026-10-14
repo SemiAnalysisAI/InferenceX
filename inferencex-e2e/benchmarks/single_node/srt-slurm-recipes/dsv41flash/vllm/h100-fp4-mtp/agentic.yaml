@@ -9,10 +9,6 @@
 base:
   schema: 2
   name: dsv41flash-fp4-h100-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3
-    precision: fp4
   resources:
     gpu_type: h100
     gpus_per_node: 8
@@ -52,17 +48,13 @@ base:
         gpu-memory-utilization: 0.92
         disable-uvicorn-access-log: true
       env:
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_USE_RUST_FRONTEND: '1'
         VLLM_USE_V2_MODEL_RUNNER: '1'
         # The indexer buffer is large enough that allocator fragmentation costs a KV block.
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         PYTHONUNBUFFERED: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. The scheduler batch is 2x CONC (AgentX subagent

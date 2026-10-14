@@ -158,7 +158,7 @@ Workflows using current tooling call `infx` modules directly, and tests import c
 
 `expand_full_sweep(master_config, runner_data, options=FullSweepOptions(...))` exposes full-sweep expansion without an `argparse` namespace. Both commands share config/scenario traversal and row builders, while command-specific selection stays explicit. Full-sweep filters concrete runner nodes; selected-key expansion also accepts matching scheduling labels and deduplicates nodes. Fixed-sequence single-node ranges are capped before expansion, while multi-node ranges and explicit lists are filtered afterward. Agentic bounds only filter existing points. Expansion returns rows before eval selection; use `select_matrix_evals` to apply eval or trim policy. Existing CLI commands and namespace-based Python adapters remain compatible.
 
-For append-only bases and Klaud baseline producers, `infx.matrix.revision.snapshot` extracts configs (under `configs/`, or `.github/configs/` before the move to the project root), multi-node recipes, legacy entrypoints, and the `infx` package (when present) from the same Git revision. Revisions before the package migration run their standalone generator; newer revisions use their own package code. Working-tree source and configs never replace committed inputs, and the planner reads base entries only as raw YAML to bound append-only scope. Snapshot subprocesses remain isolated, and extracted inputs are removed when the operation ends, including failure paths.
+For append-only bases and Klaud baseline producers, `infx.matrix.revision.snapshot` extracts configs (under `configs/`, or `.github/configs/` before the move to the project root), srt-slurm recipes, legacy entrypoints, and the `infx` package (when present) from the same Git revision. Revisions before the package migration run their standalone generator; newer revisions use their own package code. Working-tree source and configs never replace committed inputs, and the planner reads base entries only as raw YAML to bound append-only scope. Snapshot subprocesses remain isolated, and extracted inputs are removed when the operation ends, including failure paths.
 
 [`validation.py`](../infx/matrix/validation.py) validates master files and runner data before generation. Its strict models own accepted aliases and cross-field rules. Examples include mutually exclusive concurrency forms, single-node versus multi-node shapes, component metadata scope, prefill and decode hardware pairing, and cluster-label requirements for agentic scenarios.
 
@@ -212,7 +212,7 @@ The first cleanup step, before checkout, cancels the runner's Slurm jobs with pl
 
 | Driver | Runs |
 | --- | --- |
-| [`drivers/srt/`](../infx/launch/drivers/srt) | Single-node and multi-node srt-slurm recipes (`SRT_RECIPE`, `CONFIG_FILE`), including the cluster-maintained B200 Nscale lanes. Slurm only |
+| [`drivers/srt/`](../infx/launch/drivers/srt) | Single-node and multi-node srt-slurm recipes (`SRT_RECIPE`, plus `EVAL_SRT_RECIPE` for multi-node eval-only runs), including the cluster-maintained B200 Nscale lanes. Slurm only |
 | [`drivers/script.py`](../infx/launch/drivers/script.py) | Single-node runs with an explicit `BENCH_SCRIPT_OVERRIDE`, such as SPEED-Bench collectors: one container through the backend interface, on any backend. The only driver clusters on other schedulers run |
 
 Depending on the driver, the launcher may:

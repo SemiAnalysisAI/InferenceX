@@ -22,8 +22,9 @@ from pydantic import (
 )
 
 from infx.clusters.base import Record, SchedulerSettings
-from infx.clusters.slurm import SlurmSettings
+from infx.clusters.slurm import Fabric, SlurmSettings
 from infx.config import RUNNER_CONFIG, repository_root
+from infx.srt_slurm.workload import resolve_fabric
 
 CLUSTER_LABEL_PREFIX = "cluster:"
 
@@ -112,6 +113,11 @@ class Cluster(Record):
             settings = SCHEDULERS[scheduler].model_validate(data.pop(scheduler))
         except ValidationError as error:
             raise _relocated(error, scheduler) from None
+        # Env values may take the srt-slurm profile's fabric: '@fabric.<name>'.
+        srt = getattr(settings, "srt_slurm", None)
+        fabric = srt.fabric if srt is not None else Fabric()
+        if "env" in data:
+            data["env"] = resolve_fabric(data["env"], fabric.rendered(), "env")
         return {**data, "scheduler_settings": settings}
 
     @model_validator(mode="after")

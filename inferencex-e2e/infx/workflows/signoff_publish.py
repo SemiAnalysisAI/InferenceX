@@ -19,6 +19,11 @@ CHECK_ROW = re.compile(
 )
 CHECK_PREFIX = re.compile(r"(?:[-*+] )?(?:✅|❌|➖|⚠️)\s*Check\b")  # noqa: RUF001 - verifier's N/A emoji
 STATUS_EMOJI = {"PASS": "✅", "FAIL": "❌", "N/A": "➖", "WARN": "⚠️"}  # noqa: RUF001 - verifier's N/A emoji
+# The verifier sometimes marks an N/A row with the PASS emoji. N/A already counts as a pass, so
+# this one mismatch cannot change the verdict; normalize it instead of discarding the verdict.
+NA_ROW_WITH_PASS_EMOJI = re.compile(
+    r"^([ \t]*(?:[-*+] )?)✅( Check [0-9]+ \([^\r\n]+\): N/A — \S.*)$", re.MULTILINE
+)
 ESCALATION = (
     "⚠️ Pareto coverage needs additional review: @functionstackx @cquil11 @Oseltamivir @adibarra. "
     "At least 5 points per affected throughput-versus-E2EL frontier are highly recommended. "
@@ -34,21 +39,61 @@ INVALID = (
 )
 
 
-def check_statuses(lines: list[str]) -> dict[int, str]:
-    statuses = {}
-    for line in lines:
-        match = CHECK_ROW.fullmatch(line.strip())
+CHECKS = range(17)
+
+
+def normalize_verdict(verdict: str) -> str:
+    return NA_ROW_WITH_PASS_EMOJI.sub(r"\1➖\2", verdict)  # noqa: RUF001 - verifier's N/A emoji
+
+
+def parse_verdict(verdict: str) -> tuple[dict[int, str], list[str]]:
+    """Return the check statuses and every reason the verdict cannot be published."""
+    lines = verdict.splitlines()
+    statuses: dict[int, str] = {}
+    errors = []
+    for number, line in enumerate(lines, 1):
+        row = line.strip()
+        match = CHECK_ROW.fullmatch(row)
         if match is None:
-            if CHECK_PREFIX.match(line.strip()):
-                return {}
+            if CHECK_PREFIX.match(row):
+                errors.append(
+                    f"Line {number}: write each check on one line as "
+                    f"`<emoji> Check N (<name>): <STATUS> — <reason>`: {row}"
+                )
             continue
-        emoji, number, status = match.groups()
-        check = int(number)
+        emoji, check_number, status = match.groups()
+        check = int(check_number)
         allowed = {"PASS", "N/A", "WARN"} if check in {4, 14, 15, 16} else {"PASS", "N/A", "FAIL"}
-        if check in statuses or status not in allowed or emoji != STATUS_EMOJI[status]:
-            return {}
-        statuses[check] = status
-    return statuses if statuses.keys() == set(range(17)) else {}
+        if check not in CHECKS:
+            errors.append(f"Line {number}: Check {check} does not exist; use Checks 0-16.")
+        elif check in statuses:
+            errors.append(f"Line {number}: Check {check} appears more than once.")
+        elif status not in allowed:
+            errors.append(
+                f"Line {number}: Check {check} cannot be {status}; use {', '.join(sorted(allowed))}."
+            )
+        elif emoji != STATUS_EMOJI[status]:
+            errors.append(f"Line {number}: {status} rows start with {STATUS_EMOJI[status]}.")
+        statuses.setdefault(check, status)
+    missing = [str(check) for check in CHECKS if check not in statuses]
+    if missing:
+        errors.append(f"Missing Check {', '.join(missing)}; include each of Checks 0-16 once.")
+    expected = (
+        REJECT
+        if "FAIL" in statuses.values()
+        else WARN
+        if "WARN" in statuses.values()
+        else SUCCESS_HEADER
+    )
+    headers = [line for line in lines if line in (SUCCESS_HEADER, REJECT, WARN)]
+    if headers != [expected] or lines[:1] != [expected]:
+        errors.append(f"The first line must be the only verdict header: {expected}")
+    return statuses, errors
+
+
+def verdict_errors(verdict: str) -> list[str]:
+    """Return every reason the publisher would reject this verdict; empty means it publishes."""
+    return parse_verdict(normalize_verdict(verdict))[1]
 
 
 def marker(signoff_key: str) -> str:
@@ -64,13 +109,9 @@ def _is_verdict_for(comment: dict[str, Any], signoff_key: str) -> bool:
 
 
 def verdict_body(verdict: str, head_sha: str, signoff_key: str) -> tuple[str, str]:
-    lines = verdict.splitlines()
-    headers = [line for line in lines if line in (SUCCESS_HEADER, REJECT, WARN)]
-    checks = check_statuses(lines)
-    warning = "WARN" in checks.values()
-    expected = REJECT if "FAIL" in checks.values() else WARN if warning else SUCCESS_HEADER
-    valid = bool(checks) and headers == [expected] and lines[0] == expected
-    if not valid:
+    verdict = normalize_verdict(verdict)
+    checks, errors = parse_verdict(verdict)
+    if errors:
         verdict = INVALID
     else:
         notices = []

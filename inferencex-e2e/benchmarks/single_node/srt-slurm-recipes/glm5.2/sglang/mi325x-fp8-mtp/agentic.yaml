@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: glm5.2-fp8-mi325x-sglang-agentic
-  model:
-    path: hf:zai-org/GLM-5.2-FP8
-    container: lmsysorg/sglang:v0.5.19-rocm720-mi30x
-    precision: fp8
   resources:
     gpu_type: mi325x
     gpus_per_node: 8
@@ -58,12 +54,7 @@ base:
         SGLANG_DSA_FUSE_TOPK: 'false'
         SGLANG_OPT_USE_TOPK_V2: 'false'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: zai-org/GLM-5.2-FP8
-      # GLM-5.2 natively supports 1M context, so replay the complete corpus.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       # Long responses admitted near the end of the measurement window can take

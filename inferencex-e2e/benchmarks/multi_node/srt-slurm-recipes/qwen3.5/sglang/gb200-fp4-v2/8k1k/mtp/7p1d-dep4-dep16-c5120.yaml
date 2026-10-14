@@ -11,10 +11,6 @@ frontend:
   nginx_container: nginx
   args:
     enforce-disagg: true
-model:
-  path: qwen3.5-fp4
-  container: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
-  precision: fp4
 resources:
   gpu_type: gb200
   gpus_per_node: 4
@@ -169,13 +165,3 @@ roles:
 health_check:
   max_attempts: 360
   interval_seconds: 10
-benchmark:
-  type: sa-bench
-  isl: 8192
-  osl: 1024
-  concurrencies: '5120'
-  req_rate: inf
-  random_range_ratio: 0.8
-  num_prompts_mult: 10
-  num_warmup_mult: 2
-  use_chat_template: true

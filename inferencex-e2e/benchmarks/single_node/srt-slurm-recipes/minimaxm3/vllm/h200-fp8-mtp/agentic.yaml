@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: minimaxm3-fp8-h200-vllm-agentic
-  model:
-    path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai:nightly-1a001d584244bd21829a5e5bd4a376ea141c0ce3
-    precision: fp8
   resources:
     gpu_type: h200
     gpus_per_node: 8
@@ -61,12 +57,8 @@ base:
         # Atomic reduction for the Marlin MXFP8 MoE path.
         VLLM_MARLIN_USE_ATOMIC_ADD: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: MiniMaxAI/MiniMax-M3-MXFP8
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
 
 # One variant per point. The scheduler batch is 2x CONC and graph capture covers
 # it at four tokens per sequence (three drafts).

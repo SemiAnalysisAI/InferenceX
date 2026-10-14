@@ -67,7 +67,7 @@ def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
     """Bind the single-node recipe variant for this point; the binder writes ``arguments``."""
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
-        f"{run.workspace}/{run.request.srt_recipe}", str(arguments),
+        f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
     ]  # fmt: skip
     return proc.run(prepare, env=run.env, cwd=checkout.root).returncode
 
@@ -76,6 +76,29 @@ def bound_arguments(arguments: Path) -> tuple[str, list[str]]:
     """The selected recipe and srtctl runtime arguments the binder wrote (NUL-separated)."""
     selected, *runtime_args = arguments.read_bytes().decode().split("\0")[:-1]
     return selected, runtime_args
+
+
+def bind_recipe(
+    run: SrtRun,
+    checkout: Checkout,
+    staged: str,
+    output: str,
+    power_port: int | None,
+    client_env: Mapping[str, str],
+) -> int:
+    """Compose and bind the staged fragment into ``output``, with telemetry if ``power_port``."""
+    bind = [str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.workload", staged, output]
+    if power_port is not None:
+        bind += ["--power-port", str(power_port)]
+    for name, value in client_env.items():
+        bind += ["--client-env", f"{name}={value}"]
+    bind += _fabric(run)
+    return proc.run(bind, env=run.env, cwd=checkout.root).returncode
+
+
+def _fabric(run: SrtRun) -> list[str]:
+    """The binder argument that resolves recipe ``'@fabric.<name>'`` values on this cluster."""
+    return ["--fabric", json.dumps(run.srt.fabric.rendered())]
 
 
 def apply(
@@ -146,11 +169,11 @@ class Submitted:
 
 
 def submit_lane(
-    run: SrtRun, submitted: Submitted, checkout: Checkout, config_file: str, arguments: list[str]
+    run: SrtRun, submitted: Submitted, checkout: Checkout, recipe: str, arguments: list[str]
 ) -> int:
     """Submit a multi-node lane job, record it in ``submitted``, and return srtctl's exit code."""
     applied = apply(
-        run, checkout, config_file, [*arguments, "--json", "--yes"], stdout=submitted.manifest
+        run, checkout, recipe, [*arguments, "--json", "--yes"], stdout=submitted.manifest
     )
     print(applied.stdout, end="", flush=True)
     if applied.returncode:
@@ -163,7 +186,7 @@ def submit_lane(
 def multinode_arguments(
     run: SrtRun,
     lane: SrtLane,
-    config_file: str,
+    recipe: str,
     overrides: list[str],
     *,
     preflight: bool,
@@ -176,7 +199,7 @@ def multinode_arguments(
         "benchmark.stream_output=true",
         *overrides,
         "-f",
-        config_file,
+        recipe,
     ]
     if not preflight:
         arguments.append("--no-preflight")
