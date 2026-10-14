@@ -1,30 +1,16 @@
-# AgentX dsv41flash vllm gb300-fp4 recipes (Dynamo frontend + vLLM, AGGREGATED): shared
-# settings in base, one override per benchmark point. Select one with
-# CONFIG_FILE=recipes/dsv41flash/vllm/gb300-fp4/agentx/agg-variants.yaml:override_<name>.
-#
-# One TP4 worker (vllm-rs with a native Dynamo sidecar) per point. The harness applies
-# the golden acceptance length itself.
-
 schema: 2
 
 base:
   name: dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: "vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4"
-    precision: fp4
   identity:
-    model:
-      repo: deepseek-ai/DeepSeek-V4.1-Flash
-    container:
-      image: "vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4"
+    model: {}
+    container: {}
     frameworks:
       dynamo: "1.6.0.dev20261010"
   dynamo:
     install: true
     source:
       wheel: "1.6.0.dev20261010"
-    # TCP request plane and ZMQ event plane: no broker hop at high request rates; NATS is not needed.
     request_plane: tcp
     event_plane: zmq
     sidecar: true
@@ -56,7 +42,6 @@ base:
     args:
       router-mode: "kv"
       router-session-affinity-ttl-secs: 14400
-      # Every request goes prefill then decode: never let the router prefill locally on a decode rank.
       active-decode-blocks-threshold: None
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
@@ -91,7 +76,7 @@ base:
         served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
         language-model-only: true
         tokenizer-mode: "deepseek_v41"
-        # The Dynamo frontend applies the deepseek_v41 parsers (published by the sidecar); vLLM must not parse too.
+        # Parse once in the Dynamo frontend.
         reasoning-parser: None
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true,"use_thp":true}'
@@ -100,7 +85,7 @@ base:
         kv-cache-dtype: "fp8"
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
-        # Each TP worker runs on its GPU's NUMA node; the 144 CPUs per task give vLLM the whole node to bind from.
+        # Full-node CPU affinity lets vLLM detect each GPU's NUMA node.
         numa-bind: true
   sbatch_directives:
     mem: "0"
@@ -108,18 +93,11 @@ base:
   srun_options:
     container-remap-root: ""
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
       INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
-      RESULT_DIR: "/logs/agentic"
       PORT: "8000"
-      IS_MULTINODE: "true"
-      MODEL: "deepseek-ai/DeepSeek-V4.1-Flash"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
-      AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
-      HF_HUB_CACHE: "/hf_hub_cache"
 
 override_tp4_c1:
   name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg-tp4-c1"
