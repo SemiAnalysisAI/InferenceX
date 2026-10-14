@@ -238,7 +238,7 @@ For fixed-sequence throughput jobs, the workflow requires `<RESULT_FILENAME>.jso
 
 ### Reusing and extending result processing
 
-[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) accepts a loaded benchmark mapping and an explicit environment mapping. It returns the aggregate dictionary without reading process environment or performing file I/O. Library callers do not need `RESULT_FILENAME`. The existing CLI validates its environment, reads the raw artifact, calls the builder, writes the aggregate, and, for multinode results, runs power aggregation with the existing best-effort or `REQUIRE_POWER` policy.
+[`infx.results.fixed_sequence.build_result`](../infx/results/fixed_sequence.py) accepts a loaded benchmark mapping and an explicit environment mapping. It returns the aggregate dictionary without reading process environment or performing file I/O. Library callers do not need `RESULT_FILENAME`. The existing CLI validates its environment, reads the raw artifact, calls the builder, writes the aggregate, and runs power aggregation for multinode results or a retained native single-node telemetry package, with the existing best-effort or `REQUIRE_POWER` policy.
 
 ```python
 from infx.results.fixed_sequence import build_result
@@ -265,7 +265,9 @@ The current processing paths share these helpers:
 - [`Parallelism`](../infx/results/topology.py) shares GPU-count calculation, parallelism result fields, and normalization when there are no separate decode GPUs. Fixed-sequence results retain explicit allocation counts; AgentX derives counts from its workers. Each caller retains its environment defaults, validation order, errors, and throughput denominators.
 - [`with_power_metrics`](../infx/results/power/__init__.py) returns a copy with the supplied metric family replaced, removes stale validity reasons, and validates and rounds new metrics. Callers supply metric keys and schema version, then own artifact writes and validation sidecars. This allows another metric family to reuse the transformation without changing its implementation.
 
-The power telemetry engine also lives in [`infx.results.power`](../infx/results/power): `multinode.run` validates srt-slurm artifact packages. Its benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization live in `common.py`. Fixed-sequence and AgentX adapters import the engine directly; new result formats can supply their benchmark window and token counts to it. Single-node results carry no power until srt-slurm telemetry covers those lanes.
+The power telemetry engine also lives in [`infx.results.power`](../infx/results/power): `multinode.run` validates srt-slurm artifact packages. Its benchmark-window parsing, per-device integration, aggregate replacement, and audit serialization live in `common.py`. Fixed-sequence and AgentX adapters import the engine directly; new result formats can supply their benchmark window and token counts to it. Native srt-slurm telemetry also covers single-node throughput and AgentX lanes.
+
+SRT fixed-sequence and AgentX clients use native srt-slurm power sampling; they no longer launch a local NVIDIA/AMD SMI sampler. Single-node fixed-sequence execution requires `SRT_MEASUREMENT_WINDOW_DIR` before running throughput, then writes the completed window from the benchmark result. AgentX marks its native window regardless of node count; a missing contract records invalid power under the existing best-effort/`REQUIRE_POWER` policy. The launcher must enable native telemetry, retain its power package and producer identity, and finalize AgentX power after collection. Fixed-sequence processing selects that package through `POWER_ARTIFACT_DIR`, including single-node jobs.
 
 The `infx` package runs with no installation step or new runtime dependency. Run the engine with `python -m infx.results.power.multinode` from `inferencex-e2e/`.
 

@@ -266,3 +266,36 @@ schema; unknown keys fail.
   The cluster's own `env` and `srt-slurm.host-setup.env` values may take a field the
   same way; they resolve when the record loads, and `env` still rejects the commas of a
   list.
+- `slurm.srt-slurm.extra.default_gpu_exporter` is the cluster's native power exporter.
+  Native single-node throughput and AgentX jobs inherit it when the bound recipe
+  enables telemetry without selecting its own exporter; eval-only jobs
+  collect no power, a cluster without the block stops preparation before the benchmark
+  starts, and an invalid measurement fails the job under `REQUIRE_POWER=1` or otherwise
+  records an invalid verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`
+  on their configured exporter port. AMD clusters use srt-slurm's
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/545233a0d36e7d21cf74bb01a4365475c9214003/docs/power-telemetry.md#gpu-exporter-labels-and-metrics):
+  `gpu_labels` names the index and identity labels (`gpu_id`, `serial_number`) and
+  `gpu_metrics` the power, utilization and temperature metrics (`gpu_power_usage` with its
+  recorded `scope`, `gpu_gfx_activity`, `gpu_junction_temperature`); unknown keys such as
+  the former `power_profile` are rejected. The image is the public
+  `ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:0d1c32c965f955b0fbf1dc87a84f7205be9019ce8d2fdf1eb929de28c71cec54`
+  (tag `v1.5.4-highres-20261008`), AMD's v1.5.4-based high-resolution build from their
+  2026-10-08 private drop: a GPUWatch stream inside the exporter samples each GPU once per
+  second into an in-memory store that `/metrics` is served from, so a scrape no longer
+  triggers an `amd-smi` call (the single-threaded library that made the earlier
+  cache-TTL patch necessary). It starts with the plain `/home/amd/tools/entrypoint.sh` on
+  port `19500` and is resolved by digest through the cluster's `squash` settings like any
+  other image. It reads
+  [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json),
+  declared in each AMD profile's `workspace-mounts` at `/etc/metrics/config.json`; that file enables
+  `CommonConfig.HighResolution` (`FastPeriodSecs: 1`, `SlowPeriodSecs: 5`, read at startup)
+  and disables the health service, as AMD's drop notes recommend. Until NVIDIA/srt-slurm#573 merges,
+  [`573-participating-gpus.patch`](../runners/srt-slurm/patches/README.md) keeps
+  worker-node sample rows to the GPUs the job uses; without it a TP4 job on an eight-GPU
+  node records `unexpected_device`. Single-node matrix rows still reject `require-power`; a
+  manual `e2e-tests.yml` dispatch passes its `require-power` input to the single-node
+  throughput and AgentX jobs.
+
+- `slurm.srt-slurm.workspace-mounts` maps files relative to `inferencex-e2e/` into
+  job containers. The renderer resolves each source against the job checkout;
+  host-absolute paths belong in `mounts`, and volume aliases in `volume-mounts`.

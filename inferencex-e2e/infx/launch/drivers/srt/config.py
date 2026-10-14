@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from infx.launch.request import SrtRequest
 
 NGINX_IMAGE = "nginx:1.27.4"
-DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
@@ -119,7 +118,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     volume_mounts = {
         str(volume_path(cluster, name)): target for name, target in srt.volume_mounts.items()
     }
-    mounts = _mounts({**volume_mounts, **srt.mounts}, job.mounts)
+    workspace_mounts = {
+        str(job.workspace / source): target for source, target in srt.workspace_mounts.items()
+    }
+    mounts = _mounts({**volume_mounts, **srt.mounts, **workspace_mounts}, job.mounts)
     if mounts:
         config["default_mounts"] = mounts
     if srt.gpus_per_node_directive is not None:
@@ -158,6 +160,17 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
 def write(path: Path, config: Mapping[str, Any]) -> None:
     """Write ``config`` as YAML; one that does not serialize leaves ``path`` untouched."""
     path.write_text(yaml.safe_dump(dict(config), sort_keys=False))
+
+
+def stage_gpu_exporter(run: SrtRun, *, single_node: bool = False) -> tuple[str, str]:
+    """Stage the cluster's GPU exporter image: its recipe name and the reference jobs start from."""
+    exporter = run.srt.extra.get("default_gpu_exporter")
+    if not isinstance(exporter, dict) or not exporter.get("container_image"):
+        raise LaunchError("native power requires a cluster GPU exporter")
+    image = exporter["container_image"]
+    staged = run.backend.stage_image(image, helper="dcgm-exporter", single_node=single_node)
+    (run.workspace / EXPORTER_PROVENANCE).write_text(f"{run.backend.image_provenance(staged)}\n")
+    return image, staged.reference
 
 
 def srun_options(settings: SlurmSettings) -> str | None:
@@ -274,9 +287,9 @@ def write_lane_config(
         prefill_image = request.env["PREFILL_IMAGE"]
         containers[prefill_image] = backend.stage_image(prefill_image).reference
     if power.dcgm:
-        exporter = backend.stage_image(DCGM_EXPORTER_IMAGE, helper="dcgm-exporter")
-        (run.workspace / EXPORTER_PROVENANCE).write_text(f"{backend.image_provenance(exporter)}\n")
-        containers["dcgm-exporter"] = exporter.reference
+        image, reference = stage_gpu_exporter(run)
+        containers["dcgm-exporter"] = reference
+        containers[image] = reference
     create_volume_mounts(run)
     job = SrtJob(
         srtctl_root=checkout.root,

@@ -23,6 +23,9 @@ def point(tmp_path, monkeypatch):
         shared = tmp_path / f"configs/srt-recipes/{block}.yaml"
         shared.parent.mkdir(parents=True, exist_ok=True)
         shared.write_text(yaml.safe_dump({"benchmark": {"type": "custom", "command": f"bash {client}"}}))
+    (tmp_path / "configs/srt-recipes/telemetry-native.yaml").write_text(
+        yaml.safe_dump({"telemetry": {"enabled": True, "required": False}})
+    )
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
     recipe = {
         "engine": "sglang",
@@ -59,8 +62,8 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
         "USE_CHAT_TEMPLATE": "false",
         "CONC": "2", "RESULT_FILENAME": "point-identity",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "RESULT_DIR": "/logs",
-        "FRAMEWORK": "sglang",
-    }}
+        "FRAMEWORK": "sglang", "REQUIRE_POWER": "0",
+    }, "concurrencies": [2]}
     assert actual["roles"]["agg"]["args"] == {
         "tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32,
     }
@@ -85,7 +88,8 @@ def test_agentx_fragments_are_composed_and_bound_to_the_point(point):
     assert selected == f"{path}:override_c2"
     assert bound["model"] == {"path": "hf:test/model", "container": "other:tag", "precision": "fp8"}
     assert bound["benchmark"] == {
-        "type": "custom", "command": "bash srt_agentic.sh", "env": {"CONC": "2", "MODEL": "test/model"},
+        "type": "custom", "command": "bash srt_agentic.sh", "env": {"CONC": "2", "MODEL": "test/model", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1"},
+        "concurrencies": [2],
     }
     path.write_text(yaml.safe_dump({"base": {**recipe, "model": {"container": "stale:tag"}}}))
     with pytest.raises(ValueError, match=r"remove base\.model\.container"):
@@ -274,3 +278,30 @@ def test_runtime_container_options_remain_native_mapping(point):
     }
     with pytest.raises(ValueError, match='must map option names to string values'):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
+
+
+@pytest.mark.parametrize("recipe_required,requested", [(True, "0"), (False, "1")])
+def test_binding_keeps_either_required_power_policy(point, recipe_required, requested):
+    path, recipe, env = point
+    recipe["telemetry"] = {"required": recipe_required}
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    _, actual = select_recipe(f"{path}:base", {**env, "REQUIRE_POWER": requested})
+    assert actual["telemetry"]["required"] is True
+    assert actual["benchmark"]["concurrencies"] == [2]
+
+
+@pytest.mark.parametrize(
+    "recipe_required,requested,expected",
+    [(False, None, "0"), (False, "1", "1"), (True, None, "1")],
+)
+def test_agentic_binding_derives_require_power_from_either_policy(point, recipe_required, requested, expected):
+    path, recipe, env = point
+    recipe["telemetry"] = {"required": recipe_required}
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    agentic_env = {**env, "IS_AGENTIC": "1", "DURATION": "20"}
+    if requested is not None:
+        agentic_env["REQUIRE_POWER"] = requested
+    _, actual = select_recipe(f"{path}:base", agentic_env)
+    assert actual["benchmark"]["env"]["REQUIRE_POWER"] == expected
+    assert actual["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert actual["telemetry"]["required"] is (expected == "1")

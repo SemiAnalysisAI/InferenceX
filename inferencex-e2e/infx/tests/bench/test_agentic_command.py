@@ -28,6 +28,11 @@ POINT = {
     "RESULT_FILENAME": "agentx",
     "EVAL_ONLY": "false",
     "IS_MULTINODE": "false",
+    "ENABLE_AGENTX_POWER": "0",
+    "REQUIRE_POWER": "0",
+    "TP": "3",
+    "PP_SIZE": "2",
+    "PCP_SIZE": "2",
     "IS_AGENTIC": "1",
     "KV_OFFLOADING": "none",
     "PRECISION": "fp4",
@@ -54,12 +59,21 @@ case "$2" in
     *) echo "unexpected $*" >> "$EVENTS"; exit 99 ;;
 esac
 """
-FAKE_AIPERF = r"""#!/bin/sh
-echo replay >> "$EVENTS"
-sleep "${REPLAY_SECONDS:-0}"
-exit "${REPLAY_RC:-0}"
+FAKE_AIPERF = f"""#!{sys.executable}
+import os, time
+with open(os.environ["EVENTS"], "a") as events:
+    events.write("replay\\n")
+time.sleep(float(os.environ.get("REPLAY_SECONDS", "0")))
+raise SystemExit(int(os.environ.get("REPLAY_RC", "0")))
 """
 FAKE_HF = '#!/bin/sh\nexit "${HF_RC:-0}"\n'
+FAKE_NVIDIA_SMI = r"""#!/bin/sh
+case " $* " in
+    *" -l 1 "*) exec sleep 60 ;;
+    *noheader*) echo gpu-final-sample >> "$EVENTS" ;;
+    *) echo gpu-identity >> "$EVENTS" ;;
+esac
+"""
 DRIVER = """
 import os, sys
 from pathlib import Path
@@ -67,6 +81,16 @@ from infx.bench.agentic.run import Plan, execute
 from infx.bench.agentic.venv import Runtime
 sys.exit(execute(Plan.from_env(os.environ), Runtime(Path(sys.argv[1])), os.environ))
 """
+
+
+@pytest.fixture(autouse=True)
+def fake_gpu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep an accidental sampler invocation observable and isolated from hardware."""
+    tools = tmp_path / "gpu"
+    tools.mkdir()
+    executable(tools / "nvidia-smi", FAKE_NVIDIA_SMI)
+    monkeypatch.setenv("PATH", f"{tools}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("EVENTS", str(tmp_path / "events.log"))
 
 
 def _point(tmp_path: Path, **overrides: str | None) -> dict[str, str]:
@@ -129,7 +153,10 @@ def _events(tmp_path: Path) -> list[str]:
         ({"CONC": "4 8", "CONC_LIST": "4 8"}, "CONC must be a positive integer"),
         ({"IS_MULTINODE": "1"}, "IS_MULTINODE must be true or false"),
         ({"EVAL_ONLY": "true"}, "  - EVAL_ENDPOINT_READY_TIMEOUT_SECONDS"),
-        ({"IS_MULTINODE": "true"}, "  - ENABLE_AGENTX_POWER\n  - REQUIRE_POWER"),
+        (
+            {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": None, "REQUIRE_POWER": None},
+            "  - ENABLE_AGENTX_POWER\n  - REQUIRE_POWER",
+        ),
     ],
 )
 def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, message):
@@ -152,15 +179,28 @@ OFFSET = "agentic_power_timezone_offset.txt"
 REPLAYED = {"benchmark.log", "benchmark_command.txt"}
 
 
+def test_single_node_native_power_records_windows_without_local_sampler(tmp_path):
+    rc = _run(tmp_path, ENABLE_AGENTX_POWER="1", SRT_MEASUREMENT_WINDOW_DIR="/w")
+
+    assert rc == 0
+    results = tmp_path / "results"
+    mark = f"adapter --result-dir {results} --concurrency 8 --write-multinode-window"
+    assert _events(tmp_path) == [
+        f"{mark} running", "replay", "aggregate agentx", f"{mark} completed",
+        "analyze", "validate",
+    ]
+    assert not (results / "gpu_metrics.csv").exists()
+
+
 @pytest.mark.parametrize(
     ("overrides", "rc", "events", "files"),
     [
         pytest.param(
-            {"ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"},
+            {},
             0,
             ["replay", "aggregate agentx", "analyze", "validate"],
             REPLAYED,
-            id="single-node-publishes-no-power",
+            id="power-off",
         ),
         pytest.param(
             {**WINDOW, "ENABLE_AGENTX_POWER": "0", "KV_OFFLOADING": "dram",
@@ -169,6 +209,17 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             ["replay", "aggregate agentx_conc8", "analyze", "validate"],
             {f"conc_8/{name}" for name in REPLAYED},
             id="multi-node-opt-out",
+        ),
+        pytest.param(
+            {"ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"},
+            0,
+            [
+                "replay", "aggregate agentx", "adapter --result-dir {results} --agg-result {out}/agentx.json"
+                " --multinode-contract-missing --require-power",
+                "analyze", "validate",
+            ],
+            REPLAYED,
+            id="single-node-without-native-window",
         ),
         pytest.param(
             WINDOW,
@@ -193,11 +244,11 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
             id="unpublished-window-skips-the-replay",
         ),
         pytest.param(
-            MISSING,
+            {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1"},
             0,
             [
                 "replay", "aggregate agentx_conc8", "adapter --result-dir {results}/conc_8 --agg-result {out}/agentx_conc8.json"
-                " --multinode-contract-missing --require-power",
+                " --multinode-contract-missing",
                 "analyze", "validate",
             ],
             {f"conc_8/{name}" for name in REPLAYED},
@@ -231,7 +282,7 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 ):
     rc = _run(
         tmp_path,
-        **MISSING,
+        ENABLE_AGENTX_POWER="1",
         REPLAY_RC=replay,
         AGGREGATE_RC=aggregate,
         VALIDATE_RC=validate,
@@ -266,7 +317,7 @@ def test_required_server_metrics_gate_an_otherwise_clean_point(tmp_path, csv, pr
 
 def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
     runtime = _runtime(tmp_path)
-    env = _point(tmp_path, REPLAY_SECONDS="60", PYTHONPATH=str(REPO_ROOT))
+    env = _point(tmp_path, ENABLE_AGENTX_POWER="1", REPLAY_SECONDS="60", PYTHONPATH=str(REPO_ROOT))
     driver = subprocess.Popen(
         [sys.executable, "-c", DRIVER, str(runtime.root)],
         env=env,
@@ -278,6 +329,9 @@ def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
     try:
         deadline = time.monotonic() + 10
         while "replay" not in _events(tmp_path):
+            if driver.poll() is not None:
+                _, stderr = driver.communicate()
+                pytest.fail(f"driver exited before replay: {stderr}")
             assert time.monotonic() < deadline, "the replay did not start"
             time.sleep(0.01)
         os.killpg(driver.pid, signal.SIGINT)

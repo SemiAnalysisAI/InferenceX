@@ -8,3 +8,4 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
+| `573-participating-gpus.patch` | [NVIDIA/srt-slurm#573](https://github.com/NVIDIA/srt-slurm/pull/573) | Record only the GPUs workers occupy on a worker node; an exporter such as AMD's reports every GPU, which the collector otherwise flags as `unexpected_device`. |
