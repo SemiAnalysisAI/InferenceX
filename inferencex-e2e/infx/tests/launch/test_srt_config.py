@@ -10,15 +10,18 @@ import pytest
 import yaml
 
 from infx.clusters import Cluster, load_inventory
+from infx.clusters.slurm import slurm_settings
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch
 from infx.launch.drivers.srt.checkout import Checkout, compute_workspace
-from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
+from infx.launch.drivers.srt.config import SrtJob, binder_inputs, pyxis_spelling, render, write
+from infx.launch.drivers.srt.lanes import SrtLane
+from infx.launch.drivers.srt.power import NO_POWER, PowerDecision
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.policy import LaunchPath
-from infx.launch.request import SrtRequest
+from infx.launch.request import MultiNodeRequest, SrtRequest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -177,11 +180,10 @@ def test_selected_partition_overrides_inherited_and_point_environment(tmp_path):
     ({"max_attempts": 2160, "interval_seconds": 5}, {"max_attempts": 2160, "interval_seconds": 5}),
 ])  # fmt: skip
 def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path, health, effective):
-    recipe = tmp_path / "recipes/r.yaml"
-    recipe.parent.mkdir()
+    recipe = tmp_path / "recipe.yaml"
     recipe.write_text(yaml.safe_dump({"schema": 2, "name": "r", **({"health_check": health} if health else {})}))
 
-    prepare_recipe(tmp_path, "recipes/r.yaml", "job", None, None)
+    prepare_recipe(recipe, "job", None)
 
     resolved = resolve_config_with_defaults(yaml.safe_load(recipe.read_text()), render(cluster(), job()))
     assert resolved["health_check"] == effective
@@ -229,3 +231,36 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
 
     assert staged == tmp_path / "runs/infmax-workspace-1-1-abc"
     assert sorted(str(p.relative_to(staged)) for p in staged.rglob("*") if p.is_file()) == sorted(kept)
+
+
+@pytest.mark.parametrize(("agentic", "decision", "expected"), [
+    ("1", NO_POWER, (None, "true", "0", "0")),
+    # DCGM alone: the launcher collects no AgentX power, so the client marks no window.
+    ("1", PowerDecision(dcgm=True, agentx=False), (9401, "true", "0", "0")),
+    ("1", PowerDecision(dcgm=True, agentx=True), (9401, "true", "1", "0")),
+    ("1", PowerDecision(dcgm=True, agentx=True, require=True), (9401, "true", "1", "1")),
+    ("1", PowerDecision(dcgm=True, agentx=False, adapter=True), (9401, "true", "1", "0")),
+    ("0", PowerDecision(dcgm=True, agentx=False), (9401, None, None, None)),
+])  # fmt: skip
+def test_the_agentx_client_measures_power_exactly_when_the_launcher_collects_it(
+    tmp_path, agentic, decision, expected
+):
+    record = cluster(srt={"power-exporter-port": 9401})
+    request = MultiNodeRequest.from_env({
+        "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i",
+        "FRAMEWORK": "dynamo-sglang", "MODEL_PREFIX": "m", "PRECISION": "fp8",
+        "SPEC_DECODING": "none", "RESULT_FILENAME": "r", "IS_AGENTIC": agentic, "RUN_EVAL": "false",
+        "EVAL_ONLY": "false", "IS_MULTINODE": "true", "SRT_RECIPE": "r.yaml", "CONC": "4",
+        "CONC_LIST": "4",
+    })  # fmt: skip
+
+    port, client_env = binder_inputs(
+        record, slurm_settings(record).srt_slurm, SrtLane(), request, decision
+    )
+
+    switches = (
+        client_env.get("IS_MULTINODE"),
+        client_env.get("ENABLE_AGENTX_POWER"),
+        client_env.get("REQUIRE_POWER"),
+    )
+    assert (port, *switches) == expected

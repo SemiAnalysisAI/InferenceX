@@ -4,10 +4,6 @@
 base:
   schema: 2
   name: minimaxm3-fp4-b200-trtllm-agentic
-  model:
-    path: hf:nvidia/MiniMax-M3-NVFP4
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
-    precision: fp4
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -96,10 +92,7 @@ base:
         TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
         TRTLLM_TORCH_COMPILE_CONTEXT_ONLY: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/MiniMax-M3-NVFP4
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
       KV_OFFLOADING: dram
 

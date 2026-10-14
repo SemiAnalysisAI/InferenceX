@@ -1,19 +1,12 @@
 # AgentX dsv4 vllm gb300-fp4 recipes: shared settings in base, one
-# override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/dsv4/vllm/gb300-fp4/agentx/agg-variants.yaml:override_<name>.
+# override per benchmark configuration.
 
 schema: 2
 
 base:
-  model:
-    path: "deepseek-v4-pro"
-    container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
-    precision: "fp4"
   identity:
-    model:
-      repo: "deepseek-ai/DeepSeek-V4-Pro"
-    container:
-      image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
+    model: {}
+    container: {}
     frameworks:
       dynamo: "1.2.1"
   dynamo:
@@ -52,7 +45,7 @@ base:
           global_segment_size: "150GB"
           local_buffer_size: "4GB"
           protocol: "rdma"
-          device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+          device_name: "@fabric.rdma-devices"
           mode: "embedded"
           enable_offload: false
   frontend:
@@ -77,7 +70,6 @@ base:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
         TRANSFORMERS_CACHE: "/hf_hub_cache"
-        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
         VLLM_LOG_STATS_INTERVAL: "1"
         TILELANG_CLEANUP_TEMP_FILES: "1"
@@ -96,9 +88,9 @@ base:
         VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
         UCX_MEMTYPE_CACHE: "n"
-        UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+        UCX_NET_DEVICES: "@fabric.rdma-device-ports"
         UCX_TLS: "rc,cuda_copy"
-        NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         NCCL_P2P_LEVEL: "NVL"
         MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
         MC_STORE_CLIENT_METRIC: "1"
@@ -125,19 +117,8 @@ base:
   srun_options:
     container-remap-root: ""
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
-      RESULT_DIR: "/logs/agentic"
-      PORT: "8000"
-      # Keep aggregate workers in the multinode result schema so ingestion uses
-      # the zero decode-worker count instead of duplicating TP into P and D.
-      IS_MULTINODE: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
-      AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
-      HF_HUB_CACHE: "/hf_hub_cache"
-      WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
 
 # GB300 AgentX aggregate topology: one TP4 worker occupies one four-GPU node
 # and serves both prefill and decode at concurrency 8. Size max-num-seqs at
