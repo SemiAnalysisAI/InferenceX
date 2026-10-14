@@ -6,13 +6,10 @@ base:
   name: dsv41flash-fp4-mi355x-vllm-agentic
   model:
     path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # The first ROCm 10.0 nightly carrying vllm-project/vllm#60397 (DSv4.1
-    # mono decode kernels), which the environment below enables. It also
-    # brings #59685 (AITER MegaMoEV2 for DeepSeek V4), #56638 (shared
-    # combine_topk_swa_indices kernel in place of the Torch prefill combine),
-    # #60159 (native merge_attn_states on gfx950) and #60389 (MLA derived
-    # weights kept in place on weight reload).
-    container: vllm/vllm-openai-rocm:nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe
+    # ROCm 10.0 nightly of 2026-10-13, the first to carry both
+    # vllm-project/vllm#59039 (decoder SWA bounded replay on ROCm) and #61082
+    # (mono decode on all 40 backbone layers, switched by --monokernel).
+    container: vllm/vllm-openai-rocm:nightly-rocm100-5555a2d8f7116b2b4877f66516f4128176cf722a
     precision: fp4
   resources:
     gpu_type: mi355x
@@ -58,17 +55,14 @@ base:
         # indexer does not support.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
-        # The ROCm sparse SWA path lacks the replay window clamp; bounded replay
-        # memory-faulted at the first prefix hit with a replay start.
-        no-swa-bounded-replay: true
+        # Mono decode kernels (vllm-project/vllm#60397, #61082): two persistent
+        # launches a layer on all 40 backbone layers for decode steps of up to
+        # 48 rows (c8 with five drafts); larger steps take the regular path.
+        monokernel: true
         disable-uvicorn-access-log: true
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
-        # Mono decode kernels (vllm-project/vllm#60397): two persistent
-        # launches a layer for decode steps of up to 48 rows (c8 with five
-        # drafts); larger steps take the regular path.
-        VLLM_ROCM_MONO_DECODE: '1'
         # INT4 quick all-reduce above its size threshold
         # (vllm-project/recipes#1061).
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
