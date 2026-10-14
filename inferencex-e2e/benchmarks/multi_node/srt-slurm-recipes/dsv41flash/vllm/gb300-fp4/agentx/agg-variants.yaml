@@ -100,9 +100,11 @@ base:
         kv-cache-dtype: "fp8"
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
+        # Each TP worker runs on its GPU's NUMA node; the 144 CPUs per task give vLLM the whole node to bind from.
+        numa-bind: true
   sbatch_directives:
     mem: "0"
-    cpus-per-task: "72"
+    cpus-per-task: "144"
   srun_options:
     container-remap-root: ""
   benchmark:

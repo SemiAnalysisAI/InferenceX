@@ -121,7 +121,7 @@ base:
         enable-cumem-allocator: true
         enable-ep-weight-filter: true
         attention-config: '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
-        engram-config: '{"cpu_offload":true,"embedding_across_dp":true,"use_thp":false}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true,"use_thp":true}'
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","enable_adaptive_verification":false}'
         prefill-schedule-interval: 2
         gpu-memory-utilization: 0.95
@@ -129,7 +129,7 @@ base:
         kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048],"max_cudagraph_capture_size":2046}'
         max-num-seqs: 64
-        max-num-batched-tokens: 16384
+        max-num-batched-tokens: 32768
         long-prefill-token-threshold: 8192
         prefix-cache-retention-interval: 32768
         numa-bind: true
@@ -205,32 +205,20 @@ base:
       AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
       HF_HUB_CACHE: "/hf_hub_cache"
 
-override_10p1d_dep2_dep16_c6656:
-  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-10p1d-dep2-dep16-c6656"
-  roles:
-    prefill:
-      nodes: 5
-      workers: 10
-    decode:
-      args:
-        max-num-seqs: 132
-        max-num-batched-tokens: 1320
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":792,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384,390,396,402,408,414,420,426,432,438,444,450,456,462,468,474,480,486,492,498,504,510,516,522,528,534,540,546,552,558,564,570,576,582,588,594,600,606,612,618,624,630,636,642,648,654,660,666,672,678,684,690,696,702,708,714,720,726,732,738,744,750,756,762,768,774,780,786,792]}'
-
-override_8p1d_dep2_dep16_c5120:
-  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-8p1d-dep2-dep16-c5120"
+override_8p1d_dep2_dep16_c4096:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-8p1d-dep2-dep16-c4096"
   roles:
     prefill:
       nodes: 4
       workers: 8
     decode:
       args:
-        max-num-seqs: 70
-        max-num-batched-tokens: 700
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":420,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384,390,396,402,408,414,420]}'
+        max-num-seqs: 72
+        max-num-batched-tokens: 720
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":432,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384,390,396,402,408,414,420,426,432]}'
 
-override_6p1d_dep2_dep16_c4096:
-  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-6p1d-dep2-dep16-c4096"
+override_6p1d_dep2_dep16_c2884:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-6p1d-dep2-dep16-c2884"
   roles:
     prefill:
       nodes: 3
@@ -241,12 +229,12 @@ override_6p1d_dep2_dep16_c4096:
         max-num-batched-tokens: 400
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":240,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240]}'
 
-override_5p1d_dep2_dep16_c2560:
-  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-5p1d-dep2-dep16-c2560"
+override_4p1d_dep2_dep16_c1228:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-4p1d-dep2-dep16-c1228"
   roles:
     prefill:
-      nodes: 3
-      workers: 5
+      nodes: 2
+      workers: 4
     decode:
       args:
         max-num-seqs: 18
