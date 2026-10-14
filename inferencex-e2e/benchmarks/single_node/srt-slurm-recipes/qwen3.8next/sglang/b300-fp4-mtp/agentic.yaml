@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: qwen3.8next-fp4-b300-sglang-agentic
-  model:
-    path: hf:RadixArk/Qwen3.8-Flash-Next-NVFP4
-    container: lmsysorg/sglang:qwen38flashnext
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -60,13 +56,8 @@ base:
     max_attempts: 1440
     interval_seconds: 5
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: RadixArk/Qwen3.8-Flash-Next-NVFP4
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      # 256k-capped corpus, within this model's context.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
 
 # One variant per point: admission is 2x CONC and the graph batch is CONC. NEXTN
 # resets an unset admission limit to 48, so it stays explicit.

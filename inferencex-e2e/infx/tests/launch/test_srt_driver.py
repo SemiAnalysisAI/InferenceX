@@ -36,14 +36,9 @@ from infx.tests.launch.fake_slurm import (
 POINT_RECIPE = {
     "engine": "sglang",
     "resources": {"gpus_per_node": 8},
-    "model": {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"},
     "roles": {"agg": {
         "nodes": 1, "workers": 1, "gpus": 4,
         "args": {"tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32},
-    }},
-    "benchmark": {"type": "custom", "env": {
-        "MODEL": "test/model", "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5",
-        "USE_CHAT_TEMPLATE": "false",
     }},
 }  # fmt: skip
 
@@ -55,11 +50,7 @@ POINT_ENV = {
     "IS_MULTINODE": "false", "SRT_RECIPE": "recipe.yaml", "FAKE_RESULTS": "single",
 }  # fmt: skip
 
-LANE_RECIPE = """name: "fixture"
-model:
-  path: "alias"
-  container: "test:tag"
-  precision: "fp8"
+LANE_FRAGMENT = """name: "fixture"
 roles:
   prefill:
     args:
@@ -72,11 +63,9 @@ roles:
 health_check:
   max_attempts: 100
   interval_seconds: 5
-benchmark:
-  type: sa-bench
-  concurrencies: [4]
 """
-POWER_TELEMETRY = "telemetry:\n  dcgm_exporter:\n    image: dcgm\n  enabled: true\n"
+POWER_TELEMETRY = "telemetry:\n  collector_join_timeout_seconds: 12\n"
+MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
 
 
 @pytest.fixture
@@ -100,7 +89,7 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), **overrides}
 
 
-def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: str) -> dict[str, str]:
+def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides: str) -> dict[str, str]:
     """Environment of a multi-node point whose recipe lives in the workspace mirror.
 
     RUNNER_NAME defaults to the cluster's first runner.
@@ -110,7 +99,7 @@ def lane_env(harness, cluster_id: str, recipe: str = LANE_RECIPE, **overrides: s
     mirror.write_text(recipe)
     env = {
         **harness.env, "RUNNER_NAME": overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id),
-        "IS_MULTINODE": "true", "CONFIG_FILE": "recipes/test/lane.yaml", "IMAGE": "test:tag",
+        "IS_MULTINODE": "true", "SRT_RECIPE": f"{MIRROR}/test/lane.yaml", "IMAGE": "test:tag",
         "CONC_LIST": "4", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
         "FAKE_RESULTS": "fixed",
     }  # fmt: skip
@@ -134,6 +123,13 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
     env = single_node_env(harness, "h200-cw")
+    # The binder takes the job cluster's fabric facts.
+    records = yaml.safe_load(harness.config.read_text())
+    records["clusters"]["h200-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
+    harness.config.write_text(yaml.safe_dump(records))
+    fragment = yaml.safe_load((workspace / "recipe.yaml").read_text())
+    fragment["base"]["roles"]["agg"]["env"] = {"NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}
+    (workspace / "recipe.yaml").write_text(yaml.safe_dump(fragment))
     assert_ok(launch(env, harness.config, workspace))
 
     assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
@@ -141,7 +137,14 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
+    # srtctl runs the point's bound variant.
+    bound = Path(argv[argv.index("--file") + 1])
+    recipe = yaml.safe_load(bound.read_text())
+    assert recipe["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
+    assert {k: recipe["benchmark"]["env"][k] for k in ("MODEL", "CONC", "USE_CHAT_TEMPLATE")} == {
+        "MODEL": "test/model", "CONC": "2", "USE_CHAT_TEMPLATE": "false",
+    }
+    assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth9"}
     assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
     assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
     assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
@@ -178,13 +181,13 @@ LABS = {
             mounts=(LaneMount(Match(), "cache", "/cache"),), time_limit="2:00:00",
         ),
         env=dict(FRAMEWORK="dynamo-sglang"),
-        model="nvme/model", preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
+        paths={"hf:org/Model": "nvme/model"}, preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
         served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
     ),
     "lab-b": dict(
         lane=SrtLane(shared_run_root=(Match(),)),
         env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", FAKE_RESULTS="agentic"),
-        model="models/model", preflight=True, tag=None, setup_script=None, served=None,
+        paths={"hf:org/Model": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
         dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
     ),
 }  # fmt: skip
@@ -230,8 +233,8 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
     for other, spec in LABS.items():
         monkeypatch.setitem(lanes.SRT_LANES, (other, LaunchPath.SRT_MULTI), spec["lane"])
     monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(Match(), served_name="served-model"),))
-    env = lane_env(harness, cluster_id, RUNNER_NAME=f"{cluster_id}_00", MODEL_PREFIX="dsr1",
-                   PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
+    env = lane_env(harness, cluster_id, lab.get("recipe", LANE_FRAGMENT), RUNNER_NAME=f"{cluster_id}_00",
+                   MODEL_PREFIX="dsr1", PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
     runner, tmp, workspace = env["RUNNER_NAME"], harness.tmp, harness.workspace
     assert launch_here(monkeypatch, env, lab_config(tmp), workspace) == 0
 
@@ -255,7 +258,7 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert checkout.parent == workspace.resolve()
         assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
     assert ("--no-preflight" in argv) is not lab["preflight"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/lane.yaml"
+    submitted = argv[argv.index("--file") + 1]
     assert {"--json", "--yes", "benchmark.stream_output=true", WORKDIR} <= set(argv)
     if lab["tag"] is None:
         assert "--tags" not in argv
@@ -267,13 +270,23 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
         assert argv[argv.index("--setup-script") + 1] == lab["setup_script"]
     assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
 
-    staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
+    # The lane edits the recipe the binder wrote from the composed fragment.
+    bound = yaml.safe_load(Path(submitted).read_text())
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
     dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
-    assert staged["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["model"] == {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"}
+    if env["IS_AGENTIC"] == "1":
+        # lab-b mounts no cache volume, so the client keeps its caches in the container, and
+        # measures no power.
+        assert bound["benchmark"]["env"] == {
+            "RESULT_DIR": "/logs/agentic", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache",
+            "HF_HUB_CACHE": "/hf_hub_cache", "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "0",
+            "REQUIRE_POWER": "0",
+        }
 
     config = srtslurm(checkout)
-    assert config["model_paths"] == {"alias": str(tmp / lab["model"])}
+    assert config["model_paths"] == {name: str(tmp / path) for name, path in lab["paths"].items()}
     assert config["default_time_limit"] == lab["time"]
     assert set(lab["mounts"]) <= set(config.get("default_mounts", {}).values())
     imported = [line.split()[-1] for line in lines(harness.logs, "enroot")]
@@ -299,10 +312,10 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     )
     adapter.chmod(0o755)
     env = lane_env(
-        harness, "h200-dgxc", LANE_RECIPE + POWER_TELEMETRY,
+        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
         MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
         IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
-        REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter),
+        REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -315,8 +328,13 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert provenance.endswith(f"  {exporter}\n")
     assert (workspace / "LOGS/power/exporter-image.sha256").read_text() == provenance
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == commit + "\n"
-    staged = yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text())
-    assert staged["benchmark"]["concurrencies"] == [4]
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["benchmark"]["concurrencies"] == [4]
+    assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    # The client fails invalid power when the workflow requires it; h200-dgxc rules never do.
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
+    assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
+    assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
@@ -372,9 +390,7 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
 def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
     runner_temp = harness.tmp / "runner-temp"
     runner_temp.mkdir()
-    recipe = json.loads(json.dumps(POINT_RECIPE))
-    recipe["benchmark"]["command"] = "bash /infmax-workspace/benchmarks/srt_agentic.sh"
-    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": recipe}))
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
     env = {
         **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for("b300-dsxe"), "MODEL_PREFIX": "dsv41flash",
         "PRECISION": "fp8", "IS_AGENTIC": "1", "DURATION": "600", "RUNNER_TEMP": str(runner_temp),
@@ -417,7 +433,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_RECIPE)
+    (mirror / "eval.yaml").write_text(LANE_FRAGMENT)
     # What the in-container eval staged: its own batch record, but not every workflow input.
     staged = {
         "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
@@ -427,14 +443,14 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     env = lane_env(
         harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
         MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
-        EVAL_ONLY="true", EVAL_CONFIG_FILE="recipes/test/eval.yaml", FAKE_RESULTS="eval",
+        EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
         EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
 
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == "recipes/test/eval.yaml"
+    assert Path(argv[argv.index("--file") + 1]).name == "recipe.yaml"
     assert "frontend.placement.node=head" in argv
     checkout = Path(call["cwd"])
     assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
@@ -455,6 +471,31 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     )
     assert list(workspace.glob("point-identity_*.json")) == []
 
+
+def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
+    monkeypatch.setitem(lanes.SRT_LANES, ("lab-a", LaunchPath.SRT_MULTI), LABS["lab-a"]["lane"])
+    bundle = "base:\n" + "".join(f"  {line}\n" for line in LANE_FRAGMENT.splitlines())
+    env = lane_env(
+        harness, "lab-a", bundle + "override_x:\n  roles:\n    decode:\n      nodes: 3\n",
+        RUNNER_NAME="lab-a_00", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="org/Model", SRT_RECIPE=f"{MIRROR}/test/lane.yaml:override_x",
+    )  # fmt: skip
+    assert launch_here(monkeypatch, env, lab_config(harness.tmp), harness.workspace) == 0
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    bound = yaml.safe_load((Path(call["cwd"]) / argv[argv.index("--file") + 1]).read_text())
+    args = {"tensor-parallel-size": 8, "watchdog-timeout": 600, "dist-timeout": 1800}
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == "inferencex-lab-a_00"
+    assert bound["roles"] == {"prefill": {"args": args}, "decode": {"nodes": 3, "args": args}}
+
+
+def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):
+    env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
+                   FRAMEWORK="dynamo-sglang", MODEL="m", SRT_RECIPE="recipes/test/lane.yaml")  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert "recipes/test/lane.yaml is not under benchmarks/multi_node/srt-slurm-recipes" in result.stderr
+    assert lines(harness.logs, "git") == []
 
 def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
     env = lane_env(
@@ -481,9 +522,8 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
     ("h100-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
-    ("gb300-nv", dict(MODEL_PREFIX="llama", PRECISION="fp8", FRAMEWORK="dynamo-sglang"), "stages no checkpoint"),
-    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang", CONFIG_FILE=""),
-     "CONFIG_FILE is not set"),
+    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+                       SRT_RECIPE=f"{MIRROR}/test/missing.yaml"), "is not in the recipe mirror"),
 ])  # fmt: skip
 def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_id, env, message):
     result = launch(lane_env(harness, cluster_id, MODEL="m", **env), harness.config, harness.workspace)
@@ -495,6 +535,7 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [
     ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
     ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
+    ("multi", dict(SRT_RECIPE=None), "SRT_RECIPE"),
     ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),
 ])  # fmt: skip
 def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, missing):

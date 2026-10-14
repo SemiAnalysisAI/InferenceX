@@ -6,14 +6,8 @@ base:
   name: qwen3.8next-fp4-gb300-sglang-agentic-stock-v0521
   identity:
     model:
-      repo: nvidia/Qwen3.8-Flash-Next-NVFP4
       revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
-    container:
-      image: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
-  model:
-    path: hf:nvidia/Qwen3.8-Flash-Next-NVFP4
-    container: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
-    precision: fp4
+    container: {}
   resources:
     gpu_type: gb300
     gpus_per_node: 4
@@ -104,12 +98,8 @@ base:
     mem: '0'
     container-remap-root: ''
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/Qwen3.8-Flash-Next-NVFP4
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
       # Native single-node binding verifies these against the generated point.
       TOTAL_CPU_DRAM_GB: '225'
       KV_OFFLOADING: dram
