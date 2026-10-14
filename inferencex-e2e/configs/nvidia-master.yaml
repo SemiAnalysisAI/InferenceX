@@ -5647,10 +5647,6 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
 # throughput. Dynamo KV routing and AIPerf conversation-aware routing remain
 # enabled by framework=dynamo-vllm.
 
-# B200 sibling of minimaxm3-fp4-b300-vllm-agentic-mtp (same image, EAGLE3-GQA
-# draft and golden AL). TP4 only: TP2's 31.72 GiB KV pool cannot hold one
-# 1,048,576-token request, so vLLM never starts (run 31141913741). Past conc 40
-# the SimpleCPU arm traces offload bandwidth, not the SKU.
 minimaxm3-fp4-b200-vllm-agentic-mtp:
   image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
   model: nvidia/MiniMax-M3-NVFP4
