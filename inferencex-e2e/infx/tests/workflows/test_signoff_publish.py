@@ -22,6 +22,7 @@ def verdict(
     failure=False,
     warning=False,
     reuse_warning=False,
+    draft_warning=False,
     body_warning=False,
     nvidia_warning=False,
     prefix="",
@@ -31,6 +32,11 @@ def verdict(
     ]
     rows[13] = "➖ Check 13 (Draft precision): N/A — No speculative changes."
     expanded = []
+    if draft_warning:
+        rows.pop(13)
+        expanded.append(
+            "⚠️ Check 13 (Draft precision): WARN — Pinned draft implementation unavailable."
+        )
     if reuse_warning:
         rows.pop(4)
         expanded.append(
@@ -316,7 +322,9 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(
     "failure,coverage_warning",
     [(False, False), (True, False), (False, True), (True, True)],
 )
-@pytest.mark.parametrize("advisory_warning", ["reuse_warning", "body_warning", "nvidia_warning"])
+@pytest.mark.parametrize(
+    "advisory_warning", ["reuse_warning", "draft_warning", "body_warning", "nvidia_warning"]
+)
 def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     publish, failure, coverage_warning, advisory_warning
 ):
@@ -329,6 +337,9 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     assert body.startswith(marker() + "\n" + header)
     expected_warning = {
         "reuse_warning": "⚠️ Check 4 (Reuse command): WARN — No authorized reuse command.",
+        "draft_warning": (
+            "⚠️ Check 13 (Draft precision): WARN — Pinned draft implementation unavailable."
+        ),
         "body_warning": "⚠️ Check 15 (PR description): WARN — Body claims 16 GiB; recipe sets 8 GiB.",
         "nvidia_warning": (
             "⚠️ Check 16 (NVIDIA overview): WARN — Kimi-K3 / vLLM on B300: missing listing."
@@ -343,6 +354,17 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     assert ("❌ Check 1 (Sweep): FAIL" in body) == failure
     assert "did not produce a valid verdict" not in body
     assert len(result["writes"]) == 1
+
+
+def test_confirmed_draft_violation_still_publishes_rejection(publish):
+    content = verdict(REJECT, draft_warning=True, body_warning=True).replace(
+        "⚠️ Check 13 (Draft precision): WARN — Pinned draft implementation unavailable.",
+        "❌ Check 13 (Draft precision): FAIL — BF16 draft converted to MXFP4.",
+    )
+    result = publish(content)
+    body = result["comments"][0]["body"]
+    assert body == marker() + "\n" + content + f"\n\nAssessed commit: `{SHA}`.\n"
+    assert "did not produce a valid verdict" not in body
 
 
 def test_listed_nvidia_pair_passes_without_warning_banner(publish):

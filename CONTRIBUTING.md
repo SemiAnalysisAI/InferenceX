@@ -112,8 +112,13 @@ name or precision label.
 For speculative-decoding changes, the CODEOWNER's additional detail section must
 identify the draft checkpoint/revision (or embedded head), the precision it ships in,
 how the pinned upstream image handles it by default, and its effective serving
-precision, so the reviewer can confirm the last two match. If this cannot be
-verified, the criterion is not satisfied. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
+precision, so the reviewer can confirm the last two match. If evidence is missing
+or inaccessible, record the uncertainty and missing evidence instead of claiming
+verification. Check 13 reports WARN and requests human review; this does not
+establish compliance or grant an exception. A demonstrated precision violation or
+prohibited enablement still FAILs, even if another affected variant is unverified.
+An unchecked draft-precision item explained this way does not independently fail
+the checklist-format check. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
 [verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped).
 
 This follows the same principle as
