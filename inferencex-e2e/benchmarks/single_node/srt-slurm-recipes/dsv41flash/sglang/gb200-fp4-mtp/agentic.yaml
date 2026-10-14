@@ -54,10 +54,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. TP4 admission is 2x CONC, capped at the graph batch;
-# SWA prefix tails are 32x CONC with a floor of 128. DP4 points run DP attention
-# behind sglang-router, from c64 with 64K prefill chunks. Saturation points get
-# a longer warmup drain.
 override_tp4_c1:
   roles:
     agg:
