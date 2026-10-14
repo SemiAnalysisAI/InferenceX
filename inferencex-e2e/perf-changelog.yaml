@@ -9738,3 +9738,13 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark-tuned
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a knob-tuned sibling of the GB300 DeepSeek-V4.1-Flash SGLang AgentX curve on the official lmsysorg/sglang:nightly-dev-cu13-20261012-e6072935 (digest pinned, the same image as InferenceX #3859), stock SGLang without framework patches: five points measured on that image that InferenceX #3859 does not already carry, TP2/EP2 at C8 and C32, DEP2 (TP2/DP2/EP2 with DP attention) at C160, and TP4/EP1 at C1 and C14; one variant per point in agentic-tuned.yaml, each the exact configuration measured in a full 3600 s run. DEP2 C64/C128 and TP4 C4/C16 were dropped because #3859 ships the same configurations in dsv41flash-fp4-gb300-sglang-agentic-dspark."
+    - "Every point: SGLANG_DSPARK_FOLDED_SAMPLING=2 and 16K prefill chunks. TP2/EP2 C8 and C32: decoder SWA bounded replay (prefill graph backend disabled), expandable allocator segments, SGLANG_NUMA_BIND_V2=0 and a prefill-decode interval of 96 at C8 and 48 at C32; tokenizer-worker-num 4 at C32. DEP2 C160, as in InferenceX #3859: DP attention with DP LM head and local control broadcast, MegaMoE all-to-all, total_requests load balancing, shortest-prefill-first, tokenizer-worker-num 4, interval 16 and request cap 256, behind sglang-router (cache_aware, dp-aware, routing key from the AIPerf correlation id). TP4 C14: EP1, interval 192, tokenizer-worker-num 4, caps 128, static ragged verify and SGLANG_NUMA_BIND_V2=0; TP4 C1: the published recipe with folded sampling and 16K chunks and a 16-step prefill-decode interval."
+    - "Canonical DSpark block 5 and golden acceptance 3.51 are unchanged. GSM8K passed on folded sampling (TP2 0.975, TP4 0.973), on bounded replay (0.977), on the DEP2 router config on this image (0.9742) and on stock TP4 on this image (0.9735)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3929

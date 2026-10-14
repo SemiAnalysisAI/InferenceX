@@ -1,0 +1,208 @@
+# DeepSeek-V4.1-Flash AgentX on GB300 with SGLang native DSpark: knob-tuned
+# curve on the official nightly-dev-cu13-20261012-e6072935 image. Stock SGLang,
+# no framework patches: every change is a server flag, environment variable,
+# topology or the image. Five points: TP2 C8/C32, DEP2 C160 and TP4 C1/C14,
+# the configurations not already in dsv41flash-fp4-gb300-sglang-agentic-dspark
+# (InferenceX #3859 carries DEP2 C64/C128 and TP4 C4/C16 unchanged). Each is
+# the exact configuration measured on this image in one full
+# 3600 s AgentX run (results in each variant's comment: p90 tok/s/user /
+# tok/s/GPU / TTFT p90, and the published GB300 point at the same TP and
+# concurrency where one exists).
+#
+# Knobs against the published dsv41flash-fp4-gb300-sglang-agentic-dspark
+# curve: SGLANG_DSPARK_FOLDED_SAMPLING=2, 16K prefill chunks, a longer
+# prefill-decode interval, tokenizer-worker-num 4, shortest-prefill-first
+# scheduling at DEP2, decoder SWA bounded replay at TP2, SGLANG_NUMA_BIND_V2=0
+# (Engram host-table huge pages), expert parallelism 1 at TP4, caps sized to the
+# concurrency; DEP2 at C160 (data-parallel attention, MegaMoE all-to-all,
+# cache-aware DP-aware sglang-router, as in InferenceX #3859).
+base:
+  schema: 2
+  name: dsv41flash-fp4-gb300-sglang-agentic-tuned
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        chunked-prefill-size: 16384
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: 'True'
+        SGLANG_DSPARK_FOLDED_SAMPLING: '2'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# c8-pdi96-numa0-i1012: 317.3 / 30,527 / 1.5 s; published 2026-10-09 227.3 / 29,970 / 1.5 s
+override_tp2_c8:
+  frontend:
+    type: sglang
+  roles:
+    agg:
+      args:
+        prefill-decode-interval: 96
+        mem-fraction-static: 0.8
+        cuda-graph-max-bs-decode: 64
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        swa-prefix-tails: 512
+        max-running-requests: 16
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_NUMA_BIND_V2: '0'
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+# c32-pdi48-tok4-numa0-i1012: 186.3 / 114,929 / 2.8 s; published 2026-10-09 112.5 / 94,503 / 10.3 s
+override_tp2_c32:
+  frontend:
+    type: sglang
+  roles:
+    agg:
+      args:
+        prefill-decode-interval: 48
+        tokenizer-worker-num: 4
+        mem-fraction-static: 0.8
+        cuda-graph-max-bs-decode: 64
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_NUMA_BIND_V2: '0'
+      gpus: 2
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+# c160-dep2-megamoe-router-i1012: 82.4 / 301,770 / 3.9 s; no published point
+override_dep2_c160:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      args:
+        prefill-decode-interval: 16
+        mem-fraction-static: 0.85
+        cuda-graph-max-bs-decode: 128
+        tensor-parallel-size: 2
+        data-parallel-size: 2
+        expert-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        load-balance-method: total_requests
+        moe-a2a-backend: megamoe
+        schedule-policy: shortest-prefill-first
+        tokenizer-worker-num: 4
+        swa-prefix-tails: 4096
+        max-running-requests: 256
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_NUMA_BIND_V2: '0'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      gpus: 2
+  benchmark:
+    env:
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      CONC: '160'
+
+# c1-tp4-fold2-i1012: 624.9 / 7,358 / 1.3 s; published 2026-10-09 536.0 / 6,840 / 1.8 s
+override_tp4_c1:
+  frontend:
+    type: sglang
+  roles:
+    agg:
+      args:
+        prefill-decode-interval: 16
+        mem-fraction-static: 0.8
+        cuda-graph-max-bs-decode: 64
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        max-running-requests: 2
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_RAGGED_VERIFY_MODE: static
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+# c14-tp4-stock-i1012: 453.8 / 22,381 / 1.9 s; no published point
+override_tp4_c14:
+  frontend:
+    type: sglang
+  roles:
+    agg:
+      args:
+        prefill-decode-interval: 192
+        tokenizer-worker-num: 4
+        mem-fraction-static: 0.8
+        cuda-graph-max-bs-decode: 128
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_NUMA_BIND_V2: '0'
+      gpus: 4
+  benchmark:
+    env:
+      CONC: '14'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
