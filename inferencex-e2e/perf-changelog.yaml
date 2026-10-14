@@ -9812,3 +9812,9 @@
   - Refresh GB200 DSpark recipes for the current launcher and use K6 for TP8 C1/C4/C8.
   - 更新 GB200 DSpark 配置以适配当前启动脚本，并在 TP8 C1/C4/C8 使用 K6。
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3416
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-rocm720-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4067
