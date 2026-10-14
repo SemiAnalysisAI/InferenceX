@@ -196,10 +196,13 @@ def _write_json_atomic(path: str, value) -> None:
 
 
 def kernel_generation(backend) -> str:
-    """Identify the kernel family and captured-all-reduce measurement regime."""
+    """Identify the kernel family and the rank-alignment regime it was timed under."""
     family = backend.kernel_generation or "n-a"
-    # Historical -cudagraph rows used an external barrier and alignment spin.
-    return f"{family}-cudagraph-in-graph-ar" if backend.cuda_graph_enabled else family
+    # Historical -cudagraph rows used an external barrier and alignment spin; historical eager
+    # rows (bare family) had no per-sample alignment.
+    if backend.cuda_graph_enabled:
+        return f"{family}-cudagraph-in-graph-ar"
+    return f"{family}-eager-spin-ar"
 
 
 class _Collectives:

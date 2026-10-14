@@ -353,10 +353,21 @@ drained pair (`cuda_graph_last_output_passed`). Graphed rows carry a `-cudagraph
 `kernel_generation`, so the durable store never pools them with eager rows; the artifact also
 records `implementation.cuda_graph_replay` and `cuda_graph_supported`.
 
+**Eager rows align the same way.** A row that stays eager (no graph-safe mode, or
+`COLLX_CUDA_GRAPH=0`) opens each fresh-entry sample the way DeepEP's `bench_kineto` does: a GPU
+spin of 500 µs wall time, then a device all-reduce, both queued ahead of the sample with no host
+sync before the start event. The spin is calibrated per timed series because `torch.cuda._sleep`
+counts SM cycles. It outlasts the host's launch of the sample, so the last rank to arrive already
+has its timed work queued when the all-reduce releases everyone, and every rank's window opens at
+the barrier's exit instead of at its host's launch. Each chain sibling is aligned once, before its
+first event, as the graph chain is. Eager rows carry the `-eager-spin-ar` suffix. Earlier eager
+rows (the bare family) had no per-sample alignment, so their small-T latency included host launch
+skew.
+
 ### Chained Pair Period
 
 The eager pipeline measures **fresh entry**: drained around each timed window, so every
-sample starts from an idle pipeline and the ranks re-stagger before each one. A decode loop never
+sample starts from an idle pipeline behind the rank barrier. A decode loop never
 stops, and what it pays per MoE layer is the pipeline's steady-state **period**. Every eager row
 therefore carries the chained family, measured by `benchmark_chain`: dispatch→combine pairs issued
 back-to-back with CUDA events enqueued on-stream and **no host synchronization inside the loop**,

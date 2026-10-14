@@ -5,9 +5,10 @@ import functools
 import os
 
 
-def time_us(torch, fn, iters: int, pre=None, post=None) -> list[float]:
+def time_us(torch, fn, iters: int, pre=None, post=None, align=None) -> list[float]:
     """Per-iteration CUDA-event latencies (us) for THIS rank.
 
+    `align()` opens each sample by enqueueing the rank alignment ahead of everything else.
     `pre()` runs untimed before each sample and its result is passed to `fn`; `post(result)` runs
     after the end event and sync. There is deliberately NO sync between `pre()` and the start
     event: stream order already keeps pre()'s work out of the window, and a sync would put the
@@ -16,6 +17,8 @@ def time_us(torch, fn, iters: int, pre=None, post=None) -> list[float]:
     iteration N+1's dispatch must not race iteration N's combine on the persistent buffer.
     """
     def sample():
+        if align is not None:
+            align()
         arg = pre() if pre is not None else None
         s = torch.cuda.Event(enable_timing=True)
         e = torch.cuda.Event(enable_timing=True)
@@ -66,12 +69,51 @@ def _chain_result(pair, floors, drop, combined):
 
 
 class EagerTiming:
-    """CUDA events recorded on the stream around eagerly launched operations."""
+    """CUDA events recorded on the stream around eagerly launched operations.
+
+    Each timed sample, and each chain sibling, opens with a GPU spin and then a device all-reduce,
+    the order DeepEP's bench_kineto uses. The spin outlasts the host's launch of the whole sample,
+    so the last rank to arrive already has its timed work queued when the all-reduce releases
+    everyone; the window then starts on every rank at the barrier's exit instead of at each host's
+    launch, which the cross-rank MAX would otherwise report as latency.
+    """
 
     graph = False
+    # Wall time the spin must outlast: the host's enqueue of one sample (alignment, untimed
+    # setup, events and the timed operation). Precision is not needed; the all-reduce aligns.
+    SPIN_US = 500.0
 
     def __init__(self, backend):
         self.backend = backend
+        self.spin_cycles = None
+        self._align_token = None
+
+    def calibrate_spin(self):
+        """Size the spin to SPIN_US of wall time: `_sleep` counts SM cycles, not time."""
+        import torch
+
+        probe = 200_000
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        torch.cuda._sleep(probe // 10)  # ramp clocks before the measured spin
+        start.record()
+        torch.cuda._sleep(probe)
+        end.record()
+        torch.cuda.synchronize()
+        elapsed_us = max(start.elapsed_time(end) * 1000.0, 1e-3)
+        self.spin_cycles = max(1, int(probe * self.SPIN_US / elapsed_us))
+
+    def align(self):
+        """Enqueue the spin, then a device all-reduce, on the current stream; no host sync."""
+        import torch
+        import torch.distributed as dist
+
+        if self._align_token is None:
+            self._align_token = torch.zeros(1, device=self.backend.device)
+        if self.spin_cycles is None:
+            self.calibrate_spin()
+        torch.cuda._sleep(self.spin_cycles)
+        dist.all_reduce(self._align_token)
 
     def components(self):
         """Roundtrip, dispatch and combine always; stage only when it launches device work."""
@@ -82,9 +124,11 @@ class EagerTiming:
         import torch
 
         b = self.backend
+        align = self.align
+        self.calibrate_spin()  # clocks move with load and temperature: per timed series
         if name == "roundtrip":
             staged = b.warm_and_hoist_stage(problem, warmup)
-            return time_us(torch, lambda: b.run_roundtrip(problem, staged), iters)
+            return time_us(torch, lambda: b.run_roundtrip(problem, staged), iters, align=align)
         if name == "dispatch":
             b.warm(problem, warmup)
 
@@ -92,7 +136,7 @@ class EagerTiming:
                 b.stage(problem, handle)
                 b.combine(problem, handle)
 
-            return time_us(torch, lambda: b.dispatch(problem), iters,
+            return time_us(torch, lambda: b.dispatch(problem), iters, align=align,
                            post=finish if b.requires_fresh_pair else None)
         if name == "stage":
             # Staging is the timed operation here, so it must be warmed on every iteration.
@@ -102,7 +146,7 @@ class EagerTiming:
                 b.stage(problem, handle)
                 return handle
 
-            return time_us(torch, stage, iters, pre=lambda: b.dispatch(problem),
+            return time_us(torch, stage, iters, align=align, pre=lambda: b.dispatch(problem),
                            post=(lambda h: b.combine(problem, h)) if b.requires_fresh_pair else None)
         if name == "combine":
             b.warm(problem, warmup)
@@ -113,10 +157,11 @@ class EagerTiming:
                 return handle
 
             if b.requires_fresh_pair:
-                return time_us(torch, lambda h: b.combine(problem, h), iters, pre=staged_dispatch)
+                return time_us(torch, lambda h: b.combine(problem, h), iters, align=align,
+                               pre=staged_dispatch)
             handle = staged_dispatch()
             torch.cuda.synchronize()
-            return time_us(torch, lambda: b.combine(problem, handle), iters)
+            return time_us(torch, lambda: b.combine(problem, handle), iters, align=align)
         raise RuntimeError(f"unknown timed component {name!r}")
 
     def chain(self, problem, staged, iters, drop):
@@ -135,6 +180,8 @@ class EagerTiming:
 
         floors = {"dispatch": (events(), events()), "combine": (events(), events())}
         pair = (events(), events())
+        self.calibrate_spin()
+        self.align()
         for i in range(iters):
             floors["dispatch"][0][i].record()
             handle = b.dispatch(problem)
@@ -147,6 +194,7 @@ class EagerTiming:
             b.combine(problem, handle)
             floors["combine"][1][i].record()
         torch.cuda.synchronize()
+        self.align()
         for i in range(iters):
             pair[0][i].record()
             handle = b.dispatch(problem)

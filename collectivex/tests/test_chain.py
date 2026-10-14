@@ -149,14 +149,18 @@ class ChainedPairPeriod(unittest.TestCase):
     def test_the_loop_is_free_running_dispatch_combine_pairs(self):
         # A host sync inside the loop drains the GPU and turns the period back into a sequence of
         # drained roundtrips; a cross-rank call between pairs re-aligns the ranks and buys back
-        # the very stagger the chain exists to amortise. Neither may appear.
+        # the very stagger the chain exists to amortise. Neither may appear. Each sibling is
+        # aligned once, before its first event, as the graph chain is.
         iters = 6
         backend = _ChainBackend()
         run_chain(backend, iters, 2)
         self.assertEqual(
             timed_tail(backend.calls, iters, 2), ["dispatch", "combine"] * iters
         )
-        self.assertNotIn("all_reduce", backend.calls)
+        for section in chain_sections(backend.calls):
+            first_event = section.index("record")
+            self.assertEqual(section[:first_event], ["align_spin", "all_reduce"])
+            self.assertNotIn("all_reduce", section[first_event:])
         self.assertNotIn("dist_barrier", backend.calls)
 
     def test_a_hoisted_stage_runs_once_and_stays_out_of_every_pair_window(self):
@@ -292,6 +296,40 @@ class CudaGraphRoundtrip(unittest.TestCase):
             backend.timed_components()
 
 
+class EagerAlignment(unittest.TestCase):
+    """Eager samples are aligned the way DeepEP's bench_kineto aligns them: a GPU spin, then a
+    device all-reduce, both queued ahead of the sample, with no host sync before the window."""
+
+    def _eager_component(self, component, iters=3):
+        backend = _ChainBackend()
+        with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "0"}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            backend.benchmark_component(component, new_problem(), warmup=2, iters=iters)
+        return backend.calls
+
+    def test_every_eager_sample_opens_with_a_spin_then_a_device_all_reduce(self):
+        iters = 3
+        for component in ("roundtrip", "dispatch", "combine"):
+            with self.subTest(component=component):
+                calls = self._eager_component(component, iters)
+                barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
+                self.assertEqual(len(barriers), iters)
+                for i in barriers:
+                    self.assertEqual(calls[i - 1], "align_spin")
+                    # The window opens with no host sync after the barrier.
+                    window_start = calls.index("record", i)
+                    self.assertNotIn("sync", calls[i:window_start])
+
+    def test_the_spin_is_calibrated_to_wall_time_before_the_first_sample(self):
+        calls = self._eager_component("roundtrip")
+        # `_sleep` counts SM cycles: a clock ramp, then a spin bracketed by two events and a sync
+        # converts SPIN_US to cycles before any barrier is queued.
+        calibration = calls.index("align_spin")
+        self.assertEqual(calls[calibration:calibration + 5],
+                         ["align_spin", "record", "align_spin", "record", "sync"])
+        self.assertLess(calibration, calls.index("all_reduce"))
+
+
 class GraphAlignmentAndValueCheck(unittest.TestCase):
     def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
         backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
@@ -372,7 +410,8 @@ class EventPlacement(unittest.TestCase):
         )
         self.assertEqual(
             period,
-            ["record", "dispatch", "stage", "combine", "record"] * iters,
+            ["align_spin", "all_reduce"]
+            + ["record", "dispatch", "stage", "combine", "record"] * iters,
         )
 
 class ChainBudgetGate(unittest.TestCase):
