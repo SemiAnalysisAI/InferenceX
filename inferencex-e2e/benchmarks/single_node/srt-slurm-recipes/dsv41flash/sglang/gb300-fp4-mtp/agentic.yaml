@@ -31,6 +31,8 @@ base:
         cuda-graph-max-bs-decode: 64
         reasoning-parser: auto
         tool-call-parser: auto
+        # Re-encoding a 300K-600K-token conversation takes ~0.6 s with HF tokenizers.
+        tokenizer-backend: fastokens
         # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
