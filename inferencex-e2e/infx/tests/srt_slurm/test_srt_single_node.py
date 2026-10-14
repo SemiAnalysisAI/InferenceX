@@ -280,24 +280,17 @@ def test_runtime_container_options_remain_native_mapping(point):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
 
 
-@pytest.mark.parametrize("recipe_required,requested", [(True, "0"), (False, "1")])
-def test_binding_keeps_either_required_power_policy(point, recipe_required, requested):
-    path, recipe, env = point
-    recipe["telemetry"] = {"required": recipe_required}
-    path.write_text(yaml.safe_dump({"base": recipe}))
+@pytest.mark.parametrize("requested", ["0", "1"])
+def test_binding_requires_power_from_the_workflow(point, requested):
+    path, _, env = point
     _, actual = select_recipe(f"{path}:base", {**env, "REQUIRE_POWER": requested})
-    assert actual["telemetry"]["required"] is True
+    assert actual["telemetry"]["required"] is (requested == "1")
     assert actual["benchmark"]["concurrencies"] == [2]
 
 
-@pytest.mark.parametrize(
-    "recipe_required,requested,expected",
-    [(False, None, "0"), (False, "1", "1"), (True, None, "1")],
-)
-def test_agentic_binding_derives_require_power_from_either_policy(point, recipe_required, requested, expected):
-    path, recipe, env = point
-    recipe["telemetry"] = {"required": recipe_required}
-    path.write_text(yaml.safe_dump({"base": recipe}))
+@pytest.mark.parametrize("requested,expected", [(None, "0"), ("1", "1")])
+def test_agentic_binding_derives_require_power_from_the_workflow(point, requested, expected):
+    path, _, env = point
     agentic_env = {**env, "IS_AGENTIC": "1", "DURATION": "20"}
     if requested is not None:
         agentic_env["REQUIRE_POWER"] = requested
@@ -305,3 +298,11 @@ def test_agentic_binding_derives_require_power_from_either_policy(point, recipe_
     assert actual["benchmark"]["env"]["REQUIRE_POWER"] == expected
     assert actual["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
     assert actual["telemetry"]["required"] is (expected == "1")
+
+
+def test_fragment_cannot_require_single_node_power(point):
+    path, recipe, env = point
+    recipe["telemetry"] = {"required": True}
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    with pytest.raises(ValueError, match="telemetry.required"):
+        select_recipe(f"{path}:base", env)

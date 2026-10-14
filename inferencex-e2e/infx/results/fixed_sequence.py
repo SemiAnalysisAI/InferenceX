@@ -306,7 +306,7 @@ def process_result(env: Mapping[str, str]) -> int:
     with open(agg_path, "w") as f:
         json.dump(data, f, indent=2)
     status = 0
-    if data["is_multinode"] or env.get("POWER_ARTIFACT_DIR"):
+    if data["is_multinode"] or env.get("POWER_PRODUCER_SHA"):
         status = aggregate_power_result(env, bench_path, agg_path)
         validation_path = Path(f"power_validation_{result_filename}.json")
         from .power.audit import audit_summary

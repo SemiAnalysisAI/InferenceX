@@ -159,16 +159,12 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert lines(harness.logs, "scancel") == []
 
 
-@pytest.mark.parametrize("requested,recipe_required,require_power", [("0", False, "0"), ("1", False, "1"), ("0", True, "1")])
+@pytest.mark.parametrize("require_power", ["0", "1"])
 @pytest.mark.parametrize(("cluster_id", "kind", "port"), [
     ("mi355x-amds", "custom", 19500), ("h200-cw", "dcgm", 9401),
 ])  # fmt: skip
-def test_single_node_native_power_is_bound_and_retained(harness, requested, recipe_required, require_power, cluster_id, kind, port):
-    env_file = harness.tmp / "github-env"
-    env = single_node_env(harness, cluster_id, REQUIRE_POWER=requested, GITHUB_ENV=str(env_file))
-    fragment = yaml.safe_load((harness.workspace / "recipe.yaml").read_text())
-    fragment["base"]["telemetry"] = {"required": recipe_required}
-    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump(fragment))
+def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
+    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power)
     assert_ok(launch(env, harness.config, harness.workspace))
 
     workspace = harness.workspace
@@ -200,10 +196,7 @@ def test_single_node_native_power_is_bound_and_retained(harness, requested, reci
     assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
     assert (workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
     assert (workspace / "LOGS/point-identity.json").is_file()
-    assert dict(line.split("=", 1) for line in env_file.read_text().splitlines()) == {
-        "POWER_ARTIFACT_DIR": "LOGS/power", "POWER_RESULT_ROOT": "LOGS",
-        "POWER_PRODUCER_SHA": env["FAKE_SRT_COMMIT"], "REQUIRE_POWER": require_power,
-    }
+    assert (workspace / "power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
 
 
 def test_single_node_eval_requires_a_successful_eval(harness):

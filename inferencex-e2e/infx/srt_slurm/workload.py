@@ -133,7 +133,11 @@ def _fragment_versions(block: Any, path: str) -> Iterator[str]:
 
 def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
     """Reject a fragment that sets a bound key, even to the value the binder would write."""
-    keys = (*_POINT_KEYS, *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]))
+    keys = (
+        *_POINT_KEYS,
+        *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]),
+        *(() if multinode else (("telemetry", "required"),)),
+    )
     if "base" in raw:
         blocks = [(name, block) for name, block in raw.items() if name != "schema"]
     else:
@@ -334,9 +338,7 @@ def bind_workload(
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
         if not multinode:
-            required = bound["telemetry"].get("required", False) or environment.get(
-                "REQUIRE_POWER", "0"
-            ) in {"1", "true", "TRUE", "yes", "YES"}
+            required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
             bound["telemetry"]["required"] = required
             workload["REQUIRE_POWER"] = "1" if required else "0"
     if agentic and not multinode:

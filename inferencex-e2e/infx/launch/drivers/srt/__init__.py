@@ -15,8 +15,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-
 from infx.clusters.slurm import SlurmSettings
 from infx.launch import policy
 from infx.launch.backends.base import BackendError
@@ -70,16 +68,6 @@ def run_single_node(launch: Launch) -> int:
     if not request.eval_only:
         image, reference = config.stage_gpu_exporter(run, single_node=True)
         containers[image] = reference
-        required = yaml.safe_load(Path(selected).read_text())["telemetry"]["required"]
-        request = request.model_copy(update={"require_power": required})
-        run.request = request
-        run.env["REQUIRE_POWER"] = "1" if required else "0"
-        if github_env := request.env.get("GITHUB_ENV"):
-            with Path(github_env).open("a") as handle:
-                handle.write(
-                    "POWER_ARTIFACT_DIR=LOGS/power\nPOWER_RESULT_ROOT=LOGS\n"
-                    f"POWER_PRODUCER_SHA={checkout.commit}\nREQUIRE_POWER={run.env['REQUIRE_POWER']}\n"
-                )
     job_config = config.SrtJob(
         srtctl_root=checkout.root,
         workspace=run.workspace,

@@ -325,6 +325,10 @@ jobs:
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
             exit 1
           fi
+          # A native power job's launcher stamp names the telemetry producer
+          if [ -f power-producer-sha.txt ]; then
+            export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
+          fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
       - name: Upload result
