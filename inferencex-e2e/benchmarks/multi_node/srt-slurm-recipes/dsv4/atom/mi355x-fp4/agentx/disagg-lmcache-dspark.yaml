@@ -28,7 +28,6 @@ base:
       gpus: 8
       env: &environment
         PYTHONUNBUFFERED: "1"
-        PYTHONDONTWRITEBYTECODE: "1"
         SAFETENSORS_FAST_GPU: "1"
         VLLM_LOG_LEVEL: WARNING
         ATOM_LOG_LEVEL: WARNING

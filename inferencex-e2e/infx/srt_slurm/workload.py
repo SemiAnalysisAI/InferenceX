@@ -31,7 +31,7 @@ BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
 # The binder writes these, the master power field owns telemetry, and the launcher hands
 # the benchmark client its cache and result paths and, multi-node, IS_MULTINODE and the
-# AgentX power switch.
+# AgentX power switches.
 _POINT_KEYS = (
     ("model", "path"),
     ("model", "container"),
@@ -45,12 +45,29 @@ _POINT_KEYS = (
 _FIXED_ENV = ("MODEL", "ISL", "OSL", "CONC", "CONC_LIST", "RANDOM_RANGE_RATIO", "USE_CHAT_TEMPLATE")
 _AGENTIC_ENV = ("CONC", "CONC_LIST", "RESULT_DIR", "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE",
                 "HUGGINGFACE_HUB_CACHE")  # fmt: skip
+# The workflow exports the matrix point to every job, so no fragment pins it. A single-node
+# variant may still label its point with CONC, SPEC_DECODING, KV_OFFLOADING and
+# TOTAL_CPU_DRAM_GB, which the launcher checks against the point.
+_WORKFLOW_ENV = (
+    "IMAGE", "MODEL_PREFIX", "FRAMEWORK", "PRECISION", "DISAGG", "DURATION", "MAX_MODEL_LEN",
+    "KV_OFFLOAD_BACKEND", "KV_OFFLOAD_BACKEND_METADATA", "ROUTER_METADATA", "KV_P2P_TRANSFER",
+    "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
+)  # fmt: skip
+_MULTINODE_ENV = (
+    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
+    *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
+      for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
+)  # fmt: skip
+_SINGLE_NODE_ENV = ("TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT")
 BOUND_ENV = {
-    (False, False): _FIXED_ENV,
-    (False, True): _FIXED_ENV,
-    (True, False): ("MODEL", *_AGENTIC_ENV),
+    (False, False): (*_FIXED_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
+    (False, True): (*_FIXED_ENV, *_WORKFLOW_ENV, *_MULTINODE_ENV),
+    (True, False): ("MODEL", *_AGENTIC_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
     (True, True): (
+        "MODEL",
         *_AGENTIC_ENV,
+        *_WORKFLOW_ENV,
+        *_MULTINODE_ENV,
         "AIPERF_DATASET_MMAP_CACHE_DIR",
         "IS_MULTINODE",
         "ENABLE_AGENTX_POWER",
@@ -98,7 +115,8 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
                 found.append(f"{'.'.join(filter(None, (name, *key)))} (= {value!r})")
     if found:
         raise ValueError(
-            f"{source}: remove {', '.join(found)} from the fragment; the launcher binds them"
+            f"{source}: remove {', '.join(found)} from the fragment; "
+            "the launcher or the workflow sets them"
         )
 
 

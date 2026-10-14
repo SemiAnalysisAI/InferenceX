@@ -53,7 +53,6 @@ base:
       gpus: 8
       env:
         HF_HUB_CACHE: /hf_hub_cache
-        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
         VLLM_LOG_STATS_INTERVAL: "1"
         VLLM_SERVER_DEV_MODE: "1"

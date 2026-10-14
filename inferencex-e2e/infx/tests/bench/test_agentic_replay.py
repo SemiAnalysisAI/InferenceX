@@ -45,6 +45,11 @@ def test_default_point_leaves_the_replay_policy_to_the_scenario():
     ]  # fmt: skip
 
 
+def test_a_recipe_tokenizer_replaces_the_model_id_as_tokenizer_only():
+    argv = _argv(TOKENIZER="/model", SERVED_MODEL_NAME="glm5_2")
+    assert (_value(argv, "--model"), _value(argv, "--tokenizer")) == ("glm5_2", "/model")
+
+
 def test_opt_in_inputs_add_their_flags_in_place():
     argv = _argv(
         SERVED_MODEL_NAME="DeepSeek-V4-Pro",

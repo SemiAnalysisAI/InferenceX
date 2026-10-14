@@ -22,11 +22,12 @@ class PowerPolicyError(LaunchError):
 
 @dataclass(frozen=True)
 class PowerRule:
-    """One allowed power combination."""
+    """One allowed power combination; ``require`` makes the client fail invalid AgentX power."""
 
     when: Match
     agentx: bool
     adapter: bool = False
+    require: bool = False
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
+                require=True,
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang"), agentic=False), agentx=False),
         ),
@@ -59,6 +61,7 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
+                require=True,
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),
         ),
@@ -134,6 +137,7 @@ class PowerDecision:
     dcgm: bool
     agentx: bool
     adapter: bool = False
+    require: bool = False
 
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
@@ -151,6 +155,8 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
         raise PowerPolicyError(f"cluster {cluster_id!r} measures no DCGM power on {path}")
     for rule in lane.rules:
         if rule.when(request):
-            return PowerDecision(dcgm=True, agentx=rule.agentx, adapter=rule.adapter)
+            return PowerDecision(
+                dcgm=True, agentx=rule.agentx, adapter=rule.adapter, require=rule.require
+            )
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error
     raise PowerPolicyError(message)

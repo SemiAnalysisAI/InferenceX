@@ -235,12 +235,13 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
 
 
 @pytest.mark.parametrize(("agentic", "decision", "expected"), [
-    ("1", NO_POWER, (None, "true", "0")),
+    ("1", NO_POWER, (None, "true", "0", "0")),
     # DCGM alone: the launcher collects no AgentX power, so the client marks no window.
-    ("1", PowerDecision(dcgm=True, agentx=False), (9401, "true", "0")),
-    ("1", PowerDecision(dcgm=True, agentx=True), (9401, "true", "1")),
-    ("1", PowerDecision(dcgm=True, agentx=False, adapter=True), (9401, "true", "1")),
-    ("0", PowerDecision(dcgm=True, agentx=False), (9401, None, None)),
+    ("1", PowerDecision(dcgm=True, agentx=False), (9401, "true", "0", "0")),
+    ("1", PowerDecision(dcgm=True, agentx=True), (9401, "true", "1", "0")),
+    ("1", PowerDecision(dcgm=True, agentx=True, require=True), (9401, "true", "1", "1")),
+    ("1", PowerDecision(dcgm=True, agentx=False, adapter=True), (9401, "true", "1", "0")),
+    ("0", PowerDecision(dcgm=True, agentx=False), (9401, None, None, None)),
 ])  # fmt: skip
 def test_the_agentx_client_measures_power_exactly_when_the_launcher_collects_it(
     tmp_path, agentic, decision, expected
@@ -258,5 +259,9 @@ def test_the_agentx_client_measures_power_exactly_when_the_launcher_collects_it(
         record, slurm_settings(record).srt_slurm, SrtLane(), request, decision
     )
 
-    switches = (client_env.get("IS_MULTINODE"), client_env.get("ENABLE_AGENTX_POWER"))
+    switches = (
+        client_env.get("IS_MULTINODE"),
+        client_env.get("ENABLE_AGENTX_POWER"),
+        client_env.get("REQUIRE_POWER"),
+    )
     assert (port, *switches) == expected

@@ -133,12 +133,6 @@ base:
     type: dynamo
     enable_multiple_frontends: false
     env:
-      MODEL: deepseek-ai/DeepSeek-V4-Pro
-      MODEL_PREFIX: dsv4
-      FRAMEWORK: dynamo-trt
-      PRECISION: fp4
-      DURATION: '3600'
-      KV_OFFLOADING: dram
       ETCD_LEASE_TTL: '120'
       DYN_ROUTER_QUEUE_THRESHOLD: None
       DYN_TOKENIZER_CACHE: '1'
@@ -195,9 +189,6 @@ override_1p4d_dep4_tep8_c4_b1:
           backend: TRTLLM
         moe_expert_parallel_size: 8
         tensor_parallel_size: 8
-  frontend:
-    env:
-      CONC: '4'
 
 override_1p6d_dep4_tep4_c24_b4:
   name: dynamo-disagg-gb300-1p6d-dep4-tep4-c24-b4-mtp
@@ -231,9 +222,6 @@ override_1p6d_dep4_tep4_c24_b4:
           backend: TRTLLM
         moe_expert_parallel_size: 4
         tensor_parallel_size: 4
-  frontend:
-    env:
-      CONC: '24'
 
 override_1p1d_dep8_dep32_c388_b4:
   name: dynamo-disagg-gb300-1p1d-dep8-dep32-c388-b4-mtp
@@ -254,9 +242,6 @@ override_1p1d_dep8_dep32_c388_b4:
         max_num_tokens: 16
         moe_expert_parallel_size: 32
         tensor_parallel_size: 32
-  frontend:
-    env:
-      CONC: '388'
 
 override_2p1d_dep8_dep32_c736_b8:
   name: dynamo-disagg-gb300-2p1d-dep8-dep32-c736-b8-mtp
@@ -278,9 +263,6 @@ override_2p1d_dep8_dep32_c736_b8:
         max_num_tokens: 32
         moe_expert_parallel_size: 32
         tensor_parallel_size: 32
-  frontend:
-    env:
-      CONC: '736'
 
 override_3p1d_dep8_dep16_c1152_b32:
   name: dynamo-disagg-gb300-3p1d-dep8-dep16-c1152-b32-mtp
@@ -308,9 +290,6 @@ override_3p1d_dep8_dep16_c1152_b32:
         max_num_tokens: 128
         moe_expert_parallel_size: 16
         tensor_parallel_size: 16
-  frontend:
-    env:
-      CONC: '1152'
 
 override_5p1d_dep8_dep16_c2626_b96:
   name: dynamo-disagg-gb300-5p1d-dep8-dep16-c2626-b96-mtp
@@ -354,6 +333,3 @@ override_5p1d_dep8_dep16_c2626_b96:
         max_num_tokens: 384
         moe_expert_parallel_size: 16
         tensor_parallel_size: 16
-  frontend:
-    env:
-      CONC: '2626'

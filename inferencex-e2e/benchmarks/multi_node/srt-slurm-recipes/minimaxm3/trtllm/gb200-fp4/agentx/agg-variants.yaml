@@ -113,10 +113,8 @@ base:
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
       SERVED_MODEL_NAME: nvidia/MiniMax-M3-NVFP4
-      MAX_MODEL_LEN: '1048576'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
-      KV_OFFLOAD_BACKEND_METADATA: '{"name":"native"}'
 
 # MiniMax-M3 NVFP4, TensorRT-LLM aggregated TP4 + EAGLE3-GQA (3 draft tokens), one GB200 node, Dynamo frontend.
 # Engine config is the max_batch_size=5 member of the TP4 recipe set.

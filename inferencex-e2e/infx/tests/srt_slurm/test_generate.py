@@ -174,7 +174,7 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     # the launcher's power decision.
     assert recipe["benchmark"]["env"] == {
         "RESULT_DIR": "/results", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf", "HF_HUB_CACHE": "/hf",
-        "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1",
+        "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "0",
     }  # fmt: skip
     assert recipe["benchmark"]["concurrencies"] == [8]
 

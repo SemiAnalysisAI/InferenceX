@@ -47,7 +47,6 @@ base:
         stream-interval: 20
       env:
         PYTHONNOUSERSITE: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   benchmark:

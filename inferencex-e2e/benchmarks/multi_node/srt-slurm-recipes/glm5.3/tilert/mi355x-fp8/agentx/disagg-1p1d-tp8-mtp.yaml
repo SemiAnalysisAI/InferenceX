@@ -9,7 +9,6 @@ setup_script: glm5.3-tilert-rocm.sh
 environment:
   TILERT_VERSION: "0.1.6.post3"
   RDMAV_FORK_SAFE: "1"
-  PYTHONDONTWRITEBYTECODE: "1"
   NCCL_SOCKET_IFNAME: eno0
   GLOO_SOCKET_IFNAME: eno0
   NCCL_IB_HCA: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
@@ -96,7 +95,7 @@ health_check:
   interval_seconds: 5
 benchmark:
   env:
-    MODEL: /model
+    TOKENIZER: /model
     SERVED_MODEL_NAME: glm5_2
     AIPERF_MAX_CONTEXT_LENGTH: "1048576"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"

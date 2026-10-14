@@ -65,7 +65,6 @@ base:
         # graphs keep FULL_AND_PIECEWISE capture working.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
         OMP_NUM_THREADS: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'
   benchmark:

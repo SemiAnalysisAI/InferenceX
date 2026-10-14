@@ -48,7 +48,6 @@ base:
         gpu-memory-utilization: 0.92
         disable-uvicorn-access-log: true
       env:
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_USE_RUST_FRONTEND: '1'
         VLLM_USE_V2_MODEL_RUNNER: '1'
         # The indexer buffer is large enough that allocator fragmentation costs a KV block.

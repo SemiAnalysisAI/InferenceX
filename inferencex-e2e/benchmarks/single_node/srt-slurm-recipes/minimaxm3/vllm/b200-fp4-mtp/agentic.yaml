@@ -47,7 +47,6 @@ base:
         speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","use_local_argmax_reduction":true}'
       env:
         PYTHONNOUSERSITE: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_FLOAT32_MATMUL_PRECISION: high
         VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
   benchmark:

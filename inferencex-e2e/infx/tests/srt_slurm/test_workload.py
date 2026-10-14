@@ -93,6 +93,9 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
     }}}}, True, True,
      "override_tp8.benchmark.env.IS_MULTINODE (= 'false'), "
      "override_tp8.benchmark.env.ENABLE_AGENTX_POWER (= '0')"),
+    # The workflow exports the matrix point; a fragment pins none of it.
+    ({"benchmark": {"env": {"REQUIRE_POWER": "1", "MODEL": "/model"}}}, True, True,
+     "benchmark.env.MODEL (= '/model'), benchmark.env.REQUIRE_POWER (= '1')"),
 ])  # fmt: skip
 def test_a_fragment_that_sets_a_bound_key_is_rejected(project, data, agentic, multinode, reported):
     path = fragment(project, data)

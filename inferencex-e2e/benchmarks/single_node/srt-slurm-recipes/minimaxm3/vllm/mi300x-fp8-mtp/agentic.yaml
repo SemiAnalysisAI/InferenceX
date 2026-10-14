@@ -50,7 +50,6 @@ base:
         speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN"}'
       env:
         PYTHONNOUSERSITE: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         VLLM_ROCM_USE_AITER: '1'

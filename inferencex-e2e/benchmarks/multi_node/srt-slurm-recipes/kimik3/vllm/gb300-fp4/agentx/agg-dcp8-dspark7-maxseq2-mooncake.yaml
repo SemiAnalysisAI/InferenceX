@@ -74,7 +74,6 @@ roles:
       VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
       VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
       ETCD_LEASE_TTL: "120"
-      VLLM_ENGINE_READY_TIMEOUT_S: "3600"
       VLLM_RPC_TIMEOUT: "600000"
       VLLM_USE_V2_MODEL_RUNNER: "1"
       VLLM_USE_RUST_FRONTEND: "1"
@@ -126,7 +125,6 @@ telemetry:
 
 benchmark:
   env:
-    REQUIRE_POWER: "1"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
   placement:
     node: head

@@ -24,7 +24,6 @@ environment:
   HF_HUB_CACHE: "/hf_hub_cache"
   HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
   TRANSFORMERS_CACHE: "/hf_hub_cache"
-  VLLM_ENGINE_READY_TIMEOUT_S: "3600"
   VLLM_RPC_TIMEOUT: "600000"
   VLLM_LOG_STATS_INTERVAL: "1"
   VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
@@ -76,13 +75,6 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   env:
-    MODEL: "deepseek-ai/DeepSeek-V4-Pro"
-    MODEL_PREFIX: "dsv4"
-    FRAMEWORK: "dynamo-vllm"
-    PRECISION: "fp4"
-    CONC: "4"
-    DURATION: "3600"
-    KV_OFFLOADING: "none"
     ETCD_LEASE_TTL: "120"
     DYN_ROUTER_QUEUE_THRESHOLD: "None"
     DYN_TOKENIZER_CACHE: "1"

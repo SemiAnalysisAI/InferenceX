@@ -86,11 +86,8 @@ base:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache/hub
         HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
-        PYTHONDONTWRITEBYTECODE: "1"
         PYTHONUNBUFFERED: "1"
         PYTHONPATH: /sgl-workspace/aiter
-        TORCH_NCCL_BLOCKING_WAIT: "1"
-        NCCL_BLOCKING_WAIT: "1"
         NCCL_IB_HCA: rdma3,rdma0,rdma2,rdma1,rdma7,rdma4,rdma6,rdma5
         GLOO_SOCKET_IFNAME: eno0
         NCCL_SOCKET_IFNAME: eno0
@@ -108,7 +105,6 @@ base:
         SGLANG_USE_AITER: "1"
         SGLANG_USE_ROCM700A: "0"
         SGLANG_HACK_FLASHMLA_BACKEND: unified_kv_triton
-        SGLANG_OPT_USE_AITER_INDEXER: "true"
         SGLANG_OPT_FP8_WO_A_FUSED_INVROPE: "1"
         SGLANG_OPT_USE_AITER_BATCHED_GEMM: "1"
         AITER_BF16_FP8_MOE_BOUND: "0"
@@ -116,14 +112,9 @@ base:
         IBDEVICES: rdma3,rdma0,rdma2,rdma1,rdma7,rdma4,rdma6,rdma5
         MORI_RDMA_TC: "104"
         MORI_IO_TC: "104"
-        MORI_IO_SQ_BACKOFF_TIMEOUT_US: "500000"
         MORI_IO_QP_MAX_SEND_WR: "32767"
-        MORI_IO_QP_MAX_CQE: "32768"
-        MORI_IO_QP_MAX_SGE: "2"
-        MORI_IO_TC_DISABLE: "0"
         MORI_SHMEM_MODE: ISOLATION
         MORI_EP_LAUNCH_CONFIG_MODE: AUTO
-        MORI_APP_LOG_LEVEL: WARNING
         SGLANG_MORI_COMBINE_DTYPE: auto
         SGLANG_MORI_QP_PER_TRANSFER: "4"
         SGLANG_MORI_NUM_WORKERS: "4"
@@ -136,7 +127,6 @@ base:
         SGLANG_ENABLE_OVERLAP_PLAN_STREAM: "0"
         SGLANG_LOG_MS: "true"
         SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
-        SGLANG_ROUTER_STDOUT_LOGS: "0"
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
       args: &server
         served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813

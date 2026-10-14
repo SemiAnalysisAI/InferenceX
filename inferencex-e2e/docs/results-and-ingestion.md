@@ -185,6 +185,9 @@ writes both into every srt-slurm multi-node AgentX recipe: `IS_MULTINODE=true`, 
 `ENABLE_AGENTX_POWER=1` exactly when the launcher collects the point's AgentX power
 (a `power: true` row whose lane rule collects AgentX or adapter power). Other
 multi-node points get `ENABLE_AGENTX_POWER=0` and publish no power fields or verdict.
+`REQUIRE_POWER` is bound beside them: `1` when the workflow requires power or the
+lane's power rule does (GB200 and GB300 Kimi-K3 AgentX), so the client fails a point
+whose power is invalid.
 Multinode runs retain the deployment telemetry under `LOGS/power/` and
 per-concurrency window/validation files under `LOGS/agentic/` in their
 `power_audit_<RESULT_FILENAME>` artifact. Available audits and AgentX aggregates
