@@ -57,6 +57,7 @@ base:
       router-mode: "least-loaded"
       router-session-affinity-ttl-secs: 900
     env:
+      DYN_TCP_REQUEST_TIMEOUT: "120"
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
       DYN_TOKENIZER_CACHE_BYTES: "8589934592"
 
@@ -70,6 +71,8 @@ base:
       workers: 1
       gpus: 8
       env:
+        DYN_TCP_REQUEST_TIMEOUT: "120"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_ALLREDUCE_USE_FLASHINFER: "1"
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
         # Use the direct DCP a2a/gather kernels rather than the collective
@@ -82,7 +85,6 @@ base:
         VLLM_USE_V2_MODEL_RUNNER: "1"
         VLLM_USE_RUST_FRONTEND: "1"
         VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
-        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
         MC_SLICE_SIZE: "1048576"
         MC_MAX_MR_SIZE: "4294967296"
         WITH_NVIDIA_PEERMEM: "0"
@@ -106,6 +108,7 @@ base:
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
         enable-prefix-caching: true
         prefix-match-unit: 128
+        prefix-cache-retention-interval: 0
 
   sbatch_directives:
     mem: "0"
@@ -137,21 +140,3 @@ override_dcp8_dspark7_maxseq2:
         max-num-batched-tokens: 8192
         enable-cumem-allocator: true
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
-
-override_dcp8_dspark4:
-  roles:
-    agg:
-      env:
-        PYTHONNOUSERSITE: "1"
-        TORCH_CUDA_ARCH_LIST: "10.0"
-        PYTHONHASHSEED: "42"
-        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "900"
-      args:
-        max-num-batched-tokens: 16384
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
-      AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
-      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"

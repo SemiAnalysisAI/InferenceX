@@ -57,6 +57,7 @@ base:
       router-mode: "least-loaded"
       router-session-affinity-ttl-secs: 900
     env:
+      DYN_TCP_REQUEST_TIMEOUT: "120"
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
       DYN_TOKENIZER_CACHE_BYTES: "8589934592"
 
@@ -71,6 +72,8 @@ base:
       workers: 1
       gpus: 8
       env: &kimi_env
+        DYN_TCP_REQUEST_TIMEOUT: "120"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_USE_DIRECT_DCP_A2A: "1"
         VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
         VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
@@ -176,23 +179,37 @@ base:
 override_1p1d_dcp8_dcp8_dspark4:
   roles:
     prefill:
+      env:
+        VLLM_ENABLE_GEMM_RS: "1"
       args:
+        max-num-seqs: 64
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        cp-kv-cache-interleave-size:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
     decode:
       nodes: 2
       workers: 1
       args:
+        cp-kv-cache-interleave-size:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
 
 override_1p2d_dcp8_dcp8_dspark4:
   roles:
     prefill:
+      env:
+        VLLM_ENABLE_GEMM_RS: "1"
       args:
+        max-num-seqs: 64
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        cp-kv-cache-interleave-size:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
     decode:
       nodes: 4
       workers: 2
       args:
+        cp-kv-cache-interleave-size:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
 
 override_1p3d_dcp8_dcp8_dspark7:
@@ -209,10 +226,17 @@ override_1p3d_dcp8_dcp8_dspark7:
 override_1p3d_dcp8_dcp8_dspark4:
   roles:
     prefill:
+      env:
+        VLLM_ENABLE_GEMM_RS: "1"
       args:
+        max-num-seqs: 64
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        cp-kv-cache-interleave-size:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
     decode:
       nodes: 6
       workers: 3
       args:
+        cp-kv-cache-interleave-size:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'

@@ -9718,3 +9718,16 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh Kimi-K3 MXFP4 GB300 AgentX coverage to 11 points: DCP8 1P1D c64/c80, 1P2D c48/c64/c80, 1P3D c32/c48 and DSpark7 c1; aggregated DSpark7 maxseq2 c1/c4; TP8 + DEP16 2P1D c320."
+    - "Match the validated local DCP recipes with prefill EP/SP, DeepGEMM MegaMoE, GEMM-RS and automatic KV interleaving. Preserve the existing 1P3D DSpark7 c1 recipe."
+    - "Add DEP16 with prefill EP8 and DeepGEMM MegaMoE, decode TokenSpeed MLA min-split-8, and capacity-only Mooncake with decode prefix caching disabled."
+    - "Use a placeholder nightly image hash pending publication of the image containing vLLM #61125; replace it before requesting a benchmark sweep."
+  pr-link: TBD
