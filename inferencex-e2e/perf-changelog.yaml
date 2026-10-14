@@ -9823,3 +9823,10 @@
     - "Use master-config recipe selectors and composed AgentX fragments; preserve the dedicated frontend/client node and the c2884 and c1228 tuning."
     - "Backport the vLLM Python sidecar reasoning-parser fix through the shared patch mechanism while retaining the main srt-slurm pin."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3941
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-agentic-mtp
+  description:
+    - "Raise the TP2 C1 CUDA graph max batch to 2 to cover the admission limit."
+    - "Deepen NEXTN speculation for TP2 C1 to 5 steps (6 draft tokens)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3966
