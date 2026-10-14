@@ -146,13 +146,17 @@ CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
 CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 
 
-def _published_tails(percentiles, graph_replay):
+def _published_tails(percentiles, graph_replay, missed_fraction=0.0):
     """Under graph replay only the median: a rank whose host is late to launch its replay stalls
     the others, so graphed fresh-entry tails measure host jitter (gb200 flashinfer T=1 roundtrip
-    p99 858us vs combine p99 30us)."""
-    if not graph_replay or percentiles is None:
-        return percentiles
-    return {key: (value if key == "p50" else None) for key, value in percentiles.items()}
+    p99 858us vs combine p99 30us). Eager tails are withheld once the samples whose alignment may
+    have failed could fill everything above them: p99 at 1% of samples, p95 at 5%, p90 at 10%."""
+    if percentiles is None:
+        return None
+    if graph_replay:
+        return {key: (value if key == "p50" else None) for key, value in percentiles.items()}
+    return {key: (None if key != "p50" and 100 * missed_fraction >= 100 - int(key[1:]) else value)
+            for key, value in percentiles.items()}
 
 
 def _component(percentiles, count, *, derived=False, origin=None):
@@ -266,8 +270,9 @@ class Point:
 
     Fresh-entry series carry one value per timed iteration pooled across trials: MAX-reduced for
     the published latencies, MIN-reduced (`_min`) for the skew-excluded companions, `spread` the
-    roundtrip's max-min. The chained family runs on its own trials: `chain`/`chain_spread` are
-    per-iteration, `gap` and `settle` one scalar per trial.
+    roundtrip's max-min, and `missed` counts each eager series' samples that some rank entered
+    after its alignment spin ran out. The chained family runs on its own trials:
+    `chain`/`chain_spread` are per-iteration, `gap` and `settle` one scalar per trial.
     """
 
     T: int
@@ -301,6 +306,7 @@ class Point:
     combine_floor: list = field(default_factory=list)
     gap: list = field(default_factory=list)
     settle: list = field(default_factory=list)
+    missed: dict = field(default_factory=dict)
 
     def inputs_unchanged(self, torch):
         x, idx, weights = self.snapshot
@@ -454,6 +460,11 @@ class Sweep:
                     measured[name] = self.backend.benchmark_component(
                         name, point.problem, self.args.warmup, self.args.iters
                     )
+                    missed = self.backend.alignment_misses()
+                    if missed is not None:
+                        # A sample is misaligned when any rank entered it late.
+                        late = int(sum(self.reduce.vec(missed, MAX)))
+                        point.missed[name] = point.missed.get(name, 0) + late
                 if measured["dispatch"]:
                     point.dispatch += self.reduce.vec(measured["dispatch"], MAX)
                     point.combine += self.reduce.vec(measured["combine"], MAX)
@@ -587,9 +598,15 @@ class Sweep:
         dp, sp, cp, rtp = _pcts(point.dispatch), _pcts(point.stage), _pcts(point.combine), _pcts(point.roundtrip)
         chainp = _pcts(point.chain)
         origin = CUDA_GRAPH_ORIGIN if graph else None
+        # Stage is local work, so only the cross-rank series gate the tails.
+        missed_fraction = max((point.missed.get(name, 0) / len(samples)
+                               for name, samples in (("roundtrip", point.roundtrip),
+                                                     ("dispatch", point.dispatch),
+                                                     ("combine", point.combine)) if samples),
+                              default=0.0)
 
         def pub(pcts):
-            return _published_tails(pcts, graph)
+            return _published_tails(pcts, graph, missed_fraction)
 
         def measured(samples, pcts=None):
             return _component(pub(pcts or _pcts(samples)), len(samples), origin=origin)
@@ -647,6 +664,12 @@ class Sweep:
             },
             # Diagnostic, not a latency: large next to the roundtrip means skew-inflated.
             "cross_rank_spread_us": _component(_pcts(point.spread), len(point.spread)),
+            # Eager only: per series, the samples some rank entered after its spin ran out, and
+            # the largest cross-rank series' share of them, which withholds the tails it could fill.
+            "rank_alignment": None if graph else {
+                "missed_fraction": missed_fraction,
+                "missed_samples": dict(sorted(point.missed.items())),
+            },
             "correctness": correctness,
             "global_tokens": global_tokens,
             "byte_provenance": {
@@ -676,7 +699,7 @@ class Sweep:
                   f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(point.roundtrip)} "
                   f"fanout={rstats['fanout_mean']:.2f} "
                   f"recv[min/mean/max]={recv_min}/{recv_total // self.world_size}/{recv_max} "
-                  f"correct={point_ok}")
+                  f"{'' if graph else f'missed={missed_fraction:.2%} '}correct={point_ok}")
         return row
 
     def _document(self, rows, all_ok):
@@ -743,6 +766,7 @@ class Sweep:
             "implementation": {
                 "fp8_consume": backend.fp8_consume,
                 "kernel_generation": kernel_generation(backend),
+                "rank_alignment": backend.timing.alignment,
                 # The reduction the oracle held the kernel to, and the library version it was
                 # chosen from: a wheel bump must not silently change the arithmetic behind `passed`.
                 "combine_reduction": backend.combine_reduction,

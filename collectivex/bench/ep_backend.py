@@ -542,6 +542,11 @@ class EPBackend(abc.ABC):
         """Measure one named component; every component gets the same warm-up first."""
         return self.timing.component(component, problem, warmup, iters)
 
+    def alignment_misses(self):
+        """Per sample of the last component, 1 where this rank's alignment spin ran out before its
+        window opened; None under graph replay."""
+        return self.timing.missed_samples()
+
     def benchmark_chain(self, problem, warmup, iters, drop):
         """Free-running dispatch->combine pairs, no host sync between them: what a decode loop pays.
 

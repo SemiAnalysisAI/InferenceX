@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import itertools
 import sys
 import types
 import unittest
@@ -300,9 +301,9 @@ class EagerAlignment(unittest.TestCase):
     """Eager samples are aligned the way DeepEP's bench_kineto aligns them: a GPU spin, then a
     device all-reduce, both queued ahead of the sample, with no host sync before the window."""
 
-    def _eager_component(self, component, iters=3):
-        backend = _ChainBackend()
-        with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "0"}, clear=True), \
+    def _eager_component(self, component, iters=3, backend=None, env=None):
+        backend = backend or _ChainBackend()
+        with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "0", **(env or {})}, clear=True), \
                 trace_torch(backend.clock, backend.calls):
             backend.benchmark_component(component, new_problem(), warmup=2, iters=iters)
         return backend.calls
@@ -320,14 +321,45 @@ class EagerAlignment(unittest.TestCase):
                     window_start = calls.index("record", i)
                     self.assertNotIn("sync", calls[i:window_start])
 
-    def test_the_spin_is_calibrated_to_wall_time_before_the_first_sample(self):
-        calls = self._eager_component("roundtrip")
-        # `_sleep` counts SM cycles: a clock ramp, then a spin bracketed by two events and a sync
-        # converts SPIN_US to cycles before any barrier is queued.
-        calibration = calls.index("align_spin")
-        self.assertEqual(calls[calibration:calibration + 5],
-                         ["align_spin", "record", "align_spin", "record", "sync"])
-        self.assertLess(calibration, calls.index("all_reduce"))
+    def test_the_spin_is_calibrated_after_the_warm_up_and_before_the_first_sample(self):
+        for component in ("roundtrip", "dispatch", "combine"):
+            with self.subTest(component=component):
+                calls = self._eager_component(component)
+                # `_sleep` counts SM cycles: a clock ramp, then a spin bracketed by two events and
+                # a sync converts the spin's wall time to cycles at the clocks warm-up left behind.
+                calibration = calls.index("align_spin")
+                self.assertEqual(calls[calibration:calibration + 5],
+                                 ["align_spin", "record", "align_spin", "record", "sync"])
+                self.assertIn("combine", calls[:calibration])
+                self.assertLess(calibration, calls.index("all_reduce"))
+
+    def test_a_fresh_pair_series_aligns_ahead_of_its_untimed_dispatch(self):
+        # The barrier releases the untimed dispatch, so a host sync inside it (normal mode) would
+        # open the window late; LL adapters, the ones that require fresh pairs, do not sync.
+        backend = _ChainBackend()
+        backend.requires_fresh_pair = True
+        iters = 3
+        calls = self._eager_component("combine", iters, backend=backend)
+        barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
+        self.assertEqual(len(barriers), iters)
+        for i in barriers:
+            self.assertEqual(calls[i - 1:i + 7], ["align_spin", "all_reduce", "dispatch", "stage",
+                                                  "record", "combine", "record", "sync"])
+
+    def test_a_sample_counts_as_missed_when_its_host_outruns_the_spin(self):
+        # One fake millisecond per perf_counter() read: every sample's lead is 1000 us.
+        for spin_us, missed in (("500", 1), ("2000", 0)):
+            with self.subTest(spin_us=spin_us):
+                backend = _ChainBackend()
+                ticks = (tick / 1000.0 for tick in itertools.count())
+                with mock.patch.object(ep_timing.time, "perf_counter", lambda: next(ticks)):
+                    self._eager_component("roundtrip", 4, backend=backend,
+                                          env={"COLLX_ALIGN_SPIN_US": spin_us})
+                self.assertEqual(backend.alignment_misses(), [missed] * 4)
+                self.assertEqual(backend.timing.alignment["spin_us"], float(spin_us))
+
+    def test_graph_replay_has_no_host_step_to_miss(self):
+        self.assertIsNone(ep_timing.GraphTiming(_ChainBackend()).missed_samples())
 
 
 class GraphAlignmentAndValueCheck(unittest.TestCase):
@@ -677,6 +709,18 @@ class _SweepBackend(ep_backend.EPBackend):
         return transformed
 
 
+class _MisalignedSweepBackend(_SweepBackend):
+    """Every roundtrip sample was entered by some rank after its spin ran out; nothing else was."""
+
+    def benchmark_component(self, component, problem, warmup, iters):
+        self._timed = (component, iters)
+        return super().benchmark_component(component, problem, warmup, iters)
+
+    def alignment_misses(self):
+        component, iters = self._timed
+        return [int(component == "roundtrip")] * iters
+
+
 class _GraphSweepBackend(_SweepBackend):
     CUDA_GRAPH_MODES = ("normal",)
 
@@ -939,6 +983,60 @@ class ChainedPublication(unittest.TestCase):
         self.assertEqual(sampling["chain_drop"], CHAIN_DROP)
         self.assertIn("period=", self.swept.stdout)
         self.assertNotIn("period=n/a", self.swept.stdout)
+
+
+class AlignmentMissPublication(unittest.TestCase):
+    """Eager rows publish how many samples some rank entered after its spin ran out, and withhold
+    the tails those samples could fill."""
+
+    PERCENTILES = {"p50": 1.0, "p90": 2.0, "p95": 3.0, "p99": 4.0}
+
+    def test_a_tail_is_withheld_once_missed_samples_could_fill_it(self):
+        for fraction, expected in ((0.0, [1.0, 2.0, 3.0, 4.0]), (0.009, [1.0, 2.0, 3.0, 4.0]),
+                                   (0.01, [1.0, 2.0, 3.0, None]), (0.05, [1.0, 2.0, None, None]),
+                                   (0.1, [1.0, None, None, None]), (1.0, [1.0, None, None, None])):
+            with self.subTest(fraction=fraction):
+                published = ep_harness._published_tails(self.PERCENTILES, False, fraction)
+                self.assertEqual(list(published.values()), expected)
+        self.assertEqual(list(ep_harness._published_tails(self.PERCENTILES, True).values()),
+                         [1.0, None, None, None])
+
+    def test_a_clean_eager_row_keeps_its_tails_and_records_the_spin(self):
+        swept = drive()
+        self.assertEqual(swept.doc["implementation"]["rank_alignment"],
+                         {"method": "gpu-spin-then-all-reduce", "spin_us": 2000.0})
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertEqual(row["rank_alignment"], {
+                    "missed_fraction": 0.0,
+                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
+                })
+                self.assertIsNotNone(row["components"]["roundtrip"]["percentiles_us"]["p99"])
+
+    def test_missed_roundtrips_withhold_the_row_tails(self):
+        swept = drive(backend_factory=_MisalignedSweepBackend)
+        self.assertEqual(swept.rc, 0)
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertEqual(row["rank_alignment"], {
+                    "missed_fraction": 1.0,
+                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 8},
+                })
+                for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
+                              row["cross_rank_min_us"]["roundtrip"]):
+                    tails = block["percentiles_us"]
+                    self.assertEqual(tails["p50"], 10.0)
+                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                self.assertIsNone(row["token_rate_at_latency_percentile"]["p99"])
+                # The chained family aligns once per sibling and keeps its tails.
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+
+    def test_graph_rows_carry_no_miss_count(self):
+        swept = drive(backend_factory=_GraphSweepBackend)
+        self.assertEqual(swept.doc["implementation"]["rank_alignment"],
+                         {"method": "in-graph-all-reduce", "spin_us": None})
+        for row in swept.rows:
+            self.assertIsNone(row["rank_alignment"])
 
 
 class CudaGraphPublication(unittest.TestCase):

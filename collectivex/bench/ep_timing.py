@@ -3,26 +3,32 @@ from __future__ import annotations
 
 import functools
 import os
+import time
 
 
-def time_us(torch, fn, iters: int, pre=None, post=None, align=None) -> list[float]:
+def time_us(torch, fn, iters: int, pre=None, post=None, align=None, leads=None) -> list[float]:
     """Per-iteration CUDA-event latencies (us) for THIS rank.
 
-    `align()` opens each sample by enqueueing the rank alignment ahead of everything else.
-    `pre()` runs untimed before each sample and its result is passed to `fn`; `post(result)` runs
-    after the end event and sync. There is deliberately NO sync between `pre()` and the start
-    event: stream order already keeps pre()'s work out of the window, and a sync would put the
-    host's launch of the collective inside it and let launch jitter stagger the ranks (b200 uccl-ep
-    LL combine: 113.4us with a sync vs 87.4us without at T=1). Each iteration ends synchronized:
-    iteration N+1's dispatch must not race iteration N's combine on the persistent buffer.
+    `align()` opens each sample by enqueueing the rank alignment ahead of everything else;
+    `leads`, when given, receives each sample's host time (us) from the start of `align()` to the
+    start event's record, which the alignment's spin must outlast. `pre()` runs untimed before each
+    sample and its result is passed to `fn`; `post(result)` runs after the end event and sync.
+    There is deliberately NO sync between `pre()` and the start event: stream order already keeps
+    pre()'s work out of the window, and a sync would put the host's launch of the collective inside
+    it and let launch jitter stagger the ranks (b200 uccl-ep LL combine: 113.4us with a sync vs
+    87.4us without at T=1). Each iteration ends synchronized: iteration N+1's dispatch must not race
+    iteration N's combine on the persistent buffer.
     """
     def sample():
+        opened = time.perf_counter()
         if align is not None:
             align()
         arg = pre() if pre is not None else None
         s = torch.cuda.Event(enable_timing=True)
         e = torch.cuda.Event(enable_timing=True)
         s.record()
+        if leads is not None:
+            leads.append((time.perf_counter() - opened) * 1e6)
         result = fn(arg) if pre is not None else fn()
         e.record()
         torch.cuda.synchronize()
@@ -75,21 +81,34 @@ class EagerTiming:
     the order DeepEP's bench_kineto uses. The spin outlasts the host's launch of the whole sample,
     so the last rank to arrive already has its timed work queued when the all-reduce releases
     everyone; the window then starts on every rank at the barrier's exit instead of at each host's
-    launch, which the cross-rank MAX would otherwise report as latency.
+    launch, which the cross-rank MAX would otherwise report as latency. A sample whose host took
+    longer than the spin to reach its start event is counted as missed (`missed_samples`).
     """
 
     graph = False
-    # Wall time the spin must outlast: the host's enqueue of one sample (alignment, untimed
-    # setup, events and the timed operation). Precision is not needed; the all-reduce aligns.
-    SPIN_US = 500.0
+    # Wall time the spin must outlast: the host's enqueue of one sample (alignment, untimed setup,
+    # events and the timed operation), stalls included. 500 us covered the ~50-70 us enqueue but
+    # not its occasional stalls, which doubled h200 uccl-ep decode p99; DeepEP spins ~10 ms.
+    SPIN_US = 2000.0
 
     def __init__(self, backend):
         self.backend = backend
+        self.spin_us = float(os.environ.get("COLLX_ALIGN_SPIN_US") or self.SPIN_US)
         self.spin_cycles = None
+        self.leads = []
         self._align_token = None
 
+    @property
+    def alignment(self):
+        return {"method": "gpu-spin-then-all-reduce", "spin_us": self.spin_us}
+
+    def missed_samples(self):
+        """1 per sample of the last timed series whose host outran the spin before recording the
+        start event: that rank's window may have opened after the barrier released the others."""
+        return [int(lead > self.spin_us) for lead in self.leads]
+
     def calibrate_spin(self):
-        """Size the spin to SPIN_US of wall time: `_sleep` counts SM cycles, not time."""
+        """Size the spin to `spin_us` of wall time: `_sleep` counts SM cycles, not time."""
         import torch
 
         probe = 200_000
@@ -101,7 +120,7 @@ class EagerTiming:
         end.record()
         torch.cuda.synchronize()
         elapsed_us = max(start.elapsed_time(end) * 1000.0, 1e-3)
-        self.spin_cycles = max(1, int(probe * self.SPIN_US / elapsed_us))
+        self.spin_cycles = max(1, int(probe * self.spin_us / elapsed_us))
 
     def align(self):
         """Enqueue the spin, then a device all-reduce, on the current stream; no host sync."""
@@ -120,15 +139,22 @@ class EagerTiming:
         names = ["roundtrip", "dispatch", "combine"]
         return names + ["stage"] if self.backend.stage_device_work else names
 
+    def _time(self, fn, iters, **kwargs):
+        """Time one series, every sample aligned. The spin is calibrated here, after the caller's
+        warm-up, because clocks move with load and temperature."""
+        import torch
+
+        self.calibrate_spin()
+        self.leads = []
+        return time_us(torch, fn, iters, align=self.align, leads=self.leads, **kwargs)
+
     def component(self, name, problem, warmup, iters):
         import torch
 
         b = self.backend
-        align = self.align
-        self.calibrate_spin()  # clocks move with load and temperature: per timed series
         if name == "roundtrip":
             staged = b.warm_and_hoist_stage(problem, warmup)
-            return time_us(torch, lambda: b.run_roundtrip(problem, staged), iters, align=align)
+            return self._time(lambda: b.run_roundtrip(problem, staged), iters)
         if name == "dispatch":
             b.warm(problem, warmup)
 
@@ -136,8 +162,8 @@ class EagerTiming:
                 b.stage(problem, handle)
                 b.combine(problem, handle)
 
-            return time_us(torch, lambda: b.dispatch(problem), iters, align=align,
-                           post=finish if b.requires_fresh_pair else None)
+            return self._time(lambda: b.dispatch(problem), iters,
+                              post=finish if b.requires_fresh_pair else None)
         if name == "stage":
             # Staging is the timed operation here, so it must be warmed on every iteration.
             b.warm(problem, warmup, stage_every=True)
@@ -146,8 +172,8 @@ class EagerTiming:
                 b.stage(problem, handle)
                 return handle
 
-            return time_us(torch, stage, iters, align=align, pre=lambda: b.dispatch(problem),
-                           post=(lambda h: b.combine(problem, h)) if b.requires_fresh_pair else None)
+            return self._time(stage, iters, pre=lambda: b.dispatch(problem),
+                              post=(lambda h: b.combine(problem, h)) if b.requires_fresh_pair else None)
         if name == "combine":
             b.warm(problem, warmup)
 
@@ -157,11 +183,10 @@ class EagerTiming:
                 return handle
 
             if b.requires_fresh_pair:
-                return time_us(torch, lambda h: b.combine(problem, h), iters, align=align,
-                               pre=staged_dispatch)
+                return self._time(lambda h: b.combine(problem, h), iters, pre=staged_dispatch)
             handle = staged_dispatch()
             torch.cuda.synchronize()
-            return time_us(torch, lambda: b.combine(problem, handle), iters, align=align)
+            return self._time(lambda: b.combine(problem, handle), iters)
         raise RuntimeError(f"unknown timed component {name!r}")
 
     def chain(self, problem, staged, iters, drop):
@@ -283,6 +308,14 @@ class GraphTiming:
     def __init__(self, backend):
         self.backend = backend
         self._align_token = None
+
+    @property
+    def alignment(self):
+        return {"method": "in-graph-all-reduce", "spin_us": None}
+
+    def missed_samples(self):
+        """Replays are launched whole, so there is no host step between barrier and window."""
+        return None
 
     def components(self):
         return ["roundtrip", "dispatch", "combine"]
