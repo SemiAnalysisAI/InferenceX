@@ -7,10 +7,6 @@
 base:
   schema: 2
   name: dsv4-fp4-mi355x-sglang-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261007
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -78,10 +74,7 @@ base:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
         GPU_MAX_HW_QUEUES: '2'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4-Pro-0813
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

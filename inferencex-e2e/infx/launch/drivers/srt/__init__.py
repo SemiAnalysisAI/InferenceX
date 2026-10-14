@@ -19,7 +19,7 @@ from infx.clusters.slurm import SlurmSettings
 from infx.launch import policy
 from infx.launch.backends.base import BackendError
 from infx.launch.backends.slurm import srtctl_job_name
-from infx.launch.context import Launch
+from infx.launch.context import Launch, LaunchError
 from infx.launch.drivers.srt import collect, config, lanes, models, power, submit
 from infx.launch.drivers.srt.checkout import (
     checkout_dir,
@@ -28,9 +28,20 @@ from infx.launch.drivers.srt.checkout import (
     prepare_checkout,
     run_setup,
 )
-from infx.launch.drivers.srt.recipe import eval_overrides, prepare_recipe
+from infx.launch.drivers.srt.recipe import (
+    eval_overrides,
+    prepare_recipe,
+    recipe_mirror_path,
+    staged_recipe,
+)
 from infx.launch.drivers.srt.run import SrtRun, require, slurm_backend
-from infx.launch.request import BATCH_REENTRY_ENV, RequestError, SingleNodeRequest, SrtRequest
+from infx.launch.request import (
+    BATCH_REENTRY_ENV,
+    MultiNodeRequest,
+    RequestError,
+    SingleNodeRequest,
+)
+from infx.srt_slurm.workload import BOUND_RECIPE
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -120,13 +131,16 @@ def run_batch(launch: Launch) -> int:
 def run_multinode(launch: Launch) -> int:
     """One job on the cluster's lane for the launch path: prepare, submit, follow, collect."""
     lane = lanes.srt_lane(launch.cluster.id, launch.path)
-    request = SrtRequest.from_env(launch.request.env)
+    request = MultiNodeRequest.from_env(launch.request.env)
     lanes.check_request(lane, request)
-    config_file = lanes.config_file(request)
-    decision = power.resolve_power(launch.cluster.id, launch.path, request)
+    srt_recipe = lanes.srt_recipe(request)
+    staged = staged_recipe(srt_recipe)
+    if not recipe_mirror_path(request.workspace, srt_recipe).is_file():
+        raise LaunchError(f"{srt_recipe} is not in the recipe mirror")
+    decision = power.decide_power(launch.cluster.id, launch.path, request)
     model = models.checkpoint(launch.cluster, request)
     served = models.served_path(launch.cluster, request, model)
-    model_paths = models.model_paths(launch.cluster, request, config_file, served)
+    model_paths = models.model_paths(launch.cluster, request, served)
     run = SrtRun.create(launch, request, models.job_env(launch.cluster, request, served))
     preflight = run.srt.preflight and not (model_paths and model and model.node_local)
     if request.framework == "tilert":
@@ -145,14 +159,17 @@ def run_multinode(launch: Launch) -> int:
     infmax = compute_workspace(run, checkout, shared=shared)
     run.env["INFMAX_WORKSPACE"] = str(infmax)
 
-    conc_list = request.env.get("CONC_LIST", "") if decision.dcgm else None
-    job_name = srtctl_job_name(request.runner_name)
-    prepare_recipe(checkout.root, config_file, job_name, run.srt.dist_timeout_s, conc_list)
-    arguments = submit.multinode_arguments(run, lane, config_file, overrides, preflight=preflight)
+    recipe = str(checkout.root / BOUND_RECIPE)
+    power_port, client_env = config.binder_inputs(run.cluster, run.srt, lane, request, decision)
+    if rc := submit.bind_recipe(run, checkout, staged, recipe, power_port, client_env):
+        return rc
+    # Only the bound recipe is flat: a bundle keeps its names and roles under base and overrides.
+    prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
+    arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
     manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
     run.life.callback(submitted.cancel, run.backend)
-    if rc := submit.submit_lane(run, submitted, checkout, config_file, arguments):
+    if rc := submit.submit_lane(run, submitted, checkout, recipe, arguments):
         return rc
     return collect.collect(run, lane, checkout, submitted.adopted(), decision, infmax)
 
@@ -189,11 +206,14 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
             problems.append(f"{where}: no srt-slurm.shared-run-root")
         if srt.default_time_limit is not None and (lane.time_limit or lane.long_time_limit):
             problems.append(f"{where}: its time limits are shadowed by default-time-limit")
-    problems.extend(
-        f"POWER_LANES[{cluster_id!r}, {path}]: no SRT_LANES row"
-        for cluster_id, path in power.POWER_LANES
-        if scoped(cluster_id) and (cluster_id, path) not in lanes.SRT_LANES
-    )
+    for cluster_id, path in power.POWER_LANES:
+        where = f"POWER_LANES[{cluster_id!r}, {path}]"
+        if not scoped(cluster_id):
+            continue
+        if (cluster_id, path) not in lanes.SRT_LANES:
+            problems.append(f"{where}: no SRT_LANES row")
+        elif (srt := _srt_settings(clusters.get(cluster_id))) and srt.power_exporter_port is None:
+            problems.append(f"{where}: no srt-slurm.power-exporter-port")
     for cluster_id, overrides in models.OVERRIDES.items():
         if scoped(cluster_id) and profile("OVERRIDES", cluster_id) is not None:
             entries = clusters[cluster_id].models.entries

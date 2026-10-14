@@ -2,8 +2,6 @@
 
 import argparse
 import copy
-import hashlib
-import json
 import re
 import subprocess
 import traceback
@@ -14,6 +12,7 @@ import yaml
 
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
+from .fingerprint import recipe_fingerprint
 from .generate import (
     EvalMode,
     drop_app_colliding_evals,
@@ -26,6 +25,7 @@ from .revision import GENERATOR, snapshot
 from .validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
+    config_root,
     load_config_files,
     load_runner_file,
 )
@@ -109,22 +109,6 @@ def _matrix_curve_key(entry: dict) -> tuple:
             if key not in {"conc", "exp-name", "recipe-fingerprint"}
         )
     )
-
-
-def recipe_fingerprint(entry: dict) -> str:
-    """Hash the generated recipe independently of point-level concurrency/name."""
-    recipe = {
-        key: value
-        for key, value in entry.items()
-        if key not in {"conc", "exp-name", "recipe-fingerprint"}
-    }
-    canonical = json.dumps(
-        recipe,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _matrix_visual_series_key(entry: dict) -> tuple:
@@ -366,6 +350,7 @@ def build_plan(
 
         config_files = MASTER_CONFIGS if config_files is None else config_files
         master_config = load_config_files(config_files)
+        root = config_root(config_files)
         runner_data = None
 
         def generate_current(
@@ -383,6 +368,7 @@ def build_plan(
                     runner_data,
                     scenario_types=scenarios,
                     eval_mode=mode,
+                    root=root,
                 )
             except Exception as error:
                 command = [
@@ -473,7 +459,7 @@ def build_plan(
             all_benchmark_results = trim_conc(all_benchmark_results)
 
         for result in all_benchmark_results:
-            result["recipe-fingerprint"] = recipe_fingerprint(result)
+            result["recipe-fingerprint"] = recipe_fingerprint(result, root)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             scenario = (
                 "agentic"

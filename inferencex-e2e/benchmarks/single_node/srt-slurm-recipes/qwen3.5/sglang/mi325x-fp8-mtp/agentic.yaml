@@ -3,10 +3,6 @@
 base:
   schema: 2
   name: qwen3.5-fp8-mi325x-sglang-agentic
-  model:
-    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:v0.5.16-rocm720-mi30x
-    precision: fp8
   resources:
     gpu_type: mi325x
     gpus_per_node: 8
@@ -58,12 +54,7 @@ base:
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-      # 256k-capped corpus: the unfiltered corpus exceeds this model's context.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
