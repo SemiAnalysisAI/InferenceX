@@ -251,6 +251,12 @@ Buffer initialises NVSHMEM with an RDMA transport even single-node, and on b300 
 with "nvshmem detect topo failed" (status 28) with and without `NVSHMEM_REMOTE_TRANSPORT=none`
 (runs 34521825749, 34523594787); the HT ElasticBuffer path, which needs no NVSHMEM, passes.
 
+For a hand run, give your operator document its own `storage_roots`. It derives both paths after
+the registry baseline is merged in, so a registry `storage_roots` would override a lone
+`stage_dir`, and the image and backend caches would still land in the registry's (CI-owned) paths.
+An image owned by another account is reused when readable and current, but never replaced or
+deleted; the launcher stops with an error instead.
+
 `stage_dir` (or `storage_roots`, which derives `stage_dir` and `squash_dir` under
 `<root>/collectivex/`) must be visible at the same path on the login node and every allocated node,
 and must not be group- or world-writable. Each run creates a mode-0700 `job_<execution>` child

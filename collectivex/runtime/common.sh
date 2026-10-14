@@ -681,6 +681,9 @@ collx_ensure_squash() {
   key="${sq##*/}"
   key="${key%.sqsh}"
   locks="$squash_dir/.locks"
+  # A lock directory another account owns (a CI runner's) falls back to a per-user one.
+  { mkdir -p "$locks" && touch "$locks/${key}.lock"; } 2>/dev/null \
+    || locks="/tmp/inferencex-collectivex-locks-$(id -u)"
   mkdir -p "$locks" 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
@@ -697,6 +700,12 @@ collx_ensure_squash() {
     collx_log "container squash ready (reusing staged import)"
   else
     collx_log "importing configured container image ($verdict)"
+    # Never replace another user's image: shared image dirs need not be sticky.
+    if [ -e "$sq" ] && [ ! -O "$sq" ]; then
+      collx_log "ERROR: $sq is $verdict but belongs to another user;" \
+        "set squash_dir to storage you own"
+      return 1
+    fi
     rm -f "$sq" "$sq.digest" 2>> "$log" \
       || { collx_log_tail "$log"; return 1; }
     # </dev/null: never block on an interactive password prompt.
@@ -723,7 +732,7 @@ collx_ensure_squash() {
     printf '%s\n' "${COLLX_IMAGE_DIGEST:-}" > "$sq.digest" 2>> "$log" || true
     # Retired per-run names of this image; the age gate spares a file a concurrent old-generation
     # run may still be reading.
-    find "$squash_dir" -maxdepth 1 -type f \
+    find "$squash_dir" -maxdepth 1 -type f -user "$(id -u)" \
       -name "*_$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh" ! -name "${sq##*/}" \
       -mmin +2880 -delete 2>/dev/null || true
   fi
@@ -776,6 +785,12 @@ collx_ensure_squash_on_job() {
       collx_log_tail "$log"
       return 1
     fi
+    if [ "$rc" = 15 ]; then
+      collx_log "ERROR: a stale or unreadable image there belongs to another user;" \
+        "set squash_dir to storage you own or exclude the node"
+      collx_log_tail "$log"
+      return 1
+    fi
     if [ "$attempt" -lt "$max_attempts" ]; then
       collx_log "container import attempt $attempt/$max_attempts failed (rc=$rc); retrying"
       collx_log_tail "$log"
@@ -813,8 +828,12 @@ export ENROOT_TEMP_PATH="$compute_home/enroot-tmp"
 export ENROOT_CACHE_PATH="$compute_home/enroot-cache"
 export ENROOT_DATA_PATH="$compute_home/enroot-data"
 export ENROOT_RUNTIME_PATH="$compute_home/enroot-run"
-mkdir -p "$(dirname "$sq")" "$(dirname "$lock")" \
+mkdir -p "$(dirname "$sq")" \
   "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
+# A lock directory another account owns (a CI runner's) falls back to a per-user one.
+{ mkdir -p "$(dirname "$lock")" && touch "$lock"; } 2>/dev/null \
+  || { lock="/tmp/inferencex-collectivex-locks-$(id -u)/${lock##*/}"
+       mkdir -p "$(dirname "$lock")"; }
 exec 9>"$lock"
 # Shared storage serializes the import; node-local storage imports in parallel.
 flock 9
@@ -832,6 +851,11 @@ else
   done
   converter="$(command -v enroot-aufs2ovlfs || true)"
   [ -z "$converter" ] || getcap "$converter" || true
+  # Never replace another user's image: node-local image dirs need not be sticky.
+  if [ -e "$sq" ] && [ ! -O "$sq" ]; then
+    echo "$sq is $verdict but belongs to another user" >&2
+    exit 15
+  fi
   rm -f -- "$sq" "$sq.digest"
   enroot import -o "$sq" "docker://$image" </dev/null
   unsquashfs -l "$sq" >/dev/null 2>&1
@@ -839,7 +863,7 @@ else
   printf '%s\n' "$digest" > "$sq.digest" || true
   # Retired per-run names of this image never get touched again; the age gate
   # spares a file a concurrent old-generation run may still be reading.
-  find "$(dirname "$sq")" -maxdepth 1 -type f -name "*_${sanitized}.sqsh" \
+  find "$(dirname "$sq")" -maxdepth 1 -type f -user "$(id -u)" -name "*_${sanitized}.sqsh" \
     ! -name "${sq##*/}" -mmin +2880 -delete 2>/dev/null || true
 fi
 BASH

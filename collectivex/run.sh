@@ -124,8 +124,9 @@ for row in "${rows[@]}"; do
     unset COLLX_IMAGE_OVERRIDE
     [ "$image" = - ] || export COLLX_IMAGE_OVERRIDE="$image"
     [ "$staged" = - ] || export COLLX_STAGED_IMAGE_DIR="$staged"
-    [ "$minutes" = - ] || export COLLX_TIME="$minutes"
-    export COLLX_TIME="${COLLX_TIME:-300}"
+    # The caller's COLLX_TIME wins: a first-time image import can outlast a short shard's ask.
+    [ -n "${COLLX_TIME:-}" ] || { [ "$minutes" = - ] && COLLX_TIME=300 || COLLX_TIME="$minutes"; }
+    export COLLX_TIME
     if [ "$dry" = 1 ]; then
       env | grep -E '^(COLLX_|COLLECTIVEX_|CX_)' | sort
       echo "would run: bash collectivex/launchers/launch_$launcher.sh"
