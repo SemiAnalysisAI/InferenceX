@@ -51,11 +51,14 @@ base:
 # ATOM's MiniMax-M3 mono decode is on by default at every TP4 point and
 # serves decode steps of up to 16 tokens (four requests with EAGLE3 K3);
 # ATOM builds it for TP4 only, so TP2 runs the unfused path.
+# TP4 caps steps at 8192 tokens: aiter picks the scatter GEMM2 for M3 TP4 MoE
+# at M > 8192, which faults on unwritten Opus reverse routes until aiter #6467.
 override_tp4_c1:
   roles:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 2
   benchmark:
     env:
@@ -66,6 +69,7 @@ override_tp4_c2:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 4
   benchmark:
     env:
@@ -76,6 +80,7 @@ override_tp4_c4:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 8
   benchmark:
     env:
@@ -86,6 +91,7 @@ override_tp4_c5:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 10
   benchmark:
     env:
@@ -96,6 +102,7 @@ override_tp4_c8:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 16
   benchmark:
     env:
@@ -106,6 +113,7 @@ override_tp4_c10:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 20
   benchmark:
     env:
@@ -116,6 +124,7 @@ override_tp4_c12:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 24
   benchmark:
     env:
@@ -126,6 +135,7 @@ override_tp4_c15:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 30
       env:
         ATOM_M3_INDEXER_CP: '1'
@@ -138,6 +148,7 @@ override_tp4_c20:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 40
       env:
         ATOM_M3_INDEXER_CP: '1'
@@ -150,6 +161,7 @@ override_tp4_c24:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 48
       env:
         ATOM_M3_INDEXER_CP: '1'
@@ -162,6 +174,7 @@ override_tp4_c28:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 56
       env:
         ATOM_M3_INDEXER_CP: '1'
@@ -280,6 +293,7 @@ override_tp4_c40_lmcache:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 80
         extra-kv-connectors:
           - kv_connector: lmcache_offload
@@ -305,6 +319,7 @@ override_tp4_c48_lmcache:
     agg:
       gpus: 4
       args:
+        max-num-batched-tokens: 8192
         max-num-seqs: 96
         extra-kv-connectors:
           - kv_connector: lmcache_offload
