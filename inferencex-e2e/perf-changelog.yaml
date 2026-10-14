@@ -9740,6 +9740,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
 
 - config-keys:
+    - qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a Qwen3.5 NVFP4 B300 Dynamo-SGLang AgentX configuration with aggregate MTP recipes for TP2/EP2, TP2, and TP4 worker layouts."
+    - "Use the pinned lmsysorg/sglang:nightly-dev-20261013-7224fce1 image and validate each recipe's MTP step count against the committed Qwen3.5 thinking-on golden acceptance-length curve."
+    - "Serve the NextN draft layer at its shipped precision: no recipe sets SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE."
+    - "Replace aliases removed in this image (cuda-graph-max-bs becomes cuda-graph-max-bs-decode; SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK=1 becomes SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK=0) and drop settings that have no effect in it."
+    - "Run the TP2/EP2 point with the default linear-replayssm-cache-len (16) instead of 8: this image's GDN ReplaySSM spec-verify commit kernel needs a replay window of at least 16, and 8 fails to compile at the first verify."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2978
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-agentic-mtp
   scenario-type:
     - agentic-coding
