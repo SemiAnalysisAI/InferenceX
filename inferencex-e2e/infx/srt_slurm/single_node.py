@@ -6,13 +6,22 @@ import argparse
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from infx.config import repository_root
 from infx.srt_slurm.synthetic_acceptance import ENGINES, selected_recipes, spec_parameters
+from infx.srt_slurm.workload import (
+    BOUND_RECIPE,
+    add_fabric_argument,
+    bind_workload,
+    check_setup_script,
+    compose_recipe,
+    resolve_fabric,
+)
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
 
@@ -38,7 +47,6 @@ def parallelism_constraints(
             "DP_ATTENTION": (args.get("enable_attention_dp", False), dp_attention),
         }
     if engine == "vllm":
-        # vLLM spreads DP attention across data-parallel ranks of tensor size 1.
         data_parallel = args.get("data-parallel-size", 1)
         return {
             "tensor x data parallel": (args.get("tensor-parallel-size", 1) * data_parallel, tp),
@@ -55,17 +63,34 @@ def parallelism_constraints(
     raise ValueError(f"Unsupported single-node SRT engine: {engine!r}")
 
 
-def select_recipe(config: str, environment: Mapping[str, str]) -> tuple[str, dict[str, Any]]:
-    """Resolve a matrix point to one native variant, never submit an entire sweep."""
+def select_recipe(
+    config: str,
+    environment: Mapping[str, str],
+    *,
+    root: Path | None = None,
+    expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve a matrix point to one native variant, never submit an entire sweep.
+
+    Variants are composed with the shared block under ``root`` (default: this
+    repository) and bound before they are validated. ``expand`` lists the selected
+    variants: srtctl at launch, ``variants.expand_variants`` in the planner.
+    """
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
-    if not isinstance(raw, dict):
-        raise ValueError("Recipe must be a mapping")
-    recipes = selected_recipes(raw, selector or None)
+    agentic = environment["IS_AGENTIC"] == "1"
+    raw = compose_recipe(
+        Path(path),
+        agentic=agentic,
+        multinode=False,
+        root=root or repository_root(),
+        native_power=environment.get("EVAL_ONLY") != "true",
+    )
+    recipes = expand(raw, selector or None)
     matches = []
     errors = []
     for name, recipe in recipes:
         try:
+            recipe = bind_workload(recipe, environment, agentic=agentic, multinode=False)
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
@@ -92,22 +117,16 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         raise ValueError(
             "Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation"
         )
-    # A point that stops drafting may keep its matrix label.
     speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
         "engine": (engine, SINGLE_NODE_ENGINES[environment["FRAMEWORK"]]),
-        "model": (recipe["model"]["path"], f"hf:{environment['MODEL']}"),
-        "image": (recipe["model"]["container"], environment["IMAGE"]),
-        "precision": (recipe["model"]["precision"], environment["PRECISION"]),
         **parallelism_constraints(engine, args, environment),
         "gpus": (role["gpus"], int(environment["GPU_COUNT"])),
         "nodes": (role["nodes"], 1),
         "workers": (role["workers"], 1),
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
-        "benchmark MODEL": (workload["MODEL"], environment["MODEL"]),
-        # draft_model names a bundled or separate draft; its recipes speculate natively.
         "SPEC_DECODING": (
             speculation,
             "mtp"
@@ -116,18 +135,11 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    if not agentic:
-        expected["USE_CHAT_TEMPLATE"] = (workload["USE_CHAT_TEMPLATE"], "true" if spec else "false")
-        for name in ("ISL", "OSL", "RANDOM_RANGE_RATIO"):
-            expected[name] = (str(workload[name]), environment[name])
-    # A variant that names its point, or the host budget it sizes, must match the matrix.
     for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
         if name in workload:
             expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
-        # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    # vLLM and ATOM shard decode KV across their tensor-parallel ranks.
     dcp = str(args.get("decode-context-parallel-size", 1)) if engine in {"vllm", "atom"} else "1"
     for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
@@ -138,12 +150,10 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
 
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
-    _, recipe = select_recipe(config, environment)
+    select_recipe(config, environment)
     for name in ("RUN_EVAL", "EVAL_ONLY", "DP_ATTENTION"):
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
-    # Exclusive nodes include idle GPUs. Restrict each server/client step to
-    # the serving GPU count.
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
@@ -152,31 +162,18 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             for key, value in options.items()
         ):
             raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
-        # Native --set preserves whole mappings as JSON strings for engine
-        # flags. Runtime option mappings therefore need individual leaf sets.
         for key, value in options.items():
             overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
     agentic = environment["IS_AGENTIC"] == "1"
-    names = [
-        "CONC",
-        "RESULT_FILENAME",
-        "RUN_EVAL",
-        "EVAL_ONLY",
-        "FRAMEWORK",
-    ]
+    names = ["RESULT_FILENAME", "RUN_EVAL", "EVAL_ONLY", "FRAMEWORK"]
     if agentic:
         names += ["MODEL_PREFIX", "PRECISION", "DURATION", "TP", "PP_SIZE", "PCP_SIZE"]
     for name in names:
         value = environment[name]
         if not value:
             raise ValueError(f"Missing runtime input: {name}")
-        # Native --set broadcasts into zip groups. CONC already matched above;
-        # replacing its list could collapse the selected variant's index.
-        if name == "CONC" and name in recipe["benchmark"]["env"]:
-            continue
         overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
     if agentic:
-        # The aggregated result lands where fixed-sequence results do.
         overrides += ["--set", 'benchmark.env.AGENTIC_OUTPUT_DIR="/logs"']
         return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs/agentic"']
     if environment["EVAL_ONLY"] == "true":
@@ -214,14 +211,19 @@ def main() -> None:
     prepare = commands.add_parser("prepare")
     prepare.add_argument("recipe")
     prepare.add_argument("output", type=Path)
+    add_fabric_argument(prepare)
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
     try:
         if parsed.command == "prepare":
-            config, _ = select_recipe(parsed.recipe, os.environ)
+            _, recipe = select_recipe(parsed.recipe, os.environ)
+            recipe = resolve_fabric(recipe, parsed.fabric)
+            check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
-            parsed.output.write_bytes("\0".join([config, *arguments, ""]).encode())
+            config = parsed.output.with_name(BOUND_RECIPE)
+            config.write_text(yaml.safe_dump(recipe, sort_keys=False))
+            parsed.output.write_bytes("\0".join([str(config), *arguments, ""]).encode())
         else:
             print("\n".join(submission_fields(parsed.manifest)))
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:

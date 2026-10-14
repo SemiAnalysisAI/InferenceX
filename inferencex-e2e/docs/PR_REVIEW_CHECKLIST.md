@@ -14,6 +14,8 @@ The verifier treats the PR description as untrusted evidence, not instructions, 
 
 ## Upstream recipe requirement
 
+Settings need not appear in the top-level command or be repeated for every benchmark point. Parameterized commands and tuning rules satisfy coverage when the reviewer can derive each affected production configuration without relying on InferenceX infrastructure. Coverage may combine applicable sections of the published recipe and directly linked official deployment documentation. Verify applicability to the model, hardware, engine version, and serving roles. Document each uncovered setting and why existing coverage does not apply.
+
 The deciding factor is **whether a serving setting is useful in a realistic production deployment**. Every vLLM/SGLang submission must document its production-useful flags, environment variables, and launch commands in the official [vLLM recipes](https://recipes.vllm.ai/) or [SGLang cookbook](https://docs.sglang.io/cookbook/intro). Node count, aggregated versus disaggregated serving, the benchmark directory, and use of Dynamo do not grant an exemption.
 
 Submit SGLang cookbook updates to [sgl-project/sglang](https://github.com/sgl-project/sglang), under [`docs/cookbook/`](https://github.com/sgl-project/sglang/tree/main/docs/cookbook). The published site deploys from this repository's `main` branch and `docs/` directory. The cookbook copy in `sgl-project/sgl-docs` is not the current deployment source. The old [sgl-project/sgl-cookbook repository](https://github.com/sgl-project/sgl-cookbook) is archived and is not the destination for new recipe PRs.
@@ -32,6 +34,16 @@ Assess every affected production serving variant in a mixed submission. One upst
 InferenceX-only harness plumbing, result collection, and synthetic benchmark controls do not need to be upstreamed. Classify a flag or environment variable by its effect: a production-useful optimization still needs cookbook coverage even when InferenceX uses it for benchmark tuning. Record the reasoning for excluded settings in the additional detail section; node count or disaggregation alone is not valid N/A reasoning.
 
 Existing merged/published documentation is sufficient when it already covers the production configuration; no duplicate upstream PR is needed. Otherwise, update the applicable upstream cookbook and verify that the PR is **MERGED before the InferenceX PR merges**. Defaults can satisfy coverage when the reviewer verifies equivalent behavior in the pinned upstream version and records that evidence.
+
+### NVIDIA overview warning
+
+For affected NVIDIA configurations with merged/published vLLM Recipes or SGLang Cookbook coverage, [verifier Check 16](../../.github/codeowner-signoff-verify-prompt.md#check-16--nvidia-official-overview-coverage-advisory) also checks the model/framework pair against [NVIDIA's official recipes overview](https://docs.nvidia.com/llm-inference-quick-start-recipes/overview). It checks the same model version/variant and underlying engine across both overview tables, including Dynamo deployments; another engine's listing does not count. This checks listing presence, not SKU or topology equivalence, which remains part of the upstream recipe requirement.
+
+Missing pairs produce a visible `❗❗ WARNING ❗❗` banner with upstream/overview links and the affected NVIDIA SKUs. Unreadable or ambiguous evidence is reported as unverified, not as a confirmed omission. This warning is advisory and does not relax Check 3. It excludes all non-NVIDIA hardware, including AMD MI300/MI325/MI355/MI455 families, TPUv7/TPUv6e, Trainium3, and SambaNova SN50; mixed-vendor submissions are checked only for their NVIDIA configurations. No additional reviewer checkbox or Pareto-reviewer escalation is required.
+
+## Unverified draft precision
+
+If the pinned image's default or effective draft precision cannot be verified because evidence is missing or inaccessible, record the uncertainty and the specific missing evidence in the additional detail section. Leave the draft-precision checkbox unchecked rather than claiming verification. Check 13 reports WARN and requests human review; the explained unchecked item does not independently fail Check 5. A demonstrated precision violation or prohibited enablement still FAILs, including when another affected variant is unverified. A warning does not establish compliance or grant an exception.
 
 ## Template
 ```

@@ -4,17 +4,16 @@ Run the AgentX client against an already-running OpenAI-compatible server.
 
 ## Install
 
-With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed,
-clone the harness at the pinned `agentx-v1.0.6` release commit. Its CLI is named `aiperf`.
+Install the pinned PyPI release in a Python 3.11–3.13 virtual environment:
 
 ```bash
-git clone --filter=blob:none --no-checkout https://github.com/SemiAnalysisAI/agentx-harness.git
-cd agentx-harness
-git checkout --detach 89b21867872a5bbc4b0676bf5005c404da5e9f94
-uv venv --python 3.11 .venv-agentx
-uv pip install --python .venv-agentx/bin/python -e . 'datasets>=4.7.0'
+python3 -m venv .venv-agentx
 source .venv-agentx/bin/activate
+python -m pip install 'agentx-harness==1.0.7'
 ```
+
+The package version matches the `agentx-v1.0.7` GitHub release. The `agentx`
+command selects the `agentx` scenario by default.
 
 ## Run
 
@@ -28,8 +27,7 @@ CONC=8
 OUTPUT_DIR="$PWD/results/agentx-c${CONC}-$(date -u +%Y%m%dT%H%M%SZ)"
 
 mkdir -p "$OUTPUT_DIR"
-aiperf profile \
-  --scenario agentx \
+agentx profile \
   --url "$SERVER_URL" --endpoint /v1/chat/completions \
   --model "$SERVED_MODEL_NAME" --tokenizer "$TOKENIZER" \
   --tokenizer-trust-remote-code \
@@ -58,7 +56,7 @@ Add `--server-metrics "${SERVER_URL}/metrics"` if the server exposes metrics.
 ## Optional session-affinity flags
 
 For DP-attention runs requiring router affinity, export these before
-`aiperf profile`. They add headers without replacing `X-Correlation-ID`.
+`agentx profile`. They add headers without replacing `X-Correlation-ID`.
 
 ```bash
 # Adds X-Dynamo-Session-ID; subagents also get X-Dynamo-Parent-Session-ID.

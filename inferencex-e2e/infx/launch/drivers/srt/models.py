@@ -3,8 +3,7 @@
 MODEL resolves to its ``models.entries`` record, keyed by its basename or
 ``<basename>@<root>``, a node-local copy first; ``OVERRIDES`` holds the exceptions. An
 srt-slurm job serves that checkpoint unless the point's additional-settings name a
-MODEL_PATH, and every ``model.path`` alias of its recipe (anything but an ``hf:`` id or
-absolute path) maps to what it serves.
+MODEL_PATH: the ``hf:<MODEL>`` its recipe is bound to maps to it.
 """
 
 from __future__ import annotations
@@ -14,12 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
-
 from infx.clusters.slurm import slurm_settings
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.config import volume_path
-from infx.launch.drivers.srt.recipe import recipe_mirror_path
 from infx.launch.policy import Match, any_of, point_settings
 
 if TYPE_CHECKING:
@@ -35,6 +31,7 @@ class Override:
     entry: str | None = None
     served_name: str | None = None
     require_config: bool = False
+    hub: bool = False
 
 
 OVERRIDES: dict[str, tuple[Override, ...]] = {
@@ -89,6 +86,14 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
             served_name="DeepSeek-R1-0528",
         ),
+        Override(
+            Match(any_of("glm5.2"), any_of("fp8"), any_of("dynamo-sglang"), agentic=True),
+            hub=True,
+        ),
+    ),
+    "mi355x-amds": (
+        Override(Match(any_of("dsr1"), any_of("fp8"), any_of("sglang-disagg")), hub=True),
+        Override(Match(any_of("qwen3.5"), any_of("fp4"), any_of("sglang-disagg")), hub=True),
     ),
 }
 
@@ -157,38 +162,18 @@ def served_path(cluster: Cluster, request: LaunchRequest, model: Checkpoint | No
     return None
 
 
-def recipe_aliases(recipe: Path) -> set[str]:
-    """The aliases a recipe's ``model.path`` names, in any variant of an override bundle.
-
-    A launch serves one MODEL, so every variant's alias maps to the same checkpoint.
-    """
-    raw = yaml.safe_load(recipe.read_text())
-    blocks = raw.values() if isinstance(raw, dict) and "base" in raw else [raw]
-    paths: set[object] = set()
-    for block in blocks:
-        model = block.get("model") if isinstance(block, dict) else None
-        value = model.get("path") if isinstance(model, dict) else None
-        paths.update(value if isinstance(value, list) else [value])
-    return {path for path in paths if isinstance(path, str) and not path.startswith(("hf:", "/"))}
-
-
-def model_paths(
-    cluster: Cluster,
-    request: LaunchRequest,
-    config_file: str,
-    served: str | None,
-) -> dict[str, str]:
-    """srtslurm.yaml ``model_paths``: each recipe alias mapped to ``served``."""
-    recipe = recipe_mirror_path(request.workspace, config_file)
-    if not recipe.is_file():
-        raise LaunchError(f"CONFIG_FILE {config_file} is not in the recipe mirror: {recipe}")
-    aliases = recipe_aliases(recipe)
-    if aliases and served is None:
-        raise LaunchError(
-            f"cluster {cluster.id!r} stages no checkpoint for MODEL={request.model}, "
-            f"which recipe aliases {sorted(aliases)} name"
-        )
-    return dict.fromkeys(sorted(aliases), served) if served is not None else {}
+def model_paths(cluster: Cluster, request: LaunchRequest, served: str | None) -> dict[str, str]:
+    """srtslurm.yaml ``model_paths``: the bound ``hf:<MODEL>`` to ``served``."""
+    if _override(cluster, request, "hub"):
+        return {}
+    if served is None:
+        if not request.is_agentic:
+            raise LaunchError(
+                f"cluster {cluster.id!r} stages no checkpoint for MODEL={request.model}, "
+                f"which the fixed-sequence recipe binds as hf:{request.model}"
+            )
+        return {}
+    return {f"hf:{request.model}": served}
 
 
 def job_env(cluster: Cluster, request: LaunchRequest, served: str | None) -> dict[str, str]:

@@ -1,3 +1,2 @@
-# The AgentX client's needs beyond utils/aiperf's own dependencies; venv.py installs them with uv.
-# The trace corpora use the datasets Json feature type, added in 4.7.0.
+agentx-harness==1.0.7
 datasets>=4.7.0
