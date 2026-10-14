@@ -1,4 +1,3 @@
-# Qwen3.5 FP8 GB200 disaggregated MTP 1P1D TEP8/TEP8 points.
 
 schema: 2
 name: "qwen3.5-fp8-gb200-mtp-8k1k-1p1d-tep8-tep8"

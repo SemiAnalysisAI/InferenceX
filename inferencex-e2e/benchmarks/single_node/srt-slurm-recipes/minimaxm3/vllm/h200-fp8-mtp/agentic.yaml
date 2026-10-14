@@ -1,5 +1,3 @@
-# MiniMax-M3 MXFP8 AgentX on H200 with vLLM EAGLE3 (the GQA draft head)
-# and an FP8 MSA indexer cache.
 base:
   schema: 2
   name: minimaxm3-fp8-h200-vllm-agentic

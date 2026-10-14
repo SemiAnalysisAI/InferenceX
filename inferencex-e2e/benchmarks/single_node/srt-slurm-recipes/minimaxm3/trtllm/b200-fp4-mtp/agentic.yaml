@@ -1,6 +1,3 @@
-# MiniMax-M3 NVFP4 AgentX on B200 with TRT-LLM EAGLE3-GQA. DRAM KV offload
-# uses TRT-LLM's native secondary pool, pinned per topology rather than derived
-# from TOTAL_CPU_DRAM_GB.
 base:
   schema: 2
   name: minimaxm3-fp4-b200-trtllm-agentic

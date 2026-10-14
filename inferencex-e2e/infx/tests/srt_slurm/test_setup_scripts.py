@@ -13,7 +13,6 @@ from infx.tests.bench.stubs import executable
 
 ROOT = Path(__file__).resolve().parents[3]
 CONFIGS = ROOT / "benchmarks/multi_node/srt-slurm-recipes/configs"
-# The container's python3: records each call; its pip accepts --break-system-packages.
 PYTHON3 = f"""#!{sys.executable}
 import json, os, sys
 with open(os.environ["STUB_PYTHON3_TRACE"], "a") as trace:
@@ -21,7 +20,6 @@ with open(os.environ["STUB_PYTHON3_TRACE"], "a") as trace:
 if sys.argv[1:] == ["-m", "pip", "install", "--help"]:
     print("  --break-system-packages")
 """
-# The container mounts this checkout at /infmax-workspace.
 MOUNT = 'source() { builtin source "${1/#\\/infmax-workspace/$STUB_WORKSPACE}" "${@:2}"; }\n'
 
 

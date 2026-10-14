@@ -1,6 +1,3 @@
-# Stock ARM64 SGLang, one serving GPU per point. No source/package overlay.
-# Size the host cache against the public GB300 profile's per-worker DRAM allowance.
-# The matrix floors the allowance to 225 GB; H224 leaves pool-alignment headroom.
 base:
   schema: 2
   name: qwen3.8next-fp4-gb300-sglang-agentic-stock-v0521

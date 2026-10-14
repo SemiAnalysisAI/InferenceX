@@ -38,25 +38,19 @@ roles:
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
       SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
 
-  # Decode-specific environment variables
     args:
-      # Model configuration
       served-model-name: "deepseek-ai/DeepSeek-R1"
       trust-remote-code: true
 
-      # KV cache and attention
       kv-cache-dtype: "fp8_e4m3"
       attention-backend: "trtllm_mla"
 
-      # Quantization
       quantization: "modelopt_fp4"
       moe-runner-backend: "flashinfer_trtllm"
 
-      # Radix cache disabled
       disable-radix-cache: true
       disable-chunked-prefix-cache: true
 
-      # Other flags
       stream-interval: 50
       decode-log-interval: 1000
       watchdog-timeout: 1000000
@@ -64,26 +58,21 @@ roles:
       disable-shared-experts-fusion: true
       disaggregation-bootstrap-port: 30001
 
-      # Prefill-specific mode
       disaggregation-mode: "prefill"
 
-      # Memory and token limits
       mem-fraction-static: 0.95
       max-total-tokens: 131072
       max-prefill-tokens: 524288
       chunked-prefill-size: 131072
 
-      # Request handling
       max-running-requests: 30000
       load-balance-method: "round_robin"
 
-      # Performance optimizations
       disable-cuda-graph: true
       enable-dp-attention: false
       fp4-gemm-backend: "flashinfer_cutlass"
       disaggregation-transfer-backend: nixl
 
-      # Parallelism
       tp-size: 4
       dp-size: 1
       ep-size: 1
@@ -111,23 +100,18 @@ roles:
       SGLANG_MOE_NVFP4_DISPATCH: "1"
 
     args:
-      # Model configuration
       served-model-name: "deepseek-ai/DeepSeek-R1"
       trust-remote-code: true
 
-      # KV cache and attention
       kv-cache-dtype: "fp8_e4m3"
       attention-backend: "trtllm_mla"
 
-      # Quantization
       quantization: "modelopt_fp4"
       moe-runner-backend: "flashinfer_cutedsl"
 
-      # Radix cache disabled
       disable-radix-cache: true
       disable-chunked-prefix-cache: true
 
-      # Other flags
       stream-interval: 50
       decode-log-interval: 1000
       watchdog-timeout: 1000000
@@ -136,18 +120,14 @@ roles:
       eplb-algorithm: "deepseek"
       disaggregation-bootstrap-port: 30001
 
-      # Decode-specific mode
       disaggregation-mode: "decode"
 
-      # Memory and token limits
       mem-fraction-static: 0.83
       max-total-tokens: 524288
       chunked-prefill-size: 24576
 
-      # Request handling
       max-running-requests: 16384
 
-      # DeepEP configuration
       moe-a2a-backend: "deepep"
       deepep-mode: "low_latency"
       ep-dispatch-algorithm: "static"
@@ -156,7 +136,6 @@ roles:
       cuda-graph-max-bs: 512
       num-reserved-decode-tokens: 112
 
-      # Additional decode optimizations
       moe-dense-tp-size: 1
       enable-dp-lm-head: true
       prefill-round-robin-balance: true
@@ -164,7 +143,6 @@ roles:
       fp4-gemm-backend: "flashinfer_cutlass"
       disaggregation-transfer-backend: nixl
 
-      # Parallelism
       tp-size: 32
       dp-size: 32
       ep-size: 32

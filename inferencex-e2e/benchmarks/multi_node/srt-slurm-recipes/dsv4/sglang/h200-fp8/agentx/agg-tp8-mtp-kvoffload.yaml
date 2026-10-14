@@ -1,9 +1,6 @@
 schema: 2
 name: "agg-h200-tp8-mtp-kvoffload"
 
-# DeepSeek-V4-Pro-0813 AgentX aggregated TP8 serving on one 8xH200 node with
-# DSpark K=6. The recipe is topology-invariant; configs/nvidia-master.yaml
-# varies only concurrency to produce the latency/throughput Pareto curve.
 
 identity:
   model: {}

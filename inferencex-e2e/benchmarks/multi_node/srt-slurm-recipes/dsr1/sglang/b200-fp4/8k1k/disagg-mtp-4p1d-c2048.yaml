@@ -1,11 +1,3 @@
-# DeepSeek-R1-0528 FP4 8k/1k B200 dynamo-sglang disagg — MTP, 4P:1D (c2048)
-# Topology: 4 prefill workers (TP4/EP4 dp-attn) + 1 decode worker (TP8/EP8 dp-attn) = 24 GPU.
-# Dedicated high-concurrency tune:
-#   SGLANG_HACK_SEQ_BOOTSTRAP_ROOM performance knob (not output-affecting; standard in GB200 recipes).
-#   max-running-requests raised to 2048 to avoid admission throttle at high concurrency.
-#   scheduler-recv-interval: 1 on decode.
-#   symm-mem + allreduce fusion retained.
-#   prefill stream-interval: 100; decode stream-interval: 34 (tuned for the c2048 batch cadence).
 schema: 2
 name: b200-fp4-dsr1_8k1k_mtp_4p1d_c2048
 resources:

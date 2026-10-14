@@ -38,7 +38,6 @@ class Tool:
 GENERATOR = Tool("infx.matrix.generate", "utils/matrix_logic/generate_sweep_configs.py")
 PLANNER = Tool("infx.matrix.plan", "utils/process_changelog.py")
 TOOLS = {"generate": GENERATOR, "plan": PLANNER}
-# Fingerprints a revision's rows as its planner does; revisions without it hashed the row alone.
 FINGERPRINTER = "infx.matrix.fingerprint"
 CONFIG_DIRS = ("configs", ".github/configs")
 NESTED_PROJECT = "inferencex-e2e/"

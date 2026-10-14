@@ -38,7 +38,7 @@ def make_request_case(monkeypatch) -> dict:
         if case.get("fail_path") == path:
             raise RuntimeError("GitHub unavailable")
         if method == "POST":
-            assert path == "/issues/comments/41/reactions"  # No separate comments.
+            assert path == "/issues/comments/41/reactions"
             case["writes"].append(data["content"])
             case["reactions"].append({"id": len(case["writes"]) + 100,
                                       "content": data["content"],

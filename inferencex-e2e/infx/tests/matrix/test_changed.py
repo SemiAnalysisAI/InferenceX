@@ -37,7 +37,6 @@ def git(root: Path, *args: str) -> str:
 
 
 def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, capsys):
-    # The base revision generates with its own committed generator.
     shutil.copytree(ROOT / "infx", tmp_path / "infx", ignore=shutil.ignore_patterns("__pycache__"))
     (tmp_path / RECIPES).mkdir(parents=True)
     write_shared_blocks(tmp_path)
@@ -58,7 +57,6 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-qm", "base")
     git(tmp_path, "tag", "base")
-    # The head is the working tree: an edited fragment, a longer conc-list and a removed key.
     write(tmp_path, {
         "edited": entry("edited.yaml", [2, 4]), "grown": entry("stable.yaml", [2, 4]),
         "same": entry("stable.yaml", [8]),
@@ -74,7 +72,6 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
          [point["conc"] for point in change["added"]], [point["conc"] for point in change["removed"]])
         for change in report["changed"]
     ] == [("edited", 2, 2, [2, 4], [2, 4]), ("grown", 1, 2, [4], []), ("gone", 1, 0, [], [2])]  # fmt: skip
-    # Generating the base leaves the checkout as it was.
     assert git(tmp_path, "status", "--porcelain").splitlines() == [
         f" M {RECIPES}/edited.yaml", " M configs/nvidia-master.yaml",
     ]

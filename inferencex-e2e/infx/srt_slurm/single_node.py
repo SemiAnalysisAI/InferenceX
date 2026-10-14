@@ -47,7 +47,6 @@ def parallelism_constraints(
             "DP_ATTENTION": (args.get("enable_attention_dp", False), dp_attention),
         }
     if engine == "vllm":
-        # vLLM spreads DP attention across data-parallel ranks of tensor size 1.
         data_parallel = args.get("data-parallel-size", 1)
         return {
             "tensor x data parallel": (args.get("tensor-parallel-size", 1) * data_parallel, tp),
@@ -114,7 +113,6 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         raise ValueError(
             "Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation"
         )
-    # A point that stops drafting may keep its matrix label.
     speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
     agentic = environment["IS_AGENTIC"] == "1"
     expected = {
@@ -125,7 +123,6 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         "workers": (role["workers"], 1),
         "roles": (set(recipe["roles"]), {"agg"}),
         "benchmark type": (benchmark["type"], "custom"),
-        # draft_model names a bundled or separate draft; its recipes speculate natively.
         "SPEC_DECODING": (
             speculation,
             "mtp"
@@ -134,14 +131,11 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
         ),
         "AgentX client": (benchmark.get("command", "").endswith("srt_agentic.sh"), agentic),
     }
-    # A variant that names its point, or the host budget it sizes, must match the matrix.
     for name in ("CONC", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB"):
         if name in workload:
             expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
-        # Native ATOM derives -tp from the aggregate worker's GPU allocation.
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    # vLLM and ATOM shard decode KV across their tensor-parallel ranks.
     dcp = str(args.get("decode-context-parallel-size", 1)) if engine in {"vllm", "atom"} else "1"
     for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
@@ -156,8 +150,6 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     for name in ("RUN_EVAL", "EVAL_ONLY", "DP_ATTENTION"):
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
-    # Exclusive nodes include idle GPUs. Restrict each server/client step to
-    # the serving GPU count.
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
@@ -166,12 +158,9 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             for key, value in options.items()
         ):
             raise ValueError("SRT_SRUN_OPTIONS must map option names to string values")
-        # Native --set preserves whole mappings as JSON strings for engine
-        # flags. Runtime option mappings therefore need individual leaf sets.
         for key, value in options.items():
             overrides += ["--set", f"srun_options.{key}={json.dumps(value)}"]
     agentic = environment["IS_AGENTIC"] == "1"
-    # The binder already wrote CONC into the selected variant.
     names = ["RESULT_FILENAME", "RUN_EVAL", "EVAL_ONLY", "FRAMEWORK"]
     if agentic:
         names += ["MODEL_PREFIX", "PRECISION", "DURATION", "TP", "PP_SIZE", "PCP_SIZE"]
@@ -181,7 +170,6 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
             raise ValueError(f"Missing runtime input: {name}")
         overrides += ["--set", f"benchmark.env.{name}={json.dumps(value)}"]
     if agentic:
-        # The aggregated result lands where fixed-sequence results do.
         overrides += ["--set", 'benchmark.env.AGENTIC_OUTPUT_DIR="/logs"']
         return [*overrides, "--set", 'benchmark.env.RESULT_DIR="/logs/agentic"']
     if environment["EVAL_ONLY"] == "true":
@@ -229,7 +217,6 @@ def main() -> None:
             recipe = resolve_fabric(recipe, parsed.fabric)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
-            # srtctl gets the bound variant, never the fragment.
             config = parsed.output.with_name(BOUND_RECIPE)
             config.write_text(yaml.safe_dump(recipe, sort_keys=False))
             parsed.output.write_bytes("\0".join([str(config), *arguments, ""]).encode())

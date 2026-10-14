@@ -1,7 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on MI300X (gfx942) with vLLM native DSpark
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). The KV cache is
-# GPU-resident; the Engram tables stay on GPU at TP8 and move to pinned host
-# memory below TP8, where the checkpoint share already fills a 192 GB card.
 base:
   schema: 2
   name: dsv41flash-fp4-mi300x-vllm-agentic

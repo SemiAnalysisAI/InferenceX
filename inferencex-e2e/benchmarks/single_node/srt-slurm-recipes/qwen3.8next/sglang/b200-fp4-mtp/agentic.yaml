@@ -1,5 +1,3 @@
-# Qwen3.8-Flash-Next NVFP4 AgentX on B200 via SGLang with native NEXTN MTP.
-# The 126 GiB checkpoint fits on one GPU, so the cookbook command is TP1.
 base:
   schema: 2
   name: qwen3.8next-fp4-b200-sglang-agentic

@@ -1,11 +1,6 @@
-# Source: https://github.com/Inferact/srt-slurm-sa/blob/4a870cd5bc333bf8a312fc65ca1ea82cdab9b2df/recipes/vllm/deepseek-v4-pro/GB300/agentic/agentx-v1.0.1/1p3d-pdep4-dtp8-c3-kv-nixl-mtp-flashinfer-ar-lpt512-psi1.yaml
-# Adapted from the source topology to a 1P4D concurrency-4 point for the
-# InferenceX AgentX harness; eval-only runs continue to verify real MTP output.
 schema: 2
 name: "svf-vllm-disagg-gb300-1p4d-dep4-tp8-c4-mtp-agentic"
 
-# GB300 high-interactivity AgentX MTP3 topology: one DEP4 prefill worker
-# feeds four TP8 decode workers at concurrency 4 through NIXL.
 
 identity:
   model: {}

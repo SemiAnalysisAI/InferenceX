@@ -1,5 +1,3 @@
-# Qwen3.5-397B-A17B MXFP4 AgentX on MI355X with SGLang native EAGLE MTP; KV is
-# GPU-resident or extends to host DRAM through HiCache.
 base:
   schema: 2
   name: qwen3.5-fp4-mi355x-sglang-agentic

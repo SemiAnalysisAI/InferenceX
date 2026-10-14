@@ -23,19 +23,14 @@ from infx.config import repository_root
 from infx.results.metadata import parse_component_metadata
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 
-# Keyed by (agentic, multinode).
 SHARED_BLOCKS = {
     (False, False): Path("configs/srt-recipes/fixed-sequence-single.yaml"),
     (False, True): Path("configs/srt-recipes/fixed-sequence-multi.yaml"),
     (True, False): Path("configs/srt-recipes/agentic.yaml"),
     (True, True): Path("configs/srt-recipes/agentic.yaml"),
 }
-# The bound variant srtctl gets.
 BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
-# The binder writes these, the master power field owns telemetry, and the launcher hands
-# the benchmark client its cache and result paths and, multi-node, IS_MULTINODE and the
-# AgentX power switches.
 _POINT_KEYS = (
     ("model", "path"),
     ("model", "container"),
@@ -49,9 +44,6 @@ _POINT_KEYS = (
 _FIXED_ENV = ("MODEL", "ISL", "OSL", "CONC", "CONC_LIST", "RANDOM_RANGE_RATIO", "USE_CHAT_TEMPLATE")
 _AGENTIC_ENV = ("CONC", "CONC_LIST", "RESULT_DIR", "AGENTIC_OUTPUT_DIR", "HF_HUB_CACHE",
                 "HUGGINGFACE_HUB_CACHE")  # fmt: skip
-# The workflow exports the matrix point to every job, so no fragment pins it. A single-node
-# variant may still label its point with CONC, SPEC_DECODING, KV_OFFLOADING and
-# TOTAL_CPU_DRAM_GB, which the launcher checks against the point.
 _WORKFLOW_ENV = (
     "IMAGE", "MODEL_PREFIX", "FRAMEWORK", "PRECISION", "DISAGG", "DURATION", "MAX_MODEL_LEN",
     "KV_OFFLOAD_BACKEND", "KV_OFFLOAD_BACKEND_METADATA", "ROUTER_METADATA", "KV_P2P_TRANSFER",
@@ -78,8 +70,6 @@ BOUND_ENV = {
     ),
 }
 FABRIC_REFERENCE = "@fabric."
-# Repo setup scripts that install a component the master config versions: its master field
-# and name. The binder writes that version as VERSION_ENV[field] wherever the script runs.
 INSTALLERS = {
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
     "kimik3-b300-mooncake.sh": ("kv-offload-backend", "mooncake"),
@@ -88,10 +78,7 @@ INSTALLERS = {
     "vllm-router.sh": ("router", "vllm-router"),
 }
 VERSION_ENV = {"router": "ROUTER_VERSION", "kv-offload-backend": "KV_OFFLOAD_BACKEND_VERSION"}
-# The workflow exports each master field as JSON.
 _METADATA_ENV = {"router": "ROUTER_METADATA", "kv-offload-backend": "KV_OFFLOAD_BACKEND_METADATA"}
-# srtctl runs setup_script from its checkout's configs/ (these trees staged together) or
-# configs/patches/, and only warns when it finds neither.
 SETUP_SCRIPT_DIRS = (
     Path("benchmarks/multi_node/srt-slurm-recipes/configs"),
     Path("utils/srt-slurm/configs"),
@@ -146,7 +133,6 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
         blocks = [(None, raw)]
     found = []
     for name, block in blocks:
-        # A single-node variant may name its point, pairing that concurrency with its tuning.
         conc_allowed = not multinode and name not in (None, "base")
         for key in keys:
             present, value = _lookup(block, key)
@@ -284,7 +270,6 @@ def bind_workload(
     from the tuning it pairs with.
     """
     image, model = _required(environment, "IMAGE"), _required(environment, "MODEL")
-    # schema, name and model lead the written recipe.
     bound = {key: deepcopy(value) for key, value in recipe.items() if key in ("schema", "name")}
     bound["model"] = {
         **recipe.get("model", {}),
@@ -297,7 +282,6 @@ def bind_workload(
     if isinstance(identity.get("model"), dict):
         identity["model"]["repo"] = model
     if isinstance(identity.get("container"), dict):
-        # Identity names the registry reference, not Pyxis's registry#path spelling.
         identity["container"]["image"] = image.replace("#", "/", 1)
     benchmark = bound.setdefault("benchmark", {})
     workload = benchmark.setdefault("env", {})
@@ -306,7 +290,6 @@ def bind_workload(
             (name, str(_positive(_required(environment, name), name))) for name in ("ISL", "OSL")
         )
     if multinode:
-        # The client reads CONC_LIST from the job environment the workflow exports.
         concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
     else:
         conc = _positive(_required(environment, "CONC"), "CONC")
@@ -323,13 +306,11 @@ def bind_workload(
                 USE_CHAT_TEMPLATE="true" if speculates else "false",
             )
         concurrencies = [conc]
-    # A fragment that sets HF_HOME keeps its own Hugging Face cache layout.
     workload.update(
         (name, value)
         for name, value in (client_env or {}).items()
         if not (name == "HF_HUB_CACHE" and "HF_HOME" in workload)
     )
-    # srtctl derives power-telemetry windows from benchmark.concurrencies.
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
     _bind_components(bound, environment)

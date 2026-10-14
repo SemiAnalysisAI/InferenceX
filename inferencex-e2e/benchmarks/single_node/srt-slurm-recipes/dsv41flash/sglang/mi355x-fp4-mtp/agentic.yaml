@@ -1,5 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on MI355X with SGLang native DSpark.
-# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-sglang-agentic
@@ -176,7 +174,6 @@ override_tp2_c64:
       CONC: '64'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-# DP2 attention with TP MoE.
 override_tp2_c32_dp:
   frontend:
     type: sglang-router

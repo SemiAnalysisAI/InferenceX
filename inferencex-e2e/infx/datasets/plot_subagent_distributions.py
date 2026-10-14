@@ -143,7 +143,6 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
             duration_sec.append(int(entry.get("duration_ms") or 0) / 1000.0)
             group_total_tokens.append(int(entry.get("total_tokens") or 0))
 
-            # Count cache reuse within this group, excluding its first request.
             seen: set[int] = set()
             for i, r in enumerate(inners):
                 if "in" in r:

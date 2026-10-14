@@ -38,7 +38,6 @@ if "STUB_SITE" in env:
 os.execve(sys.executable, [sys.executable, *argv], env)
 '''
 
-# `uv venv` copies the stub interpreter; STUB_UV_<COMMAND>_RC fails a command.
 UV_STUB = r'''
 import json
 import os
@@ -94,7 +93,6 @@ if "--bfcl-project-root" in argv:
 sys.exit(plan.get("rc", 0))
 '''
 
-# What each real adapter publishes on success.
 PUBLISHES = {
     "kimi_vendor_eval.py": ["results_kimi_vendor_2026-01-01.json", "kimi_vendor_report.json"],
     "minimax_provider_eval.py": ["results_minimax_vendor_2026-01-01.json", "minimax_vendor_report.json"],
@@ -105,7 +103,6 @@ PUBLISHES = {
     ],
     "bfcl_adapter.py": ["results_bfcl.json", "bfcl_report.json"],
 }
-# The image python3 is too old, and uv cannot build the venv.
 PROVISIONING_FAILS = {"STUB_VERSION_RC": "1", "STUB_UV_VENV_RC": "7"}
 
 
@@ -216,7 +213,6 @@ def test_minimax_runs_stock_sources_with_pinned_dependencies(
     assert run["argv"][0] == "run"
     assert _flag(run["argv"], "--source-dir") == _flag(source["argv"], "--source-dir")
     assert _flag(run["argv"], "--dependency-dir") == _flag(pip["uv"], "--target")
-    # The stock verifier runs on the exact interpreter its dependencies were installed for.
     assert _flag(run["argv"], "--python") == _flag(pip["uv"], "--python") == stub.python3
 
 
@@ -248,7 +244,6 @@ def test_too_old_image_python_runs_the_adapter_in_a_uv_venv(stub: Stub) -> None:
     [uv_venv] = stub.uv_calls("venv")
     [pip] = stub.uv_calls("pip")
     venv = Path(uv_venv["uv"][-1])
-    # uv provides the provider's floor version, never the too-old image interpreter.
     assert _flag(uv_venv["uv"], "--python") == "3.11"
     assert "--system-site-packages" not in uv_venv["uv"]
     adapter = str(stub.evals / "kimi_vendor_eval.py")
@@ -299,7 +294,6 @@ def test_setup_failure_is_recorded_by_the_real_adapter_on_python310_and_skips_th
     rc: int,
     message: str,
 ) -> None:
-    # Python 3.10 has no datetime.UTC; the real adapters must still write the failure.
     python310 = tmp_path / "python310"
     python310.mkdir()
     (python310 / "sitecustomize.py").write_text(
@@ -320,9 +314,7 @@ def test_setup_failure_is_recorded_by_the_real_adapter_on_python310_and_skips_th
     ("kimi-vendor", "kimi_vendor_eval.py", [], "Kimi Vendor Verifier evaluation failed with exit code 3"),
     ("minimax-vendor", "minimax_provider_eval.py", [],
      "MiniMax Provider Verifier evaluation failed with exit code 3"),
-    # Half a BFCL publication is not a published result.
     ("bfcl", "bfcl_adapter.py", ["results_bfcl.json"], "BFCL evaluation failed with exit code 3"),
-    # A complete publication is the adapter's own verdict.
     ("kimi-vendor", "kimi_vendor_eval.py", PUBLISHES["kimi_vendor_eval.py"], None),
 ])  # fmt: skip
 def test_a_failed_run_is_recorded_as_an_integration_error_unless_the_adapter_published_it(
@@ -393,7 +385,6 @@ def test_bfcl_archive_failure_fails_a_passing_run_and_keeps_its_scores(
 
     assert outcome == EvalOutcome(1, "bfcl_vllm_minimax_m3")
     assert "refusing to archive symbolic link: escape.json" in capfd.readouterr().err
-    # Neither the archive nor its temporary file is left behind.
     assert sorted(path.name for path in stub.results.iterdir()) == sorted(
         PUBLISHES["bfcl_adapter.py"]
     )
