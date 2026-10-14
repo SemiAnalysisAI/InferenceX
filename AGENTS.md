@@ -57,6 +57,15 @@ Then validate it in the receiving script after sourcing the shared helper:
 check_env_vars IS_MULTINODE MODEL_NAME PRECISION
 ```
 
+## Code comments (mandatory)
+
+Applies to every file, including recipes, configs, scripts, and source.
+
+- **No header comments.** Never add broad, overarching comments at the top of a file or above a recipe, override, or section. Do not describe what the file, topology, or config is.
+- **No history.** Do not write comments that describe how the code evolved, where it was derived from, what it replaced, or past results. Git history and `inferencex-e2e/perf-changelog.yaml` are the record.
+- **Only technical explanation.** A comment explains a specific line or block: why a value was chosen, or technical context a reader cannot get from the code, such as a hardware quirk, upstream bug, or measured failure.
+- **Be extremely succinct and technical.** One short line is the norm. Do not restate the code.
+
 ## Deprecating benchmark configs
 
 - Delete retired entries from the active master config; do not archive them. Git history and `inferencex-e2e/perf-changelog.yaml` are the record of past settings. For a partial deprecation, remove only the retired scenarios and retain the supported scenarios in the active entry.
