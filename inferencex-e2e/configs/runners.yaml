@@ -755,6 +755,7 @@ clusters:
         DeepSeek-V4-Pro: {root: scratch, dir: DeepSeek-V4-Pro}
         DeepSeek-V4-Pro-0813: {root: scratch, dir: DeepSeek-V4-Pro-0813}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3-MXFP8: {root: data-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}

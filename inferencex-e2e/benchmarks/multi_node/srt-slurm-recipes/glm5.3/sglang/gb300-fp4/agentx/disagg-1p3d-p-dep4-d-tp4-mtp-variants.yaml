@@ -1,0 +1,154 @@
+schema: 2
+
+base:
+  name: gb300-fp4-glm5.3-agentx-sglang-1p3d
+  slurm:
+    time_limit: "4:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    type: sglang-router
+    num_additional_frontends: 0
+    args:
+      dp-aware: true
+      decode-policy: round_robin
+      max-tree-size: 15000000
+      eviction-interval-secs: 10
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '3600'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        MC_TE_METRIC: 'true'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args:
+        served-model-name: nvidia/GLM-5.3-NVFP4
+        disaggregation-mode: prefill
+        disaggregation-transfer-backend: mooncake
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        load-balance-method: total_tokens
+        chunked-prefill-size: 65536
+        max-prefill-tokens: 16384
+        max-running-requests: 16
+        disable-cuda-graph: true
+        moe-runner-backend: flashinfer_cutlass
+        fp4-gemm-backend: flashinfer_cutlass
+        enable-flashinfer-allreduce-fusion: true
+        mem-fraction-static: 0.8
+        context-length: 989831
+        enable-hierarchical-cache: true
+        hicache-size: 125  # 4 ranks share one job cgroup; indexer host pool scales with it
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 1
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 2
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        enable-metrics: true
+        enable-cache-report: true
+    decode:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '3600'
+        SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+        SGLANG_MOE_NVFP4_DISPATCH: '1'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        MC_TE_METRIC: 'true'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args:
+        served-model-name: nvidia/GLM-5.3-NVFP4
+        disaggregation-mode: decode
+        disaggregation-transfer-backend: mooncake
+        disaggregation-decode-extra-slots: 0
+        tensor-parallel-size: 4
+        disable-radix-cache: true
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        chunked-prefill-size: 64
+        moe-runner-backend: flashinfer_trtllm
+        fp4-gemm-backend: flashinfer_cutlass
+        enable-flashinfer-allreduce-fusion: true
+        mem-fraction-static: 0.9
+        context-length: 996582
+        stream-interval: 30
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        enable-metrics: true
+        enable-cache-report: true
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+    exclusive: ''
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      PORT: '8000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_c48:
+  name: disagg-gb300-1p3d-p-dep4-d-tp4-c48-mtp
+
+override_c42:
+  name: disagg-gb300-1p3d-p-dep4-d-tp4-c42-mtp
+
+override_c36:
+  name: disagg-gb300-1p3d-p-dep4-d-tp4-c36-mtp
+
+override_c33:
+  name: disagg-gb300-1p3d-p-dep4-d-tp4-c33-mtp
+
+override_c30:
+  name: disagg-gb300-1p3d-p-dep4-d-tp4-c30-mtp
+
+override_c24:
+  name: disagg-gb300-1p3d-p-dep4-d-tp4-c24-mtp

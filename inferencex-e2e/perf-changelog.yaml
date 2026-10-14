@@ -9823,3 +9823,12 @@
     - "Use master-config recipe selectors and composed AgentX fragments; preserve the dedicated frontend/client node and the c2884 and c1228 tuning."
     - "Backport the vLLM Python sidecar reasoning-parser fix through the shared patch mechanism while retaining the main srt-slurm pin."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3941
+
+- config-keys:
+    - glm5.3-fp4-gb300-sglang-disagg-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 NVFP4 AgentX on GB300 with SGLang prefill/decode disaggregation behind sglang-router 0.3.2 (1 DEP4 prefill + 3 TP4 decode workers, NEXTN MTP, Mooncake KV transfer, prefill HiCache) on lmsysorg/sglang:v0.5.20-cu130 at concurrency 24, 30, 33, 36, 42 and 48."
+    - "Add the GLM-5.3-NVFP4 checkpoint to the gb300-nv model list."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4072
