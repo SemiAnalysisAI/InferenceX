@@ -330,11 +330,6 @@ def bind_workload(
         for name, value in (client_env or {}).items()
         if not (name == "HF_HUB_CACHE" and "HF_HOME" in workload)
     )
-    if not multinode:
-        bound["telemetry"] = {
-            **(bound.get("telemetry") or {}),
-            "enabled": environment.get("EVAL_ONLY") != "true",
-        }
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
         if not multinode:
