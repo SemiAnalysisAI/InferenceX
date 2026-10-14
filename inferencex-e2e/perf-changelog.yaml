@@ -9718,3 +9718,10 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+  - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+  - Pin dsv41flash B200 FP4 vllm mtp AgentX to the 2026-10-13 image vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:e5c9e6bb82f645e8fca04e4d395743ee5ed473a62b98942d65f83c35d0c69301.
+  - Preserve deployment topology, speculative mode, concurrency points, KV-offload settings and evaluation coverage.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4048
