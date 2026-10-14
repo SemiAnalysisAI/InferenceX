@@ -425,7 +425,7 @@ class TestValidPackage:
         assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
 
     def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
-        from infx.results.agentic.power_adapter import run_multinode_agentic_power
+        from infx.results.agentic.power_adapter import run_native_agentic_power
 
         pkg = build_package(tmp_path)
         result_dir = pkg.logs_root / "agentic" / "conc_4"
@@ -469,7 +469,7 @@ class TestValidPackage:
             )
         )
 
-        assert run_multinode_agentic_power(
+        assert run_native_agentic_power(
             result_dir=result_dir,
             agg_result=pkg.agg_result,
             power_dir=pkg.power_dir,
@@ -707,7 +707,7 @@ class TestManifestGates:
 
 
 @pytest.mark.parametrize("utilization", [("", ""), ("75.5", "0.9")])
-@pytest.mark.parametrize("temperature", [None, "", "0", "65.5"])
+@pytest.mark.parametrize("temperature", [None, "", "0", "65.5", "200"])
 def test_optional_samples_preserve_energy(tmp_path, utilization, temperature):
     """Optional utilization and temperature columns preserve board energy."""
     pkg = build_package(tmp_path)
@@ -744,7 +744,7 @@ def test_v2_samples_reject_mixed_versions_and_invalid_utilization(tmp_path, row)
     assert reasons == ("samples_csv_malformed",)
 
 
-@pytest.mark.parametrize("temperature", ["nan", "inf", "bad", "-300", "9223372036854775794"])
+@pytest.mark.parametrize("temperature", ["nan", "inf", "bad", "-300", "200.5", "9223372036854775794"])
 def test_v3_samples_reject_invalid_temperature(tmp_path, temperature):
     path = tmp_path / "samples.csv"
     path.write_text(

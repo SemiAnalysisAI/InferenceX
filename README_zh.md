@@ -90,7 +90,7 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 ## 参与贡献
 
 欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md)与合并流程的更多详情，请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。
-维护者与 Agent 的文档导航请从 [`docs/index.md`](inferencex-e2e/docs/index.md) 开始，其中集中链接架构、配置、Workflow、评估、Runner 与故障排查参考。
+维护者与 Agent 请从 [`AGENTS.md`](AGENTS.md) 开始阅读，其中链接了配置、Workflow、评估与恢复操作参考。
 
 无需 CI 或 Slurm 即可对已有服务进行基准测试，请参阅
 [独立运行 AgentX-Harness](inferencex-e2e/docs/agentx-standalone.md)，

@@ -169,7 +169,7 @@ jobs:
             use gh api --method GET. Use Read/Glob/Grep for local inspection, not shell file commands
             or Python. Run one allowed gh/git command per Bash call, without cd/env wrappers,
             pipes or compound commands; use gh --jq for filtering (never with --slurp).
-            Read inferencex-e2e/docs/index.md and AGENTS.md. Titles alone cannot exclude
+            Read AGENTS.md. Titles alone cannot exclude
             overlap; incomplete file lists require investigation, not assumptions.
 
             Each candidate names its live inferencex-e2e/configs/*-master.yaml:KEY family and an exact published
