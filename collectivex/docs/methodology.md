@@ -1,11 +1,11 @@
 # CollectiveX EP Benchmark Methodology
 
-CollectiveX schedules expert-parallel (EP) communication benchmarks, executes them on real
-accelerator allocations, and uploads the neutral artifacts each run emits. It does **not** validate
-those artifacts, promote, rank, recommend, select, hide, or decide what any consumer displays. The
-frontend reads the neutral matrix, result, and summary artifacts and makes its own coverage
-and display decisions. This document describes how a case is scheduled, measured, checked, and
-recorded, not a publication or qualification contract.
+CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
+allocations and writes one result document per case into `collectivex/results/`. Committing those
+files is the publish step. It does **not** rank, recommend, select, or decide what any consumer
+displays. The frontend reads `results/cases.json` and the committed result documents and makes its
+own coverage and display decisions. This document describes how a case is scheduled, measured,
+checked, and recorded, not a publication or qualification contract.
 
 ## Product Boundary
 
@@ -114,7 +114,7 @@ traffic and the FP8 dequant volume.
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`,
 `--ep-sizes`, and `--precisions` select a subset. A subset produces a smaller matrix, not a
-different contract. The matrix is generated per dispatch. There is no frozen matrix digest or locked
+different contract. The matrix is generated per run. There is no frozen matrix digest or locked
 case count.
 
 | Systems | EP8 | EP16 |
@@ -655,14 +655,14 @@ Pre/post dispatch behavior is checked against canonical source-token metadata an
 Native receive slots may be assigned nondeterministically, so physical receive order is not treated
 as a correctness property.
 
-## Result Artifact
+## Result Document
 
-One raw case document carries `record_type: "case-attempt"`, the single `version`, and a
-`generated_at` timestamp, and contains:
+One raw case document, committed at `results/<sku>/<case_id>.json`, carries `record_type:
+"case-attempt"`, the single `version`, and a `generated_at` timestamp, and contains:
 
 - `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and the scheduled case, including backend,
   EP size, mode, precision, phase, suite, workload, and the topology coordinate), and
-  `allocation_factors` (run id, run attempt, source SHA).
+  `allocation_factors` (source SHA; the run id and run attempt are null for hand runs).
 - `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks.
 - `measurement`: dispatch/combine dtype (the realized wire formats, with combine always BF16 and dispatch
   BF16 or the SKU's FP8 format) and semantics, `payload_unit` (`token-rank`), `sampling`, and the
@@ -686,15 +686,16 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
 - `runtime`: the realized software stack, `vendor`, `framework` (the torch version),
   `accelerator_runtime` (the CUDA or HIP version torch was built against), and
   `collective_library` (`nccl`/`rccl` and the version actually loaded into the process).
-- `provenance`: the mounted image tag and source SHA, and
+- `provenance`: the mounted image tag, the source SHA, and `source_dirty` (whether `collectivex/`
+  had uncommitted edits; such a result is never published), and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
 Each `rows` entry carries point latency (`components`, graph-replayed by default where supported,
 plus `components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), byte
 accounting, token rate, correctness, load, and fanout, while
-per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
-case writes exactly this one raw result document, while unsupported or never-run cells produce no
-synthetic record.
+per-point statistics are summarized in place, not emitted as separate documents. Each run of a case
+writes exactly this one raw result document, replacing the case's previous file, while unsupported
+or never-run cells produce no synthetic record.
 
 ## Identity
 
@@ -723,23 +724,13 @@ matching. Scale-out also pins `NCCL_IB_MERGE_NICS=0` so dual-port NIC fusion can
 `NCCL_CROSS_NIC=0`. Selectors come from the tracked platform registry, optionally overlaid by an
 operator config, and appear only in mode-0600 private logs.
 
-Repository staging uses a pre-existing, runner-owned, group/world non-writable shared base outside
-the checkout and workflow workspace. The parent process resolves the exact execution child before
-copying. Backend preparation then runs from that tree on every allocated node. Cleanup waits for
-confirmed allocation teardown and removes only that child. DeepEP V2 source is fetched before allocation at an
-exact pinned revision, initializes its pinned `fmt` submodule, and applies the required local patch.
-
-H200, B200, and B300 may derive that private base beneath the validated operating-system account home
-when it is compute-visible. H100 instead derives a sibling of its shared container directory, never a
-child of image storage.
-Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
-from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
-its owner matches the private parent owner. Explicit stages and all other runners retain the strict
-effective-UID ownership rule. An execution-ID suffix isolates parallel B300 workers. The current
-NFS export may realize a newly created base as
-UID 0. Only that creation path is accepted, while a pre-existing root-owned base is rejected.
-Canonical GB300 execution likewise ignores its legacy group-writable `stage_dir` and derives an
-execution-specific private base beneath the validated compute-visible account home.
+Repository staging copies `collectivex/` into a mode-0700 execution child of the operator's
+`stage_dir` (or, when none is configured, beside the image under `squash_dir`), which must be
+visible at the same path on the login node and every allocated node and must not be group- or
+world-writable. The parent process resolves the exact execution child before copying. Backend
+preparation then runs from that tree on every allocated node. Cleanup waits for confirmed allocation
+teardown and removes only that child. DeepEP V2 source is fetched before allocation at an exact
+pinned revision, initializes its pinned `fmt` submodule, and applies the required local patch.
 
 ## Image Pinning And Build Isolation
 
@@ -748,30 +739,28 @@ staged once per cluster and reused by every run of the same image. Freshness is 
 digest sidecar: the registry manifest digest is resolved from the submit host at launch, and a
 resolved digest that differs from the sidecar stamp means the tag moved upstream and forces a
 fresh import. An unresolved digest (no registry egress, a transient blip) reuses whatever is
-staged; the `refresh_image` dispatch input forces an update in that case, discarding only files
-staged before the launch so concurrent legs still import once. Validity is still proven per use
+staged; `COLLX_IMAGE_REFRESH=1` forces an update in that case, discarding only files staged
+before the launch so concurrent runs still import once. Validity is still proven per use
 (`unsquashfs -l`) before any reuse. Image-provided DeepEP is
 also checked against exact package versions and its expected API. Source-built DeepEP V2 uses
 a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its path binds CPU/GPU
-architecture, image, and upstream commit. The cache is never an artifact. Per-execution
+architecture, image, and upstream commit. The cache is never committed. Per-execution
 source/results stages remain isolated and disposable, and runtime probes fail closed before reuse. The runner UID is
 inside the trusted cluster boundary: this cache guards against stale or accidental mutation, not
 hostile same-UID jobs. Only an unpublished partial build may be reset automatically. A cache that
 fails integrity or runtime checks is left intact and rejected so a concurrent allocation cannot lose
 files it is using.
 
-## Neutral Artifact Delivery
+## Result Delivery
 
-There is no results server, attached store, or managed object store. Each shard runs one allocation,
-emits per-case result JSON and a small mechanical summary, and uploads them as GitHub artifacts with
-`always()` so a red or partial run still uploads. A case counts as successful on the benchmark's own
-return code. There is no completeness or privacy validation step before upload, and failed or
-unsupported cells produce no synthetic record.
-
-No step promotes a run, builds a dataset, or advances a channel. The artifacts are the output. Any
-downstream display or comparison is the consumer's responsibility.
+There is no results server or managed object store. Each shard runs one allocation and its per-case
+result documents are copied to `results/<sku>/` in the checkout that ran it. A case counts as
+successful on the benchmark's own return code, and failed or unsupported cells produce no synthetic
+record. Results reach the dashboard only through a reviewed commit to `main`; the unit-test job
+checks every committed result against `results/cases.json`, rejects ones measured from uncommitted
+code, and rejects IP addresses and host-identifying fields.
 
 ## Legacy Data
 
 Historical numeric schemas 3-5 are outside this benchmark's artifacts. They remain historical
-diagnostic evidence and are not produced or consumed by the current sweep.
+diagnostic evidence and are not produced or consumed by the current harness.

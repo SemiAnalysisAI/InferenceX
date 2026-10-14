@@ -364,7 +364,7 @@ def extract_shard(matrix_path: str, shard_id: str, output_path: str) -> dict[str
 def main() -> int:
     parser = argparse.ArgumentParser(description="CollectiveX matrix resolver")
     parser.add_argument("--backend", default="all")
-    parser.add_argument("--only-sku", default="")
+    parser.add_argument("--only-sku", "--sku", dest="only_sku", default="")
     parser.add_argument("--exclude-skus", default="")
     parser.add_argument("--ep-sizes", default="")
     parser.add_argument("--precisions", default="",
@@ -379,6 +379,8 @@ def main() -> int:
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--out", default="")
+    parser.add_argument("--cases-json", default="", metavar="PATH",
+                        help="also write {version, requested_cases}, the dashboard's coverage")
     args = parser.parse_args()
 
     if args.extract_from:
@@ -404,6 +406,10 @@ def main() -> int:
             json.dumps(matrix, sort_keys=True, separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
+    if args.cases_json:
+        cases = {key: matrix[key] for key in ("version", "requested_cases")}
+        Path(args.cases_json).write_text(json.dumps(cases, indent=1, sort_keys=True) + "\n",
+                                         encoding="utf-8")
     runnable = sum(item["disposition"] == "runnable" for item in matrix["requested_cases"])
     unsupported = len(matrix["requested_cases"]) - runnable
     print(

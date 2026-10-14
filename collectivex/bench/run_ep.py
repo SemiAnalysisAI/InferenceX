@@ -91,6 +91,8 @@ def main() -> int:
         "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
         "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA")
         or os.environ.get("GITHUB_SHA"),
+        # run.sh records whether collectivex/ had uncommitted edits; such results never publish.
+        "source_dirty": {"0": False, "1": True}.get(os.environ.get("COLLECTIVEX_SOURCE_DIRTY")),
     }
     args.git_run = _run if any(_run.values()) else None
 

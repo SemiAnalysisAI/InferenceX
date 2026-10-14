@@ -1122,14 +1122,14 @@ class RunnerFilterIsContentBased(unittest.TestCase):
             ("other-sku-stub-deepseek-v3-low-latency-decode-ep8-uniform-bf16_TS-c000.json",
              "other-sku"),
         ])
-        kept = summarize.load_results(directory, "stub-sku", None)
+        kept = summarize.load_results(directory, "stub-sku")
         self.assertEqual(len(kept), 1)
         self.assertEqual(kept[0]["identity"]["case_factors"]["sku"], "stub-sku")
 
     def test_a_foreign_sku_is_excluded_even_when_the_filename_would_match(self):
         # The filename claims one SKU, the row declares another; the row wins.
         directory = self._directory([("stub-sku_anything_TS-c000.json", "other-sku")])
-        self.assertEqual(summarize.load_results(directory, "stub-sku", None), [])
+        self.assertEqual(summarize.load_results(directory, "stub-sku"), [])
 
 
 if __name__ == "__main__":

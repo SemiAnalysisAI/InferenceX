@@ -126,5 +126,5 @@ fi
 
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable "${SRUN_EXTRA[@]}")
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
-collx_log "done - result artifacts collected"
+collx_log "done - results collected"
 exit "$FINAL_RC"

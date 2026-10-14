@@ -402,8 +402,7 @@ class ContainerImportRetry(unittest.TestCase):
     HARNESS = """
 set -u
 export COLLX_IMAGE_PLATFORM=linux/amd64
-export COLLX_JOB_ROOT="$ROOT/job"
-mkdir -p "$COLLX_JOB_ROOT"
+export COLLX_LOG_DIR="$ROOT/logs"
 mkdir -p "$ROOT/bin" "$ROOT/sqsh"
 # Fake srun: appends one line per invocation and replays a scripted exit-code sequence.
 cat > "$ROOT/bin/srun" <<'FAKE'
@@ -503,7 +502,7 @@ class CaseArgvContract(unittest.TestCase):
             path.write_text(json.dumps({"version": 1, "cases": [case or self.CASE]}))
             result = subprocess.run(
                 [sys.executable, str(RUNTIME / "config.py"), "case-args",
-                 str(path), "0", "h200-dgxc", "TS", *placement],
+                 str(path), "0", "h200-dgxc", *placement],
                 capture_output=True, check=True,
             )
         return self._decode(result.stdout, entrypoint)
@@ -524,7 +523,7 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.version, 1)
         self.assertEqual(args.seed, self.CASE["seed"])
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
-        self.assertEqual(args.out, f"results/{self.CASE['case_id']}_TS-c000.json")
+        self.assertEqual(args.out, f"results/h200-dgxc/{self.CASE['case_id']}.json")
 
     def test_a_legacy_colon_string_profile_still_decodes(self) -> None:
         # Sweep `version` does not bump for the codec change, so a shard staged before it --
@@ -587,7 +586,7 @@ class CaseArgvContract(unittest.TestCase):
                 )
                 self.assertEqual(args.backend, backend)
                 self.assertEqual(args.case_id, case["case_id"])
-                self.assertEqual(args.out, f"results/{case['case_id']}_TS-c000.json")
+                self.assertEqual(args.out, f"results/h200-dgxc/{case['case_id']}.json")
 
     def test_a_swap_blocks_case_round_trips_through_its_own_parser(self) -> None:
         import run_swap_blocks
@@ -607,7 +606,9 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.layout, args.warmup, args.iterations),
                          (case["layout"], case["warmup"], case["iterations"]))
         self.assertEqual(args.max_payload_bytes, case["max_payload_bytes"])
-        self.assertEqual(str(args.output), f"results/{case['case_id']}_TS-c000.json")
+        self.assertEqual((args.case_id, args.profile, args.sku),
+                         (case["case_id"], case["profile"], "h200-dgxc"))
+        self.assertEqual(str(args.output), f"results/h200-dgxc/{case['case_id']}.json")
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"], case=case, entrypoint="run_swap_blocks")
 

@@ -763,7 +763,11 @@ class Sweep:
                 "world_size": self.world_size,
             },
             "runtime": getattr(args, "runtime", {}),
-            "provenance": {"image": getattr(args, "image", "") or None, "source_sha": git_run.get("source_sha")},
+            "provenance": {
+                "image": getattr(args, "image", "") or None,
+                "source_sha": git_run.get("source_sha"),
+                "source_dirty": git_run.get("source_dirty"),
+            },
             "outcome": {
                 "reasons": [] if all_ok else ["semantic correctness or routing identity failed"],
                 "status": "success" if all_ok else "invalid",

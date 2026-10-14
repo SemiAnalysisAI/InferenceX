@@ -117,5 +117,5 @@ fi
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
 rm -f "$MOUNT_SRC"/collectivex/gpucore.* 2>/dev/null || true
-collx_log "done - result artifacts collected"
+collx_log "done - results collected"
 exit "$FINAL_RC"

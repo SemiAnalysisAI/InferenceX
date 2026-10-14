@@ -1,17 +1,17 @@
 # CollectiveX - Experimental (Beta)
 
 CollectiveX is an experimental MoE expert-parallel communication benchmark. It measures dispatch,
-combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
-neutral result artifacts.
+combine, and paired roundtrip latency across EP libraries and accelerator systems, and writes one
+result file per case into `results/`, where it is committed.
 
 A second suite, the [vLLM `swap_blocks` benchmark](docs/swap-blocks.md),
 measures pinned CPU↔GPU and same-GPU block copies,
 with its own correctness checks and latency/bandwidth JSON output. It runs through the same
-sweep matrix and pool launchers (`suites: swap-blocks`).
+matrix and pool launchers (`run.sh <sku> --suite swap-blocks`).
 
-CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
-artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
-decide what a consumer displays. Any downstream display or comparison is the consumer's
+CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Committing the
+results is the publish step: the dashboard builds from whatever `results/` holds on `main`. It does
+not rank, recommend, or select. Any downstream display or comparison is the consumer's
 responsibility. The full measurement methodology is in [docs/methodology.md](docs/methodology.md).
 
 ## Execution Profile
@@ -129,7 +129,7 @@ and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, 
 `swap-blocks` adds one single-GPU shard per pool from `configs/swap_sweep.json`). Every suite's
 shards take the same path: the pool launcher allocates, `runtime/config.py case-args` encodes each
 case as its entrypoint's argv, and the rank wrapper execs that entrypoint. The matrix is generated
-per dispatch, with no frozen digest or locked case count.
+per run, with no frozen digest or locked case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -164,23 +164,31 @@ scale-up ranks per domain. GB EP16 remains MNNVL scale-up and therefore uses LSA
 SKU/backend/EP cell is attempted is a capability fact. Whether it succeeded is decided by the
 benchmark's return code.
 
-## Workflow And Artifacts
+## Running By Hand
 
-`.github/workflows/collectivex-sweep.yml` has two jobs. `setup` generates a public-SKU matrix
-(`backend`, `only_sku`, `exclude_skus`, `ep_sizes` inputs) and uploads the matrix.
-`sweep` extracts a strict ignored `.shards/<id>.json` control per matrix entry, executes one
-allocation per shard, fetches pinned DeepEP source before allocation when required, and uploads the
-result artifacts with `always()` so a red or partial run still uploads.
+Run from the pool's Slurm login node, in a checkout of the commit you want to measure:
 
-Each shard emits per-case result JSON and a small mechanical summary. A case counts as successful on
-the benchmark's own return code. There is no completeness or privacy validation step, and failed or
-unsupported cells produce no synthetic record. No step promotes a run,
-builds a dataset, or advances a channel. The neutral artifacts are the output. A consumer downloads
-them and decides what to display.
+```bash
+collectivex/run.sh h200-dgxc --list-shards          # what will run, one allocation per shard
+setsid nohup collectivex/run.sh h200-dgxc > run-h200.log 2>&1 < /dev/null &
+collectivex/run.sh h200-dgxc --shard h200-dgxc-nccl-ep-bf16-n2   # rerun one failed shard
+```
 
-No operator credentials are passed to the workflow or uploaded. Runner-local overrides and any
-selectors stay on the runner. Per-step runner logs are kept on the runner for postmortem, and
-result artifacts carry only the fields listed in the methodology.
+`run.sh` resolves the pool's cases with `sweep_matrix.py` (`--suite`, `--backend`, `--ep`,
+`--modes` and `--precisions` narrow it), gives each shard its own allocation through the pool's
+launcher, and copies every result to `results/<sku>/<case_id>.json`, replacing the previous result
+for that case. A failed shard does not stop the others; the closing summary lists each shard's exit
+code. Interrupting `run.sh` releases its allocations. Runtime logs stay under
+`/tmp/inferencex-collectivex-<uid>/logs/<execution>/` on the login node.
+
+Results record the commit they were measured at, so `run.sh` refuses to start while `collectivex/`
+has uncommitted edits (`--allow-dirty` runs anyway, and the results are marked so they cannot be
+published). To publish, review `git diff collectivex/results/<sku>`, check it with `python3 -m
+unittest collectivex/tests/test_results.py`, and open a PR with the files. That test also runs in
+CI: every committed result must be a runnable case in `results/cases.json`, come from committed
+code, and contain no IP addresses or host-identifying fields. Regenerate `cases.json` whenever the
+configs change: `python3 collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json
+collectivex/results/cases.json`.
 
 ## Runner Configuration
 
@@ -190,8 +198,8 @@ runner-local JSON document at `$XDG_CONFIG_HOME/inferencex/collectivex.json` or
 unknown field, and non-JSON input all fail closed, and configuration is never evaluated as shell.
 Duplicate JSON keys are NOT rejected. `json.load` keeps the last silently, and runner keys other
 than the one being resolved are not validated, so a typo'd SKU name is ignored rather than
-reported. GHA passes no operator secret, so a SKU runs entirely from its tracked baseline unless a
-runner-local document is present.
+reported. A SKU runs entirely from its tracked baseline unless an operator document is present; put
+your own storage paths and node excludes there rather than in the registry.
 
 All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
 architecture/product, container image and platform, fixed placement, launcher, runnable backend/EP
@@ -243,40 +251,31 @@ Buffer initialises NVSHMEM with an RDMA transport even single-node, and on b300 
 with "nvshmem detect topo failed" (status 28) with and without `NVSHMEM_REMOTE_TRANSPORT=none`
 (runs 34521825749, 34523594787); the HT ElasticBuffer path, which needs no NVSHMEM, passes.
 
-`stage_dir` is a pre-existing, runner-owned, non-symlinked base outside the checkout and workflow
-workspace. It is not group- or world-writable and is visible at the same path on the runner and every
-allocated node. Jobs create only a marked mode-0700 execution child, prove cross-node read/write
-visibility, and remove that exact child after allocation teardown. They never mount the runner
-checkout or create a stage beneath image storage on AMD. When an AMD operator row omits `stage_dir`,
-the runner derives a private base beside its standard `_work` directory on the shared runner
-filesystem. The root-owned squash cache is never used as a repository stage.
+`stage_dir` (or `storage_roots`, which derives `stage_dir` and `squash_dir` under
+`<root>/collectivex/`) must be visible at the same path on the login node and every allocated node,
+and must not be group- or world-writable. Each run creates a mode-0700 `job_<execution>` child
+there, copies `collectivex/` into it, and removes it after allocation teardown. Without `stage_dir`
+the stage goes beside the image under `squash_dir`; the h100, b300, GB and AMD launchers require an
+explicit one.
 
-H200, B200, and B300 runners may omit `stage_dir`. Their isolated execution child is created under a
-runner-owned mode-0700 base in the validated operating-system account home, independent of the
-workflow's temporary `HOME`. H100 may also omit `stage_dir`. Its private base is created beside, never
-beneath, the configured shared container directory so it is compute-visible. Canonical B300 execution
-ignores any legacy configured `stage_dir` and always uses the validated compute-visible account-home
-base. An execution-ID suffix isolates parallel B300 workers. Canonical GB300 execution likewise
-ignores its legacy group-writable `stage_dir` and derives an execution-specific private base beneath the
-validated compute-visible account home. Backend preparation runs from that staged tree on every node.
-
-Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
-platform, so one run never reuses another run's imported filesystem. The image tag and platform are
-per-SKU registry fields. The DeepEP V2 source pin lives in `runtime/common.sh` and its build is
-fetched and verified at the pinned commit, checked for `ElasticBuffer`, and cached in a
-cluster-local build cache keyed by architecture, image, and commit. Only the fixed `/cx-cache` mount
-reaches the container.
+Enroot imports the configured image tag once per pool into a squash keyed by image tag and platform;
+the image digest decides when it is stale, and `COLLX_IMAGE_REFRESH=1` forces a re-import. The image
+tag and platform are per-SKU registry fields. The DeepEP V2 source pin lives in `runtime/common.sh`
+and its build is fetched and verified at the pinned commit, checked for `ElasticBuffer`, and cached
+in a cluster-local build cache keyed by architecture, image, and commit. Only the fixed `/cx-cache`
+mount reaches the container.
 
 ## Local Checks
 
 ```bash
 python3 -m unittest discover collectivex/tests -p 'test_*.py'
 python3 collectivex/sweep_matrix.py --backend all --out /tmp/cx-matrix.json >/dev/null
-bash -n collectivex/runtime/*.sh collectivex/launchers/*.sh
+bash -n collectivex/run.sh collectivex/runtime/*.sh collectivex/launchers/*.sh
+collectivex/run.sh h200-dgxc --dry-run   # each shard's environment, without allocating
 ```
 
-Core paths are `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`, `launchers/`,
-and `tests/`.
+Core paths are `run.sh`, `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`,
+`launchers/`, `results/` and `tests/`.
 
 NCCL-EP nightly installation and exact wheel provenance are documented in
 [the NCCL-EP guide](docs/nccl-ep.md).
