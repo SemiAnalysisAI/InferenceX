@@ -221,7 +221,7 @@ level pinning but leave the RoCE-only GID override unset so NVSHMEM/NCCL can use
 Mixed Ethernet and InfiniBand HCA lists are rejected.
 
 `rdma_fabric: "efa"` declares an AWS Elastic Fabric Adapter cluster (b300 is a p6-b300.48xlarge
-pool with 16 EFA devices per node). EFA is not a verbs HCA: its ports report no link layer, it has
+pool with 16 EFA devices per node, h100-dgxc a p5.48xlarge pool with 32). EFA is not a verbs HCA: its ports report no link layer, it has
 no GID table, service level or traffic class, and NCCL reaches it only through the aws-ofi-nccl
 libfabric plugin that the cluster's enroot hook mounts into every container. On such a fabric the
 probe accepts the unspecified link layer for the listed `rdma_devices` (which must still be ACTIVE
@@ -238,8 +238,8 @@ Multi-node shards build aws-ofi-nccl 1.21.1 into the backend cache and load it i
 Proxy GIN still bounds these rows well below the IB pools: GPU-initiated GIN on EFA needs EFA
 installer 1.50.0 on the hosts (efa.ko 3.3.0 completion counters, libfabric 2.6) and NCCL 2.31.
 DeepEP sizes its SMs from an `ibstat` rate probe that cannot see EFA, so `network.rdma_gbs` supplies
-the per-GPU scale-out rate instead. DeepEP V2 low-latency stays withheld there: its legacy
-Buffer initialises NVSHMEM with an RDMA transport even single-node, and on that pool NVSHMEM aborts
+the per-GPU scale-out rate instead. DeepEP V2 low-latency stays withheld on both: its legacy
+Buffer initialises NVSHMEM with an RDMA transport even single-node, and on b300 NVSHMEM aborts
 with "nvshmem detect topo failed" (status 28) with and without `NVSHMEM_REMOTE_TRANSPORT=none`
 (runs 34521825749, 34523594787); the HT ElasticBuffer path, which needs no NVSHMEM, passes.
 
