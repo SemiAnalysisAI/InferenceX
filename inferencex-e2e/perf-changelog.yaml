@@ -9689,3 +9689,12 @@
   description:
     - "Bump ATOM image to the v0.1.7 release build (rocm/atom-dev:nightly_202610080328, digest-pinned)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3911
+
+- config-keys:
+    - qwen3.5-fp4-b300-trtllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 B300 AgentX on TensorRT-LLM release:1.3.0rc24: one aggregated TEP8 worker (TP8, MoE EP8) with native MTP at draft length 6, at concurrency 4, 8, 16, 24, 32, 52 and 64."
+    - "FP8 KV cache with KV cache manager v2, per-conversation block reuse, and TRT-LLM's native 128 GiB/rank host KV tier (dram-utilization 0.367)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3967
