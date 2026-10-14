@@ -27,7 +27,8 @@ REQUIRED = (
     "IS_MULTINODE",
     "PRECISION",
 )
-# Only srt-slurm's multi-node telemetry measures AgentX power; single-node points publish none.
+# Only srt-slurm's multi-node telemetry measures AgentX power: its binder sets
+# ENABLE_AGENTX_POWER to 1 exactly when the launcher collects it. Single-node points publish none.
 POWER_SWITCHES = ("ENABLE_AGENTX_POWER", "REQUIRE_POWER")
 # The finished profile's accepted error fraction; a recipe's live abort threshold
 # (AIPERF_LIVE_FAILED_REQUEST_THRESHOLD) does not move it.
@@ -62,9 +63,8 @@ class Plan:
         switches = inputs.require(*POWER_SWITCHES, env=env) if multinode else {}
         result_dir = Path(values["RESULT_DIR"]).absolute()
         result_filename = values["RESULT_FILENAME"]
-        if multinode or env.get("CONC_LIST"):
-            # Multi-node collection globs one ${RESULT_FILENAME}_conc*.json per point. Some
-            # multi-node recipes pin IS_MULTINODE=false, so the workflow's CONC_LIST counts too.
+        if multinode:
+            # Multi-node collection globs one ${RESULT_FILENAME}_conc*.json per point.
             result_dir /= f"conc_{values['CONC']}"
             result_filename += f"_conc{values['CONC']}"
         replay = ReplayConfig.from_env(env, result_dir)
@@ -143,7 +143,7 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     rc = _open_power_window(plan, python, env)
     if rc:
         return rc
-    argv = replay_argv(cfg, runtime.aiperf)
+    argv = replay_argv(cfg, runtime.agentx)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
     with proc.DeferSignals() as signals:
@@ -262,8 +262,8 @@ def main(argv: list[str]) -> int:
     plan = Plan.from_env(os.environ)
     runtime = Runtime.for_job(os.environ)
     if not runtime.active():
-        print(f"Preparing the AIPerf runtime in {runtime.venv}", flush=True)
-        rc = bootstrap(runtime, proc.REPO_ROOT / "utils" / "aiperf")
+        print(f"Preparing the AgentX runtime in {runtime.venv}", flush=True)
+        rc = bootstrap(runtime)
         if rc:
             return rc
         # The venv interpreter needs the same safe sys.path as this one had.

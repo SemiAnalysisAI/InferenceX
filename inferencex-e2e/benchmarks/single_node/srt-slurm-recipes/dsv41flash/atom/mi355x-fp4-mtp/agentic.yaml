@@ -1,20 +1,16 @@
 # DeepSeek-V4.1-Flash AgentX on MI355X with ATOM DSpark (five draft tokens),
 # following ROCm/ATOM recipes/DeepSeek-V4.1-Flash-Agentic.md at the image's
-# revision (73defd9b868663be51985fedff06115ef9bcab3d). TP2 and TP4, no expert
+# revision (a0527c9dbfb801e22cd29882454df6f6d21cdd91). TP2 and TP4, no expert
 # parallelism; the KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-atom-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: rocm/atom-dev:nightly_202610100929
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    container_image: rocm/atom-dev@sha256:a60811a8467b43e3e50e9e9eb8cec34f68b7bca03f8c6dbd6a0ff813dde49d4c
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -52,12 +48,7 @@ base:
         ATOM_DISABLE_MMAP: 'true'
         AITER_LOG_LEVEL: WARNING
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
-      # Full-context corpus for this 1M-context recipe.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       # The upstream one-hour profile warms five requests per lane.
       AIPERF_WARMUP_REQUESTS_PER_LANE: '5'
       # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
@@ -91,14 +82,6 @@ override_tp2_c4:
   benchmark:
     env:
       CONC: '4'
-
-override_tp2_c5:
-  roles:
-    agg:
-      gpus: 2
-  benchmark:
-    env:
-      CONC: '5'
 
 override_tp2_c6:
   roles:
@@ -144,14 +127,6 @@ override_tp2_c64:
     env:
       CONC: '64'
 
-override_tp2_c128:
-  roles:
-    agg:
-      gpus: 2
-  benchmark:
-    env:
-      CONC: '128'
-
 override_tp4_c1:
   roles:
     agg:
@@ -159,30 +134,6 @@ override_tp4_c1:
   benchmark:
     env:
       CONC: '1'
-
-override_tp4_c4:
-  roles:
-    agg:
-      gpus: 4
-  benchmark:
-    env:
-      CONC: '4'
-
-override_tp4_c5:
-  roles:
-    agg:
-      gpus: 4
-  benchmark:
-    env:
-      CONC: '5'
-
-override_tp4_c6:
-  roles:
-    agg:
-      gpus: 4
-  benchmark:
-    env:
-      CONC: '6'
 
 override_tp4_c8:
   roles:

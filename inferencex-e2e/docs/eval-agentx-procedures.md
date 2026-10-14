@@ -5,7 +5,7 @@ Use this page to add and run graded evals, operate AgentX trace replays, preserv
 
 To run only the replay client against an existing server, follow
 [Run AgentX-Harness Standalone](agentx-standalone.md). It includes installation
-and a direct `aiperf profile` command without CI or Slurm.
+and a direct `agentx profile` command without CI or Slurm.
 
 ## 1. Pick the correct execution mode
 
@@ -110,7 +110,7 @@ Run these with Python 3.10 or newer, normally inside the serving container, beca
 
 Set `EVAL_ONLY=true` **before server launch**. It is not merely a switch inside the eval command:
 
-1. For a single-node fixed-sequence job, the srt binder sets the server context to the matrix `MAX_MODEL_LEN` (`isl + osl + 256`) through `context-length` for SGLang, `max_seq_len` and `max_num_tokens` for TRT-LLM, or `max-model-len` for vLLM and ATOM. AgentX points and multi-node jobs keep their recipe's own context, and multi-node jobs can select a real-verification `EVAL_CONFIG_FILE`.
+1. For a single-node fixed-sequence job, the srt binder sets the server context to the matrix `MAX_MODEL_LEN` (`isl + osl + 256`) through `context-length` for SGLang, `max_seq_len` and `max_num_tokens` for TRT-LLM, or `max-model-len` for vLLM and ATOM. AgentX points and multi-node jobs keep their recipe's own context, and multi-node jobs can select a real-verification `eval-srt-recipe`.
 2. The health check still runs. In eval-only jobs, vendor frameworks also wait for the served model on the OpenAI chat route, within `EVAL_ENDPOINT_READY_TIMEOUT_SECONDS`.
 3. Throughput is skipped.
 4. `python3 -m infx.bench eval` sizes each lm-eval request from `EVAL_MAX_MODEL_LEN`, else from `MAX_MODEL_LEN` capped at the model's native maximum.
@@ -195,7 +195,7 @@ Retain `meta_env.json`, `results*.json`, and `sample*.jsonl`. The aggregate is a
 
 ## 7. Run AgentX: fast feedback versus canonical evidence
 
-`python3 -m infx.bench agentic` builds its own client runtime with uv ([`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)). It creates a fresh Python 3.11 venv under `AIPERF_RUNTIME_DIR` (default `<tmp>/inferencex-agentic-<SLURM_JOB_ID or PID>`) and installs the editable `utils/aiperf` with its declared dependencies, plus the client requirements AIPerf does not declare ([`requirements.txt`](../infx/bench/agentic/requirements.txt)). It then re-runs itself under that venv's Python. Recipes reach it through [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh).
+`python3 -m infx.bench agentic` builds its own client runtime with uv ([`infx/bench/agentic/venv.py`](../infx/bench/agentic/venv.py)). It creates a fresh Python 3.11 venv under `AIPERF_RUNTIME_DIR` (default `<tmp>/inferencex-agentic-<SLURM_JOB_ID or PID>`) and installs `agentx-harness==1.0.7` from PyPI with its declared dependencies, plus the additional client requirements ([`requirements.txt`](../infx/bench/agentic/requirements.txt)). It then re-runs itself under that venv's Python. Recipes reach it through [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh).
 
 AgentX is AIPerf `agentx` trace replay, not a fixed-token synthetic benchmark. The `agentx` scenario owns the replay defaults: ten additional warmup requests per trajectory lane, a 1,800-second warmup drain limit, a 0.10 live failure threshold, and a 300-second trace idle cap. A recipe may raise the drain limit with `AGENTIC_WARMUP_GRACE_PERIOD` or loosen the live abort with `AIPERF_LIVE_FAILED_REQUEST_THRESHOLD`; the finished profile still fails validation above a 0.10 error rate ([post-run gate](../infx/bench/agentic/run.py#L33-L35)). The profile runs for the configured duration. `agentx-fast` forces one warmup request per lane and a 1,200-second profile. It affects single- and multi-node AgentX throughput only. Fixed-sequence throughput and evals remain canonical. Fast runs are not eligible for artifact reuse ([workflow policy](ci-procedures.md#pr-primary-and-modifier-labels), [fast replay settings](../infx/bench/agentic/replay.py#L64-L65)).
 

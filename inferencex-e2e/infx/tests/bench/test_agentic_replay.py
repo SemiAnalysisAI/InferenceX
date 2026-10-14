@@ -27,7 +27,7 @@ BASE_ENV = {
 
 def _argv(**overrides: str | None) -> list[str]:
     env = {name: value for name, value in {**BASE_ENV, **overrides}.items() if value is not None}
-    return replay_argv(ReplayConfig.from_env(env, Path("/results")), "/venv/bin/aiperf")
+    return replay_argv(ReplayConfig.from_env(env, Path("/results")), "/venv/bin/agentx")
 
 
 def _value(argv: list[str], flag: str) -> str | None:
@@ -37,12 +37,17 @@ def _value(argv: list[str], flag: str) -> str | None:
 def test_default_point_leaves_the_replay_policy_to_the_scenario():
     # A workflow MAX_MODEL_LEN is not the server's limit, so it never caps the replay.
     assert _argv(MAX_MODEL_LEN="131072") == [
-        "/venv/bin/aiperf", "profile", "--scenario", "agentx", "--url", "http://localhost:8000",
+        "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
         "--concurrency", "8", "--benchmark-duration", "3600", "--tokenizer-trust-remote-code",
         "--output-artifact-dir", "/results/aiperf_artifacts",
         "--public-dataset", traces.CAPPED,
     ]  # fmt: skip
+
+
+def test_a_recipe_tokenizer_replaces_the_model_id_as_tokenizer_only():
+    argv = _argv(TOKENIZER="/model", SERVED_MODEL_NAME="glm5_2")
+    assert (_value(argv, "--model"), _value(argv, "--tokenizer")) == ("glm5_2", "/model")
 
 
 def test_opt_in_inputs_add_their_flags_in_place():
@@ -61,7 +66,7 @@ def test_opt_in_inputs_add_their_flags_in_place():
     )
 
     assert argv == [
-        "/venv/bin/aiperf", "profile", "--scenario", "agentx", "--url", "http://localhost:8000",
+        "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
         "--model", "DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
         "--concurrency", "8", "--benchmark-duration", "3600",
         "--failed-request-threshold", "0.25", "--warmup-grace-period", "3600",

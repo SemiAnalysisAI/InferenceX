@@ -15,12 +15,14 @@ entry-name:
   # Optional defaults for every search-space entry in this config.
   router: { name: string, version: string }
   kv-p2p-transfer: string
+  # Recipe directory under benchmarks/<single|multi>_node/srt-slurm-recipes/.
+  srt-recipe-dir: string
   scenarios:
     fixed-seq-len:
     - isl: int
       osl: int
       search-space:
-      - { tp: int, conc-start: int, conc-end: int }
+      - { tp: int, conc-start: int, conc-end: int, srt-recipe: string }
       # Optionally, specify pipeline/expert/data-attention/context parallelism.
       - { tp: int, pp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
       # Optionally, declare router metadata and the P2P KV transfer engine.
@@ -137,13 +139,36 @@ independent component version. Supply `version` for independently versioned
 backends such as LMCache or Mooncake. Additional keys and image references in
 `version` are rejected.
 
+Most `router` and `kv-offload-backend` versions label what the image ships. When a
+repository setup script installs the component instead, `version` is required and is
+the installed version; the launcher binds or checks it
+([recipe fragments](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#recipe-fragments)).
+
 Agentic duration is not a master YAML field. Matrix generation defaults agentic
 jobs to 3600 seconds. Reusable workflow callers may override the `duration`
 input.
 
 Notes:
-- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `srt-recipe`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
+- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
+- A multinode search-space entry with `power: true` measures DCGM power: its rows carry `power: true`, the launcher merges the shared telemetry block into the recipe and rejects lanes without a power rule.
+- srt-slurm entries require `srt-recipe-dir`. Every row requires `srt-recipe: <file>[:<selector>]` under it (selector: `base`, `override_<name>` or `zip_override_<name>[<i>]`). Multinode rows may add `eval-srt-recipe`. Validation rejects missing files or variants, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` settings. Only `llmd-vllm` keeps `CONFIG_FILE`. Generated rows carry the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
+
+### DWDP prefill groups
+
+Multi-node prefill workers may set `dwdp-size` to the number of ranks in a
+distributed weight-data parallel group. It defaults to 1 (disabled). For DWDP,
+`tp`, `ep`, `pp`, `dcp-size`, and `pcp-size` must all be 1 and `dp-attn` must be
+false. `num-worker` counts groups, not ranks: two workers with `dwdp-size: 8`
+allocate 16 prefill GPUs. Decode workers cannot enable DWDP.
+
+The native TensorRT-LLM recipe must enable the corresponding DWDP mode and match
+the declared group layout. This field records topology and sizes allocations;
+it does not inject backend launch flags or enable a benchmark recipe. Results
+carry `prefill_dwdp_size` when greater than 1; TP remains 1. Existing result
+identities are unchanged when DWDP is disabled.
+
+See NVIDIA's [DWDP implementation notes](https://raw.githubusercontent.com/NVIDIA/TensorRT-LLM/main/docs/source/blogs/tech_blog/blog19_DWDP_Distributed_Weight_Data_Parallelism_for_High_Performance_LLM_Inference_on_NVL72.md).
 
 ## Runners
 
@@ -224,8 +249,20 @@ schema; unknown keys fail.
   Pyxis imports inside the job.
 - `slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
   volumes every job mounts to container paths, `mounts` does the same for host
-  paths outside the volumes (devices), `env` is the environment of the srt-slurm
+  paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
+  volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
+  of power points, `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
   itself uses.
+- `slurm.srt-slurm.fabric` holds the hosts' network facts that recipes take as
+  `'@fabric.<name>'` values: the lists `rdma-devices` (the RDMA HCAs, as NCCL, Mooncake,
+  SGLang `disaggregation-ib-device` and `IBDEVICES` read them), `rdma-device-ports` (the
+  HCAs as `device:port`, as UCX reads them) and `socket-ifname` (NCCL and Gloo), rendered
+  comma-joined, and the numbers `rdma-gid-index` and `rdma-tc` (the RDMA GID index and
+  traffic class). Fields name cluster facts, not the software that reads them; a recipe
+  maps one onto its engine's setting, as in `MC_GID_INDEX: '@fabric.rdma-gid-index'`.
+  The cluster's own `env` and `srt-slurm.host-setup.env` values may take a field the
+  same way; they resolve when the record loads, and `env` still rejects the commas of a
+  list.

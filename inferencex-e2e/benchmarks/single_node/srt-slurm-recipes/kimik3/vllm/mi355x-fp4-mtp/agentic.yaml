@@ -9,10 +9,6 @@
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
-  model:
-    path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai-rocm:nightly-rocm100-81198e97ba7eee2a22540caaa756b7fdddcb4d93
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -72,10 +68,7 @@ base:
         # Route DCP multi-token verify through the AITER ASM round-robin decode.
         VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: moonshotai/Kimi-K3
       # Long agentic turns against a 1M context are prefill-bound on the server.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'

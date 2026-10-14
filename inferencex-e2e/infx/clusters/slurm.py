@@ -10,9 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
-from pydantic import AfterValidator, Field, field_validator, model_validator
+from pydantic import AfterValidator, Field, PlainSerializer, field_validator, model_validator
 
 from infx.clusters.base import Record, SchedulerSettings, Visibility, Volume
+from infx.srt_slurm.workload import resolve_fabric
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -150,10 +151,35 @@ class HostSetup(Record):
         return script
 
 
+# Each field's type is how a recipe reads it: every list consumer (UCX, NCCL, Gloo, SGLang,
+# Mooncake, IBDEVICES) parses one comma-separated string, and env values are strings.
+FabricName = Annotated[str, Field(pattern=r"^[^,\s]+$")]
+FabricList = Annotated[
+    tuple[FabricName, ...], Field(min_length=1), PlainSerializer(",".join, return_type=str)
+]
+FabricNumber = Annotated[int, Field(ge=0), PlainSerializer(str, return_type=str)]
+
+
+class Fabric(Record):
+    """The hosts' network facts; a value ``'@fabric.<name>'`` takes one: a recipe's at bind
+    time, a cluster ``env`` or ``host-setup.env`` value when its record loads."""
+
+    rdma_devices: FabricList | None = Field(default=None, alias="rdma-devices")
+    rdma_device_ports: FabricList | None = Field(default=None, alias="rdma-device-ports")
+    socket_ifname: FabricList | None = Field(default=None, alias="socket-ifname")
+    rdma_gid_index: FabricNumber | None = Field(default=None, alias="rdma-gid-index")
+    rdma_tc: FabricNumber | None = Field(default=None, alias="rdma-tc")
+
+    def rendered(self) -> dict[str, str | None]:
+        """Every field as a recipe reads it, by name; None where the cluster sets none."""
+        return self.model_dump(by_alias=True)
+
+
 class SrtSlurmSettings(Record):
     """Cluster-owned srtslurm.yaml facts; job-specific values are added by the driver."""
 
     network_interface: str = Field(alias="network-interface")
+    fabric: Fabric = Field(default_factory=Fabric)
     job_tag: str | None = Field(default=None, alias="job-tag")
     default_time_limit: str | None = Field(
         default=None, alias="default-time-limit", pattern=r"^\d+:\d{2}:\d{2}$"
@@ -173,8 +199,23 @@ class SrtSlurmSettings(Record):
     shared_run_root: HostPath | None = Field(default=None, alias="shared-run-root")
     uv_cache_root: HostPath | None = Field(default=None, alias="uv-cache-root")
     volume_mounts: dict[str, str] = Field(default_factory=dict, alias="volume-mounts")
+    agentic_volume_mounts: dict[str, str] = Field(
+        default_factory=dict, alias="agentic-volume-mounts"
+    )
     mounts: dict[str, str] = Field(default_factory=dict)
+    power_exporter_port: int | None = Field(default=None, alias="power-exporter-port", gt=0)
     extra: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _host_setup_fabric(cls, data: Any) -> Any:
+        """``host-setup.env`` values may take this profile's fabric: ``'@fabric.<name>'``."""
+        setup = data.get("host-setup") if isinstance(data, dict) else None
+        if not isinstance(setup, dict) or not isinstance(setup.get("env"), dict):
+            return data
+        fabric = Fabric.model_validate(data.get("fabric") or {})
+        env = resolve_fabric(setup["env"], fabric.rendered(), "host-setup.env")
+        return {**data, "host-setup": {**setup, "env": env}}
 
 
 class SlurmSettings(SchedulerSettings):
@@ -211,9 +252,18 @@ class SlurmSettings(SchedulerSettings):
     @model_validator(mode="after")
     def _mounted_volumes_exist(self) -> Self:
         """srt-slurm volume mounts must name declared volumes."""
-        mounted = self.srt_slurm.volume_mounts if self.srt_slurm is not None else {}
-        if unknown := sorted(mounted.keys() - self.volumes.keys()):
-            raise ValueError(f"srt-slurm.volume-mounts names unknown volumes: {unknown}")
+        srt = self.srt_slurm
+        mounts = (
+            {}
+            if srt is None
+            else {
+                "volume-mounts": srt.volume_mounts,
+                "agentic-volume-mounts": srt.agentic_volume_mounts,
+            }
+        )
+        for field, mounted in mounts.items():
+            if unknown := sorted(mounted.keys() - self.volumes.keys()):
+                raise ValueError(f"srt-slurm.{field} names unknown volumes: {unknown}")
         return self
 
     @model_validator(mode="after")

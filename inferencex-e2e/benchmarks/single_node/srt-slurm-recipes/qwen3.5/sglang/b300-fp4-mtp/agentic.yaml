@@ -2,10 +2,6 @@
 base:
   schema: 2
   name: qwen3.5-fp4-b300-sglang-agentic
-  model:
-    path: hf:nvidia/Qwen3.5-397B-A17B-NVFP4
-    container: lmsysorg/sglang:v0.5.16-cu130
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -55,13 +51,8 @@ base:
         # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/Qwen3.5-397B-A17B-NVFP4
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-      # 256k-capped corpus, within this model's context.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
 
 # One variant per point. Admission is 2x CONC and the graph batch is CONC,
 # capped at 64. TP4 tokenizes with six workers to keep 256k warmups inside the

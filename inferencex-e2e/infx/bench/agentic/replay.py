@@ -36,7 +36,8 @@ class ReplayConfig:
     model: str
     """Served name sent as ``--model``."""
     tokenizer: str
-    """Hugging Face id; a wire name is not necessarily a valid repo id."""
+    """``TOKENIZER`` (a recipe's checkpoint path), else the Hugging Face id; a wire name is not
+    necessarily a valid repo id."""
     concurrency: int
     duration: int
     # None keeps the agentx scenario's default.
@@ -80,7 +81,7 @@ class ReplayConfig:
         return cls(
             url=_server_url(env),
             model=inputs.optional("SERVED_MODEL_NAME", env) or values["MODEL"],
-            tokenizer=values["MODEL"],
+            tokenizer=inputs.optional("TOKENIZER", env) or values["MODEL"],
             concurrency=inputs.parse_positive_int("CONC", values["CONC"]),
             duration=duration,
             warmup_requests_per_lane=warmup,
@@ -148,10 +149,10 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
 
 
 def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
-    """The ``aiperf profile`` argv for ``cfg``; ``cli`` is the ``aiperf`` executable."""
+    """The ``agentx profile`` argv for ``cfg``; ``cli`` is the ``agentx`` executable."""
     # The agentx scenario owns the endpoint, streaming, seed, start ratios, warmup and failure
     # defaults, trace idle cap, token counts, telemetry, dataset size, and metric slices.
-    argv = [str(cli), "profile", "--scenario", "agentx", "--url", cfg.url]
+    argv = [str(cli), "profile", "--url", cfg.url]
     argv += ["--model", cfg.model, "--tokenizer", cfg.tokenizer]
     argv += ["--concurrency", str(cfg.concurrency), "--benchmark-duration", str(cfg.duration)]
     if cfg.live_failed_request_threshold is not None:
