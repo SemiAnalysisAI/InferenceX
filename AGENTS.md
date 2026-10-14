@@ -75,8 +75,8 @@ Applies to every file, including recipes, configs, scripts, and source.
 
 ## Launchers, hooks, and synthetic acceptance
 
-- Launch only through `python -m infx.launch`; do not add shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in named policy tables, and drivers never branch on a cluster id. Retiring a cluster removes its label, record, and policy rows in the same PR. Details: [launch mechanics](inferencex-e2e/docs/architecture.md#launch-mechanics-stay-in-cluster-records).
-- srt-slurm host-setup hooks only check or prepare hosts. They never run benchmarks, tune engines, patch containers, or hide failures. Details: [host-setup hooks](inferencex-e2e/docs/architecture.md#srt-slurm-host-setup-hooks).
+- Launch only through `python -m infx.launch`; do not add shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in named policy tables, and drivers never branch on a cluster id. Retiring a cluster removes its label, record, and policy rows in the same PR.
+- srt-slurm host-setup hooks only check or prepare hosts. They never run benchmarks, tune engines, patch containers, or hide failures.
 - Never hard-code synthetic acceptance lengths. The srt driver selects the measured value from `inferencex-e2e/infx/golden_al_distribution/` automatically. Details: [using golden curves](inferencex-e2e/infx/golden_al_distribution/README.md#using-golden-curves-in-srt-slurm-runs).
 
 ## Test quality

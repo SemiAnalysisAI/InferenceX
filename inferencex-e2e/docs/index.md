@@ -17,8 +17,8 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | Dispatch or monitor a run | [CI procedures](ci-procedures.md#manual-end-to-end-dispatch) | `e2e-tests.yml`, run logs, artifacts |
 | Prepare a PR sweep | [CI procedures](ci-procedures.md#pr-primary-and-modifier-labels) | `run-sweep.yml`, labels, changelog delta |
 | Reuse a green sweep | [CI procedures](ci-procedures.md#artifact-reuse-and-merge-with-reuse) | reuse gate, source artifacts, merge helper |
-| Add or debug evals | [Eval and AgentX procedures](eval-agentx-procedures.md#2-add-a-graded-eval) | `EVALS.md`, eval templates, score validator |
-| Run AgentX | [Eval and AgentX procedures](eval-agentx-procedures.md#7-run-agentx-fast-feedback-versus-canonical-evidence) | agentic config, trace source, live-run skill |
+| Add or debug evals | [Eval reference](../infx/evals/EVALS.md) | eval templates, score validator |
+| Run AgentX | [Standalone replay](agentx-standalone.md) | agentic config, trace source, [live-run skill](../../.agents/skills/debug-agentx-runs/SKILL.md) |
 | Inspect a result or ingest | [Recovery and results procedures](recovery-results-procedures.md#result-pipeline-know-what-should-exist) | artifact schema, collector, app ingest workflow |
 | Recover failed ingest | [Recovery and results procedures](recovery-results-procedures.md#failed-ingest-recovery) | recovery tool, source-run artifacts, ancestry rules |
 | Debug a runner or workspace | [Recovery and results procedures](recovery-results-procedures.md#amd-root-owned-workspace-prevention-and-recovery) | launcher cleanup, `.claude/commands/` cluster playbooks, cluster logs |
@@ -28,12 +28,9 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | Page | Open it for |
 | --- | --- |
 | [`index.md`](index.md) | This task router |
-| [`architecture.md`](architecture.md) | Config-to-result flow, ownership boundaries, artifacts, and InferenceX-app handoff |
 | [`power_model` README](../../power_model/README.md) | Installation, CLI usage, supported systems, and power-model assumptions |
 | [`ci-procedures.md`](ci-procedures.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
-| [`eval-agentx-procedures.md`](eval-agentx-procedures.md) | Eval and AgentX selection, execution, scoring, evidence, and live-run diagnosis |
 | [`agentx-standalone.md`](agentx-standalone.md) | Install the pinned AgentX client and replay traces against an existing server without CI or Slurm |
-| [`results-and-ingestion.md`](results-and-ingestion.md) | Published-result lookup, artifact identities and schemas, app ingestion, dedupe, and provenance |
 | [`recovery-results-procedures.md`](recovery-results-procedures.md) | Result processing, ingest verification and recovery, runner cleanup, and failure classification |
 | [`testing.md`](testing.md) | Local checks, smoke runs, evidence standards, and review gates |
 | [`troubleshooting.md`](troubleshooting.md) | Failure-layer diagnosis, known cases, safe remediation, and stop conditions |
