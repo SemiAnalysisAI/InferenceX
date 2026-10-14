@@ -19,9 +19,9 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | Reuse a green sweep | [CI procedures](ci-procedures.md#artifact-reuse-and-merge-with-reuse) | reuse gate, source artifacts, merge helper |
 | Add or debug evals | [Eval reference](../infx/evals/EVALS.md) | eval templates, score validator |
 | Run AgentX | [Standalone replay](agentx-standalone.md) | agentic config, trace source, [live-run skill](../../.agents/skills/debug-agentx-runs/SKILL.md) |
-| Inspect a result or ingest | [Recovery and results procedures](recovery-results-procedures.md#result-pipeline-know-what-should-exist) | artifact schema, collector, app ingest workflow |
-| Recover failed ingest | [Recovery and results procedures](recovery-results-procedures.md#failed-ingest-recovery) | recovery tool, source-run artifacts, ancestry rules |
-| Debug a runner or workspace | [Recovery and results procedures](recovery-results-procedures.md#amd-root-owned-workspace-prevention-and-recovery) | launcher cleanup, `.claude/commands/` cluster playbooks, cluster logs |
+| Inspect a result or ingest | [Result inspection](../../.claude/commands/recover-failed-ingest.md#inspect-results-and-choose-the-repair) | artifact schema, collector, app ingest workflow |
+| Recover failed ingest | [Recovery command](../../.claude/commands/recover-failed-ingest.md) | recovery tool, source-run artifacts, ancestry rules |
+| Debug a runner or workspace | [Troubleshooting](troubleshooting.md) | launcher cleanup, `.claude/commands/` cluster playbooks, cluster logs |
 
 ## Task and page index
 
@@ -31,7 +31,7 @@ Paths and shell commands in these guides are relative to `inferencex-e2e/` unles
 | [`power_model` README](../../power_model/README.md) | Installation, CLI usage, supported systems, and power-model assumptions |
 | [`ci-procedures.md`](ci-procedures.md) | Matrix generation, validation, dispatch, PR sweeps, reuse, staging, and artifact downloads |
 | [`agentx-standalone.md`](agentx-standalone.md) | Install the pinned AgentX client and replay traces against an existing server without CI or Slurm |
-| [`recovery-results-procedures.md`](recovery-results-procedures.md) | Result processing, ingest verification and recovery, runner cleanup, and failure classification |
+| [Recovery command](../../.claude/commands/recover-failed-ingest.md) | Result inspection, ingest verification, and artifact-reuse recovery |
 | [`testing.md`](testing.md) | Local checks, smoke runs, evidence standards, and review gates |
 | [`troubleshooting.md`](troubleshooting.md) | Failure-layer diagnosis, known cases, safe remediation, and stop conditions |
 | [`PR_REVIEW_CHECKLIST.md`](PR_REVIEW_CHECKLIST.md) | CODEOWNER review and exact sign-off requirements |
