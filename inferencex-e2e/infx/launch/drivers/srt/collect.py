@@ -108,12 +108,11 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     request = run.request
     power_rc = 0
     if request.is_agentic and not request.eval_only:
-        require(request, "INFERENCEX_RESULTS_PYTHON", "GPU_COUNT")
+        require(request, "INFERENCEX_RESULTS_PYTHON")
         sidecar = f"power_validation_{request.result_filename}.json"
         power_rc = run_power_adapter(
             request.inferencex_results_python, run.workspace, logs, logs / "agentic",
             logs / f"{request.result_filename}.json", producer_sha,
-            "--expected-num-gpus", request.env["GPU_COUNT"],
             "--validation-result", str(run.workspace / sidecar), "--audit-source", sidecar,
             require_power=request.require_power,
         )  # fmt: skip

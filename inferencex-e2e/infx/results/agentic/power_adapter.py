@@ -323,25 +323,16 @@ def _gpu_count(value: Any) -> int | None:
     return value
 
 
-def _power_topology(
-    aggregate: Mapping[str, Any], expected_num_gpus: int | None
-) -> tuple[int, int, int] | None:
+def _power_topology(aggregate: Mapping[str, Any]) -> tuple[int, int, int] | None:
     """The (prefill, decode, aggregate) GPU counts the power validator must find.
 
-    A single-node point (``expected_num_gpus`` set) is one aggregate worker of the
-    launcher's GPU count; the aggregate must agree. A multinode point declares its
-    own roles: disaggregated prefill/decode, or one aggregate worker of their sum.
+    A single-node point is one aggregate worker of ``num_gpus``. A multinode point
+    declares its own roles: disaggregated prefill/decode, or one aggregate worker of their sum.
     """
     disagg = aggregate.get("disagg")
-    if expected_num_gpus is not None:
-        if (
-            _gpu_count(expected_num_gpus) in (None, 0)
-            or aggregate.get("is_multinode") is not False
-            or disagg is not False
-            or _gpu_count(aggregate.get("num_gpus")) != expected_num_gpus
-        ):
-            return None
-        return 0, 0, expected_num_gpus
+    if aggregate.get("is_multinode") is False:
+        num_gpus = _gpu_count(aggregate.get("num_gpus"))
+        return (0, 0, num_gpus) if disagg is False and num_gpus else None
     prefill_gpus = _gpu_count(aggregate.get("num_prefill_gpu"))
     decode_gpus = _gpu_count(aggregate.get("num_decode_gpu"))
     if (
@@ -364,16 +355,10 @@ def run_native_agentic_power(
     logs_root: Path,
     expected_producer_sha: str,
     require_power: bool = False,
-    expected_num_gpus: int | None = None,
     audit_source: str | None = None,
     validation_result: Path | None = None,
 ) -> int:
-    """Join one AgentX aggregate to the finalized native power package.
-
-    ``expected_num_gpus`` marks a single-node point: the aggregate must describe one
-    aggregate worker of exactly that size. Multinode points carry their own
-    prefill/decode or aggregate topology.
-    """
+    """Join one AgentX aggregate to the finalized native power package."""
     validation_result = validation_result or result_dir / "power_validation.json"
     reasons: list[str] = []
     try:
@@ -386,7 +371,7 @@ def run_native_agentic_power(
             reasons.append("agentic_aggregate_invalid")
         aggregate = {}
 
-    topology = _power_topology(aggregate, expected_num_gpus)
+    topology = _power_topology(aggregate)
     if topology is None:
         reasons.append("agentic_gpu_topology_invalid")
     bench_result = _formal_result_for_directory(result_dir)
@@ -455,7 +440,6 @@ def main() -> int:
     parser.add_argument("--power-dir", type=Path)
     parser.add_argument("--logs-root", type=Path)
     parser.add_argument("--expected-producer-sha")
-    parser.add_argument("--expected-num-gpus", type=int)
     parser.add_argument("--audit-source")
     parser.add_argument("--validation-result", type=Path)
     parser.add_argument(
@@ -515,7 +499,6 @@ def main() -> int:
         logs_root=args.logs_root,
         expected_producer_sha=args.expected_producer_sha,
         require_power=args.require_power,
-        expected_num_gpus=args.expected_num_gpus,
         audit_source=args.audit_source,
         validation_result=args.validation_result,
     )

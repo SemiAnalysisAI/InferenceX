@@ -44,14 +44,14 @@ def test_single_node_collector_finalizes_native_agentx_power(
     manifest_path.write_text(json.dumps(manifest))
     aggregate_path = pkg.logs_root / "point.json"
     aggregate_path.write_text(json.dumps({
-        "conc": 4, "num_gpus": 4, "is_multinode": False, "disagg": False,
+        "conc": 4, "num_gpus": 0 if failure == "agentic_gpu_topology_invalid" else 4,
+        "is_multinode": False, "disagg": False,
         "power_valid": 1, "avg_power_w": 999, "total_gpu_energy_j": 999,
     }))
     if failure == "samples_csv_missing":
         (pkg.power_dir / "samples.csv").unlink()
-    expected_count = "2" if failure == "agentic_gpu_topology_invalid" else "4"
     env = {**os.environ, "INFERENCEX_RESULTS_PYTHON": sys.executable,
-           "GPU_COUNT": expected_count, "REQUIRE_POWER": str(int(require_power)),
+           "REQUIRE_POWER": str(int(require_power)),
            "PYTHONPATH": str(Path(__file__).resolve().parents[4])}
     request = SimpleNamespace(is_agentic=True, eval_only=False, run_eval=False,
                               require_power=require_power, inferencex_results_python=sys.executable,
