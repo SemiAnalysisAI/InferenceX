@@ -3,6 +3,7 @@ import os
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +19,7 @@ from infx.tests.historical_revision import (
     commit_history,
     forbid_current_config_parsing,
 )
+from infx.tests.srt_recipes import shared_blocks, single_node_fragment
 
 
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
@@ -375,8 +377,6 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "ep": 1,
         "recipe-fingerprint": "fingerprint",
     }
-    # The current generator routes by cluster and records the recipe path; the producer did
-    # not. The same public point must still freeze once, under the current key.
     current = {
         "single_node": {
             "all": [
@@ -512,10 +512,11 @@ def family_configs():
             "framework": "sglang",
             "runner": "fixture",
             "multinode": False,
+            "srt-recipe-dir": "fixture",
             "scenarios": {
                 "fixed-seq-len": [{
                     "isl": 1024, "osl": 1024,
-                    "search-space": [{"tp": 1, "conc-list": [2, 6]}],
+                    "search-space": [{"tp": 1, "conc-list": [2, 6], "srt-recipe": "recipe.yaml"}],
                 }],
             },
         },
@@ -530,31 +531,47 @@ def family_configs():
     return master, runners
 
 
+def write_fixture_recipe(root: Path) -> None:
+    recipe = root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+    recipe.parent.mkdir(parents=True, exist_ok=True)
+    recipe.write_text("{}\n")
+
+
 @pytest.mark.parametrize("prefix", ["", "inferencex-e2e/"])
 def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_configs, prefix):
     master, runners = family_configs
     files = {
         prefix + "configs/nvidia-master.yaml": yaml.safe_dump(master),
         prefix + "configs/runners.yaml": yaml.safe_dump(runners),
-    }
+        prefix + "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml":
+            yaml.safe_dump(single_node_fragment(1)).encode(),
+        **{prefix + path: text.encode() for path, text in shared_blocks().items()},
+    }  # fmt: skip
     monkeypatch.setattr(
         github, "read",
         lambda *_: {"tree": [{"path": prefix.rstrip("/") or "configs"}]},
     )
     monkeypatch.setattr(github, "file_at", lambda _repo, _head, path: files[path])
 
-    matrix = validation.canonical_matrix(
-        "example/project", "a" * 40, "configs/nvidia-master.yaml:fixture",
-    )
+    def family() -> list[dict]:
+        matrix = validation.canonical_matrix(
+            "example/project", "a" * 40, "configs/nvidia-master.yaml:fixture",
+        )
+        assert matrix["evals"] == []
+        return matrix["single_node"]["all"]
 
-    assert [
-        (row["model"], row["conc"], row["image"])
-        for row in matrix["single_node"]["all"]
-    ] == [
+    rows = family()
+    assert [(row["model"], row["conc"], row["image"]) for row in rows] == [
         ("example/model", 2, "example/image:stable"),
         ("example/model", 6, "example/image:stable"),
     ]
-    assert matrix["evals"] == []
+    block = prefix + "configs/srt-recipes/fixed-sequence-single.yaml"
+    files[block] = files[block] + b"  env: {EXTRA: '1'}\n"
+    changed = family()
+    assert [row["conc"] for row in changed] == [2, 6]
+    assert {row["recipe-fingerprint"] for row in changed}.isdisjoint(
+        row["recipe-fingerprint"] for row in rows
+    )
 
 
 CANDIDATE_ID = "1" * 16 + "-" + "2" * 16
@@ -654,7 +671,6 @@ def test_select_defers_a_baseline_the_current_family_no_longer_generates(tmp_pat
     _, head = commit_history(tmp_path, "inferencex-e2e")
     monkeypatch.chdir(tmp_path)
     producer_family = validation.producer_matrix("example/project", head, FAMILY)
-    # The published baseline has c2 and c6; the current family dropped c6.
     shrunk = {"single_node": {"all": [
         row for row in producer_family["single_node"]["all"] if row["conc"] == 2
     ]}}  # fmt: skip
@@ -767,9 +783,7 @@ def serve_dsr1_baseline(monkeypatch, current, markdown):
 
 
 @pytest.mark.parametrize(("markdown", "current", "retired"), [
-    # MODELS.md deprecated the 1k/1k workload the family dropped after the baseline.
     pytest.param(models_md(), [dsr1_point(8192, [1])], True, id="deprecated-after-baseline"),
-    # The bold form deprecates the workload for every model.
     pytest.param(
         models_md(
             "**Deprecated for all models** since 2026-07-17"
@@ -777,56 +791,44 @@ def serve_dsr1_baseline(monkeypatch, current, markdown):
         ),
         [dsr1_point(8192, [1])], True, id="deprecated-for-all-models",
     ),
-    # A deprecation dated on the baseline day does not follow the published point.
     pytest.param(
         models_md(DEPRECATED_1K1K.replace("2026-07-17", "2026-05-22")), [dsr1_point(8192, [1])],
         False, id="deprecated-on-baseline-day",
     ),
-    # A deprecation dated on no calendar day.
     pytest.param(
         models_md(DEPRECATED_1K1K.replace("2026-07-17", "2026-09-31")), [dsr1_point(8192, [1])],
         False, id="invalid-date",
     ),
-    # The deprecating PR belongs to another repository.
     pytest.param(
         models_md(DEPRECATED_1K1K.replace("example/project", "other/project")),
         [dsr1_point(8192, [1])], False, id="other-repository",
     ),
-    # The link text names another PR than the link.
     pytest.param(
         models_md(DEPRECATED_1K1K.replace("[#2263]", "[#2264]")), [dsr1_point(8192, [1])],
         False, id="pr-number-mismatch",
     ),
-    # Absence from the current family alone is not a retirement.
     pytest.param(models_md("Active."), [dsr1_point(8192, [1])], False, id="only-absent"),
-    # A second, differently spaced 1k/1k row makes the workload's status ambiguous.
     pytest.param(
         models_md(scenarios="| Single-turn 1k1k | 1024/1024 | Active. |\n"),
         [dsr1_point(8192, [1])], False, id="duplicate-scenario-row",
     ),
-    # A repeated Scenarios table is ambiguous.
     pytest.param(
         models_md(models="\n| Scenario | ISL/OSL | Status |\n|---|---|---|\n"),
         [dsr1_point(8192, [1])], False, id="duplicate-scenarios-table",
     ),
-    # A row with a stray cell makes its whole table unreadable.
     pytest.param(
         models_md(scenarios="| Single-turn 4k1k | 4096 / 1024 | Active. | stray |\n"),
         [dsr1_point(8192, [1])], False, id="malformed-row",
     ),
-    # The model's support row does not deprecate the scenario.
     pytest.param(models_md(deprecated=""), [dsr1_point(8192, [1])], False, id="model-not-listed"),
-    # The model's support row also lists the scenario as active.
     pytest.param(
         models_md(active="Single-turn 8k1k, Single-turn 1k1k"), [dsr1_point(8192, [1])], False,
         id="also-active",
     ),
-    # Two support-matrix rows claim the dsr1 prefix.
     pytest.param(
         models_md(models="| DeepSeek-R1 | `dsr1` | 2025-01-20 | Single-turn 1k1k | |\n"),
         [dsr1_point(8192, [1])], False, id="duplicate-model-row",
     ),
-    # The family still runs 1k/1k, so the dropped 1k/1k point was not retired with it.
     pytest.param(
         models_md(), [dsr1_point(1024, [2]), dsr1_point(8192, [1])], False,
         id="workload-still-run",
@@ -855,11 +857,9 @@ def test_select_exempts_only_points_models_md_retired_after_the_baseline(
     baseline = reporting.BaselinePreflight.model_validate_json(
         (directory / CANDIDATE_ID / "baseline-preflight.json").read_text()
     ).baseline
-    # The retired point stays in the frozen roster with its published result and evidence.
     assert [(point.label.split(" c")[0], point.result) for point in baseline.points] == [
         ("1024/1024", "passed"), ("8192/1024", "passed"),
     ]
-    # The workload is recorded so later checks re-derive the retirement without the public API.
     assert baseline.retirements == [reporting.Retirement(
         scenario="Single-turn 1k1k", date="2026-07-17",
         pr_link="https://github.com/example/project/pull/2263", model_prefix="dsr1", isl=1024,
@@ -884,7 +884,6 @@ def test_final_coverage_exempts_retired_points_and_reports_their_evidence(monkey
     reporting.check_baseline_coverage(
         "example/project", candidate, {"single_node": {"all": current}}, baseline
     )
-    # Every point no retirement names is still required, whatever else the sweep covers.
     with pytest.raises(github.VerificationError, match="omits or changes frozen baseline points"):
         reporting.check_baseline_coverage(
             "example/project", candidate, {"single_node": {"all": [dsr1_point(8192, [2])]}},
@@ -899,8 +898,6 @@ def test_final_coverage_exempts_retired_points_and_reports_their_evidence(monkey
         benchmarks_expected=1, benchmarks_passed=1, evals_expected=0, evals_passed=0,
         points=[kept.model_copy(update={"run_id": 7, "head": "c" * 40})],
     )
-    # The body and the final report, which never measures it, both name the retired point
-    # with its scenario, date and PR.
     for text in (
         reporting.render_body(baseline),
         reporting.render_attempt(final, baseline, "example/project"),
@@ -941,12 +938,10 @@ def test_baseline_rejects_retirements_it_cannot_justify():
 
     for roster, changes, error in (
         (fixed, {"date": "2026-05-22"}, "after the baseline date"),
-        # A date that is no calendar day is rejected, not compared as text.
         (fixed, {"date": "2026-09-31"}, "day is out of range for month"),
         (fixed, {"points": ["d" * 64]}, "distinct frozen baseline points"),
         (fixed, {"points": ["a" * 64, "a" * 64]}, "distinct frozen baseline points"),
         (fixed, {"points": ["a" * 64, "b" * 64]}, "not retired"),
-        # An AgentX point has no single-turn workload to retire.
         ([*fixed, agentic], {"points": ["c" * 64]}, "Only fixed-seq-len points"),
         (fixed, {"pr_link": "https://example.com/pull/2263"}, "pr_link"),
     ):
@@ -966,8 +961,6 @@ def test_baselines_without_retirements_keep_the_earlier_record_format():
 
     record = baseline.model_dump_json(by_alias=True)
 
-    # Code that predates retirements rejects unknown fields, so the empty field is left out;
-    # a record without it still loads.
     assert "retirements" not in json.loads(record)
     assert reporting.Baseline.model_validate_json(record) == baseline
 
@@ -992,7 +985,6 @@ def check_final(tmp_path, monkeypatch, record, head_concs):
         validation, "canonical_matrix",
         lambda _repository, ref, _family: {"single_node": {"all": families[ref]}},
     )
-    # Only the planner reads the public API; the re-check uses the record and the base.
     monkeypatch.setattr(api, "fetch", lambda *_args, **_kwargs: pytest.fail("public API call"))
     pull = {"number": 7, "head": {"sha": head}, "body": reporting.baseline_marker(record)}
     monkeypatch.setattr(lifecycle, "current_session", lambda: SimpleNamespace(
@@ -1013,7 +1005,6 @@ def test_check_final_accepts_a_retirement_it_rederives_at_the_candidate_base(
     tmp_path, monkeypatch, capfd
 ):
     baseline = frozen_dsr1_baseline(monkeypatch)
-    # The record names the retired workload, so the check needs no public API call.
     record = baseline.model_copy(update={"retirements": [reporting.Retirement(
         scenario="Single-turn 1k1k", date="2026-07-17",
         pr_link="https://github.com/example/project/pull/2263", model_prefix="dsr1", isl=1024,
@@ -1025,16 +1016,12 @@ def test_check_final_accepts_a_retirement_it_rederives_at_the_candidate_base(
 
 
 @pytest.mark.parametrize(("retired", "changes", "head_concs", "status"), [
-    # A fabricated retirement for 8k/1k c2, which the head dropped but the base still generates.
     pytest.param([0, 2], {}, [1], DEPRECATED_1K1K, id="unretired-point"),
-    # The recorded workload is not the retired point's 1k/1k.
     pytest.param([0], {"isl": 8192}, [1, 2], DEPRECATED_1K1K, id="other-workload"),
-    # The recorded deprecation links another repository's PR.
     pytest.param(
         [0], {"pr_link": "https://github.com/other/project/pull/2263"}, [1, 2], DEPRECATED_1K1K,
         id="other-repository",
     ),
-    # MODELS.md at the candidate base never deprecated 1k/1k.
     pytest.param([0], {}, [1, 2], "Active.", id="not-deprecated-at-base"),
 ])  # fmt: skip
 def test_check_final_rejects_retirements_the_candidate_base_does_not_derive(
@@ -1042,7 +1029,6 @@ def test_check_final_rejects_retirements_the_candidate_base_does_not_derive(
 ):
     baseline = frozen_dsr1_baseline(monkeypatch)
     [retirement] = baseline.retirements
-    # The agent can rewrite the PR-body record, or the preflight that it copies.
     record = baseline.model_copy(update={"retirements": [retirement.model_copy(update={
         **changes, "points": [baseline.points[index].key for index in retired],
     })]})
@@ -1058,7 +1044,6 @@ def test_check_final_rejects_retirements_the_candidate_base_does_not_derive(
 def test_finish_and_recovery_rederive_retirements_before_readiness(monkeypatch):
     baseline = frozen_dsr1_baseline(monkeypatch)
     [retirement] = baseline.retirements
-    # A fabricated retirement for 8k/1k c2, which the base still generates.
     record = baseline.model_copy(update={"retirements": [retirement.model_copy(update={
         "points": [baseline.points[0].key, baseline.points[2].key],
     })]})
@@ -1069,7 +1054,6 @@ def test_finish_and_recovery_rederive_retirements_before_readiness(monkeypatch):
     )
     monkeypatch.setattr(session, "pulls", lambda: [pull])
     monkeypatch.setattr(session, "refresh", lambda _pull: pull)
-    # The completed sweep at the head covers 8k/1k c1 only.
     monkeypatch.setattr(lifecycle, "verify_sweep", lambda *_: (
         {"single_node": {"all": [dsr1_point(8192, [1])]}}, [], [],
     ))
@@ -1139,6 +1123,7 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
     configs.mkdir(parents=True)
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(project)
 
     families = klaud.live_families(tmp_path if from_repository_root else project)
 
@@ -1154,6 +1139,7 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
     configs.mkdir()
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(tmp_path)
 
     def git(*args):
         return subprocess.check_output(

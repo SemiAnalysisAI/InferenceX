@@ -171,7 +171,6 @@ def _provision(job: Job) -> str:
     except env.BenchError as error:
         raise _provision_failed(job, str(error)) from error
     minor, site_packages = job.provider.python_minor, job.provider.system_site_packages
-    # uv reads a bare "python3" as any Python 3, so name the image's own interpreter.
     python3 = shutil.which(job.python, path=job.ctx.env.get("PATH")) or job.python
     new_enough = proc.call([python3, "-c", _VERSION_CHECK, str(minor)], job.ctx.env) == 0
     if new_enough and not site_packages:
@@ -338,7 +337,6 @@ PROVIDERS: dict[str, Provider] = {
         failure_command=("failure",),
         message_flag="--message",
     ),
-    # BFCL supports Python 3.10 and reuses the image's installed stack.
     "bfcl": Provider(
         default_suite="bfcl_smoke",
         suites={

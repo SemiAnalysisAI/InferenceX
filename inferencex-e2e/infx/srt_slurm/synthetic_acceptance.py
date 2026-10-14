@@ -7,7 +7,6 @@ import copy
 import fnmatch
 import json
 import os
-import re
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -17,6 +16,7 @@ from typing import Any
 import yaml
 
 from infx.golden_al_distribution import GOLDEN_DIR, golden_length
+from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
 ENGINES = {
     "sglang": "sglang",
@@ -56,7 +56,6 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
             "model": args.get("draft-model", ""),
         }
         if spec["method"] == "dspark":
-            # ATOM DSpark verifies with probabilistic block rejection sampling.
             spec["draft_sample_method"] = "probabilistic"
         return spec
     if engine == "vllm":
@@ -114,7 +113,6 @@ def build_overrides(
         and environment["IS_AGENTIC"].lower() in ("1", "true")
         and environment["SPEC_DECODING"] != "none"
     )
-    # Prefill may have a different MTP depth; generation defines the AL target.
     generation = roles.get("decode", roles.get("agg", {}))
     spec = spec_parameters(generation, engine)
     al = None
@@ -141,8 +139,6 @@ def build_overrides(
         "trtllm": (TRT_VARIABLE,),
         "tilert": TILERT_VARIABLES,
     }.get(engine, ())
-    # SRT applies recipe-wide environment after role environment. Keep simulation
-    # role-local so global values cannot override the golden AL or leak into evals.
     for key in variables:
         if key in (recipe.get("environment") or {}):
             overrides += ["--unset", f"environment.{key}"]
@@ -155,9 +151,6 @@ def build_overrides(
         if engine == "tilert":
             selected = role.get("engine", recipe.get("engine", "tilert"))
             worker_engine = selected.get("type") if isinstance(selected, Mapping) else selected
-            # TileRT's first token and draft cache come from real vLLM prefill.
-            # Only its decode runtime simulates acceptance, using environment
-            # variables (decode_server has no --simulate-acc-* CLI options).
             if name != "decode" or worker_engine != "tilert":
                 worker_al = None
         worker_spec = spec_parameters(role, worker_engine)
@@ -185,7 +178,6 @@ def build_overrides(
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
         elif worker_engine == "atom":
-            # ATOM forces acceptance with a server flag rather than environment.
             key = "spec-decode-acceptance-length"
             if worker_al is not None and worker_spec:
                 overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
@@ -211,7 +203,12 @@ def build_overrides(
 def selected_recipes(
     raw: dict[str, Any], selector: str | None
 ) -> list[tuple[str | None, dict[str, Any]]]:
-    """Delegate expansion to SRT, retaining its selector for each submission."""
+    """Delegate expansion to SRT, retaining its selector for each submission.
+
+    ``srtctl apply`` merges a zip variant over its base as an override, which drops the
+    variant's null-valued keys (``connector: null`` falls back to the engine default);
+    the selected zip variants match that.
+    """
     if "base" not in raw:
         if selector is not None:
             raise ValueError("recipe selector requires an override-format recipe")
@@ -219,10 +216,11 @@ def selected_recipes(
     from srtctl.core.config import generate_override_configs
 
     selected = generate_override_configs(raw, selector=selector)
-    if (
-        selector == "base"
-        or (selector and selector.startswith("override_") and not any(c in selector for c in "*?"))
-        or (selector and re.fullmatch(r"zip_override_[\w-]+\[\d+\]", selector))
+    zip_variant = selector and ZIP_VARIANT.fullmatch(selector)
+    if zip_variant:
+        return [(selector, without_nulls(selected[0][1]))]
+    if selector == "base" or (
+        selector and selector.startswith("override_") and not any(c in selector for c in "*?")
     ):
         return [(selector, selected[0][1])]
     keys = sorted(k for k in raw if k.startswith("override_")) + sorted(
@@ -233,8 +231,10 @@ def selected_recipes(
         if selector is not None and not fnmatch.fnmatch(key, selector):
             continue
         for index, (_, recipe) in enumerate(generate_override_configs(raw, selector=key)):
-            name = f"{key}[{index}]" if key.startswith("zip_override_") else key
-            result.append((name, recipe))
+            if key.startswith("zip_override_"):
+                result.append((f"{key}[{index}]", without_nulls(recipe)))
+            else:
+                result.append((key, recipe))
     return result
 
 
@@ -273,8 +273,6 @@ def plan_commands(
                 for item in generated_overrides
             ):
                 raise ValueError(f"Caller {removal.render()} conflicts with golden acceptance")
-        # SRT broadcasts overrides into zip groups. Reject a collapsed selection
-        # before any job is submitted, rather than selecting the wrong variant.
         materialized = copy.deepcopy(raw)
         apply_overrides_to_recipe(materialized, generated_overrides)
         selected_recipes(materialized, variant)

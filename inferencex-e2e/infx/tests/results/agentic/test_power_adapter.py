@@ -7,8 +7,75 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+
+from infx.tests.results.power.test_aggregate_power_multinode import PRODUCER_SHA, build_package
+
+
+@pytest.mark.parametrize("require_power", [False, True])
+@pytest.mark.parametrize("failure", [None, "samples_csv_missing", "agentic_gpu_topology_invalid",
+                                     "producer_commit_mismatch"])
+def test_single_node_collector_finalizes_native_agentx_power(
+    tmp_path: Path, require_power: bool, failure: str | None,
+) -> None:
+    from infx.launch.drivers.srt.collect import finalize_single_node_results
+
+    pkg = build_package(tmp_path)
+    result_dir = pkg.logs_root / "agentic"
+    result_dir.mkdir()
+    stem = "agentic_power_concurrency_4"
+    pkg.original_result.replace(result_dir / f"{stem}.json")
+    old_window = pkg.windows_dir / "my_result.json"
+    window = json.loads(old_window.read_text())
+    window.update(benchmark_type="custom", result_path=f"agentic/{stem}.json")
+    old_window.unlink()
+    (pkg.windows_dir / f"{stem}.json").write_text(json.dumps(window))
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for device in manifest["expected_devices"]:
+        for assignment in device["assignments"]:
+            assignment.update(worker_role="agg", het_group=None)
+    manifest["expected_windows"] = [{"benchmark_type": "custom", "concurrency": 4}]
+    manifest["window_validations"][0].update(
+        benchmark_type="custom", window_file=f"windows/{stem}.json"
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    aggregate_path = pkg.logs_root / "point.json"
+    aggregate_path.write_text(json.dumps({
+        "conc": 4, "num_gpus": 0 if failure == "agentic_gpu_topology_invalid" else 4,
+        "is_multinode": False, "disagg": False,
+        "power_valid": 1, "avg_power_w": 999, "total_gpu_energy_j": 999,
+    }))
+    if failure == "samples_csv_missing":
+        (pkg.power_dir / "samples.csv").unlink()
+    env = {**os.environ, "INFERENCEX_RESULTS_PYTHON": sys.executable,
+           "REQUIRE_POWER": str(int(require_power)),
+           "PYTHONPATH": str(Path(__file__).resolve().parents[4])}
+    request = SimpleNamespace(is_agentic=True, eval_only=False, run_eval=False,
+                              require_power=require_power, inferencex_results_python=sys.executable,
+                              result_filename="point", env=env)
+    run = SimpleNamespace(request=request, env=env, workspace=tmp_path)
+    producer_sha = "b" * 40 if failure == "producer_commit_mismatch" else PRODUCER_SHA
+    assert finalize_single_node_results(run, pkg.logs_root, producer_sha) == int(require_power and failure is not None)
+    aggregate = json.loads(aggregate_path.read_text())
+    validation = json.loads((tmp_path / "power_validation_point.json").read_text())
+    assert not (result_dir / "power_validation.json").exists()
+    assert aggregate["power_valid"] == int(failure is None)
+    assert aggregate["power_audit"]["source"] == "power_validation_point.json"
+    if failure is None:
+        assert aggregate["total_gpu_energy_j"] == 84_000
+        assert aggregate["avg_power_w"] == 350
+        assert aggregate["power_audit"]["expected_gpu_count"] == 4
+        assert aggregate["power_audit"]["producer_sha"] == PRODUCER_SHA
+        assert aggregate["power_invalid_reasons"] == []
+    else:
+        assert "avg_power_w" not in aggregate
+        assert "total_gpu_energy_j" not in aggregate
+        reason = "package_recompute_invalid" if failure == "samples_csv_missing" else failure
+        assert reason in aggregate["power_invalid_reasons"]
+        assert reason in validation["reasons"]
 
 
 @pytest.mark.parametrize("require_power", [False, True])
@@ -350,112 +417,6 @@ def test_multinode_window_writer_fails_closed_on_invalid_window_environment(
     assert "formal measurement-window contract" in capsys.readouterr().err
 
 
-def test_multinode_aggregation_uses_central_package_and_aggregate_topology(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    from infx.results.agentic import power_adapter
-
-    logs_root = tmp_path / "logs"
-    result_dir = logs_root / "agentic" / "conc_8"
-    result_dir.mkdir(parents=True)
-    bench_result = result_dir / "agentic_power_concurrency_8.json"
-    bench_result.write_text(json.dumps({"max_concurrency": 8}))
-    agg_result = tmp_path / "agg_agentx_conc8.json"
-    agg_result.write_text(
-        json.dumps(
-            {"disagg": True, "num_prefill_gpu": 16, "num_decode_gpu": 16}
-        ),
-        encoding="utf-8",
-    )
-    power_dir = logs_root / "power"
-    power_dir.mkdir(parents=True)
-    calls: list[dict] = []
-
-    def fake_run(**kwargs) -> int:
-        calls.append(kwargs)
-        return 0
-
-    monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
-
-    exit_code = power_adapter.run_multinode_agentic_power(
-        result_dir=result_dir,
-        agg_result=agg_result,
-        power_dir=power_dir,
-        logs_root=logs_root,
-        expected_producer_sha="a1b8c7af10c00e5ea40074aebdc0086189bbc064",
-        require_power=True,
-    )
-
-    assert exit_code == 0
-    assert calls == [
-        {
-            "power_dir": power_dir,
-            "bench_result": bench_result,
-            "agg_result": agg_result,
-            "prefill_gpus": 16,
-            "decode_gpus": 16,
-            "aggregate_gpus": 0,
-            "expected_producer_sha": "a1b8c7af10c00e5ea40074aebdc0086189bbc064",
-            "logs_root": logs_root,
-            "validation_result": result_dir / "power_validation.json",
-            "require_power": True,
-        }
-    ]
-
-
-def test_multinode_aggregation_maps_aggregate_deployment_to_agg_role(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    from infx.results.agentic import power_adapter
-
-    logs_root = tmp_path / "logs"
-    result_dir = logs_root / "agentic" / "conc_8"
-    result_dir.mkdir(parents=True)
-    bench_result = result_dir / "agentic_power_concurrency_8.json"
-    bench_result.write_text(json.dumps({"max_concurrency": 8}))
-    agg_result = tmp_path / "agg_agentx_conc8.json"
-    agg_result.write_text(
-        json.dumps(
-            {"disagg": False, "num_prefill_gpu": 8, "num_decode_gpu": 0}
-        ),
-        encoding="utf-8",
-    )
-    power_dir = logs_root / "power"
-    power_dir.mkdir(parents=True)
-    calls: list[dict] = []
-
-    def fake_run(**kwargs) -> int:
-        calls.append(kwargs)
-        return 0
-
-    monkeypatch.setattr(power_adapter, "run_multinode_power", fake_run)
-
-    assert power_adapter.run_multinode_agentic_power(
-        result_dir=result_dir,
-        agg_result=agg_result,
-        power_dir=power_dir,
-        logs_root=logs_root,
-        expected_producer_sha="a" * 40,
-        require_power=True,
-    ) == 0
-    assert calls == [
-        {
-            "power_dir": power_dir,
-            "bench_result": bench_result,
-            "agg_result": agg_result,
-            "prefill_gpus": 0,
-            "decode_gpus": 0,
-            "aggregate_gpus": 8,
-            "expected_producer_sha": "a" * 40,
-            "logs_root": logs_root,
-            "validation_result": result_dir / "power_validation.json",
-            "require_power": True,
-        }
-    ]
-
-
 @pytest.mark.parametrize(
     "payload",
     [
@@ -471,7 +432,7 @@ def test_multinode_aggregation_rejects_invalid_aggregate_topology(
     tmp_path: Path,
     payload: dict,
 ):
-    from infx.results.agentic.power_adapter import run_multinode_agentic_power
+    from infx.results.agentic.power_adapter import run_native_agentic_power
 
     logs_root = tmp_path / "logs"
     result_dir = logs_root / "agentic" / "conc_8"
@@ -489,7 +450,7 @@ def test_multinode_aggregation_rejects_invalid_aggregate_topology(
     }
     agg_result.write_text(json.dumps({**stale_metrics, **payload}))
 
-    assert run_multinode_agentic_power(
+    assert run_native_agentic_power(
         result_dir=result_dir,
         agg_result=agg_result,
         power_dir=logs_root / "power",
@@ -504,10 +465,11 @@ def test_multinode_aggregation_rejects_invalid_aggregate_topology(
 
 
 @pytest.mark.parametrize("payload", [None, "{", "[]"])
+@pytest.mark.parametrize("require_power", [False, True])
 def test_multinode_invalid_aggregate_retains_failure_verdict(
-    tmp_path: Path, payload: str | None,
+    tmp_path: Path, payload: str | None, require_power: bool,
 ) -> None:
-    from infx.results.agentic.power_adapter import run_multinode_agentic_power
+    from infx.results.agentic.power_adapter import run_native_agentic_power
 
     logs_root = tmp_path / "logs"
     result_dir = logs_root / "agentic/conc_8"
@@ -515,14 +477,15 @@ def test_multinode_invalid_aggregate_retains_failure_verdict(
     if payload is not None:
         agg_result.write_text(payload)
 
-    assert run_multinode_agentic_power(
+    assert run_native_agentic_power(
         result_dir=result_dir,
         agg_result=agg_result,
         power_dir=logs_root / "power",
         logs_root=logs_root,
         expected_producer_sha="a" * 40,
-        require_power=True,
-    ) == 1
+        require_power=require_power,
+        audit_source="results/power_validation.json",
+    ) == int(require_power)
     verdict = json.loads((result_dir / "power_validation.json").read_text())
     assert verdict["power_valid"] is False
     assert "agentic_aggregate_invalid" in verdict["reasons"]
@@ -544,7 +507,7 @@ def test_multinode_failure_clears_stale_metrics_when_verdict_write_fails(
         raise OSError("audit directory unavailable")
 
     monkeypatch.setattr(power_adapter, "_write_multinode_failure_validation", fail_verdict)
-    assert power_adapter.run_multinode_agentic_power(
+    assert power_adapter.run_native_agentic_power(
         result_dir=tmp_path / "logs/agentic/conc_8",
         agg_result=aggregate_path,
         power_dir=tmp_path / "logs/power",

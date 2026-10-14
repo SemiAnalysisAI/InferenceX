@@ -1,10 +1,6 @@
 schema: 2
 name: "minimax-m3-vllm-disagg-gb200-1p4d-dep4-tp4-marlin-fp8-1k1k"
 
-# 1P DEP4 prefill (TP1 DP4 EP, 4 GPU/worker) + 4D TP4 decode (TP4, 4 GPU/worker = 1 node each).
-# Decode uses Marlin MoE backend with expert-parallel disabled (1p4d only).
-# GB200 has 4 GPUs/node.
-# Nodes: 1 prefill + 4 decode (+ head/infra).
 
 model:
   path: "minimax-m3-mxfp8"

@@ -1,19 +1,6 @@
-# DeepSeek-V4.1-Flash AgentX on MI355X with vLLM native DSpark
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). The KV cache is
-# GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    # The first ROCm 10.0 nightly carrying vllm-project/vllm#60397 (DSv4.1
-    # mono decode kernels), which the environment below enables. It also
-    # brings #59685 (AITER MegaMoEV2 for DeepSeek V4), #56638 (shared
-    # combine_topk_swa_indices kernel in place of the Torch prefill combine),
-    # #60159 (native merge_attn_states on gfx950) and #60389 (MLA derived
-    # weights kept in place on weight reload).
-    container: vllm/vllm-openai-rocm:nightly-rocm100-7d0b4e57aac4c4323225b0eee9ae960ce75ffffe
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -58,17 +45,14 @@ base:
         # indexer does not support.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
-        # The ROCm sparse SWA path lacks the replay window clamp; bounded replay
-        # memory-faulted at the first prefix hit with a replay start.
-        no-swa-bounded-replay: true
+        # Mono decode kernels (vllm-project/vllm#60397, #61082): two persistent
+        # launches a layer on all 40 backbone layers for decode steps of up to
+        # 48 rows (c8 with five drafts); larger steps take the regular path.
+        monokernel: true
         disable-uvicorn-access-log: true
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
-        # Mono decode kernels (vllm-project/vllm#60397): two persistent
-        # launches a layer for decode steps of up to 48 rows (c8 with five
-        # drafts); larger steps take the regular path.
-        VLLM_ROCM_MONO_DECODE: '1'
         # INT4 quick all-reduce above its size threshold
         # (vllm-project/recipes#1061).
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
@@ -78,16 +62,10 @@ base:
         # graphs keep FULL_AND_PIECEWISE capture working.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
         OMP_NUM_THREADS: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
-      # Full-context corpus for this 1M-context recipe.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point, concurrency 1 through 64 on both TP arms (c128 and

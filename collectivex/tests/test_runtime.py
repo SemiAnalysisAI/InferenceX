@@ -259,6 +259,24 @@ class RelaxedOrderingProfileTests(unittest.TestCase):
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
+class EfaPluginProfileTests(unittest.TestCase):
+    def test_ranks_load_the_prepared_plugin_and_proxy_gin(self) -> None:
+        lib = "/cx-cache/ofi/lib"
+        for lib_dir, expected in (
+            (lib, f"{lib}/libnccl-net-ofi.so {lib}/libnccl-ofi-tuner.so 2"),
+            ("", "ofi unset 2"),
+        ):
+            with self.subTest(lib_dir=lib_dir):
+                stdout = run_common(
+                    "export COLLX_RDMA_FABRIC=efa COLLX_RDMA_DEVICES=rdmap86s0"
+                    f" NCCL_TUNER_PLUGIN=stale COLLX_OFI_NCCL_LIB_DIR='{lib_dir}';"
+                    " collx_apply_network_profile 2 nvlink-rdma;"
+                    ' echo "$NCCL_NET_PLUGIN ${NCCL_TUNER_PLUGIN:-unset} $NCCL_GIN_TYPE"',
+                    check=True,
+                ).stdout
+                self.assertEqual(stdout.strip().splitlines()[-1], expected)
+
+
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
