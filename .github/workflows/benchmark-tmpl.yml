@@ -473,12 +473,9 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_window.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
-            ${{ env.INFERENCEX_E2E_ROOT }}/results/power_validation.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256
