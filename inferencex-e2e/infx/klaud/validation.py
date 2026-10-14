@@ -33,6 +33,12 @@ def benchmark_points(entries: list[dict]) -> set[tuple]:
     }
 
 
+def project_prefix(repository: str, head: str) -> str:
+    """The end-to-end project directory at ``head``: ``inferencex-e2e/`` or the root."""
+    tree = github.read(repository, f"git/trees/{head}")
+    return "inferencex-e2e/" if "inferencex-e2e" in {item["path"] for item in tree["tree"]} else ""
+
+
 def canonical_matrix(repository: str, head: str, family: str) -> dict:
     """Generate the unfiltered family from exact-head YAML using trusted local code.
 
@@ -41,36 +47,44 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     """
     import yaml
 
+    from infx.matrix.fingerprint import recipe_fingerprint
     from infx.matrix.generate import generate_test_config_sweep, mark_eval_entries
-    from infx.matrix.plan import recipe_fingerprint
-    from infx.matrix.validation import validate_master_config, validate_runner_config
+    from infx.matrix.validation import (
+        srt_recipe_references,
+        validate_master_config,
+        validate_runner_config,
+    )
+    from infx.srt_slurm.workload import SHARED_BLOCKS, TELEMETRY_BLOCK
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     source, key = family.split(":", 1)
-    prefix = ""
-    tree = github.read(repository, f"git/trees/{head}")
-    paths = {item["path"] for item in tree["tree"]}
-    if "inferencex-e2e" in paths:
-        prefix = "inferencex-e2e/"
+    prefix = project_prefix(repository, head)
     master = yaml.safe_load(github.file_at(repository, head, prefix + source))
     runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
-    # Only the selected family is relevant; retired sibling schemas may have changed.
-    entries = generate_test_config_sweep(
-        SimpleNamespace(config_keys=[key]),
-        validate_master_config({key: master[key]}),
-        validate_runner_config(runners),
-    )
+    family_config = {key: master[key]}
+    with tempfile.TemporaryDirectory(prefix="klaud-recipes-") as temp:
+        root = Path(temp)
+        references = srt_recipe_references(family_config)[key]
+        paths = {reference.partition(":")[0] for reference in references}
+        blocks = [block.as_posix() for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK)]
+        for path in [*paths, *blocks]:
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            (root / path).write_bytes(github.file_at(repository, head, prefix + path))
+        entries = generate_test_config_sweep(
+            SimpleNamespace(config_keys=[key]),
+            validate_master_config(family_config, root),
+            validate_runner_config(runners),
+            root,
+        )
+        fingerprinted = [
+            {**row, "recipe-fingerprint": recipe_fingerprint(row, root)} for row in entries
+        ]
     evals = [
         dict(row, **{"eval-only": True})
         for row in mark_eval_entries(deepcopy(entries))
         if row.get("run-eval")
     ]
-    return {
-        "single_node": {
-            "all": [{**row, "recipe-fingerprint": recipe_fingerprint(row)} for row in entries]
-        },
-        "evals": evals,
-    }
+    return {"single_node": {"all": fingerprinted}, "evals": evals}
 
 
 PRODUCER_UNAVAILABLE = "Baseline producer family cannot be regenerated"
@@ -89,12 +103,11 @@ class ProducerRegenerationError(VerificationError):
 
 
 def producer_matrix(repository: str, head: str, family: str) -> dict:
-    """Regenerate a published producer's family with the producer revision's own generator.
+    """Regenerate a published producer's family with the producer revision's own tooling.
 
     This runs another revision's code, which inherits only ``INHERITED_ENV``: call it only
     where no credentials are held, as the ``regenerate-producers`` step does.
     """
-    from infx.matrix.plan import recipe_fingerprint
     from infx.matrix.revision import snapshot
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
@@ -111,17 +124,21 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
             )
         with snapshot(head) as producer:
             rows = producer.generate([family.split(":", 1)[1]], ["--no-evals"])
+            if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+                raise ValueError("the generator did not print a list of matrix rows")
+            fingerprints = producer.fingerprints(rows)
     except subprocess.SubprocessError as error:
         stderr = getattr(error, "stderr", None) or b""
         text = stderr.decode(errors="replace") if isinstance(stderr, bytes) else stderr
         raise ProducerRegenerationError(text) from error
     except (OSError, ValueError) as error:
         raise ProducerRegenerationError(str(error)) from error
-    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
-        raise ProducerRegenerationError("the generator did not print a list of matrix rows")
     return {
         "single_node": {
-            "all": [{**row, "recipe-fingerprint": recipe_fingerprint(row)} for row in rows]
+            "all": [
+                {**row, "recipe-fingerprint": fingerprint}
+                for row, fingerprint in zip(rows, fingerprints, strict=True)
+            ]
         }
     }
 
@@ -159,8 +176,6 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
         measured = {
             key: value for key, value in entry.items() if key not in ("priority", "queue-token")
         }
-        # The workflow adds schema defaults AFTER fingerprinting. Compare complete
-        # settings with the independently generated recipe under that same schema.
         normalized = schema.validate_python(measured).model_dump(by_alias=True, exclude_none=True)
         if any(generated.get(point) != normalized for point in benchmark_points([entry])):
             raise VerificationError("Matrix settings do not match the canonical recipe")
@@ -241,7 +256,6 @@ def check_coverage(
         "eval", expected_evals(matrix), {row[:-1] for row in eval_rows}
     )
     if errors:
-        # Only a fixed failure code escapes: no raw artifact data in public diagnostics.
         raise VerificationError("Full-sweep result coverage or consistency failed")
 
 
@@ -258,10 +272,7 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
         wanted = (
             name in ("klaud-sweep-manifest", "results_bmk")
             or name.startswith("bmk_agentic_")
-            or (
-                name.startswith("eval_")
-                and not name.startswith(("eval_server_logs_", "eval_gpu_metrics_"))
-            )
+            or (name.startswith("eval_") and not name.startswith("eval_server_logs_"))
         )
         if not wanted:
             continue
@@ -291,7 +302,7 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
                 if any(
                     a["name"].startswith(prefix)
                     and a["name"] != name
-                    and not a["name"].startswith(("eval_server_logs_", "eval_gpu_metrics_"))
+                    and not a["name"].startswith("eval_server_logs_")
                     and utc(a["created_at"]) >= utc(attempt["run_started_at"])
                     for a in inventory
                 ):

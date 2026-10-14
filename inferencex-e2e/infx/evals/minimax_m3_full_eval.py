@@ -14,9 +14,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+UTC = timezone.utc  # noqa: UP017
 
 TASK_NAME = "minimax_m3_full"
 RESULT_FORMAT = "inferencex-eval-v1"

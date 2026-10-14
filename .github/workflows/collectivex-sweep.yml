@@ -84,7 +84,7 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -eo pipefail
-          source ../inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source ../inferencex-e2e/benchmarks/check_env.sh
           check_env_vars INPUT_SUITES INPUT_SWAP_PROFILE INPUT_BACKEND RUN_ID RUN_ATTEMPT GITHUB_OUTPUT
           args=(--suites "$INPUT_SUITES" --swap-profile "$INPUT_SWAP_PROFILE" --backend "$INPUT_BACKEND")
           [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")

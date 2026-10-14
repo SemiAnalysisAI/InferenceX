@@ -1,0 +1,216 @@
+
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg
+  identity:
+    model: {}
+  dynamo:
+    install: true
+    source:
+      wheel: "1.5.0.dev20260914"
+  slurm:
+    # c96 AgentX runs take ~2.5 h including the 60 min profiling phase and the gate.
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  # Dynamo 1.5 discovers workers through etcd and also needs NATS; both run with the
+  # frontend on the prefill node (two nodes total for 1P1D).
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+    args:
+      router-mode: kv
+      # Session-affinity TTL as measured for the single-decode 1P1D cells; the
+      # multi-decode overrides below set it to 1 s (per-turn load-aware decode pick).
+      router-session-affinity-ttl-secs: "3600"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        SGLANG_DEFAULT_THINKING: "1"
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+        SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        disaggregation-transfer-backend: mooncake
+        # Long-context first turns (P90 ISL ~250k tokens): one 16k-token chunk per step.
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        max-running-requests: 64
+        swa-prefix-tails: 4096
+        mem-fraction-static: 0.85
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+      # KV events for the Dynamo KV router; srtctl allocates the ZMQ ports per worker.
+      kv_events: true
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        SGLANG_DEFAULT_THINKING: "1"
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        disaggregation-transfer-backend: mooncake
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        mem-fraction-static: 0.85
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+      kv_events: true
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      AGENTIC_WARMUP_GRACE_PERIOD: "3600"
+
+override_1p1d_c96:
+  name: disagg-gb300-1p1d-tp2ep2-c96
+
+override_1p2d_c48:
+  name: disagg-gb300-1p2d-tp2ep2-c48
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    decode:
+      workers: 2
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+override_1p2d_c64:
+  name: disagg-gb300-1p2d-tp2ep2-c64
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    decode:
+      workers: 2
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+override_1p2d_spread_c16:
+  name: disagg-gb300-1p2d-spread-tp2ep2-c16
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+override_1p1d_hicache_c160:
+  name: disagg-gb300-1p1d-hicache-tp2ep2-c160
+  roles:
+    prefill:
+      args:
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      args:
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 192
+
+override_2p1d_hicache_c256:
+  name: disagg-gb300-2p1d-hicache-tp2ep2-c256
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 128
+        enable-hierarchical-cache: true
+        hicache-ratio: 1
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+    decode:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 256

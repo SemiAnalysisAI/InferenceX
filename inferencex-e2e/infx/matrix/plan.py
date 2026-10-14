@@ -2,8 +2,6 @@
 
 import argparse
 import copy
-import hashlib
-import json
 import re
 import subprocess
 import traceback
@@ -14,6 +12,7 @@ import yaml
 
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
+from .fingerprint import recipe_fingerprint
 from .generate import (
     EvalMode,
     drop_app_colliding_evals,
@@ -26,6 +25,7 @@ from .revision import GENERATOR, snapshot
 from .validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
+    config_root,
     load_config_files,
     load_runner_file,
 )
@@ -51,7 +51,6 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
         if line.startswith("-") and not line.startswith("---"):
             deleted_content = line[1:]
             if deleted_content.strip():
-                # The changelog is append-only, except for blank lines.
                 raise ValueError(
                     f"Deletions are not allowed in {filepath}. "
                     f"Only additions to the changelog are permitted. "
@@ -109,22 +108,6 @@ def _matrix_curve_key(entry: dict) -> tuple:
             if key not in {"conc", "exp-name", "recipe-fingerprint"}
         )
     )
-
-
-def recipe_fingerprint(entry: dict) -> str:
-    """Hash the generated recipe independently of point-level concurrency/name."""
-    recipe = {
-        key: value
-        for key, value in entry.items()
-        if key not in {"conc", "exp-name", "recipe-fingerprint"}
-    }
-    canonical = json.dumps(
-        recipe,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _matrix_visual_series_key(entry: dict) -> tuple:
@@ -359,13 +342,12 @@ def build_plan(
 
         all_benchmark_results = []
         all_eval_results = []
-        # Track benchmark coverage per scenario so overlapping changelog entries
-        # with disjoint scenario filters do not suppress each other.
         benchmark_scenarios_seen = defaultdict(set)
         eval_scenarios_seen = defaultdict(set)
 
         config_files = MASTER_CONFIGS if config_files is None else config_files
         master_config = load_config_files(config_files)
+        root = config_root(config_files)
         runner_data = None
 
         def generate_current(
@@ -383,6 +365,7 @@ def build_plan(
                     runner_data,
                     scenario_types=scenarios,
                     eval_mode=mode,
+                    root=root,
                 )
             except Exception as error:
                 command = [
@@ -426,8 +409,6 @@ def build_plan(
                 selected_config_scenarios,
             )
 
-        # Process all-evals entries first so their broader eval matrix wins when
-        # the same config appears in multiple changelog entries.
         resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
         for entry, all_configs in resolved_entries:
@@ -473,7 +454,7 @@ def build_plan(
             all_benchmark_results = trim_conc(all_benchmark_results)
 
         for result in all_benchmark_results:
-            result["recipe-fingerprint"] = recipe_fingerprint(result)
+            result["recipe-fingerprint"] = recipe_fingerprint(result, root)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             scenario = (
                 "agentic"
@@ -482,13 +463,11 @@ def build_plan(
             )
             final_results[node_type][scenario].append(result)
 
-        # Entries are selected independently; the app still keeps one eval per identity.
         all_eval_results = [
             result
             for result in drop_app_colliding_evals(all_eval_results)
             if result.get("run-eval")
         ]
-        # Fixed-sequence and AgentX eval jobs have different workflow inputs.
         for result in all_eval_results:
             prefix = "multinode_" if result.get("prefill") is not None else ""
             suffix = "agentic_evals" if result.get("scenario-type") == "agentic-coding" else "evals"
@@ -532,7 +511,6 @@ def main() -> None:
             evals_only=args.evals_only,
         )
     except MatrixGenerationError as error:
-        # Preserve the legacy child diagnostics and failure status at the CLI.
         stderr = "".join(traceback.format_exception(error.cause))
         print(stderr)
         raise subprocess.CalledProcessError(1, error.command, stderr=stderr) from None
