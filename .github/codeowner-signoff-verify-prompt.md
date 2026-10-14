@@ -727,7 +727,8 @@ The publisher adds the prominent `❗❗ WARNING ❗❗` banner for this warning
 Do not add Pareto-reviewer mentions or duplicate the banner yourself.
 
 ## Verdict and output
-Decide PASS only if Checks 0-16 ALL pass. A check reported as `N/A` counts as a pass.
+Decide PASS only if Checks 0-16 ALL pass. A check reported as `N/A` counts as a pass,
+but its row still starts with ➖, never ✅.
 Checks 4, 14, 15, and 16 may WARN but never FAIL. If any warns and no other check fails,
 use the WARN header below. If any other check fails, use REJECTED even when
 Check 4, 14, 15, or 16 also warns.
@@ -740,6 +741,13 @@ unchanged. It records only the assessed commit and does not publish commit statu
 verdict forward to later commits.
 Do not include a hidden marker or assessed-commit footer; the publisher adds them.
 Always write your full current assessment, even if it matches a previous verdict.
+After writing the file, check it with the publisher's rules:
+```bash
+uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate /tmp/codeowner-signoff-verdict.md
+```
+It lists every row or header the publisher would reject. Fix those and rerun it until it
+prints `Verdict format is valid.` before you finish. It checks format only; never change a
+check's conclusion to satisfy it.
 
 KEEP IT TIGHT. A busy reviewer should get it in ~15 seconds. Do not write a novel or a
 single terse line. Rules:
@@ -778,6 +786,10 @@ single terse line. Rules:
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
     `⚠️ Check 15 (PR description): WARN — <claim versus actual configuration/evidence; correction needed>`
     `⚠️ Check 16 (NVIDIA overview): WARN — <model/framework, NVIDIA SKUs, missing or unverified listing; upstream and overview links>`
+  The status word alone selects the emoji. An N/A row starts with ➖ even when it is the
+  only N/A row among PASS rows; Check 12 is N/A on most PRs. Keep each row on one line,
+  with its reason after ` — `. Never end a row at its status and continue the reason on
+  later lines or in sub-bullets; the publisher rejects such rows.
   Never hide Check 4, 14, 15, or 16 WARN inside the collapsed group.
   Check 4, 15, and 16 warnings must not trigger the Pareto-coverage escalation.
   For Check 14 WARN, the publisher adds the
