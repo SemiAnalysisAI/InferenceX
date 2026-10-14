@@ -109,11 +109,12 @@ Steps:
    the canvas, then SSH in with `ssh -A` when a jumpbox or agent forwarding is involved.
 2. Reproduce the exact benchmark the launcher runs. Single-node jobs go through the srt driver
    of `python -m infx.launch run` (`inferencex-e2e/infx/launch/drivers/srt/`): it binds the
-   master row's `srt-recipe:` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/<engine>/<sku>-<precision>[-mtp]/<scenario>.yaml`)
+   matrix row's `srt-recipe` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<srt-recipe-dir>/<srt-recipe>`)
    with `python -m infx.srt_slurm.single_node prepare`, renders the job-local `srtslurm.yaml`
-   from the cluster's record, then submits it through srtctl. Read the recipe for the image
-   (`model.container`), server args and env, and the cluster record for mounts and the job env
-   (`IMAGE`, `TP`, `PRECISION`, `SPEC_DECODING`, `CONC`, …). On Slurm clusters, use
+   from the cluster's record, then submits it through srtctl. Read the bound `recipe.yaml` that
+   `prepare` writes for the image (`model.container`, the master `image`), server args and env,
+   and the cluster record for mounts and the job env (`IMAGE`, `TP`, `PRECISION`,
+   `SPEC_DECODING`, `CONC`, …). On Slurm clusters, use
    `salloc` or `srun` with the squash image. On the **bare-metal `-tw` pools, use `docker run`**
    on the node directly without `srun`.
 3. **Always diff against a working node or working SKU** for reference. Most node failures

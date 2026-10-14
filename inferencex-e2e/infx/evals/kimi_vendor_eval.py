@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# The integration-error path runs under the serving image's python3, which may be 3.10.
 UTC = timezone.utc  # noqa: UP017
 
 TASK_NAME = "kimi_tool_call_schema"

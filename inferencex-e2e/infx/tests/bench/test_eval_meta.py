@@ -12,13 +12,11 @@ TOPOLOGY = (
 
 
 @pytest.mark.parametrize(("inputs", "expected"), [
-    # srt-slurm names: explicit per-phase DP attention wins over a stale DP_ATTENTION.
     (
         {"PREFILL_TP": "4", "PREFILL_EP": "4", "PREFILL_DP_ATTN": "true",
          "DECODE_TP": "8", "DECODE_EP": "8", "DECODE_DP_ATTN": "false", "DP_ATTENTION": "false"},
         (4, 4, True, 4, 4, True, 1, 8, 8, False, 1),
     ),
-    # Decode inherits prefill's TP and EP; worker counts default to one each.
     (
         {"PREFILL_TP": "8", "PREFILL_EP": "2", "DECODE_DP_ATTN": "true"},
         (8, 2, False, 8, 2, False, 1, 8, 2, True, 1),

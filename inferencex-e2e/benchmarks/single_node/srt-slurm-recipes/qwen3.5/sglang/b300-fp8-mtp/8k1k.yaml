@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: qwen3.5-fp8-b300-sglang-mtp-8k1k
-  model:
-    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:v0.5.12-cu130
-    precision: fp8
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -53,15 +49,6 @@ base:
       env:
         SGLANG_ENABLE_SPEC_V2: '1'
         PYTHONNOUSERSITE: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'true'
 zip_override_concurrency:
   roles:
     agg:
