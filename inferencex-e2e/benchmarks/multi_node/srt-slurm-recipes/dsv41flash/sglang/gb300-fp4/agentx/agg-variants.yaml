@@ -11,12 +11,14 @@ base:
       wheel: "1.5.0.dev20260914"
   slurm:
     time_limit: "4:00:00"
+  # Cold weight loads from the shared HF cache plus graph capture take 15-20 min.
   health_check:
     max_attempts: 1440
     interval_seconds: 10
   resources:
     gpu_type: gb300
     gpus_per_node: 4
+  # Dynamo 1.5 discovers workers through etcd and also needs NATS.
   services:
     - name: etcd
       type: etcd
@@ -49,10 +51,13 @@ base:
         PYTHONNOUSERSITE: "1"
         PYTHONUNBUFFERED: "1"
         HF_HUB_CACHE: /hf_hub_cache
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
         SGLANG_DEFAULT_THINKING: "1"
         SGLANG_DSV41_REASONING_EFFORT: high
         SGLANG_DSPARK_OPT_MARKOV_W2_BF16: "True"
+        # TP2 keeps the row-sharded Engram tables in host DRAM.
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
       args:
@@ -61,12 +66,16 @@ base:
         tensor-parallel-size: 2
         expert-parallel-size: 2
         mem-fraction-static: 0.8
+        # Keep active decode requests progressing while long prefixes are queued.
         prefill-decode-interval: 16
+        # Admission never exceeds the captured decode graph batch.
         cuda-graph-max-bs-decode: 64
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 5
         reasoning-parser: auto
         tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
         weight-loader-prefetch-checkpoints: true
@@ -82,6 +91,7 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
 
 override_tp4_c1:

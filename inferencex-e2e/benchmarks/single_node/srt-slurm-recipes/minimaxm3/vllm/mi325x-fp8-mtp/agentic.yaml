@@ -14,6 +14,7 @@ base:
   engine:
     type: vllm
     connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -33,6 +34,8 @@ base:
         enable-prefix-caching: true
         enable-chunked-prefill: true
         max-num-batched-tokens: 32768
+        # Three-token EAGLE3; throughput runs replace verification with the
+        # golden acceptance length.
         speculative-config: '{"method": "eagle3", "model": "Inferact/MiniMax-M3-EAGLE3-GQA", "num_speculative_tokens": 3, "attention_backend": "TRITON_ATTN"}'
         tool-call-parser: minimax_m3
         reasoning-parser: minimax_m3
@@ -49,6 +52,7 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
+# One variant per point. Admission is 2x CONC.
 override_tp8_c1:
   roles:
     agg:

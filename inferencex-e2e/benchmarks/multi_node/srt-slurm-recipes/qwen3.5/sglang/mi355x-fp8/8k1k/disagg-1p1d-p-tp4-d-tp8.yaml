@@ -12,6 +12,9 @@ identity:
 slurm:
   time_limit: "08:00:00"
 
+# This topology owns every GPU on each MI355X node. Give SGLang the complete
+# 128-core cpuset as well: its ROCm image enables per-GPU CPU affinity, which
+# maps the eight TP ranks across the full dual-socket CPU topology.
 sbatch_directives:
   cpus-per-task: "128"
   mem: "0"
@@ -35,6 +38,9 @@ roles:
     gpus: 4
     env: &common_environment
       HF_HOME: "/hf_hub_cache"
+    # Hugging Face stores hub snapshots under $HF_HOME/hub. Keep the explicit
+    # cache variables on that same path so srt-slurm's prefetch and every
+    # backend process resolve the identical, current snapshot.
       HF_HUB_CACHE: "/hf_hub_cache/hub"
       HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
       PYTHONUNBUFFERED: "1"

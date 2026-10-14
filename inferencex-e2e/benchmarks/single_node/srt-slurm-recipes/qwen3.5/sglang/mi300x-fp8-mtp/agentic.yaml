@@ -12,6 +12,8 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  # Loading plus first-request kernel tuning outlasts the 1800 s default:
+  # MI300X Qwen3.5 was ready after ~27 minutes (run 36160403972).
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -49,6 +51,8 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
+# One variant per point. AgentX concurrency counts live session trees, so
+# admission is 2x CONC; the graph batch is CONC, capped at 64.
 override_tp8_ep1_c4:
   roles:
     agg:

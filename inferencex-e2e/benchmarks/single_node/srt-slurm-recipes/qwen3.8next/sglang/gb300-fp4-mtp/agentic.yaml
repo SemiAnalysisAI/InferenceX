@@ -27,6 +27,7 @@ base:
         PYTHONUNBUFFERED: '1'
         NO_COLOR: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        # Explicitly disable the prohibited draft precision conversion path.
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
       args:
         served-model-name: nvidia/Qwen3.8-Flash-Next-NVFP4
@@ -60,6 +61,8 @@ base:
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 4
         speculative-moe-runner-backend: flashinfer_trtllm
+        # The native connector injects model-specific golden AL for throughput;
+        # quality evaluations use real verification. No manual AL override.
         enable-linear-replayssm-spec: true
         cuda-graph-backend-prefill: disabled
         cuda-graph-backend-decode: full
@@ -68,6 +71,8 @@ base:
         kv-cache-dtype: bfloat16
         speculative-draft-kv-cache-dtype: bfloat16
         enable-hierarchical-cache: true
+        # One combined packed target/draft KV + Mamba host-pool budget.
+        # Verify actual allocations, not whole-node Slurm memory reservation.
         hicache-size: 224
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
@@ -92,9 +97,11 @@ base:
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Native single-node binding verifies these against the generated point.
       TOTAL_CPU_DRAM_GB: '225'
       KV_OFFLOADING: dram
 
+# Only client concurrency changes; serving/admission/graph/cache settings stay fixed.
 override_c1:
   benchmark:
     env:

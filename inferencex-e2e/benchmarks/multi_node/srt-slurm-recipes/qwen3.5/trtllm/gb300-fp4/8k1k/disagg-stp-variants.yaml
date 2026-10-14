@@ -22,6 +22,7 @@ base:
 
   engine:
     type: trtllm
+    # Dynamo builds before ai-dynamo/dynamo#12162 reject --publish-metrics.
     publish_metrics: false
 
   roles:

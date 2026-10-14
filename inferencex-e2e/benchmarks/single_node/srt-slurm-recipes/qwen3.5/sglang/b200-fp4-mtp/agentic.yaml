@@ -47,11 +47,18 @@ base:
         NCCL_NVLS_ENABLE: '1'
         SGL_ENABLE_JIT_DEEPGEMM: 'false'
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
+# One variant per point. Admission is 2x CONC and the graph batch is CONC,
+# capped at 64. TP4 tokenizes in parallel to keep 256k warmups within the
+# client timeout; TP2 keeps the single tokenizer, whose multi-worker startup
+# races with TP2 HiCache shared-memory initialization. HiCache sizes each of
+# the target KV and Mamba host pools per rank with a 1 GB/rank alignment
+# reserve and the 1/15 NEXTN draft pool: (DRAM - TP) * 15 / TP / 31 GB.
 override_tp4_c1:
   roles:
     agg:

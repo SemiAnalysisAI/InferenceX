@@ -14,6 +14,7 @@ base:
   engine:
     type: vllm
     connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
     max_attempts: 720
@@ -36,6 +37,7 @@ base:
         enable-auto-tool-choice: true
         reasoning-parser: deepseek_v4
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4"}'
+        # Throughput runs switch to synthetic rejection at the golden acceptance length.
         speculative-config: '{"method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic"}'
         no-disable-hybrid-kv-cache-manager: true
         disable-uvicorn-access-log: true
@@ -53,6 +55,14 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
+# One variant per point. Graphs capture every decode batch of up to
+# max-num-seqs sequences in tokens (1 target + 6 drafts each). TP8 admits CONC
+# with a fixed 50 GiB KV cache, and also captures piecewise mixed batches of
+# 100-500 tokens. DEP8 runs one data-parallel rank per GPU behind a
+# consistent-hash vLLM Router (turns of one conversation share a rank), admits
+# 2x CONC across the ranks with MegaMoE experts, reserves verification slots
+# beyond an 8192-token prefill budget, and splits TOTAL_CPU_DRAM_GB GB of eager
+# offload across the ranks; c160 and c192 shrink the per-rank KV cache.
 override_tp8_c1:
   roles:
     agg:

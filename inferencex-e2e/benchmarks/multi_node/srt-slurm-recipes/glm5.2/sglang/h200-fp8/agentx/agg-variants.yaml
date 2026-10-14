@@ -11,6 +11,8 @@ base:
       sglang: 4358a1617cad734fc37bf53d9e5c2092bd43d075
 
   dynamo:
+    # This nightly includes the matching Dynamo adapter. Reinstalling an older
+    # wheel removes compatibility with this SGLang commit.
     install: false
 
   resources:

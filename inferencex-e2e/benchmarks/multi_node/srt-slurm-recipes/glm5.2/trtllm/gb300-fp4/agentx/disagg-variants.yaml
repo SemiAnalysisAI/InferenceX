@@ -13,6 +13,10 @@ base:
     gpus_per_node: 4
   engine:
     type: trtllm
+    # Publish engine metrics without KV events. The pinned Dynamo wheel also
+    # selects the routed node address for metadata and transport advertisement
+    # (ai-dynamo/dynamo#15628).
+    # srtctl advertises the worker leaders' /metrics to AIPerf.
     publish_metrics: true
   roles:
     prefill:
@@ -50,6 +54,8 @@ base:
         cache_transceiver_config:
           backend: NIXL
           transceiver_runtime: PYTHON
+          # C++ transfer-agent bounce: every prefill->decode copy is staged in fixed pieces instead of
+          # first-touch writes into the remote pool.
           agent_bounce_buffer_enable: true
           agent_bounce_params:
             max_average_descriptor_size: 4MB
@@ -120,6 +126,8 @@ base:
         cache_transceiver_config:
           backend: NIXL
           transceiver_runtime: PYTHON
+          # C++ transfer-agent bounce: every prefill->decode copy is staged in fixed pieces instead of
+          # first-touch writes into the remote pool.
           agent_bounce_buffer_enable: true
           agent_bounce_params:
             max_average_descriptor_size: 4MB

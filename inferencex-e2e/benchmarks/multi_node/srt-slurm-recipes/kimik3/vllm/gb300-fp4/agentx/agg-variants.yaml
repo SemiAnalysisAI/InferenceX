@@ -72,6 +72,8 @@ base:
       env:
         VLLM_ALLREDUCE_USE_FLASHINFER: "1"
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+        # Use the direct DCP a2a/gather kernels rather than the collective
+        # fallback, matching the B300 arm (kimik3_fp4_b300_vllm_mtp.sh).
         VLLM_USE_DIRECT_DCP_A2A: "1"
         VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
         VLLM_USE_DIRECT_DCP_KV_GATHER: "1"

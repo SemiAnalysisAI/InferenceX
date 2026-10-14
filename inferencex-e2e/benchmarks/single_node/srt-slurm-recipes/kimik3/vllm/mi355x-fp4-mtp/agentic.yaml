@@ -14,6 +14,7 @@ base:
   engine:
     type: vllm
     connector: null
+  # Weights load for up to VLLM_ENGINE_READY_TIMEOUT_S.
   health_check:
     interval_seconds: 10
     max_attempts: 720
@@ -39,25 +40,40 @@ base:
         attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA"}'
         stream-interval: 10
       env:
+        # Upstream AMD recipe environment.
         VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
         VLLM_ROCM_USE_AITER: '1'
         SAFETENSORS_FAST_GPU: '1'
         VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
         AITER_BF16_FP8_MOE_BOUND: '0'
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        # The MI355X nodes report MEC firmware 38, below the 177 that fixes the
+        # RCCL memory reclaim issue.
         HSA_NO_SCRATCH_RECLAIM: '1'
+        # 2.8 TB of weights off a shared mount takes far longer than the default.
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         PYTHONNOUSERSITE: '1'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
         VLLM_USE_DIRECT_DCP_A2A: '0'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        # Route DCP multi-token verify through the AITER ASM round-robin decode.
         VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
   benchmark:
     env:
+      # Long agentic turns against a 1M context are prefill-bound on the server.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
+# One variant per point. The DSpark draft length descends with concurrency
+# (7, 5, 4, 3, 4, 4) and stays at 4 for the throughput band; agentic runs
+# replace block rejection with the golden acceptance length for that draft
+# length. Admission is 2x CONC and graph
+# capture covers every even size up to 2x CONC x (1 + drafts). Every point
+# requests FULL_AND_PIECEWISE; the AMD K3 model has no torch.compile
+# submodule, so without breakable graphs vLLM falls back to FULL_DECODE_ONLY.
+# The offload points split the 1799 GB DRAM budget evenly across the eight ranks;
+# identical prefixes must hash to identical block keys on every rank.
 override_tp8_c1:
   roles:
     agg:

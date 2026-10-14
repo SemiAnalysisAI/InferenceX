@@ -32,6 +32,8 @@ base:
         speculative-num-steps: 1
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 7
+        # The checkpoint lives on Lustre: prefetch sequentially across local
+        # ranks so post-load repacking reads from page cache.
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load": true}'
         enable-metrics: true
@@ -39,6 +41,7 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled keep-alive connections.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
@@ -48,12 +51,21 @@ base:
         SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
         SGLANG_OPT_USE_TOPK_V2: '1'
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+        # The image's first ptxas on the legacy search path.
         TRITON_PTXAS_PATH: /usr/local/cuda-13.0/bin/ptxas
   benchmark:
     env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
+# One variant per point; admission is 2x CONC. TP8 captures graphs up to the
+# admission cap and runs the FlashInfer MXFP4 MoE; its replicated HiCache
+# pools fit ratio 2.75 (~121 GiB/rank) on 1.7 TiB hosts. DEP8 shards the host
+# pools (ratio 8), caps graphs at 32, runs MegaMoE with 6144 prefill tokens per
+# DP rank, and balances DP admission; the gateway routes sessions by AIPerf
+# correlation ID. C160 interleaves prefill more often and bounds the gateway's
+# load imbalance.
 override_tp8_c1:
   roles:
     agg:

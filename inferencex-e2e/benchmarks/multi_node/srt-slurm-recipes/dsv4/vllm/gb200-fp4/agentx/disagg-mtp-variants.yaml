@@ -138,6 +138,8 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
 
+# Long AgentX prefills can exceed Dynamo's request-plane default while
+# the healthy DEP8 worker is still computing the first response.
 override_1p1d:
   name: dsv4-gb200-vllm-agentic-mtp-disagg-1p1d-dep8-dep8
   roles:
@@ -145,6 +147,8 @@ override_1p1d:
       nodes: 2
       workers: 1
 
+# Long AgentX prefills can exceed Dynamo's request-plane default while
+# the healthy DEP8 workers are still computing their first responses.
 override_2p1d:
   name: dsv4-gb200-vllm-agentic-mtp-disagg-2p1d-dep8-dep8
   roles:

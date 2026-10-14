@@ -10,6 +10,7 @@ base:
     source:
       wheel: "1.5.0.dev20260914"
   slurm:
+    # c96 AgentX runs take ~2.5 h including the 60 min profiling phase and the gate.
     time_limit: "6:00:00"
   health_check:
     max_attempts: 1440
@@ -17,6 +18,8 @@ base:
   resources:
     gpu_type: gb300
     gpus_per_node: 4
+  # Dynamo 1.5 discovers workers through etcd and also needs NATS; both run with the
+  # frontend on the prefill node (two nodes total for 1P1D).
   services:
     - name: etcd
       type: etcd
@@ -34,6 +37,8 @@ base:
       DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
     args:
       router-mode: kv
+      # Session-affinity TTL as measured for the single-decode 1P1D cells; the
+      # multi-decode overrides below set it to 1 s (per-turn load-aware decode pick).
       router-session-affinity-ttl-secs: "3600"
       active-decode-blocks-threshold: "None"
       active-prefill-tokens-threshold: "None"
@@ -67,6 +72,7 @@ base:
         tensor-parallel-size: 2
         expert-parallel-size: 2
         disaggregation-transfer-backend: mooncake
+        # Long-context first turns (P90 ISL ~250k tokens): one 16k-token chunk per step.
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
         max-running-requests: 64
@@ -81,6 +87,7 @@ base:
         weight-loader-prefetch-checkpoints: true
         weight-loader-drop-cache-after-load: false
         model-loader-extra-config: '{"enable_multithread_load":true}'
+      # KV events for the Dynamo KV router; srtctl allocates the ZMQ ports per worker.
       kv_events: true
     decode:
       nodes: 1

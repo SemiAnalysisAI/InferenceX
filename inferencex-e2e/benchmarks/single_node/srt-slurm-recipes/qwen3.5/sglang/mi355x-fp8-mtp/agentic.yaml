@@ -23,6 +23,8 @@ base:
         data-parallel-size: 1
         expert-parallel-size: 1
         attention-backend: aiter
+        # This arm does not use ROCm quick all-reduce, so AITER allreduce
+        # fusion stays on, as on the MI355X FP8 fixed-sequence recipes.
         enable-aiter-allreduce-fusion: true
         mem-fraction-static: 0.8
         model-loader-extra-config: '{"enable_multithread_load": true}'
@@ -33,6 +35,7 @@ base:
         chunked-prefill-size: 16384
         scheduler-recv-interval: 60
         stream-interval: 50
+        # Parallel tokenization keeps 256k warmups within the client timeout.
         tokenizer-worker-num: 6
         reasoning-parser: qwen3
         tool-call-parser: qwen3_coder
@@ -48,12 +51,17 @@ base:
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         AITER_FLYDSL_FORCE: '1'
         SGLANG_MAMBA_SSM_DTYPE: bfloat16
+        # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
+# One variant per point. Admission is 2x CONC and the decode graph batch follows
+# it up to 128. HiCache skips non-reusable blocks and is sized in tiers: CONC 16
+# to 28 keep the 1.5x ratio, CONC 32 to 56 pin a 253 GB host pool, and CONC 64 to
+# 80 pin 400 GB. hicache-size overrides hicache-ratio where it is set.
 
 override_tp4_c1:
   roles:

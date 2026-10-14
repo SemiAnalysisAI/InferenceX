@@ -46,6 +46,7 @@ base:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
         PYTHONNOUSERSITE: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
         SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
@@ -53,12 +54,16 @@ base:
         SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
         SGLANG_OPT_USE_TOPK_V2: '1'
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+        # Triton compiles with the image's CUDA ptxas.
         TRITON_PTXAS_PATH: /usr/local/cuda/bin/ptxas
   benchmark:
     env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
+# One variant per point. TP8: admission is 2x CONC and the graph batch 4x
+# CONC, capped at 64.
 override_tp8_c1:
   roles:
     agg:
@@ -114,6 +119,12 @@ override_tp8_c32:
       CONC: '32'
       KV_OFFLOADING: none
 
+# DEP8 replaces the TP8 MoE path: the router keeps each session on the DP rank
+# holding its radix prefix, the global prefill chunk is 8192 per rank, decode
+# graphs cover the padded speculative batch across ranks, and AIPerf owns the
+# warmup. HiCache capacity is a host/device ratio; 3 keeps the tier near 2 TB.
+# Mega-MoE's transient workspace sits outside the static pool, so the static
+# fraction steps down with CONC: 0.90 to c256, 0.88 at c384, 0.86 from c512.
 override_dep8_c32:
   frontend: &dep8_frontend
     type: sglang-router
@@ -124,6 +135,7 @@ override_dep8_c32:
       connect-timeout-secs: 900
       request-timeout-secs: 14400
       disable-health-check: true
+      # A transient router-to-engine send failure would otherwise abort the run.
       retry-max-retries: 8
       retry-initial-backoff-ms: 500
       retry-max-backoff-ms: 10000
@@ -158,6 +170,7 @@ override_dep8_c32:
         max-running-requests: 64
         mem-fraction-static: 0.9
       env: &dep8_env
+        # Covers the 8192-token per-rank prefill budget.
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
   benchmark:
     env:

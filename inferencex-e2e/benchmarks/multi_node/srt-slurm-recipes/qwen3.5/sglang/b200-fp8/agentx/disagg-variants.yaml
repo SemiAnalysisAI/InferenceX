@@ -150,6 +150,7 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
+# Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c8:
   roles:
     prefill:
@@ -163,6 +164,7 @@ override_1p1d_p_tp4_d_tp4_c8:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 8
 
+# Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c16:
   roles:
     prefill:
@@ -176,6 +178,7 @@ override_1p1d_p_tp4_d_tp4_c16:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 16
 
+# Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c24:
   roles:
     prefill:
@@ -189,6 +192,7 @@ override_1p1d_p_tp4_d_tp4_c24:
         max-running-requests: 48
         cuda-graph-max-bs-decode: 24
 
+# Fast replay improves the published frontier; canonical sweep qualification is pending.
 override_1p1d_p_tp4_d_tp4_c32:
   roles:
     prefill:
@@ -202,11 +206,13 @@ override_1p1d_p_tp4_d_tp4_c32:
         max-running-requests: 64
         cuda-graph-max-bs-decode: 32
 
+# Experimental; retain only measured improvements over the current Pareto frontier.
 override_1p1d_p_tp4_d_tp4_c48_write_through:
   roles:
     prefill:
       args:
         max-running-requests: 96
+        # Combined KV/Mamba budget: 860 GB per TP4 prefill worker.
         hicache-size: 215
         hicache-write-policy: write_through
     decode:
@@ -215,11 +221,13 @@ override_1p1d_p_tp4_d_tp4_c48_write_through:
         max-running-requests: 96
         cuda-graph-max-bs-decode: 48
 
+# Short replay improves the published frontier; full official qualification remains required.
 override_1p1d_p_tp4_d_tp4_c64_write_through:
   roles:
     prefill:
       args:
         max-running-requests: 128
+        # Combined KV/Mamba budget: 860 GB per TP4 prefill worker.
         hicache-size: 215
         hicache-write-policy: write_through
     decode:

@@ -14,6 +14,7 @@ base:
   engine:
     type: vllm
     connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
     max_attempts: 720
@@ -33,6 +34,7 @@ base:
         block-size: 256
         max-model-len: 1048576
         attention-config: '{"indexer_kv_dtype":"mxfp4","backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+        # Throughput runs switch to synthetic rejection at the golden acceptance length.
         speculative-config: '{"method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic"}'
         disable-uvicorn-access-log: true
         tokenizer-mode: deepseek_v4
@@ -52,8 +54,13 @@ base:
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      # Native single-node jobs mount the persistent HF hub cache here.
       AIPERF_DATASET_MMAP_CACHE_DIR: /mnt/hf_hub_cache/aiperf_mmap_cache
 
+# Each zip group couples client concurrency to the scheduler and graph shapes.
+# Capture both 6*S draft and 7*S verification tokens for S=1..max-num-seqs.
+# TP also captures larger piecewise shapes for mixed prefill/decode batches.
+# The first five points use TP8; the final point is TP4 c8.
 zip_override_tp:
   roles:
     agg:
@@ -79,6 +86,10 @@ zip_override_tp:
       CONC: ['1', '2', '4', '8', '16', '8']
       KV_OFFLOADING: none
 
+# DEP8 admits 2*CONC/8 sequences per rank. Keep 8192 prefill tokens plus
+# seven verification tokens per sequence, with the budget aligned to eight.
+# CPU KV is split across eight ranks; offload remains eager so block hashes
+# agree across ranks. The router keeps each conversation on the same rank.
 zip_override_dep8:
   frontend:
     type: vllm-router
@@ -102,6 +113,7 @@ zip_override_dep8:
         long-prefill-token-threshold: 512
         max-num-batched-tokens: [8304, 8360, 8416, 8528, 8640, 8696]
         gpu-memory-utilization: 0.92
+        # Leave runtime workspace headroom at every concurrency.
         kv-cache-memory-bytes: 105000000000
         max-num-seqs: [16, 24, 32, 48, 64, 72]
         compilation-config:

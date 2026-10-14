@@ -13,6 +13,7 @@ base:
       wheel: "1.2.1"
   environment:
     DYNAMO_WHEEL_DIRS: "/srtctl-wheels"
+    # The frontend shares Grace CPU capacity with the long TP8 cold start.
     ETCD_LEASE_TTL: "7200"
   setup_script: vllm-container-deps.sh
   slurm:
@@ -144,4 +145,5 @@ override_c8:
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128],"mode":0}'
   benchmark:
     env:
+      # Avoid concurrent readers observing a mismatched mmap data/index pair.
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"

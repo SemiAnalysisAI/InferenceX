@@ -12,6 +12,7 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  # This release drops cached_tokens_details on the multi-tokenizer path.
   setup_script: sglang-multi-tokenizer-cached-tokens-details.sh
   roles:
     agg:
@@ -29,6 +30,7 @@ base:
         mamba-ssm-dtype: bfloat16
         attention-backend: flashinfer
         enable-flashinfer-allreduce-fusion: true
+        # 80 GB HBM3 keeps the static fraction at 0.75.
         mem-fraction-static: 0.75
         stream-interval: 50
         scheduler-recv-interval: 10
@@ -41,6 +43,8 @@ override_gpu_kv:
   benchmark:
     env:
       KV_OFFLOADING: none
+# HiCache extends RadixAttention. Hybrid GDN/Mamba allocates one KV and one
+# Mamba host pool per rank: 1731 GB / TP8 / 2 pools = 108 GB each.
 override_hicache:
   roles:
     agg:

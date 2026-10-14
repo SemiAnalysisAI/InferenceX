@@ -4,6 +4,7 @@ base:
   name: "b200-fp4-stp-8k1k"
 
   dynamo:
+    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
     request_plane: "nats"
     source:
       pypi: 0.8.1

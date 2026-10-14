@@ -14,6 +14,7 @@ base:
   engine:
     type: vllm
     connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -38,6 +39,8 @@ base:
         max-num-batched-tokens: 16384
         stream-interval: 20
         trust-remote-code: true
+        # Three-token EAGLE3 with the GQA draft head. Throughput uses
+        # golden-AL synthetic rejection.
         speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","use_local_argmax_reduction":true}'
       env:
         PYTHONNOUSERSITE: '1'
@@ -47,6 +50,8 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
+# One variant per point. DRAM points give SimpleCPUOffload the whole host budget
+# (TOTAL_CPU_DRAM_GB decimal GB) with lazy offload.
 override_tp8_c1:
   roles:
     agg:

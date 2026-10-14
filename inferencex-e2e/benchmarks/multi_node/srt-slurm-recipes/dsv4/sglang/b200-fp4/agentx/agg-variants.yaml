@@ -94,6 +94,8 @@ base:
         hicache-mem-layout: page_first_direct
   sbatch_directives:
     mem: "0"
+    # NScale B200 nodes expose 192 logical CPUs. Request the full node CPU set;
+    # mem=0 reserves all 1.7 TiB of allocatable host DRAM for HiCache.
     cpus-per-task: "192"
   srun_options:
     mem: "0"

@@ -99,6 +99,7 @@ roles:
       speculative-num-draft-tokens: 7
 
 srun_options:
+  # The custom benchmark installs its isolated AIPerf environment at runtime.
   container-remap-root: ""
 
 telemetry:
@@ -108,4 +109,7 @@ benchmark:
   env:
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    # Fail the run loudly if the aggregate engine's sglang: metrics never reach
+    # the AIPerf export, instead of publishing a trace artifact with no backend
+    # series behind it.
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"

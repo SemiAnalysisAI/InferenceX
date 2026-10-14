@@ -12,6 +12,8 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  # Loading plus first-request kernel tuning outlasts the 1800 s default:
+  # MI300X Qwen3.5 was ready after ~27 minutes (run 36160403972).
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -45,14 +47,19 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # The MI30X image's DSA top-k v2 JIT includes CUDA-only headers when
+        # compiled for gfx942. Use the portable Torch path, no fused top-k.
         SGLANG_DSA_FUSE_TOPK: 'false'
         SGLANG_OPT_USE_TOPK_V2: 'false'
   benchmark:
     env:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Long responses admitted near the end of the measurement window can take
+      # minutes to finish; bound their drain without extending admission.
       AIPERF_BENCHMARK_GRACE_PERIOD: '1800'
 
+# One variant per point. Admission and the decode graph batch are 2x CONC.
 override_tp8_c1:
   roles:
     agg:

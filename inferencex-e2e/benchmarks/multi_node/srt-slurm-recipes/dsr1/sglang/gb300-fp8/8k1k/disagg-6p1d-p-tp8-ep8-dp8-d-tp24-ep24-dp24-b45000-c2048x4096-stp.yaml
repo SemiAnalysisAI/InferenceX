@@ -10,6 +10,8 @@ resources:
   gpus_per_node: 4
 
 dynamo:
+  # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
+  # Use NATS for a recipe prior to Dynamo commit 39d2a68.
   request_plane: "nats"
 
   source:

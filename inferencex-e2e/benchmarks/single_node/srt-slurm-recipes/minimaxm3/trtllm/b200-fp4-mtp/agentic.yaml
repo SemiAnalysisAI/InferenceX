@@ -14,7 +14,10 @@ base:
   engine:
     type: trtllm
     served_model_name: nvidia/MiniMax-M3-NVFP4
+  # Keep Prometheus without rc23's per-step timing collector and accept BFCL's
+  # store=false field.
   setup_script: minimaxm3-trtllm-agentx.sh
+  # TP8 loads, autotunes and captures graphs past the 30-minute default.
   health_check:
     max_attempts: 1440
     interval_seconds: 5
@@ -22,6 +25,7 @@ base:
     agg:
       nodes: 1
       workers: 1
+      # Server-layer flag; the local checkpoint mounts at /model.
       extra_args: [--chat_template, /model/chat_template.jinja]
       args:
         moe_expert_parallel_size: 1
@@ -89,6 +93,9 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
       KV_OFFLOADING: dram
 
+# One variant per point. The batch cap is CONC; graphs capture every batch up
+# to 20 and a thinned ladder above. The host pool is 250 GiB at TP4 and
+# 200 GiB at TP8.
 override_tp4_c5:
   roles:
     agg:

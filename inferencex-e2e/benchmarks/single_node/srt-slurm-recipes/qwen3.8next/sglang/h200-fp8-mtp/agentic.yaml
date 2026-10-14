@@ -41,6 +41,7 @@ base:
         PYTHONNOUSERSITE: '1'
         SGLANG_ENABLE_SPEC_V2: '1'
 
+# One variant per point: admission is 2x CONC and the graph batch is CONC.
 override_c1:
   roles:
     agg:

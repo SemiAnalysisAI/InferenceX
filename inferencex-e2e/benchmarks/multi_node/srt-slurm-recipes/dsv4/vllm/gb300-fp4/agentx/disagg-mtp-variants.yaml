@@ -8,6 +8,7 @@ base:
   dynamo:
     install: true
   environment:
+    # Mooncake prefix-block hashes must match across processes and nodes.
     PYTHONHASHSEED: "0"
   setup_script: vllm-container-deps.sh
   slurm:
@@ -170,6 +171,7 @@ base:
     env:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      # Avoid concurrent readers observing a mismatched mmap data/index pair.
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"
 
 override_1p1d_dep4_dep16_c128:

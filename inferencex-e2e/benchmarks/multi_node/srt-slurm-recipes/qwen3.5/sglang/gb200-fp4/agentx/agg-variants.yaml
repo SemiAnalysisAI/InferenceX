@@ -144,6 +144,8 @@ override_tp2ep2_hicache:
         enable-linear-replayssm-spec: true
         linear-replayssm-cache-len: 8
         mem-fraction-static: 0.88
+        # extra_buffer_lazy uses four physical Mamba state slots per running request.
+        # This layout is the measured K5 middle frontier through C28.
         max-mamba-cache-size: 320
         page-size: 64
         enable-hierarchical-cache: true

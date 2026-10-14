@@ -14,6 +14,7 @@ base:
   engine:
     type: vllm
     connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -28,14 +29,28 @@ base:
         tool-call-parser: deepseek_v41
         enable-auto-tool-choice: true
         reasoning-parser: deepseek_v41
+        # The upstream recipe's name resolves to the Triton MXFP4 W4A16 kernel
+        # on gfx942.
         moe-backend: aiter
         gpu-memory-utilization: 0.9
+        # Five-token DSpark with probabilistic drafting. Throughput runs replace
+        # block rejection with the golden acceptance length. Adaptive
+        # verification trims requests on device, which the ROCm DeepSeek-V4
+        # indexer does not support.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
+        # Upstream picks 1024 on GPUs with >= 160 GiB, and 2x CONC starves
+        # subagent fan-out at low CONC. Graph capture covers 128 x (1 + 5 drafts).
         max-num-seqs: 128
         max-cudagraph-capture-size: 1024
+        # The sparse-attention indexer allocates a [batched-tokens, 1M] fp8
+        # logits buffer at startup.
         max-num-batched-tokens: 8192
+        # The ROCm sparse SWA path lacks the replay window clamp; bounded replay
+        # memory-faulted at the first prefix hit with a replay start.
         no-swa-bounded-replay: true
+        # Piecewise capture segfaulted on gfx942; capture only full decode
+        # graphs and run prefill eagerly.
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         disable-uvicorn-access-log: true
       env:
@@ -50,6 +65,8 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
+# One variant per point. There is no TP2 arm: a 192 GB card measured negative KV
+# memory at TP2 (run 35671005506).
 override_tp8_c1:
   roles:
     agg:

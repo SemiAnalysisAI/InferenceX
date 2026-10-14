@@ -15,6 +15,8 @@ base:
     max_attempts: 1440
     interval_seconds: 10
 
+  # Tachometer's per-node exporters slow decode steps by a few percent and add
+  # host memory on the head node; this ladder is a throughput measurement.
   observability:
     tachometer:
       enabled: false
@@ -36,6 +38,9 @@ base:
       type: mooncake-master
       args:
         - --eviction_high_watermark_ratio=0.90
+    # Decode ranks use a chunk cache, so their host DRAM only joins the store
+    # through standalone stores: four per decode node, so segments stay uniform
+    # with prefill's per-rank ones instead of one oversized segment per node.
     - &decode-store
       name: store-decode-0
       type: mooncake-store
@@ -48,10 +53,15 @@ base:
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 180gb
         MC_STORE_CLIENT_METRIC_INTERVAL: '5'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        # Advertise the store transfer engine on the node address instead of the first active
+        # interface: some GB300 nodes expose a BMC Redfish interface (bmc_redfish0, the same
+        # 10.0.1.2 on every node) ahead of the fabric interface.
         MC_TCP_BIND_ADDRESS: "{node_ip}"
       preamble: |
         ulimit -n 1048576
         ulimit -l unlimited
+      # Cold container starts on a decode node have exceeded srtctl's 120 s default;
+      # the <<: merge is shallow, so every store repeats the timeout.
       readiness:
         port: 8800
         timeout_seconds: 600
@@ -123,11 +133,16 @@ base:
         SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
         SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
         MOONCAKE_PROTOCOL: rdma
+        # The store only registers host buffers on RDMA; without an explicit list it
+        # falls back to NVLink for same-domain peers and aborts at the warmup put.
         MOONCAKE_DEVICE: "@fabric.rdma-devices"
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 140gb
         MOONCAKE_STANDALONE_STORAGE: '0'
         MC_STORE_CLIENT_METRIC_INTERVAL: '5'
         MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        # Advertise the store transfer engine on the node address instead of the first active
+        # interface: some GB300 nodes expose a BMC Redfish interface (bmc_redfish0, the same
+        # 10.0.1.2 on every node) ahead of the fabric interface.
         MC_TCP_BIND_ADDRESS: "{node}"
         WITH_NVIDIA_PEERMEM: '0'
       args:
@@ -147,10 +162,13 @@ base:
         moe-dense-tp-size: 1
         moe-a2a-backend: megamoe
         enable-deepseek-v4-fp4-indexer: true
+        # W4A4 is prefill-only: the prefill DSpark worker runs the target forward and
+        # writes the draft KV from target hidden states, but never the draft MoE.
         enable-w4a4-mxfp4-megamoe: true
         disaggregation-transfer-backend: mooncake
         disaggregation-mode: prefill
         load-balance-method: total_tokens
+        # 16k-token chunks per DP rank need ~12 GiB more for the DSV4 indexer.
         mem-fraction-static: 0.8
         page-size: 256
         swa-full-tokens-ratio: 0.02
@@ -217,6 +235,10 @@ base:
         moe-dense-tp-size: 1
         moe-a2a-backend: megamoe
         enable-deepseek-v4-fp4-indexer: true
+        # No W4A4 here: the MegaMoE MMA type is global and the DSpark draft shares the
+        # MegaMoE backend, so W4A4 would lower the draft MoE's activations below the
+        # image default (fp8xfp4). The FP4 indexer stays on: the draft has no indexer,
+        # and the indexer cache layout must match between prefill and decode.
         disaggregation-transfer-backend: mooncake
         disaggregation-mode: decode
         load-balance-method: total_tokens
@@ -239,6 +261,8 @@ base:
     mem: "0"
     container-remap-root: ""
   benchmark:
+    # The replay client holds ~300 GB of host memory; on the default head node it
+    # shares prefill_0's node and OOMs it. Put it on the etcd/nats node instead.
     placement:
       node: dedicated
     env:
@@ -299,6 +323,8 @@ override_4p1d_c2400:
   frontend:
     nginx_keepalive_timeout: "900s"
     env:
+      # AgentX warmup can legitimately keep the single wide decode worker busy
+      # for longer than Dynamo's 10-second TCP request-plane default.
       DYN_TCP_REQUEST_TIMEOUT: "60"
   roles:
     prefill:

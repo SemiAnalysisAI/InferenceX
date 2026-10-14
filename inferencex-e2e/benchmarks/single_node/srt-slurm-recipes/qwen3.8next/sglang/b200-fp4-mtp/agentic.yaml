@@ -23,8 +23,10 @@ base:
         tensor-parallel-size: 1
         data-parallel-size: 1
         expert-parallel-size: 1
+        # Quantization is read from the checkpoint.
         linear-attn-prefill-backend: flashinfer
         linear-attn-decode-backend: flashinfer
+        # Flashinfer linear-attn decode on SM100+ requires a bfloat16 state.
         mamba-ssm-dtype: bfloat16
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
@@ -42,11 +44,15 @@ base:
         NCCL_NVLS_ENABLE: '1'
         SGL_ENABLE_JIT_DEEPGEMM: 'false'
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
+# One variant per point. NEXTN resets an unset admission cap to 48, so it is
+# explicit: 2x CONC, with the graph batch equal to it. C16 needs a larger
+# static fraction and a bounded Mamba cache.
 override_c1:
   roles:
     agg:

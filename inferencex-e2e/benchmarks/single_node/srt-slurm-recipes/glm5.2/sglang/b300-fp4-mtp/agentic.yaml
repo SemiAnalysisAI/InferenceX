@@ -26,6 +26,7 @@ base:
         bf16-gemm-backend: cutedsl
         max-prefill-tokens: 8192
         quantization: modelopt_fp4
+        # GLM-5.2 emits the GLM-4.7 tool-call format.
         tool-call-parser: glm47
         reasoning-parser: glm45
         chunked-prefill-size: 8192
@@ -34,6 +35,8 @@ base:
         speculative-num-steps: 3
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 4
+        # MLA-family: every TP rank holds complete per-token KV, so the host
+        # pool is an absolute 270 GB/rank; the DSA indexer pool rides on top.
         enable-hierarchical-cache: true
         hicache-size: 270
         hicache-write-policy: write_back
@@ -44,14 +47,19 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
   benchmark:
     env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '2399'
 
+# One variant per point: admission is 2x CONC and the graph batch matches it,
+# capped at 64. Use K=5 at c1/c4/c8/c20; retain K=3 elsewhere. The connector
+# selects the committed golden acceptance length for each variant.
 override_c1:
   roles:
     agg:
