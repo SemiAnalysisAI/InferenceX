@@ -372,14 +372,58 @@ spin's enqueue to the start event's record, so that rank's window may have opene
 released the others. Each eager row publishes `rank_alignment.missed_samples` per series and
 `missed_fraction`, the largest share among roundtrip, dispatch and combine (staging is local work).
 Every fresh-entry tail in the row (components, `cross_rank_min_us` and the token rates) is withheld
-once the missed samples could fill everything above it: p99 at 1% of samples, p95 at 5%, p90 at
-10%. `implementation.rank_alignment` records the method and spin; graphed rows say
-`in-graph-all-reduce` and carry `rank_alignment: null`. Two limits:
+once the samples that were missed or host-stalled (below), each counted once, could fill everything
+above it: p99 at 1% of samples, p95 at 5%, p90 at 10%. `implementation.rank_alignment` records the
+method and spin; graphed rows say `in-graph-all-reduce` and carry `rank_alignment: null`.
 
-- In modes whose dispatch waits on the host (uccl-ep normal, deepep-v2 normal prefill) the barrier
-  aligns the dispatch launch, and the host's poll and relaunch sit inside the window: that is their
-  production cost. A series whose untimed setup contains such a wait (FP8 `stage` in normal mode) is
-  not aligned at all, and counts its misses without gating the row.
+**Host-synced series wait out a throttled host.** In modes whose dispatch waits on the host
+(uccl-ep normal, deepep-v2 normal prefill) the barrier aligns the dispatch launch, and the host's
+poll and relaunch sit inside the window. That is their production cost, and it carries the host's
+speed into the window. While uccl-ep EP16 runs, b200-nscale nodes intermittently run the cores of
+both sockets at about 200 MHz effective (`scaling_cur_freq`, an APERF/MPERF average) for 100-200 ms,
+every 2-5 s, while the GPUs keep their clocks and the thermal-throttle counters stay at zero. An
+idle pinned process outside the benchmark runs ~16x slow over the same spans, then takes another
+10-20 ms to wind back up through 3-7x. The same nodes show none of it idle, with 40 cores busy,
+during uccl-ep EP8, or during deepep-v2 EP16, whose RDMA is GPU-initiated where uccl-ep posts its
+own from 32 busy-polling CPU proxies per node; base and eager runs see it at the same rate. It is
+the platform's response to uccl-ep's multi-node host load, not to the alignment. The 50-100 µs of
+uccl-ep host work between the notify and the end event then takes 1-2 ms, every rank's transfer
+waits on the late one, and `cross_rank_min_us` rises with MAX. On 2026-10-14 that hit 0.7-1.2% of
+EP16 decode samples, enough to put roundtrip p99 at 2-3.8 ms instead of ~0.6 ms at whichever rungs
+collected more than 1%.
+
+So each sample of these series first times a fixed loop of interpreter work (~20 µs at speed)
+outside the window, and while it runs more than 2.5x slower than the lowest median any of the run's
+series calibrated, the rank keeps probing instead of opening the sample; the other ranks wait at
+the barrier. A second probe after the sample's final sync catches a throttle that began inside the
+window. A sample waits at most 0.5 s and a run 60 s in total, so a host throttled for good cannot
+stall the run; past the budget its throttled samples count as stalled. One node did that on
+2026-10-14: under uccl-ep EP16 its second socket ran throttled a third of the time, 5-30% of the
+samples counted as stalled, and every tail was withheld. Rows publish, per series,
+`host_held_samples`: samples whose start some rank held for more than 1 ms (a shorter hold is an
+interrupt on one probe), which then opened at speed and gate nothing; and `host_stalled_samples`:
+samples where a probe on either side of some rank's window ran more than 5x slow, a throttle that
+began inside the window or outlasted the hold, which gate the tails like missed ones. Each count
+carries its largest series share (`host_held_fraction`, `host_stalled_fraction`); all four are null
+in series whose dispatch does not wait on the host. The bars come from the same diagnostics: away
+from throttles, a ~50 µs slice of Python on a rank's own core runs more than 2.5x its median in at
+most 0.2% of samples and more than 5x in about 0.001%.
+
+Holding measures the library on a host running at speed. A uccl-ep EP16 decode loop on this
+platform pays the throttles too, and `host_held_fraction` shows how often they came. Rows timed
+before the alignment (the bare family) kept them, inconsistently: the whole launch path sat in
+their window, and the throttles put their roundtrip p99 at 2.9-4.3 ms at every rung of three
+runs that day. Their loop is paced by the host, though: it slows ~8x during a throttle, where the
+spin-paced eager loop slows ~2.4x, so a throttle holds a smaller share of their samples and a run
+with few throttles can look clean.
+
+Three limits:
+
+- A series whose untimed setup contains a host wait (FP8 `stage` in normal mode) is not aligned at
+  all, and counts its misses without gating the row.
+- The probes see the host only at the two ends of a sample, a spin and a window apart: a slowdown
+  under 5x after the sample opened, or a throttle that starts and ends between them, still lands in
+  the window uncounted. The chained family is not held.
 - Unlike `bench_kineto`, nothing flushes L2 between samples.
 
 Each chain sibling is aligned once, before its first event, as the graph chain is. Eager rows carry

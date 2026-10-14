@@ -144,6 +144,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
         # Normal decode runs ElasticBuffer as vLLM's graphed deepep_v2 decode does
         # (do_cpu_sync=False, valid prefix read on device); prefill keeps the exact-size sync.
         self._normal_cpu_sync = self.mode == "normal" and args.phase != "decode"
+        self.host_synced_dispatch = self._normal_cpu_sync
         if self.mode == "normal" and not self._normal_cpu_sync:
             self.kernel_generation = "v2-elastic-buffer-nosync"
         if (os.environ.get("EP_WIN_RELAXED_ORDERING") == "1" and self.mode == "normal"
