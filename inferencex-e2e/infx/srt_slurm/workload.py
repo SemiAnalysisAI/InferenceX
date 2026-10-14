@@ -31,6 +31,7 @@ SHARED_BLOCKS = {
 }
 BOUND_RECIPE = "recipe.yaml"
 TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-dcgm.yaml")
+NATIVE_TELEMETRY_BLOCK = Path("configs/srt-recipes/telemetry-native.yaml")
 _POINT_KEYS = (
     ("model", "path"),
     ("model", "container"),
@@ -58,7 +59,13 @@ _SINGLE_NODE_ENV = ("TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTE
 BOUND_ENV = {
     (False, False): (*_FIXED_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
     (False, True): (*_FIXED_ENV, *_WORKFLOW_ENV, *_MULTINODE_ENV),
-    (True, False): ("MODEL", *_AGENTIC_ENV, *_WORKFLOW_ENV, *_SINGLE_NODE_ENV),
+    (True, False): (
+        "MODEL",
+        *_AGENTIC_ENV,
+        *_WORKFLOW_ENV,
+        *_SINGLE_NODE_ENV,
+        "ENABLE_AGENTX_POWER",
+    ),
     (True, True): (
         "MODEL",
         *_AGENTIC_ENV,
@@ -126,7 +133,11 @@ def _fragment_versions(block: Any, path: str) -> Iterator[str]:
 
 def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multinode: bool) -> None:
     """Reject a fragment that sets a bound key, even to the value the binder would write."""
-    keys = (*_POINT_KEYS, *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]))
+    keys = (
+        *_POINT_KEYS,
+        *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]),
+        *(() if multinode else (("telemetry", "required"),)),
+    )
     if "base" in raw:
         blocks = [(name, block) for name, block in raw.items() if name != "schema"]
     else:
@@ -170,7 +181,13 @@ def check_setup_script(recipe: Mapping[str, Any], source: Path, root: Path) -> N
 
 
 def compose_recipe(
-    path: Path, *, agentic: bool, multinode: bool, root: Path, power_port: int | None = None
+    path: Path,
+    *,
+    agentic: bool,
+    multinode: bool,
+    root: Path,
+    power_port: int | None = None,
+    native_power: bool = False,
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
@@ -181,6 +198,8 @@ def compose_recipe(
         raise ValueError(f"{path}: recipe must be a mapping")
     check_fragment(raw, path, agentic=agentic, multinode=multinode)
     shared = _block(root / SHARED_BLOCKS[agentic, multinode])
+    if native_power:
+        shared = merge_blocks(shared, _block(root / NATIVE_TELEMETRY_BLOCK))
     if power_port is not None:
         exporter = {"telemetry": {"dcgm_exporter": {"port": power_port}}}
         shared = merge_blocks(shared, merge_blocks(_block(root / TELEMETRY_BLOCK), exporter))
@@ -313,6 +332,14 @@ def bind_workload(
     )
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
+        if not multinode:
+            required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
+            bound["telemetry"]["required"] = required
+            workload["REQUIRE_POWER"] = "1" if required else "0"
+    if agentic and not multinode:
+        workload["ENABLE_AGENTX_POWER"] = (
+            "1" if (bound.get("telemetry") or {}).get("enabled") is True else "0"
+        )
     _bind_components(bound, environment)
     return bound
 

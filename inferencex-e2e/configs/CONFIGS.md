@@ -266,3 +266,19 @@ schema; unknown keys fail.
   The cluster's own `env` and `srt-slurm.host-setup.env` values may take a field the
   same way; they resolve when the record loads, and `env` still rejects the commas of a
   list.
+- `slurm.srt-slurm.extra.default_gpu_exporter` is the cluster's native power exporter.
+  Native single-node throughput and AgentX jobs inherit it when the bound recipe
+  enables telemetry without selecting its own exporter; eval-only jobs collect no power.
+  A cluster without the block stops preparation before the benchmark starts. An invalid
+  measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
+  verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
+  srt-slurm's
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/545233a0d36e7d21cf74bb01a4365475c9214003/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
+  former `power_profile`. The AMD exporter reads
+  [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);
+  [`runners/srt-slurm/patches/README.md`](../runners/srt-slurm/patches/README.md) lists
+  the srt-slurm patches native power collection relies on.
+- `slurm.srt-slurm.workspace-mounts` maps files relative to `inferencex-e2e/` into
+  job containers. The renderer resolves each source against the job checkout;
+  host-absolute paths belong in `mounts`, and volume aliases in `volume-mounts`.

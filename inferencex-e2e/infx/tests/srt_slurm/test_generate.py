@@ -53,6 +53,7 @@ MASTER = {
     },
 }  # fmt: skip
 SHARED = {
+    "telemetry-native.yaml": {"telemetry": {"enabled": True, "required": False}},
     "fixed-sequence-single.yaml": {"benchmark": {"type": "custom", "command": "bash client.sh"}},
     "agentic.yaml": {"benchmark": {"type": "custom", "command": "bash srt_agentic.sh"}},
     "telemetry-dcgm.yaml": {"telemetry": {"enabled": True, "dcgm_exporter": {
@@ -74,6 +75,7 @@ def project(tmp_path):
             "volumes": {"hf-hub-cache": {"path": "/srv/hf"}, "aiperf-cache": {"path": "/srv/aiperf"}},
             "srt-slurm": {
                 "network-interface": "eth0", "power-exporter-port": 9555,
+                "extra": {"default_gpu_exporter": {"container_image": "exporter:test", "port": 9499}},
                 "volume-mounts": {"hf-hub-cache": "/hf"},
                 "agentic-volume-mounts": {"aiperf-cache": "/aiperf"},
                 "fabric": {"socket-ifname": ["eth7"]},
@@ -142,8 +144,8 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
     assert recipe["model"] == {"path": "hf:org/model", "container": "org/image:1", "precision": "fp8"}
     assert recipe["benchmark"] == {"type": "custom", "command": "bash client.sh", "env": {
         "CONC": "4", "ISL": "1024", "OSL": "128", "MODEL": "org/model",
-        "RANDOM_RANGE_RATIO": "0.8", "USE_CHAT_TEMPLATE": "true",
-    }}  # fmt: skip
+        "RANDOM_RANGE_RATIO": "0.8", "USE_CHAT_TEMPLATE": "true", "REQUIRE_POWER": "0",
+    }, "concurrencies": [4]}  # fmt: skip
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth7"}
 
 
@@ -173,7 +175,8 @@ def test_a_single_node_agentx_point_gets_the_agentic_client_and_no_sequence_leng
     assert (record["variant"], record["cluster"]) == (None, "fixture")
     assert recipe["model"] == {"path": "hf:org/model", "container": "org/image:1", "precision": "fp8"}
     assert recipe["benchmark"] == {
-        "type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "org/model", "CONC": "2"},
+        "type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "org/model", "CONC": "2", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1"},
+        "concurrencies": [2],
     }  # fmt: skip
 
 

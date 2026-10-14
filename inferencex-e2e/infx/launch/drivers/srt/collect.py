@@ -24,6 +24,7 @@ from infx.launch.artifacts import (
     copy_eval_artifacts,
     copy_fixed_sequence_results,
     copy_to_workspace,
+    run_power_adapter,
     validate_agentic_power,
 )
 from infx.launch.backends.base import BackendError
@@ -49,7 +50,11 @@ def _copy_tree_into(source: Path, destination: Path) -> None:
 
 
 def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
-    """Exit cleanup of a single-node point: cancel a live job, then stage its artifacts."""
+    """Exit cleanup of a single-node point: cancel a live job, then stage its artifacts.
+
+    A power package that cannot be copied fails the point only when valid power was
+    required; otherwise the result stands and the package is reported incomplete.
+    """
     job = submitted.recover(run.backend)
     if job is None:
         return 0
@@ -58,8 +63,9 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     if not output.is_dir():
         return 0
     rc = 0
-    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     logs = output / "logs"
+    power_rc = 0 if run.request.eval_only else _stage_power_package(run, logs)
+    bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
     result = logs / f"{run.request.result_filename}.json"
     if result.is_file():
         try:
@@ -73,15 +79,43 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
         except OSError as error:
             print(f"ERROR: failed to stage AgentX artifacts: {error}", file=sys.stderr)
             rc = 1
-    return rc
+    return rc or power_rc
 
 
-def check_single_node(run: SrtRun, logs: Path) -> int:
-    """Fail unless each requested eval succeeded and the benchmark result exists.
+def _stage_power_package(run: SrtRun, logs: Path) -> int:
+    """Copy the native power package into LOGS; 1 when power was required and a copy failed."""
+    try:
+        power_dir = logs / "power"
+        power_dir.mkdir(parents=True, exist_ok=True)
+        for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
+            shutil.copyfile(run.workspace / name, power_dir / name)
+        shutil.copytree(logs, run.workspace / "LOGS", symlinks=True, dirs_exist_ok=True)
+    except OSError as error:
+        level = "ERROR" if run.request.require_power else "WARNING"
+        print(f"{level}: failed to stage the native power package: {error}", file=sys.stderr)
+        return int(run.request.require_power)
+    return 0
+
+
+def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
+    """Write native AgentX power metrics, then validate evals and the benchmark result.
+
+    A single-node point publishes the fixed-sequence bundle shape: the validation
+    sidecar sits beside the result, named after it, and the audit names that file.
 
     srt-slurm treats a failed post-benchmark eval as non-fatal; InferenceX does not.
     """
     request = run.request
+    power_rc = 0
+    if request.is_agentic and not request.eval_only:
+        require(request, "INFERENCEX_RESULTS_PYTHON")
+        sidecar = f"power_validation_{request.result_filename}.json"
+        power_rc = run_power_adapter(
+            request.inferencex_results_python, run.workspace, logs, logs / "agentic",
+            logs / f"{request.result_filename}.json", producer_sha,
+            "--validation-result", str(run.workspace / sidecar), "--audit-source", sidecar,
+            require_power=request.require_power,
+        )  # fmt: skip
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
@@ -92,7 +126,7 @@ def check_single_node(run: SrtRun, logs: Path) -> int:
         if not result.is_file() or result.stat().st_size == 0:
             print(f"ERROR: benchmark result {result} is missing or empty", file=sys.stderr)
             return 1
-    return 0
+    return power_rc
 
 
 def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
