@@ -229,7 +229,10 @@ def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive
     slurm = {
         "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
         "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
-        "srt-slurm": {"network-interface": "", "single-node-exclusive": exclusive},
+        "srt-slurm": {
+            "network-interface": "", "single-node-exclusive": exclusive,
+            "extra": {"default_gpu_exporter": {"container_image": "exporter:tag", "port": 9400}},
+        },
     }  # fmt: skip
     cluster = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
     if dram is not None:
