@@ -82,7 +82,10 @@ inside it. Compiling the quantize reduces this rather than causing it. An eager 
 quantize op into an already-busy stream, so the small-T end of an FP8 `normal` row is the least
 production-representative number the suite emits. Compare FP8 and BF16 at the top of the ladder.
 `low-latency` rows are unaffected: those kernels quantize internally or take pre-quantized input by
-API contract. NCCL EP is BF16-only this release, so its cells carry the control alone. The
+API contract. NCCL EP supports FP8 only for low-latency decode, using native DS_FP8E3M4
+dispatch with zero-copy disabled and BF16 combine. Native-consume roundtrip excludes
+dequantization staging; normal mode and prefill remain BF16-only.
+The
 per-backend precision set lives in `sweep_matrix.py`'s `BACKEND_PRECISIONS` and a backend never
 emits a case for a precision it does not support. `normal`-mode cases use the
 `layout-and-dispatch-v1` semantics. `low-latency` cases use each backend's decode-kernel semantics
