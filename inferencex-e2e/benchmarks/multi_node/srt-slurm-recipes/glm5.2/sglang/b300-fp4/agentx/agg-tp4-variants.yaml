@@ -1,0 +1,197 @@
+# AgentX glm5.2 sglang b300-fp4 recipes behind Dynamo: one aggregated TP4 engine
+# (4 of the node's 8 GPUs) per point. Shared settings live in base, one override
+# per concurrency.
+#
+# EAGLE runs off GLM-5.2's built-in nextn head at K=5 (5 steps, topk 1, 6 draft
+# tokens). The launcher pins acceptance to the golden thinking-on AL for K=5
+# (3.61, infx/golden_al_distribution/glm5.2_mtp.yaml); the recipe sets no
+# SGLANG_SIMULATE_ACC_* values. The draft head runs at its shipped precision
+# (SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0, the pinned image's default).
+
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: 1.5.0.dev20260903
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  slurm:
+    time_limit: '4:00:00'
+  dynamo:
+    install: true
+    source:
+      wheel: 1.5.0.dev20260903
+  frontend:
+    type: dynamo
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    args:
+      router-mode: kv
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+      router-session-affinity-ttl-secs: 3600
+  # Tuned without the Tachometer exporters; keep them off so the GPUs serve alone.
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        quantization: modelopt_fp4
+        kv-cache-dtype: fp8_e4m3
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        bf16-gemm-backend: cutedsl
+        # GLM-5.2 emits the GLM-4.7 tool-call format.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.83
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        # MLA-family: every TP rank holds complete per-token KV, so the host
+        # pool is an absolute size per rank (4 ranks on the node); the DSA
+        # indexer pool rides on top.
+        enable-hierarchical-cache: true
+        hicache-size: 270
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        watchdog-timeout: 1800
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+      readiness:
+        port: 2379
+        timeout_seconds: 900
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 64
+      readiness:
+        port: 4222
+        timeout_seconds: 900
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    mem: '0'
+
+# Plain TP4 arm: admission and graph batch at 8 for the low-latency end.
+override_c1:
+  name: glm52-b300-agg-tp4-c1-mtp
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs: 8
+
+override_c8:
+  name: glm52-b300-agg-tp4-c8-mtp
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+
+override_c16:
+  name: glm52-b300-agg-tp4-c16-mtp
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+
+override_c20:
+  name: glm52-b300-agg-tp4-c20-mtp
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs: 64
+
+# DP4 attention over the TP4 engine with the prefill delayer: four attention
+# ranks share the MoE, so the throughput end batches more decode per step.
+override_c24:
+  name: glm52-b300-agg-tp4-dp4attn-c24-mtp
+  roles:
+    agg:
+      args:
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        chunked-prefill-size: 65536
+        mem-fraction-static: 0.85
+        hicache-size: 295
+        max-running-requests: 128
+        cuda-graph-max-bs: 64
+
+override_c32:
+  name: glm52-b300-agg-tp4-dp4attn-c32-mtp
+  roles:
+    agg:
+      args:
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-prefill-delayer: true
+        enable-symm-mem: true
+        chunked-prefill-size: 32768
+        max-running-requests: 64
+        cuda-graph-max-bs: 64
+
+override_c48:
+  name: glm52-b300-agg-tp4-dp4attn-c48-mtp
+  roles:
+    agg:
+      args:
+        data-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        prefill-delayer-max-delay-passes: 60
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.85
+        max-running-requests: 128
+        cuda-graph-max-bs: 64
