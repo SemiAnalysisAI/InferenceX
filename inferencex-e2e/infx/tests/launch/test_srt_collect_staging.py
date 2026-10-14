@@ -30,7 +30,6 @@ def _point(tmp_path: Path, *, require_power: bool) -> tuple[SimpleNamespace, Sim
     (logs / "power").mkdir(parents=True)
     (logs / "power" / "samples.csv").write_text("retained native samples\n")
     (logs / "point.json").write_text('{"completed": 2}\n')
-    (logs / "power_validation_point.json").write_text('{"power_valid": true}\n')
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
@@ -56,7 +55,6 @@ def test_power_package_copy_failure_fails_the_point_only_when_power_is_required(
 
     assert rc == int(require_power)
     assert (workspace / "point.json").read_text() == '{"completed": 2}\n'
-    assert (workspace / "power_validation_point.json").is_file()
     level = "ERROR" if require_power else "WARNING"
     assert f"{level}: failed to stage the native power package" in capsys.readouterr().err
 
@@ -68,4 +66,3 @@ def test_power_package_is_staged_beside_the_result(tmp_path: Path) -> None:
     assert (workspace / "LOGS" / "power" / "samples.csv").read_text() == "retained native samples\n"
     assert (workspace / "LOGS" / "power" / "power-producer-sha.txt").is_file()
     assert (workspace / "point.json").is_file()
-    assert (workspace / "power_validation_point.json").is_file()

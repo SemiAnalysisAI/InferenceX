@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 from infx.bench.env import InputError
 from infx.bench.eval import meta as eval_meta
-from infx.launch import proc
 from infx.launch.artifacts import (
     ArtifactError,
     bundle_server_logs,
@@ -25,6 +24,7 @@ from infx.launch.artifacts import (
     copy_eval_artifacts,
     copy_fixed_sequence_results,
     copy_to_workspace,
+    run_power_adapter,
     validate_agentic_power,
 )
 from infx.launch.backends.base import BackendError
@@ -83,26 +83,18 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
 
 
 def _stage_power_package(run: SrtRun, logs: Path) -> int:
-    """Copy the native power package and its sidecar next to the result; 1 when power was required and a copy failed."""
-    level = "ERROR" if run.request.require_power else "WARNING"
-    failed = False
-    power_dir = logs / "power"
+    """Copy the native power package into LOGS; 1 when power was required and a copy failed."""
     try:
+        power_dir = logs / "power"
         power_dir.mkdir(parents=True, exist_ok=True)
         for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
             shutil.copyfile(run.workspace / name, power_dir / name)
         shutil.copytree(logs, run.workspace / "LOGS", symlinks=True, dirs_exist_ok=True)
     except OSError as error:
+        level = "ERROR" if run.request.require_power else "WARNING"
         print(f"{level}: failed to stage the native power package: {error}", file=sys.stderr)
-        failed = True
-    sidecar = logs / f"power_validation_{run.request.result_filename}.json"
-    if sidecar.is_file():
-        try:
-            copy_to_workspace(sidecar, run.workspace / sidecar.name)
-        except ArtifactError as error:
-            print(f"{level}: {error}", file=sys.stderr)
-            failed = True
-    return int(failed and run.request.require_power)
+        return int(run.request.require_power)
+    return 0
 
 
 def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
@@ -118,19 +110,13 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     if request.is_agentic and not request.eval_only:
         require(request, "INFERENCEX_RESULTS_PYTHON", "GPU_COUNT")
         sidecar = f"power_validation_{request.result_filename}.json"
-        argv = [
-            request.inferencex_results_python, "-m", "infx.results.agentic.power_adapter",
-            "--result-dir", str(logs / "agentic"),
-            "--agg-result", str(logs / f"{request.result_filename}.json"),
-            "--power-dir", str(logs / "power"),
-            "--logs-root", str(logs),
-            "--expected-producer-sha", producer_sha,
+        power_rc = run_power_adapter(
+            request.inferencex_results_python, run.workspace, logs, logs / "agentic",
+            logs / f"{request.result_filename}.json", producer_sha,
             "--expected-num-gpus", request.env["GPU_COUNT"],
-            "--validation-result", str(logs / sidecar),
-            "--audit-source", sidecar,
-            *(["--require-power"] if request.require_power else []),
-        ]  # fmt: skip
-        power_rc = proc.run(argv, env=run.env, cwd=run.workspace).returncode
+            "--validation-result", str(run.workspace / sidecar), "--audit-source", sidecar,
+            require_power=request.require_power,
+        )  # fmt: skip
     if request.run_eval or request.eval_only:
         exit_file = logs / "infx-eval-exit-code"
         if not exit_file.is_file() or exit_file.read_text().rstrip("\n") != "0":
