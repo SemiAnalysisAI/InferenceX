@@ -62,11 +62,12 @@ base:
 # tables in host DRAM and runs 16K chunks with decoder SWA bounded replay and a
 # longer prefill-decode interval. c64, c128 and c160 run DEP2 (DP attention with
 # MegaMoE and decoder SWA bounded replay) behind the SGLang router with
-# shortest-prefill-first scheduling; c160 keeps the HuggingFace tokenizer. TP4
-# uses static ragged verify and 16K chunks; c1 keeps Engram in HBM with decoder
-# SWA bounded replay and no prefill-decode interval. TP4/EP1 c4 and c16 keep
-# Engram in host DRAM with 4096 SWA tails and a 128 graph batch; c16 adds a
-# 192-step interval. Saturation points get a longer warmup drain.
+# shortest-prefill-first scheduling; c160 keeps the HuggingFace tokenizer and
+# halves the interval to 8. TP4 uses static ragged verify and 16K chunks; c1
+# keeps Engram in HBM with decoder SWA bounded replay and no prefill-decode
+# interval. TP4/EP1 c4 and c16 keep Engram in host DRAM with 4096 SWA tails and
+# a 128 graph batch; c16 adds a 192-step interval. Saturation points get a
+# longer warmup drain.
 override_tp2_c16:
   roles:
     agg:
@@ -179,7 +180,7 @@ override_dep2_c160:
       gpus: 2
       args:
         <<: *dep2_args
-        prefill-decode-interval: 16
+        prefill-decode-interval: 8
         mem-fraction-static: 0.85
         max-running-requests: 256
         cuda-graph-max-bs-decode: 128
