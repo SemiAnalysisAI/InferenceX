@@ -33,6 +33,12 @@ InferenceX-only harness plumbing, result collection, and synthetic benchmark con
 
 Existing merged/published documentation is sufficient when it already covers the production configuration; no duplicate upstream PR is needed. Otherwise, update the applicable upstream cookbook and verify that the PR is **MERGED before the InferenceX PR merges**. Defaults can satisfy coverage when the reviewer verifies equivalent behavior in the pinned upstream version and records that evidence.
 
+### NVIDIA overview warning
+
+For affected NVIDIA configurations with merged/published vLLM Recipes or SGLang Cookbook coverage, [verifier Check 16](../../.github/codeowner-signoff-verify-prompt.md#check-16--nvidia-official-overview-coverage-advisory) also checks the model/framework pair against [NVIDIA's official recipes overview](https://docs.nvidia.com/llm-inference-quick-start-recipes/overview). It checks the same model version/variant and underlying engine across both overview tables, including Dynamo deployments; another engine's listing does not count. This checks listing presence, not SKU or topology equivalence, which remains part of the upstream recipe requirement.
+
+Missing pairs produce a visible `❗❗ WARNING ❗❗` banner with upstream/overview links and the affected NVIDIA SKUs. Unreadable or ambiguous evidence is reported as unverified, not as a confirmed omission. This warning is advisory and does not relax Check 3. It excludes all non-NVIDIA hardware, including AMD MI300/MI325/MI355/MI455 families, TPUv7/TPUv6e, Trainium3, and SambaNova SN50; mixed-vendor submissions are checked only for their NVIDIA configurations. No additional reviewer checkbox or Pareto-reviewer escalation is required.
+
 ## Template
 ```
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
