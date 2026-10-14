@@ -331,12 +331,10 @@ def test_mixed_chassis_and_rack_use_their_actual_gpu_counts():
     assert [node.power_w for node in named(result, "GraceCPU")] == [3600]
     assert [node.power_w for node in named(result, "NVMeDrive")] == [50, 720]
     assert result.facility_power_w == pytest.approx(result.AllInPower_per_gpu * 80)
-    # A per-Grace-socket measurement leaves the HGX x86 CPUs modeled.
     measured = model.estimate_breakdown(125, cpu_and_dram_measured_power_per_socket=98)
     assert [node.power_w for node in named(measured, "X86CPU")] == [240]
     assert named(measured, "GraceCPU") == []
     assert [node.power_w for node in named(measured, "Grace socket (measured)")] == [3528]
-    # A per-x86-socket measurement leaves the Grace sockets modeled.
     measured = model.estimate_breakdown(125, cpu_measured_power_per_socket=180)
     assert [node.power_w for node in named(measured, "CPU")] == [360]
     assert named(measured, "X86CPU") == []

@@ -71,6 +71,7 @@ DESIGN_OPERATING_STATE = OperatingState(
 
 class HGXSystemChassis(GPUSystem):
     default_cooling: ClassVar[CoolingProfile] = CoolingProfile(mode="air")
+    has_x86_cpu_sockets: ClassVar[bool] = True
     cpu_count: ClassVar[int] = 2
     dimm_count: ClassVar[int] = 32
     dimm_capacity_gb: ClassVar[int] = 64

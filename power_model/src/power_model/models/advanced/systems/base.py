@@ -40,6 +40,7 @@ class GPUSystem(FrozenModel, ABC):
     default_cooling: ClassVar[CoolingProfile]
     system_unit: ClassVar[str] = "chassis"
     has_grace_sockets: ClassVar[bool] = False
+    has_x86_cpu_sockets: ClassVar[bool] = False
     default_networking: ClassVar[tuple[NetworkGroup, ...] | None] = None
     gpu_count: PositiveCount
     provenance: Provenance = COMPONENT_INPUT
