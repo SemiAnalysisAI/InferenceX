@@ -9823,3 +9823,12 @@
     - "Use master-config recipe selectors and composed AgentX fragments; preserve the dedicated frontend/client node and the c2884 and c1228 tuning."
     - "Backport the vLLM Python sidecar reasoning-parser fix through the shared patch mechanism while retaining the main srt-slurm pin."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3941
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX 8P1D point at concurrency 4096 to the existing curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4071
+  append-only: true
