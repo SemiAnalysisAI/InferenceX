@@ -9738,3 +9738,12 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add the Qwen3.8-Flash-Next Quark MXFP4 (FP8 PLE) AgentX recipe on MI355X with SGLang native NEXTN MTP (3 steps, eagle-topk 1, 4 draft tokens) at TP1/EP1 and concurrency 1/4/8/12/16, no KV offloading. TP1: the ~126 GiB checkpoint fits on one MI355X."
+    - "Serve amd/Qwen3.8-Flash-Next-Quark-MXFP4-PLEFP8 from lmsysorg/sglang:v0.5.21-rocm724-mi35x@sha256:2f6b9105e26fcc8ca5c8acbcb81b35f940c96ade6aa578f755357944ba8e9707 with quark quantization, the aiter attention backend, page-size 64, kv-cache-dtype auto, mem-fraction-static 0.9, chunked-prefill-size 16384 and mamba-ssm-dtype bfloat16; decode CUDA graphs are on."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3974
