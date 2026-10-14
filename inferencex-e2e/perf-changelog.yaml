@@ -9819,7 +9819,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX recipes: aggregated TP4 at conc 1 and 8, and disaggregated DEP2 prefill / DEP16 decode at 8P1D, 6P1D and 4P1D."
-    - "Use master-config recipe selectors and composed AgentX fragments; preserve the dedicated frontend/client node and the c4096, c2884 and c1228 tuning."
+    - "Add GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX recipes: aggregated TP4 at conc 1 and 8, and disaggregated DEP2 prefill / DEP16 decode at 6P1D c2884 and 4P1D c1228."
+    - "Use master-config recipe selectors and composed AgentX fragments; preserve the dedicated frontend/client node and the c2884 and c1228 tuning."
     - "Backport the vLLM Python sidecar reasoning-parser fix through the shared patch mechanism while retaining the main srt-slurm pin."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3941
