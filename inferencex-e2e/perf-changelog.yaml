@@ -9730,4 +9730,4 @@
     - "Match the validated local DCP recipes with prefill EP/SP, DeepGEMM MegaMoE, GEMM-RS and automatic KV interleaving. Preserve the existing 1P3D DSpark7 c1 recipe."
     - "Add DEP16 with prefill EP8 and DeepGEMM MegaMoE, decode TokenSpeed MLA min-split-8, and capacity-only Mooncake with decode prefix caching disabled."
     - "Use a placeholder nightly image hash pending publication of the image containing vLLM #61125; replace it before requesting a benchmark sweep."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4044
