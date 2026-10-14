@@ -9683,3 +9683,9 @@
     - "TP2 c16/c32: 16K prefill chunks with decoder SWA bounded replay and the prefill CUDA graph disabled, a 96/48-step prefill-decode interval, PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True and 4 tokenizer workers; SGLANG_NUMA_BIND_V2=0 at c16 (previously 4K chunks with the default 16-step interval). Local one-hour runs on the new image: c16 55,560 tok/s/GPU at 264.6 tok/s/user P90 (324.9 median); c32 113,613 at 183.1 (242.7)."
     - "c64 and c128 move from TP2 to DEP2 (TP2/DP2/EP2 with DP attention, DP LM head and MegaMoE) behind sglang-router (cache_aware, dp-aware, routing key from the AIPerf correlation id), with total_requests load balancing, shortest-prefill-first scheduling, 16K chunks, 4096 SWA prefix tails and 4 tokenizer workers. c64 uses a 24-step prefill-decode interval and admits 128; c128 a 16-step interval, mem-fraction-static 0.85, admits 256 with a 128 graph batch. Local one-hour runs: c64 200,265 tok/s/GPU at 114.3 tok/s/user P90 (132.7 median), versus 149,666 at 99.4 median for the TP2 point it replaces; c128 271,364 at 81.6 P90 (93.0 median), versus 147,763 at 37.9 median."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3859
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+  description:
+    - "Bump ATOM image to the v0.1.7 release build (rocm/atom-dev:nightly_202610080328, digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3911

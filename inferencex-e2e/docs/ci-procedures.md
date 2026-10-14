@@ -291,6 +291,8 @@ Execution stays on the trusted default branch and serializes per PR. Starting Cl
 
 The verifier associates one advisory comment with each sign-off resource and includes the assessed SHA. Editing the same checklist updates only its associated verdict; a different checklist receives a separate verdict, so an older sign-off's verdict is never overwritten. Later pushes do not extend that assessment or trigger another run. Dispatch manually to reassess, including after a review event was missed during a merge conflict. The verifier publishes no commit status, and GitHub's separate human approval requirements still apply.
 
+Before finishing, the verifier checks its verdict file with `python -m infx.workflows.signoff_validate`, which applies the publisher's format rules without publishing. The publisher rewrites `✅` to `➖` on N/A rows; any other malformed verdict is still replaced with "The verifier did not produce a valid verdict" and needs a manual reassessment.
+
 Do not rerun an in-progress run blindly. A completed failed run can rerun only failed jobs and their dependents:
 
 ```bash
