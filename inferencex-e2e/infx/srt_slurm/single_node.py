@@ -140,7 +140,8 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    dcp = str(args.get("decode-context-parallel-size", 1)) if engine in {"vllm", "atom"} else "1"
+    dcp_engines = {"vllm", "atom", "sglang"}
+    dcp = str(args.get("decode-context-parallel-size", 1)) if engine in dcp_engines else "1"
     for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():

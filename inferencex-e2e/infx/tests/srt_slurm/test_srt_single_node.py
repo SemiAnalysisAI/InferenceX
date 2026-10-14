@@ -182,6 +182,20 @@ def test_dp_attention_is_validated_without_replacing_recipe_topology(point):
         runtime_arguments(f"{path}:base", {**env, "DP_ATTENTION": "false"})
 
 
+def test_sglang_dcp_is_validated_against_the_point(point):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"]["decode-context-parallel-size"] = 4
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    actual = copy.deepcopy(recipe)
+    argv = runtime_arguments(f"{path}:base", {**env, "DCP_SIZE": "4"})
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["roles"]["agg"]["args"]["decode-context-parallel-size"] == 4
+    with pytest.raises(ValueError, match=r"DCP_SIZE: recipe/matrix '1' != '4'"):
+        runtime_arguments(f"{path}:base", env)
+    with pytest.raises(ValueError, match=r"DCP_SIZE: recipe/matrix '2' != '4'"):
+        runtime_arguments(f"{path}:base", {**env, "DCP_SIZE": "2"})
+
+
 def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
     path, recipe, env = point
     recipe["engine"] = {"type": "trtllm", "served_model_name": "test/model"}
