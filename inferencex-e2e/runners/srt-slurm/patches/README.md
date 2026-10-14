@@ -8,3 +8,4 @@ Each patch is a temporary fix for an open upstream PR. When the PR merges and th
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
+| `508-discovery-connector-templates.patch` | [#508](https://github.com/NVIDIA/srt-slurm/pull/508) (`7445497e2626c5bda6f8213610d91a675d81f7a4`, backend only) | Bind allocated discovery endpoints inside explicit connector templates without replacing sibling connectors. |
