@@ -9738,3 +9738,9 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4059
