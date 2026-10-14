@@ -9738,3 +9738,17 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202610071700 to rocm/atom-dev:nightly_202610141644 (digest sha256:ef65fed021823c29d37c636101e6242b7b97b970f5e3f5e8badd672f73935d61; ATOM 6e9b3e1c5, ROCm 7.2.4)."
+    - "Turn on ATOM's DeepSeek-V4 bounded state replay at every point (ATOM_DSV4_STATE_REPLAY=1, ROCm/ATOM#2552): a prefix hit with no state checkpoint behind it keeps the whole hit and recomputes only the sliding window's receptive field below it (7,875 tokens with the DSpark draft), which rebuilds every layer's window and compressor state exactly. State checkpoints are kept at prompt ends only (state-checkpoint-interval-tokens -1, ATOM_STATE_CHECKPOINT_DEMAND=0)."
+    - "With the replay on, C256 and C384 store the PAGE KV alone in LMCache, no state image, and a hit LMCache holds past HBM loads that KV and replays below it (ROCm/ATOM#2571). The LMCache server and its settings are unchanged; drop lmcache.mp.max_pinned_state_bytes, which ATOM no longer reads."
+    - "DP attention points balance each lockstep prefill step by estimated chunk cost (ROCm/ATOM#2551, on by default with the prefill delayer)."
+    - "Run the TP points C1 to C16 with FP8 KV (was BF16), as the DEP band already does; KV is FP8 at every point."
+    - "Points, concurrencies and the remaining server settings are unchanged."
+    - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4-Pro-0813 runs as shipped."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
