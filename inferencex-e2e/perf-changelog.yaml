@@ -9763,4 +9763,4 @@
     - "Run the TP points C1 to C16 with FP8 KV (was BF16), as the DEP band already does; KV is FP8 at every point."
     - "Points, concurrencies and the remaining server settings are unchanged."
     - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4-Pro-0813 runs as shipped."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4065
