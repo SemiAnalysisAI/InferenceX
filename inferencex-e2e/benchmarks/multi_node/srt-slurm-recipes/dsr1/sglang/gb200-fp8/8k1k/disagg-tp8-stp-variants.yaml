@@ -7,7 +7,6 @@ base:
 
     source:
       pypi: 0.8.1
-    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
   frontend:
     type: dynamo
     enable_multiple_frontends: true

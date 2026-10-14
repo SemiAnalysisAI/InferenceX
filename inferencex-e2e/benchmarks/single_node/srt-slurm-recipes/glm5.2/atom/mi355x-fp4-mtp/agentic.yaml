@@ -1,6 +1,3 @@
-# GLM-5.2 MXFP4 AgentX on MI355X with ATOM MTP, TP-only with GPU-resident KV.
-# The DCP4 LMCache band was removed with the legacy script (#3461): srtctl
-# reserves ATOM's kv-transfer-config for disaggregated workers.
 base:
   schema: 2
   name: glm5.2-fp4-mi355x-atom-agentic
@@ -24,8 +21,6 @@ base:
         served-model-name: amd/GLM-5.2-MXFP4
         gpu-memory-utilization: 0.95
         enable_prefix_caching: true
-        # model.layers.78 is the MTP head, shipped in BF16; excluding it keeps
-        # online ptpc_fp8 quantization off the draft while experts stay MXFP4.
         online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*.mlp.gate","model.layers.[0-9].mlp.*expert*","model.layers.[1-6][0-9].mlp.*expert*","model.layers.7[0-7].mlp.*expert*","model.layers.78.*"]}'
         max-num-batched-tokens: 16384
         kv_cache_dtype: fp8
@@ -41,8 +36,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC with graphs captured up to it. The
-# draft is five tokens through concurrency 8 and four above it.
 override_tp4_c2:
   roles:
     agg:

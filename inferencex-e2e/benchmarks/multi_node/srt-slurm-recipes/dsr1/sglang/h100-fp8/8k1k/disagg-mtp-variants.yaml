@@ -6,8 +6,6 @@ base:
     gpus_per_node: 8
 
   dynamo:
-    # Dynamo 0.8.0 was the default when this recipe was written; pin it explicitly.
-    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
     request_plane: "nats"
     source:
       pypi: "0.8.0"
@@ -71,14 +69,10 @@ base:
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 3
 
-  # Container setup plus loading the weights over NFS outlasts the 30-minute default.
   health_check:
     max_attempts: 360
     interval_seconds: 10
 
-  # etcd and NATS are static binaries from /configs; run them in the small nginx
-  # image instead of a ~40 GB copy of the job image each on the head node. The
-  # first container step on an H100 node can still take minutes to set up.
   services:
     - name: etcd
       type: etcd
@@ -93,9 +87,6 @@ base:
         port: 4222
         timeout_seconds: 1200
 
-  # SGLang fails when one TP rank finishes loading 480 s before another. Weights
-  # come over NFS and a node reused from an earlier run loads from page cache, so
-  # read them into every worker's cache first to even out the load.
   host_setup:
     nodes: workers
     timeout_seconds: 3600

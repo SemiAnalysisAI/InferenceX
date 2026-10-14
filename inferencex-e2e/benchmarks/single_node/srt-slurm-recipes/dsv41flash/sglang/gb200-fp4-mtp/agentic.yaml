@@ -1,5 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on GB200 with SGLang native DSpark. The KV cache
-# is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-gb200-sglang-agentic
@@ -21,41 +19,28 @@ base:
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
-        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 5
         reasoning-parser: auto
         tool-call-parser: auto
-        # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
-        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
-        # AgentX measures thinking on, the regime of the golden acceptance curve.
         SGLANG_DEFAULT_THINKING: '1'
         SGLANG_DSV41_REASONING_EFFORT: high
-        # Row-sharded host Engram tables free HBM for the 1M-context working set.
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
-  # Cold weight loads from the shared HF cache plus graph capture outlast
-  # srt-slurm's 1800 s default, as they did the legacy one-hour deadline.
   health_check:
     max_attempts: 1440
     interval_seconds: 5
   benchmark:
     env:
-      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. TP4: static fraction 0.70, 4096-token prefill chunks,
-# 64-request graph batch. TP2 needs 0.92, 2048-token chunks, a 16-request graph
-# batch and expandable segments to fit. Admission is 2x CONC, capped at the graph
-# batch. SWA prefix tails are 64x CONC (TP2 128x), capped at 1024. Decode
-# interleaving applies to TP2 and c16. Saturation points get a longer warmup drain.
 override_tp4_c1:
   roles:
     agg:

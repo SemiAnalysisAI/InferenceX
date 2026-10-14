@@ -1,5 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on MI355X with SGLang native DSpark.
-# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-sglang-agentic
@@ -23,7 +21,6 @@ base:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
         tensor-parallel-size: 2
-        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 5
         enforce-shared-experts-fusion: true
@@ -33,15 +30,12 @@ base:
         cuda-graph-backend-prefill: disabled
         reasoning-parser: auto
         tool-call-parser: auto
-        # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
-        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
-        # AgentX measures thinking on, the regime of the golden acceptance curve.
         SGLANG_DEFAULT_THINKING: '1'
         SGLANG_DSV41_REASONING_EFFORT: high
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
@@ -57,13 +51,9 @@ base:
         GPU_MAX_HW_QUEUES: '2'
   benchmark:
     env:
-      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point; the saturation point gets a longer warmup drain. A longer
-# prefill-decode interval trades TTFT for P90 ITL: 192 with lpm up to c8, 96 at c16
-# and 32 at c32. amd-master.yaml runs c32 and c64 on the DP2 variants only.
 override_tp2_c1:
   roles:
     agg:
@@ -176,7 +166,6 @@ override_tp2_c64:
       CONC: '64'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-# DP2 attention with TP MoE.
 override_tp2_c32_dp:
   frontend:
     type: sglang-router

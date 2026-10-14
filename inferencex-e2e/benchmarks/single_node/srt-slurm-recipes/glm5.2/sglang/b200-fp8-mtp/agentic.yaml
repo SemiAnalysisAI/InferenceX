@@ -1,6 +1,3 @@
-# GLM-5.2 FP8 AgentX on B200 with SGLang EAGLE MTP off the checkpoint's nextn
-# head: the TP8 low-latency arm (fp8 KV, cutedsl bf16 GEMM) with HiCache
-# host-DRAM offload at every point.
 base:
   schema: 2
   name: glm5.2-fp8-b200-sglang-agentic
@@ -29,12 +26,9 @@ base:
         bf16-gemm-backend: cutedsl
         max-prefill-tokens: 8192
         quantization: fp8
-        # GLM-5.2 emits the GLM-4.7 tool-call format; glm45 leaves calls as raw text.
         tool-call-parser: glm47
         reasoning-parser: glm45
         chunked-prefill-size: 8192
-        # B200 HBM leaves ~31 GB outside the static share for EAGLE verification,
-        # graph capture and DSA indexer temporaries.
         mem-fraction-static: 0.83
         speculative-algorithm: EAGLE
         speculative-num-steps: 3
@@ -49,22 +43,15 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'
-        # Keep FlashInfer/Triton/Inductor/JIT caches off the shared home.
         SGLANG_CACHE_DIR: /tmp/sglang-cache
-        # Outlast AIPerf's pooled keep-alive connections.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
   benchmark:
     env:
-      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1731'
 
-# One variant per point. Admission is 2x CONC and the graph batch matches it,
-# capped at 64. MLA ranks hold complete per-token KV, so ratio 0.75 gives too
-# few host slots past C8; C12/C16 pin a 169 GB/rank pool (~1,662 GB across TP8
-# with the DSA indexer, within the 1,731 GB budget).
 override_c1:
   roles:
     agg:

@@ -1,4 +1,3 @@
-# Qwen3.5-397B-A17B NVFP4 AgentX on B300 with SGLang native NEXTN MTP.
 base:
   schema: 2
   name: qwen3.5-fp4-b300-sglang-agentic
@@ -48,18 +47,11 @@ base:
         NCCL_NVLS_ENABLE: '1'
         SGL_ENABLE_JIT_DEEPGEMM: 'false'
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-        # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC and the graph batch is CONC,
-# capped at 64. TP4 tokenizes with six workers to keep 256k warmups inside the
-# client timeout; TP2 keeps SGLang's single tokenizer, which avoids a startup
-# race with HiCache shared-memory initialization. HiCache sizes the target KV
-# and Mamba host pools independently, and the NEXTN draft adds 1/15 of the
-# target: (599 GB - 1 GB/rank) * 15 / TP2 / 31 = 144 GB per pool.
 override_tp4_c1:
   roles:
     agg:

@@ -1,10 +1,6 @@
 schema: 2
 name: "disagg-h200-2p2d-pcp8-tp8-dp8-mtp"
 
-# Refresh of the 2P2D topology from Actions run 30133535261 with EAGLE MTP.
-# The released SGLang image does not combine MTP with HiSparse, so decode KV
-# cache remains GPU-resident. MTP uses the committed GLM-5.2 golden thinking-on
-# acceptance length for three speculative steps.
 
 dynamo:
   install: true

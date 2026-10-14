@@ -1,5 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on B200 with SGLang native DSpark. The KV cache
-# is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-b200-sglang-agentic
@@ -21,39 +19,27 @@ base:
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
-        # Keep active decode requests progressing while long prefixes are queued.
         prefill-decode-interval: 16
-        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 5
-        # Admission never exceeds the captured decode graph batch.
         cuda-graph-max-bs-decode: 64
         reasoning-parser: auto
         tool-call-parser: auto
-        # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
-        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
-        # AgentX measures thinking on, the regime of the golden acceptance curve.
         SGLANG_DEFAULT_THINKING: '1'
         SGLANG_DSV41_REASONING_EFFORT: high
-        # Row-sharded host Engram tables free HBM for the 1M-context working set.
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
   benchmark:
     env:
-      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. TP4 admission is 2x CONC, capped at the graph batch,
-# and SWA prefix tails are 32x CONC with a floor of 128. DP4 points run DP
-# attention behind sglang-router with per-rank tails. Saturation points get a
-# longer warmup drain.
 override_tp4_c1:
   roles:
     agg:

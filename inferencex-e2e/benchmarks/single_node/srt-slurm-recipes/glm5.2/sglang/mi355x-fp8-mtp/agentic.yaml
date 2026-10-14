@@ -1,5 +1,3 @@
-# GLM-5.2 FP8 AgentX on MI355X with SGLang EAGLE MTP. The ~756 GB
-# block-FP8 checkpoint is TP8-only; quantization is detected from the checkpoint.
 base:
   schema: 2
   name: glm5.2-fp8-mi355x-sglang-agentic
@@ -24,12 +22,8 @@ base:
         kv-cache-dtype: fp8_e4m3
         dsa-prefill-backend: tilelang
         dsa-decode-backend: tilelang
-        # GLM-5.2 emits GLM-4.7-style tool calls; glm45 keeps hybrid thinking
-        # in reasoning_content.
         tool-call-parser: glm47
         reasoning-parser: glm45
-        # 32k chunks interleave decode between prefill chunks and keep per-chunk
-        # activation headroom low enough for 0.85.
         chunked-prefill-size: 32768
         mem-fraction-static: 0.85
         speculative-algorithm: EAGLE
@@ -40,18 +34,13 @@ base:
         enable-metrics: true
       env:
         PYTHONNOUSERSITE: '1'
-        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
-        # The DSA indexer uses the precompiled HIP Top-K op.
         SGLANG_OPT_USE_TOPK_V2: 'false'
   benchmark:
     env:
-      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC; the decode graph batch follows it
-# up to 64. HiCache holds 1.5x the device KV pool and skips non-reusable blocks.
 override_tp8_c1:
   roles:
     agg:

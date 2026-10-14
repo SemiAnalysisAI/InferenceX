@@ -1,5 +1,3 @@
-# Qwen3.5-397B-A17B MXFP4 AgentX on MI355X with SGLang native EAGLE MTP; KV is
-# GPU-resident or extends to host DRAM through HiCache.
 base:
   schema: 2
   name: qwen3.5-fp4-mi355x-sglang-agentic
@@ -55,9 +53,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC and the decode graph batch follows
-# it up to 128; TP4 adds tokenizer workers. HiCache pins a 253 GB host pool
-# (hicache-size overrides hicache-ratio).
 override_tp4_c1:
   roles:
     agg:

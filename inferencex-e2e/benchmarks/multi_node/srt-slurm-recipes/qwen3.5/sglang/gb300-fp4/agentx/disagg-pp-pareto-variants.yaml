@@ -1,5 +1,3 @@
-# AgentX qwen3.5 sglang gb300-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -50,8 +48,6 @@ base:
       workers: 3
       gpus: 4
       env:
-        # The 0831 image contains the PP+spec runtime merged by SGLang #35758,
-        # but still carries the pre-merge PP+spec assert in validation_hook.py.
         PYTHONOPTIMIZE: '1'
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_DISAGG_STAGING_BUFFER: '1'

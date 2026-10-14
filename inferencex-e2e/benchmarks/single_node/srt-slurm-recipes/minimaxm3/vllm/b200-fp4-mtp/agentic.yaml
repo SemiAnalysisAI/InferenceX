@@ -1,5 +1,3 @@
-# MiniMax-M3 NVFP4 AgentX on B200 with vLLM EAGLE3 (the GQA draft head).
-# DRAM KV offload uses SimpleCPUOffloadConnector in lazy mode.
 base:
   schema: 2
   name: minimaxm3-fp4-b200-vllm-agentic
@@ -16,7 +14,6 @@ base:
   engine:
     type: vllm
     connector: null
-  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -42,8 +39,6 @@ base:
         max-num-batched-tokens: 16384
         stream-interval: 20
         trust-remote-code: true
-        # Three-token EAGLE3 with the GQA draft head. Throughput runs switch to
-        # synthetic rejection at the golden acceptance length.
         speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","use_local_argmax_reduction":true}'
       env:
         PYTHONNOUSERSITE: '1'
@@ -53,8 +48,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point. DRAM points give SimpleCPUOffload the whole host budget
-# (TOTAL_CPU_DRAM_GB decimal GB) with lazy offload.
 override_tp8_c1:
   roles:
     agg:

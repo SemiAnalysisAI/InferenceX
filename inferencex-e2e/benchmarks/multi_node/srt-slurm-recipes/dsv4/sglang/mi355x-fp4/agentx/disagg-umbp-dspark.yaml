@@ -1,7 +1,3 @@
-# DeepSeek-V4-Pro-0813 AgentX on MI355X: 1P1D SGLang disaggregation over MoRI
-# with DSpark. Every arm offloads prefill KV to UMBP as a direct external store
-# for the unified radix tree (no host cache tier), backed by a 1.5 TB
-# hugepage DRAM tier on the prefill node.
 schema: 2
 base:
   name: mi355x-dsv4-pro-0813-agentx-umbp
@@ -16,9 +12,6 @@ base:
     args:
       policy: consistent_hashing
       dp-aware: true
-      # The agentic PD path ran --decode-policy round_robin before #3428; the
-      # port dropped it, which silently applies --policy (consistent_hashing)
-      # to decode as well.
       decode-policy: round_robin
       cache-threshold: 0.3
       balance-abs-threshold: 2
@@ -28,10 +21,6 @@ base:
       health-check-timeout-secs: 600
       health-check-interval-secs: 30
   engine: sglang
-  # A recipe host_setup replaces the cluster default, so run its fabric, GPU and
-  # hugepage-reclaim checks first. Then reserve the UMBP tier's hugepages on the
-  # prefill node (the allocation's first node in 1P1D) so the tier never falls
-  # back to 4 KiB pages; teardown returns them for the next job.
   host_setup:
     nodes: workers
     timeout_seconds: 1800
@@ -45,8 +34,6 @@ base:
         bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"; fi
     teardown:
       - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
-  # The per-allocation /logs mount is shared by the service and prefill
-  # containers, so the socket cannot collide with another job's UMBP.
   services:
     - name: umbp
       type: generic
@@ -73,7 +60,6 @@ base:
         fi
         export LD_LIBRARY_PATH="/sgl-workspace/mori/python/mori:${LD_LIBRARY_PATH}"
       readiness:
-        # Wait for GPU registration of the tier, not merely a listening socket.
         log:
           pattern: host memory registered for GPU access
         timeout_seconds: 5400
@@ -158,14 +144,12 @@ base:
         unified-cache-external-linker-backend: mori
         hicache-storage-backend-extra-config: '{"standalone_startup_timeout_ms":120000}'
         enable-cache-report: true
-        # Optimistic prefill (sgl-project/sglang#38978) is wired for the linker only.
         optimistic-prefill-attempts: 2
     decode:
       nodes: 1
       workers: 1
       env:
         <<: *environment
-        # Decode runs no UMBP tier; offload is prefill-side.
         UMBP_STANDALONE_ADDRESS: ""
         SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "128"
         SGLANG_SIMULATE_ACC_METHOD: match-expected
@@ -174,11 +158,6 @@ base:
       args:
         <<: *server
         disable-cuda-graph: false
-        # The anchor carries prefill's UMBP linker flags, which the pre-#3428
-        # launcher appended to PREFILL_SERVER_CONFIG alone (server_sglang.sh:
-        # "decode does not read this"). Decode runs no UMBP tier -- its
-        # UMBP_STANDALONE_ADDRESS is empty above -- so enabling the linker here
-        # points it at nothing. false and null both emit no flag at all.
         enable-unified-cache-external-linker: false
         unified-cache-external-linker-backend: null
         hicache-storage-backend-extra-config: null
@@ -201,17 +180,11 @@ base:
       TOKENIZERS_PARALLELISM: "false"
       TRANSFORMERS_VERBOSITY: error
 
-# One variant per point; each point runs in its own allocation. Admission is
-# 2x CONC on both roles. Decode captures graphs up to 2x CONC, or CONC/4 per
-# rank under DP attention. DSpark draft length is 6 at c4/c16/c32 (the golden
-# AL peak) and 3 above; MoRI decode dispatch scales with it (64 x (draft + 1)).
 override_c4:
   roles:
     prefill:
       gpus: 4
       env:
-        # Split-K 8 for the HCA (compress ratio 128) decode stream in the
-        # unified_kv kernels, over the image default 4. Only c4 sets it.
         SGLANG_MLA_HCA_KV_SPLITS: "8"
       args:
         tp-size: 4
@@ -508,50 +481,19 @@ override_c192:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
-        # Must cover the per-rank prefill chunk: sglang divides
-        # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
-        # silently fall back to fused MoE.
         SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: "8192"
         SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
-        # MegaMoEV2 addresses its dispatch/combine buffers through mori's
-        # symmetric heap. base's ISOLATION mode builds no heap at all, so every
-        # rank logs "Pointer ... is not in symmetric heap [0x0, 0x0)" and then
-        # faults on a near-null address in mega_moe_stage1.
         MORI_SHMEM_MODE: STATIC_HEAP
-        # hipMalloc'd in full on the first MegaMoE forward, after the KV pool is
-        # sized, so every byte comes out of the (1 - mem-fraction-static)
-        # headroom whether used or not. MegaMoEV2 places ~0.51 GiB per 1024
-        # MTPR in it (mega_moe/flydsl_dispatch_combine_intranode_op.py), i.e.
-        # 4.2 GiB at MTPR 8192; mori's 4 GiB default overflows at graph
-        # capture. 8G is 1.9x that.
         MORI_SHMEM_HEAP_SIZE: 8G
-        # MoE communication belongs to mori under MegaMoE; leaving the DP
-        # gatherv / reduce-scatter path on runs two comm schemes at once.
-        # Decode, which keeps the baseline MoE path, keeps them set.
         SGLANG_SHARED_EXPERT_TP1: "0"
         SGLANG_DP_SHARED_EXPERT_LOCAL: "0"
         SGLANG_DP_USE_GATHERV: "0"
         SGLANG_DP_USE_REDUCE_SCATTER: "0"
-        # Two parallel KV pools -- nope in fp8, rope kept in bf16 -- instead of
-        # one bf16 pool, on the unified_kv_triton kernels base selects. The
-        # layout only matches those kernels, and both PD peers must agree on it
-        # or the handshake fails, so it is set on prefill and decode alike. The
-        # DSpark draft worker stays bf16 (kv_cache_configurator.py excludes it).
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 8
         dp-size: 8
-        # MegaMoE replaces mori dispatch/combine outright (mori stays only as
-        # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
@@ -574,7 +516,6 @@ override_c192:
         SGLANG_DP_USE_GATHERV: "1"
         SGLANG_DP_USE_REDUCE_SCATTER: "1"
         MORI_MAX_DISPATCH_TOKENS_DECODE: "256"
-        # Set on both PD peers; the handshake rejects disagreeing KV layouts.
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 8
@@ -646,50 +587,19 @@ override_c256:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
-        # Must cover the per-rank prefill chunk: sglang divides
-        # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
-        # silently fall back to fused MoE.
         SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: "8192"
         SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
-        # MegaMoEV2 addresses its dispatch/combine buffers through mori's
-        # symmetric heap. base's ISOLATION mode builds no heap at all, so every
-        # rank logs "Pointer ... is not in symmetric heap [0x0, 0x0)" and then
-        # faults on a near-null address in mega_moe_stage1.
         MORI_SHMEM_MODE: STATIC_HEAP
-        # hipMalloc'd in full on the first MegaMoE forward, after the KV pool is
-        # sized, so every byte comes out of the (1 - mem-fraction-static)
-        # headroom whether used or not. MegaMoEV2 places ~0.51 GiB per 1024
-        # MTPR in it (mega_moe/flydsl_dispatch_combine_intranode_op.py), i.e.
-        # 4.2 GiB at MTPR 8192; mori's 4 GiB default overflows at graph
-        # capture. 8G is 1.9x that.
         MORI_SHMEM_HEAP_SIZE: 8G
-        # MoE communication belongs to mori under MegaMoE; leaving the DP
-        # gatherv / reduce-scatter path on runs two comm schemes at once.
-        # Decode, which keeps the baseline MoE path, keeps them set.
         SGLANG_SHARED_EXPERT_TP1: "0"
         SGLANG_DP_SHARED_EXPERT_LOCAL: "0"
         SGLANG_DP_USE_GATHERV: "0"
         SGLANG_DP_USE_REDUCE_SCATTER: "0"
-        # Two parallel KV pools -- nope in fp8, rope kept in bf16 -- instead of
-        # one bf16 pool, on the unified_kv_triton kernels base selects. The
-        # layout only matches those kernels, and both PD peers must agree on it
-        # or the handshake fails, so it is set on prefill and decode alike. The
-        # DSpark draft worker stays bf16 (kv_cache_configurator.py excludes it).
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 8
         dp-size: 8
-        # MegaMoE replaces mori dispatch/combine outright (mori stays only as
-        # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
@@ -712,7 +622,6 @@ override_c256:
         SGLANG_DP_USE_GATHERV: "1"
         SGLANG_DP_USE_REDUCE_SCATTER: "1"
         MORI_MAX_DISPATCH_TOKENS_DECODE: "256"
-        # Set on both PD peers; the handshake rejects disagreeing KV layouts.
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 8
@@ -794,72 +703,29 @@ override_c256:
     env:
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
-# MegaMoE prefill on the DP-attention arm, with the fp8 unified KV pool, at
-# c384/c512. Prefill moves its MoE off mori dispatch/combine onto Aiter
-# MegaMoEv2 (DEP8); decode stays on the EP1 baseline path these arms already
-# use, so the two roles differ only in the MoE backend and the memory the mori
-# heap takes. Sizing follows c192/c256: admission is 2x CONC on both roles and
-# decode captures graphs up to 2x CONC / dp-size.
 
 override_c384:
   frontend:
     args:
-      # The gateway's 1800 s default aborts every request still waiting on an
-      # overloaded prefill at once, which these two points hit during warmup.
-      # An abort that lands mid-RDMA-write strands the mori TransferStatus and
-      # wedges that prefill DP's transfers for good (sglang
-      # disaggregation/mori/conn.py, _process_transfer_chunk). 14400 matches
-      # the single-node agentic recipes.
       request-timeout-secs: 14400
   roles:
     prefill:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
-        # Must cover the per-rank prefill chunk: sglang divides
-        # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
-        # silently fall back to fused MoE.
         SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: "8192"
         SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
-        # MegaMoEV2 addresses its dispatch/combine buffers through mori's
-        # symmetric heap. base's ISOLATION mode builds no heap at all, so every
-        # rank logs "Pointer ... is not in symmetric heap [0x0, 0x0)" and then
-        # faults on a near-null address in mega_moe_stage1.
         MORI_SHMEM_MODE: STATIC_HEAP
-        # hipMalloc'd in full on the first MegaMoE forward, after the KV pool is
-        # sized, so every byte comes out of the (1 - mem-fraction-static)
-        # headroom whether used or not. MegaMoEV2 places ~0.51 GiB per 1024
-        # MTPR in it (mega_moe/flydsl_dispatch_combine_intranode_op.py), i.e.
-        # 4.2 GiB at MTPR 8192; mori's 4 GiB default overflows at graph
-        # capture. 8G is 1.9x that.
         MORI_SHMEM_HEAP_SIZE: 8G
-        # MoE communication belongs to mori under MegaMoE; leaving the DP
-        # gatherv / reduce-scatter path on runs two comm schemes at once.
-        # Decode, which keeps the baseline MoE path, keeps them set.
         SGLANG_SHARED_EXPERT_TP1: "0"
         SGLANG_DP_SHARED_EXPERT_LOCAL: "0"
         SGLANG_DP_USE_GATHERV: "0"
         SGLANG_DP_USE_REDUCE_SCATTER: "0"
-        # Two parallel KV pools -- nope in fp8, rope kept in bf16 -- instead of
-        # one bf16 pool, on the unified_kv_triton kernels base selects. The
-        # layout only matches those kernels, and both PD peers must agree on it
-        # or the handshake fails, so it is set on prefill and decode alike. The
-        # DSpark draft worker stays bf16 (kv_cache_configurator.py excludes it).
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 8
         dp-size: 8
-        # MegaMoE replaces mori dispatch/combine outright (mori stays only as
-        # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1
@@ -998,62 +864,25 @@ override_c384:
 override_c512:
   frontend:
     args:
-      # The gateway's 1800 s default aborts every request still waiting on an
-      # overloaded prefill at once, which these two points hit during warmup.
-      # An abort that lands mid-RDMA-write strands the mori TransferStatus and
-      # wedges that prefill DP's transfers for good (sglang
-      # disaggregation/mori/conn.py, _process_transfer_chunk). 14400 matches
-      # the single-node agentic recipes.
       request-timeout-secs: 14400
   roles:
     prefill:
       gpus: 8
       env:
         GPU_MAX_HW_QUEUES: "5"
-        # Aiter MegaMoEv2 (sgl-project/sglang#35619). The megamoe a2a backend
-        # alone only selects the hook; without this flag it falls through to
-        # the DeepGEMM path, which has no ROCm kernel. The flag is not
-        # backend-local -- schedule_batch.py also keys the SWA eviction cadence
-        # off it -- so it stays off the decode role entirely.
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: "1"
-        # Must cover the per-rank prefill chunk: sglang divides
-        # chunked-prefill-size by dp-size, i.e. 65536 / 8. Tokens past MTPR
-        # silently fall back to fused MoE.
         SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: "8192"
         SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
-        # MegaMoEV2 addresses its dispatch/combine buffers through mori's
-        # symmetric heap. base's ISOLATION mode builds no heap at all, so every
-        # rank logs "Pointer ... is not in symmetric heap [0x0, 0x0)" and then
-        # faults on a near-null address in mega_moe_stage1.
         MORI_SHMEM_MODE: STATIC_HEAP
-        # hipMalloc'd in full on the first MegaMoE forward, after the KV pool is
-        # sized, so every byte comes out of the (1 - mem-fraction-static)
-        # headroom whether used or not. MegaMoEV2 places ~0.51 GiB per 1024
-        # MTPR in it (mega_moe/flydsl_dispatch_combine_intranode_op.py), i.e.
-        # 4.2 GiB at MTPR 8192; mori's 4 GiB default overflows at graph
-        # capture. 8G is 1.9x that.
         MORI_SHMEM_HEAP_SIZE: 8G
-        # MoE communication belongs to mori under MegaMoE; leaving the DP
-        # gatherv / reduce-scatter path on runs two comm schemes at once.
-        # Decode, which keeps the baseline MoE path, keeps them set.
         SGLANG_SHARED_EXPERT_TP1: "0"
         SGLANG_DP_SHARED_EXPERT_LOCAL: "0"
         SGLANG_DP_USE_GATHERV: "0"
         SGLANG_DP_USE_REDUCE_SCATTER: "0"
-        # Two parallel KV pools -- nope in fp8, rope kept in bf16 -- instead of
-        # one bf16 pool, on the unified_kv_triton kernels base selects. The
-        # layout only matches those kernels, and both PD peers must agree on it
-        # or the handshake fails, so it is set on prefill and decode alike. The
-        # DSpark draft worker stays bf16 (kv_cache_configurator.py excludes it).
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 8
         dp-size: 8
-        # MegaMoE replaces mori dispatch/combine outright (mori stays only as
-        # the shmem bootstrap), so none of the mori EP knobs apply here.
-        # Shared-expert fusion stays as base sets it: the image carries
-        # sgl-project/sglang#40943, which enables it on the grouped-topk path
-        # MegaMoE uses.
         ep-size: 8
         moe-a2a-backend: megamoe
         moe-dense-tp-size: 1

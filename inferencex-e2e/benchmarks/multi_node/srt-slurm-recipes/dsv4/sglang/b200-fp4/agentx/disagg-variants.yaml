@@ -1,5 +1,3 @@
-# AgentX dsv4 sglang b200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -71,8 +69,6 @@ base:
         SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
-        # P/D workers are on separate HGX B200 nodes, so use Mooncake's standard
-        # RDMA-registered CUDA buffers rather than an NVL72 custom memory pool.
         NCCL_TIMEOUT: '100000'
         NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
         SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
@@ -101,14 +97,11 @@ base:
         enable-deepseek-v4-fp4-indexer: true
         enable-w4a4-mxfp4-megamoe: true
         disaggregation-transfer-backend: mooncake
-        # Use the eight external HCAs. mlx5_6..9 are on a separate low-LID
-        # fabric, while mlx5_bond_0 caused cross-fabric QP RTR timeouts.
         disaggregation-ib-device: '@fabric.rdma-devices'
         disaggregation-mode: prefill
         load-balance-method: total_tokens
         mem-fraction-static: 0.85
         page-size: 256
-        # Favor the full-attention pool; measured SWA utilization remained low.
         swa-full-tokens-ratio: 0.01
         max-running-requests: 256
         cuda-graph-max-bs-decode: 256
@@ -192,8 +185,6 @@ base:
         speculative-num-draft-tokens: 7
   sbatch_directives:
     mem: "0"
-    # NScale B200 nodes expose 192 logical CPUs. Request the full node CPU set;
-    # mem=0 reserves all 1.7 TiB of allocatable host DRAM for HiCache.
     cpus-per-task: "192"
   srun_options:
     mem: "0"
@@ -204,9 +195,6 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
-# B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (1P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 64.
-# Each DEP8 worker occupies one eight-GPU B200 node.
 override_1p1d_c64:
   name: "disagg-b200-1p1d-dep8-dep8-c64-mtp-kvoffload"
   roles:
@@ -214,9 +202,6 @@ override_1p1d_c64:
       args:
         max-running-requests: 128
 
-# B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (1P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 128.
-# Each DEP8 worker occupies one eight-GPU B200 node.
 override_1p1d_c128:
   name: "disagg-b200-1p1d-dep8-dep8-c128-mtp-kvoffload"
   roles:
@@ -224,9 +209,6 @@ override_1p1d_c128:
       args:
         max-running-requests: 256
 
-# B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (2P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 256.
-# Each DEP8 worker occupies one eight-GPU B200 node.
 override_2p1d_c256:
   name: "disagg-b200-2p1d-dep8-dep8-c256-mtp-kvoffload"
   roles:
@@ -239,10 +221,6 @@ override_2p1d_c256:
       env:
         SGLANG_DSV4_MHC_PREWARM: '1'
       args:
-        # Leave enough decode activation headroom while expanding the KV pools
-        # for transient DP-rank imbalance at concurrency 256.
         mem-fraction-static: 0.91
-        # Favor the full-attention pool while retaining enough SWA capacity for
-        # the busiest decode rank.
         swa-full-tokens-ratio: 0.005
         max-running-requests: 512

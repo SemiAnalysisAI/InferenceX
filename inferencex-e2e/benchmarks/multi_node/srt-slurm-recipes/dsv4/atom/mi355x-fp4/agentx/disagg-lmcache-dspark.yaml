@@ -1,9 +1,3 @@
-# DeepSeek-V4-Pro-0813 AgentX on MI355X: 1P1D ATOM disaggregation over Mooncake
-# RDMA behind AToMesh, with DSpark (three draft tokens). Three tiers:
-# TP8 at concurrency 1-16, DP attention at 64-128, and DP attention plus ATOM's
-# in-process LMCache CPU offload on prefill at 256. srtctl generates the Mooncake
-# P/D connector; the offload tier adds lmcache_offload next to it through
-# extra-kv-connectors.
 base:
   schema: 2
   name: mi355x-dsv4-pro-0813-atom-agentx-lmcache
@@ -36,7 +30,6 @@ base:
         LOGLEVEL: WARNING
         ATOM_MOE_GU_ITLV: "1"
         AITER_BF16_FP8_MOE_BOUND: "0"
-        # Rail-isolated RDMA: matched rails replace dest-device affinity.
         MC_GID_INDEX: "@fabric.rdma-gid-index"
         ATOM_MOONCAKE_MATCHED_RAILS: auto
         NCCL_IB_DISABLE: "1"
@@ -53,7 +46,6 @@ base:
         num-speculative-tokens: 3
         kv_cache_dtype: fp8
         index-cache-dtype: fp4
-        # ATOM forces block size 256 for V4.
         block-size: 256
         gpu-memory-utilization: 0.9
         max-model-len: 1000000
@@ -87,9 +79,6 @@ base:
       TOKENIZERS_PARALLELISM: "false"
       TRANSFORMERS_VERBOSITY: error
 
-# One variant per point; each point runs in its own allocation. Admission is
-# 2x CONC on both roles. Decode captures every batch up to min(64, 2x CONC) on
-# TP, or CONC/4 per rank under DP attention. DP attention adds TBO on prefill.
 
 override_tp8_c1:
   frontend:
@@ -204,7 +193,6 @@ override_dpa8_c256_lmcache:
             max_pending_saves: 8
             slot_sidecar_staging_slots: 4
             lmcache.local_cpu: true
-            # total-cpu-dram-gb 1499 (dram-utilization 0.5) over the eight prefill ranks.
             lmcache.max_local_cpu_size: 187
             lmcache.local_disk: null
             lmcache.max_local_disk_size: 0
@@ -223,5 +211,4 @@ override_dpa8_c256_lmcache:
         enable-dp-attention: true
   benchmark:
     env:
-      # dp_sticky keys sessions on the correlation id.
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'

@@ -1,5 +1,3 @@
-# Qwen3.5-397B-A17B FP8 AgentX on B200 with SGLang native NEXTN MTP. The KV
-# cache is GPU-resident or extends to host DRAM through HiCache.
 base:
   schema: 2
   name: qwen3.5-fp8-b200-sglang-agentic
@@ -34,7 +32,6 @@ base:
         mem-fraction-static: 0.8
         stream-interval: 50
         scheduler-recv-interval: 10
-        # Parallel tokenization keeps 256k warmups within the client timeout.
         tokenizer-worker-num: 6
         reasoning-parser: qwen3
         tool-call-parser: qwen3_coder
@@ -50,16 +47,11 @@ base:
         NCCL_NVLS_ENABLE: '1'
         SGL_ENABLE_JIT_DEEPGEMM: 'false'
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-        # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC and the decode graph batch is
-# CONC, capped at 64. HiCache sizes each of the target KV and Mamba host pools
-# per rank with a 1 GB/rank alignment reserve and the 1/15 NEXTN draft pool:
-# (DRAM - TP) * 15 / TP / 31 GB.
 override_tp8_c1:
   roles:
     agg:

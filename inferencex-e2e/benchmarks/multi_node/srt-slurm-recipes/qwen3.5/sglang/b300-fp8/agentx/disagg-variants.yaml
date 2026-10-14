@@ -1,5 +1,3 @@
-# AgentX qwen3.5 sglang b300-fp8 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -160,7 +158,6 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# Colocated prefill and decode with prefill HiCache.
 override_tp4_tp4_c4:
   name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c4-mtp-hicache
   roles:
@@ -181,7 +178,6 @@ override_tp4_tp4_c4:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 16
 
-# Colocated prefill and decode with prefill HiCache.
 override_tp4_tp4_c12:
   name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c12-mtp-hicache
   roles:
@@ -202,7 +198,6 @@ override_tp4_tp4_c12:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 16
 
-# Colocated TP4 prefill and decode with prefill HiCache.
 override_tp4_tp4_c24:
   name: qwen35-b300-disagg-1p1d-tp4-tp4-colocated-c24-mtp-hicache
   roles:
@@ -223,7 +218,6 @@ override_tp4_tp4_c24:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
 
-# Colocated prefill and decode with prefill HiCache.
 override_tp4ep4_tp4_c32:
   name: qwen35-b300-disagg-1p1d-tp4ep4-tp4-colocated-c32-mtp-hicache
   roles:
@@ -244,7 +238,6 @@ override_tp4ep4_tp4_c32:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
 
-# Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c32:
   name: qwen35-b300-disagg-1p1d-tp2ep2-tp2ep2-colocated-c32-mtp-hicache
   roles:
@@ -253,7 +246,6 @@ override_tp2ep2_tp2ep2_c32:
         mem-fraction-static: 0.88
         cuda-graph-max-bs-decode: 32
 
-# Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c40:
   name: qwen35-b300-disagg-1p1d-tp2ep2-tp2ep2-colocated-c40-mtp-hicache
   roles:
@@ -262,7 +254,6 @@ override_tp2ep2_tp2ep2_c40:
         mem-fraction-static: 0.88
         cuda-graph-max-bs-decode: 48
 
-# Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c44:
   name: qwen35-b300-disagg-1p1d-tp2ep2-tp2ep2-colocated-c44-mtp-hicache
   roles:
@@ -271,7 +262,6 @@ override_tp2ep2_tp2ep2_c44:
         mem-fraction-static: 0.88
         cuda-graph-max-bs-decode: 48
 
-# Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c48:
   name: qwen35-b300-disagg-1p1d-tp2ep2-tp2ep2-colocated-c48-mtp-hicache
   roles:
@@ -280,7 +270,6 @@ override_tp2ep2_tp2ep2_c48:
         mem-fraction-static: 0.92
         cuda-graph-max-bs-decode: 48
 
-# Colocated TP2+EP2 prefill and decode with write-through HiCache.
 override_tp2ep2_tp2ep2_c56_replayssm:
   name: qwen35-b300-disagg-1p1d-tp2ep2-tp2ep2-colocated-c56-replayssm-mtp-hicache
   roles:

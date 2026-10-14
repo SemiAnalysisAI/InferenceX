@@ -1,6 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on H200 with vLLM native DSpark
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). Engram weights use
-# UVA DRAM; the KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-h200-vllm-agentic
@@ -17,7 +14,6 @@ base:
   engine:
     type: vllm
     connector: null
-  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
   health_check:
     interval_seconds: 10
     max_attempts: 720
@@ -33,14 +29,8 @@ base:
         enable-auto-tool-choice: true
         reasoning-parser: deepseek_v41
         engram-config: '{"cpu_offload":true}'
-        # Five-token DSpark with probabilistic drafting. Throughput runs replace
-        # block rejection with the golden acceptance length.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
-        # The HF cache here is a VIRTIOFS mount, which vLLM does not treat as a
-        # network FS, so it memory-maps the 475 GiB checkpoint lazily: 19/48 shards
-        # loaded in the 3600 s readiness window (run 35012494184). Stream the shards
-        # into page cache with parallel readers first.
         safetensors-load-strategy: prefetch
         disable-uvicorn-access-log: true
       env:
@@ -51,12 +41,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point. Graph capture starts at 64 tokens (DSpark5 verification
-# for concurrent subagents at c1-c4) and doubles until it covers CONC x (1 + 5
-# drafts), up to 2048. TP4 leaves ~15 GiB of KV per 141 GB GPU, so it caps
-# batched tokens at 4096 (the indexer's 1M-wide logits buffer), bounds the
-# scheduler at 2x CONC within [16, 256] (FlashInfer autotune fails below 16) and
-# stops capturing above 512 tokens.
 override_tp8_c1:
   roles:
     agg:

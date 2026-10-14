@@ -1,7 +1,3 @@
-# DeepSeek-V4-Pro AgentX on B300 with SGLang EAGLE (3 steps, 4 draft tokens).
-# TP4 and TP8 run the flashinfer MXFP4 MoE with GPU-resident KV; DEP8
-# (attention DP + Mega-MoE + FP4 indexer) runs behind the SGLang router with a
-# HiCache DRAM tier.
 base:
   schema: 2
   name: dsv4-fp4-b300-sglang-agentic-eagle
@@ -49,7 +45,6 @@ base:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
         PYTHONNOUSERSITE: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'
-        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
         SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
@@ -57,16 +52,12 @@ base:
         SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
         SGLANG_OPT_USE_TOPK_V2: '1'
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
-        # Triton compiles with the image's CUDA ptxas.
         TRITON_PTXAS_PATH: /usr/local/cuda/bin/ptxas
   benchmark:
     env:
-      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. TP4/TP8: admission is 2x CONC and the decode graph
-# batch 4x CONC, capped at 64.
 override_tp4_c1:
   roles:
     agg:
@@ -211,12 +202,6 @@ override_tp8_c32:
       CONC: '32'
       KV_OFFLOADING: none
 
-# DEP8 replaces the TP8 MoE path: the router keeps each session on the DP rank
-# holding its radix prefix, the global prefill chunk is 8192 per rank, decode
-# graphs cover the padded speculative batch across ranks, and AIPerf owns the
-# warmup. DEP8 mixes prefill into decode batches, schedules shortest prefill
-# first, coordinates speculative prefill across DP ranks, and keeps the router
-# circuit breaker off. HiCache capacity is a host/device ratio of 2.
 override_dep8_c64:
   frontend: &dep8_frontend
     type: sglang-router
@@ -228,7 +213,6 @@ override_dep8_c64:
       request-timeout-secs: 14400
       disable-health-check: true
       disable-circuit-breaker: true
-      # A transient router-to-engine send failure would otherwise abort the run.
       retry-max-retries: 8
       retry-initial-backoff-ms: 500
       retry-max-backoff-ms: 10000
@@ -265,7 +249,6 @@ override_dep8_c64:
         max-running-requests: 128
       env: &dep8_env
         SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
-        # Covers the 8192-token per-rank prefill budget.
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
   benchmark:
     env:

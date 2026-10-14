@@ -1,5 +1,3 @@
-# AgentX dsv4 vllm gb300-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -76,7 +74,6 @@ base:
         served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
         kv-cache-dtype: "fp8"
         pipeline-parallel-size: 1
-        # max-num-seqs: 512
         trust-remote-code: true
         block-size: 256
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
@@ -86,58 +83,13 @@ base:
         enable-ep-weight-filter: true
         enable-sleep-mode: true
         tokenizer-mode: deepseek_v4
-  # sbatch + srun resource grants for clusters without per-GPU defaults.
-  #
-  # mem=0: allocate all available node memory (~868 GB on CW gb300). Without
-  # this, sbatch only requests ntasks × DefMemPerCPU = 8 × 4 GB = 32 GB for
-  # the whole job and worker cgroups OOM-kill mid model load (R7-R11 hit
-  # this; sacct showed AllocTRES mem=4G per step).
-  #
-  # cpus-per-task=72: give each task one CW gb300 NUMA socket (144 cores
-  # split 2 × 72). Critical for the *infra step* (etcd + nats) which
-  # srtctl spawns without --gres=gpu — on CW that means DefMemPerCPU
-  # applies and the step gets 1 CPU by default. With 24 dynamo DP ranks
-  # all hammering etcd for lease keep-alives, single-CPU etcd can't keep
-  # up and dies (R12 hit this; etcd reported max-cpu-set=1, leases
-  # deadline-exceeded, infra SIGKILL'd at 16:35:49). 72 CPUs is plenty
-  # for both etcd + nats AND for vLLM worker auxiliary threads.
-  #
-  # nv gb300 doesn't need this because cluster default DefCpuPerGPU=35
-  # auto-allocates 4*35=140 CPUs per GPU-bearing task; cw has no per-GPU
-  # default. Setting it here is safe on both because the value is ≤ node
-  # CPU count.
-  #
-  # srun_options.mem=0 forces each srun step to use the full node memory
-  # (without it, srun steps default back to cpus_per_task × DefMemPerCPU).
-  # Docs: docs/config-reference.md#sbatch_directives + #srun_options.
   sbatch_directives:
     mem: "0"
     cpus-per-task: "72"
   srun_options:
     mem: "0"
-    # gb300-nv: pyxis maps the calling user (sa-shared) into the container as
-    # uid 345200007. dpkg refuses to run without EUID 0 even though
-    # ENROOT_ROOTFS_WRITABLE=1 makes the rootfs writable, so the srt_agentic
-    # apt-get install git step fails. --container-remap-root asks pyxis to
-    # remap us to uid 0 inside the container. srt-slurm renders empty-string
-    # values as flag-only srun args (see core/slurm.py:250).
     container-remap-root: ""
 
-# Agentic-coding variant of dsv4/vllm/gb300-fp4/8k1k/disagg-1p6d-dep4-tp4-stp.yaml.
-# Topology is identical (1 prefill DEP=4 + 6 decode TP=4, 28 GPUs across 7
-# GB300 nodes + 1 dedicated NATS/etcd infra node) so we can compare against
-# the fixed-seq-len 1p6d baseline at the same concurrency point (192).
-#
-# Divergence vs the 8k1k sibling:
-#   - benchmark.type:        sa-bench -> custom (hands off to srt_agentic.sh)
-#   - max-model-len:         removed (let vLLM derive from model config; agentic
-#                              trajectories blow past any small explicit cap)
-#   - no-enable-prefix-caching: dropped (prefix caching MUST be on for
-#                              trajectory reuse — entire point of agentic)
-# Note: --enable-auto-tool-choice / --tool-call-parser / --reasoning-parser
-# are NOT set on the worker. The dynamo-vllm worker entrypoint doesn't
-# accept them (different arg parser than `vllm serve`). In disagg, chat
-# parsing happens at the dynamo frontend, not at the worker.
 override_1p6d_dep4_tp4:
   name: "svf-vllm-disagg-gb300-1p6d-dep4-tp4-agentic"
   roles:
@@ -145,8 +97,6 @@ override_1p6d_dep4_tp4:
       nodes: 1
       workers: 1
       args:
-        # enforce-eager: true
-        # max-num-seqs: 256
         attention-config: '{"use_fp4_indexer_cache": true}'
     decode:
       nodes: 6
@@ -157,21 +107,6 @@ override_1p6d_dep4_tp4:
         all2all-backend: "flashinfer_nvlink_one_sided"
         no-enable-flashinfer-autotune: true
 
-# Agentic-coding variant of dsv4/vllm/gb300-fp4/8k1k/disagg-4p1d-dep4-dep8-24-c4096-stp.yaml.
-# Max-throughput shape: 4 prefill (DEP=4 each) + 1 decode (DEP=8). 6 GB300
-# nodes (4P + 2D = 24 GPUs at 4 GPUs/node) plus a dedicated NATS/etcd infra
-# node. Sized for concurrency 4096 with deep_gemm_mega_moe on both workers.
-#
-# Divergence vs the 8k1k sibling:
-#   - benchmark.type:        sa-bench -> custom (hands off to srt_agentic.sh)
-#   - max-model-len:         removed (let vLLM derive from model config; agentic
-#                              trajectories blow past any small explicit cap)
-#   - no-enable-prefix-caching: dropped (prefix caching MUST be on for
-#                              trajectory reuse — entire point of agentic)
-# Note: --enable-auto-tool-choice / --tool-call-parser / --reasoning-parser
-# are NOT set on the worker. The dynamo-vllm worker entrypoint doesn't
-# accept them (different arg parser than `vllm serve`). In disagg, chat
-# parsing happens at the dynamo frontend, not at the worker.
 override_4p1d_dep4_dep8_24_c4096:
   name: "svf-vllm-disagg-gb300-4p1d-dep4-dep8-24-c4096-agentic"
   roles:
@@ -181,10 +116,6 @@ override_4p1d_dep4_dep8_24_c4096:
       env:
         VLLM_LOG_STATS_INTERVAL: "1"
       args:
-        # enforce-eager: true
-        # Inherited from fixed-sequence recipes; let vLLM select the scheduler
-        # sequence limit until this is tuned explicitly for the agentic trace.
-        # max-num-seqs: 16
         safetensors-load-strategy: "prefetch"
     decode:
       nodes: 2

@@ -1,11 +1,3 @@
-# Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
-# (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
-# is ~195 GB per GPU. The KV cache is GPU-resident at c1 and backed by
-# vLLM's SimpleCPUOffloadConnector (dram) from dcp8 c4. Three bands, driven by
-# kimik3-fp4-mi355x-vllm-agentic-mtp: interactive dcp1/dcp8 c1 (GPU-resident),
-# mid dcp8 c4-c16 and throughput dcp8 c44/c48/c50 (KV read sharded across all
-# 8 GPUs, DRAM offload, DSpark draft with synthetic acceptance). The 1799 GB
-# DRAM budget splits evenly across the eight ranks.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
@@ -22,7 +14,6 @@ base:
   engine:
     type: vllm
     connector: null
-  # Weights load for up to VLLM_ENGINE_READY_TIMEOUT_S.
   health_check:
     interval_seconds: 10
     max_attempts: 720
@@ -48,40 +39,25 @@ base:
         attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA"}'
         stream-interval: 10
       env:
-        # Upstream AMD recipe environment.
         VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
         VLLM_ROCM_USE_AITER: '1'
         SAFETENSORS_FAST_GPU: '1'
         VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
         AITER_BF16_FP8_MOE_BOUND: '0'
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
-        # The MI355X nodes report MEC firmware 38, below the 177 that fixes the
-        # RCCL memory reclaim issue.
         HSA_NO_SCRATCH_RECLAIM: '1'
-        # 2.8 TB of weights off a shared mount takes far longer than the default.
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         PYTHONNOUSERSITE: '1'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
         VLLM_USE_DIRECT_DCP_A2A: '0'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
-        # Route DCP multi-token verify through the AITER ASM round-robin decode.
         VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
   benchmark:
     env:
-      # Long agentic turns against a 1M context are prefill-bound on the server.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point. The DSpark draft length descends with concurrency
-# (7, 5, 4, 3, 4, 4) and stays at 4 for the throughput band; agentic runs
-# replace block rejection with the golden acceptance length for that draft
-# length. Admission is 2x CONC and graph
-# capture covers every even size up to 2x CONC x (1 + drafts). Every point
-# requests FULL_AND_PIECEWISE; the AMD K3 model has no torch.compile
-# submodule, so without breakable graphs vLLM falls back to FULL_DECODE_ONLY.
-# The offload points split the 1799 GB DRAM budget evenly across the eight ranks;
-# identical prefixes must hash to identical block keys on every rank.
 override_tp8_c1:
   roles:
     agg:
@@ -98,7 +74,6 @@ override_tp8_c1:
       CONC: '1'
       KV_OFFLOADING: 'none'
 
-# c1 with dcp8: the KV read sharded across all 8 GPUs, still GPU-resident.
 override_tp8_c1_dcp8:
   roles:
     agg:
@@ -132,7 +107,6 @@ override_tp8_c4:
       CONC: '4'
       KV_OFFLOADING: 'none'
 
-# c4 with dcp8: the KV read sharded across all 8 GPUs, backed by the DRAM tier.
 override_tp8_c4_dcp8_simple:
   roles:
     agg:
@@ -153,8 +127,6 @@ override_tp8_c4_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
-# Mid band: dcp-size 8 shards the KV read across all 8 GPUs, backed by
-# vLLM's SimpleCPUOffloadConnector DRAM tier, with the DSpark draft.
 override_tp8_c10_dcp8_simple:
   roles:
     agg:
@@ -239,9 +211,6 @@ override_tp8_c16_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
-# Throughput band: same dcp8 DRAM-offload layout with a 4-token DSpark draft.
-# Synthetic acceptance replaces block rejection with the golden acceptance
-# length. FULL_AND_PIECEWISE graphs cover every even size up to 2x CONC x 5.
 override_tp8_c44_dcp8_simple:
   roles:
     agg:

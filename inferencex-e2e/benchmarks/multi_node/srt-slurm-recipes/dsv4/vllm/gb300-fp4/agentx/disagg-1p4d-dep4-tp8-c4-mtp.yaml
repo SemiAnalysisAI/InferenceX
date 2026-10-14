@@ -1,11 +1,6 @@
-# Source: https://github.com/Inferact/srt-slurm-sa/blob/4a870cd5bc333bf8a312fc65ca1ea82cdab9b2df/recipes/vllm/deepseek-v4-pro/GB300/agentic/agentx-v1.0.1/1p3d-pdep4-dtp8-c3-kv-nixl-mtp-flashinfer-ar-lpt512-psi1.yaml
-# Adapted from the source topology to a 1P4D concurrency-4 point for the
-# InferenceX AgentX harness; eval-only runs continue to verify real MTP output.
 schema: 2
 name: "svf-vllm-disagg-gb300-1p4d-dep4-tp8-c4-mtp-agentic"
 
-# GB300 high-interactivity AgentX MTP3 topology: one DEP4 prefill worker
-# feeds four TP8 decode workers at concurrency 4 through NIXL.
 
 identity:
   model: {}
@@ -38,8 +33,6 @@ environment:
   VLLM_DSV4_MEGA_FP8_COMBINE: "1"
   VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
   DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p4d-{job_id}"
-  # Multi-node TP8 decode spans two GB300 nodes; match the sibling recipes'
-  # NCCL/UCX fabric settings (MNNVL/NVLS, IB HCAs).
   UCX_MEMTYPE_CACHE: "n"
   UCX_NET_DEVICES: "@fabric.rdma-device-ports"
   UCX_TLS: "rc,cuda_copy"
@@ -94,8 +87,6 @@ engine:
   type: vllm
   connector:
   dp_launch_mode: per_node
-  # vLLM KV routing needs prefill KV events so Dynamo can select the
-  # cache-owning PDEP4 rank.
 roles:
   prefill:
     nodes: 1
@@ -132,7 +123,6 @@ roles:
       numa-bind: true
       numa-bind-nodes: [0, 0, 1, 1]
       speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
-      # MTP capture sizes are tokens: 64 seqs * (1 target + 3 drafts).
       max-cudagraph-capture-size: 256
     kv_events: true
   decode:
@@ -142,8 +132,6 @@ roles:
 
     args:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
-      # TP8 spans two GB300 nodes; custom all-reduce is single-node only, so
-      # decode uses the FlashInfer allreduce path like the agg TP8 recipes.
       disable-custom-all-reduce: true
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       safetensors-load-strategy: "prefetch"
@@ -157,7 +145,6 @@ roles:
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      # MTP capture sizes are tokens: 16 seqs * (1 target + 3 drafts).
       max-cudagraph-capture-size: 64
       gpu-memory-utilization: 0.92
       no-disable-hybrid-kv-cache-manager: true
@@ -180,11 +167,9 @@ benchmark:
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
-    # Avoid concurrent readers observing a mismatched mmap data/index pair.
     AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"
     NUM_DATASET_ENTRIES: "393"
     HF_WEKA_DATASET: "semianalysisai/cc-traces-weka-062126"
     PUBLIC_DATASET: "semianalysis_cc_traces_weka_062126"
-  # Colocate the AgentX client with the Dynamo frontend on the first decode node.
   placement:
     node: first_decode

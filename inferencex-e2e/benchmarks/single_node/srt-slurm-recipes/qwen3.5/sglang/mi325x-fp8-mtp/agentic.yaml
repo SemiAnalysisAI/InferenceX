@@ -1,5 +1,3 @@
-# Qwen3.5 FP8 AgentX on MI325X with SGLang native EAGLE MTP. The KV cache is
-# GPU-resident.
 base:
   schema: 2
   name: qwen3.5-fp8-mi325x-sglang-agentic
@@ -14,8 +12,6 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # Loading plus first-request kernel tuning outlasts the 1800 s default:
-  # MI300X Qwen3.5 was ready after ~27 minutes (run 36160403972).
   health_check:
     interval_seconds: 10
     max_attempts: 360
@@ -59,11 +55,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. AgentX concurrency counts live session trees, so
-# admission is 2x CONC; the graph batch is CONC, capped at 64. With EAGLE,
-# SGLang reserves 15% of the static budget for the draft model: TP2 needs 0.95
-# (an effective 0.8075) to fit weights, hybrid state and KV; TP4/TP8 use 0.80.
-# Tokenizer workers run only from TP4.
 override_tp2_ep2_c1:
   roles:
     agg:

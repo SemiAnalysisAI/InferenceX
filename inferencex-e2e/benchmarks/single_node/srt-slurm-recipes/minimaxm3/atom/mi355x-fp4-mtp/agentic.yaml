@@ -1,7 +1,3 @@
-# MiniMax-M3 MXFP4 AgentX on MI355X with ATOM EAGLE3 (GQA draft, three tokens)
-# at TP2 and TP4, with GPU-resident KV or an in-process LMCache DRAM tier.
-# The DRAM variants add ATOM's lmcache_offload connector through
-# srtctl's extra-kv-connectors (NVIDIA/srt-slurm#507, in srt-slurm since v2.36.0).
 base:
   schema: 2
   name: minimaxm3-fp4-mi355x-atom-agentic
@@ -51,11 +47,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC. TP4 shards the indexer across
-# ranks at the measured points (15, 20, 24, 28, and the DRAM points 40, 48).
-# ATOM's MiniMax-M3 mono decode is on by default at every TP4 point and
-# serves decode steps of up to 16 tokens (four requests with EAGLE3 K3);
-# ATOM builds it for TP4 only, so TP2 runs the unfused path.
 override_tp4_c1:
   roles:
     agg:
@@ -204,10 +195,6 @@ override_tp2_c4:
     env:
       CONC: '4'
 
-# DRAM variants: LMCache's in-process CPU tier with ATOM's segmented LRU and
-# all-rank lookup, sized at TOTAL_CPU_DRAM_GB / TP (257 GB) per rank.
-# PYTHONHASHSEED keeps every rank's chunk keys identical; without it the
-# offload hit rate is zero.
 override_tp2_c20_lmcache:
   roles:
     agg:

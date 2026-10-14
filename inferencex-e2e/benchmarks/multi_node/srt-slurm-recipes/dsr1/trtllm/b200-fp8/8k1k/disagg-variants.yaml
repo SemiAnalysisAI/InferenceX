@@ -7,7 +7,6 @@ base:
 
   engine:
     type: trtllm
-    # Dynamo builds before ai-dynamo/dynamo#12162 reject --publish-metrics.
     publish_metrics: false
 
   roles:
@@ -79,8 +78,6 @@ base:
     interval_seconds: 10
 
   dynamo:
-    # The unversioned container alias does not identify a Dynamo version or hash.
-    # Use NATS for a recipe with an unverified Dynamo revision.
     request_plane: "nats"
     install: false
 
