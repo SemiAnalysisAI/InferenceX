@@ -560,8 +560,6 @@ def changelog_run(planning_repo, monkeypatch, capsys):
     return run
 
 
-# Hand-worked policy: entry all-evals suppresses throughput; the CLI modifier
-# expands evals while retaining throughput. Trimming affects throughput alone.
 @pytest.mark.parametrize("cli_flags,expected_modes", [
     ([], ("benchmark-subset", "subset", "all", "all")),
     (["--all-evals"], ("benchmark-all", "all", "all", "all")),
@@ -600,7 +598,6 @@ def test_overlapping_scenarios_preserve_eval_precedence_and_buckets(changelog_ru
     assert [r["conc"] for r in output["multi_node"]["8k1k"]] == [[16, 32, 64]]
     assert [r["conc"] for r in output["single_node"]["agentic"]] == [16, 32]
     assert [r["conc"] for r in output["multi_node"]["agentic"]] == [[16], [32]]
-    # Generated rows are independent across throughput and eval passes.
     assert all(r.get("run-eval", False) is False for bucket in output["single_node"].values() for r in bucket)
     assert all(r["eval-only"] is True for r in output["evals"] + output["agentic_evals"])
 
@@ -646,7 +643,6 @@ def test_append_only_rejects_mixed_or_entry_eval_modes(changelog_run, entries):
     (["single", "missing"], "not found"), (["single", "missing-*"], "No config keys matched"),
 ])
 def test_invalid_key_after_valid_key_rejects_entire_selection(changelog_run, keys, message, planning_repo):
-    # Key errors precede runner loading, even when that file is invalid.
     (planning_repo[0] / "configs/runners.yaml").write_text("invalid\n")
     with pytest.raises(ValueError, match=message):
         changelog_run([{"config-keys": keys}])
@@ -673,7 +669,6 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, 
 
 
 def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, changelog_run, capsys):
-    # Single-node generation succeeds before multinode scheduling fails.
     (planning_repo[0] / "benchmarks/multi_node/srt-slurm-recipes/fixture/recipe.yaml").write_text(
         "schema: 2\n"
     )
@@ -777,8 +772,6 @@ def test_plan_rejects_empty_changelog_before_reading_inputs():
 def test_generation_api_preserves_json_rejection_for_yaml_sets(planning_repo):
     from infx.matrix.generate import generate_config_matrix
     root, master, runners = planning_repo
-    # Pydantic accepts this YAML set as a list, but validation returns the raw
-    # config. The generator CLI has always rejected it at JSON serialization.
     worker = master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["prefill"]
     worker["additional-settings"] = {"A=1"}
     validate_master_config(master, root)

@@ -94,8 +94,6 @@ def build_config_params(result: dict) -> dict:
     }
 
 
-# Use LIKE prefix match on model to handle cases where DB model name
-# differs from model-prefix (e.g. model-prefix "gptoss" -> DB "gptoss120b")
 BASELINE_QUERY = """
     SELECT br.metrics as metrics,
            c.model as db_model
@@ -124,10 +122,6 @@ BASELINE_QUERY = """
     LIMIT 1
 """
 
-# Metrics to compare: (result_key, header_label, higher_is_better, format_spec)
-# TTFT is in seconds in the result JSON, display in ms
-# E2EL is in seconds
-# Interactivity is in tok/s/user
 METRIC_DEFS = [
     ("tput_per_gpu", "TPUT/GPU", True, ".2f"),
     ("median_ttft", "TTFT Median (ms)", False, ".4f"),
@@ -144,7 +138,6 @@ METRIC_DEFS = [
     ("p99.9_e2el", "E2EL P99.9 (s)", False, ".4f"),
 ]
 
-# Keys that are stored in seconds but should be displayed in ms
 MS_DISPLAY_KEYS = {"median_ttft", "p90_ttft", "p99_ttft", "p99.9_ttft"}
 
 
@@ -316,7 +309,7 @@ def main() -> None:
 
         table_rows = []
         for row in single_node:
-            parts = row["parallelism"]  # "tp1/ep1"
+            parts = row["parallelism"]
             tp_val = parts.split("/")[0].replace("tp", "")
             ep_val = parts.split("/")[1].replace("ep", "")
             config_cols = [
@@ -370,7 +363,6 @@ def main() -> None:
 
         table_rows = []
         for row in multi_node:
-            # Parse P(tp4/ep4) D(tp8/ep8)
             m = re.match(r"P\(tp(\d+)/ep(\d+)\) D\(tp(\d+)/ep(\d+)\)", row["parallelism"])
             config_cols = [
                 row["model"],

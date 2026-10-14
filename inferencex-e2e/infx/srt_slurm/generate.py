@@ -28,7 +28,6 @@ from infx.srt_slurm.workload import bind_multinode, check_setup_script, resolve_
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
 
-# What benchmark-tmpl.yml and benchmark-multinode-tmpl.yml export.
 RANDOM_RANGE_RATIO = "0.8"
 THINKING_MODE = "thinking_on"
 
@@ -70,7 +69,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             CONC_LIST=" ".join(map(str, point["conc"])),
         )
         if agentic:
-            # A multi-node AgentX job serves its one concurrency.
             environment["CONC"] = str(point["conc"][0])
         return environment
     return {
@@ -118,7 +116,6 @@ def _binder_inputs(
     srt = slurm_settings(cluster).srt_slurm
     if srt is None:
         raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
-    # The job reads these; the binder inputs depend on none of them.
     runtime = {
         "RUNNER_NAME": runner,
         "GITHUB_WORKSPACE": str(root),

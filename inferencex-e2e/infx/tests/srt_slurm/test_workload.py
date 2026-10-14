@@ -106,7 +106,6 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
     ({"environment": {"ROUTER_VERSION": "0.1.14"}}, True, False, "environment.ROUTER_VERSION (= '0.1.14')"),
     ({"base": {}, "override_c": {"services": [{"name": "m", "env": {"KV_OFFLOAD_BACKEND_VERSION": "1"}}]}},
      True, True, "override_c.services[0].env.KV_OFFLOAD_BACKEND_VERSION (= '1')"),
-    # The workflow exports the matrix point; a fragment pins none of it.
     ({"benchmark": {"env": {"REQUIRE_POWER": "1", "MODEL": "/model"}}}, True, True,
      "benchmark.env.MODEL (= '/model'), benchmark.env.REQUIRE_POWER (= '1')"),
 ])  # fmt: skip
@@ -282,7 +281,6 @@ def test_the_multinode_binder_writes_the_one_selected_variant(project, tmp_path)
     assert bind(f"{path}:override_narrow", str(output)).returncode == 0
     bound = yaml.safe_load(output.read_text())
     assert bound["benchmark"]["command"] == "bash agentic.sh"
-    # The selected variant's fabric references take the cluster's values.
     assert bound["roles"]["decode"]["env"] == {"UCX": "mlx5_0:1,mlx5_1:1"}
 
 

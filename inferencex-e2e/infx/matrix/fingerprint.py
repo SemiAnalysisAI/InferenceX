@@ -19,17 +19,13 @@ from infx.config import repository_root
 from infx.srt_slurm.generate import bound_variant, point_environment
 from infx.srt_slurm.variants import expand_variants
 
-# Point-level row fields: one recipe serves every concurrency and experiment name.
 ROW_EXCLUDED = frozenset({"conc", "exp-name", "recipe-fingerprint"})
-# The job name (srtctl numbers zip variants by position), the point's concurrencies and the
-# cluster's exporter port.
 RECIPE_EXCLUDED = (
     ("name",),
     ("benchmark", "concurrencies"),
     ("benchmark", "env", "CONC"),
     ("telemetry", "dcgm_exporter", "port"),
 )
-# Stands in for the cluster's exporter port so a power row composes its telemetry block.
 EXPORTER_PORT = 0
 
 

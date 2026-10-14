@@ -41,7 +41,6 @@ class Curve:
 def curve_name(model: str, spec: Mapping[str, Any]) -> str:
     """Map an InferenceX model prefix and speculative config to a curve file stem."""
     method = str(spec.get("method", "")).lower()
-    # SGLang calls native model MTP EAGLE/NEXTN; the curve describes the model's head.
     if method in ("eagle", "nextn"):
         method = "eagle3" if model == "minimaxm3" else "mtp"
     curve = f"{model}_{method}"
@@ -51,7 +50,6 @@ def curve_name(model: str, spec: Mapping[str, Any]) -> str:
         if "gqa" in str(spec.get("model", "")).lower():
             curve += "_gqa"
     elif model == "kimik3" and method == "dspark":
-        # Kimi has distinct measured curves; require the recipe to choose its sampler.
         sampling = spec.get("draft_sample_method")
         if sampling == "probabilistic":
             curve += "_probabilistic_sample_method_block_rejection_sample_method"

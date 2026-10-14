@@ -18,7 +18,6 @@ from infx.bench.__main__ import main as bench
 from infx.tests.bench.stubs import executable
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-# Client flags every lane passes, whatever the point.
 POLICY = {
     "--dataset-name": "random",
     "--request-rate": "inf",
@@ -27,8 +26,6 @@ POLICY = {
     "--percentile-metrics": "ttft,tpot,itl,e2el",
 }
 
-# Records each client run and writes the result file the real client would. With
-# FAKE_CLIENT_TRAP set, it runs until SIGTERM or SIGHUP, records the signal, and exits 0.
 FAKE_CLIENT = """
 import json, os, signal, sys, time
 from pathlib import Path
@@ -162,7 +159,6 @@ def frontend(*models: str):
     )
 
 
-# What benchmarks/multi_node/llm-d/server.sh passes for one concurrency.
 POINT_FLAGS = {
     "--base-url": "http://0.0.0.0:8080",
     "--model": "deepseek-ai/DeepSeek-V4-Pro",
@@ -213,7 +209,6 @@ def test_single_node_shim_runs_one_point_and_writes_only_its_result(
         **flags,
     }
     assert [path.name for path in logs.iterdir()] == ["point_conc4.json"]
-    # The shim sets PYTHONSAFEPATH for infx.bench only; Python-script tools break under it.
     assert run["safe_path"] is None
 
 
@@ -247,7 +242,6 @@ def test_multi_node_shim_writes_one_result_and_power_window_per_concurrency(
     windows.mkdir(parents=True)
     env = sweep_env(tmp_path, tools, url, TOKENIZER="/model", SRT_MEASUREMENT_WINDOW_DIR=str(windows))
 
-    # A later --logs-dir overrides the shim's /logs.
     result = run_shim("multi_node/srt_fixed_sequence.sh", env, "--logs-dir", str(tmp_path / "logs"))
 
     assert result.returncode == 0, result.stderr
@@ -289,7 +283,6 @@ def test_multi_node_shim_writes_one_result_and_power_window_per_concurrency(
 
 def test_sweep_stops_at_the_first_failing_point(tmp_path, tools, http_server, monkeypatch):
     url = http_server(frontend("served/model-id"))
-    # An aggregated row: no decode workers, and no TOKENIZER.
     use_env(monkeypatch, sweep_env(
         tmp_path, tools, url, CONC_LIST="4 16 32", PREFILL_NUM_WORKERS="2", DECODE_NUM_WORKERS="0",
         FAKE_CLIENT_FAIL_CONC="16",
@@ -365,6 +358,5 @@ def test_point_relays_a_signal_and_an_interrupted_run_never_passes(tmp_path, too
     finally:
         process.kill()
 
-    # The client exited 0 on the relayed signal, but an interrupted run never passes.
     assert process.returncode == rc, stderr
     assert trapped.read_text() == sent.name

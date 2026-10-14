@@ -31,7 +31,6 @@ class Override:
     entry: str | None = None
     served_name: str | None = None
     require_config: bool = False
-    # Load the Hub snapshot of MODEL, whether or not a checkpoint is staged.
     hub: bool = False
 
 
@@ -93,7 +92,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
         ),
     ),
     "mi355x-amds": (
-        # The cluster stages neither checkpoint; these lanes load the Hub snapshot.
         Override(Match(any_of("dsr1"), any_of("fp8"), any_of("sglang-disagg")), hub=True),
         Override(Match(any_of("qwen3.5"), any_of("fp4"), any_of("sglang-disagg")), hub=True),
     ),

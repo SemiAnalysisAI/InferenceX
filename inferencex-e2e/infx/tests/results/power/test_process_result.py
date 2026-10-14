@@ -33,7 +33,6 @@ def test_long_multinode_names_survive_result_and_power_processing(
     assert aggregate['recipe_fingerprint'] == fingerprint
     assert aggregate['model'] == 'deepseek-ai/DeepSeek-R1-0528'
     assert (tmp_path / ('power_validation_' + name)).is_file()
-    # Different full fingerprints must remain distinct even with the same first 16 characters.
     assert result_stem(base, 'a' * 64) != result_stem(base, 'a' * 16 + 'b' * 48)
 
 
@@ -70,8 +69,6 @@ def test_multinode_explicit_gpu_counts_control_decode_fields_and_denominators(
 ):
     from infx.results.fixed_sequence import build_result
 
-    # Worker dimensions describe 48 prefill and 180 decode GPUs. The supplied
-    # allocation counts, 20 and 0, remain authoritative for this collector.
     env = {**multinode_env_vars, "PREFILL_NUM_WORKERS": "2", "PREFILL_TP": "3",
            "PREFILL_PP_SIZE": "2", "PREFILL_PCP_SIZE": "4", "DECODE_NUM_WORKERS": "3",
            "DECODE_TP": "6", "DECODE_EP": "5", "DECODE_PP_SIZE": "2",
@@ -282,7 +279,6 @@ class TestProcessResultScript:
 
         output_data = json.loads(result.stdout)
 
-        # Verify base fields
         assert output_data["hw"] == "mi300x"
         assert output_data["framework"] == "sglang"
         assert output_data["precision"] == "fp8"
@@ -294,28 +290,23 @@ class TestProcessResultScript:
         assert output_data["disagg"] is False
         assert output_data["recipe_fingerprint"] == "a" * 64
 
-        # Verify single-node specific fields
         assert output_data["is_multinode"] is False
         assert output_data["tp"] == 8
         assert output_data["ep"] == 1
         assert output_data["dp_attention"] == "false"
 
-        # Verify throughput calculations (divided by tp=8)
         assert output_data["tput_per_gpu"] == pytest.approx(1875.0625)
         assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)
         assert output_data["input_tput_per_gpu"] == pytest.approx(375.0625)
 
-        # Verify latency conversions (ms to seconds)
         assert output_data["ttft_p50"] == pytest.approx(0.1505)
         assert output_data["ttft_p99"] == pytest.approx(0.2503)
         assert output_data["e2e_latency_p50"] == pytest.approx(1.5)
         assert output_data["e2e_latency_p99"] == pytest.approx(2.5)
 
-        # Verify interactivity calculations (1000 / tpot_ms)
         assert output_data["intvty_p50"] == pytest.approx(40.0)
         assert output_data["intvty_p99"] == pytest.approx(22.222222)
 
-        # Verify output file created
         output_file = tmp_path / "agg_benchmark_result.json"
         assert output_file.exists()
 
@@ -326,13 +317,11 @@ class TestProcessResultScript:
 
         output_data = json.loads(result.stdout)
 
-        # Verify base fields
         assert output_data["hw"] == "gb200"
         assert output_data["framework"] == "dynamo-trt"
         assert output_data["precision"] == "fp4"
         assert output_data["disagg"] is True
 
-        # Verify multinode specific fields
         assert output_data["is_multinode"] is True
         assert output_data["prefill_tp"] == 4
         assert output_data["prefill_ep"] == 4
@@ -347,10 +336,9 @@ class TestProcessResultScript:
         assert output_data["prefill_hw"] == "gb200"
         assert output_data["decode_hw"] == "h100"
 
-        # Verify throughput calculations
-        assert output_data["tput_per_gpu"] == pytest.approx(535.732143)  # 28 GPUs total
-        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)  # 8 decode GPUs
-        assert output_data["input_tput_per_gpu"] == pytest.approx(150.025)  # 20 prefill GPUs
+        assert output_data["tput_per_gpu"] == pytest.approx(535.732143)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(150.025)
 
     def test_component_metadata_is_emitted_when_present(
         self, tmp_path, sample_benchmark_result, multinode_env_vars
@@ -455,7 +443,6 @@ class TestProcessResultScript:
 
     def test_missing_single_node_env_vars(self, tmp_path, sample_benchmark_result, base_env_vars):
         """Test that missing single-node env vars causes failure."""
-        # base_env_vars doesn't have TP, EP_SIZE, DP_ATTENTION
         result = run_script(tmp_path, base_env_vars, sample_benchmark_result)
 
         assert result.returncode != 0
@@ -466,7 +453,6 @@ class TestProcessResultScript:
         env = base_env_vars.copy()
         env["IS_MULTINODE"] = "true"
         env["DISAGG"] = "true"
-        # Missing multinode-specific vars
 
         result = run_script(tmp_path, env, sample_benchmark_result)
 
@@ -476,7 +462,7 @@ class TestProcessResultScript:
     def test_disagg_without_multinode_fails(self, tmp_path, sample_benchmark_result, single_node_env_vars):
         """Test that disagg=true without multinode raises error."""
         env = single_node_env_vars.copy()
-        env["DISAGG"] = "true"  # Disagg without multinode
+        env["DISAGG"] = "true"
 
         result = run_script(tmp_path, env, sample_benchmark_result)
 
@@ -511,7 +497,7 @@ class TestCalculations:
             "max_concurrency": 8,
             "total_token_throughput": 1000.0,
             "output_throughput": 800.0,
-            "custom_metric_ms": 500.0,  # Should become custom_metric = 0.5
+            "custom_metric_ms": 500.0,
         }
 
         result = run_script(tmp_path, single_node_env_vars, benchmark_result)
@@ -548,8 +534,8 @@ class TestCalculations:
         benchmark_result = {
             "model_id": "test-model",
             "max_concurrency": 64,
-            "total_token_throughput": 28000.0,  # Will be divided by total GPUs
-            "output_throughput": 16000.0,  # Will be divided by decode GPUs
+            "total_token_throughput": 28000.0,
+            "output_throughput": 16000.0,
         }
 
         env = multinode_env_vars.copy()
@@ -578,9 +564,9 @@ class TestCalculations:
             output_data["decode_dcp_size"],
             output_data["decode_pcp_size"],
         ) == (2, 4, 1)
-        assert output_data["tput_per_gpu"] == pytest.approx(1000.0)  # 28000 / 28
-        assert output_data["output_tput_per_gpu"] == pytest.approx(2000.0)  # 16000 / 8
-        assert output_data["input_tput_per_gpu"] == pytest.approx(600.0)  # (28000 - 16000) / 20
+        assert output_data["tput_per_gpu"] == pytest.approx(1000.0)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(2000.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(600.0)
 
     def test_multinode_aggregate_decode_fields_zero(self, tmp_path, multinode_env_vars):
         """Aggregate multinode results should report zero decode TP/EP when no decode GPUs exist."""
@@ -640,7 +626,6 @@ class TestOutputFile:
         output_file = tmp_path / "agg_benchmark_result.json"
         assert output_file.exists()
 
-        # Verify content matches stdout
         with open(output_file) as f:
             file_content = json.load(f)
 
@@ -716,7 +701,6 @@ def test_workflow_uses_result_python_with_unsupported_ambient_python(
     )
     assert result.returncode == 0, result.stderr
     aggregate = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
-    # 1000 tokens/s over the fixture's TP=8.
     assert aggregate["tput_per_gpu"] == pytest.approx(125.0)
 
 

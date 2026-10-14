@@ -113,7 +113,6 @@ class Cluster(Record):
             settings = SCHEDULERS[scheduler].model_validate(data.pop(scheduler))
         except ValidationError as error:
             raise _relocated(error, scheduler) from None
-        # Env values may take the srt-slurm profile's fabric: '@fabric.<name>'.
         srt = getattr(settings, "srt_slurm", None)
         fabric = srt.fabric if srt is not None else Fabric()
         if "env" in data:
@@ -190,7 +189,6 @@ class RunnerInventory(Record):
         cluster = matches[0]
         settings = cluster.scheduler_settings
         if isinstance(settings, SlurmSettings) and settings.partitions:
-            # Return a job-local profile; never mutate the shared inventory.
             cluster = cluster.model_copy(
                 update={
                     "scheduler_settings": settings.model_copy(

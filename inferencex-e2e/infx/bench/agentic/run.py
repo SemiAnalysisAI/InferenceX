@@ -27,17 +27,10 @@ REQUIRED = (
     "IS_MULTINODE",
     "PRECISION",
 )
-# Only srt-slurm's multi-node telemetry measures AgentX power: its binder sets
-# ENABLE_AGENTX_POWER to 1 exactly when the launcher collects it. Single-node points publish none.
 POWER_SWITCHES = ("ENABLE_AGENTX_POWER", "REQUIRE_POWER")
-# The finished profile's accepted error fraction; a recipe's live abort threshold
-# (AIPERF_LIVE_FAILED_REQUEST_THRESHOLD) does not move it.
 FAILED_REQUEST_THRESHOLD = "0.10"
-# Spellings the power switches have always accepted as enabled.
 TRUE_VALUES = frozenset({"1", "true", "TRUE", "yes", "YES"})
 
-# window: mark srt-slurm's multi-node measurement window; missing: a multi-node job
-# without that window, recorded as invalid power.
 PowerMode = Literal["off", "window", "missing"]
 
 
@@ -64,12 +57,10 @@ class Plan:
         result_dir = Path(values["RESULT_DIR"]).absolute()
         result_filename = values["RESULT_FILENAME"]
         if multinode:
-            # Multi-node collection globs one ${RESULT_FILENAME}_conc*.json per point.
             result_dir /= f"conc_{values['CONC']}"
             result_filename += f"_conc{values['CONC']}"
         replay = ReplayConfig.from_env(env, result_dir)
         _require_single_point(env, values["CONC"])
-        # Matrix launches declare kv-offloading; srt-slurm's standalone agentx.sh does not.
         if env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding":
             _validate_kv_offload(env)
         eval_only = inputs.flag("EVAL_ONLY", env)
@@ -116,7 +107,6 @@ def _validate_kv_offload(env: Mapping[str, str]) -> None:
 def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMode:
     if switches.get("ENABLE_AGENTX_POWER") not in TRUE_VALUES:
         return "off"
-    # srt-slurm's telemetry measures multi-node points and exports the window directory.
     return "window" if env.get("SRT_MEASUREMENT_WINDOW_DIR") else "missing"
 
 
@@ -155,7 +145,6 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
 
 def _download_traces(cfg: ReplayConfig, runtime: Runtime, env: Mapping[str, str]) -> int:
     print(f"Loading traces via aiperf public-dataset: {cfg.loader} ({cfg.dataset})", flush=True)
-    # Into the shared HF_HUB_CACHE: later jobs hit it, and the aggregate reads traces there.
     rc = proc.call([str(runtime.hf), "download", "--repo-type", "dataset", cfg.dataset], env)
     if rc:
         print(f"ERROR: downloading {cfg.dataset} failed with code {rc}", file=sys.stderr)
@@ -166,8 +155,6 @@ def _open_power_window(plan: Plan, python: str, env: Mapping[str, str]) -> int:
     """Record the replay clock's UTC offset and mark srt-slurm's multi-node window running."""
     if plan.power != "window":
         return 0
-    # AIPerf exports naive local datetimes; the adapter needs the offset to convert the
-    # profiling window to Unix time.
     now = dt.datetime.now(dt.timezone.utc).astimezone()
     (plan.result_dir / "agentic_power_timezone_offset.txt").write_text(f"{now:%z}\n")
     rc = _power_adapter(plan, python, env, *_window(plan, "running"))
@@ -230,8 +217,6 @@ def _check_server_metrics(artifact_dir: Path, prefix: str | None) -> None:
         raise inputs.BenchError(
             f"required AIPerf server metrics artifacts are missing or empty in {artifact_dir}"
         )
-    # The export can be several GiB. Metric names are object keys, so a quoted prefix
-    # anywhere proves the engine's metrics were captured.
     if not _contains(exported, f'"{prefix}'.encode()):
         raise inputs.BenchError(f"{exported} has no metric with required prefix {prefix!r}")
     print(f"Validated required AIPerf server metrics prefix {prefix!r}", flush=True)
@@ -266,7 +251,6 @@ def main(argv: list[str]) -> int:
         rc = bootstrap(runtime)
         if rc:
             return rc
-        # The venv interpreter needs the same safe sys.path as this one had.
         environ = {**os.environ, "PYTHONPATH": proc.pythonpath(), "PYTHONSAFEPATH": "1"}
         runtime.exec_python(["-m", "infx.bench", "agentic", *argv], environ)
     return execute(plan, runtime, os.environ)

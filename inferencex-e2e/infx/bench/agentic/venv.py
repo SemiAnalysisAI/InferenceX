@@ -14,9 +14,7 @@ from typing import NoReturn
 from infx.bench import proc, uv
 from infx.bench.env import BenchError
 
-# AIPerf dropped Python 3.10, which some ROCm images still ship; uv fetches a pinned build.
 PYTHON_VERSION = "3.11"
-# The pinned harness release and additional client dependencies.
 REQUIREMENTS = Path(__file__).with_name("requirements.txt")
 
 
@@ -32,7 +30,6 @@ class Runtime:
         explicit = environ.get("AIPERF_RUNTIME_DIR")
         if explicit:
             return cls(Path(explicit).absolute())
-        # The process id survives the re-exec into the venv, so both phases agree.
         job = environ.get("SLURM_JOB_ID") or str(os.getpid())
         return cls(Path(tempfile.gettempdir()) / f"inferencex-agentic-{job}")
 
@@ -74,7 +71,6 @@ def bootstrap(runtime: Runtime) -> int:
     if rc:
         return rc
     install = [uv_exe, "pip", "install", "--python", str(runtime.python)]
-    # This runtime must not inherit the tooling project's dependency age cutoff.
     install += ["--no-config", "-r", str(REQUIREMENTS)]
     if proc.call(install, {**env, "UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}):
         raise BenchError(
