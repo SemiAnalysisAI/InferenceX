@@ -199,8 +199,8 @@ unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same 
 NVIDIA-only and CUDA 13 only, and runs EP8 and EP16 on all six NVIDIA SKUs: EP16 stays inside the
 MNNVL scale-up domain on GB200/GB300 and is a 2x8 RDMA scale-out over the cross-node GIN path on
 H100/H200/B200/B300. Under v0.1 that GIN path faulted inside `nccl_ep.cc` identically on RoCE and IB
-on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200 (full decode and
-prefill ladders correct), with B300 enabled on the same fix pending its pool's revalidation. FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM. It is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32. The adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. Its FP8 dispatch is the one (backend, precision) pair here that is realizable but off every deployed path. vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it back in for transport comparison against DeepEP V2/UCCL-EP at matching bytes and block size: the one place a precision filter ADDS rows rather than only removing them.
+on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200, and on B300 over
+EFA proxy GIN (full decode and prefill ladders correct). FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM. It is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32. The adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. Its FP8 dispatch is the one (backend, precision) pair here that is realizable but off every deployed path. vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it back in for transport comparison against DeepEP V2/UCCL-EP at matching bytes and block size: the one place a precision filter ADDS rows rather than only removing them.
 
 A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
 the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
@@ -719,8 +719,11 @@ missing or partial profiles, then probes every allocated node for the configured
 HCA port, and configured GID before backend initialization. It never substitutes a default route,
 inherited runner environment, or transport fallback. Scale-up and MNNVL cases clear the profile.
 Scale-out NVIDIA forces `NCCL_NET=IB`, while AMD leaves plugin selection to RCCL. Both use exact HCA
-matching. Scale-out also pins `NCCL_IB_MERGE_NICS=0` so dual-port NIC fusion cannot disable NCCL GIN
-(which the DeepEP V2 EP16 hybrid path requires), and a rail-isolated fabric (`rail_isolated`) adds
+matching. The EFA pools (b300, h100) instead load aws-ofi-nccl from the host EFA user space, which
+the launcher binds read-only into the container ahead of the image's own, and run GIN through its
+CPU proxy (`NCCL_GIN_TYPE=2`). Scale-out also pins `NCCL_IB_MERGE_NICS=0` so dual-port NIC fusion
+cannot disable NCCL GIN (which the DeepEP V2 EP16 hybrid path requires), and a rail-isolated fabric
+(`rail_isolated`) adds
 `NCCL_CROSS_NIC=0`. Selectors come from the tracked platform registry, optionally overlaid by an
 operator config, and appear only in mode-0600 private logs.
 

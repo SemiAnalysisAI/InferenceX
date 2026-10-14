@@ -276,6 +276,97 @@ class EfaPluginProfileTests(unittest.TestCase):
                 ).stdout
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
+    @staticmethod
+    def _loader_path(root: str, start: str) -> str:
+        """LD_LIBRARY_PATH after the rank wrapper's profile, re-applied over what backend
+        preparation persisted (`start`), with the host EFA user space bound under `root`."""
+        return run_common(
+            'COLLX_EFA_HOST_ROOT="$1" LD_LIBRARY_PATH="$2";'
+            " export COLLX_RDMA_FABRIC=efa COLLX_RDMA_DEVICES=rdmap86s0;"
+            " collx_apply_network_profile 2 nvlink-rdma; collx_apply_network_profile 2 nvlink-rdma;"
+            ' echo "$LD_LIBRARY_PATH"',
+            root, start, check=True,
+        ).stdout.strip().splitlines()[-1]
+
+    def test_the_host_efa_user_space_leads_the_loader_path_once(self) -> None:
+        # Persisted rank environments already carry the prefix behind the backend's own NCCL, so
+        # it is moved to the front rather than repeated, and an empty start never leaves an empty
+        # (current-directory) entry behind.
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "lib").mkdir()
+            host = [f"{root}/lib", f"{root}/libdir/libibverbs",
+                    "/opt/amazon/efa/lib", "/opt/amazon/ofi-nccl/lib"]
+            for start, rest in (
+                ("", []),
+                ("/usr/local/cuda/lib64", ["/usr/local/cuda/lib64"]),
+                (f"/venv/nccl/lib:{root}/lib:/usr/local/cuda/lib64:/opt/amazon/efa/lib",
+                 ["/venv/nccl/lib", "/usr/local/cuda/lib64"]),
+            ):
+                with self.subTest(start=start):
+                    self.assertEqual(self._loader_path(root, start), ":".join(host + rest))
+
+    def test_outside_a_container_the_loader_path_is_untouched(self) -> None:
+        # The launcher applies the same profile on the login node, which has no binds.
+        with tempfile.TemporaryDirectory() as root:
+            self.assertEqual(self._loader_path(root, "/usr/local/cuda/lib64"),
+                             "/usr/local/cuda/lib64")
+
+
+class EfaHostMountTests(unittest.TestCase):
+    LIBDIR = "/usr/lib/x86_64-linux-gnu"
+
+    @staticmethod
+    def _mounts(fabric: str, nodes: int, platform: str = "linux/amd64", root: str = ""):
+        return run_common(
+            '[ -z "$1" ] || COLLX_EFA_HOST_ROOT="$1";'
+            f' COLLX_RDMA_FABRIC="{fabric}" NODES={nodes} COLLX_TRANSPORT=nvlink-rdma'
+            f" COLLX_IMAGE_PLATFORM={platform} CONTAINER_MOUNTS=/stage:/ix;"
+            ' collx_add_efa_host_mounts && echo "$CONTAINER_MOUNTS"',
+            root,
+        )
+
+    def test_multi_node_efa_shards_bind_the_host_user_space_read_only(self) -> None:
+        mounts = self._mounts("efa", 2).stdout.strip().split(",")
+        self.assertEqual(mounts[0], "/stage:/ix")
+        expected = [
+            "/opt/amazon/efa:/opt/amazon/efa:ro",
+            "/opt/amazon/ofi-nccl:/opt/amazon/ofi-nccl:ro",
+            f"{self.LIBDIR}:/opt/collectivex/host-efa/libdir:ro",
+        ]
+        # NCCL dlopens the linker name before the soname; both must reach the host copy.
+        for name in ("libibverbs", "libefa", "libmlx5"):
+            expected += [f"{self.LIBDIR}/{name}.so.1:/opt/collectivex/host-efa/lib/{target}:ro"
+                         for target in (f"{name}.so.1", f"{name}.so")]
+        self.assertEqual(mounts[1:], expected)
+
+    def test_single_node_and_non_efa_shards_keep_their_mounts(self) -> None:
+        for fabric, nodes in (("efa", 1), ("", 2)):
+            with self.subTest(fabric=fabric, nodes=nodes):
+                result = self._mounts(fabric, nodes)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(result.stdout.strip(), "/stage:/ix")
+
+    def test_an_unknown_image_platform_fails_closed(self) -> None:
+        result = self._mounts("efa", 2, platform="linux/riscv64")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no host EFA user space layout", result.stderr)
+
+    def test_the_profile_loader_path_is_what_the_mounts_provide(self) -> None:
+        # Every directory the EFA profile puts first on the loader path is a bound directory, a
+        # subdirectory of one, or the directory the soname binds land in; the host's whole libdir
+        # is bound only so its providers resolve, and never reaches the loader path itself.
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "lib").mkdir()
+            mounts = self._mounts("efa", 2, root=root).stdout.strip().split(",")[1:]
+            targets = [mount.split(":")[1] for mount in mounts]
+            prefix = EfaPluginProfileTests._loader_path(root, "").split(":")
+            for entry in prefix:
+                with self.subTest(entry=entry):
+                    self.assertTrue(any(
+                        entry == target or entry.startswith(target + "/")
+                        or os.path.dirname(target) == entry for target in targets))
+            self.assertNotIn(f"{root}/libdir", prefix)
+
 
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:

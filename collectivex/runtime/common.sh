@@ -38,9 +38,10 @@ COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 # whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
 # string keys the shared cache dir.
 COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
-# aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards. The hosts mount 1.20, whose
-# proxy thread applies every GIN signal with an inline gdrcopy read-modify-write of device memory;
-# 1.21 hands signals to a worker and drops the read (1.3-4.5x on b300 EP16).
+# aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards whose host plugin predates
+# 1.21 (h100's 1.20). That proxy thread applies every GIN signal with an inline gdrcopy
+# read-modify-write of device memory; 1.21 hands signals to a worker and drops the read (1.3-4.5x on
+# b300 EP16).
 COLLX_OFI_NCCL_VERSION="1.21.1"
 COLLX_OFI_NCCL_SHA256="2533d1ec179a86dcf0470fc39800b06cd9169cd854c0c913cc4782a42f36cff4"
 
@@ -201,21 +202,61 @@ collx_export_gid_index_for_link_layer() {
   esac
 }
 
-# AWS EFA scale-out (b300-dsxe, p6-b300.48xlarge: 16 EFA devices per node). EFA is not a verbs
-# HCA: its ports report link_layer Unspecified, it has no GID table, service level or traffic
-# class, and NCCL reaches it only through the aws-ofi-nccl libfabric plugin, which the cluster's
-# enroot hook bind-mounts into every container (/opt/amazon/{efa,ofi-nccl} on the ld path). GIN
-# rides the plugin's ncclGinPlugin export through its CPU proxy: GPU-initiated GIN on EFA needs
-# libfabric GDA ops and a counting-event efa.ko the hosts lack (EFA installer 1.50.0). So the
-# whole IB/RoCE selector family (NCCL_IB_*, NVSHMEM_HCA_LIST/IBGDA, MORI_*, UCCL_IB_*) stays
-# unset: the plugin enumerates and rails the EFA devices itself, and the operator's rdma_devices
-# list is consumed only by the network-profile probe as the set of ports that must be ACTIVE.
-# NVSHMEM (deepep-v2) has its own libfabric transport; point it at EFA the same way.
-# NCCL_GIN_TYPE=2 (proxy): with gdrcopy present the plugin's GIN loads, but NCCL still prefers
-# its built-in GDAKI on the nodes' two ConnectX-7 IB ports, which are not the GPU fabric, and
-# window registration then fails on most ranks (error 6) while the rest wait.
+# Where collx_efa_host_mounts binds the host's rdma-core inside the container.
+COLLX_EFA_HOST_ROOT=/opt/collectivex/host-efa
+
+# The EFA pools' enroot hooks need not give a container the host EFA user space (b300's binds only
+# /dev/infiniband), and the image's own (rdma-core 50, libfabric 1.17, no aws-ofi-nccl) predates the
+# hosts' efa.ko, so multi-node EFA shards bind the host's read-only: /opt/amazon/{efa,ofi-nccl} in
+# place, and libibverbs, libefa and libmlx5 under both their soname and the linker name NCCL dlopens
+# first (an image copy found under either name is a second libibverbs that loads no provider). A
+# provider must come from the same rdma-core as libibverbs, which looks for
+# lib<driver>-rdmav<its private ABI>.so, so the host's whole multiarch libdir is bound privately as
+# well: its libibverbs/ providers are symlinks into their parent and resolve there, without the
+# launcher naming the host's ABI. The EFA profile puts all of it first on the loader path.
+collx_efa_host_mounts() {
+  local libdir name mounts
+  case "$1" in
+    linux/amd64) libdir=/usr/lib/x86_64-linux-gnu ;;
+    linux/arm64) libdir=/usr/lib/aarch64-linux-gnu ;;
+    *) return 1 ;;
+  esac
+  mounts="/opt/amazon/efa:/opt/amazon/efa:ro,/opt/amazon/ofi-nccl:/opt/amazon/ofi-nccl:ro"
+  mounts+=",$libdir:$COLLX_EFA_HOST_ROOT/libdir:ro"
+  for name in libibverbs libefa libmlx5; do
+    mounts+=",$libdir/$name.so.1:$COLLX_EFA_HOST_ROOT/lib/$name.so.1:ro"
+    mounts+=",$libdir/$name.so.1:$COLLX_EFA_HOST_ROOT/lib/$name.so:ro"
+  done
+  printf '%s' "$mounts"
+}
+
+# Adds the host EFA user space to a staged shard's CONTAINER_MOUNTS when it crosses an EFA fabric.
+collx_add_efa_host_mounts() {
+  local mounts
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] && [ "${NODES:-1}" -gt 1 ] \
+    && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  mounts="$(collx_efa_host_mounts "${COLLX_IMAGE_PLATFORM:-}")" \
+    || collx_die "no host EFA user space layout for this image platform"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
+}
+
+# AWS EFA scale-out (b300: p6-b300.48xlarge, 16 EFA devices per node; h100-dgxc: p5.48xlarge, 32).
+# EFA is not a verbs HCA: its ports report link_layer Unspecified, it has no GID table, service
+# level or traffic class, and NCCL reaches it only through the aws-ofi-nccl libfabric plugin from
+# the host EFA user space (collx_efa_host_mounts). So the whole IB/RoCE selector family
+# (NCCL_IB_*, NVSHMEM_HCA_LIST/IBGDA, MORI_*, UCCL_IB_*) stays unset: the plugin enumerates and
+# rails the EFA devices itself, and the operator's rdma_devices list is consumed only by the
+# network-profile probe as the set of ports that must be ACTIVE. NVSHMEM (deepep-v2) has its own
+# libfabric transport; point it at EFA the same way.
+# NCCL_GIN_TYPE=2 runs GIN through the plugin's CPU proxy. The plugin's GPU-initiated backend
+# (type 5, EFA GDA, aws-ofi-nccl 1.21 on EFA installer 1.50.0) has only weak signals, and nccl.ep
+# and the pinned DeepEP both require strong ones ("GIN strong signals are required, but the GIN
+# plugin does not support them"), yet NCCL picks it when left to choose. Before 1.21 NCCL picked its
+# built-in GDAKI on the nodes' two ConnectX-7 IB ports instead, which are not the GPU fabric, and
+# window registration failed on most ranks (error 6) while the rest waited.
 # Ranks load the plugin build their rank env names (COLLX_OFI_NCCL_LIB_DIR); otherwise the host's.
 collx_apply_efa_profile() {
+  local root="$COLLX_EFA_HOST_ROOT" path dir joined=""
   export NCCL_NET_PLUGIN=ofi NCCL_GIN_TYPE=2
   if [ -n "${COLLX_OFI_NCCL_LIB_DIR:-}" ]; then
     export NCCL_NET_PLUGIN="$COLLX_OFI_NCCL_LIB_DIR/libnccl-net-ofi.so" \
@@ -224,6 +265,17 @@ collx_apply_efa_profile() {
   export FI_PROVIDER=efa FI_EFA_FORK_SAFE=1
   export NVSHMEM_REMOTE_TRANSPORT=libfabric NVSHMEM_LIBFABRIC_PROVIDER=efa
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER NVSHMEM_HCA_LIST NVSHMEM_ENABLE_NIC_PE_MAPPING
+  # Only inside a container that has the binds; the rank wrapper re-applies this profile over the
+  # environment backend preparation persisted, so the prefix is moved to the front, not repeated.
+  [ -d "$root/lib" ] || return 0
+  path=":${LD_LIBRARY_PATH:-}:"
+  for dir in "$root/lib" "$root/libdir/libibverbs" /opt/amazon/efa/lib /opt/amazon/ofi-nccl/lib; do
+    while [[ "$path" == *":$dir:"* ]]; do path="${path/":$dir:"/:}"; done
+    joined="$joined${joined:+:}$dir"
+  done
+  path="${path#:}"
+  path="${path%:}"
+  export LD_LIBRARY_PATH="$joined${path:+:$path}"
 }
 
 # Selector values are interface/HCA identifiers, never addresses.
