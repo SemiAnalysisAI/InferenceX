@@ -60,6 +60,7 @@ class RackScaleSystem(GPUSystem):
         compute = self.compute_tray.estimate_breakdown(
             per_gpu,
             cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
+            cpu_measured_power_per_socket=cpu_measured_power_per_socket,
             operating_state=state,
         ).scaled(self.compute_tray_count)
         switches = self.switch_tray.estimate_breakdown().scaled(self.switch_tray_count)

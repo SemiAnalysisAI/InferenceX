@@ -153,6 +153,29 @@ def test_measured_x86_cpu_replaces_modeled_cpus_and_loads_fans_and_psu_without_r
     ]
 
 
+def test_measured_cpu_and_dram_replaces_both_hgx_cpu_and_dimm_loads():
+    hardware = MI355HGXSystemChassis()
+    modeled = hardware.estimate_it_power(400)
+    measured = hardware.estimate_it_power(400, cpu_and_dram_measured_power_per_socket=180)
+    generic = measured.children[1]
+    assert (
+        generic.children[0].name,
+        generic.children[0].quantity,
+        generic.children[0].power_w,
+    ) == (
+        "CPUAndDRAM",
+        2,
+        360,
+    )
+    assert generic.children[0].provenance.kind == "measured"
+    assert "DDR5DIMM" not in [item.name for item in generic.children]
+    assert measured.children[0] == modeled.children[0]
+    assert (
+        dict(measured.children[-1].details)["design_non_gpu_power_w"]
+        == dict(modeled.children[-1].details)["design_non_gpu_power_w"]
+    )
+
+
 @pytest.mark.parametrize(
     "component, message",
     [

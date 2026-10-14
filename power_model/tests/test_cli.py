@@ -317,9 +317,32 @@ def test_cli_measured_x86_cpu_input_reaches_json_and_bom_only_when_given(capsys)
     assert json.loads(capsys.readouterr().out)["cpu_measured_power_per_socket"] == 180
     main([*args, "--cpu-measured-power-per-socket=180", "--power-breakdown-per-chassis"])
     output = " ".join(capsys.readouterr().out.split())
-    assert "x86 CPU input (measured): 180.00 W/socket" in output
+    assert "CPU input (measured): 180.00 W/socket" in output
     assert "├─ CPU 180.00 2 360.00" in output
     assert "X86CPU" not in output
+
+
+@pytest.mark.parametrize(
+    "system, flag, field",
+    [
+        (
+            "mi355",
+            "--cpu-and-dram-measured-power-per-socket=180",
+            "cpu_and_dram_measured_power_per_socket",
+        ),
+        ("gb200", "--cpu-measured-power-per-socket=180", "cpu_measured_power_per_socket"),
+    ],
+)
+def test_cli_applies_either_measured_socket_input_on_each_system_family(
+    capsys, system, flag, field
+):
+    args = ["--gpu-level-power-per-gpu=400", f"--system={system}"]
+    main(args)
+    modeled = json.loads(capsys.readouterr().out)
+    main([*args, flag])
+    measured = json.loads(capsys.readouterr().out)
+    assert measured[field] == 180
+    assert measured["it_power_w"] != modeled["it_power_w"]
 
 
 @pytest.mark.parametrize("power", ["0", "5e-324"])
@@ -439,10 +462,6 @@ def test_cli_help_lists_models_and_systems(capsys):
             "unrecognized arguments: --scale-up-fabric-power-w=100",
         ),
         (
-            hgx_args("b300") + ["--cpu-and-dram-measured-power-per-socket=98"],
-            "cpu_and_dram_measured_power_per_socket requires a system with Grace sockets",
-        ),
-        (
             ["--model=example", *rack_args(), "--cpu-and-dram-measured-power-per-socket=98"],
             "cpu_and_dram_measured_power_per_socket requires the oss model's Grace inventory",
         ),
@@ -455,10 +474,6 @@ def test_cli_help_lists_models_and_systems(capsys):
             rack_args() + ["--cpu-and-dram-measured-power-per-socket=nan"],
             "argument --cpu-and-dram-measured-power-per-socket: "
             "expected finite watts >= 0, got 'nan'",
-        ),
-        (
-            rack_args() + ["--cpu-measured-power-per-socket=180"],
-            "cpu_measured_power_per_socket requires a system with x86 CPU sockets",
         ),
         (
             [

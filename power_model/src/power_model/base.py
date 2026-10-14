@@ -222,9 +222,9 @@ class PowerModel(OperatingState, ABC):
         cpu_and_dram_measured_power_per_socket: float | None = None,
         cpu_measured_power_per_socket: float | None = None,
     ) -> PowerEstimate:
-        """cpu_and_dram_measured_power_per_socket is watts per Grace socket and replaces its
-        modeled loads. cpu_measured_power_per_socket is watts per x86 CPU package and replaces
-        the modeled x86 CPU only.
+        """Per-socket measured inputs replace modeled CPU and DRAM or CPU alone.
+
+        The available measurement source currently depends on the system.
         """
         gpu_power = validate_watts(gpu_level_power_per_gpu)
         socket_power = (

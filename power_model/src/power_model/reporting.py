@@ -66,8 +66,8 @@ def format_power_breakdown_per_chassis(estimate: PowerEstimate) -> str:
     sections = [
         f"Power BoM per {unit}",
         f"GPU input: {estimate.gpu_level_power_per_gpu:,.2f} W/GPU | "
-        + ("" if socket is None else f"Grace socket input (measured): {socket:,.2f} W/socket | ")
-        + ("" if x86_cpu is None else f"x86 CPU input (measured): {x86_cpu:,.2f} W/socket | ")
+        + ("" if socket is None else f"CPU+DRAM input (measured): {socket:,.2f} W/socket | ")
+        + ("" if x86_cpu is None else f"CPU input (measured): {x86_cpu:,.2f} W/socket | ")
         + f"Workload: {estimate.workload_state.value} | "
         f"Scale-out: {'on' if estimate.using_scale_out else 'off'}",
     ]

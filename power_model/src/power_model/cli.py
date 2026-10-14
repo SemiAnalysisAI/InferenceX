@@ -49,14 +49,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--cpu-and-dram-measured-power-per-socket",
         type=_measured_watts,
-        help="ACPI Grace Power Socket average in watts per socket (GB200/GB300 NVL72), "
-        "never DCGM field 1130 CPU power; replaces modeled Grace CPU and LPDDR5X",
+        help="Measured CPU and DRAM watts per socket; currently collected from ACPI Grace Power "
+        "Socket on GB200/GB300 NVL72",
     )
     parser.add_argument(
         "--cpu-measured-power-per-socket",
         type=_measured_watts,
-        help="RAPL package average in watts per x86 CPU socket (HGX only), excluding DIMMs; "
-        "replaces modeled x86 CPU",
+        help="Measured CPU-only watts per socket, excluding DRAM; currently collected from "
+        "RAPL package power on HGX",
     )
     parser.add_argument(
         "--system",

@@ -40,7 +40,6 @@ class GPUSystem(FrozenModel, ABC):
     default_cooling: ClassVar[CoolingProfile]
     system_unit: ClassVar[str] = "chassis"
     has_grace_sockets: ClassVar[bool] = False
-    has_x86_cpu_sockets: ClassVar[bool] = False
     default_networking: ClassVar[tuple[NetworkGroup, ...] | None] = None
     gpu_count: PositiveCount
     provenance: Provenance = COMPONENT_INPUT
@@ -61,9 +60,8 @@ class GPUSystem(FrozenModel, ABC):
     ) -> PowerComponentBreakdown:
         """Evaluate one system without PUE.
 
-        cpu_and_dram_measured_power_per_socket is watts per Grace socket; systems without
-        Grace ignore it. cpu_measured_power_per_socket is watts per x86 CPU package; systems
-        without x86 CPUs ignore it.
+        cpu_and_dram_measured_power_per_socket covers one CPU and its DRAM.
+        cpu_measured_power_per_socket covers one CPU without DRAM.
         """
 
     def _configuration(self, state: OperatingState) -> dict[str, JsonValue]:

@@ -20,6 +20,7 @@ from power_model.models.advanced.components.generic import (
     CPU,
     DDR5DIMM,
     X86CPU,
+    CPUAndDRAM,
     NVMeDrive,
     PCIeSwitch,
     PEX89144PCIeSwitch,
@@ -61,7 +62,7 @@ from power_model.models.advanced.networking import (
     QM9790_TWO_TIER_NETWORK,
     NetworkGroup,
 )
-from power_model.models.advanced.profiles import X86_CPU_SOCKET_INPUT
+from power_model.models.advanced.profiles import X86_CPU_AND_DRAM_SOCKET_INPUT, X86_CPU_SOCKET_INPUT
 from power_model.models.advanced.systems.base import GPUSystem, _profile_parameters
 
 DESIGN_OPERATING_STATE = OperatingState(
@@ -71,7 +72,6 @@ DESIGN_OPERATING_STATE = OperatingState(
 
 class HGXSystemChassis(GPUSystem):
     default_cooling: ClassVar[CoolingProfile] = CoolingProfile(mode="air")
-    has_x86_cpu_sockets: ClassVar[bool] = True
     cpu_count: ClassVar[int] = 2
     dimm_count: ClassVar[int] = 32
     dimm_capacity_gb: ClassVar[int] = 64
@@ -98,6 +98,7 @@ class HGXSystemChassis(GPUSystem):
                 group.component,
                 (
                     CPU,
+                    CPUAndDRAM,
                     DDR5DIMM,
                     ScaleOutNICCard,
                     SystemSideTransceiver,
@@ -112,13 +113,20 @@ class HGXSystemChassis(GPUSystem):
         return self
 
     def _component_groups(
-        self, state: OperatingState, cpu_measured_power_per_socket: float | None = None
+        self,
+        state: OperatingState,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
+        cpu_measured_power_per_socket: float | None = None,
     ) -> tuple[ComponentGroup, ...]:
-        cpu = (
-            X86CPU.for_workload(state.workload_state)
-            if cpu_measured_power_per_socket is None
-            else CPU(power_w=cpu_measured_power_per_socket, provenance=X86_CPU_SOCKET_INPUT)
-        )
+        if cpu_measured_power_per_socket is not None:
+            cpu = CPU(power_w=cpu_measured_power_per_socket, provenance=X86_CPU_SOCKET_INPUT)
+        elif cpu_and_dram_measured_power_per_socket is not None:
+            cpu = CPUAndDRAM(
+                power_w=cpu_and_dram_measured_power_per_socket,
+                provenance=X86_CPU_AND_DRAM_SOCKET_INPUT,
+            )
+        else:
+            cpu = X86CPU.for_workload(state.workload_state)
         groups = (ComponentGroup(component=cpu, quantity=self.cpu_count),)
         if self.system_nic_count:
             if self.default_nic_type is None:
@@ -129,15 +137,16 @@ class HGXSystemChassis(GPUSystem):
                     quantity=self.system_nic_count,
                 ),
             )
-        groups += (
-            ComponentGroup(
-                component=DDR5DIMM(capacity_gb=self.dimm_capacity_gb).for_cpu_offload(
-                    state.cpu_offload
+        if not isinstance(cpu, CPUAndDRAM):
+            groups += (
+                ComponentGroup(
+                    component=DDR5DIMM(capacity_gb=self.dimm_capacity_gb).for_cpu_offload(
+                        state.cpu_offload
+                    ),
+                    quantity=self.dimm_count,
                 ),
-                quantity=self.dimm_count,
-            ),
-            ComponentGroup(component=NVMeDrive(), quantity=self.nvme_count),
-        )
+            )
+        groups += (ComponentGroup(component=NVMeDrive(), quantity=self.nvme_count),)
         if self.pex89144_count:
             groups += (
                 ComponentGroup(component=PEX89144PCIeSwitch(), quantity=self.pex89144_count),
@@ -153,11 +162,14 @@ class HGXSystemChassis(GPUSystem):
         self,
         system_components: tuple[PowerComponentBreakdown, ...],
         *,
+        cpu_and_dram_measured_power_per_socket: float | None,
         cpu_measured_power_per_socket: float | None,
         operating_state: OperatingState,
     ) -> PowerComponentBreakdown:
         state = OperatingState.model_validate(operating_state)
-        groups = self._component_groups(state, cpu_measured_power_per_socket)
+        groups = self._component_groups(
+            state, cpu_and_dram_measured_power_per_socket, cpu_measured_power_per_socket
+        )
         components = self._power_components(
             (
                 *system_components,
@@ -224,6 +236,7 @@ class HGXSystemChassis(GPUSystem):
         board = self.ubb.for_operating_state(state)
         return self._finish_system(
             (board.estimate_breakdown(gpu_level_power_per_gpu),),
+            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
             cpu_measured_power_per_socket=cpu_measured_power_per_socket,
             operating_state=state,
         )

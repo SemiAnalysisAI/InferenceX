@@ -85,6 +85,22 @@ X86_CPU_SOCKET_INPUT = Provenance(
         "Zen 2 RAPL inaccurate, so treat the value as measured with that caveat.",
     ),
 )
+X86_CPU_AND_DRAM_SOCKET_INPUT = Provenance(
+    profile_id="x86-cpu-and-dram-socket-input",
+    version="1",
+    source="cpu_and_dram_measured_power_per_socket argument",
+    kind="measured",
+    input_boundary="One x86 CPU and its attached DDR5 DIMMs, per socket",
+    assumptions=("Replaces modeled X86CPU and DDR5DIMM power.",),
+)
+GRACE_CPU_SOCKET_INPUT = Provenance(
+    profile_id="grace-cpu-socket-input",
+    version="1",
+    source="cpu_measured_power_per_socket argument",
+    kind="measured",
+    input_boundary="One Grace CPU without its LPDDR5X memory pool",
+    assumptions=("Replaces modeled GraceCPU power; LPDDR5X remains modeled.",),
+)
 NVME_BASELINE = Provenance(
     profile_id="hgx-idle-nvme",
     version="1",
