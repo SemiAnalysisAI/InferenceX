@@ -206,6 +206,8 @@ override_4p1d_dep2_dep16_c1228:
 
 override_8p1d_dep2_dep16_c4096:
   name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-8p1d-dep2-dep16-c4096"
+  slurm:
+    time_limit: "16:00:00"
   roles:
     prefill:
       nodes: 4
