@@ -57,7 +57,7 @@ def run_single_node(launch: Launch) -> int:
     hf_cache = models.single_node_hf_cache(run.cluster, request)
     time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
-    checkout = prepare_checkout(run, root / "checkout", power=False)
+    checkout = prepare_checkout(run, root / "checkout", power=not request.eval_only)
     install_srtctl(run, checkout)
     step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
     if run.srt.single_node_exclusive and job_mib is not None:
@@ -67,6 +67,10 @@ def run_single_node(launch: Launch) -> int:
     if rc := submit.bind_point(run, checkout, root / "arguments"):
         return rc
     selected, runtime_args = submit.bound_arguments(root / "arguments")
+    containers = {}
+    if not request.eval_only:
+        image, reference = config.stage_gpu_exporter(run, single_node=True)
+        containers[image] = reference
     job_config = config.SrtJob(
         srtctl_root=checkout.root,
         workspace=run.workspace,
@@ -74,6 +78,7 @@ def run_single_node(launch: Launch) -> int:
         image=request.image,
         container=run.backend.stage_image(request.image, single_node=True).reference,
         nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
+        containers=containers,
         model_paths={f"hf:{request.model}": model_path},
         mounts=[(str(hf_cache), request.hf_hub_cache)],
         single_node=True,
@@ -99,9 +104,13 @@ def run_single_node(launch: Launch) -> int:
         run.backend.stream_logs(job)
     except BackendError:
         return 1
-    if not run.backend.state(job).succeeded:
-        return 1
-    return collect.check_single_node(run, run.backend.fetch_outputs(job, fetched) / "logs")
+    status = run.backend.state(job)
+    logs = run.backend.fetch_outputs(job, fetched) / "logs"
+    if not request.eval_only:
+        (logs / "power").mkdir(parents=True, exist_ok=True)
+        (logs / "power/native-job-status.txt").write_text(f"{job.id}|{status.raw}\n")
+    rc = collect.finalize_single_node_results(run, logs, checkout.commit)
+    return rc or int(not status.succeeded)
 
 
 def run_batch(launch: Launch) -> int:

@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from infx.results.power import (
     POWER_METRIC_SCHEMA_VERSION,
     with_power_metrics,
 )
+from infx.results.power.audit import audit_summary
 from infx.results.power.common import _write_json_atomic
 from infx.results.power.multinode import WINDOWS_DIRNAME, run as run_multinode_power
 
@@ -321,7 +323,31 @@ def _gpu_count(value: Any) -> int | None:
     return value
 
 
-def run_multinode_agentic_power(
+def _power_topology(aggregate: Mapping[str, Any]) -> tuple[int, int, int] | None:
+    """The (prefill, decode, aggregate) GPU counts the power validator must find.
+
+    A single-node point is one aggregate worker of ``num_gpus``. A multinode point
+    declares its own roles: disaggregated prefill/decode, or one aggregate worker of their sum.
+    """
+    disagg = aggregate.get("disagg")
+    if aggregate.get("is_multinode") is False:
+        num_gpus = _gpu_count(aggregate.get("num_gpus"))
+        return (0, 0, num_gpus) if disagg is False and num_gpus else None
+    prefill_gpus = _gpu_count(aggregate.get("num_prefill_gpu"))
+    decode_gpus = _gpu_count(aggregate.get("num_decode_gpu"))
+    if (
+        not isinstance(disagg, bool)
+        or prefill_gpus is None
+        or decode_gpus is None
+        or prefill_gpus + decode_gpus <= 0
+    ):
+        return None
+    if disagg:
+        return prefill_gpus, decode_gpus, 0
+    return 0, 0, prefill_gpus + decode_gpus
+
+
+def run_native_agentic_power(
     *,
     result_dir: Path,
     agg_result: Path,
@@ -329,9 +355,11 @@ def run_multinode_agentic_power(
     logs_root: Path,
     expected_producer_sha: str,
     require_power: bool = False,
+    audit_source: str | None = None,
+    validation_result: Path | None = None,
 ) -> int:
-    """Join one AgentX aggregate to the finalized central multinode package."""
-    validation_result = result_dir / "power_validation.json"
+    """Join one AgentX aggregate to the finalized native power package."""
+    validation_result = validation_result or result_dir / "power_validation.json"
     reasons: list[str] = []
     try:
         aggregate = json.loads(agg_result.read_text(encoding="utf-8"))
@@ -343,15 +371,8 @@ def run_multinode_agentic_power(
             reasons.append("agentic_aggregate_invalid")
         aggregate = {}
 
-    prefill_gpus = _gpu_count(aggregate.get("num_prefill_gpu"))
-    decode_gpus = _gpu_count(aggregate.get("num_decode_gpu"))
-    disagg = aggregate.get("disagg")
-    if (
-        not isinstance(disagg, bool)
-        or prefill_gpus is None
-        or decode_gpus is None
-        or prefill_gpus + decode_gpus <= 0
-    ):
+    topology = _power_topology(aggregate)
+    if topology is None:
         reasons.append("agentic_gpu_topology_invalid")
     bench_result = _formal_result_for_directory(result_dir)
     if bench_result is None:
@@ -375,32 +396,38 @@ def run_multinode_agentic_power(
                 f"[agentx_power] Failed to record multinode adapter failure: {exc}",
                 file=sys.stderr,
             )
-        return _fail_multinode_adapter(
+        status = _fail_multinode_adapter(
             "Multinode AgentX power adaptation failed: " + ", ".join(reasons),
             require_power=require_power,
         )
-
-    assert prefill_gpus is not None  # noqa: S101
-    assert decode_gpus is not None  # noqa: S101
-    assert isinstance(disagg, bool)  # noqa: S101
-    assert bench_result is not None  # noqa: S101
-    aggregate_gpus = 0
-    if not disagg:
-        aggregate_gpus = prefill_gpus + decode_gpus
-        prefill_gpus = 0
-        decode_gpus = 0
-    return run_multinode_power(
-        power_dir=power_dir,
-        bench_result=bench_result,
-        agg_result=agg_result,
-        prefill_gpus=prefill_gpus,
-        decode_gpus=decode_gpus,
-        aggregate_gpus=aggregate_gpus,
-        expected_producer_sha=expected_producer_sha,
-        logs_root=logs_root,
-        validation_result=validation_result,
-        require_power=require_power,
-    )
+    else:
+        assert topology is not None  # noqa: S101
+        assert bench_result is not None  # noqa: S101
+        prefill_gpus, decode_gpus, aggregate_gpus = topology
+        status = run_multinode_power(
+            power_dir=power_dir,
+            bench_result=bench_result,
+            agg_result=agg_result,
+            prefill_gpus=prefill_gpus,
+            decode_gpus=decode_gpus,
+            aggregate_gpus=aggregate_gpus,
+            expected_producer_sha=expected_producer_sha,
+            logs_root=logs_root,
+            validation_result=validation_result,
+            require_power=require_power,
+        )
+    if audit_source is not None:
+        try:
+            result = json.loads(agg_result.read_text())
+            validation = json.loads(validation_result.read_text())
+            if not isinstance(result, dict) or not isinstance(validation, dict):
+                raise ValueError("AgentX aggregate and validation must be JSON objects")
+            result.update(audit_summary(validation, audit_source))
+            _write_json_atomic(agg_result, result)
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"[agentx_power] Audit summary unavailable: {exc}", file=sys.stderr)
+            status = max(status, int(require_power))
+    return status
 
 
 def main() -> int:
@@ -413,6 +440,8 @@ def main() -> int:
     parser.add_argument("--power-dir", type=Path)
     parser.add_argument("--logs-root", type=Path)
     parser.add_argument("--expected-producer-sha")
+    parser.add_argument("--audit-source")
+    parser.add_argument("--validation-result", type=Path)
     parser.add_argument(
         "--require-power",
         action="store_true",
@@ -463,13 +492,15 @@ def main() -> int:
         parser.error(
             "--agg-result, --logs-root, and --expected-producer-sha are required with --power-dir"
         )
-    return run_multinode_agentic_power(
+    return run_native_agentic_power(
         result_dir=args.result_dir,
         agg_result=args.agg_result,
         power_dir=args.power_dir,
         logs_root=args.logs_root,
         expected_producer_sha=args.expected_producer_sha,
         require_power=args.require_power,
+        audit_source=args.audit_source,
+        validation_result=args.validation_result,
     )
 
 

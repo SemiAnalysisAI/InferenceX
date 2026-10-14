@@ -19,9 +19,12 @@ base:
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
+        # Keep active decode requests progressing while long prefixes are queued.
+        prefill-decode-interval: 16
         # DSpark is the checkpoint's bundled draft; the block size is its only knob.
         speculative-algorithm: DSPARK
         speculative-dspark-block-size: 5
+        cuda-graph-max-bs-decode: 64
         reasoning-parser: auto
         tool-call-parser: auto
         # Draft passes under long-context load outlast the 1800 s default watchdog.
@@ -49,41 +52,20 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. TP4: static fraction 0.70, 4096-token prefill chunks,
-# 64-request graph batch. TP2 needs 0.92, 2048-token chunks, a 16-request graph
-# batch and expandable segments to fit. Admission is 2x CONC, capped at the graph
-# batch. SWA prefix tails are 64x CONC (TP2 128x), capped at 1024. Decode
-# interleaving applies to TP2 and c16. Saturation points get a longer warmup drain.
 override_tp4_c1:
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 64
-        cuda-graph-max-bs-decode: 64
+        expert-parallel-size: 4
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 8192
+        swa-prefix-tails: 128
         max-running-requests: 2
   benchmark:
     env:
       CONC: '1'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c2:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 128
-        cuda-graph-max-bs-decode: 64
-        max-running-requests: 4
-  benchmark:
-    env:
-      CONC: '2'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
 
 override_tp4_c4:
@@ -92,11 +74,12 @@ override_tp4_c4:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 256
-        cuda-graph-max-bs-decode: 64
+        expert-parallel-size: 4
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 8192
+        swa-prefix-tails: 128
         max-running-requests: 8
+        prefill-decode-interval: 384
   benchmark:
     env:
       CONC: '4'
@@ -108,11 +91,12 @@ override_tp4_c8:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 512
-        cuda-graph-max-bs-decode: 64
+        expert-parallel-size: 4
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 8192
+        swa-prefix-tails: 256
         max-running-requests: 16
+        prefill-decode-interval: 384
   benchmark:
     env:
       CONC: '8'
@@ -124,213 +108,149 @@ override_tp4_c16:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 64
-        max-running-requests: 32
-        prefill-decode-interval: 16
-  benchmark:
-    env:
-      CONC: '16'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c32:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 64
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '32'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp4_c64:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 64
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '64'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp4_c128:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        mem-fraction-static: 0.7
-        chunked-prefill-size: 4096
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 64
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '128'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp2_c1:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
-        swa-prefix-tails: 128
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 2
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
-  benchmark:
-    env:
-      CONC: '1'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp2_c2:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
-        swa-prefix-tails: 256
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 4
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
-  benchmark:
-    env:
-      CONC: '2'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp2_c4:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
+        expert-parallel-size: 4
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 8192
         swa-prefix-tails: 512
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 8
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
-  benchmark:
-    env:
-      CONC: '4'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp2_c8:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 16
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
-  benchmark:
-    env:
-      CONC: '8'
-      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp2_c16:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 16
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+        max-running-requests: 32
+        prefill-decode-interval: 96
   benchmark:
     env:
       CONC: '16'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
 
-override_tp2_c32:
+override_dep4_c32:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
   roles:
     agg:
-      gpus: 2
+      gpus: 4
       args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 16
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        load-balance-method: total_requests
+        tokenizer-worker-num: 8
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 32768
+        swa-prefix-tails: 2048
+        max-running-requests: 256
+        prefill-decode-interval: 88
   benchmark:
     env:
       CONC: '32'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
-override_tp2_c64:
+override_dep4_c64:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
   roles:
     agg:
-      gpus: 2
+      gpus: 4
       args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 16
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        load-balance-method: total_requests
+        tokenizer-worker-num: 8
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 65536
+        swa-prefix-tails: 2048
+        max-running-requests: 256
+        prefill-decode-interval: 72
   benchmark:
     env:
       CONC: '64'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
-override_tp2_c128:
+override_dep4_c128:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
   roles:
     agg:
-      gpus: 2
+      gpus: 4
       args:
-        tensor-parallel-size: 2
-        mem-fraction-static: 0.92
-        chunked-prefill-size: 2048
-        swa-prefix-tails: 1024
-        cuda-graph-max-bs-decode: 16
-        max-running-requests: 16
-        prefill-decode-interval: 16
-      env:
-        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        load-balance-method: total_requests
+        tokenizer-worker-num: 8
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 65536
+        swa-prefix-tails: 2048
+        max-running-requests: 256
+        prefill-decode-interval: 24
   benchmark:
     env:
       CONC: '128'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dep4_c192:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        load-balance-method: total_requests
+        tokenizer-worker-num: 8
+        mem-fraction-static: 0.76
+        chunked-prefill-size: 65536
+        swa-prefix-tails: 3072
+        max-running-requests: 384
+        prefill-decode-interval: 12
+  benchmark:
+    env:
+      CONC: '192'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'

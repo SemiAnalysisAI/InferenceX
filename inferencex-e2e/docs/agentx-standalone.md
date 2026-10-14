@@ -9,10 +9,10 @@ Install the pinned PyPI release in a Python 3.11–3.13 virtual environment:
 ```bash
 python3 -m venv .venv-agentx
 source .venv-agentx/bin/activate
-python -m pip install 'agentx-harness==1.0.7'
+python -m pip install 'agentx-harness==1.0.9'
 ```
 
-The package version matches the `agentx-v1.0.7` GitHub release. The `agentx`
+The package version matches the `agentx-v1.0.9` GitHub release. The `agentx`
 command selects the `agentx` scenario by default.
 
 ## Run
