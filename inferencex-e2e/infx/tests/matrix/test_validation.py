@@ -1336,7 +1336,6 @@ class TestMultiNodeAgenticMatrixEntry:
             validate_agentic_matrix_entry(without_prefill)
 
     def test_smoke_rows_satisfy_the_dispatch_schema(self):
-        """Klaud dispatches --smoke for every family; each row must reach the GPU jobs."""
         from infx.matrix.generate import smoke_entries
 
         row = {**MULTINODE_AGENTIC_EVAL_ROW, "conc": [8, 32]}

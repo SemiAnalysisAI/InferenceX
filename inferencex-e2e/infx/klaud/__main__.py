@@ -35,7 +35,6 @@ from .models import (
 )
 
 PRODUCERS = "producers.json"
-# Outcomes that say nothing about the candidate itself, so the next wave may retry them.
 RETRY_NEXT_WAVE = frozenset({"capacity-deferred"})
 
 
@@ -161,11 +160,6 @@ def choose(
 
 
 def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str, str | None]:
-    """Map candidates given an agent within the cooldown to their newest recorded outcome.
-
-    Every base counts: main moves faster than the cooldown, so a same-base filter never matched.
-    An attempt without a readable verified outcome maps to ``None``.
-    """
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     try:
         runs = github_items(
@@ -206,7 +200,6 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
 
 
 def recorded_outcome(repository: str, artifact: dict) -> str | None:
-    """The verified outcome in a candidate diagnostics artifact, or ``None`` if unreadable."""
     with tempfile.TemporaryDirectory() as scratch:
         try:
             download_json(repository, artifact, Path(scratch))
@@ -225,11 +218,6 @@ def recorded_outcome(repository: str, artifact: dict) -> str | None:
 
 
 def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
-    """Skip recently attempted candidates; capacity deferrals only sort last.
-
-    A deterministic block (missing weights, a broken matrix, a failed sweep) repeats on every
-    wave, so it waits out the cooldown instead of taking a slot from an untried candidate.
-    """
     fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
     deferred = [
         candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
@@ -238,11 +226,6 @@ def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> 
 
 
 def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
-    """Open PRs that can own a family's refresh in the overlap review.
-
-    A PR idle for ``stale_days`` no longer blocks families; Klaud's own candidate PRs always
-    count, because they hold a validated or in-flight refresh awaiting review.
-    """
     cutoff = now - timedelta(days=stale_days)
     return [
         pr

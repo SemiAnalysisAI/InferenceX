@@ -4,7 +4,6 @@ name: Klaud Cold auto-sweep
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
   schedule:
-    # Frequent waves catch short idle-capacity windows; the capacity gate and claims bound load.
     - cron: '0 */2 * * *'
 
 permissions:
@@ -82,8 +81,6 @@ jobs:
       actions: read # Read workflow runs and artifacts.
       pull-requests: read # Read PR metadata.
     env:
-      # Bound one semantic-overlap review. Attempted candidates skip the cooldown unless only
-      # capacity deferred them; other open PRs idle past the stale window stop owning families.
       REVIEW_BATCH_SIZE: '64'
       CANDIDATE_COOLDOWN_HOURS: '24'
       STALE_PR_DAYS: '7'
