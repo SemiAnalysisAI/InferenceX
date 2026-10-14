@@ -293,7 +293,7 @@ def test_edited_signoff_starts_verification_for_same_resource(service, name):
 def test_removed_signoff_does_not_start_verification(service, name, action):
     event = event_for(name)
     event["action"] = action
-    service.clear()  # Rejected events must not reach GitHub or verification.
+    service.clear()
     assert resolve(name, event) == {"proceed": "false"}
 
 

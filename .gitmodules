@@ -1,6 +1,3 @@
-[submodule "utils/aiperf"]
-	path = inferencex-e2e/utils/aiperf
-	url = https://github.com/SemiAnalysisAI/aiperf.git
 [submodule "utils/srt-slurm"]
 	path = inferencex-e2e/utils/srt-slurm
 	url = https://github.com/NVIDIA/srt-slurm.git

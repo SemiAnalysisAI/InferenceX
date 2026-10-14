@@ -44,8 +44,6 @@ PCT_COLORS: dict[int, str] = {
     99: "#d62728",
 }
 
-# One spec per metric: key, title, xlabel, label format string, whether
-# to use log-x in the "log" variant of the figure.
 PLOT_SPECS: list[dict] = [
     {
         "key": "think_time_sec",
@@ -133,7 +131,6 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
     osls: list[int] = []
     hit_rates: list[float] = []
     main_turns_per_session: list[int] = []
-    # Mean request count per nonempty agent, including the main agent.
     avg_agent_depth_per_session: list[float] = []
 
     files = sorted(in_dir.glob("*.json"))
@@ -145,7 +142,6 @@ def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
         trace = json.loads(p.read_text())
         seen_hashes: set[int] = set()
         n_main = 0
-        # Index 0 is the main agent; remaining entries are subagents.
         agent_turn_counts: list[int] = [0]
         for r in trace.get("requests", []):
             if r.get("type") == "subagent":
@@ -213,7 +209,6 @@ def _draw_histogram(
     pct = {p: float(np.percentile(arr, p)) for p in PERCENTILES}
 
     if log_x:
-        # Zeros appear only in the linear plot.
         positive = arr[arr > 0]
         if positive.size == 0:
             ax.set_title(f"{title}\n(no positive values)")
@@ -225,7 +220,6 @@ def _draw_histogram(
         ax.hist(positive, bins=edges, color="#888", edgecolor="#222", linewidth=0.4)
         ax.set_xscale("log")
     else:
-        # Clip heavy tails; also clip the lower tail when values can be negative.
         has_neg = float(arr.min()) < 0
         if has_neg:
             lo_pct = 100 - linear_clip_pct

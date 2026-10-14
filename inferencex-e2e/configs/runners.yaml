@@ -510,6 +510,8 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          socket-ifname: [eth0]
         job-tag: h200
         gpus-per-node-directive: true
         segment-directive: false
@@ -518,6 +520,7 @@ clusters:
         volume-mounts:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
+        power-exporter-port: 9401
   b200-cw:
     gpus-per-node: 8
     arch: x86_64
@@ -606,11 +609,20 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3, mlx5_4, mlx5_5, mlx5_10, mlx5_11]
+          rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1, mlx5_4:1, mlx5_5:1, mlx5_10:1,
+                              mlx5_11:1]
+          rdma-gid-index: 3
         job-tag: b200
         default-time-limit: "4:00:00"
         single-node-models: staged
         container-aliases: [dynamo-vllm, dynamo-sglang, dynamo-trtllm, sglang-v0.5.11-cu130]
         nginx-aliases: [nginx-sqsh]
+        agentic-volume-mounts:
+          aiperf-cache: /aiperf_mmap_cache
+          hf-hub-cache: /hf_hub_cache
+        power-exporter-port: 9401
   b300-dsxe:
     gpus-per-node: 8
     available-cpu-dram-mib: 3_977_095
@@ -664,10 +676,15 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_10:1, mlx5_11:1, mlx5_16:1, mlx5_17:1,
+                              mlx5_20:1, mlx5_21:1, mlx5_22:1, mlx5_23:1, mlx5_4:1, mlx5_5:1,
+                              mlx5_8:1, mlx5_9:1, mlx5_2:1, mlx5_3:1]
         job-tag: b300
         single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm]
         nginx-aliases: [nginx-sqsh]
+        power-exporter-port: 9401
   gb200-nv:
     gpus-per-node: 4
     available-cpu-dram-mib: 860_160
@@ -712,6 +729,10 @@ clusters:
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
+          rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
+          rdma-gid-index: 3
         job-tag: gb200
         default-time-limit: "6:00:00"
         preflight: false
@@ -719,6 +740,10 @@ clusters:
         container-aliases: [dynamo-trtllm, dynamo-sglang]
         nginx-aliases: [nginx-sqsh]
         shared-run-root: /mnt/lustre01/users-public/sa-shared/gha-runs
+        agentic-volume-mounts:
+          aiperf-cache: /aiperf_mmap_cache
+          hf-hub-cache: /hf_hub_cache
+        power-exporter-port: 9401
   gb300-nv:
     gpus-per-node: 4
     available-cpu-dram-mib: 860_160
@@ -763,6 +788,9 @@ clusters:
             port: 9402
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
+        fabric:
+          rdma-devices: [mlx5_0, mlx5_1, mlx5_2, mlx5_3]
+          rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
         job-tag: gb300
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, v0.5.11, v0.5.13.post1]
@@ -773,6 +801,7 @@ clusters:
           aiperf-cache: /aiperf_mmap_cache
           hf-hub-cache: /hf_hub_cache
           dynamo-wheels: /configs/dynamo-wheels
+        power-exporter-port: 19401
   mi300x-amd:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_547_820
@@ -793,6 +822,8 @@ clusters:
         import: all-nodes
         lock-timeout-s: 600
       srt-slurm:
+        workspace-mounts: &amd-exporter-config
+          runners/srt-slurm/exporters/amd-power.json: /etc/metrics/config.json
         network-interface: ""
         single-node-time-limit: 180
         gpus-per-node-directive: true
@@ -804,6 +835,22 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
+          default_gpu_exporter: &amd-exporter
+            container_image: ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:0d1c32c965f955b0fbf1dc87a84f7205be9019ce8d2fdf1eb929de28c71cec54
+            port: 19500
+            command: /home/amd/tools/entrypoint.sh
+            kind: custom
+            gpu_labels:
+              index: gpu_id
+              identity: serial_number
+            gpu_metrics:
+              power:
+                metric: gpu_power_usage
+                scope: gpu_device_power_as_reported_by_amd_device_metrics_exporter
+              gpu_util:
+                metric: gpu_gfx_activity
+              temperature:
+                metric: gpu_junction_temperature
   # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
   mi325x-amd:
     gpus-per-node: 8
@@ -825,6 +872,7 @@ clusters:
         import: compute
         lock-timeout-s: 600
       srt-slurm:
+        workspace-mounts: *amd-exporter-config
         network-interface: ""
         single-node-time-limit: 480
         gpus-per-node-directive: true
@@ -834,6 +882,7 @@ clusters:
           /dev/dri: /dev/dri
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
+          default_gpu_exporter: *amd-exporter
           default_bash_preamble: |-
             export XDG_CACHE_HOME="/tmp/xdg-cache-$SLURM_JOB_ID"
             export TRITON_CACHE_DIR="/tmp/triton-cache-$SLURM_JOB_ID"
@@ -842,9 +891,11 @@ clusters:
     available-cpu-dram-mib: 3_095_781
     arch: x86_64
     env:
-      MORI_RDMA_TC: "104"
+      MORI_RDMA_TC: '@fabric.rdma-tc'
     models:
       entries:
+        Kimi-K3: {root: it-share-data, dir: Kimi-K3}
+        DeepSeek-R1-0528-MXFP4-v2: {root: it-share-data, dir: DeepSeek-R1-0528-MXFP4-v2}
         DeepSeek-V4-Pro-0813: {root: it-share-data, dir: DeepSeek-V4-Pro-0813}
         GLM-5.3: {root: it-share-data, dir: GLM-5.3}
         Qwen3.5-397B-A17B-FP8: {root: it-share-data, dir: Qwen3.5-397B-A17B-FP8}
@@ -866,7 +917,13 @@ clusters:
         import: compute
         multi-node-import: false
       srt-slurm:
+        workspace-mounts: *amd-exporter-config
         network-interface: eno0
+        fabric:
+          rdma-devices: [rdma0, rdma1, rdma2, rdma3, rdma4, rdma5, rdma6, rdma7]
+          socket-ifname: [eno0]
+          rdma-gid-index: 1
+          rdma-tc: 104
         single-node-time-limit: 500
         gpus-per-node-directive: true
         segment-directive: false
@@ -874,7 +931,7 @@ clusters:
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
-            IBDEVICES: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+            IBDEVICES: '@fabric.rdma-devices'
           timeout-s: 1200
           nodes: all
         volume-mounts:
@@ -885,5 +942,5 @@ clusters:
           /it-share/hf_home: /it-share/hf_home
         extra:
           visible_devices_env: ROCR_VISIBLE_DEVICES
-          default_gpu_exporter: null
+          default_gpu_exporter: *amd-exporter
           nginx_raise_ulimit: false

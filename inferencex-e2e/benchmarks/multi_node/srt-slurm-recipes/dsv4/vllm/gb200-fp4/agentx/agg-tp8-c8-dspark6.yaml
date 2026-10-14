@@ -1,15 +1,8 @@
 schema: 2
 name: dsv4-vllm-agg-gb200-tp8-c8-dspark6-agentic
-model:
-  path: /mnt/lustre01/users-public/sa-shared/models/DeepSeek-V4-Pro-0813
-  container: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
-  precision: fp4
 identity:
   model:
-    repo: deepseek-ai/DeepSeek-V4-Pro-0813
     revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
-  container:
-    image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
   frameworks:
     dynamo: 1.3.0.dev20260720
 dynamo:
@@ -49,7 +42,7 @@ services:
       global_segment_size: 150GB
       local_buffer_size: 4GB
       protocol: rdma
-      device_name: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+      device_name: "@fabric.rdma-devices"
       mode: embedded
       enable_offload: false
 frontend:
@@ -95,9 +88,9 @@ roles:
       VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '1024'
       VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
       UCX_MEMTYPE_CACHE: n
-      UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1
+      UCX_NET_DEVICES: "@fabric.rdma-device-ports"
       UCX_TLS: rc,cuda_copy
-      NCCL_IB_HCA: mlx5_0,mlx5_1,mlx5_2,mlx5_3
+      NCCL_IB_HCA: "@fabric.rdma-devices"
       NCCL_P2P_LEVEL: NVL
       MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
       MC_STORE_CLIENT_METRIC: '1'
@@ -136,11 +129,7 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-    RESULT_DIR: /logs/agentic
     PORT: '8000'
-    IS_MULTINODE: 'true'
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
-    AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
-    HF_HUB_CACHE: /hf_hub_cache
     WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
     AIPERF_DATASET_MMAP_CACHE_ENABLED: 'false'

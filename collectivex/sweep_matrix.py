@@ -44,9 +44,8 @@ BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
     "uccl-ep": ("bf16", "fp8"),
-    # NCCL EP is BF16-only now; NCCL EP v0.2 supports FP8 dispatch, but the integration is
-    # pending (see bench/ep_nccl.py).
-    "nccl-ep": ("bf16",),
+    # FP8 dispatch is enabled for low-latency decode only (see the mode/phase gate below).
+    "nccl-ep": ("bf16", "fp8"),
     # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
     # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
     # comparable. Realizable, but off every deployed path -- see OFF_PATH_PRECISIONS.
@@ -287,6 +286,10 @@ def resolve_matrix(
                         emit_precisions = sorted(supported)[:1]
                     for mode in cell_modes:
                         for precision in emit_precisions:
+                            if target == "nccl-ep" and precision == "fp8" and (
+                                mode != "low-latency" or phase != "decode"
+                            ):
+                                continue
                             case = {
                                 "suite": SWEEP["suite"],
                                 "workload": workload["name"],

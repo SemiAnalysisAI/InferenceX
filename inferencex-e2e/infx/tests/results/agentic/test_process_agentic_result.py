@@ -208,7 +208,6 @@ def _write_fixture(tmp_path: Path) -> Path:
     artifact = result_dir / "aiperf_artifacts"
     artifact.mkdir(parents=True)
 
-    # 5 records across 2 conversations; turn indices grow within each.
     records = [
         _make_record(
             conv_id="trace-A",
@@ -270,8 +269,6 @@ def _write_fixture(tmp_path: Path) -> Path:
         for r in records:
             f.write(json.dumps(r) + "\n")
 
-    # Aggregate file. Processor uses jsonl as the canonical source so this
-    # only needs to be parsable — the values aren't asserted on.
     with open(artifact / "profile_export_aiperf.json", "w") as f:
         json.dump(
             {
@@ -291,7 +288,6 @@ def _write_fixture(tmp_path: Path) -> Path:
             f,
         )
 
-    # No server_metrics_export.json — exercises the missing-file path.
     return result_dir
 
 
@@ -326,7 +322,6 @@ def _run_processor(
             "SPEC_DECODING": "none",
             "DISAGG": "false",
             "IS_MULTINODE": "false",
-            # No aiperf theoretical cache metric in this fixture.
             "HF_HUB_CACHE": str(result_dir / "_no_such_cache"),
         }
     )
@@ -456,10 +451,8 @@ def test_processor_latency_units_are_seconds(tmp_path: Path):
     output_dir = tmp_path / "out"
     agg = _run_processor(result_dir, output_dir)
     latency = agg["request_metrics"]["latency"]
-    # Fixture mean ttft = (30+35+32+40+33)/5 = 34.0 ms = 0.034 s.
     assert latency["ttft"]["mean"] == pytest.approx(0.034)
     assert latency["ttft"]["p50"] == pytest.approx(0.033)
-    # Fixture mean e2e = (1000+1100+900+1400+1050)/5 = 1090 ms = 1.09 s.
     assert latency["e2el"]["mean"] == pytest.approx(1.09)
     assert latency["itl"]["mean"] == pytest.approx(0.01824)
     _assert_stable_request_metrics_schema(agg)
@@ -495,7 +488,6 @@ def test_processor_derives_interactivity_from_matching_itl_percentile(
     agg = _run_processor(result_dir, tmp_path / "out")
 
     metric = agg["request_metrics"]["latency"]["intvty"]
-    # Hand-worked ITL p90/p75/p50/mean: 84, 60, 20, 43 1/3 ms.
     assert metric["p90"] == pytest.approx(11.90476)
     assert metric["p75"] == pytest.approx(16.66667)
     assert metric["p50"] == pytest.approx(50.0)
@@ -509,7 +501,6 @@ def test_processor_aggregates_e2e_normalized_interactivity_from_slow_tail(
     artifact = result_dir / "aiperf_artifacts"
     artifact.mkdir(parents=True)
 
-    # E2EL / OSL ratios are 0.02 and 0.04 seconds per output token.
     records = [
         _make_record(
             conv_id="trace-fast",
@@ -655,7 +646,6 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     assert agg["dcp_size"] == 2
     assert agg["pcp_size"] == 2
     assert agg["num_gpus"] == 16
-    # 840 input + 275 output tokens over 4.1 seconds on 16 GPUs.
     assert per_gpu["total_tput_tps"] == pytest.approx(16.99695)
     assert per_gpu["input_tput_tps"] == pytest.approx(12.80488)
     assert per_gpu["output_tput_tps"] == pytest.approx(4.19207)
@@ -664,7 +654,6 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
 def test_processor_serializes_shared_expert_gpus(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     agg = _run_processor(result_dir, tmp_path / "out", env_overrides={"TP": "4", "EP_SIZE": "4"})
-    # EP shares devices with TP.
     assert agg["num_gpus"] == 4
 
 
@@ -704,7 +693,6 @@ def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path
     assert full_response_itl["p50"] == pytest.approx(0.005)
     assert full_response_itl["p75"] == pytest.approx(0.00523)
     assert full_response_intvty["p50"] == pytest.approx(200.0)
-    # p75 interpolates to 5.2348955 ms before conversion and rounding.
     assert full_response_intvty["p75"] == pytest.approx(191.02578)
 
 
@@ -823,8 +811,6 @@ def test_gpu_shape_counts_workers_and_normalizes_absent_decode(
         "PREFILL_GPUS": "999", "DECODE_GPUS": "999",
     }
     fields, num_gpus, tp, ep, attention = _gpu_shape(env)
-    # Two 24-GPU prefill workers plus either three 10-GPU decode workers or
-    # no decode workers. EP and DCP do not allocate extra GPUs.
     assert num_gpus == expected_gpus
     assert fields["num_prefill_gpu"] == 48
     assert fields["num_decode_gpu"] == (30 if decode_workers == "3" else 0)
@@ -927,7 +913,6 @@ def test_processor_handles_missing_server_metrics(tmp_path: Path):
     assert server_metrics["kv_cache"]["gpu_total_tokens"] is None
     assert agg["kv_cache_pool_tokens"] is None
     assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] is None
-    # Non-server-derived totals fall back to per-record sums.
     assert server_metrics["tokens"]["prompt_total"] == 840
     assert server_metrics["tokens"]["generation_total"] == 275
     assert server_metrics["tokens"]["requests_completed"] == 5
@@ -1635,13 +1620,9 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
             f,
         )
 
-    # Keep trace metadata present so this also proves theoretical cache does
-    # not depend on recomputing from local HF traces.
     hf_cache = tmp_path / "_hf"
     snapshot = hf_cache / "datasets--semianalysisai--cc-traces-weka-042026" / "snapshots" / "abc"
     snapshot.mkdir(parents=True)
-    # Real corpus uses the ``out`` alias (Pydantic's external name for
-    # output_length). Mix both to verify the loader accepts either.
     traces = [
         {
             "id": "trace-A",
@@ -1688,7 +1669,6 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
     assert proc.returncode == 0, proc.stderr
     agg = json.loads((tmp_path / "out" / "agg_test.json").read_text())
     assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] == pytest.approx(0.25)
-    # output_tokens_expected populated from trace metadata (5 records: A turns 0,1,2 + B turns 0,1)
     assert agg["request_metrics"]["tokens"]["output_expected"]["mean"] == pytest.approx(
         55.0
     )
@@ -1802,7 +1782,6 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
         )
         second = build_result(records, aggregate, {}, {**env, "TP": "2"})
 
-    # 450 tokens over three seconds, divided among four GPUs.
     assert result["request_metrics"]["throughput"]["per_gpu"] == {
         "total_tput_tps": 37.5, "output_tput_tps": 12.5, "input_tput_tps": 25.0,
     }
@@ -1825,7 +1804,7 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
 def test_builder_does_not_consume_logs_when_backend_does_not_use_them(framework, metric_names):
     def unavailable_logs():
         raise OSError("unreadable optional log")
-        yield  # Make failure occur on consumption, as with a file iterator.
+        yield
 
     result = build_result(
         [], {}, {"metrics": {name: {"series": []} for name in metric_names}},
@@ -1878,7 +1857,6 @@ def test_processor_trace_cache_precedence_and_last_duplicate(tmp_path, cache_env
     snapshot = cache / "datasets--semianalysisai--cc-traces-weka-062126" / "snapshots" / "one"
     snapshot.mkdir(parents=True)
     trace = {"id": "trace-A", "requests": [{"type": "n", "out": 17}] * 3}
-    # Bad JSON is skipped; later JSON overrides earlier JSONL for this trace.
     (snapshot / "a.jsonl").write_text("{bad json\n" + json.dumps(trace) + "\n")
     (snapshot / "z.json").write_text(json.dumps({
         **trace, "requests": [{"type": "s", "output_length": 23}] * 3,
@@ -1893,7 +1871,6 @@ def test_processor_trace_cache_precedence_and_last_duplicate(tmp_path, cache_env
             hub / "datasets--semianalysisai--cc-traces-weka-062126"
         )
     else:
-        # A configured direct cache takes precedence over HF_HOME.
         env["HF_HOME"] = str(tmp_path / "wrong-home")
     if cache_env == "HF_HUB_CACHE":
         env["HUGGINGFACE_HUB_CACHE"] = str(tmp_path / "wrong-hub")
