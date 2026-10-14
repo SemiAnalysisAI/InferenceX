@@ -21,8 +21,6 @@ REQUIRED = (
     "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING",
 )
 
-# The scenario rejects shorter profiles; smoke runs below it pass --unsafe-override, which
-# marks them submission_valid=false.
 MIN_SCENARIO_DURATION_S = 900
 FAST_DURATION_S = 1200
 FAST_WARMUP_REQUESTS_PER_LANE = "1"
@@ -40,7 +38,6 @@ class ReplayConfig:
     necessarily a valid repo id."""
     concurrency: int
     duration: int
-    # None keeps the agentx scenario's default.
     warmup_requests_per_lane: str | None
     live_failed_request_threshold: str | None
     warmup_grace_period: str | None
@@ -64,15 +61,11 @@ class ReplayConfig:
         warmup = None
         if values["AIPERF_EXPERIMENTAL_FAST"] == "1":
             duration, warmup = FAST_DURATION_S, FAST_WARMUP_REQUESTS_PER_LANE
-        # Dynamo routes later turns to their prefix's prefill worker via nvext.session_control;
-        # builds after #9920 reject that field, so their recipes route by header or opt out.
         conv_aware = (
             values["FRAMEWORK"].startswith("dynamo-")
             and values["AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING"] != "0"
             and values["AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID"] != "true"
         )
-        # Replays keep the model's native context: an inherited MAX_MODEL_LEN is a workflow
-        # value, so only this opt-in sets a smaller service limit.
         max_context = inputs.optional("AIPERF_MAX_CONTEXT_LENGTH", env)
         loader, dataset = traces.resolve(
             values["MODEL_PREFIX"], inputs.optional("WEKA_LOADER_OVERRIDE", env)
@@ -85,13 +78,10 @@ class ReplayConfig:
             concurrency=inputs.parse_positive_int("CONC", values["CONC"]),
             duration=duration,
             warmup_requests_per_lane=warmup,
-            # Recipes with correlated low-concurrency trajectories loosen the live abort.
             live_failed_request_threshold=inputs.optional(
                 "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD", env
             ),
-            # Saturation arms with a larger in-flight set need longer to drain warmup.
             warmup_grace_period=inputs.optional("AGENTIC_WARMUP_GRACE_PERIOD", env),
-            # One ``key:value`` pair per word, as AIPerf's multi-value flag takes them.
             extra_inputs=tuple(extra_inputs.split()),
             dynamo_session_timeout=(
                 values["AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS"] if conv_aware else None
@@ -106,9 +96,7 @@ class ReplayConfig:
             unsafe_override=duration < MIN_SCENARIO_DURATION_S,
             loader=loader,
             dataset=dataset,
-            # Recipes whose legacy launch rendered prompts client-side keep doing so.
             apply_chat_template=env.get("AIPERF_APPLY_CHAT_TEMPLATE") == "true",
-            # Lets this point's admitted responses finish before the deployment is torn down.
             benchmark_grace_period=inputs.optional("AIPERF_BENCHMARK_GRACE_PERIOD", env),
         )
 
@@ -127,7 +115,6 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
     """Every Prometheus endpoint AIPerf scrapes; it keeps ``endpoint_url`` per series."""
     urls = inputs.optional("AIPERF_SERVER_METRICS_URLS", env)
     if not urls and env.get("SRTCTL_FRONTEND_TYPE") != "dynamo":
-        # A router frontend does not re-export engine metrics; read each worker's.
         prefill = env.get("SRT_PREFILL_ENDPOINTS")
         endpoints = env.get("SRT_AGG_ENDPOINTS") or (
             (f"{prefill}," if prefill else "") + env.get("SRT_DECODE_ENDPOINTS", "")
@@ -150,13 +137,10 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
 
 def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
     """The ``agentx profile`` argv for ``cfg``; ``cli`` is the ``agentx`` executable."""
-    # The agentx scenario owns the endpoint, streaming, seed, start ratios, warmup and failure
-    # defaults, trace idle cap, token counts, telemetry, dataset size, and metric slices.
     argv = [str(cli), "profile", "--url", cfg.url]
     argv += ["--model", cfg.model, "--tokenizer", cfg.tokenizer]
     argv += ["--concurrency", str(cfg.concurrency), "--benchmark-duration", str(cfg.duration)]
     if cfg.live_failed_request_threshold is not None:
-        # Live abort only; run.FAILED_REQUEST_THRESHOLD gates the finished profile.
         argv += ["--failed-request-threshold", cfg.live_failed_request_threshold]
     if cfg.warmup_requests_per_lane is not None:
         argv += ["--warmup-requests-per-lane", cfg.warmup_requests_per_lane]
@@ -165,13 +149,10 @@ def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
     if cfg.extra_inputs:
         argv += ["--extra-inputs", *cfg.extra_inputs]
     if cfg.dynamo_session_timeout is not None:
-        # The router's inactivity lease; the upstream 300 s is shorter than an overloaded request.
         argv += ["--use-dynamo-conv-aware-routing"]
         argv += ["--dynamo-session-timeout-seconds", cfg.dynamo_session_timeout]
-    # The dataset manager loads the tokenizer anyway, and Kimi ships custom tokenizer code.
     argv.append("--tokenizer-trust-remote-code")
     if cfg.max_context_length is not None:
-        # Longer traces would be deterministic 4xxs that still pressure the engine while queued.
         argv += ["--max-context-length", str(cfg.max_context_length)]
     if cfg.server_metrics_urls:
         argv += ["--server-metrics", *cfg.server_metrics_urls]

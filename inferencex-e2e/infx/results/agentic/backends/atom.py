@@ -64,8 +64,6 @@ class AtomBackend(ServerMetricsBackend):
             preferred_keys=("total", "sum", "max", "avg"),
         )
         external_hit_rate = rate(external_tokens, full_tokens)
-        # ATOM's admitted cache counter may already include a completed
-        # LMCache load, so do not add external tokens a second time.
         overall_hit_rate = cache_hit_rate
 
         flat["server_gpu_cache_hit_rate"] = cache_hit_rate

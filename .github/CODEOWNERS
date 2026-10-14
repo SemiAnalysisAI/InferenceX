@@ -1,7 +1,7 @@
 * @SemiAnalysisAI/core
 
 # AMD master config
-inferencex-e2e/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
+inferencex-e2e/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @1am9trash
 
 # NVIDIA master config
 inferencex-e2e/configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @wzhao18 @nvpohanh @RohitNagraj @SemiAnalysisAI/core

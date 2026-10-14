@@ -1,10 +1,6 @@
 schema: 2
 name: "b200-fp4-mtp2-throughput-5p-dep4-1d-dep8"
 
-# Derived from the srt-slurm b200-fp4 8k1k recipe (recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml
-# base + override_mtp2_throughput_5p1d, DEP4 prefill / DEP8 decode, MTP2).
-# One flat YAML per concrete topology, matching the InferenceX glm5 disagg
-# layout (<model-prefix>/<engine>/<gpu>-<precision>/<workload>/<recipe>.yaml).
 
 dynamo:
   install: true

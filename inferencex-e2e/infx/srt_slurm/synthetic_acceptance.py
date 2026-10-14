@@ -56,7 +56,6 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
             "model": args.get("draft-model", ""),
         }
         if spec["method"] == "dspark":
-            # ATOM DSpark verifies with probabilistic block rejection sampling.
             spec["draft_sample_method"] = "probabilistic"
         return spec
     if engine == "vllm":
@@ -114,7 +113,6 @@ def build_overrides(
         and environment["IS_AGENTIC"].lower() in ("1", "true")
         and environment["SPEC_DECODING"] != "none"
     )
-    # Prefill may have a different MTP depth; generation defines the AL target.
     generation = roles.get("decode", roles.get("agg", {}))
     spec = spec_parameters(generation, engine)
     al = None
@@ -128,8 +126,6 @@ def build_overrides(
         "trtllm": (TRT_VARIABLE,),
         "tilert": TILERT_VARIABLES,
     }.get(engine, ())
-    # SRT applies recipe-wide environment after role environment. Keep simulation
-    # role-local so global values cannot override the golden AL or leak into evals.
     for key in variables:
         if key in (recipe.get("environment") or {}):
             overrides += ["--unset", f"environment.{key}"]
@@ -142,9 +138,6 @@ def build_overrides(
         if engine == "tilert":
             selected = role.get("engine", recipe.get("engine", "tilert"))
             worker_engine = selected.get("type") if isinstance(selected, Mapping) else selected
-            # TileRT's first token and draft cache come from real vLLM prefill.
-            # Only its decode runtime simulates acceptance, using environment
-            # variables (decode_server has no --simulate-acc-* CLI options).
             if name != "decode" or worker_engine != "tilert":
                 worker_al = None
         worker_spec = spec_parameters(role, worker_engine)
@@ -172,7 +165,6 @@ def build_overrides(
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
         elif worker_engine == "atom":
-            # ATOM forces acceptance with a server flag rather than environment.
             key = "spec-decode-acceptance-length"
             if worker_al is not None and worker_spec:
                 overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
@@ -268,8 +260,6 @@ def plan_commands(
                 for item in generated_overrides
             ):
                 raise ValueError(f"Caller {removal.render()} conflicts with golden acceptance")
-        # SRT broadcasts overrides into zip groups. Reject a collapsed selection
-        # before any job is submitted, rather than selecting the wrong variant.
         materialized = copy.deepcopy(raw)
         apply_overrides_to_recipe(materialized, generated_overrides)
         selected_recipes(materialized, variant)

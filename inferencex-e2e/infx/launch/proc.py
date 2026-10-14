@@ -35,7 +35,7 @@ def run(
     check: bool = False,
     capture: bool = False,
     cwd: str | Path | None = None,
-    input: str | None = None,  # noqa: A002 - mirrors subprocess.run
+    input: str | None = None,  # noqa: A002
     echo_command: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Echo ``argv`` and run it. ``env`` replaces the child environment, as in subprocess.

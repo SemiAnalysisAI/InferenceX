@@ -51,7 +51,7 @@ class Lifecycle:
         def run() -> None:
             try:
                 result = fn(*args, **kwargs)
-            except Exception:  # noqa: BLE001 - every cleanup must get its turn
+            except Exception:  # noqa: BLE001
                 traceback.print_exc()
                 self._cleanup_failed = True
                 return

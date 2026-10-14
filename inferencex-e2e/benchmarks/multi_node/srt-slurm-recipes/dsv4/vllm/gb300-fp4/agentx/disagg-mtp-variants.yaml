@@ -1,5 +1,3 @@
-# AgentX dsv4 vllm gb300-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -176,12 +174,6 @@ base:
       # Avoid concurrent readers observing a mismatched mmap data/index pair.
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"
 
-# Derived from PR #2302's DEP8/DEP32 c256 recipe.
-# Halve the prefill/decode topology while preserving its conservative
-# 4/16/16 decode limits and isolated JIT cache paths.
-# GB300 AgentX MTP3 topology: one DEP4 prefill worker feeds one
-# DEP16 decode worker at concurrency 128. Decode consumes P/D KV through NIXL
-# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 override_1p1d_dep4_dep16_c128:
   name: "svf-vllm-disagg-gb300-1p1d-dep4-dep16-c128-mtp-agentic"
   identity:
@@ -215,12 +207,6 @@ override_1p1d_dep4_dep16_c128:
   sbatch_directives:
     mem: "0"
 
-# Derived from PR #2302's DEP8/DEP32 c256 recipe.
-# Halve the prefill/decode topology while preserving its conservative
-# 8/32/32 decode limits and isolated JIT cache paths.
-# GB300 AgentX MTP3 topology: one DEP4 prefill worker feeds one
-# DEP16 decode worker at concurrency 256. Decode consumes P/D KV through NIXL
-# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 override_1p1d_dep4_dep16_c256:
   name: "svf-vllm-disagg-gb300-1p1d-dep4-dep16-c256-mtp-agentic"
   identity:
@@ -254,8 +240,6 @@ override_1p1d_dep4_dep16_c256:
   sbatch_directives:
     mem: "0"
 
-# GB300 AgentX MTP3 topology: one DEP4 prefill worker feeds one
-# DEP8 decode worker at concurrency 256.
 override_1p1d_dep4_dep8_c256:
   name: "svf-vllm-disagg-gb300-1p1d-dep4-dep8-c256-mtp-agentic"
   identity:
@@ -288,12 +272,6 @@ override_1p1d_dep4_dep8_c256:
         max-cudagraph-capture-size: 1024
         gpu-memory-utilization: 0.92
 
-# Source: https://github.com/SemiAnalysisAI/InferenceX/blob/0c33d4615792705ed12bfc204e3a54cfa436cf02/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep8-dep16-c512-mtp-agentic.yaml
-# Runtime and performance arguments follow the current DEP8/DEP16 GB300 P/D
-# recipes; throughput-only synthetic MTP acceptance is injected at launch.
-# GB300 AgentX MTP3 topology: one DEP8 prefill worker feeds one
-# DEP16 decode worker at concurrency 512. Decode consumes P/D KV through NIXL
-# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 override_1p1d_dep8_dep16_c512:
   name: "svf-vllm-disagg-gb300-1p1d-dep8-dep16-c512-mtp-agentic"
   identity:
@@ -326,9 +304,6 @@ override_1p1d_dep8_dep16_c512:
   sbatch_directives:
     mem: "0"
 
-# GB300 AgentX MTP3 topology: two DEP8 prefill workers feed one
-# DEP16 decode worker at concurrency 1024. Decode consumes P/D KV through NIXL
-# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 override_2p1d_dep8_dep16_c1024:
   name: "svf-vllm-disagg-gb300-2p1d-dep8-dep16-c1024-mtp-agentic"
   identity:
@@ -359,9 +334,6 @@ override_2p1d_dep8_dep16_c1024:
   sbatch_directives:
     mem: "0"
 
-# GB300 AgentX MTP3 topology: two DEP8 prefill workers feed one
-# DEP12 decode worker at concurrency 1152. Decode consumes P/D KV through NIXL
-# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 override_2p1d_dep8_dep12_c1152:
   name: "svf-vllm-disagg-gb300-2p1d-dep8-dep12-c1152-mtp-agentic"
   identity:

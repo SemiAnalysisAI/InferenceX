@@ -119,7 +119,6 @@ def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(("model", "agentic", "overrides", "paths"), [
     ("org/M", "0", (), {"hf:org/M": "nvme/m"}),
-    # A fixed-sequence point needs a staged checkpoint unless its lane loads the Hub snapshot.
     ("org/Unstaged", "0", (), LaunchError),
     ("org/Unstaged", "1", (), {}),
     ("org/M", "0", (Override(Match(), hub=True),), {}),

@@ -1,6 +1,3 @@
-# DeepSeek-V4-Pro-0813 FP4 AgentX on B200 with SGLang DSpark (block 6). TP8
-# covers the low-concurrency points (GPU KV, then HiCache); DEP8 attention-DP
-# fronted by the SGLang Model Gateway covers the high-concurrency HiCache points.
 base:
   schema: 2
   name: dsv4-fp4-b200-sglang-agentic

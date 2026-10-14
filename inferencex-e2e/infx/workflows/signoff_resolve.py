@@ -41,7 +41,6 @@ def _reference(
         else:
             kind, path = "inline review comment", f"/pulls/comments/{ref_id}"
         comment = github.api(repo, path, token)
-        # Comment IDs are repository-wide; the URL's PR number alone is not evidence.
         if kind != "review summary":
             field, resource = (
                 ("issue_url", "issues")

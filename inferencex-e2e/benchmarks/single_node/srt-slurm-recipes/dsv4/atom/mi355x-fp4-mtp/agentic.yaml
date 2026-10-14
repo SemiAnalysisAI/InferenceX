@@ -1,7 +1,3 @@
-# DeepSeek-V4-Pro-0813 AgentX on MI355X with ATOM DSpark K6 (six draft tokens,
-# a verify window of 7). Low concurrency is TP-only. The DP-attention band runs
-# MegaMoE with EPLB from C48 (C64 without EPLB). C256 and C384 add an LMCache
-# CPU KV tier (lmcache_mp); the other points keep the KV cache GPU-resident.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-atom-agentic

@@ -1,6 +1,3 @@
-# Agentic-coding SGLang aggregated recipes for GLM-5.2-NVFP4 on GB300: one
-# aggregated TP8 worker with EAGLE MTP 5-1-6 and a hierarchical-cache KV tier.
-# Admission and the decode graph batch are twice the concurrency.
 
 schema: 2
 

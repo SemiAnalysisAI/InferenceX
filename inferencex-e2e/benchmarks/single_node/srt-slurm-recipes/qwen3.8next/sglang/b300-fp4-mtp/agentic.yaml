@@ -1,5 +1,3 @@
-# Qwen3.8-Flash-Next NVFP4 AgentX on B300 via SGLang with native NEXTN MTP.
-# The 126 GiB checkpoint fits on one B300, so the cookbook command is TP1.
 base:
   schema: 2
   name: qwen3.8next-fp4-b300-sglang-agentic

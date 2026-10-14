@@ -15,19 +15,16 @@ BUNDLE = {
     "schema": 2,
     "base": {
         "name": "bundle", "engine": "sglang",
-        # srtctl apply drops this null from zip variants only.
         "frontend": {"type": "sglang", "router": None},
         "roles": {"agg": {"gpus": 4, "args": {
             "tensor-parallel-size": 4, "chunked-prefill-size": 8192, "cuda-graph-bs": [1, 2, 4],
         }}},
         "benchmark": {"env": {"KEEP": "1"}},
     },
-    # Null deletes a key and lists replace.
     "override_wide": {"roles": {"agg": {"gpus": 8, "args": {
         "tensor-parallel-size": 8, "chunked-prefill-size": None, "cuda-graph-bs": [8],
     }}}},
     "override_named": {"name": "custom", "benchmark": None},
-    # Length-1 lists broadcast across the group.
     "zip_override_conc": {
         "roles": {"agg": {"args": {"max-running-requests": [2, 4, 8]}}},
         "benchmark": {"env": {"CONC": ["2", "4", "8"], "KEEP": ["0"]}},

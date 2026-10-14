@@ -39,7 +39,6 @@ def test_client_preserves_outcome_before_failure(
     monkeypatch.setattr(client, '_load_tokenizer', lambda *a, **kw: object())
     monkeypatch.setattr(client, 'sample_random_requests', lambda **kw: [])
     monkeypatch.setattr(client, 'benchmark', AsyncMock(return_value=raw))
-    # Avoid changing the test process's global GC state.
     monkeypatch.setattr(client.gc, 'freeze', lambda: None)
     invalid = requested == 0 or completed is None or completed < 0 or completed > requested
 
@@ -64,7 +63,7 @@ def test_client_preserves_outcome_before_failure(
     assert outcome['completed'] == completed
     if invalid:
         assert '0 <= completed <= requested > 0' in outcome['error']
-        assert 'failed' not in outcome  # Invalid counts cannot define a failure rate.
+        assert 'failed' not in outcome
     else:
         assert 'error' not in outcome
         assert outcome['failed'] == {100: 0, 95: 5, 94: 6, 0: 100}[completed]

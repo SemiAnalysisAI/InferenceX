@@ -1,15 +1,3 @@
-# B200-FP4 8k1k STP variants
-#
-# Three modes distinguished by override key names:
-#   override_stp_tp4:  TP4 prefill (DP=1, EP=1), low-latency single-node
-#   zip_override_stp_lowlat:  dep4 prefill + tep8 decode (DP=1)
-#   override_stp_maxtpt_7p2d:  dep4 prefill + dep8 decode, 7p2d
-#
-# Usage:
-#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                              # all variants
-#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:override_stp_tp4             # STP tp4 only
-#   srtctl apply  -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml:zip_override_stp_lowlat[0]   # STP 1p1d only
-#   srtctl dry-run -f recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml                             # preview
 
 schema: 2
 base:
@@ -52,16 +40,13 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
       args:
-        # Model configuration
         served-model-name: "deepseek-ai/DeepSeek-R1"
         trust-remote-code: true
         quantization: "modelopt_fp4"
 
-        # Disaggregation mode
         disaggregation-mode: "prefill"
         disaggregation-transfer-backend: nixl
 
-        # Memory and token limits
         mem-fraction-static: 0.85
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
@@ -69,23 +54,19 @@ base:
         max-running-requests: 512
         disable-cuda-graph: true
 
-        # Parallelism
         tensor-parallel-size: 4
         data-parallel-size: 4
         expert-parallel-size: 4
         enable-dp-attention: true
         enable-dp-lm-head: true
 
-        # Attention
         attention-backend: "trtllm_mla"
         kv-cache-dtype: "fp8_e4m3"
 
-        # MoE
         moe-runner-backend: "flashinfer_trtllm"
         moe-dense-tp-size: 1
         fp4-gemm-backend: "flashinfer_trtllm"
 
-        # Other flags
         stream-interval: 30
         watchdog-timeout: 1000000
         enable-flashinfer-allreduce-fusion: true
@@ -111,16 +92,13 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
       args:
-        # Model configuration
         served-model-name: "deepseek-ai/DeepSeek-R1"
         trust-remote-code: true
         quantization: "modelopt_fp4"
 
-        # Disaggregation mode
         disaggregation-mode: "decode"
         disaggregation-transfer-backend: nixl
 
-        # Memory and token limits
         mem-fraction-static: 0.85
         max-prefill-tokens: 32768
         chunked-prefill-size: 32768
@@ -128,20 +106,16 @@ base:
         max-running-requests: 512
         cuda-graph-max-bs: 512
 
-        # Parallelism
         tensor-parallel-size: 8
         data-parallel-size: 1
         expert-parallel-size: 8
 
-        # Attention
         attention-backend: "trtllm_mla"
         kv-cache-dtype: "fp8_e4m3"
 
-        # MoE
         moe-runner-backend: "flashinfer_trtllm"
         fp4-gemm-backend: "flashinfer_trtllm"
 
-        # Other flags
         stream-interval: 30
         watchdog-timeout: 1000000
         enable-flashinfer-allreduce-fusion: true
@@ -152,7 +126,6 @@ base:
     interval_seconds: 10
 
 
-# STP TP4 prefill mode: TP4 (DP=1, EP=1) instead of dep4 — low-latency single-node
 override_stp_tp4:
   name: "b200-fp4-stp-low-latency-tp4-1p-tp8-1d"
   frontend:
@@ -169,7 +142,6 @@ override_stp_tp4:
         expert-parallel-size: 1
 
 
-# STP low-latency: dep4 prefill + tep8 decode (DP=1), scale sweep 1p1d/1p5d/2p5d
 zip_override_stp_lowlat:
   name:
     - "b200-fp4-stp-low-latency-dep4-1p-tep8-1d"
@@ -185,7 +157,6 @@ zip_override_stp_lowlat:
       workers: [1, 5, 5]
 
 
-# STP max-throughput 7p2d: dep4 prefill + dep8 decode, flashinfer_cutlass backend
 override_stp_maxtpt_7p2d:
   name: "b200-fp4-stp-max-tpt-dep4-7p-dep8-2d"
   resources: {}

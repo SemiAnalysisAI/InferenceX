@@ -37,7 +37,6 @@ AUTOMATIC_AGENTIC_VENDOR_EVALS = {
 }
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
-# 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
 MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -104,8 +103,6 @@ def trim_conc(entries: list[dict]) -> list[dict]:
             )
         )
         if entry.get("eval-only"):
-            # A standalone eval job (e.g. GSM8K beside a vendor suite) is its
-            # own shape: never merge it with throughput or another suite.
             key += (
                 (
                     "eval-only",
@@ -275,8 +272,6 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
     recipe_path = root / path
     recipe = yaml.safe_load(recipe_path.read_text())
     if "base" in recipe:
-        # srtctl merges the variant over base (null deletes a key). Zip groups,
-        # whole bundles and non-schema-2 variants leave the estimate to the topology.
         if not (selector == "base" or selector.startswith("override_")):
             return None
         schema = recipe.get("schema")
@@ -288,7 +283,6 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
     roles = recipe.get("roles")
     if roles:
-        # A colocated decode role shares prefill nodes.
         for name, role in roles.items():
             if "nodes" not in role:
                 raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
@@ -322,7 +316,6 @@ def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data
         f"cluster {cluster_id!r}": fabric.rendered()
         for cluster_id, fabric in _label_fabrics(label, runner_data).items()
     }
-    # A runner no cluster label lists, such as a bare cluster id, still has its names checked.
     fabrics = fabrics or {f"runner {label!r}": dict.fromkeys(Fabric().rendered(), "")}
     for reach, fabric in fabrics.items():
         for _, recipe in variants:
@@ -693,7 +686,6 @@ def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
         if free == concs:
             continue
         if free:
-            # Only batched all-concurrency evals cover several concurrencies.
             row[Fields.CONC.value] = free
             continue
         row[Fields.RUN_EVAL.value] = False
@@ -728,7 +720,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
     eval_indices = set()
-    mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
+    mn_eval_conc = {}
 
     def _eligible_eval_concs(entry: dict) -> list[int]:
         conc = entry[Fields.CONC.value]
@@ -747,8 +739,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             conc_values = conc if isinstance(conc, list) else [conc]
             mn_eval_conc[i] = max(conc_values)
 
-    # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
-    # Only 8k1k entries with a top-level TP (single-node schema).
     sn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value not in entry:
@@ -777,8 +767,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             if e[Fields.CONC.value] in target_concs:
                 eval_indices.add(i)
 
-    # Multi-node: group rows that differ only in concurrency, then evaluate each
-    # distinct parallelism configuration at its highest configured concurrency.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -797,14 +785,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Agentic GSM8K: the eval runs as a separate eval-only job, so every
-    # agentic throughput result is preserved. Vendor-suite models take part
-    # too; their GSM8K pick becomes an extra eval-only row below.
     ag_sn_groups = defaultdict(list)
-    # Multi-node agentic: same "highest eligible conc per distinct
-    # parallelism config" policy as the fixed-seq-len mn_groups above. A
-    # deployment with no topology at MIN_EVAL_CONC or above (e.g. a
-    # conc-1-only engine) still gets one GSM8K, at its highest conc overall.
     ag_mn_groups = defaultdict(list)
     ag_mn_fallback: dict[tuple, tuple[int, int]] = {}
     for i, entry in enumerate(matrix_values):
@@ -827,8 +808,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             continue
         conc = entry[Fields.CONC.value]
         conc_val = max(conc) if isinstance(conc, list) else conc
-        # Same keys as single-node 8k1k, plus image so configs that differ
-        # only by image (e.g. an image bump) each get their own eval.
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
@@ -839,7 +818,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.IMAGE.value],
         )
         ag_sn_groups[key].append((i, conc_val))
-    gsm8k_picks: dict[int, int | None] = {}  # index -> multinode eval conc
+    gsm8k_picks: dict[int, int | None] = {}
     for entries in ag_sn_groups.values():
         gsm8k_picks[max(entries, key=lambda item: item[1])[0]] = None
     for entries in ag_mn_groups.values():
@@ -880,7 +859,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     for i, eval_conc in extra_gsm8k.items():
         matrix_values.append(_gsm8k_eval_only_row(matrix_values[i], eval_conc))
 
-    # An eval-only GSM8K copy that loses its app identity has nothing left to run.
     return [
         row
         for row in drop_app_colliding_evals(matrix_values)
@@ -940,7 +918,6 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
                 eval_entry[Fields.CONC.value] = sorted(set(conc_values))
                 eval_entry[Fields.EVAL_CONC.value] = max(conc_values)
             expanded_entries.append(eval_entry)
-            # GSM8K too: continue with a copy free of the vendor eval fields.
             entry = {
                 key: value
                 for key, value in entry.items()
@@ -978,8 +955,6 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             expanded_entries.append(eval_entry)
             continue
 
-        # Only 8k1k is eligible for evals; leave other sequence lengths as-is
-        # (their RUN_EVAL stays False, so the evals-only filter drops them).
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             expanded_entries.append(entry)
             continue
@@ -1058,8 +1033,6 @@ def _fixed_sequence_entries(
         dp_attn = benchmark.get(Fields.DP_ATTN.value)
 
     entries = []
-    # Multi-node rows carry the whole concurrency list; single-node rows carry
-    # one point. Keep point-major, runner-minor order for existing consumers.
     for conc in [conc_values] if is_multinode else conc_values:
         for runner in runners:
             entry = {
@@ -1172,8 +1145,6 @@ def _agentic_entries(
     if not conc_values:
         return []
 
-    # Every AgentX point owns a server allocation. Multi-node points retain
-    # singleton lists for the reusable workflow's shared concurrency-list input.
     if is_multinode:
         offload_suffix = (
             f"_{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
@@ -1323,7 +1294,6 @@ def expand_full_sweep(
                 f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
             )
 
-    # Full-sweep validates sequence names even when no config matches.
     seq_filter = {seq_len_stoi[sl] for sl in options.seq_lens} if options.seq_lens else None
     configs = (
         config
@@ -1410,7 +1380,6 @@ def _runner_values_for_filter(
         return [runner]
     candidates = runner_nodes_for_label(runner, runner_data)
     if not include_label:
-        # Full-sweep expands concrete nodes in inventory order, including repeats.
         return [node for node in candidates if runner_node_filter in node]
     if runner_node_filter in runner:
         candidates = [runner, *candidates]
@@ -1479,7 +1448,6 @@ def _expand_configs(
     rows = []
     for config in configs:
         multinode = config.get(Fields.MULTINODE.value, False)
-        # Full-sweep reads scenarios before runner filtering; selected keys defer it.
         if full_sweep is not None:
             scenarios = config[Fields.SCENARIOS.value]
             fixed = (
@@ -1564,7 +1532,6 @@ def _expand_configs(
                     )
                 )
     if root is not None:
-        # A recipe's fabric references fail here rather than on the cluster that launches it.
         selected = {
             (row[field.value], row[Fields.RUNNER.value])
             for row in rows
@@ -1586,7 +1553,7 @@ def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]
     Raises ValueError if a pattern matches nothing or an exact key is missing.
     """
     available = list(available_keys)
-    seen = {}  # use dict to preserve insertion order
+    seen = {}
     for key in config_keys:
         if "*" in key or "?" in key:
             matches = fnmatch.filter(available, key)
@@ -1694,8 +1661,6 @@ def generate_config_matrix(
         root=root,
     )
     rows = select_matrix_evals(rows, mode=eval_mode)
-    # Retain the former JSON boundary: values and nested objects cannot leak
-    # between generation passes, and unsupported values still reject.
     return json.loads(json.dumps(rows))
 
 

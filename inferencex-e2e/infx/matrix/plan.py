@@ -51,7 +51,6 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
         if line.startswith("-") and not line.startswith("---"):
             deleted_content = line[1:]
             if deleted_content.strip():
-                # The changelog is append-only, except for blank lines.
                 raise ValueError(
                     f"Deletions are not allowed in {filepath}. "
                     f"Only additions to the changelog are permitted. "
@@ -343,8 +342,6 @@ def build_plan(
 
         all_benchmark_results = []
         all_eval_results = []
-        # Track benchmark coverage per scenario so overlapping changelog entries
-        # with disjoint scenario filters do not suppress each other.
         benchmark_scenarios_seen = defaultdict(set)
         eval_scenarios_seen = defaultdict(set)
 
@@ -412,8 +409,6 @@ def build_plan(
                 selected_config_scenarios,
             )
 
-        # Process all-evals entries first so their broader eval matrix wins when
-        # the same config appears in multiple changelog entries.
         resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
         for entry, all_configs in resolved_entries:
@@ -468,13 +463,11 @@ def build_plan(
             )
             final_results[node_type][scenario].append(result)
 
-        # Entries are selected independently; the app still keeps one eval per identity.
         all_eval_results = [
             result
             for result in drop_app_colliding_evals(all_eval_results)
             if result.get("run-eval")
         ]
-        # Fixed-sequence and AgentX eval jobs have different workflow inputs.
         for result in all_eval_results:
             prefix = "multinode_" if result.get("prefill") is not None else ""
             suffix = "agentic_evals" if result.get("scenario-type") == "agentic-coding" else "evals"
@@ -518,7 +511,6 @@ def main() -> None:
             evals_only=args.evals_only,
         )
     except MatrixGenerationError as error:
-        # Preserve the legacy child diagnostics and failure status at the CLI.
         stderr = "".join(traceback.format_exception(error.cause))
         print(stderr)
         raise subprocess.CalledProcessError(1, error.command, stderr=stderr) from None

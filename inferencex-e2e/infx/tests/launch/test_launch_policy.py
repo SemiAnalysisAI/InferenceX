@@ -74,7 +74,6 @@ def test_power_eligibility_of_each_cluster_lane(
     assert (decision.dcgm, decision.agentx, decision.adapter) == (
         True, expected == AGENTX, expected == ADAPTER,
     )  # fmt: skip
-    # GB200 and GB300 Kimi-K3 AgentX clients fail a point whose power is invalid.
     assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv"))
     assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
 

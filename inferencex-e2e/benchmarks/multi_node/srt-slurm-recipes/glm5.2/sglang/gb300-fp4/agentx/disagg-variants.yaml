@@ -1,6 +1,3 @@
-# Agentic-coding SGLang low-latency disaggregated recipes for GLM-5.2-NVFP4 on GB300:
-# one DEP4 prefill worker with a hierarchical-cache KV tier feeding two, four or six
-# TP4 decode workers, EAGLE MTP 2-1-3. The DEP8/DEP16 point keeps its own recipe.
 
 schema: 2
 

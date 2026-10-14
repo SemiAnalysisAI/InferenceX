@@ -1,4 +1,2 @@
-# The pinned AgentX release and client dependencies; venv.py installs them with uv.
 agentx-harness==1.0.7
-# The trace corpora use the datasets Json feature type, added in 4.7.0.
 datasets>=4.7.0
