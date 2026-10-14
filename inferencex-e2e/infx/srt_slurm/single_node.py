@@ -79,7 +79,11 @@ def select_recipe(
     path, _, selector = config.partition(":")
     agentic = environment["IS_AGENTIC"] == "1"
     raw = compose_recipe(
-        Path(path), agentic=agentic, multinode=False, root=root or repository_root()
+        Path(path),
+        agentic=agentic,
+        multinode=False,
+        root=root or repository_root(),
+        native_power=environment.get("EVAL_ONLY") != "true",
     )
     recipes = expand(raw, selector or None)
     matches = []

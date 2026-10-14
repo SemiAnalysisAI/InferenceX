@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from infx.srt_slurm.workload import SHARED_BLOCKS, TELEMETRY_BLOCK
+from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK
 
 
 def shared_blocks() -> dict[str, str]:
@@ -17,6 +17,9 @@ def shared_blocks() -> dict[str, str]:
     }  # fmt: skip
     blocks[TELEMETRY_BLOCK.as_posix()] = yaml.safe_dump(
         {"telemetry": {"enabled": True, "dcgm_exporter": {"container_image": "dcgm"}}}
+    )
+    blocks[NATIVE_TELEMETRY_BLOCK.as_posix()] = yaml.safe_dump(
+        {"telemetry": {"enabled": True, "required": False}}
     )
     return blocks
 

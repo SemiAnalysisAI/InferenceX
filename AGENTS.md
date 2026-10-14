@@ -6,10 +6,10 @@ Guidance for AI agents working with InferenceX.
 
 ## Start here
 
-1. **Start every task with [`inferencex-e2e/docs/index.md`](inferencex-e2e/docs/index.md).** Choose the one focused guide that matches the task. Do not load every documentation page.
+1. Start with this file and the source for the component being changed. Load only the relevant command or skill, not every documentation page.
 2. Repository source, schemas, workflows, launchers, and collectors are authoritative. If documentation disagrees with implementation, follow the implementation and update the nearest English guide. Keep Chinese translations only for READMEs.
-3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy. Sweep labels and modifiers: see [PR primary and modifier labels](inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels).
-4. Before debugging a Klaud-Cold or `claude/*` image-bump PR, read [`inferencex-e2e/docs/klaud.md`](inferencex-e2e/docs/klaud.md) and the [known failure signatures](inferencex-e2e/docs/troubleshooting.md#known-failure-signatures).
+3. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening or reviewing a PR or changing review, sweep, or merge policy. Sweep labels and modifiers: see [PR sweep labels](.github/workflows/README.md#pr-sweep-labels).
+4. For Klaud-Cold or `claude/*` image-bump work, follow the [candidate instructions](.github/klaud-candidate-prompt.md) and the relevant `.claude/commands/` entry.
 
 The end-to-end Python project owns `inferencex-e2e/pyproject.toml`, `inferencex-e2e/uv.lock`, and `inferencex-e2e/.python-version`. Run its `uv` commands from `inferencex-e2e/`; root-level automation can select it with `uv run --project inferencex-e2e`.
 
@@ -23,9 +23,9 @@ The end-to-end Python project owns `inferencex-e2e/pyproject.toml`, `inferencex-
 - **PR titles MUST be bilingual:** every PR title MUST use `<English title> / <中文标题>`, e.g. `[Klaud Cold] Remove SWE-bench Lite eval / [Klaud Cold] 移除 SWE-bench Lite 评测`. Keep any prefix such as `[Klaud Cold]` on both halves. An English-only title is non-compliant; fix it before requesting review or merging. Issue titles follow the same format.
 - PR and issue descriptions and human-authored PR comments must include English and natural Simplified Chinese. In bodies and comments, keep English visible and put Chinese in one collapsed `<details><summary>中文</summary>` section. Keep code, commands, logs, stack traces, model names, hardware SKUs, framework names, flags, and identifiers unchanged. The exact CODEOWNER sign-off template is English-only. See [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
 - **One reviewer checklist per PR:** Only one eligible CODEOWNER reviewer needs to post the completed PR Review Checklist. Check for an existing checklist before posting; other reviewers do not need to duplicate it. The original reviewer must edit their existing checklist comment when correcting items or adding evidence, rather than post a new checklist. Create a replacement only if the original was deleted. See [`CONTRIBUTING.md`](CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
-- **Klaud Cold reports:** Follow the compact body/comment templates in [`inferencex-e2e/docs/klaud-reporting.md`](inferencex-e2e/docs/klaud-reporting.md), including cleanup and completion reports.
+- **Klaud Cold reports:** Use `infx.klaud`'s typed reporting commands and renderer, following the [candidate instructions](.github/klaud-candidate-prompt.md). Do not hand-build baselines, deltas, completion receipts, or cleanup reports.
 - Commit subjects use conventional English style, while commit bodies include the Chinese translation. Contributor-facing docs are English-only except READMEs. Keep existing `README_zh.md` translations synchronized with their English READMEs and preserve their language switchers; do not add or recreate Chinese translations of other docs.
-- Python under `inferencex-e2e/infx/` uses all stable Ruff rules with reviewed exclusions in `inferencex-e2e/infx/ruff.toml`, line length 100, and the Ruff formatter. The Lint job in `.github/workflows/ci.yml` runs whenever Python files change and fails on any finding. Before pushing Python changes, run the [commands in the testing guide](inferencex-e2e/docs/testing.md#python-lint-and-formatting). Fix findings where practical; justified exceptions use inline `# noqa: CODE` rather than file-wide ignores.
+- Python under `inferencex-e2e/infx/` uses all stable Ruff rules with reviewed exclusions in `inferencex-e2e/infx/ruff.toml`, line length 100, and the Ruff formatter. The Lint job in `.github/workflows/ci.yml` runs whenever Python files change and fails on any finding. Before pushing Python changes, run the [local checks](#local-checks). Fix findings where practical; justified exceptions use inline `# noqa: CODE` rather than file-wide ignores.
 - Follow the nearest existing pattern. Python uses typed signatures and strict Pydantic schemas. YAML uses kebab-case fields. Shared benchmark behavior that runs inside serving containers belongs in `inferencex-e2e/infx/bench/` as stdlib-only, Python 3.10 compatible commands (`python3 -m infx.bench <command>`), with parameters passed through environment variables or flags. Bash entrypoints stay thin shims.
 
 ## Bash conventions (mandatory)
@@ -75,8 +75,8 @@ Applies to every file, including recipes, configs, scripts, and source.
 
 ## Launchers, hooks, and synthetic acceptance
 
-- Launch only through `python -m infx.launch`; do not add shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in named policy tables, and drivers never branch on a cluster id. Retiring a cluster removes its label, record, and policy rows in the same PR. Details: [launch mechanics](inferencex-e2e/docs/architecture.md#launch-mechanics-stay-in-cluster-records).
-- srt-slurm host-setup hooks only check or prepare hosts. They never run benchmarks, tune engines, patch containers, or hide failures. Details: [host-setup hooks](inferencex-e2e/docs/architecture.md#srt-slurm-host-setup-hooks).
+- Launch only through `python -m infx.launch`; do not add shell launchers. Cluster facts go in the cluster's `clusters:` record, workload rules in named policy tables, and drivers never branch on a cluster id. Retiring a cluster removes its label, record, and policy rows in the same PR.
+- srt-slurm host-setup hooks only check or prepare hosts. They never run benchmarks, tune engines, patch containers, or hide failures.
 - Never hard-code synthetic acceptance lengths. The srt driver selects the measured value from `inferencex-e2e/infx/golden_al_distribution/` automatically. Details: [using golden curves](inferencex-e2e/infx/golden_al_distribution/README.md#using-golden-curves-in-srt-slurm-runs).
 
 ## Test quality
@@ -112,7 +112,27 @@ Never write, and always delete on sight, a test that does any of the following:
 3. Would this test fail because someone added a recipe, bumped an image tag, or reworded a comment? If yes, it is pinning config or source and must go.
 4. Does an existing test already reach this branch? If yes, extend it or drop the new one.
 
-Deleting a test that fails these questions needs no replacement. Do not preserve test counts. See [the testing guide](inferencex-e2e/docs/testing.md#test-quality) for timing and contract tests, and [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that repeat the implementation.
+Deleting a test that fails these questions needs no replacement. Do not preserve test counts. In timing tests, synchronize on observable readiness, bound waits and cleanup, and keep process termination and artifact writes real when those are the contract. See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that repeat the implementation.
+
+## Local checks
+
+Run from `inferencex-e2e/`:
+
+```bash
+uv sync --locked --all-extras --group test
+uvx --exclude-newer PT12H ruff@latest check --fix infx
+uvx --exclude-newer PT12H ruff@latest format infx
+uv run --locked --all-extras --group test python -m pytest -c pyproject.toml infx/tests/ -n 4
+```
+
+Use the focused test path for the changed contract before running broader suites.
+Use `--extra workflows` for GitHub integrations and `--extra results` for result tooling.
+Dependency changes update both `pyproject.toml` and `uv.lock`; add dependencies with
+`uv add` and upgrade specific packages with `uv lock --upgrade-package NAME`.
+For workflow changes, run the [Zizmor CI command](.github/workflows/zizmor.yml)
+with authenticated online checks; do not weaken its audit or global suppression policy.
+Schema/generator checks do not prove serving behavior. Run the exact config first,
+inspect its generated fields, then collect applicable smoke, sweep, and eval evidence.
 
 ## Non-negotiable benchmark invariants
 
@@ -123,6 +143,9 @@ Deleting a test that fails these questions needs no replacement. Do not preserve
 - Multi-node srt-slurm changes update the recipe YAML and matching master config together. srt-slurm recipes, fixed-sequence and AgentX, are fragments that get the master image, model, precision (and fixed-sequence lengths) from the binder.
 - Every speculative fixed-sequence benchmark renders prompts with the chat template: the binder (`inferencex-e2e/infx/srt_slurm/workload.py::bind_workload`) sets `benchmark.env.USE_CHAT_TEMPLATE: "true"` for single-node recipes that speculate, which `python3 -m infx.bench fixed-seq` (run by `srt_fixed_sequence.sh`) turns into `--use-chat-template` for the benchmark client.
 - Benchmarks create no new directories under `/workspace`. Root containers must not leave root-owned files in shared AMD runner workspaces.
-- Generated configuration is not runtime proof. Run the narrowest local check, then the applicable smoke, sweep, or eval procedure from the [task routing table](inferencex-e2e/docs/index.md#task-routing).
+- Generated configuration is not runtime proof. Run the narrowest local check, then use the [workflow guide](.github/workflows/README.md), [eval reference](inferencex-e2e/infx/evals/EVALS.md), or [AgentX replay guide](inferencex-e2e/docs/agentx-standalone.md) for the applicable execution path.
 
-All repository maps, task routes, commands, schemas, sweep semantics, artifact contracts, recovery steps, and detailed conventions live behind [`inferencex-e2e/docs/index.md`](inferencex-e2e/docs/index.md).
+Use [config documentation](inferencex-e2e/configs/CONFIGS.md) for config fields,
+[GitHub operations](.github/AGENT_OPERATIONS.md) for dispatch and review, and the
+[recovery command](.claude/commands/recover-failed-ingest.md) for results and ingestion.
+Runtime source and schemas remain authoritative.
