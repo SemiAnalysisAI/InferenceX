@@ -26,9 +26,9 @@ Write natural technical Chinese used by ML infrastructure engineers. Preserve mo
 
 ## Sweep labels and reuse
 
-Primary labels, modifiers, canary, fail-fast, and the fork dispatch path are owned by [PR primary and modifier labels](../inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels) and [canary and fail-fast semantics](../inferencex-e2e/docs/ci-procedures.md#canary-and-fail-fast-semantics). Apply exactly one primary label, normally `full-sweep-fail-fast`.
+Primary labels, modifiers, canary, fail-fast, and the fork dispatch path are documented in [PR sweep labels](workflows/README.md#pr-sweep-labels). Apply exactly one primary label, normally `full-sweep-fail-fast`.
 
-Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, run `python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict` while the conflict stages are present, as in [changelog conflict recovery](../inferencex-e2e/docs/ci-procedures.md#changelog-conflict-recovery). It keeps main's bytes and re-appends only the PR's entry. Never hand-merge, 3-way merge, or reformat the changelog.
+Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, run `python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict` while the conflict stages are present, as in [changelog conflict recovery](workflows/README.md#changelog-conflict-recovery). It keeps main's bytes and re-appends only the PR's entry. Never hand-merge, 3-way merge, or reformat the changelog.
 
 Pushes to `main` never run a sweep: `.github/workflows/run-sweep.yml` is PR-only. A push that changes `inferencex-e2e/perf-changelog.yaml` runs `.github/workflows/merge-ingest.yml` (Merge Ingest). Its single `ingest` job validates the merged PR's authorized `/use <run_id>` (or legacy `/reuse-sweep-run`) command and source run, then dispatches ingest of that reused PR sweep. Without valid reuse authorization the run fails, and nothing is benchmarked or ingested. `[skip-sweep]` only skips PR benchmark setup; changelog validation and reuse authorization checks still run, and Merge Ingest ignores it.
 

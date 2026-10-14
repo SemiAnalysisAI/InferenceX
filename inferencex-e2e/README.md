@@ -8,7 +8,7 @@
 
 This project contains model-serving benchmarks, configurations, launchers, Python
 tooling, documentation, and performance history. Start with the
-[documentation index](docs/index.md).
+[agent instructions](../AGENTS.md).
 
 The [Python manifest](pyproject.toml) and [lockfile](uv.lock) belong to this
 project. From the repository root, install and run the local tooling with:
@@ -21,7 +21,7 @@ uv run --locked python -m infx.matrix.generate test-config \
 ```
 
 Replace `<key>` with the selected config key. Workflow dispatch generator arguments
-also use paths relative to this directory. See the [testing guide](docs/testing.md)
+also use paths relative to this directory. See [local checks](../AGENTS.md#local-checks)
 for dependency groups and checks.
 
 The project-local [Python version](.python-version) selects its interpreter.
