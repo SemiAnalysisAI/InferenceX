@@ -12,17 +12,16 @@
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8, 16]},
       "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
-      "fabric": {"nic": "ConnectX-7 2x200GbE", "switch": "Arista 7060DX5-64S (Tomahawk4, 25.6T)"},
+      "fabric": {"nic": "AWS EFA (p5.48xlarge, 32 x 100G per node)", "switch": "AWS EFA fabric (SRD)"},
       "operator": {
-        "partition": "hpc-gpu-1",
-        "account": "customer",
-        "squash_dir": "/mnt/nfs/sa-shared/cx-squash",
-        "exclude_nodes": "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-2,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+        "partition": "batch_1",
+        "account": "benchmark",
+        "squash_dir": "/data/home/sa-gha-runner/collectivex/containers"
       },
       "network": {
-        "socket_ifname": "eth0",
-        "rdma_devices": "mlx5_18,mlx5_19,mlx5_20,mlx5_21,mlx5_22,mlx5_23,mlx5_24,mlx5_25,mlx5_26,mlx5_27,mlx5_28,mlx5_29,mlx5_30,mlx5_31,mlx5_32,mlx5_33",
-        "ib_gid_index": "3"
+        "rdma_fabric": "efa",
+        "rdma_gbs": 50,
+        "rdma_devices": "rdmap79s0,rdmap80s0,rdmap81s0,rdmap82s0,rdmap96s0,rdmap97s0,rdmap98s0,rdmap99s0,rdmap113s0,rdmap114s0,rdmap115s0,rdmap116s0,rdmap130s0,rdmap131s0,rdmap132s0,rdmap133s0,rdmap147s0,rdmap148s0,rdmap149s0,rdmap150s0,rdmap164s0,rdmap165s0,rdmap166s0,rdmap167s0,rdmap181s0,rdmap182s0,rdmap183s0,rdmap184s0,rdmap198s0,rdmap199s0,rdmap200s0,rdmap201s0"
       }
     },
     "h200-dgxc": {
