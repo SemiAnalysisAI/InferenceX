@@ -1,0 +1,198 @@
+# GLM-5.2 FP8 AgentX on B300, knob-tuned: plain SGLang EAGLE off the
+# checkpoint's nextn head, at TP8 and on a single 4-GPU TP4 engine. Every
+# setting is a stock server flag or environment variable of the pinned image;
+# the image runs as shipped. TP8 C4-C8 and TP4 C1 keep the KV cache in HBM;
+# the other points spill evicted prefixes to host DRAM through HiCache.
+base:
+  schema: 2
+  name: glm5.2-fp8-b300-sglang-agentic-tuned
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: zai-org/GLM-5.2-FP8
+        trust-remote-code: true
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        expert-parallel-size: 1
+        # The checkpoint's native context (max_position_embeddings).
+        context-length: 1048576
+        # DSA pages are 64 tokens; TRT-LLM sparse-attention kernels for both phases.
+        page-size: 64
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        # Admission and decode graphs cover 32 running requests.
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        # EAGLE off the bundled nextn head; TP4 C1 drafts one token more.
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        # GLM-5.2 emits the GLM-4.7 tool-call format.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        default-chat-template-kwargs: '{"enable_thinking":true}'
+        # Overlap checkpoint reads with weight loading.
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Keep FlashInfer, Triton and JIT caches allocation-local.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+        # Reserve 5% (default 20%) of free memory for the DSA indexer logits.
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.05'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per TP and concurrency. HiCache points keep the published
+# 270 GB/rank host pool (MLA: every TP rank holds complete per-token KV; the
+# DSA indexer pool rides on top), so TP4 uses half the host DRAM of TP8.
+# prefill-decode-interval spaces prefills so long prompts stall running
+# decodes less often.
+
+# TP8, KV in HBM.
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        mem-fraction-static: 0.85
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        mem-fraction-static: 0.85
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+# TP8 with HiCache. Prefill graphs cover chunks up to 4096 tokens.
+override_tp8_c16:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        mem-fraction-static: 0.85
+        cuda-graph-max-bs-prefill: 4096
+        prefill-decode-interval: 32
+        enable-hierarchical-cache: true
+        hicache-size: 270
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2399'
+
+override_tp8_c32:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        mem-fraction-static: 0.92
+        cuda-graph-max-bs-prefill: 4096
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-size: 270
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2399'
+
+# TP4: one 4-GPU engine. The ~756 GB checkpoint takes ~189 GB per GPU.
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.92
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.90
+        enable-hierarchical-cache: true
+        hicache-size: 270
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp4_c12:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        mem-fraction-static: 0.92
+        prefill-decode-interval: 96
+        enable-hierarchical-cache: true
+        hicache-size: 270
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'

@@ -9750,3 +9750,12 @@
     - "Replace aliases removed in this image (cuda-graph-max-bs becomes cuda-graph-max-bs-decode; SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK=1 becomes SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK=0) and drop settings that have no effect in it."
     - "Run the TP2/EP2 point with the default linear-replayssm-cache-len (16) instead of 8: this image's GDN ReplaySSM spec-verify commit kernel needs a replay window of at least 16, and 8 fails to compile at the first verify."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2978
+
+- config-keys:
+    - glm5.2-fp8-b300-sglang-agentic-mtp-tuned
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add glm5.2-fp8-b300-sglang-agentic-mtp-tuned, a tuned sibling of glm5.2-fp8-b300-sglang-agentic-mtp with a new recipe, agentic-tuned.yaml (TP8 and TP4)."
+    - "Image: lmsysorg/sglang@sha256:239ae983b1bc6ead51e3fe88f21b7ab795ba7ef1a0666384924dac87d855005d (nightly-dev-cu13-20260914-4358a161)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3933

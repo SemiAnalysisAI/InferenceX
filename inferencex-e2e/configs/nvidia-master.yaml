@@ -7317,6 +7317,32 @@ glm5.2-fp8-b200-sglang-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
 
+# GLM-5.2 FP8 B300 AgentX, knob-tuned sibling of glm5.2-fp8-b300-sglang-agentic-mtp
+# (that entry and its recipe are unchanged). Plain SGLang, stock flags and
+# environment only, on nightly-dev-cu13-20260914-4358a161 pinned by its amd64
+# digest (the tag is gone from Docker Hub). EAGLE off the bundled nextn head:
+# K=4 at TP4 C1, K=3 elsewhere; the golden AL follows K
+# (infx/golden_al_distribution/glm5.2_mtp.yaml). TP8 at C4-C32 and one 4-GPU
+# TP4 engine at C1-C12. TP8 C4-C8 and TP4 C1 keep the KV cache in HBM; the
+# rest use HiCache with the published 270 GB/rank host pool.
+glm5.2-fp8-b300-sglang-agentic-mtp-tuned:
+  image: lmsysorg/sglang@sha256:239ae983b1bc6ead51e3fe88f21b7ab795ba7ef1a0666384924dac87d855005d
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:b300-dsxe
+  precision: fp8
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.2/sglang/b300-fp8-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 8], srt-recipe: agentic-tuned.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32], srt-recipe: agentic-tuned.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-tuned.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 12], srt-recipe: agentic-tuned.yaml }
+
 # GLM-5.2 NVFP4 B200 AgentX on Dynamo + SGLang. EAGLE uses the model's
 # built-in nextn head, with acceptance pinned to the golden thinking-on AL in
 # infx/golden_al_distribution/glm5.2_mtp.yaml. Both arms use HiCache write-back
