@@ -395,6 +395,7 @@ jobs:
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
+            require-power: ${{ inputs.require-power }}
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
@@ -505,6 +506,7 @@ jobs:
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
         with:
+            require-power: ${{ inputs.require-power }}
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}

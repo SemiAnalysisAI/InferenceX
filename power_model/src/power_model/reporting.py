@@ -62,10 +62,12 @@ def format_power_breakdown_per_chassis(estimate: PowerEstimate) -> str:
     units = {dict(system.details).get("system_unit", "chassis") for system in systems.children}
     unit = next(iter(units)) if len(units) == 1 else "system"
     socket = estimate.cpu_and_dram_measured_power_per_socket
+    x86_cpu = estimate.cpu_measured_power_per_socket
     sections = [
         f"Power BoM per {unit}",
         f"GPU input: {estimate.gpu_level_power_per_gpu:,.2f} W/GPU | "
-        + ("" if socket is None else f"Grace socket input (measured): {socket:,.2f} W/socket | ")
+        + ("" if socket is None else f"CPU+DRAM input (measured): {socket:,.2f} W/socket | ")
+        + ("" if x86_cpu is None else f"CPU input (measured): {x86_cpu:,.2f} W/socket | ")
         + f"Workload: {estimate.workload_state.value} | "
         f"Scale-out: {'on' if estimate.using_scale_out else 'off'}",
     ]
