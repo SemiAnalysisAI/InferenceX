@@ -149,6 +149,14 @@ State the inspected scope and why it is N/A. Existing merged/published coverage
 can satisfy this check without a new upstream PR. The merge standard is that
 production users can reproduce the serving configuration from merged, public
 upstream documentation, without needing InferenceX benchmark infrastructure.
+Settings need not appear in the top-level command or be repeated for every
+benchmark point. Parameterized commands and tuning rules satisfy coverage when
+the reviewer can derive each affected production configuration without relying
+on InferenceX infrastructure. Coverage may combine applicable sections of the
+published recipe and directly linked official deployment documentation. Verify
+that the model, hardware, engine version, and serving roles are applicable;
+do not transfer settings from an unrelated model or deployment without evidence.
+Document each uncovered setting and why existing coverage does not apply.
 - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
   the corresponding merged recipe PR in
   `https://github.com/vllm-project/recipes` or
@@ -236,6 +244,10 @@ against the sign-off body.
 - FAIL if the sign-off is missing current-template items (stale copy) or left items
   unchecked without an explanation in the additional detail section. Name the
   missing/unchecked items and link the current template.
+- An unchecked draft-precision item with the missing evidence and uncertainty
+  recorded in the additional detail section satisfies this template check.
+  Assess the precision itself under Check 13; unavailable evidence warns there
+  and does not become a checklist-format failure.
 
 ## Check 6 — Upstream vLLM/SGLang images, and engine-first ordering
 The checklist makes upstream engine images a HARD guideline: on established hardware,
@@ -565,9 +577,17 @@ its separate speculative-algorithm/configuration requirements.
   Golden/synthetic AgentX acceptance (Check 11) does not demonstrate preserved draft
   precision and cannot excuse lowering it.
 - PASS only when the effective draft path is verified to match the shipped baseline.
-  If evidence is missing or inaccessible, FAIL as "Draft precision could not be
-  verified", naming the missing evidence; do not assert that a precision change was
-  proven.
+  If evidence is missing or inaccessible, WARN as "Draft precision could not be
+  verified", naming the missing evidence and requesting human review; do not
+  assert that a precision change was proven or report PASS. This includes an
+  unverified effective value for the named prohibition above. Independently proven
+  precision violations or prohibited enablement still FAIL, even when evidence
+  for another affected variant is unavailable. Do not convert this evidence-only
+  warning into a failure under Check 5 when the checklist records the uncertainty
+  and identifies the missing evidence in its additional detail section.
+  Use the exact image's implementation, build metadata, or inspectable source
+  artifacts to establish its behavior. A missing commit or backend on current
+  upstream main is not proof of a precision violation in the pinned image.
 - N/A only when the PR does not affect any speculative-decoding benchmark.
   A change that removes speculative decoding entirely is also N/A; verify that no
   affected speculative path remains.
@@ -729,9 +749,9 @@ Do not add Pareto-reviewer mentions or duplicate the banner yourself.
 ## Verdict and output
 Decide PASS only if Checks 0-16 ALL pass. A check reported as `N/A` counts as a pass,
 but its row still starts with ➖, never ✅.
-Checks 4, 14, 15, and 16 may WARN but never FAIL. If any warns and no other check fails,
-use the WARN header below. If any other check fails, use REJECTED even when
-Check 4, 14, 15, or 16 also warns.
+Checks 4, 14, 15, and 16 may WARN but never FAIL. Check 13 may WARN for unavailable
+evidence and FAIL for a demonstrated violation. If any check warns and none fails,
+use the WARN header below. Any FAIL requires REJECTED, even when other checks warn.
 Keep the `N/A — <reason>` row so the reviewer sees it was considered.
 Write the complete verdict to `/tmp/codeowner-signoff-verdict.md` using the Write
 or Bash tool. Do not post, edit, or delete GitHub comments, labels, or commit
@@ -756,7 +776,7 @@ single terse line. Rules:
     on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
     on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
     on warnings without failures: `## ⚠️ **Verdict: WARN** ⚠️`
-- Keep failing criteria AND Check 4/14/15/16 warnings in the main body, beneath the verdict header and
+- Keep failing criteria AND Check 4/13/14/15/16 warnings in the main body, beneath the verdict header and
   blocking summary. Put every PASS and N/A criterion in ONE collapsed HTML details
   group after the failures and warnings. Use exactly this structure (replace the placeholders;
   the rows below illustrate the format, not actual findings):
@@ -783,6 +803,7 @@ single terse line. Rules:
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
     `⚠️ Check 4 (Reuse command): WARN — <missing authorized command; reminder to post /use run_id>`
+    `⚠️ Check 13 (Draft precision): WARN — <affected config; missing pinned evidence; human review needed>`
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
     `⚠️ Check 15 (PR description): WARN — <claim versus actual configuration/evidence; correction needed>`
     `⚠️ Check 16 (NVIDIA overview): WARN — <model/framework, NVIDIA SKUs, missing or unverified listing; upstream and overview links>`
@@ -790,8 +811,8 @@ single terse line. Rules:
   only N/A row among PASS rows; Check 12 is N/A on most PRs. Keep each row on one line,
   with its reason after ` — `. Never end a row at its status and continue the reason on
   later lines or in sub-bullets; the publisher rejects such rows.
-  Never hide Check 4, 14, 15, or 16 WARN inside the collapsed group.
-  Check 4, 15, and 16 warnings must not trigger the Pareto-coverage escalation.
+  Never hide Check 4, 13, 14, 15, or 16 WARN inside the collapsed group.
+  Check 4, 13, 15, and 16 warnings must not trigger the Pareto-coverage escalation.
   For Check 14 WARN, the publisher adds the
   warning and mentions @functionstackx, @cquil11, @Oseltamivir, and @adibarra
   above the findings. Use only @usernames, without personal names; do not
@@ -807,13 +828,13 @@ single terse line. Rules:
 - If all checks pass or are N/A: write the PASS verdict header followed by the
   collapsed group containing all seventeen PASS/N/A rows. No criteria appear expanded.
 - If there are warnings but no failures: write the WARN header, the expanded
-  Check 4, 14, 15, and/or 16 warning rows, then the collapsed PASS/N/A group.
+  Check 4, 13, 14, 15, and/or 16 warning rows, then the collapsed PASS/N/A group.
   The publisher adds reviewer mentions only for Check 14 warnings.
 - If any check other than Checks 4, 14, 15, and 16 fails: immediately after the REJECTED header, write a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}` with the blocking
   summary. Then show only FAIL rows, each led by its root issue (e.g. "No passing
   sweep/eval on any commit in this PR") with the supporting link after. Keep any
-  Check 4, 14, 15, and 16 warnings expanded too. Finish with
+  Check 4, 13, 14, 15, and 16 warnings expanded too. Finish with
   the collapsed PASS/N/A group.
 
 Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ / ⚠️ status emojis
