@@ -497,7 +497,8 @@ ofi_nccl_install() {
   rm -rf "$root" && mkdir -m 700 "$root" \
     || { collx_log "ERROR: aws-ofi-nccl cache-create failed"; return 1; }
   tarball="aws-ofi-nccl-$version.tar.gz"
-  curl -sSfL --retry 3 -o "$root/$tarball" \
+  # Bounded per attempt so a stalled download is retried instead of hanging backend preparation.
+  curl -sSfL --connect-timeout 30 --max-time 300 --retry 3 -o "$root/$tarball" \
       "https://github.com/aws/aws-ofi-nccl/releases/download/v$version/$tarball" \
     && printf '%s  %s\n' "$COLLX_OFI_NCCL_SHA256" "$root/$tarball" | sha256sum -c --quiet \
     && tar -xzf "$root/$tarball" -C "$root" \
