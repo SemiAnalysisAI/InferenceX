@@ -57,15 +57,15 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC, capped at the graph batch. SWA
-# prefix tails are 64x CONC up to 4096. TP2 keeps row-sharded Engram tables in
-# host DRAM and runs 16K chunks with decoder SWA bounded replay and a longer
-# prefill-decode interval. c64 and c128 run DEP2 (DP attention with MegaMoE)
-# behind the SGLang router with shortest-prefill-first scheduling. TP4 uses
-# static ragged verify and 16K chunks; c1 keeps Engram in HBM with no
-# prefill-decode interval. TP4/EP1 c4 and c16 keep Engram in host DRAM with 4096
-# SWA tails and a 128 graph batch; c16 adds a 192-step interval. Saturation
-# points get a longer warmup drain.
+# One variant per point. Admission is 2x CONC (1 at c1), capped at the graph
+# batch. SWA prefix tails are 64x CONC up to 4096. TP2 keeps row-sharded Engram
+# tables in host DRAM and runs 16K chunks with decoder SWA bounded replay and a
+# longer prefill-decode interval. c64 and c128 run DEP2 (DP attention with
+# MegaMoE) behind the SGLang router with shortest-prefill-first scheduling. TP4
+# uses static ragged verify and 16K chunks; c1 keeps Engram in HBM with decoder
+# SWA bounded replay and no prefill-decode interval. TP4/EP1 c4 and c16 keep
+# Engram in host DRAM with 4096 SWA tails and a 128 graph batch; c16 adds a
+# 192-step interval. Saturation points get a longer warmup drain.
 override_tp2_c16:
   roles:
     agg:
@@ -179,7 +179,9 @@ override_tp4_c1:
         expert-parallel-size: 1
         chunked-prefill-size: 16384
         prefill-decode-interval: 0
-        max-running-requests: 2
+        max-running-requests: 1
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
       env:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
         SGLANG_RAGGED_VERIFY_MODE: static
