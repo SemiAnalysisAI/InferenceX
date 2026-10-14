@@ -9718,11 +9718,3 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
-
-- config-keys:
-    - "*"
-  description:
-    - "Bind the shared native telemetry fragment into selected recipes for srt-slurm power collection for single-node fixed-sequence and AgentX jobs (eval-only stays disabled), replacing client-side GPU sampling with srt-slurm measurement windows; single-node AgentX points publish power_validation_<RESULT_FILENAME>.json beside the result, and require-power reaches single-node jobs."
-    - "Configure the AMD device-metrics-exporter on mi300x-amd, mi325x-amd and mi355x-amds through srt-slurm's kind: custom exporter schema (NVIDIA/srt-slurm#572, included in the current v2.51.1 pin; gpu_id/serial_number labels; gpu_power_usage, gpu_gfx_activity and gpu_junction_temperature metrics) with the public ghcr.io#semianalysisai/amd-device-metrics-exporter image by digest; drop the AMD power-profile patch and the prepared-exporter staging step."
-    - "Carry NVIDIA/srt-slurm#573 as a local patch so worker-node exporters report only the job's GPUs; accept #572 manifests and samples v3 with temperature_c in the single-node and multinode power_audit consumers, and keep packages whose producer recorded clock_sync_failures unpublishable."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3781
