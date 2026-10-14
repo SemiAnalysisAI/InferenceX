@@ -1,4 +1,3 @@
-# Qwen3.5-397B-A17B FP8 AgentX on B300 with SGLang native NEXTN MTP.
 base:
   schema: 2
   name: qwen3.5-fp8-b300-sglang-agentic

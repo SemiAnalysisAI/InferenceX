@@ -1,8 +1,6 @@
 schema: 2
 name: "disagg-h200-1p1d-pcp8-tp8-dp8-mtp6-hicache"
 
-# 1P1D GLM-5.2 FP8 AgentX topology on H200 with EAGLE MTP and prefill-side
-# hierarchical KV cache. The decode-side KV cache remains GPU-resident.
 
 dynamo:
   install: true

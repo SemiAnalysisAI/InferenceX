@@ -1,6 +1,3 @@
-# Aggregated TP8 GLM-5.2 AgentX topology on one 8-GPU H200 node. MTP uses the
-# committed GLM-5.2 golden thinking-on acceptance length for three speculative
-# steps, and max-running-requests is twice the concurrency.
 
 schema: 2
 

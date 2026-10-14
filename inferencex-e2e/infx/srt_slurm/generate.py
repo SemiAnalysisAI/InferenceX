@@ -28,7 +28,6 @@ from infx.srt_slurm.workload import bind_multinode, check_setup_script, resolve_
 if TYPE_CHECKING:
     from infx.clusters import Cluster, RunnerInventory
 
-# What benchmark-tmpl.yml and benchmark-multinode-tmpl.yml export.
 RANDOM_RANGE_RATIO = "0.8"
 THINKING_MODE = "thinking_on"
 
@@ -50,6 +49,7 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         "THINKING_MODE": THINKING_MODE,
         "RUN_EVAL": "false",
         "EVAL_ONLY": "false",
+        "REQUIRE_POWER": "1" if point.get("require-power") else "0",
         "ROUTER_METADATA": json.dumps(point["router"]) if point.get("router") else "",
         "KV_OFFLOAD_BACKEND_METADATA": (
             json.dumps(point["kv-offload-backend"])
@@ -70,7 +70,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             CONC_LIST=" ".join(map(str, point["conc"])),
         )
         if agentic:
-            # A multi-node AgentX job serves its one concurrency.
             environment["CONC"] = str(point["conc"][0])
         return environment
     return {
@@ -118,7 +117,6 @@ def _binder_inputs(
     srt = slurm_settings(cluster).srt_slurm
     if srt is None:
         raise ValueError(f"cluster {cluster.id!r} has no slurm.srt-slurm settings")
-    # The job reads these; the binder inputs depend on none of them.
     runtime = {
         "RUNNER_NAME": runner,
         "GITHUB_WORKSPACE": str(root),
@@ -173,7 +171,10 @@ def _cluster_fabric(cluster: Cluster) -> dict[str, str | None]:
 
 
 def _apply_acceptance_and_validate(
-    recipe: dict[str, Any], environment: Mapping[str, str], source: str
+    recipe: dict[str, Any],
+    environment: Mapping[str, str],
+    source: str,
+    cluster_defaults: Mapping[str, Any] | None = None,
 ) -> None:
     """Apply golden-acceptance cleanup, then load the result as srtctl would."""
     from marshmallow import ValidationError
@@ -190,7 +191,9 @@ def _apply_acceptance_and_validate(
             [value for flag, value in pairs if flag == "--unset"],
         ),
     )
-    resolved = resolve_config_with_defaults(deepcopy(recipe), None)
+    resolved = resolve_config_with_defaults(
+        deepcopy(recipe), dict(cluster_defaults) if cluster_defaults else None
+    )
     expand_engine_config_defaults(resolved)
     try:
         SrtConfig.Schema().load(resolved)
@@ -238,7 +241,18 @@ def generate_recipes(
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
             check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
-            _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
+            if "prefill" not in point:
+                clusters = {
+                    inventory.cluster_for(runner).id: inventory.cluster_for(runner)
+                    for runner in inventory.labels[point["runner"]]
+                }
+                for cluster in clusters.values():
+                    srt = slurm_settings(cluster).srt_slurm
+                    _apply_acceptance_and_validate(
+                        recipe, environment, point["srt-recipe"], srt.extra if srt else None
+                    )
+            else:
+                _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
             digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
             name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"

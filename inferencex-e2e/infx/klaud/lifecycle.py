@@ -289,7 +289,6 @@ class Session:
             }
         )
         if outcome.outcome == "validated" and pull:
-            # Reviews start at this transition: prove AND publish results first.
             self.verify(outcome, require_report=False, require_ready=False)
             from .reporting import publish_final
 
@@ -363,7 +362,6 @@ class Session:
                         {"state": "closed"},
                     )
                 self.delete_branch(pull)
-        # PR transitions can enqueue skipped runs. Wait for them before reporting completion.
         outcome = outcome.model_copy(update={"run_ids": sorted(run["id"] for run in self.runs())})
         self.verify(outcome, require_report=False)
         if pull:
@@ -468,7 +466,6 @@ def reconcile(session: Session) -> bool:
     if not pull and not runs:
         return False
     pending = session.pending(pull) if pull else None
-    # Preserve a completed successful sweep even if the agent died before reporting.
     final = [
         run
         for run in runs
@@ -478,8 +475,6 @@ def reconcile(session: Session) -> bool:
         and run["conclusion"] != "skipped"
     ]
     if not pending and any(not terminal(run) for run in runs):
-        # An interruption is not permission to stop healthy child work or block planning.
-        # The durable ownership receipt keeps this family excluded until a later pass.
         raise PendingCleanup("Owned work is still running; retained for the next recovery pass")
     validated = bool(
         final
@@ -490,9 +485,6 @@ def reconcile(session: Session) -> bool:
         try:
             session.validation(max(final, key=lambda r: r["created_at"]))
         except VerificationError:
-            # A completed but uncertifiable run is a terminal inspection outcome,
-            # not an indefinitely open draft. API/ownership uncertainty still bubbles
-            # up and preserves work; no incompatibility is inferred from this failure.
             validated = False
     outcome = pending or CandidateOutcome(
         outcome="validated" if validated else "unexpected-error",
@@ -501,8 +493,6 @@ def reconcile(session: Session) -> bool:
         run_ids=[r["id"] for r in runs],
         repairs_used=None,
     )
-    # Unknown interruption is terminal once owned work has ended; finish records
-    # the evidence, closes the PR, deletes the unchanged branch and releases the family.
     session.finish(outcome)
     return True
 
@@ -512,8 +502,6 @@ def recover() -> None:
     inventory = github.items(
         repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
     )
-    # Refs cover a crash before artifact upload; artifacts cover legacy sessions.
-    # Validate the entire inventory before mutating any owned work.
     owners = [(owner, None) for owner in claims.family_owners(repository)]
     for artifact in inventory:
         if artifact["expired"]:
@@ -594,7 +582,6 @@ def recover() -> None:
             current = github.read(repository, f"actions/runs/{owner.run_id}")
             if terminal(current) and current["run_attempt"] == parents[owner.run_id]["run_attempt"]:
                 github.write(repository, f"actions/artifacts/{artifact['id']}", "DELETE")
-    # Candidate failures are isolated, but their entire families remain unavailable.
     (Path(os.environ["RUNNER_TEMP"]) / "klaud-recovery.json").write_text(
         json.dumps(sorted(blocked))
     )

@@ -240,7 +240,6 @@ class TestWorkerConfig:
             WorkerConfig(**{
                 "num-worker": 2,
                 "tp": 4,
-                # Missing ep and dp-attn
             })
 
     def test_worker_config_extra_field_forbidden(self):
@@ -511,7 +510,7 @@ class TestMultiNodeMatrixEntry:
 
 
     def test_conc_must_be_list(self, valid_multinode_matrix_entry):
-        valid_multinode_matrix_entry["conc"] = 2150  # Single int, not list
+        valid_multinode_matrix_entry["conc"] = 2150
         with pytest.raises(ValidationError):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
@@ -655,7 +654,6 @@ class TestMultiNodeSearchSpaceEntry:
                     "ep": 4,
                     "dp-attn": False,
                 },
-                # Missing conc specification
             })
 
 
@@ -1110,7 +1108,7 @@ class TestValidateRunnerConfig:
     def test_value_must_be_list(self):
         config = {
             "labels": {
-                "h100": "h100-cr_0",  # Not a list
+                "h100": "h100-cr_0",
             },
         }
         with pytest.raises(ValueError) as exc_info:
@@ -1120,7 +1118,7 @@ class TestValidateRunnerConfig:
     def test_list_must_contain_strings(self):
         config = {
             "labels": {
-                "h100": ["h100-cr_0", 123],  # Contains non-string
+                "h100": ["h100-cr_0", 123],
             },
         }
         with pytest.raises(ValueError) as exc_info:
@@ -1335,9 +1333,6 @@ class TestMultiNodeAgenticMatrixEntry:
             if k not in ("prefill", "decode")
         }
         with pytest.raises(ValueError):
-            # Missing single-node-required fields (tp, pp, ...) and conc is a
-            # list rather than a scalar, so this must fail as a single-node
-            # agentic entry rather than silently validating.
             validate_agentic_matrix_entry(without_prefill)
 
 
@@ -1345,7 +1340,6 @@ class TestMultiNodeAgenticMatrixEntry:
 class TestLoadConfigFiles:
 
     def test_load_single_file_with_validation(self, recipe_root, valid_single_node_master_config):
-        # Recipes resolve under the project that holds configs/, not the tooling checkout.
         config_file = recipe_root / "configs/config.yaml"
         config_file.parent.mkdir()
         config_file.write_text(yaml.dump({"test-config": valid_single_node_master_config}))

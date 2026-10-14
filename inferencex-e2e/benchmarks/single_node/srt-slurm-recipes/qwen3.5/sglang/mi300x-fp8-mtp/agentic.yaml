@@ -1,5 +1,3 @@
-# Qwen3.5 FP8 AgentX on MI300X with SGLang native EAGLE MTP. The KV cache is
-# GPU-resident.
 base:
   schema: 2
   name: qwen3.5-fp8-mi300x-sglang-agentic

@@ -295,4 +295,20 @@ cat > /tmp/klaud_pr_diag.json <<'EOF'
 EOF
 ```
 
-See the known failure signatures in `inferencex-e2e/docs/troubleshooting.md#known-failure-signatures` for recurring failure modes to draw diagnoses from.
+Match the first causal error against the exact image, recipe, and hardware before
+proposing a fix. Examples are hypotheses, not permission to change serving semantics:
+
+| Signature | Check or safe next step |
+| --- | --- |
+| Changelog history deleted | Use `.github/workflows/README.md#changelog-conflict-recovery`; never hand-merge history. |
+| vLLM load/KV OOM or DEP CUDA-graph OOM | Distinguish profiling from real allocation; graph limits depend on per-DP-rank load, not global concurrency. |
+| Custom DSV4 image works but generic SGLang OOMs | Verify bundled source and compatibility; do not assume the generic release is interchangeable. |
+| B300 DeepGemm, EAGLE trtllm GEMM, or flash-attn assertion | Distinguish the backend and architecture; verify an upstream-supported image or setting. |
+| Drained node, Pyxis, Docker, full disk, occupied port | Verify current node state; use the existing cluster repair command with approval, not a recipe workaround. |
+| NATS/etcd archive integrity failure | Preserve the first error; only a verified invalid download is retryable. Do not hide other setup errors. |
+| Image tag returns 404 | Verify the exact registry tag; do not guess naming patterns. |
+| Failed-only rerun refused | Confirm completion and conclusion; cancelled runs require a full rerun. Failed ingest targets instead use `recover-failed-ingest.md`. |
+| MiniMax M3 B300 non-contiguous `q2k_indices` | Check TP1/data-parallel-attention exposure and prefer an upstream-fixed image; no unapproved engine patch. |
+
+Follow `../../.github/klaud-candidate-prompt.md` for Klaud-owned work and
+`../../.agents/skills/debug-runs/SKILL.md` for operator-led diagnosis.

@@ -1,5 +1,3 @@
-# DeepSeek-V4-Pro-0813 AgentX on B300 with vLLM DSpark6.
-# TP8 and TP4 c8 are GPU-resident; DEP8 uses SimpleCPUOffloadConnector.
 base:
   schema: 2
   name: dsv4-fp4-b300-vllm-agentic

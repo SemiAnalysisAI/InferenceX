@@ -18,7 +18,6 @@ STAGING_SITE = "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
 def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str]:
     links = payload.get("chart-links")
     if links is None:
-        # Older app deployments send only the run/date selection.
         return [f"{STAGING_SITE}/inference?i_dates={quote(f'{run_date}~r{run_id}')}"]
     if not isinstance(links, list):
         raise RuntimeError("Callback chart-links must be a list")

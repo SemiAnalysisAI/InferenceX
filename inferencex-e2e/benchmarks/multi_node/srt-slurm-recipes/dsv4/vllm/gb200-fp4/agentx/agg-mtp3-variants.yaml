@@ -1,5 +1,3 @@
-# AgentX dsv4 vllm gb200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration.
 
 schema: 2
 
@@ -124,9 +122,6 @@ base:
     env:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
 
-# GB200 AgentX aggregate topology: one TP8 worker spans two four-GPU
-# nodes and serves both prefill and decode at concurrency 4. Keep at least
-# 16 sequence slots and otherwise size the scheduler at 4x concurrency.
 override_c4:
   name: "svf-vllm-agg-gb200-tp8-c4-mtp2-agentic"
   roles:
@@ -138,9 +133,6 @@ override_c4:
         max-num-seqs: 16
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64],"mode":0}'
 
-# GB200 AgentX aggregate topology: one TP8 worker spans two four-GPU
-# nodes and serves both prefill and decode at concurrency 8. Size max-num-seqs at
-# 4x concurrency and expand the MTP CUDA-graph envelope to match.
 override_c8:
   name: "svf-vllm-agg-gb200-tp8-c8-mtp2-agentic"
   roles:

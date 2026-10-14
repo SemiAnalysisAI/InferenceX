@@ -155,11 +155,9 @@ def test_inventory_rejects_inconsistent_labels(runner_config, message):
         ("models.entries", {"Kimi-K3": {"root": "scratch", "dir": "../Kimi-K3"}}, "relative to its root"),
         ("models.download-root", "writable", "unknown volume 'writable'"),
         ("models.download-root", "scratch", "must be a shared volume"),
-        # Fabric values are lists, rendered with commas only at bind time.
         ("slurm.srt-slurm.fabric", {"rdma-devices": "mlx5_0,mlx5_1"}, "valid tuple"),
         ("slurm.srt-slurm.fabric", {"rdma-devices": ["mlx5_0,mlx5_1"]}, "should match pattern"),
         ("slurm.srt-slurm.volume-mounts", {"hf-hub-cache": "/hf_hub_cache"}, "unknown volumes"),
-        # Env values may only reference a field the cluster's own fabric sets.
         ("env", {"MORI_RDMA_TC": "@fabric.rdma-tc"}, "env.MORI_RDMA_TC: this cluster sets no srt-slurm.fabric.rdma-tc"),
         ("slurm.srt-slurm.host-setup", {"script": "setup.sh", "env": {"IBDEVICES": "@fabric.rdma-devices"}},
          "host-setup.env.IBDEVICES: this cluster sets no srt-slurm.fabric.rdma-devices"),

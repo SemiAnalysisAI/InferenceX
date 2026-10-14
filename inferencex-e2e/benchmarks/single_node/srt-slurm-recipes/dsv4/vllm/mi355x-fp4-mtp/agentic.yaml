@@ -1,7 +1,3 @@
-# DeepSeek-V4-Pro-0813 AgentX on MI355X with vLLM DSpark K6
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x). Pure
-# TP8 through c64; the wide band runs DP attention (DEP8) behind the vLLM
-# Router. The KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv4-fp4-mi355x-vllm-agentic

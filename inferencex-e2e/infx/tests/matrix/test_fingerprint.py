@@ -33,7 +33,6 @@ def fixed(*spaces: dict) -> dict:
 MASTER = {
     "single": config(False, fixed({"tp": 4, "conc-list": [2, 4], "srt-recipe": "bundle.yaml"})),
     "other": config(False, fixed({"tp": 4, "conc-list": [2, 4], "srt-recipe": "plain.yaml"})),
-    # Power merges the telemetry block and binds the point's concurrencies into the recipe.
     "multi": config(True, fixed(
         {**ROLES, "conc-list": [2, 4], "srt-recipe": "disagg.yaml:override_a", "power": True},
         {**ROLES, "conc-list": [8], "srt-recipe": "disagg.yaml:override_b"},
@@ -44,7 +43,6 @@ MASTER = {
     }]}]}),
 }  # fmt: skip
 RECIPES = {
-    # Each concurrency pairs with its own tuning.
     f"{SINGLE}/bundle.yaml": {"base": single_node_fragment(4), "zip_override_conc": {
         "roles": {"agg": {"args": {"max-running-requests": [2, 4]}}},
         "benchmark": {"env": {"CONC": ["2", "4"]}},
@@ -166,7 +164,6 @@ AGENTX_POINTS = {("agentx", "agentx.yaml:override_bench", 2)}
         ),
         AGENTX_POINTS, id="agentx-variant",
     ),
-    # Eval-only runs produce no benchmark results.
     pytest.param(
         f"{MULTI}/agentx.yaml",
         lambda recipe: recipe["override_eval"]["roles"]["decode"]["args"].update(
@@ -174,7 +171,6 @@ AGENTX_POINTS = {("agentx", "agentx.yaml:override_bench", 2)}
         ),
         set(), id="agentx-eval-variant",
     ),
-    # Cluster facts: model mounts, the DCGM exporter port and the fabric behind references.
     pytest.param(
         "configs/runners.yaml",
         lambda runners: runners["clusters"]["fixture"]["slurm"]["srt-slurm"].update({
@@ -206,7 +202,6 @@ def test_concurrency_lists_leave_the_remaining_points_alone(project):
     assert before.keys() - after.keys() == {("single", "bundle.yaml", 2)}
     assert after.keys() - before.keys() == {("multi", "disagg.yaml:override_a", 16)}
     assert all(after[point] == before[point] for point in after.keys() & before.keys())
-    # One recipe serves every concurrency of a row, or of a fragment without CONC variants.
     assert after["multi", "disagg.yaml:override_a", 16] == before["multi", "disagg.yaml:override_a", 2]
     assert after["other", "plain.yaml", 2] == after["other", "plain.yaml", 4]
 
@@ -223,7 +218,6 @@ def test_a_point_no_variant_serves_cannot_be_fingerprinted(project):
 
 def test_rows_without_an_srt_recipe_hash_the_row_alone():
     row = {"image": "img", "model": "m", "conc": 4, "exp-name": "x", "recipe-fingerprint": "old"}
-    # sha256 of {"image":"img","model":"m"}: published results of older revisions match it.
     assert recipe_fingerprint(row, Path("/nonexistent")) == (
         "adfebb88b80b867b258d2e9f972eb51f9f8c8bb2ae2bef10ab80ca8226913878"
     )
@@ -238,6 +232,5 @@ def test_the_planner_binds_a_script_installed_version_from_the_row(project):
     runners = load_runner_file(str(project / "configs/runners.yaml"))
     [row, *_] = generate_config_matrix(["multi"], master, runners, eval_mode="none", root=project)
 
-    # The checkout's setup scripts are not needed to plan.
     _, recipe = bound_variant(row, point_environment(row), project, expand=expand_variants)
     assert recipe["environment"] == {"ROUTER_VERSION": "0.1.14"}

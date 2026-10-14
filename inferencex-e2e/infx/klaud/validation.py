@@ -54,21 +54,22 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         validate_master_config,
         validate_runner_config,
     )
-    from infx.srt_slurm.workload import SHARED_BLOCKS, TELEMETRY_BLOCK
+    from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     source, key = family.split(":", 1)
     prefix = project_prefix(repository, head)
     master = yaml.safe_load(github.file_at(repository, head, prefix + source))
     runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
-    # Only the selected family is relevant; retired sibling schemas may have changed.
     family_config = {key: master[key]}
     with tempfile.TemporaryDirectory(prefix="klaud-recipes-") as temp:
-        # Recipes and their shared blocks are head data too: resolve them from the candidate.
         root = Path(temp)
         references = srt_recipe_references(family_config)[key]
         paths = {reference.partition(":")[0] for reference in references}
-        blocks = [block.as_posix() for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK)]
+        blocks = [
+            block.as_posix()
+            for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK, NATIVE_TELEMETRY_BLOCK)
+        ]
         for path in [*paths, *blocks]:
             (root / path).parent.mkdir(parents=True, exist_ok=True)
             (root / path).write_bytes(github.file_at(repository, head, prefix + path))
@@ -128,7 +129,6 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
             rows = producer.generate([family.split(":", 1)[1]], ["--no-evals"])
             if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
                 raise ValueError("the generator did not print a list of matrix rows")
-            # Published results carry the fingerprints the producer's own planner assigned.
             fingerprints = producer.fingerprints(rows)
     except subprocess.SubprocessError as error:
         stderr = getattr(error, "stderr", None) or b""
@@ -179,8 +179,6 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
         measured = {
             key: value for key, value in entry.items() if key not in ("priority", "queue-token")
         }
-        # The workflow adds schema defaults AFTER fingerprinting. Compare complete
-        # settings with the independently generated recipe under that same schema.
         normalized = schema.validate_python(measured).model_dump(by_alias=True, exclude_none=True)
         if any(generated.get(point) != normalized for point in benchmark_points([entry])):
             raise VerificationError("Matrix settings do not match the canonical recipe")
@@ -261,7 +259,6 @@ def check_coverage(
         "eval", expected_evals(matrix), {row[:-1] for row in eval_rows}
     )
     if errors:
-        # Only a fixed failure code escapes: no raw artifact data in public diagnostics.
         raise VerificationError("Full-sweep result coverage or consistency failed")
 
 
