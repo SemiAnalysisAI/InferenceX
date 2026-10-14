@@ -9718,3 +9718,14 @@
     - "Enable INT4 QuickReduce with a 256 MiB size limit and FlyDSL stage-2 FP8 on prefill and decode workers."
     - "Configure MoRIIO READ and prefill-only SimpleCPUOffloadConnector through native role arguments. Use recipe-scoped draft checkpoint and RDMA device/provider mounts. Use the upstream discovery-template fix from srt-slurm #508 through the shared v2.51.1 dependency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3582
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261013."
+    - "Raise concurrency-64 chunked-prefill-size for better TTT (TP-only 4096 to 16384; DP2 per-rank 4096 to 16384 / engine-wide 8192 to 32768)."
+    - "Extend TP2 and TP4 AgentX to concurrency 32 so TP-only overlaps DP2 at c32."
+    - "Enable SGLANG_OPT_HIP_FLYDSL_MXFP8=1."
+  pr-link: TBD
