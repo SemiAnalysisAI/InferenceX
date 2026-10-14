@@ -109,6 +109,7 @@ override_1p2d_tep8_b8_mtp3_c20:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -124,6 +125,7 @@ override_1p2d_tep8_b8_mtp3_c20:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -158,6 +160,7 @@ override_1p4d_tep8_b1_mtp3_c12:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -173,6 +176,7 @@ override_1p4d_tep8_b1_mtp3_c12:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -197,7 +201,7 @@ override_1p4d_tep8_b1_mtp3_c12:
 override_1p4d_tep8_b2_mtp3_c8:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.3.0rc29
   roles:
     prefill:
       nodes: 1
@@ -209,6 +213,7 @@ override_1p4d_tep8_b2_mtp3_c8:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -224,6 +229,7 @@ override_1p4d_tep8_b2_mtp3_c8:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -259,6 +265,7 @@ override_4p3d_tep8_b32_mtp3_c126:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -274,6 +281,7 @@ override_4p3d_tep8_b32_mtp3_c126:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -305,7 +313,7 @@ override_4p3d_tep8_b32_mtp3_c126:
 override_5p1d_dep16_b8_mtp3_c154:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.3.0rc29
   engine:
     sequential_node_start: 2
   roles:
@@ -369,6 +377,7 @@ override_7p1d_dep16_b32_mtp3_c666:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -384,6 +393,7 @@ override_7p1d_dep16_b32_mtp3_c666:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -415,7 +425,7 @@ override_7p1d_dep16_b32_mtp3_c666:
 override_11p1d_dep8_b128_mtp3_c1229:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.3.0rc29
   engine:
     sequential_node_start: 2
   roles:
@@ -501,7 +511,7 @@ override_11p1d_dep8_b128_mtp3_c1229:
 override_17p2d_dep8_b64_mtp3_c1126:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.3.0rc29
   engine:
     sequential_node_start: 2
   roles:
@@ -569,7 +579,7 @@ override_17p2d_dep8_b64_mtp3_c1126:
 override_26p1d_dep16_b256_mtp2_c4301:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.3.0rc29
   engine:
     sequential_node_start: 2
   roles:
@@ -687,7 +697,7 @@ override_26p1d_dep16_b256_mtp2_c4301:
 override_24p1d_dep16_b512_mtp0_c8192_mtp_sweep:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.3.0rc29
   engine:
     sequential_node_start: 2
   roles:
