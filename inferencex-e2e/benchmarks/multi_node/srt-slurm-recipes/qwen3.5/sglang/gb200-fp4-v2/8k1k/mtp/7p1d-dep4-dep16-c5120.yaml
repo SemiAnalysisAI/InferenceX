@@ -1,5 +1,3 @@
-# V2 mixed quantization uses the CuteDSL MoE path at this saturated wide-EP point.
-# Topology and serving knobs are pinned for reproducibility.
 schema: 2
 name: qwen35-v2-gb200-c5120-7p1d-dep4-dep16-mtp2-cap2048
 dynamo:

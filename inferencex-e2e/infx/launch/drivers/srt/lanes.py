@@ -41,7 +41,6 @@ class SrtLane:
     time_limit: str | None = None
     long_time_limit: str | None = None
     long_time: Match | None = None
-    # Where the AgentX client writes its per-concurrency artifacts in the container.
     agentic_result_dir: str = "/logs/agentic"
 
 

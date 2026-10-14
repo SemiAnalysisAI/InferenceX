@@ -35,7 +35,6 @@ def _value(argv: list[str], flag: str) -> str | None:
 
 
 def test_default_point_leaves_the_replay_policy_to_the_scenario():
-    # A workflow MAX_MODEL_LEN is not the server's limit, so it never caps the replay.
     assert _argv(MAX_MODEL_LEN="131072") == [
         "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
@@ -86,7 +85,6 @@ def test_opt_in_inputs_add_their_flags_in_place():
     [
         ({"DURATION": "899"}, "899", None, True),
         ({"DURATION": "900"}, "900", None, False),
-        # agentx-fast's 20-minute profile meets the scenario minimum the caller's 300 s misses.
         ({"AIPERF_EXPERIMENTAL_FAST": "1", "DURATION": "300"}, "1200", "1", False),
     ],
 )
@@ -172,10 +170,8 @@ def test_malformed_replay_inputs_are_rejected(overrides, message):
 @pytest.mark.parametrize(
     ("prefix", "override", "loader"),
     [
-        # Families match by prefix, so a variant of a 1M-context family replays its corpus.
         ("big41flash", None, traces.UNCAPPED),
         ("other", None, traces.CAPPED),
-        # A pin beats the family default, and the pre-download follows the pinned corpus.
         ("other", traces.UNCAPPED, traces.UNCAPPED),
     ],
 )

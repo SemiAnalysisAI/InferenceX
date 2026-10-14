@@ -1,7 +1,3 @@
-# Qwen3.5 NVFP4 V2 benchmark operating point.
-# Seven DEP4 prefill workers feed four DEP4 MTP1 decode workers.
-# srt-slurm's sa-bench ran this point with reuse_http_connections: true; the
-# InferenceX client has no such option and opens a connection per request.
 schema: 2
 name: qwen35-v2-gb200-c12288-7p4d-dep4-mtp1-cap1056
 dynamo:

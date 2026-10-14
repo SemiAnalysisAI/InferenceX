@@ -91,8 +91,7 @@ def release_family(repository: str, candidate: OwnedCandidate, parent: int) -> N
         return
     ownership = Ownership.model_validate(record(repository, value))
     if ownership.run_id != parent or ownership.candidates != [candidate]:
-        return  # Historical recovery must never remove a later session's claim.
-    # Only this owner or its exclusive recovery lease can release this immutable ref.
+        return
     github.write(repository, "git/refs/heads/" + name, "DELETE")
 
 

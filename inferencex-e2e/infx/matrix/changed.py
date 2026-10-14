@@ -26,7 +26,6 @@ from .generate import generate_config_matrix
 from .revision import snapshot
 from .validation import config_root, load_config_files, load_runner_file
 
-# Each key's points by (fingerprint, concurrency), and why any of its rows has no fingerprint.
 Matrix = dict[str, tuple[dict[tuple[str | None, int], dict[str, Any]], list[str]]]
 
 
@@ -63,7 +62,6 @@ def base_matrix(ref: str, config_files: list[str]) -> Matrix:
         master = load_config_files([str(path) for path in files if path.is_file()], validate=False)
         singles = []
         for index, (key, entry) in enumerate(master.items()):
-            # Validating every entry per key would dominate the run.
             single = configs / f"changed-{index}.yaml"
             single.write_text(yaml.safe_dump({key: entry}, sort_keys=False))
             singles.append(str(single))
@@ -152,7 +150,6 @@ def main(argv: list[str] | None = None) -> None:
             for point in points:
                 print(f"  {sign} {_label(point)}")
     print(f"{len(changed)} of {len(keys)} config keys changed since {args.base}.")
-    # Planning a row without a fingerprint fails; --json carries every message in full.
     for key in keys:
         current, previous = head.get(key, ({}, []))[1], base.get(key, ({}, []))[1]
         if current:

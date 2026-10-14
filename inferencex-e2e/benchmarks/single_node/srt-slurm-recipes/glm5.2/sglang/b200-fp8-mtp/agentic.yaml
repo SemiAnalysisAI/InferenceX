@@ -1,6 +1,3 @@
-# GLM-5.2 FP8 AgentX on B200 with SGLang EAGLE MTP off the checkpoint's nextn
-# head: the TP8 low-latency arm (fp8 KV, cutedsl bf16 GEMM) with HiCache
-# host-DRAM offload at every point.
 base:
   schema: 2
   name: glm5.2-fp8-b200-sglang-agentic

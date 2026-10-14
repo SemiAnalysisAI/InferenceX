@@ -163,7 +163,6 @@ def run_multinode(launch: Launch) -> int:
     power_port, client_env = config.binder_inputs(run.cluster, run.srt, lane, request, decision)
     if rc := submit.bind_recipe(run, checkout, staged, recipe, power_port, client_env):
         return rc
-    # Only the bound recipe is flat: a bundle keeps its names and roles under base and overrides.
     prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
     arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
     manifest = run.workspace / submit.MULTINODE_SUBMISSION

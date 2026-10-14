@@ -1,7 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on MI355X with ATOM DSpark (five draft tokens),
-# following ROCm/ATOM recipes/DeepSeek-V4.1-Flash-Agentic.md at the image's
-# revision (a0527c9dbfb801e22cd29882454df6f6d21cdd91). TP2 and TP4, no expert
-# parallelism; the KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-atom-agentic

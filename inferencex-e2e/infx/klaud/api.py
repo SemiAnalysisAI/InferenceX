@@ -174,8 +174,6 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
     age = (utc(now) - utc(feed.retrieved_at)).total_seconds()
     if age < -policy.clock_skew_seconds or age > policy.public_max_age_seconds:
         issues.append("feed-retrieval-stale")
-    # The public API/CDN owns cache freshness. Age is time in a shared cache,
-    # not the age of the benchmark data; do not impose a second CDN TTL here.
     return issues
 
 
@@ -244,8 +242,6 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             or raw["data"]["available"] is not True
         ):
             return set()
-        # Validate the consumed fields, not schemaVersion: additive API changes
-        # must not turn healthy capacity into an empty candidate list.
         available: set[str] = set()
         seen: set[str] = set()
         for cluster in raw["data"]["clusters"]:
@@ -253,8 +249,6 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             if not isinstance(cluster_id, str) or not cluster_id or cluster_id in seen:
                 return set()
             seen.add(cluster_id)
-            # The API owns the cluster-age cutoff. Check timestamp validity/order,
-            # but do not impose a second cutoff on its current snapshots.
             observed, received = utc(cluster["observedAt"]), utc(cluster["receivedAt"])
             generated = utc(raw["generatedAt"])
             if (
@@ -283,7 +277,6 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
                 or sum(counts) != total
             ):
                 continue
-            # An entirely down/unavailable cluster can also report 0% utilization.
             if (
                 summary["idleNodes"] > 0
                 and (summary["allocatedNodes"] + summary["mixedNodes"]) * 5 < total * 4

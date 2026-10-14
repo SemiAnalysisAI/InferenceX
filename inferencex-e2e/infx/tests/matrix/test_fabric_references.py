@@ -21,7 +21,6 @@ def generate(project, reference: str, fabrics: dict[str, dict], runner: str = "h
     """The fixture rows on ``runner``, the selected variant's prefill UCX devices set to ``reference``."""
     recipe = {
         "base": {"schema": 2, "engine": "sglang", "roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 1}}},
-        # The unselected variant's typo does not concern this row.
         "override_narrow": {"roles": {"prefill": {"env": {"UCX_NET_DEVICES": "@fabric.typo"}}}},
         "override_wide": {"roles": {"prefill": {"env": {"UCX_NET_DEVICES": reference}}}},
     }  # fmt: skip
@@ -69,6 +68,5 @@ def test_a_reference_no_fabric_field_or_reachable_cluster_serves_fails_generatio
 
 
 def test_a_runner_no_cluster_label_lists_still_has_its_reference_names_checked(tmp_path):
-    # Master configs may name a bare cluster id as the runner; no label maps it to a fabric.
     with pytest.raises(ValueError, match=r"'@fabric\.rdma-device-port' is not a whole .* \(runner 'h200-a'\)"):
         generate(tmp_path, "@fabric.rdma-device-port", {"h200-a": DEVICES}, runner="h200-a")

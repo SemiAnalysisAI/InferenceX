@@ -151,8 +151,6 @@ class HostSetup(Record):
         return script
 
 
-# Each field's type is how a recipe reads it: every list consumer (UCX, NCCL, Gloo, SGLang,
-# Mooncake, IBDEVICES) parses one comma-separated string, and env values are strings.
 FabricName = Annotated[str, Field(pattern=r"^[^,\s]+$")]
 FabricList = Annotated[
     tuple[FabricName, ...], Field(min_length=1), PlainSerializer(",".join, return_type=str)

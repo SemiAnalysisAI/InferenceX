@@ -1,5 +1,3 @@
-# GLM-5.2 FP8 AgentX on MI355X with SGLang EAGLE MTP. The ~756 GB
-# block-FP8 checkpoint is TP8-only; quantization is detected from the checkpoint.
 base:
   schema: 2
   name: glm5.2-fp8-mi355x-sglang-agentic

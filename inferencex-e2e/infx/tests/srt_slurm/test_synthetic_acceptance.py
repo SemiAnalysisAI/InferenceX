@@ -20,7 +20,6 @@ from infx.srt_slurm.synthetic_acceptance import (
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 
-# Exercise the pinned upstream checkout without installing its serving dependencies.
 from srtctl.core.overrides import (  # noqa: E402
     apply_overrides_to_recipe,
     parse_overrides,
@@ -283,7 +282,6 @@ def test_atom_forces_golden_acceptance_by_server_flag(
     env = {**ENV, "MODEL_PREFIX": prefix}
     result = apply_native(recipe, build_overrides(recipe, "atom", env, golden_dir=golden_dir))
     assert result["roles"]["agg"]["args"]["spec-decode-acceptance-length"] == expected
-    # Evals verify real drafts, so a recipe-pinned acceptance length is removed.
     evaluated = apply_native(
         result, build_overrides(result, "atom", {**env, "EVAL_ONLY": "true"}, golden_dir=golden_dir)
     )

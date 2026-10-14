@@ -1,5 +1,3 @@
-# Production MI355X port of the legacy Qwen3.5 MXFP4 1P1D sweep. Each role
-# owns one full 8-GPU node; SGLang Router carries requests and AMD MoRI moves KV.
 
 schema: 2
 name: "mi355x-sglang-qwen3.5-mxfp4-disagg-1p1d-tp8-fixed-seq"

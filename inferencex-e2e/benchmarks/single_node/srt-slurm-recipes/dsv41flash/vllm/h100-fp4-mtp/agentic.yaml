@@ -1,11 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on H100 with vLLM native DSpark
-# (https://github.com/vllm-project/recipes/blob/main/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml).
-# At 1M context the sparse-attention indexer allocates a [max-num-batched-tokens,
-# max-model-len] fp8 logits buffer during startup profiling (8192 x 1048576 x 2 B =
-# 16 GiB), which OOMs next to ~36 GiB/GPU of weights on 80 GB cards. Capping
-# batched tokens shrinks it; capping max-model-len would force the 256k-capped
-# corpus onto a 1M-context model. Engram weights use UVA DRAM; the KV cache is
-# GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-h100-vllm-agentic

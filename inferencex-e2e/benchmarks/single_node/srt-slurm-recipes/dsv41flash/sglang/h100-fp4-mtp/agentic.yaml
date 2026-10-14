@@ -1,11 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on H100 with SGLang native DSpark at TP8/EP8, as
-# a plain TP8 curve and a DP8-attention sweep. H100 is not in the cookbook's
-# hardware table: 80 GB cards cannot hold the resident weights plus the
-# row-sharded Engram tables and still leave a KV pool, so the tables move to
-# per-rank host shards and the prefill chunk is bounded so the sparse-attention
-# indexer's [chunk, context] scoring buffer fits next to the weights at 1M
-# context. The KV cache is GPU-resident.
-# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 base:
   schema: 2
   name: dsv41flash-fp4-h100-sglang-agentic

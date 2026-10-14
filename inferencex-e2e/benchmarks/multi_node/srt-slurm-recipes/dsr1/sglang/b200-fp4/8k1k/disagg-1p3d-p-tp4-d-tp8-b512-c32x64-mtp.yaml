@@ -1,10 +1,6 @@
 schema: 2
 name: "b200-fp4-mtp-low-latency-1p-tp4-3d-tp8"
 
-# Derived from the srt-slurm b200-fp4 8k1k recipe (recipes/dsr1/sglang/b200-fp4/8k1k/disagg-stp-mtp-variants.yaml
-# base + zip_override_mtp_lowlat[1], 1p-tp4 prefill / 3d-tp8 decode).
-# One flat YAML per concrete topology, matching the InferenceX glm5 disagg
-# layout (<model-prefix>/<engine>/<gpu>-<precision>/<workload>/<recipe>.yaml).
 
 dynamo:
   install: true

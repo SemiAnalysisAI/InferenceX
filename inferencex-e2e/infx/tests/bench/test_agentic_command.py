@@ -42,7 +42,6 @@ POINT = {
     "AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID": "false",
     "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING": "1",
 }
-# The runtime's python: each result step logs itself and exits with its *_RC.
 FAKE_PYTHON = r"""#!/bin/bash
 case "$2" in
     infx.results.agentic.process_agentic_result)
@@ -139,7 +138,6 @@ def test_points_that_cannot_be_measured_fail_before_setup(tmp_path, overrides, m
 
 
 def test_standalone_srt_slurm_point_needs_no_kv_offload_declaration(tmp_path):
-    # srt-slurm's benchmarks/agentx.sh sets neither IS_AGENTIC nor KV_OFFLOADING.
     plan = Plan.from_env(_point(tmp_path, IS_AGENTIC=None, KV_OFFLOADING=None))
     assert plan.result_filename == "agentx"
 
@@ -158,7 +156,6 @@ REPLAYED = {"benchmark.log", "benchmark_command.txt"}
     ("overrides", "rc", "events", "files"),
     [
         pytest.param(
-            # Only srt-slurm's multi-node telemetry measures power, whatever these say.
             {"ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"},
             0,
             ["replay", "aggregate agentx", "analyze", "validate"],
@@ -258,7 +255,6 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 def test_required_server_metrics_gate_an_otherwise_clean_point(tmp_path, csv, prefix, error):
     artifacts = tmp_path / "results" / "aiperf_artifacts"
     artifacts.mkdir(parents=True)
-    # The quoted prefix straddles the scanner's first 1 MiB chunk.
     exported = b" " * ((1 << 20) - 3) + b'{"vllm:num_requests_running": 1}'
     (artifacts / "server_metrics_export.json").write_bytes(exported)
     if csv:
@@ -284,8 +280,6 @@ def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
         while "replay" not in _events(tmp_path):
             assert time.monotonic() < deadline, "the replay did not start"
             time.sleep(0.01)
-        # The whole job gets the signal, like a terminal interrupt. SIGTERM and SIGHUP share the
-        # handler; test_fixed_seq's relay cases send those two.
         os.killpg(driver.pid, signal.SIGINT)
         _, stderr = driver.communicate(timeout=10)
     finally:
@@ -297,7 +291,6 @@ def test_signal_during_the_replay_skips_scoring_and_exits_128_plus_n(tmp_path):
     assert _events(tmp_path) == ["replay"]
 
 
-# The replay records its argv, writes one profiled request, and prints progress.
 FAKE_AIPERF_SCRIPT = r"""
 import json, os, pathlib, shlex, sys
 argv = sys.argv[1:]
@@ -328,7 +321,6 @@ record = {
 }))
 print("fake aiperf: profiled 1 request", flush=True)
 """
-# uv stand-in: `venv` makes a real (pip-less) venv; `pip install` adds AIPerf and hf stubs.
 FAKE_UV = r"""#!/bin/sh
 case "$1" in
     venv) for target; do :; done; exec "$REAL_PYTHON" -m venv --without-pip "$target" ;;
@@ -348,7 +340,6 @@ def test_srt_shim_builds_the_runtime_waits_for_the_server_and_writes_the_point(
     tools = tmp_path / "tools"
     tools.mkdir()
     executable(tools / "uv", FAKE_UV)
-    # The serving image's python3; it only needs the standard library.
     (tools / "python3").symlink_to(sys.executable)
     script = tmp_path / "fake_aiperf.py"
     script.write_text(FAKE_AIPERF_SCRIPT)
@@ -381,7 +372,6 @@ def test_srt_shim_builds_the_runtime_waits_for_the_server_and_writes_the_point(
 
     assert result.returncode == 0, result.stderr
     assert _events(tmp_path) == [
-        # MODEL_PREFIX=test is no 1M-context family, so the point replays the capped corpus.
         f"hf download --repo-type dataset {traces.LOADERS[traces.CAPPED]}",
         "GET /v1/models",
         "GET /v1/chat/completions",

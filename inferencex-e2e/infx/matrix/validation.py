@@ -20,7 +20,6 @@ from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
 MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
-# llm-d jobs read CONFIG_FILE (benchmarks/multi_node/llm-d-recipes) instead of srt-recipe.
 LLMD_FRAMEWORK = "llmd-vllm"
 RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
 
@@ -31,7 +30,6 @@ RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
 
 
 class Fields(Enum):
-    # Top-level config fields
     IMAGE = "image"
     MODEL = "model"
     MODEL_PREFIX = "model-prefix"
@@ -42,16 +40,13 @@ class Fields(Enum):
     SCENARIOS = "scenarios"
     MULTINODE = "multinode"
 
-    # Scenario type keys
     FIXED_SEQ_LEN = "fixed-seq-len"
     AGENTIC_CODING = "agentic-coding"
 
-    # Seq-len-config fields
     ISL = "isl"
     OSL = "osl"
     SEARCH_SPACE = "search-space"
 
-    # Search-space/benchmark fields
     TP = "tp"
     SRT_RECIPE = "srt-recipe"
     SRT_RECIPE_DIR = "srt-recipe-dir"
@@ -66,7 +61,6 @@ class Fields(Enum):
     EP = "ep"
     DP_ATTN = "dp-attn"
 
-    # Multinode-specific fields (when MULTINODE = true)
     SPEC_DECODING = "spec-decoding"
     WORKER = "worker"
     PREFILL = "prefill"
@@ -76,7 +70,6 @@ class Fields(Enum):
     MAX_NUM_TOKENS = "max-num-tokens"
     ADDITIONAL_SETTINGS = "additional-settings"
 
-    # Agentic coding fields
     KV_OFFLOADING = "kv-offloading"
     KV_OFFLOAD_BACKEND = "kv-offload-backend"
     ROUTER = "router"
@@ -91,7 +84,6 @@ class Fields(Enum):
     REQUIRE_POWER = "require-power"
     POWER = "power"
 
-    # Matrix entry fields
     CONC = "conc"
     MAX_MODEL_LEN = "max-model-len"
     EXP_NAME = "exp-name"
@@ -99,7 +91,6 @@ class Fields(Enum):
     DISAGG = "disagg"
     SCENARIO_TYPE = "scenario-type"
 
-    # Eval
     RUN_EVAL = "run-eval"
     EVAL_ONLY = "eval-only"
     EVAL_CONC = "eval-conc"
@@ -361,8 +352,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows carry selection and evaluator metadata. Benchmark-only
-    # rows omit them, and exclude_none keeps them out of dumped matrix output.
     run_eval: bool | None = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: bool | None = Field(default=None, alias=Fields.EVAL_ONLY.value)
     eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
@@ -416,10 +405,6 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows carry selection, concurrency, and evaluator metadata.
-    # Benchmark-only rows omit them, and exclude_none keeps them out of dumped
-    # matrix output. Multi-node agentic evals run one selected concurrency per
-    # job, so they do not use eval-all-concs.
     run_eval: bool | None = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: bool | None = Field(default=None, alias=Fields.EVAL_ONLY.value)
     eval_conc: int | None = Field(default=None, alias=Fields.EVAL_CONC.value)
@@ -587,7 +572,6 @@ def _recipe_reference(value: str) -> str:
 
 
 RecipeDir = Annotated[str, AfterValidator(_recipe_path)]
-# <file under srt-recipe-dir>[:<selector>]
 RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 
 
@@ -1056,7 +1040,6 @@ def srt_recipe_path(multinode: bool, directory: str, reference: str) -> str:
 
 
 def _zip_length(group: Any) -> int:
-    # srtctl broadcasts length-1 lists, so the longest list is the variant count.
     if isinstance(group, list):
         return len(group)
     if isinstance(group, dict):
@@ -1123,9 +1106,6 @@ def validate_master_config(master_configs: dict, root: Path) -> dict:
             except ValueError as e:
                 raise ValueError(f"Master config entry '{key}' failed validation:\n{e}") from e
     return master_configs
-
-
-# Runner Config Validation
 
 
 def _validate_runner_labels(labels: dict) -> None:
@@ -1236,15 +1216,10 @@ class ChangelogMatrixEntry(BaseModel):
         default_factory=dict
     )
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
-    # Each bucket maps to a run-sweep.yml job with fixed inputs. Separate
-    # AgentX rows so they cannot dispatch the fixed-sequence benchmark.
     agentic_evals: list[SingleNodeAgenticMatrixEntry] = Field(default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
     multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
-
-
-# File Loading Functions
 
 
 def load_config_files(config_files: list[str], validate: bool = True) -> dict:
@@ -1257,8 +1232,6 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
                 if not isinstance(config_data, dict):
                     raise ValueError(f"Config file '{config_file}' must contain a dictionary")
 
-                # Don't allow '*' wildcard in master config keys as we need to reserve these
-                # for expansion in infx.matrix.plan
                 for key in config_data:
                     if not isinstance(key, str):
                         raise ValueError(

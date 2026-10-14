@@ -1,6 +1,3 @@
-# DeepSeek-V4.1-Flash AgentX on GB200 with vLLM native DSpark
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). Engram weights use
-# UVA DRAM; the KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-gb200-vllm-agentic
