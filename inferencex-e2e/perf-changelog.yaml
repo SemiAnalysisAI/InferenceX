@@ -9901,4 +9901,4 @@
     - "Add Muse Spark Open NVFP4 AgentX on B200 with upstream SGLang and DFlash2 speculative decoding at TP4/EP4."
     - "Use modelopt_fp4, flashinfer_trtllm MoE, FP8 KV, layernorm sequence parallelism with MegaMoE, and an 8-token DFlash verification block with acceptance selected from the committed golden curve."
     - "Disable prefill CUDA graphs and use mem-fraction-static 0.88 to preserve KV capacity. Sweep concurrency 1, 2, 4, 8, 12, 16, 24, and 32 with GPU-resident KV."
-  pr-link: ""
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4147
