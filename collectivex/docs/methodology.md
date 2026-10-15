@@ -1,11 +1,11 @@
 # CollectiveX EP Benchmark Methodology
 
-CollectiveX schedules expert-parallel (EP) communication benchmarks, executes them on real
-accelerator allocations, and uploads the neutral artifacts each run emits. It does **not** validate
-those artifacts, promote, rank, recommend, select, hide, or decide what any consumer displays. The
-frontend reads the neutral matrix, result, and summary artifacts and makes its own coverage
-and display decisions. This document describes how a case is scheduled, measured, checked, and
-recorded, not a publication or qualification contract.
+CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
+allocations and writes one result document per case into `collectivex/results/`. Committing those
+files is the publish step. It does **not** rank, recommend, select, or decide what any consumer
+displays. The frontend reads `results/cases.json` and the committed result documents and makes its
+own coverage and display decisions. This document describes how a case is scheduled, measured,
+checked, and recorded, not a publication or qualification contract.
 
 ## Product Boundary
 
@@ -114,7 +114,7 @@ traffic and the FP8 dequant volume.
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`,
 `--ep-sizes`, and `--precisions` select a subset. A subset produces a smaller matrix, not a
-different contract. The matrix is generated per dispatch. There is no frozen matrix digest or locked
+different contract. The matrix is generated per run. There is no frozen matrix digest or locked
 case count.
 
 | Systems | EP8 | EP16 |
@@ -199,8 +199,8 @@ unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same 
 NVIDIA-only and CUDA 13 only, and runs EP8 and EP16 on all six NVIDIA SKUs: EP16 stays inside the
 MNNVL scale-up domain on GB200/GB300 and is a 2x8 RDMA scale-out over the cross-node GIN path on
 H100/H200/B200/B300. Under v0.1 that GIN path faulted inside `nccl_ep.cc` identically on RoCE and IB
-on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200 (full decode and
-prefill ladders correct), with B300 enabled on the same fix pending its pool's revalidation. FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM. It is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32. The adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. Its FP8 dispatch is the one (backend, precision) pair here that is realizable but off every deployed path. vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it back in for transport comparison against DeepEP V2/UCCL-EP at matching bytes and block size: the one place a precision filter ADDS rows rather than only removing them.
+on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200, and on B300 over
+EFA proxy GIN (full decode and prefill ladders correct). FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM. It is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32. The adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. Its FP8 dispatch is the one (backend, precision) pair here that is realizable but off every deployed path. vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it back in for transport comparison against DeepEP V2/UCCL-EP at matching bytes and block size: the one place a precision filter ADDS rows rather than only removing them.
 
 A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
 the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
@@ -295,12 +295,14 @@ and gb200 hand references were confirmed against two-pass fleet artifacts (runs 
 31089556516). Both `p50` and `p99` are
 emitted either way and `summarize.py` prints both. MAX is the fresh-entry family's reduction because
 a layer is not finished until its slowest rank is, so MAX is the completion cost, and it charges
-inter-rank entry stagger to whichever component the ranks entered unevenly. That stagger depends on
-the code path AND the precision, not only on the fleet: on identical h200 low-latency decode cells
-the per-iteration spread is ~9.3 us for deepep-v2 and uccl-ep at BF16 (they share the legacy
-`Buffer` path) against ~2.6 us for nccl-ep, and collapses to ~2.8 us for those same two under FP8,
-where in-kernel quantisation makes the heavier dispatch self-align the ranks. The term is not
-subtractable in any principled way, so MAX alone taxes some rows more than others.
+inter-rank entry stagger to whichever component the ranks entered unevenly. Before per-sample
+alignment (CUDA Graph Replay below) that stagger depended on the code path AND the precision, not
+only on the fleet: on identical h200 low-latency decode cells the per-iteration spread was ~9.3 us
+for deepep-v2 and uccl-ep at BF16 (they share the legacy `Buffer` path) against ~2.6 us for
+nccl-ep, and collapsed to ~2.8 us for those same two under FP8, where in-kernel quantisation makes
+the heavier dispatch self-align the ranks. Alignment removes most entry stagger; ranks still leave a
+window unevenly (h200 uccl-ep prefill spreads 11-67 us at p50), and that term is not subtractable
+in any principled way, so MAX alone taxes some rows more than others.
 
 Every row therefore also carries `cross_rank_min_us` (the same iterations reduced with MIN, the
 skew-excluded floor) and `cross_rank_spread_us` (per-iteration MAX minus MIN). Read MAX and MIN as a
@@ -353,10 +355,85 @@ drained pair (`cuda_graph_last_output_passed`). Graphed rows carry a `-cudagraph
 `kernel_generation`, so the durable store never pools them with eager rows; the artifact also
 records `implementation.cuda_graph_replay` and `cuda_graph_supported`.
 
+**Eager rows align the same way.** A row that stays eager (no graph-safe mode, or
+`COLLX_CUDA_GRAPH=0`) opens each fresh-entry sample the way DeepEP's `bench_kineto` does: a GPU
+spin, then a device all-reduce, both queued ahead of the sample with no host sync before the start
+event. The spin lasts 2 ms of wall time (`COLLX_ALIGN_SPIN_US`; DeepEP spins about 10 ms) and is
+calibrated after each series' warm-up, because `torch.cuda._sleep` counts SM cycles. It outlasts
+the host's enqueue of the sample, so the last rank to arrive already has its timed work queued when
+the all-reduce releases everyone, and every rank's window opens at the barrier's exit instead of at
+its host's launch: the entry skew and the first kernel's launch latency both leave the window
+(about 25 µs off `cross_rank_min_us` as well as MAX on h200). A 500 µs spin covered the typical
+50-70 µs enqueue but not its occasional stalls: h200 uccl-ep normal decode roundtrip p99 roughly
+doubled and spread p99 rose from ~20 to 185-293 µs.
+
+A sample counts as **missed** when some rank's host took longer than the spin to get from the
+spin's enqueue to the start event's record, so that rank's window may have opened after the barrier
+released the others. Each eager row publishes `rank_alignment.missed_samples` per series and
+`missed_fraction`, the largest share among roundtrip, dispatch and combine (staging is local work).
+Every fresh-entry tail in the row (components, `cross_rank_min_us` and the token rates) is withheld
+once the samples that were missed or host-stalled (below), each counted once, could fill everything
+above it: p99 at 1% of samples, p95 at 5%, p90 at 10%. `implementation.rank_alignment` records the
+method and spin; graphed rows say `in-graph-all-reduce` and carry `rank_alignment: null`.
+
+**Host-synced series wait out a throttled host.** In modes whose dispatch waits on the host
+(uccl-ep normal, deepep-v2 normal prefill) the barrier aligns the dispatch launch, and the host's
+poll and relaunch sit inside the window. That is their production cost, and it carries the host's
+speed into the window. While uccl-ep EP16 runs, b200-nscale nodes intermittently run the cores of
+both sockets at about 200 MHz effective (`scaling_cur_freq`, an APERF/MPERF average) for 100-200 ms,
+every 2-5 s, while the GPUs keep their clocks and the thermal-throttle counters stay at zero. An
+idle pinned process outside the benchmark runs ~16x slow over the same spans, then takes another
+10-20 ms to wind back up through 3-7x. The same nodes show none of it idle, with 40 cores busy,
+during uccl-ep EP8, or during deepep-v2 EP16, whose RDMA is GPU-initiated where uccl-ep posts its
+own from 32 busy-polling CPU proxies per node; base and eager runs see it at the same rate. It is
+the platform's response to uccl-ep's multi-node host load, not to the alignment. The 50-100 µs of
+uccl-ep host work between the notify and the end event then takes 1-2 ms, every rank's transfer
+waits on the late one, and `cross_rank_min_us` rises with MAX. On 2026-10-14 that hit 0.7-1.2% of
+EP16 decode samples, enough to put roundtrip p99 at 2-3.8 ms instead of ~0.6 ms at whichever rungs
+collected more than 1%.
+
+So each sample of these series first times a fixed loop of interpreter work (~20 µs at speed)
+outside the window, and while it runs more than 2.5x slower than the lowest median any of the run's
+series calibrated, the rank keeps probing instead of opening the sample; the other ranks wait at
+the barrier. A second probe after the sample's final sync catches a throttle that began inside the
+window. A sample waits at most 0.5 s and a run 60 s in total, so a host throttled for good cannot
+stall the run; past the budget its throttled samples count as stalled. One node did that on
+2026-10-14: under uccl-ep EP16 its second socket ran throttled a third of the time, 5-30% of the
+samples counted as stalled, and every tail was withheld. Rows publish, per series,
+`host_held_samples`: samples whose start some rank held for more than 1 ms (a shorter hold is an
+interrupt on one probe), which then opened at speed and gate nothing; and `host_stalled_samples`:
+samples where a probe on either side of some rank's window ran more than 5x slow, a throttle that
+began inside the window or outlasted the hold, which gate the tails like missed ones. Each count
+carries its largest series share (`host_held_fraction`, `host_stalled_fraction`); all four are null
+in series whose dispatch does not wait on the host. The bars come from the same diagnostics: away
+from throttles, a ~50 µs slice of Python on a rank's own core runs more than 2.5x its median in at
+most 0.2% of samples and more than 5x in about 0.001%.
+
+Holding measures the library on a host running at speed. A uccl-ep EP16 decode loop on this
+platform pays the throttles too, and `host_held_fraction` shows how often they came. Rows timed
+before the alignment (the bare family) kept them, inconsistently: the whole launch path sat in
+their window, and the throttles put their roundtrip p99 at 2.9-4.3 ms at every rung of three
+runs that day. Their loop is paced by the host, though: it slows ~8x during a throttle, where the
+spin-paced eager loop slows ~2.4x, so a throttle holds a smaller share of their samples and a run
+with few throttles can look clean.
+
+Three limits:
+
+- A series whose untimed setup contains a host wait (FP8 `stage` in normal mode) is not aligned at
+  all, and counts its misses without gating the row.
+- The probes see the host only at the two ends of a sample, a spin and a window apart: a slowdown
+  under 5x after the sample opened, or a throttle that starts and ends between them, still lands in
+  the window uncounted. The chained family is not held.
+- Unlike `bench_kineto`, nothing flushes L2 between samples.
+
+Each chain sibling is aligned once, before its first event, as the graph chain is. Eager rows carry
+the `-eager-spin-ar` suffix. Earlier eager rows (the bare family) had no per-sample alignment, so
+their small-T latency included host launch skew.
+
 ### Chained Pair Period
 
 The eager pipeline measures **fresh entry**: drained around each timed window, so every
-sample starts from an idle pipeline and the ranks re-stagger before each one. A decode loop never
+sample starts from an idle pipeline behind the rank barrier. A decode loop never
 stops, and what it pays per MoE layer is the pipeline's steady-state **period**. Every eager row
 therefore carries the chained family, measured by `benchmark_chain`: dispatch→combine pairs issued
 back-to-back with CUDA events enqueued on-stream and **no host synchronization inside the loop**,
@@ -497,13 +574,14 @@ All timing happens after every shape is warmed and checked. Conditioning rounds 
 measured or emitted.
 
 Comparing these figures against a vendor table is not like-for-like, in a knowable direction.
-Every sample here is an eager per-call measurement that includes kernel-launch cost and
-inter-rank entry skew, reduced across ranks by MAX. Vendor microbenchmarks published for these
-same kernels variously time the named kernel only via a profiler (DeepEP, UCCL low-latency),
-replay CUDA graphs (MoRI), average across ranks instead of taking the max (all of them), delete
-entry skew with a pre-iteration sleep or an amortized barrier (DeepEP, MoRI), and report the
-best of a config sweep (DeepEP V1, MoRI). Expect our headline to read roughly 5-10% above such
-a table on a healthy fabric. `cross_rank_min_us` is the per-row figure to place beside one.
+Every fresh-entry sample here is one event window per call, opened behind a device barrier that
+removes entry skew (as DeepEP's pre-iteration sleep and MoRI's barrier do) and reduced across ranks
+by MAX, so it keeps any host work inside the window and the slowest rank's exit. Vendor
+microbenchmarks published for these same kernels variously time the named kernel only via a
+profiler (DeepEP, UCCL low-latency), replay CUDA graphs (MoRI), average across ranks instead of
+taking the max (all of them), and report the best of a config sweep (DeepEP V1, MoRI). Expect our
+headline to read above such a table by at least the max-versus-mean gap; the earlier 5-10% estimate
+predates per-sample alignment. `cross_rank_min_us` is the per-row figure to place beside one.
 Where a like-for-like comparison exists we match or beat: our skew-excluded MoRI dispatch is
 0.96x MoRI's own shipped tuning-config best at the same shape and byte count, DeepEP V2 on B300
 reproduces DeepEP's published 8x2 figure within 3%, and FlashInfer EP matches NVIDIA's published
@@ -655,14 +733,14 @@ Pre/post dispatch behavior is checked against canonical source-token metadata an
 Native receive slots may be assigned nondeterministically, so physical receive order is not treated
 as a correctness property.
 
-## Result Artifact
+## Result Document
 
-One raw case document carries `record_type: "case-attempt"`, the single `version`, and a
-`generated_at` timestamp, and contains:
+One raw case document, committed at `results/<sku>/<case_id>.json`, carries `record_type:
+"case-attempt"`, the single `version`, and a `generated_at` timestamp, and contains:
 
 - `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and the scheduled case, including backend,
   EP size, mode, precision, phase, suite, workload, and the topology coordinate), and
-  `allocation_factors` (run id, run attempt, source SHA).
+  `allocation_factors` (source SHA; the run id and run attempt are null for hand runs).
 - `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks.
 - `measurement`: dispatch/combine dtype (the realized wire formats, with combine always BF16 and dispatch
   BF16 or the SKU's FP8 format) and semantics, `payload_unit` (`token-rank`), `sampling`, and the
@@ -686,15 +764,17 @@ One raw case document carries `record_type: "case-attempt"`, the single `version
 - `runtime`: the realized software stack, `vendor`, `framework` (the torch version),
   `accelerator_runtime` (the CUDA or HIP version torch was built against), and
   `collective_library` (`nccl`/`rccl` and the version actually loaded into the process).
-- `provenance`: the mounted image tag and source SHA, and
+- `provenance`: the mounted image tag, the source SHA, and `source_dirty` (whether `collectivex/`
+  had uncommitted edits; such a result is never published), and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
 Each `rows` entry carries point latency (`components`, graph-replayed by default where supported,
-plus `components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), byte
-accounting, token rate, correctness, load, and fanout, while
-per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
-case writes exactly this one raw result document, while unsupported or never-run cells produce no
-synthetic record.
+plus `components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), the
+eager alignment's `rank_alignment` misses (see CUDA Graph Replay), byte accounting, token rate,
+correctness, load, and fanout, while
+per-point statistics are summarized in place, not emitted as separate documents. Each run of a case
+writes exactly this one raw result document, replacing the case's previous file, while unsupported
+or never-run cells produce no synthetic record.
 
 ## Identity
 
@@ -718,28 +798,21 @@ missing or partial profiles, then probes every allocated node for the configured
 HCA port, and configured GID before backend initialization. It never substitutes a default route,
 inherited runner environment, or transport fallback. Scale-up and MNNVL cases clear the profile.
 Scale-out NVIDIA forces `NCCL_NET=IB`, while AMD leaves plugin selection to RCCL. Both use exact HCA
-matching. Scale-out also pins `NCCL_IB_MERGE_NICS=0` so dual-port NIC fusion cannot disable NCCL GIN
-(which the DeepEP V2 EP16 hybrid path requires), and a rail-isolated fabric (`rail_isolated`) adds
+matching. The EFA pools (b300, h100) instead load aws-ofi-nccl from the host EFA user space, which
+the launcher binds read-only into the container ahead of the image's own, and run GIN through its
+CPU proxy (`NCCL_GIN_TYPE=2`). Scale-out also pins `NCCL_IB_MERGE_NICS=0` so dual-port NIC fusion
+cannot disable NCCL GIN (which the DeepEP V2 EP16 hybrid path requires), and a rail-isolated fabric
+(`rail_isolated`) adds
 `NCCL_CROSS_NIC=0`. Selectors come from the tracked platform registry, optionally overlaid by an
 operator config, and appear only in mode-0600 private logs.
 
-Repository staging uses a pre-existing, runner-owned, group/world non-writable shared base outside
-the checkout and workflow workspace. The parent process resolves the exact execution child before
-copying. Backend preparation then runs from that tree on every allocated node. Cleanup waits for
-confirmed allocation teardown and removes only that child. DeepEP V2 source is fetched before allocation at an
-exact pinned revision, initializes its pinned `fmt` submodule, and applies the required local patch.
-
-H200, B200, and B300 may derive that private base beneath the validated operating-system account home
-when it is compute-visible. H100 instead derives a sibling of its shared container directory, never a
-child of image storage.
-Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
-from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
-its owner matches the private parent owner. Explicit stages and all other runners retain the strict
-effective-UID ownership rule. An execution-ID suffix isolates parallel B300 workers. The current
-NFS export may realize a newly created base as
-UID 0. Only that creation path is accepted, while a pre-existing root-owned base is rejected.
-Canonical GB300 execution likewise ignores its legacy group-writable `stage_dir` and derives an
-execution-specific private base beneath the validated compute-visible account home.
+Repository staging copies `collectivex/` into a mode-0700 execution child of the operator's
+`stage_dir` (or, when none is configured, beside the image under `squash_dir`), which must be
+visible at the same path on the login node and every allocated node and must not be group- or
+world-writable. The parent process resolves the exact execution child before copying. Backend
+preparation then runs from that tree on every allocated node. Cleanup waits for confirmed allocation
+teardown and removes only that child. DeepEP V2 source is fetched before allocation at an exact
+pinned revision, initializes its pinned `fmt` submodule, and applies the required local patch.
 
 ## Image Pinning And Build Isolation
 
@@ -748,30 +821,28 @@ staged once per cluster and reused by every run of the same image. Freshness is 
 digest sidecar: the registry manifest digest is resolved from the submit host at launch, and a
 resolved digest that differs from the sidecar stamp means the tag moved upstream and forces a
 fresh import. An unresolved digest (no registry egress, a transient blip) reuses whatever is
-staged; the `refresh_image` dispatch input forces an update in that case, discarding only files
-staged before the launch so concurrent legs still import once. Validity is still proven per use
+staged; `COLLX_IMAGE_REFRESH=1` forces an update in that case, discarding only files staged
+before the launch so concurrent runs still import once. Validity is still proven per use
 (`unsquashfs -l`) before any reuse. Image-provided DeepEP is
 also checked against exact package versions and its expected API. Source-built DeepEP V2 uses
 a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its path binds CPU/GPU
-architecture, image, and upstream commit. The cache is never an artifact. Per-execution
+architecture, image, and upstream commit. The cache is never committed. Per-execution
 source/results stages remain isolated and disposable, and runtime probes fail closed before reuse. The runner UID is
 inside the trusted cluster boundary: this cache guards against stale or accidental mutation, not
 hostile same-UID jobs. Only an unpublished partial build may be reset automatically. A cache that
 fails integrity or runtime checks is left intact and rejected so a concurrent allocation cannot lose
 files it is using.
 
-## Neutral Artifact Delivery
+## Result Delivery
 
-There is no results server, attached store, or managed object store. Each shard runs one allocation,
-emits per-case result JSON and a small mechanical summary, and uploads them as GitHub artifacts with
-`always()` so a red or partial run still uploads. A case counts as successful on the benchmark's own
-return code. There is no completeness or privacy validation step before upload, and failed or
-unsupported cells produce no synthetic record.
-
-No step promotes a run, builds a dataset, or advances a channel. The artifacts are the output. Any
-downstream display or comparison is the consumer's responsibility.
+There is no results server or managed object store. Each shard runs one allocation and its per-case
+result documents are copied to `results/<sku>/` in the checkout that ran it. A case counts as
+successful on the benchmark's own return code, and failed or unsupported cells produce no synthetic
+record. Results reach the dashboard only through a reviewed commit to `main`; the unit-test job
+checks every committed result against `results/cases.json`, rejects ones measured from uncommitted
+code, and rejects IP addresses and host-identifying fields.
 
 ## Legacy Data
 
 Historical numeric schemas 3-5 are outside this benchmark's artifacts. They remain historical
-diagnostic evidence and are not produced or consumed by the current sweep.
+diagnostic evidence and are not produced or consumed by the current harness.

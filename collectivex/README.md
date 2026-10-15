@@ -1,17 +1,17 @@
 # CollectiveX - Experimental (Beta)
 
 CollectiveX is an experimental MoE expert-parallel communication benchmark. It measures dispatch,
-combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
-neutral result artifacts.
+combine, and paired roundtrip latency across EP libraries and accelerator systems, and writes one
+result file per case into `results/`, where it is committed.
 
 A second suite, the [vLLM `swap_blocks` benchmark](docs/swap-blocks.md),
 measures pinned CPU↔GPU and same-GPU block copies,
 with its own correctness checks and latency/bandwidth JSON output. It runs through the same
-sweep matrix and pool launchers (`suites: swap-blocks`).
+matrix and pool launchers (`run.sh <sku> --suite swap-blocks`).
 
-CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
-artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
-decide what a consumer displays. Any downstream display or comparison is the consumer's
+CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Committing the
+results is the publish step: the dashboard builds from whatever `results/` holds on `main`. It does
+not rank, recommend, or select. Any downstream display or comparison is the consumer's
 responsibility. The full measurement methodology is in [docs/methodology.md](docs/methodology.md).
 
 ## Execution Profile
@@ -129,7 +129,7 @@ and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, 
 `swap-blocks` adds one single-GPU shard per pool from `configs/swap_sweep.json`). Every suite's
 shards take the same path: the pool launcher allocates, `runtime/config.py case-args` encodes each
 case as its entrypoint's argv, and the rank wrapper execs that entrypoint. The matrix is generated
-per dispatch, with no frozen digest or locked case count.
+per run, with no frozen digest or locked case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -145,7 +145,7 @@ scale-up domain.
 | DeepEP V2 | `production`, with vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` | `normal` mode is PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out. FP8 dispatch via `use_fp8_dispatch` (blockwise e4m3fn) alongside BF16. `low-latency` mode is the legacy `deep_ep.Buffer` IBGDA decode kernels (per-expert padded layout, weighted combine, `use_fp8` e4m3fn), decode only, with EP8 wherever enabled, plus EP16 on GB200/GB300 (inside the MNNVL domain) and on B200's nscale bare-metal pool (IBGDA over native IB rails with `/dev/gdrdrv`, although the prior virtualized b200 pool could never run it). B300 is an unsupported coverage row in `low-latency`: the legacy Buffer self-enables NVSHMEM IBGDA even for a single-node EP8 run, and on B300 address-handle creation fails (`ibgda.cpp:2234 Unable to create ah`), rc255 on all eight ranks. `NVSHMEM_DISABLE_IB=1` does not help. The Buffer re-enables IBGDA regardless, and the run fails identically with it set and unset (measured on b300-002 and b300-011) |
 | MoRI | `production`, with vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` | `normal` mode uses the direct `IntraNode` kernel for scale-up EP8 on every CDNA SKU and the `InterNodeV1` kernel for scale-out EP16 on mi355x (2x8 over Pollara RoCE, MoRI's default `STATIC_HEAP`). EP16 stays an unsupported row on the tw pairs, which have no cross-node GPU fabric. Two caller-side defects kept the mi355x row red before: this harness passed dispatch's returned recv-slot indices to `combine()` instead of the rank's own routing (part of ROCm/mori#475, guarded upstream by ROCm/mori#546), and it forced `MORI_SHMEM_MODE=VMM_HEAP` for scale-out, which on ROCm 7.2 leaves the heap in the cached pool and corrupts cross-node combine partials from T~64 up and at every prefill size (ROCm/mori#610; same-branch CI A/B: STATIC_HEAP green on every rung in run 34939333022, VMM_HEAP red in run 34941185534). The adapter now fails closed on any heap mode other than `STATIC_HEAP`. uccl-ep EP16 stays off mi355x: its CPU-proxy RDMA is functional on Pollara but ~13x under its documented bandwidth (~6 GB/s vs 82; unchanged by registration mode or traffic class — ionic-driver suspect). `low-latency` mode selects the `AsyncLL` decode kernel driven split-phase (dispatch send+recv, combine send+recv — the kernel SGLang deploys; same compact layout and unweighted combine as `IntraNode`; earlier rows measured `IntraNodeLL`, discriminated by `kernel_generation`), decode/EP8 only. FP8 dispatch is caller-prequantized (per-SKU e4m3fnuz on gfx942, e4m3fn on gfx950). Combine stays BF16 (`quant_type=none`) alongside BF16 dispatch |
 | UCCL-EP | `candidate` (no engine exposes a UCCL-EP selector) | [UCCL](https://github.com/uccl-project/uccl) EP: a drop-in, API-identical DeepEP replacement whose CPU proxies issue GPUDirect RDMA over plain `libibverbs` (no NVSHMEM/IBGDA), with software message ordering, atomics, and flow control. Scale-up is single-node `cudaIpc` over NVLink/XGMI (never MNNVL). `normal` mode is the legacy `Buffer` `dispatch`/`combine` (unweighted rank-sum). `low-latency` reuses the legacy `low_latency_dispatch`/`low_latency_combine` decode kernels (weighted combine), decode/EP8 only. FP8 dispatch is caller-prequantized in `normal` mode (blockwise e4m3fn, per-SKU e4m3fnuz on gfx942). In `low-latency` mode the caller sends BF16 and the decode kernel quantizes to e4m3 internally (`use_fp8`). Combine is BF16. Runs on NVIDIA and AMD (H100/H200/B200 + MI300X/MI325X/MI355X), EP8 scale-up. Cross-node EP16 is functional (the internode RDMA path connects and the light case passes correctness) but its CPU-proxy throughput overruns the standardized per-case wall-clock budget on heavy token counts, so EP16 is an unsupported coverage row for now |
-| NCCL EP | `candidate` (NVIDIA's own library, but no engine exposes an NCCL-EP selector) | [NCCL EP v0.2](https://github.com/NVIDIA/nccl-extensions): NVIDIA's native MoE dispatch/combine on the NCCL Device API, using LSA (NVLink load/store) intra-node and GIN (GPU-Initiated Networking) inter-node. Since v0.2 it ships as the `nccl-extensions` PyPI wheel (which owns `nccl.ep`; `nccl4py` — pinned alongside — provides only `nccl.core`), replacing the `contrib/nccl_ep` tree in `NVIDIA/nccl`, which has not moved since 2026-06-11. `normal` mode selects the `HIGH_THROUGHPUT` algorithm (FLAT `[N, hidden]` receive, unweighted rank-sum combine). HT requires `ZeroCopyMode.ON`: its receive token plane is NCCL-allocated and collectively registered as a symmetric window, so dispatch and combine use it directly. LL uses the rank-major, pre-reduced contract used by inference frameworks; zero-copy is enabled within one LSA/MNNVL domain and disabled for scale-out. The `LOW_LATENCY` algorithm carries `ll_backends` rows at EP8 on H100/H200/B300 and EP8+EP16 on B200/GB200/GB300. Its decode ladder has no harness token cap. LL receive capacity grows with the requested maximum, with a 256-slot minimum for short ladders; increasing capacity changes the buffer footprint and can affect smaller-point timings. FP8 is enabled only for low-latency decode with native DS_FP8E3M4 dispatch and zero-copy disabled. Combine remains BF16; native-consume roundtrip excludes dequantization staging. Normal mode and prefill remain BF16-only. NVIDIA-only and CUDA 13 only. EP8 and EP16 on all six NVIDIA SKUs: EP16 stays inside the MNNVL scale-up domain on GB200/GB300 and is a 2x8 RDMA scale-out over the cross-node GIN path on H100/H200/B200/B300. Under v0.1 that GIN path faulted inside `nccl_ep.cc` identically on RoCE and IB on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200, with B300 enabled on the same fix pending its pool's revalidation |
+| NCCL EP | `candidate` (NVIDIA's own library, but no engine exposes an NCCL-EP selector) | [NCCL EP v0.2](https://github.com/NVIDIA/nccl-extensions): NVIDIA's native MoE dispatch/combine on the NCCL Device API, using LSA (NVLink load/store) intra-node and GIN (GPU-Initiated Networking) inter-node. Since v0.2 it ships as the `nccl-extensions` PyPI wheel (which owns `nccl.ep`; `nccl4py` — pinned alongside — provides only `nccl.core`), replacing the `contrib/nccl_ep` tree in `NVIDIA/nccl`, which has not moved since 2026-06-11. `normal` mode selects the `HIGH_THROUGHPUT` algorithm (FLAT `[N, hidden]` receive, unweighted rank-sum combine). HT requires `ZeroCopyMode.ON`: its receive token plane is NCCL-allocated and collectively registered as a symmetric window, so dispatch and combine use it directly. LL uses the rank-major, pre-reduced contract used by inference frameworks; zero-copy is enabled within one LSA/MNNVL domain and disabled for scale-out. The `LOW_LATENCY` algorithm carries `ll_backends` rows at EP8 on H100/H200/B300 and EP8+EP16 on B200/GB200/GB300. Its decode ladder has no harness token cap. LL receive capacity grows with the requested maximum, with a 256-slot minimum for short ladders; increasing capacity changes the buffer footprint and can affect smaller-point timings. FP8 is enabled only for low-latency decode with native DS_FP8E3M4 dispatch and zero-copy disabled. Combine remains BF16; native-consume roundtrip excludes dequantization staging. Normal mode and prefill remain BF16-only. NVIDIA-only and CUDA 13 only. EP8 and EP16 on all six NVIDIA SKUs: EP16 stays inside the MNNVL scale-up domain on GB200/GB300 and is a 2x8 RDMA scale-out over the cross-node GIN path on H100/H200/B200/B300. Under v0.1 that GIN path faulted inside `nccl_ep.cc` identically on RoCE and IB on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200, and on B300 over EFA proxy GIN |
 | FlashInfer EP | `production`, with vLLM `--all2all-backend flashinfer_nvlink_one_sided` | [FlashInfer](https://github.com/flashinfer-ai/flashinfer) `MoeAlltoAll`: TensorRT-LLM's one-sided MNNVL all-to-all, where each rank writes tokens straight into its peers' workspace windows and combine reads them back, with no send/recv pairing and no NVSHMEM. `normal` mode only (there is one kernel family and no separate decode path), and GB200/GB300 only, since the transport is MNNVL. FP8 dispatch is caller-prequantized blockwise e4m3fn, carried as a fourth dispatch payload alongside its per-128-block FP32 scales, with the combine plane forced to BF16. The C++ `toNvDataType` accepts only fp16/bf16/fp32 for combine, so an FP8 combine buffer would raise rather than corrupt. EP8 and EP16, both inside the scale-up domain. Unlike every other backend here, its combine accumulates in the PAYLOAD dtype rather than FP32: wheels before 0.6.16 reduce the top-k contributions with a pairwise BF16 tree that rounds at every level, so the oracle models that reduction directly (`combine_reduction = "topk-slot-tree"`) instead of widening the tolerance. 0.6.16 moved the accumulator to FP32, and the adapter switches models on the installed version |
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
@@ -164,23 +164,31 @@ scale-up ranks per domain. GB EP16 remains MNNVL scale-up and therefore uses LSA
 SKU/backend/EP cell is attempted is a capability fact. Whether it succeeded is decided by the
 benchmark's return code.
 
-## Workflow And Artifacts
+## Running By Hand
 
-`.github/workflows/collectivex-sweep.yml` has two jobs. `setup` generates a public-SKU matrix
-(`backend`, `only_sku`, `exclude_skus`, `ep_sizes` inputs) and uploads the matrix.
-`sweep` extracts a strict ignored `.shards/<id>.json` control per matrix entry, executes one
-allocation per shard, fetches pinned DeepEP source before allocation when required, and uploads the
-result artifacts with `always()` so a red or partial run still uploads.
+Run from the pool's Slurm login node, in a checkout of the commit you want to measure:
 
-Each shard emits per-case result JSON and a small mechanical summary. A case counts as successful on
-the benchmark's own return code. There is no completeness or privacy validation step, and failed or
-unsupported cells produce no synthetic record. No step promotes a run,
-builds a dataset, or advances a channel. The neutral artifacts are the output. A consumer downloads
-them and decides what to display.
+```bash
+collectivex/run.sh h200-dgxc --list-shards          # what will run, one allocation per shard
+setsid nohup collectivex/run.sh h200-dgxc > run-h200.log 2>&1 < /dev/null &
+collectivex/run.sh h200-dgxc --shard h200-dgxc-nccl-ep-bf16-n2   # rerun one failed shard
+```
 
-No operator credentials are passed to the workflow or uploaded. Runner-local overrides and any
-selectors stay on the runner. Per-step runner logs are kept on the runner for postmortem, and
-result artifacts carry only the fields listed in the methodology.
+`run.sh` resolves the pool's cases with `sweep_matrix.py` (`--suite`, `--backend`, `--ep`,
+`--modes` and `--precisions` narrow it), gives each shard its own allocation through the pool's
+launcher, and copies every result to `results/<sku>/<case_id>.json`, replacing the previous result
+for that case. A failed shard does not stop the others; the closing summary lists each shard's exit
+code. Interrupting `run.sh` releases its allocations. Runtime logs stay under
+`/tmp/inferencex-collectivex-<uid>/logs/<execution>/` on the login node.
+
+Results record the commit they were measured at, so `run.sh` refuses to start while `collectivex/`
+has uncommitted edits (`--allow-dirty` runs anyway, and the results are marked so they cannot be
+published). To publish, review `git diff collectivex/results/<sku>`, check it with `python3 -m
+unittest collectivex/tests/test_results.py`, and open a PR with the files. That test also runs in
+CI: every committed result must be a runnable case in `results/cases.json`, come from committed
+code, and contain no IP addresses or host-identifying fields. Regenerate `cases.json` whenever the
+configs change: `python3 collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json
+collectivex/results/cases.json`.
 
 ## Runner Configuration
 
@@ -190,8 +198,8 @@ runner-local JSON document at `$XDG_CONFIG_HOME/inferencex/collectivex.json` or
 unknown field, and non-JSON input all fail closed, and configuration is never evaluated as shell.
 Duplicate JSON keys are NOT rejected. `json.load` keeps the last silently, and runner keys other
 than the one being resolved are not validated, so a typo'd SKU name is ignored rather than
-reported. GHA passes no operator secret, so a SKU runs entirely from its tracked baseline unless a
-runner-local document is present.
+reported. A SKU runs entirely from its tracked baseline unless an operator document is present; put
+your own storage paths and node excludes there rather than in the registry.
 
 All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
 architecture/product, container image and platform, fixed placement, launcher, runnable backend/EP
@@ -223,60 +231,67 @@ Mixed Ethernet and InfiniBand HCA lists are rejected.
 `rdma_fabric: "efa"` declares an AWS Elastic Fabric Adapter cluster (b300 is a p6-b300.48xlarge
 pool with 16 EFA devices per node, h100-dgxc a p5.48xlarge pool with 32). EFA is not a verbs HCA: its ports report no link layer, it has
 no GID table, service level or traffic class, and NCCL reaches it only through the aws-ofi-nccl
-libfabric plugin that the cluster's enroot hook mounts into every container. On such a fabric the
+libfabric plugin. The hosts' enroot hooks need not provide it (b300's bind only `/dev/infiniband`),
+and the image's own EFA user space (rdma-core 50, libfabric 1.17) predates the hosts' `efa.ko`, so
+multi-node shards bind the host's `/opt/amazon/{efa,ofi-nccl}` and rdma-core read-only and put them
+first on the loader path. On such a fabric the
 probe accepts the unspecified link layer for the listed `rdma_devices` (which must still be ACTIVE
 on every node), the IB selector family (`NCCL_IB_*`, `NVSHMEM_HCA_LIST`/IBGDA, MoRI, UCCL) stays
 unset, `NCCL_NET_PLUGIN=ofi` and `FI_PROVIDER=efa` select the plugin, NVSHMEM is pointed at its
-libfabric transport, and backend setup fails unless the plugin library is present in the container.
+libfabric transport, and backend setup fails unless the host libfabric reaches every listed device
+from inside the container.
 NCCL GIN then rides the plugin's GIN through its CPU proxy (`NCCL_GIN_TYPE=2`), which requires
 GDRCopy 2.5+ (`gdrdrv` loaded, `libgdrapi` present) on the node: without it the plugin's GIN init fails,
 NCCL disables the Device API for the communicator, and `ncclEpCreateGroup` returns `ncclInvalidUsage`.
-The type is pinned because NCCL otherwise prefers its built-in GDAKI on the nodes' two ConnectX-7 IB
-ports, which are not the GPU fabric, and most ranks then fail window registration while the rest hang.
-Multi-node shards build aws-ofi-nccl 1.21.1 into the backend cache and load it in place of the hosts'
-1.20, whose proxy applies every signal with an inline GPU read-modify-write (1.3-4.5x on b300 EP16).
-Proxy GIN still bounds these rows well below the IB pools: GPU-initiated GIN on EFA needs EFA
-installer 1.50.0 on the hosts (efa.ko 3.3.0 completion counters, libfabric 2.6) and NCCL 2.31.
+The type is pinned because NCCL otherwise picks the plugin's GPU-initiated EFA GDA backend (type 5,
+aws-ofi-nccl 1.21), which has only weak signals: nccl.ep and the pinned DeepEP both require strong
+ones and fail device-communicator setup. Before 1.21 it picked its built-in GDAKI on the nodes' two
+ConnectX-7 IB ports, which are not the GPU fabric, and most ranks failed window registration while
+the rest hung. Where the host plugin predates 1.21 (h100's 1.20), multi-node shards build aws-ofi-nccl
+1.21.1 into the backend cache and load it instead: 1.20's proxy applies every signal with an inline
+GPU read-modify-write (1.3-4.5x on b300 EP16).
+Proxy GIN still bounds these rows well below the IB pools. b300's hosts now carry the EFA GDA stack
+(EFA installer 1.50.0), but besides weak-signal EP kernels, GPU-initiated GIN there needs NCCL 2.31
+(2.32's GIN device ABI is newer than aws-ofi-nccl 1.21.1 accepts), and even a weak-signal DeepEP
+fork could not register the EFA doorbells with CUDA on the nodes' 580 driver. h100's p5 has
+first-generation EFA, which cannot run it at all.
 DeepEP sizes its SMs from an `ibstat` rate probe that cannot see EFA, so `network.rdma_gbs` supplies
 the per-GPU scale-out rate instead. DeepEP V2 low-latency stays withheld on both: its legacy
 Buffer initialises NVSHMEM with an RDMA transport even single-node, and on b300 NVSHMEM aborts
 with "nvshmem detect topo failed" (status 28) with and without `NVSHMEM_REMOTE_TRANSPORT=none`
 (runs 34521825749, 34523594787); the HT ElasticBuffer path, which needs no NVSHMEM, passes.
 
-`stage_dir` is a pre-existing, runner-owned, non-symlinked base outside the checkout and workflow
-workspace. It is not group- or world-writable and is visible at the same path on the runner and every
-allocated node. Jobs create only a marked mode-0700 execution child, prove cross-node read/write
-visibility, and remove that exact child after allocation teardown. They never mount the runner
-checkout or create a stage beneath image storage on AMD. When an AMD operator row omits `stage_dir`,
-the runner derives a private base beside its standard `_work` directory on the shared runner
-filesystem. The root-owned squash cache is never used as a repository stage.
+For a hand run, give your operator document its own `storage_roots`. It derives both paths after
+the registry baseline is merged in, so a registry `storage_roots` would override a lone
+`stage_dir`, and the image and backend caches would still land in the registry's (CI-owned) paths.
+An image owned by another account is reused when readable and current, but never replaced or
+deleted; the launcher stops with an error instead.
 
-H200, B200, and B300 runners may omit `stage_dir`. Their isolated execution child is created under a
-runner-owned mode-0700 base in the validated operating-system account home, independent of the
-workflow's temporary `HOME`. H100 may also omit `stage_dir`. Its private base is created beside, never
-beneath, the configured shared container directory so it is compute-visible. Canonical B300 execution
-ignores any legacy configured `stage_dir` and always uses the validated compute-visible account-home
-base. An execution-ID suffix isolates parallel B300 workers. Canonical GB300 execution likewise
-ignores its legacy group-writable `stage_dir` and derives an execution-specific private base beneath the
-validated compute-visible account home. Backend preparation runs from that staged tree on every node.
+`stage_dir` (or `storage_roots`, which derives `stage_dir` and `squash_dir` under
+`<root>/collectivex/`) must be visible at the same path on the login node and every allocated node,
+and must not be group- or world-writable. Each run creates a mode-0700 `job_<execution>` child
+there, copies `collectivex/` into it, and removes it after allocation teardown. Without `stage_dir`
+the stage goes beside the image under `squash_dir`; the h100, b300, GB and AMD launchers require an
+explicit one.
 
-Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
-platform, so one run never reuses another run's imported filesystem. The image tag and platform are
-per-SKU registry fields. The DeepEP V2 source pin lives in `runtime/common.sh` and its build is
-fetched and verified at the pinned commit, checked for `ElasticBuffer`, and cached in a
-cluster-local build cache keyed by architecture, image, and commit. Only the fixed `/cx-cache` mount
-reaches the container.
+Enroot imports the configured image tag once per pool into a squash keyed by image tag and platform;
+the image digest decides when it is stale, and `COLLX_IMAGE_REFRESH=1` forces a re-import. The image
+tag and platform are per-SKU registry fields. The DeepEP V2 source pin lives in `runtime/common.sh`
+and its build is fetched and verified at the pinned commit, checked for `ElasticBuffer`, and cached
+in a cluster-local build cache keyed by architecture, image, and commit. Only the fixed `/cx-cache`
+mount reaches the container.
 
 ## Local Checks
 
 ```bash
 python3 -m unittest discover collectivex/tests -p 'test_*.py'
 python3 collectivex/sweep_matrix.py --backend all --out /tmp/cx-matrix.json >/dev/null
-bash -n collectivex/runtime/*.sh collectivex/launchers/*.sh
+bash -n collectivex/run.sh collectivex/runtime/*.sh collectivex/launchers/*.sh
+collectivex/run.sh h200-dgxc --dry-run   # each shard's environment, without allocating
 ```
 
-Core paths are `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`, `launchers/`,
-and `tests/`.
+Core paths are `run.sh`, `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`,
+`launchers/`, `results/` and `tests/`.
 
 NCCL-EP nightly installation and exact wheel provenance are documented in
 [the NCCL-EP guide](docs/nccl-ep.md).

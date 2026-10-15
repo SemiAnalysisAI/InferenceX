@@ -38,9 +38,10 @@ COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 # whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
 # string keys the shared cache dir.
 COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
-# aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards. The hosts mount 1.20, whose
-# proxy thread applies every GIN signal with an inline gdrcopy read-modify-write of device memory;
-# 1.21 hands signals to a worker and drops the read (1.3-4.5x on b300 EP16).
+# aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards whose host plugin predates
+# 1.21 (h100's 1.20). That proxy thread applies every GIN signal with an inline gdrcopy
+# read-modify-write of device memory; 1.21 hands signals to a worker and drops the read (1.3-4.5x on
+# b300 EP16).
 COLLX_OFI_NCCL_VERSION="1.21.1"
 COLLX_OFI_NCCL_SHA256="2533d1ec179a86dcf0470fc39800b06cd9169cd854c0c913cc4782a42f36cff4"
 
@@ -62,7 +63,6 @@ collx_launcher_prologue() {
   collx_install_launcher_fail_safe
   [ -n "${COLLX_SHARD_FILE:-}" ] || collx_die "COLLX_SHARD_FILE is required"
   collx_load_operator_config
-  collx_prepare_stage_dir "$1"
 }
 
 # Resolves the shard placement from the COLLX_* overrides (defaults: nodes, GPUs per node,
@@ -72,7 +72,6 @@ collx_set_placement() {
   NODES="${COLLX_NODES:-$1}"; GPN="${COLLX_GPUS_PER_NODE:-$2}"
   SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-$3}"
   NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
-  TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
@@ -105,21 +104,6 @@ collx_execute_and_collect() {
   collx_collect_results "$mount_src" "$repo_root" || collect_rc=$?
   FINAL_RC="$run_rc"
   [ "$FINAL_RC" != 0 ] || FINAL_RC="$collect_rc"
-}
-
-collx_job_root_is_safe() {
-  local root="$1"
-  if [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]]; then
-    :
-  elif [[ "$root" =~ ^/tmp/inferencex-collectivex-parent-([0-9]+)-([0-9]+)-([A-Za-z0-9._-]+)/inferencex-collectivex-([0-9]+)-([0-9]+)-([A-Za-z0-9._-]+)$ ]]; then
-    [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[4]}" ] \
-      && [ "${BASH_REMATCH[2]}" = "${BASH_REMATCH[5]}" ] \
-      && [ "${BASH_REMATCH[3]}" = "${BASH_REMATCH[6]}" ] || return 1
-  else
-    return 1
-  fi
-  [ -d "$root" ] && [ ! -L "$root" ] \
-    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ]
 }
 
 # Operator JSON values are never sourced or evaluated as shell.
@@ -171,7 +155,7 @@ collx_load_operator_config() {
 # Callers parse these logs for markers (salloc grant, per-node network selectors), so they are
 # a data channel, not just failure display. They persist after the run for postmortem.
 collx_private_log_path() {
-  local path="${COLLX_JOB_ROOT:-/tmp/inferencex-collectivex-$(id -u)}/logs/$1.log"
+  local path="${COLLX_LOG_DIR:-/tmp/inferencex-collectivex-$(id -u)/logs}/$1.log"
   mkdir -p "${path%/*}" || collx_die "cannot create log directory"
   : > "$path" || collx_die "cannot create runtime log"
   printf '%s' "$path"
@@ -218,21 +202,61 @@ collx_export_gid_index_for_link_layer() {
   esac
 }
 
-# AWS EFA scale-out (b300-dsxe, p6-b300.48xlarge: 16 EFA devices per node). EFA is not a verbs
-# HCA: its ports report link_layer Unspecified, it has no GID table, service level or traffic
-# class, and NCCL reaches it only through the aws-ofi-nccl libfabric plugin, which the cluster's
-# enroot hook bind-mounts into every container (/opt/amazon/{efa,ofi-nccl} on the ld path). GIN
-# rides the plugin's ncclGinPlugin export through its CPU proxy: GPU-initiated GIN on EFA needs
-# libfabric GDA ops and a counting-event efa.ko the hosts lack (EFA installer 1.50.0). So the
-# whole IB/RoCE selector family (NCCL_IB_*, NVSHMEM_HCA_LIST/IBGDA, MORI_*, UCCL_IB_*) stays
-# unset: the plugin enumerates and rails the EFA devices itself, and the operator's rdma_devices
-# list is consumed only by the network-profile probe as the set of ports that must be ACTIVE.
-# NVSHMEM (deepep-v2) has its own libfabric transport; point it at EFA the same way.
-# NCCL_GIN_TYPE=2 (proxy): with gdrcopy present the plugin's GIN loads, but NCCL still prefers
-# its built-in GDAKI on the nodes' two ConnectX-7 IB ports, which are not the GPU fabric, and
-# window registration then fails on most ranks (error 6) while the rest wait.
+# Where collx_efa_host_mounts binds the host's rdma-core inside the container.
+COLLX_EFA_HOST_ROOT=/opt/collectivex/host-efa
+
+# The EFA pools' enroot hooks need not give a container the host EFA user space (b300's binds only
+# /dev/infiniband), and the image's own (rdma-core 50, libfabric 1.17, no aws-ofi-nccl) predates the
+# hosts' efa.ko, so multi-node EFA shards bind the host's read-only: /opt/amazon/{efa,ofi-nccl} in
+# place, and libibverbs, libefa and libmlx5 under both their soname and the linker name NCCL dlopens
+# first (an image copy found under either name is a second libibverbs that loads no provider). A
+# provider must come from the same rdma-core as libibverbs, which looks for
+# lib<driver>-rdmav<its private ABI>.so, so the host's whole multiarch libdir is bound privately as
+# well: its libibverbs/ providers are symlinks into their parent and resolve there, without the
+# launcher naming the host's ABI. The EFA profile puts all of it first on the loader path.
+collx_efa_host_mounts() {
+  local libdir name mounts
+  case "$1" in
+    linux/amd64) libdir=/usr/lib/x86_64-linux-gnu ;;
+    linux/arm64) libdir=/usr/lib/aarch64-linux-gnu ;;
+    *) return 1 ;;
+  esac
+  mounts="/opt/amazon/efa:/opt/amazon/efa:ro,/opt/amazon/ofi-nccl:/opt/amazon/ofi-nccl:ro"
+  mounts+=",$libdir:$COLLX_EFA_HOST_ROOT/libdir:ro"
+  for name in libibverbs libefa libmlx5; do
+    mounts+=",$libdir/$name.so.1:$COLLX_EFA_HOST_ROOT/lib/$name.so.1:ro"
+    mounts+=",$libdir/$name.so.1:$COLLX_EFA_HOST_ROOT/lib/$name.so:ro"
+  done
+  printf '%s' "$mounts"
+}
+
+# Adds the host EFA user space to a staged shard's CONTAINER_MOUNTS when it crosses an EFA fabric.
+collx_add_efa_host_mounts() {
+  local mounts
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] && [ "${NODES:-1}" -gt 1 ] \
+    && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  mounts="$(collx_efa_host_mounts "${COLLX_IMAGE_PLATFORM:-}")" \
+    || collx_die "no host EFA user space layout for this image platform"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
+}
+
+# AWS EFA scale-out (b300: p6-b300.48xlarge, 16 EFA devices per node; h100-dgxc: p5.48xlarge, 32).
+# EFA is not a verbs HCA: its ports report link_layer Unspecified, it has no GID table, service
+# level or traffic class, and NCCL reaches it only through the aws-ofi-nccl libfabric plugin from
+# the host EFA user space (collx_efa_host_mounts). So the whole IB/RoCE selector family
+# (NCCL_IB_*, NVSHMEM_HCA_LIST/IBGDA, MORI_*, UCCL_IB_*) stays unset: the plugin enumerates and
+# rails the EFA devices itself, and the operator's rdma_devices list is consumed only by the
+# network-profile probe as the set of ports that must be ACTIVE. NVSHMEM (deepep-v2) has its own
+# libfabric transport; point it at EFA the same way.
+# NCCL_GIN_TYPE=2 runs GIN through the plugin's CPU proxy. The plugin's GPU-initiated backend
+# (type 5, EFA GDA, aws-ofi-nccl 1.21 on EFA installer 1.50.0) has only weak signals, and nccl.ep
+# and the pinned DeepEP both require strong ones ("GIN strong signals are required, but the GIN
+# plugin does not support them"), yet NCCL picks it when left to choose. Before 1.21 NCCL picked its
+# built-in GDAKI on the nodes' two ConnectX-7 IB ports instead, which are not the GPU fabric, and
+# window registration failed on most ranks (error 6) while the rest waited.
 # Ranks load the plugin build their rank env names (COLLX_OFI_NCCL_LIB_DIR); otherwise the host's.
 collx_apply_efa_profile() {
+  local root="$COLLX_EFA_HOST_ROOT" path dir joined=""
   export NCCL_NET_PLUGIN=ofi NCCL_GIN_TYPE=2
   if [ -n "${COLLX_OFI_NCCL_LIB_DIR:-}" ]; then
     export NCCL_NET_PLUGIN="$COLLX_OFI_NCCL_LIB_DIR/libnccl-net-ofi.so" \
@@ -241,6 +265,17 @@ collx_apply_efa_profile() {
   export FI_PROVIDER=efa FI_EFA_FORK_SAFE=1
   export NVSHMEM_REMOTE_TRANSPORT=libfabric NVSHMEM_LIBFABRIC_PROVIDER=efa
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER NVSHMEM_HCA_LIST NVSHMEM_ENABLE_NIC_PE_MAPPING
+  # Only inside a container that has the binds; the rank wrapper re-applies this profile over the
+  # environment backend preparation persisted, so the prefix is moved to the front, not repeated.
+  [ -d "$root/lib" ] || return 0
+  path=":${LD_LIBRARY_PATH:-}:"
+  for dir in "$root/lib" "$root/libdir/libibverbs" /opt/amazon/efa/lib /opt/amazon/ofi-nccl/lib; do
+    while [[ "$path" == *":$dir:"* ]]; do path="${path/":$dir:"/:}"; done
+    joined="$joined${joined:+:}$dir"
+  done
+  path="${path#:}"
+  path="${path%:}"
+  export LD_LIBRARY_PATH="$joined${path:+:$path}"
 }
 
 # Selector values are interface/HCA identifiers, never addresses.
@@ -514,10 +549,9 @@ collx_slurm_job_name() {
   printf '%s' "$name"
 }
 
-# JOB_ID is recorded in the job root so workflow cleanup can release a launcher interrupted by
-# Actions. The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
+# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 collx_salloc_jobid() {
-  local log_label log job_id root="${COLLX_JOB_ROOT:-}"
+  local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
   log_label="$(collx_attempt_label scheduler-allocation "${COLLX_SALLOC_ATTEMPT:-1}")" || return 1
   if ! log="$(collx_private_log_path "$log_label")"; then
@@ -534,30 +568,17 @@ collx_salloc_jobid() {
       's/.*Granted job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   JOB_ID="$job_id"
-  if [ -n "$root" ]; then
-    collx_job_root_is_safe "$root" || return 1
-    (umask 077; printf '%s\n' "$JOB_ID" > "$root/jobid") || return 1
-  fi
 }
 
+# Cancels only this launcher's own allocation, by job id.
 collx_cleanup_allocation() {
-  local root="${1:-${COLLX_JOB_ROOT:-}}" path="" job_id="${JOB_ID:-}" active
-  if [ -n "$root" ]; then
-    collx_job_root_is_safe "$root" || return 1
-    path="$root/jobid"
-    if [ -z "$job_id" ] && [ -f "$path" ]; then
-      IFS= read -r job_id < "$path" || return 1
-    fi
-  fi
+  local job_id="${JOB_ID:-}" active
   [ -n "$job_id" ] || return 0
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   scancel "$job_id" >/dev/null 2>&1 || true
   for _ in {1..30}; do
     active="$(squeue -h -j "$job_id" -o %A 2>/dev/null)" || active=unknown
-    if [ -z "$active" ]; then
-      [ -z "$path" ] || rm -f -- "$path"
-      return
-    fi
+    [ -n "$active" ] || return 0
     sleep 1
   done
   collx_log "ERROR: scheduled allocation did not terminate during cleanup"
@@ -605,20 +626,20 @@ collx_prepare_pinned_source() {
   mkdir -p -- "$root" && chmod 700 "$root" || return 1
   temporary="$(mktemp -d "$root/.$name.XXXXXX")" || return 1
   log="$(collx_private_log_path "backend-source-$name")" || return 1
-  # On b300 the NFS export can realize a new stage dir as UID 0 while git runs as the UID-mapped
-  # Actions user, tripping git's "dubious ownership" guard. HOME is this job's ephemeral dir, so a
-  # global exemption is scoped to the job (and reaches the submodule child git).
-  git config --global --add safe.directory '*' >> "$log" 2>&1 || true
-  if GIT_TERMINAL_PROMPT=0 git init -q "$temporary" > "$log" 2>&1 \
+  # On b300 the NFS export can realize a new stage dir as UID 0 while git runs as another UID,
+  # tripping git's "dubious ownership" guard. The exemption rides the environment, so it reaches
+  # the submodule child git without touching the user's ~/.gitconfig.
+  if (export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory \
+        GIT_CONFIG_VALUE_0='*'
+      git init -q "$temporary" > "$log" 2>&1 \
       && git -C "$temporary" remote add origin "$repo" >> "$log" 2>&1 \
-      && GIT_TERMINAL_PROMPT=0 git -C "$temporary" fetch -q --no-tags --depth 1 \
-        origin "$commit" >> "$log" 2>&1 \
+      && git -C "$temporary" fetch -q --no-tags --depth 1 origin "$commit" >> "$log" 2>&1 \
       && git -C "$temporary" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD \
         >> "$log" 2>&1 \
       && [ "$(git -C "$temporary" rev-parse HEAD)" = "$commit" ] \
-      && { [ "$#" -eq 0 ] || GIT_TERMINAL_PROMPT=0 git -C "$temporary" submodule update -q \
+      && { [ "$#" -eq 0 ] || git -C "$temporary" submodule update -q \
         --init --depth 1 "$@" >> "$log" 2>&1; } \
-      && mv -- "$temporary" "$source" >> "$log" 2>&1; then
+      && mv -- "$temporary" "$source" >> "$log" 2>&1); then
     return 0
   fi
   rm -rf -- "$temporary"
@@ -643,56 +664,6 @@ collx_materialize_source() {
   local source="${COLLX_BACKEND_SOURCE_ROOT:-}/$1" destination="$2"
   [ -n "${COLLX_BACKEND_SOURCE_ROOT:-}" ] && [ -d "$source" ] || return 1
   rm -rf -- "$destination" && cp -R -- "$source" "$destination"
-}
-
-collx_prepare_implicit_stage_base() {
-  python3 "$COLLX_RUNTIME_DIR/stage.py" implicit-stage-base "${1:-}" "${2:-}"
-}
-
-collx_prepare_runner_shared_stage_base() {
-  local runner_temp="${RUNNER_TEMP:-}" runner_root
-  case "$runner_temp" in
-    /*/_work/_temp) runner_root="${runner_temp%/_work/_temp}" ;;
-    *) collx_die "canonical AMD execution requires a standard shared runner temp" ;;
-  esac
-  [ -n "$runner_root" ] && [ "$runner_root" != "$runner_temp" ] \
-    || collx_die "canonical AMD execution requires a shared runner root"
-  collx_prepare_implicit_stage_base "$runner_root"
-}
-
-collx_prepare_stage_dir() {
-  local runner="$1"
-  [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ] || return 0
-  [ -n "${COLLX_SQUASH_DIR:-}" ] \
-    || collx_die "canonical CollectiveX execution requires shared container storage"
-  if [ -z "${COLLX_STAGE_DIR:-}" ] || [ "$runner" = b300 ] || [ "$runner" = gb300 ]; then
-    case "$runner" in
-      h100-dgxc|b200-nscale)
-        # The passwd home is not compute-visible; anchor at the squash dir's parent.
-        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base "${COLLX_SQUASH_DIR%/*}")" \
-          || collx_die "canonical CollectiveX execution cannot create an isolated shared stage directory"
-        ;;
-      b300|gb300)
-        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base "" \
-          "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
-          || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
-        ;;
-      h200-dgxc)
-        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base)" \
-          || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
-        ;;
-      mi300x|mi325x|mi355x)
-        COLLX_STAGE_DIR="$(collx_prepare_runner_shared_stage_base)" \
-          || collx_die "canonical AMD execution cannot create an isolated shared stage directory"
-        ;;
-      *) collx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
-    esac
-  elif [ "$runner" = mi300x ]; then
-    COLLX_STAGE_DIR="$(python3 "$COLLX_RUNTIME_DIR/stage.py" resolve-directory \
-      "$COLLX_STAGE_DIR")" \
-      || collx_die "canonical MI300X execution cannot resolve the shared stage directory"
-  fi
-  export COLLX_STAGE_DIR
 }
 
 # One squash per (platform, image reference): never per run (re-copies 30-65GB) and never per
@@ -762,6 +733,9 @@ collx_ensure_squash() {
   key="${sq##*/}"
   key="${key%.sqsh}"
   locks="$squash_dir/.locks"
+  # A lock directory another account owns (a CI runner's) falls back to a per-user one.
+  { mkdir -p "$locks" && touch "$locks/${key}.lock"; } 2>/dev/null \
+    || locks="/tmp/inferencex-collectivex-locks-$(id -u)"
   mkdir -p "$locks" 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
@@ -778,6 +752,12 @@ collx_ensure_squash() {
     collx_log "container squash ready (reusing staged import)"
   else
     collx_log "importing configured container image ($verdict)"
+    # Never replace another user's image: shared image dirs need not be sticky.
+    if [ -e "$sq" ] && [ ! -O "$sq" ]; then
+      collx_log "ERROR: $sq is $verdict but belongs to another user;" \
+        "set squash_dir to storage you own"
+      return 1
+    fi
     rm -f "$sq" "$sq.digest" 2>> "$log" \
       || { collx_log_tail "$log"; return 1; }
     # </dev/null: never block on an interactive password prompt.
@@ -804,7 +784,7 @@ collx_ensure_squash() {
     printf '%s\n' "${COLLX_IMAGE_DIGEST:-}" > "$sq.digest" 2>> "$log" || true
     # Retired per-run names of this image; the age gate spares a file a concurrent old-generation
     # run may still be reading.
-    find "$squash_dir" -maxdepth 1 -type f \
+    find "$squash_dir" -maxdepth 1 -type f -user "$(id -u)" \
       -name "*_$(printf '%s' "$image" | sed 's#[/:@#]#_#g').sqsh" ! -name "${sq##*/}" \
       -mmin +2880 -delete 2>/dev/null || true
   fi
@@ -857,6 +837,12 @@ collx_ensure_squash_on_job() {
       collx_log_tail "$log"
       return 1
     fi
+    if [ "$rc" = 15 ]; then
+      collx_log "ERROR: a stale or unreadable image there belongs to another user;" \
+        "set squash_dir to storage you own or exclude the node"
+      collx_log_tail "$log"
+      return 1
+    fi
     if [ "$attempt" -lt "$max_attempts" ]; then
       collx_log "container import attempt $attempt/$max_attempts failed (rc=$rc); retrying"
       collx_log_tail "$log"
@@ -894,8 +880,12 @@ export ENROOT_TEMP_PATH="$compute_home/enroot-tmp"
 export ENROOT_CACHE_PATH="$compute_home/enroot-cache"
 export ENROOT_DATA_PATH="$compute_home/enroot-data"
 export ENROOT_RUNTIME_PATH="$compute_home/enroot-run"
-mkdir -p "$(dirname "$sq")" "$(dirname "$lock")" \
+mkdir -p "$(dirname "$sq")" \
   "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
+# A lock directory another account owns (a CI runner's) falls back to a per-user one.
+{ mkdir -p "$(dirname "$lock")" && touch "$lock"; } 2>/dev/null \
+  || { lock="/tmp/inferencex-collectivex-locks-$(id -u)/${lock##*/}"
+       mkdir -p "$(dirname "$lock")"; }
 exec 9>"$lock"
 # Shared storage serializes the import; node-local storage imports in parallel.
 flock 9
@@ -913,6 +903,11 @@ else
   done
   converter="$(command -v enroot-aufs2ovlfs || true)"
   [ -z "$converter" ] || getcap "$converter" || true
+  # Never replace another user's image: node-local image dirs need not be sticky.
+  if [ -e "$sq" ] && [ ! -O "$sq" ]; then
+    echo "$sq is $verdict but belongs to another user" >&2
+    exit 15
+  fi
   rm -f -- "$sq" "$sq.digest"
   enroot import -o "$sq" "docker://$image" </dev/null
   unsquashfs -l "$sq" >/dev/null 2>&1
@@ -920,7 +915,7 @@ else
   printf '%s\n' "$digest" > "$sq.digest" || true
   # Retired per-run names of this image never get touched again; the age gate
   # spares a file a concurrent old-generation run may still be reading.
-  find "$(dirname "$sq")" -maxdepth 1 -type f -name "*_${sanitized}.sqsh" \
+  find "$(dirname "$sq")" -maxdepth 1 -type f -user "$(id -u)" -name "*_${sanitized}.sqsh" \
     ! -name "${sq##*/}" -mmin +2880 -delete 2>/dev/null || true
 fi
 BASH
@@ -956,7 +951,7 @@ collx_probe_gpus_on_job() {
 # Resolved before any copy starts so the EXIT trap can remove an interrupted partial stage.
 collx_stage_path() {
   local repo_root="$1" stage_base="${2:-}" tag stage_path
-  tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
+  tag="${COLLECTIVEX_EXECUTION_ID:-manual-$$}"
   [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
     || collx_die "invalid staging execution identity"
   if [ -z "$stage_base" ] || [ "$stage_base" = "$repo_root" ]; then
@@ -968,7 +963,7 @@ collx_stage_path() {
     stage_path="${stage_base%/}/job_$tag"
   fi
   python3 "$COLLX_RUNTIME_DIR/stage.py" validate-stage-path "$repo_root" "$stage_base" \
-    "$stage_path" "${COLLX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}"
+    "$stage_path"
 }
 
 collx_stage_repo() {
@@ -988,23 +983,23 @@ collx_stage_repo() {
   fi
 }
 
-# The workflow's upload-artifact reads the checkout, not the stage dir, so staged result JSONs
-# are copied back to the checkout's results/.
+# Results are committed from the checkout, so the staged result JSONs are copied back to its
+# results/<sku>/, replacing older files for the same cases.
 collx_collect_results() {
   local mount_src="$1" repo_root="$2" dst log
   local -a files
   [ "$mount_src" = "$repo_root" ] && return 0
-  log="$(collx_private_log_path "artifact-collection-$$-${RANDOM}")"
-  dst="$repo_root/collectivex/results"
+  log="$(collx_private_log_path "result-collection-$$-${RANDOM}")"
+  dst="$repo_root/collectivex/results/$RUNNER"
   mkdir -p "$dst" 2>> "$log" \
     || { collx_log "ERROR: cannot create checkout result directory"; return 1; }
   shopt -s nullglob
-  files=("$mount_src/collectivex/results/"*.json)
+  files=("$mount_src/collectivex/results/$RUNNER/"*.json)
   shopt -u nullglob
   [ "${#files[@]}" -gt 0 ] || { collx_log "ERROR: staged run produced no result JSON"; return 1; }
   cp -- "${files[@]}" "$dst/" >> "$log" 2>&1 \
     || { collx_log "ERROR: staged result collection failed"; return 1; }
-  collx_log "collected staged results for artifact validation"
+  collx_log "collected results into collectivex/results/$RUNNER"
 }
 
 collx_cleanup_stage() {
@@ -1036,7 +1031,7 @@ collx_run_shard() {
 
   collx_resolve_slurm_rendezvous "$JOB_ID"
   collx_apply_network_profile "$NODES" "${COLLX_TRANSPORT:-}"
-  mkdir -p "$MOUNT_SRC/collectivex/results"
+  mkdir -p "$MOUNT_SRC/collectivex/results/$RUNNER"
   container_args=(--container-mounts="$CONTAINER_MOUNTS" --no-container-mount-home
     --container-workdir=/ix/collectivex --no-container-entrypoint)
   if declare -p COLLX_DISTRIBUTED_CONTAINER_ARGS >/dev/null 2>&1; then
@@ -1065,8 +1060,7 @@ collx_run_shard() {
 
   argv_file="$(mktemp)" || return 1
   while [ "$ci" -lt "$expected_cases" ]; do
-    python3 "$COLLX_RUNTIME_DIR/config.py" case-args "$shard" "$ci" \
-      "$RUNNER" "$TS" \
+    python3 "$COLLX_RUNTIME_DIR/config.py" case-args "$shard" "$ci" "$RUNNER" \
       "$NGPUS" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" > "$argv_file" \
       || { rm -f "$argv_file"; collx_die "shard case $ci does not decode against this allocation"; }
     mapfile -d '' -t ep_args < "$argv_file"
