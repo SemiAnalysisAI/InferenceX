@@ -854,7 +854,7 @@ def main() -> int:
     )
     capacity = commands.add_parser(
         "check-capacity",
-        help="Exit 0 with available nodes below 80%% utilization; otherwise nonzero, without printing telemetry",
+        help="Exit 0 with available nodes at or below 95%% utilization; otherwise nonzero, without printing telemetry",
     )
     capacity.add_argument(
         "--cluster",

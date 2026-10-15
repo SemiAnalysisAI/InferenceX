@@ -276,6 +276,35 @@ def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
     assert [pr["number"] for pr in klaud.active_pulls(pulls, now, 7)] == [1, 3, 4]
 
 
+def test_capacity_aborts_only_above_95_percent_node_utilization():
+    now = "2026-10-15T00:00:00Z"
+
+    def cluster(cluster_id, allocated, mixed, idle, down):
+        return {
+            "clusterId": cluster_id, "stale": False, "status": "operational",
+            "observedAt": now, "receivedAt": now,
+            "summary": {"totalNodes": allocated + mixed + idle + down, "allocatedNodes": allocated,
+                        "mixedNodes": mixed, "idleNodes": idle, "downNodes": down,
+                        "otherNodes": 0},
+        }
+
+    feed = Feed(
+        url="https://dash.inferencex.semianalysis.com/api/status/clusters",
+        retrieved_at=now, sha256="0" * 64,
+        payload={"kind": "inferencex.status.clusters", "generatedAt": now, "data": {
+            "available": True,
+            "clusters": [
+                cluster("at-95", 18, 1, 1, 0),
+                cluster("over-95", 38, 1, 1, 0),
+                cluster("no-idle", 19, 0, 0, 1),
+                cluster("half", 5, 0, 5, 0),
+            ],
+        }},
+    )
+
+    assert api.available_clusters(feed, api.Policy(), api.utc(now)) == {"at-95", "half"}
+
+
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
     first_id = "1" * 16 + "-" + "2" * 16
     second_id = "3" * 16 + "-" + "4" * 16

@@ -231,7 +231,7 @@ def fresh(value: Any, now: datetime, policy: Policy) -> bool:
 
 
 def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
-    """Return clusters below 80% node utilization; never publish private status."""
+    """Return clusters at or below 95% node utilization; never publish private status."""
     try:
         raw = feed.payload
         if (
@@ -279,7 +279,7 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
                 continue
             if (
                 summary["idleNodes"] > 0
-                and (summary["allocatedNodes"] + summary["mixedNodes"]) * 5 < total * 4
+                and (summary["allocatedNodes"] + summary["mixedNodes"]) * 20 <= total * 19
             ):
                 available.add(cluster_id)
         return available

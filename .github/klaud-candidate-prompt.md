@@ -49,7 +49,7 @@ Never add or remove it yourself.
 
 Check capacity before edits/branch/PR creation, every targeted dispatch, the final label
 transition and capacity-related recovery: `check-capacity --cluster ID` (repeat for ALL
-actual targets). Require fresh, available telemetry and utilization strictly below 80%.
+actual targets). Require fresh, available telemetry and utilization at or below 95%.
 Queue eligible work with normal scheduler controls; no priority overrides.
 If the check fails, report capacity-deferred and call finish. A utilization increase after
 dispatch never justifies cancelling healthy work. A benchmark capacity error alone is
