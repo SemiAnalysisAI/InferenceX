@@ -639,10 +639,10 @@ class GraphTiming(_SpinAlignment):
 
     def replay_output(self, problem):
         """An untimed capture with `stage` INSIDE the graph. After the upload replay the inputs are
-        rescaled in place and dispatch's output and the result are poisoned, so the checked
-        replay's output matches the drained pair the caller runs next on the same rescaled inputs
-        only if that replay re-read its inputs and re-ran dispatch, stage and combine. The caller
-        restores the inputs afterwards (`restore_replay_inputs`)."""
+        rescaled in place and dispatch's output, the staged combine input and the result are
+        poisoned, so the checked replay's output matches the drained pair the caller runs next on
+        the same rescaled inputs only if that replay re-read its inputs and re-ran dispatch, stage
+        and combine. The caller restores the inputs afterwards (`restore_replay_inputs`)."""
         import torch
         import torch.distributed as dist
 
