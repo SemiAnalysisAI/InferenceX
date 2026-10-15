@@ -107,7 +107,9 @@ for row in "${rows[@]}"; do
   control="$HERE/.shards/$id.json"
   python3 "$HERE/sweep_matrix.py" --extract-from "$matrix" --shard-id "$id" --out "$control" \
     >/dev/null 2>&1
-  execution="manual-$stamp-$id"
+  # The pid keeps two runs of one shard started in the same second (graphed and eager, say) out
+  # of each other's stage directory.
+  execution="manual-$stamp-$$-$id"
   echo "=== shard $id: $backend, ${nodes}x${gpn} GPUs, $ncases case(s)"
   # What the sweep workflow used to set per matrix cell. A subshell keeps one shard's image and
   # placement from leaking into the next.
