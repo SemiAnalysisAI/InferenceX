@@ -12,7 +12,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Never
@@ -247,14 +246,6 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             or not -policy.clock_skew_seconds <= snapshot_age <= policy.scheduler_max_age_seconds
         ):
             return set()
-        queued: Counter[str] = Counter()
-        for job in snapshot["queue"]:
-            nodes = 1 if job["nodeCount"] is None else job["nodeCount"]
-            if type(nodes) is not int or nodes < 1:
-                return set()
-            if job["runnerName"] is None:
-                for label in set(job["clusterIds"]):
-                    queued[label] += nodes
         available: set[str] = set()
         seen: set[str] = set()
         for metric in snapshot["packingMetrics"]:
@@ -262,10 +253,11 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
             if not isinstance(label, str) or not label.startswith("cluster:") or label in seen:
                 return set()
             seen.add(label)
-            schedulable, allocated = metric["schedulableNodes"], metric["allocatedNodes"]
-            if type(schedulable) is not int or type(allocated) is not int or allocated < 0:
+            schedulable = metric["schedulableNodes"]
+            demand = (metric["allocatedNodes"], metric["queuedNodes"])
+            if type(schedulable) is not int or any(type(n) is not int or n < 0 for n in demand):
                 continue
-            if schedulable > 0 and allocated + queued[label] <= 2 * schedulable:
+            if schedulable > 0 and sum(demand) <= 2 * schedulable:
                 available.add(label.removeprefix("cluster:"))
         return available
     except (KeyError, ValueError, TypeError, AttributeError):

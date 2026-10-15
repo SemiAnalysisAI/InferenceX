@@ -279,41 +279,31 @@ def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
 def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
     now = "2026-10-15T00:05:00Z"
 
-    def metric(name, allocated, schedulable):
+    def metric(name, allocated, queued, schedulable):
         return {"clusterLabel": f"cluster:{name}", "allocatedNodes": allocated,
-                "schedulableNodes": schedulable}
+                "queuedNodes": queued, "schedulableNodes": schedulable}
 
-    def queued(clusters, nodes, runner=None):
-        return {"clusterIds": [f"cluster:{name}" for name in clusters], "nodeCount": nodes,
-                "runnerName": runner}
-
-    def feed(snapshot_at):
+    def feed(snapshot_at, metrics):
         return Feed(
             url="https://dash.inferencex.semianalysis.com/api/status/scheduler",
             retrieved_at=now, sha256="0" * 64,
             payload={"kind": "inferencex.status.scheduler", "generatedAt": now, "data": {
                 "available": True,
-                "snapshot": {
-                    "snapshotAt": snapshot_at, "stalled": False,
-                    "packingMetrics": [
-                        metric("at-200", 8, 10), metric("over-200", 8, 10),
-                        metric("assigned", 10, 10), metric("drained", 0, 0),
-                    ],
-                    "queue": [
-                        queued(["at-200", "over-200"], 4),
-                        queued(["at-200"], 7),
-                        queued(["at-200"], None),
-                        queued(["over-200"], 9),
-                        queued(["assigned"], 20, runner="assigned_00"),
-                    ],
-                },
+                "snapshot": {"snapshotAt": snapshot_at, "stalled": False,
+                             "packingMetrics": metrics},
             }},
         )
 
+    metrics = [
+        metric("at-200", 8, 12, 10), metric("over-200", 8, 13, 10),
+        metric("idle", 0, 0, 4), metric("drained", 0, 0, 0), metric("corrupt", 1, -1, 10),
+    ]
     policy = api.Policy()
-    assert api.available_clusters(feed("2026-10-15T00:00:00Z"), policy, api.utc(now)) == {
-        "at-200", "assigned"}
-    assert api.available_clusters(feed("2026-10-14T23:59:59Z"), policy, api.utc(now)) == set()
+    fresh, stale = "2026-10-15T00:00:00Z", "2026-10-14T23:59:59Z"
+    assert api.available_clusters(feed(fresh, metrics), policy, api.utc(now)) == {"at-200", "idle"}
+    assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
+    pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
+    assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
 
 
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
