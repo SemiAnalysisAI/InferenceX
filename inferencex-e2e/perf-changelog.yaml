@@ -9843,3 +9843,9 @@
     - "Extend TP2 AgentX to concurrency 32 so TP-only overlaps DP2 at c32."
     - "Enable SGLANG_OPT_HIP_FLYDSL_MXFP8=1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4050
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  description:
+    - "Update the SGLang image to lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261014."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4095
