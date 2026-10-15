@@ -9823,3 +9823,9 @@
     - "Use master-config recipe selectors and composed AgentX fragments; preserve the dedicated frontend/client node and the c2884 and c1228 tuning."
     - "Backport the vLLM Python sidecar reasoning-parser fix through the shared patch mechanism while retaining the main srt-slurm pin."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3941
+
+- config-keys:
+  - qwen3.5-fp8-gb200-dynamo-sglang
+  description:
+  - Update SGLang image to v0.5.21-cu130 and rename the removed TP memory imbalance check env var.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4080
