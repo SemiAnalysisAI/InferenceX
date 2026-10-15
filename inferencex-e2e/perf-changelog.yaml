@@ -5595,7 +5595,7 @@
     - "Image ghcr.io/tile-ai/tilert:0.1.5 (tilert 0.1.5.post2 installed at container start); commands aligned to TileRT README Topology A -- NIXL KV transfer, --kv-cache-dtype fp8_ds_mla (prefill) <-> fp8 (decode), max-seq-len 202752; MTP speculative-config wired via spec-decoding=mtp"
     - "Topology: 1 prefill node (TP8) + 1 decode node (TP8), each 8xB200 exclusive; TileRT decode is bs=1 only so conc-list is a single point [1], ISL 1k/8k OSL 1k"
     - "Runner: launch_b200-dgxc.sh tilert early-return branch (zero impact on the dynamo path); tilert_utils/submit.sh issues two srun --ntasks=1, one per role, because prefill and decode need different container images; roles are dispatched by the TILERT_ROLE it exports, and torn down across nodes via a sentinel file on the shared /workspace"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4140
 
 - config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
@@ -9724,7 +9724,7 @@
     - "Replace the TP4/EP1 and TP2/EP1 C1-C128 sweeps with TP4/EP4 points at concurrency 1, 4, 8 and 16, plus aggregated TP4/EP4 points with DP attention (DP4) at concurrency 32, 64, 128 and 192 behind sglang-router 0.3.2."
     - "Apply the point-specific prefill-decode interval, prefill chunking, admission, memory and SWA prefix-tail settings from the single-node recipe; all points use the default fcfs schedule policy."
     - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4.1-Flash runs as shipped with block size 5."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4140
 
 - config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
@@ -9902,4 +9902,4 @@
     - "Serve flags follow the SGLang cookbook's NVFP4 cell: modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE prefill, DFlash2 draft RadixArk/Muse-Spark-Open-DFlash2 with fa4 draft attention and 8 verify tokens (7 drafts), muse reasoning and tool-call parsers. Prefill CUDA graphs are off and mem-fraction-static is 0.88 to leave room for the KV pool; admission and the decode graph batch are 2x concurrency."
     - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
     - "The checkpoint is served from the staged Lustre copy; the AgentX client reads its tokenizer from it."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4140
