@@ -5085,6 +5085,83 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [36, 44, 52], srt-recipe: agentic.yaml }
 
+# Qwen3.5 NVFP4 B300 Dynamo/SGLang AgentX variants using the pinned
+# SGLang image and committed golden acceptance-length curve.
+qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
+  image: lmsysorg/sglang:nightly-dev-20261013-7224fce1
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: false
+  srt-recipe-dir: qwen3.5/sglang/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [64]
+        srt-recipe: agg-tp2ep2-mtp3-hicache.yaml
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 2
+          pp: 1
+          ep: 2
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [44]
+        srt-recipe: agg-tp2-mtp7-hicache-variants.yaml:zip_override_running_cap[2]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 2
+          pp: 1
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [36]
+        srt-recipe: agg-tp2-mtp7-hicache-variants.yaml:zip_override_running_cap[0]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 2
+          pp: 1
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [40]
+        srt-recipe: agg-tp2-b2-mtp5-hicache.yaml
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 2
+          pp: 1
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [4]
+        srt-recipe: agg-tp4-mtp6-hicache-variants.yaml:base
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          pp: 1
+          ep: 1
+          dp-attn: false
+
 # Qwen3.8-Flash-Next NVFP4 AgentX on B300 via SGLang with native NEXTN MTP.
 # Day-zero recipe; mirrors the B200 arm. TP1 per the cookbook's verified
 # single-node command: 126 GiB of NVFP4 weights fit on one B300.
@@ -5987,72 +6064,145 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-disagg:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.2.1" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261010" }
   multinode: true
   disagg: false
   srt-recipe-dir: dsv4/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
     - search-space:
-      # Keep the checked-in recipes on real MTP verification. Throughput jobs
-      # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
-      - spec-decoding: mtp
+      # DSpark K=6 recipes keep real verification. Throughput jobs inject the
+      # committed dsv4-pro-0813-dspark golden AL at launch; EVAL_ONLY stays real.
+      - spec-decoding: draft_model
         conc-list: [1]
+        srt-recipe: agg-variants.yaml:override_tp8_c1
         num-nodes: 2
-        srt-recipe: agg-variants.yaml:override_tp8
         worker:
           num-worker: 1
           tp: 8
           ep: 1
           dp-attn: false
-      - spec-decoding: mtp
-        conc-list: [4]
-        num-nodes: 2
-        srt-recipe: agg-variants.yaml:override_tp8
-        worker:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: mtp
-        conc-list: [1, 2, 4, 6, 8]
+      - spec-decoding: draft_model
+        conc-list: [1]
+        srt-recipe: agg-variants.yaml:override_tp4_c1
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4
         worker:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [2]
+        srt-recipe: agg-variants.yaml:override_tp4_c2
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [4]
+        srt-recipe: agg-variants.yaml:override_tp4_c4
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f
-  model: deepseek-ai/DeepSeek-V4-Pro
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.6.0.dev20261010" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   srt-recipe-dir: dsv4/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    # Four DP ranks each reserve 180 GiB on an 840 GiB node.
-    - dram-utilization: 0.857143
+    # Four DP ranks each reserve 140 GB of Mooncake store on an 840 GB node.
+    - dram-utilization: 0.666667
       search-space:
-      # Keep the checked-in recipes on real MTP verification. Throughput jobs
-      # inject the committed golden AL at launch; EVAL_ONLY leaves them real.
-      - spec-decoding: mtp
-        conc-list: [1152]
+      # DSpark K=6 recipes keep real verification. Throughput jobs inject the
+      # committed dsv4-pro-0813-dspark golden AL at launch; EVAL_ONLY stays real.
+      - spec-decoding: draft_model
+        conc-list: [1024]
+        srt-recipe: disagg-mtp-variants.yaml:override_2p1d_dep8_dep16_c1024
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
-        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list: [512]
+        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_dep8_dep16_c512
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list: [128]
+        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_dep4_dep16_c128
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: draft_model
+        conc-list: [384]
+        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_dep8_dep16_c384
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # Four DP ranks each reserve 125 GB of Mooncake store on an 840 GB node.
+    - dram-utilization: 0.595238
+      search-space:
+      - spec-decoding: draft_model
+        conc-list: [1152]
         srt-recipe: disagg-mtp-variants.yaml:override_2p1d_dep8_dep12_c1152
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
         prefill:
           num-worker: 2
           tp: 8
@@ -6062,100 +6212,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           num-worker: 1
           tp: 12
           ep: 12
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [1024]
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
-        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
-        srt-recipe: disagg-mtp-variants.yaml:override_2p1d_dep8_dep16_c1024
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [256]
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
-        router: { name: dynamo-router, version: "1.3.0.dev20260720" }
-        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_dep4_dep8_c256
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [512]
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
-        router: { name: dynamo-router, version: "1.4.0" }
-        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_dep8_dep16_c512
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [4]
-        router: { name: dynamo-router, version: "1.4.0" }
-        srt-recipe: disagg-1p4d-dep4-tp8-c4-mtp.yaml
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-        decode:
-          num-worker: 4
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: mtp
-        conc-list: [128]
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
-        router: { name: dynamo-router, version: "1.4.0" }
-        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_dep4_dep16_c128
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [256]
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
-        router: { name: dynamo-router, version: "1.4.0" }
-        srt-recipe: disagg-mtp-variants.yaml:override_1p1d_dep4_dep16_c256
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
           dp-attn: true
 
 # GB200 mirror of the dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-{agg,disagg}
@@ -9269,6 +9325,90 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-disagg:
           ep: 2
           dp-attn: false
 
+dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
+  image: vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.6.0.dev20261010" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: dsv41flash/vllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        srt-recipe: agg-variants.yaml:override_tp4_c1
+        conc-list: [1]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        srt-recipe: agg-variants.yaml:override_tp4_c8
+        conc-list: [8]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.6.0.dev20261010" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: dsv41flash/vllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    # Four prefill DP ranks per node each offload up to 70 GiB of KV on an 840 GiB node.
+    - dram-utilization: 0.333333
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_6p1d_dep2_dep16_c2884
+        conc-list: [2884]
+        prefill:
+          num-worker: 6
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep2_dep16_c1228
+        conc-list: [1228]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+
 # One serving GPU, stock ARM64 release, native AgentX client and proportional host cache.
 qwen3.8next-fp4-gb300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
@@ -9564,4 +9704,188 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
           num-worker: 1
           tp: 4
           ep: 1
+          dp-attn: true
+
+dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.3.0.dev20260720
+  multinode: true
+  disagg: false
+  srt-recipe-dir: dsv4/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: draft_model
+        srt-recipe: agg-tp8-c1-dspark6.yaml
+        conc-list:
+        - 1
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        srt-recipe: agg-tp8-c4-dspark6.yaml
+        conc-list:
+        - 4
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: draft_model
+        srt-recipe: agg-tp8-c8-dspark6.yaml
+        conc-list:
+        - 8
+        num-nodes: 2
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
+  model-prefix: dsv4
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.3.0.dev20260720
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: dsv4/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep8-dep8-c32-dspark5.yaml
+        conc-list:
+        - 32
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep8-dep8-c64-dspark5.yaml
+        conc-list:
+        - 64
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep8-dep8-c128-dspark5.yaml
+        conc-list:
+        - 128
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep8-dep8-c256-dspark5.yaml
+        conc-list:
+        - 256
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep8-dep12-c360-dspark6.yaml
+        conc-list:
+        - 360
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep8-dep8-c384-dspark6.yaml
+        conc-list:
+        - 384
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep12-dep12-c384-dspark5.yaml
+        conc-list:
+        - 384
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+      - spec-decoding: draft_model
+        srt-recipe: disagg-1p1d-dep12-dep16-c512-dspark6.yaml
+        conc-list:
+        - 512
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 12
+          ep: 12
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true

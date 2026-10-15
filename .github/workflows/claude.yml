@@ -184,7 +184,7 @@ jobs:
             - Only wait for the final successful run to complete before analyzing benchmark results
             - Do NOT claim completion until the most recent job finishes and results are analyzed
             - If jobs cannot be run, say exactly what you could not run and why
-            - **Important** Modify inferencex-e2e/perf-changelog.yaml for any config changes affecting performance
+            - **Important** Append an inferencex-e2e/perf-changelog.yaml entry when the change alters what any benchmark runs (see "Updating perf-changelog.yaml" below)
 
             ## Profiling (SGLang only)
             When asked to profile a config, dispatch the `profile.yml` workflow. **Only SGLang configs can be profiled** — the profiler uses SGLang's `/start_profile` and `/stop_profile` HTTP endpoints. Reject profiling requests for vLLM, TRT, or other frameworks.
@@ -234,7 +234,7 @@ jobs:
 
             ## Updating perf-changelog.yaml
 
-            See `AGENTS.md` → "Non-negotiable benchmark invariants" for changelog rules and `inferencex-e2e/perf-changelog.yaml` for entry format. Required whenever you change image tags, env vars, or perf-affecting params in `inferencex-e2e/configs/*-master.yaml` or `inferencex-e2e/benchmarks/*.sh`. Use `XXX` as the PR-link placeholder until the PR exists.
+            See `AGENTS.md` → "Non-negotiable benchmark invariants" for changelog rules and `inferencex-e2e/perf-changelog.yaml` for entry format. Add an entry when the change alters what any benchmark runs: run `uv run python -m infx.matrix.changed --base origin/main` from `inferencex-e2e/` and cover every config key it lists; if it lists none (refactors, recipe moves, docs), add no entry. Use `XXX` as the PR-link placeholder until the PR exists.
 
             If an entry uses `append-only: true`, require the generated base matrix to remain an immutable subset of the generated head matrix. New concurrency values or new recipe variants may be added inside a selected existing config/scenario, but no existing generated point may be removed or modified, and every addition must retain the target visual curve's single non-null image. Do not enforce a file allowlist: supporting code, benchmark scripts, launchers, helpers, and other files may change when their benchmark effect is exclusive to the corresponding newly appended points. All added changelog entries must be append-only, and eval modifiers are forbidden. Trace behavior through the complete diff; unguarded changes or paths reachable by an existing point are blocking.
 
@@ -397,15 +397,12 @@ jobs:
             - For re-reviews, prefix summary with "Re-review:" and note what changed
 
             ## Master Config and Perf Changelog Validation:
-            When reviewing a PR, check if any of the following master config files were modified:
-            - `inferencex-e2e/configs/amd-master.yaml`
-            - `inferencex-e2e/configs/nvidia-master.yaml`
+            A PR needs an `inferencex-e2e/perf-changelog.yaml` entry exactly when it changes what a benchmark runs; the entry triggers result collection.
 
-            If either master config file was edited AND `inferencex-e2e/perf-changelog.yaml` was NOT edited in the same PR:
-            - This is a 🔴 **BLOCKING** issue
-            - Comment that `inferencex-e2e/perf-changelog.yaml` must also be updated when master config files are changed
-            - The perf-changelog entry should document what changed in the config and include the PR link
-            - Format: "Master config files were modified but `inferencex-e2e/perf-changelog.yaml` was not updated. When changing `inferencex-e2e/configs/amd-master.yaml` or `inferencex-e2e/configs/nvidia-master.yaml`, you must add a corresponding entry to `inferencex-e2e/perf-changelog.yaml` documenting the changes."
+            When a PR changes master configs, recipes, benchmark scripts, or launcher code and does NOT add a `inferencex-e2e/perf-changelog.yaml` entry, run `uv run python -m infx.matrix.changed --base origin/<base branch>` from `inferencex-e2e/`:
+            - If it lists changed config keys, this is a 🔴 **BLOCKING** issue. Format: "This PR changes benchmark points for <config keys> but adds no `inferencex-e2e/perf-changelog.yaml` entry. Append one entry covering these config keys to the end of the file."
+            - If it lists no changed config keys and the PR changes no benchmark script or launcher behavior that a benchmark runs, it is not an issue; do not comment on it. The tool does not see script or launcher code, so judge those changes from the diff and treat a run-affecting one without an entry as 🔴 **BLOCKING**.
+            - If it cannot run, say so in the summary comment and ask whether the change alters what any benchmark runs.
 
             ### Perf Changelog Entry Position:
             `inferencex-e2e/perf-changelog.yaml` is read in chronological order — oldest entries at the top, newest at the bottom. New entries MUST be appended to the END of the file. Never insert in the middle or prepend.
