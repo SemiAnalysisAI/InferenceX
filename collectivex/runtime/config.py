@@ -77,7 +77,7 @@ def _network_overlay(runner: str) -> dict[str, object]:
     """Repo-tracked per-SKU scale-out RDMA selectors — the `network` block of the
     SKU's configs/platform_config.json entry — overlaid onto the base operator
     config. Only NETWORK_FIELDS are taken, so identity keys and notes are ignored;
-    a missing/invalid file is a no-op fallback to the base/secret network fields."""
+    a missing/invalid file is a no-op fallback to the base network fields."""
     try:
         block = _platforms().get(runner, {}).get("network", {})
     except (KeyError, OSError, TypeError, json.JSONDecodeError):
@@ -88,17 +88,15 @@ def _network_overlay(runner: str) -> dict[str, object]:
 def operator_config(path: str, runner: str) -> None:
     try:
         platform = _platforms()[runner]
-        # The registry's tracked per-SKU `operator` block is the baseline
-        # (de-secreted by operator decision); an operator config document, when
-        # provided, overrides it per field. Path "-" means registry-only.
+        # The registry's tracked per-SKU `operator` block is the baseline; an operator config
+        # document, when provided, overrides it per field. Path "-" means registry-only.
         selected = dict(platform.get("operator", {}))
         if path != "-":
             with open(path, encoding="utf-8") as stream:
                 document = json.load(stream)
             selected.update(document["runners"].get(runner, {}))
         # Overlay repo-tracked scale-out RDMA selectors onto the base runner config;
-        # SKUs without a platform_config.json network block keep their base/secret
-        # network fields.
+        # SKUs without a platform_config.json network block keep their base network fields.
         selected.update(_network_overlay(runner))
         allowed = OPERATOR_FIELDS | NETWORK_FIELDS | {"storage_roots"}
         if set(selected) - allowed:
@@ -187,8 +185,8 @@ def _emit_argv(case: dict, version: object, runner: str) -> None:
         raise SystemExit(1)
     entrypoint, codec, out_flag = _SUITES[case["suite"]]
     # case_id is the canonical identity, so a new identity axis cannot be omitted from the
-    # filename the way mode once was. One committed file per case: a re-run replaces it, and
-    # git history keeps the result it replaced.
+    # filename. One committed file per case: a re-run replaces it, and git history keeps the
+    # result it replaced.
     out = f"results/{runner}/{case['case_id']}.json"
     argv = ["--entrypoint", entrypoint, *codec(case, version, runner), out_flag, out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")

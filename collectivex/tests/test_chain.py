@@ -13,7 +13,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 import copy
+import gc
 import json
+import math
 import os
 import statistics
 import tempfile
@@ -26,6 +28,7 @@ import ep_backend  # noqa: E402
 import ep_harness  # noqa: E402
 import ep_oracle  # noqa: E402
 import ep_timing  # noqa: E402
+import gpu_clocks  # noqa: E402
 import summarize  # noqa: E402
 from _fakes import COMBINE_MS, DISPATCH_MS, _ChainBackend, _Combined  # noqa: E402
 
@@ -49,12 +52,6 @@ class _TraceEvent:
             raise AssertionError("elapsed_time on an event that was never recorded")
         return other.t - self.t
 
-    def synchronize(self, *_args, **_kwargs):
-        pass
-
-    def query(self):
-        return True
-
 
 class _TraceGraph:
     def __init__(self, clock, log):
@@ -65,29 +62,18 @@ class _TraceGraph:
         self.clock.advance(DISPATCH_MS + COMBINE_MS)
 
 
-class _TraceTensor:
-    """Absorbs whatever a tensor is asked to do."""
-
-    def __getattr__(self, _name):
-        return lambda *args, **kwargs: self
-
-
 @contextlib.contextmanager
 def trace_torch(clock, log):
     """Install a stub `torch`/`torch.distributed` that logs the calls this contract is about."""
-    tensor = lambda *args, **kwargs: _TraceTensor()  # noqa: E731
     dist = types.SimpleNamespace(
         all_reduce=lambda *args, **kwargs: log.append("all_reduce"),
         barrier=lambda *args, **kwargs: log.append("dist_barrier"),
-        is_initialized=lambda: True,
-        get_rank=lambda *args, **kwargs: 0,
-        get_world_size=lambda *args, **kwargs: 2,
-        ReduceOp=types.SimpleNamespace(SUM="sum", MAX="max", MIN="min"),
     )
+
     @contextlib.contextmanager
     def graph_context(_graph, **kwargs):
-        if kwargs.get("capture_error_mode") != "relaxed":
-            raise AssertionError("graph capture must use relaxed mode")
+        if kwargs.get("capture_error_mode", "global") != "global":
+            raise AssertionError("graph capture must use torch's default (global) mode")
         log.append("capture_begin")
         yield
         log.append("capture_end")
@@ -99,14 +85,10 @@ def trace_torch(clock, log):
             graph=graph_context,
             synchronize=lambda *args, **kwargs: log.append("sync"),
             _sleep=lambda *args, **kwargs: log.append("align_spin"),
-            current_stream=lambda *args, **kwargs: types.SimpleNamespace(
-                synchronize=lambda: log.append("sync")
-            ),
         ),
         distributed=dist,
-        version=types.SimpleNamespace(hip=None, cuda="13.0"),
-        zeros=tensor, ones=tensor, empty=tensor, full=tensor, tensor=tensor,
-        float32="float32", float64="float64", bfloat16="bfloat16", int32="int32",
+        version=types.SimpleNamespace(hip=None),
+        zeros=lambda *args, **kwargs: object(),
         isfinite=lambda _value: types.SimpleNamespace(
             all=lambda: types.SimpleNamespace(item=lambda: True)
         ),
@@ -151,7 +133,8 @@ class ChainedPairPeriod(unittest.TestCase):
         # A host sync inside the loop drains the GPU and turns the period back into a sequence of
         # drained roundtrips; a cross-rank call between pairs re-aligns the ranks and buys back
         # the very stagger the chain exists to amortise. Neither may appear. Each sibling is
-        # aligned once, before its first event, as the graph chain is.
+        # aligned once, before its first event, by the all-reduce alone: a spin in front would let
+        # a host-bound chain queue a backlog the GPU then drains at a second speed.
         iters = 6
         backend = _ChainBackend()
         run_chain(backend, iters, 2)
@@ -160,9 +143,10 @@ class ChainedPairPeriod(unittest.TestCase):
         )
         for section in chain_sections(backend.calls):
             first_event = section.index("record")
-            self.assertEqual(section[:first_event], ["align_spin", "all_reduce"])
+            self.assertEqual(section[:first_event], ["all_reduce"])
             self.assertNotIn("all_reduce", section[first_event:])
         self.assertNotIn("dist_barrier", backend.calls)
+        self.assertNotIn("align_spin", backend.calls)
 
     def test_a_hoisted_stage_runs_once_and_stays_out_of_every_pair_window(self):
         # The conversion is materialised once, untimed, so the pair is dispatch -> combine in
@@ -196,8 +180,11 @@ class ChainedPairPeriod(unittest.TestCase):
                 series = run_chain(_ChainBackend(), iters, drop)
                 self.assertEqual(
                     sorted(series),
-                    ["combine", "combined", "dispatch", "pair", "start_to_start"],
+                    ["combine", "combined", "dispatch", "host_retries", "host_stalled", "pair",
+                     "start_to_start"],
                 )
+                # Only a dispatch that waits on the host passes its chain through the host gate.
+                self.assertEqual((series["host_retries"], series["host_stalled"]), (None, None))
                 for key in ("pair", "dispatch", "combine"):
                     self.assertEqual(len(series[key]), kept)
                 # Start-to-start is a difference series: one fewer than the kept pairs.
@@ -218,6 +205,91 @@ class ChainedPairPeriod(unittest.TestCase):
             self.assertAlmostEqual(value, 3000.0)
         for value in series["pair"]:
             self.assertAlmostEqual(value, 15000.0)  # 3ms dispatch + 7ms stage + 5ms combine
+
+
+class ChainHostGate(unittest.TestCase):
+    """A chain whose dispatch waits on the host relaunches from the host inside every pair, so each
+    sibling opens only once this host runs at speed and restarts, on every rank together, when any
+    rank's host throttled around it."""
+
+    def _gated_chain(self, verdicts, iters=4, drop=1):
+        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
+        backend.host_synced_dispatch = True
+        script = iter(verdicts)
+
+        def stalled_anywhere(_timing):
+            backend.calls.append("stall_check")
+            return next(script)
+
+        with mock.patch.object(ep_timing, "cpu_probe_us",
+                               lambda: backend.calls.append("probe") or 20.0), \
+                mock.patch.object(ep_timing.EagerTiming, "_host_stalled_anywhere", stalled_anywhere):
+            series = run_chain(backend, iters, drop)
+        self.assertRaises(StopIteration, next, script)  # every verdict was consumed
+        return backend, series
+
+    def test_each_sibling_is_held_then_aligned_and_a_stalled_one_restarts(self):
+        backend, series = self._gated_chain([False, True, False])
+        calls = backend.calls
+        barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
+        # Floors once; the period sibling twice, the first attempt discarded.
+        self.assertEqual(len(barriers), 3)
+        for i in barriers:
+            self.assertEqual(calls[i - 1], "probe")  # the hold, outside every window
+            self.assertEqual(calls[i + 1], "record")
+            self.assertEqual(calls.index("stall_check", i), calls.index("sync", i) + 1)
+        self.assertEqual(calls.count("stall_check"), 3)
+        self.assertEqual((series["host_retries"], series["host_stalled"]), (1, False))
+        self.assertEqual(len(series["pair"]), 3)
+
+    def test_a_sibling_still_stalled_after_its_last_restart_marks_the_trial(self):
+        attempts = ep_timing.EagerTiming.CHAIN_RETRIES + 1
+        backend, series = self._gated_chain([True] * (2 * attempts))
+        self.assertEqual(backend.calls.count("all_reduce"), 2 * attempts)
+        self.assertEqual(series["host_retries"], 2 * (attempts - 1))
+        self.assertIs(series["host_stalled"], True)
+
+    def test_every_rank_restarts_when_any_ranks_host_stalled(self):
+        # The verdict is a MAX all-reduce of every rank's own check, so all ranks run the same
+        # number of attempts and their chains stay paired.
+        for peer, expected in ((0, False), (1, True)):
+            with self.subTest(peer_stalled=peer):
+                class Flag:
+                    def __init__(self, data, **_kwargs):
+                        self.value = data[0]
+
+                    def item(self):
+                        return self.value
+
+                def all_reduce(flag, op=None):
+                    self.assertEqual(op, "max")
+                    flag.value = max(flag.value, peer)
+
+                dist = types.SimpleNamespace(all_reduce=all_reduce,
+                                             ReduceOp=types.SimpleNamespace(MAX="max"))
+                fake = types.SimpleNamespace(tensor=Flag, int32="int32", distributed=dist)
+                timing = ep_timing.EagerTiming(_ChainBackend())
+                timing.gate.probe_us = 20.0
+                with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}), \
+                        mock.patch.object(ep_timing, "cpu_probe_us", lambda: 20.0):
+                    self.assertIs(timing._host_stalled_anywhere(), expected)
+                self.assertEqual(timing.gate.stalled, [0])  # this rank's own check ran
+
+    def test_garbage_collection_is_off_inside_both_sibling_chains(self):
+        backend = _ChainBackend()
+        seen = []
+        original = backend.dispatch
+        backend.dispatch = lambda problem: seen.append(gc.isenabled()) or original(problem)
+        run_chain(backend, 4, 1)
+        self.assertEqual(seen[-8:], [False] * 8)
+        self.assertTrue(gc.isenabled())
+
+    def test_a_chain_without_a_host_synced_dispatch_takes_no_probe(self):
+        backend = _ChainBackend()
+        with mock.patch.object(ep_timing, "cpu_probe_us",
+                               lambda: self.fail("a probe on a chain with no host wait")):
+            series = run_chain(backend, 4, 1)
+        self.assertEqual((series["host_retries"], series["host_stalled"]), (None, None))
 
 
 class CudaGraphRoundtrip(unittest.TestCase):
@@ -241,12 +313,23 @@ class CudaGraphRoundtrip(unittest.TestCase):
         self.assertTrue(problem._cuda_graph_output.cloned)
         self.assertTrue(problem._cuda_graph_output_rewritten)
 
+    def test_one_unrewritten_capture_reds_the_point_however_later_ones_did(self):
+        backend = self._graph_backend()
+        problem = new_problem()
+        problem._cuda_graph_output_rewritten = False  # an earlier component's capture
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            backend.benchmark_component("dispatch", problem, warmup=1, iters=2)
+        self.assertIs(problem._cuda_graph_output_rewritten, False)
+
     def _graph_backend(self, stage_device_work=False, precision="bf16"):
         backend = _ChainBackend(stage_device_work=stage_device_work, precision=precision)
         backend.mode, backend.CUDA_GRAPH_MODES = "normal", ("normal",)
         return backend
 
-    def test_alignment_is_captured_before_the_timed_window_without_spin(self):
+    def test_a_spin_then_the_alignment_are_captured_before_the_timed_window(self):
+        # HIP submits a replay node by node from the host, so the captured spin is what keeps a
+        # host lagging behind the all-reduce from opening its peers' windows early.
         backend = self._graph_backend()
         with mock.patch.dict(os.environ, {}, clear=True), \
                 trace_torch(backend.clock, backend.calls):
@@ -254,10 +337,31 @@ class CudaGraphRoundtrip(unittest.TestCase):
         calls = backend.calls
         begin, end = calls.index("capture_begin"), calls.index("capture_end")
         first_event = calls.index("record", begin)
-        self.assertEqual(calls[begin:first_event].count("all_reduce"), 1)
+        self.assertEqual(calls[begin + 1:first_event], ["align_spin", "all_reduce"])
         self.assertNotIn("all_reduce", calls[first_event:end])
+        self.assertNotIn("align_spin", calls[first_event:end])
         self.assertNotIn("all_reduce", calls[end:])
-        self.assertNotIn("align_spin", calls)
+        # The spin's cycle count is calibrated after the warm-up and before the capture.
+        calibration = calls.index("align_spin")
+        self.assertEqual(calls[calibration:calibration + 5],
+                         ["align_spin", "record", "align_spin", "record", "sync"])
+        self.assertLess(calls.index("combine"), calibration)
+        self.assertLess(calibration, begin)
+
+    def test_a_replay_call_that_outlasts_the_spin_counts_as_missed(self):
+        # One fake millisecond per perf_counter() read: every replay call's lead is 1000 us.
+        for spin_us, missed in (("500", 1), ("2000", 0)):
+            with self.subTest(spin_us=spin_us):
+                backend = self._graph_backend()
+                ticks = (tick / 1000.0 for tick in itertools.count())
+                with mock.patch.dict(os.environ, {"COLLX_ALIGN_SPIN_US": spin_us}, clear=True), \
+                        trace_torch(backend.clock, backend.calls), \
+                        mock.patch.object(ep_timing.time, "perf_counter", lambda: next(ticks)):
+                    backend.benchmark_component("roundtrip", new_problem(), warmup=1, iters=4)
+                self.assertEqual(backend.alignment_misses(), [missed] * 4)
+                self.assertEqual(backend.timing.alignment,
+                                 {"method": "in-graph-spin-then-all-reduce",
+                                  "spin_us": float(spin_us)})
 
     def test_the_graph_chain_is_one_capture_of_unrolled_pairs_per_sibling(self):
         iters, drop = 5, 1
@@ -273,14 +377,15 @@ class CudaGraphRoundtrip(unittest.TestCase):
         for lo, hi in zip(begin, end):
             self.assertEqual(ops_only(calls[lo:hi]), ["dispatch", "stage", "combine"] * iters)
         self.assertEqual(calls.count("graph_replay"), 4)
-        self.assertNotIn("align_spin", calls)
         for lo, hi in zip(begin, end):
             first_event = calls.index("record", lo)
-            self.assertEqual(calls[lo:first_event].count("all_reduce"), 1)
+            self.assertEqual(calls[lo + 1:first_event], ["align_spin", "all_reduce"])
             self.assertNotIn("all_reduce", calls[first_event:hi])
+            self.assertNotIn("align_spin", calls[first_event:hi])
         self.assertEqual({len(series[k]) for k in ("pair", "dispatch", "combine")}, {iters - drop})
         self.assertEqual(len(series["start_to_start"]), iters - drop - 1)
         self.assertTrue(series["combined"].cloned)
+        self.assertEqual((series["host_retries"], series["host_stalled"]), (None, None))
 
     def test_external_switch_restores_the_eager_component_pipeline(self):
         backend = self._graph_backend(stage_device_work=True, precision="fp8")
@@ -333,18 +438,41 @@ class EagerAlignment(unittest.TestCase):
                 self.assertIn("combine", calls[:calibration])
                 self.assertLess(calibration, calls.index("all_reduce"))
 
-    def test_a_fresh_pair_series_aligns_ahead_of_its_untimed_dispatch(self):
-        # The barrier releases the untimed dispatch, so a host sync inside it (normal mode) would
-        # open the window late; LL adapters, the ones that require fresh pairs, do not sync.
-        backend = _ChainBackend()
-        backend.requires_fresh_pair = True
-        iters = 3
-        calls = self._eager_component("combine", iters, backend=backend)
-        barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
-        self.assertEqual(len(barriers), iters)
-        for i in barriers:
-            self.assertEqual(calls[i - 1:i + 7], ["align_spin", "all_reduce", "dispatch", "stage",
-                                                  "record", "combine", "record", "sync"])
+    def test_combine_is_timed_behind_its_own_untimed_dispatch(self):
+        # Every combine sample is a fresh pair, as graph replay and the roundtrip time it, so the
+        # window opens behind its own dispatch on every backend. The barrier releases that
+        # untimed dispatch, and the stage, hoisted once untimed, appears in no sample.
+        for fresh in (True, False):
+            with self.subTest(requires_fresh_pair=fresh):
+                backend = _ChainBackend()
+                backend.requires_fresh_pair = fresh
+                self.assertTrue(backend.stage_excluded_from_roundtrip)
+                iters = 3
+                calls = self._eager_component("combine", iters, backend=backend)
+                barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
+                self.assertEqual(len(barriers), iters)
+                for i in barriers:
+                    self.assertEqual(calls[i - 1:i + 6], ["align_spin", "all_reduce", "dispatch",
+                                                          "record", "combine", "record", "sync"])
+                self.assertEqual(backend.consumed[-iters:], ["staged-by-stage"] * iters)
+
+    def test_a_dispatch_that_waits_on_the_host_runs_before_the_alignment(self):
+        # Its wait for the receive counts would spend the spin and count every sample as missed;
+        # run first, it leaves the barrier to release the timed op alone.
+        for component in ("combine", "stage"):
+            with self.subTest(component=component):
+                backend = _ChainBackend(stage_device_work=True, fp8_consume="dequant")
+                backend.host_synced_dispatch = True
+                iters = 3
+                calls = self._eager_component(component, iters, backend=backend)
+                barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
+                self.assertEqual(len(barriers), iters)
+                for i in barriers:
+                    opened = calls.index("record", i)
+                    self.assertEqual(calls[i - 1], "align_spin")
+                    self.assertIn("dispatch", calls[i - 4:i - 1])
+                    self.assertNotIn("dispatch", calls[i:opened])
+                    self.assertEqual(calls[opened + 1], component)
 
     def test_a_sample_counts_as_missed_when_its_host_outruns_the_spin(self):
         # One fake millisecond per perf_counter() read: every sample's lead is 1000 us.
@@ -358,10 +486,45 @@ class EagerAlignment(unittest.TestCase):
                 self.assertEqual(backend.alignment_misses(), [missed] * 4)
                 self.assertEqual(backend.timing.alignment["spin_us"], float(spin_us))
 
-    def test_graph_replay_has_no_host_step_to_miss(self):
-        self.assertIsNone(ep_timing.GraphTiming(_ChainBackend()).missed_samples())
-        self.assertIsNone(ep_timing.GraphTiming(_ChainBackend()).host_holds())
-        self.assertIsNone(ep_timing.GraphTiming(_ChainBackend()).host_stalls())
+    def test_the_lead_covers_the_timed_ops_enqueue_unless_it_waits_on_the_host(self):
+        # A host still enqueuing the timed op when the barrier releases leaves its GPU idle inside
+        # the window, so the lead runs through fn()'s return. A dispatch that waits on the host
+        # returns after its own device work, so its lead stops at the start event instead and
+        # the host gate covers it.
+        for host_synced, missed in ((False, 1), (True, 0)):
+            with self.subTest(host_synced=host_synced):
+                backend = _ChainBackend()
+                backend.host_synced_dispatch = host_synced
+                host = [0.0]
+                original = backend.dispatch
+
+                def slow_enqueue(problem):
+                    host[0] += 3e-3  # 3 ms of host time, past the 2 ms spin
+                    return original(problem)
+
+                backend.dispatch = slow_enqueue
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(
+                        mock.patch.object(ep_timing.time, "perf_counter", lambda: host[0]))
+                    stack.enter_context(mock.patch.object(ep_timing, "cpu_probe_us", lambda: 20.0))
+                    self._eager_component("dispatch", 3, backend=backend)
+                self.assertEqual(backend.alignment_misses(), [missed] * 3)
+
+    def test_garbage_collection_is_off_inside_a_timed_series(self):
+        backend = _ChainBackend()
+        seen = []
+        original = backend.dispatch
+        backend.dispatch = lambda problem: seen.append(gc.isenabled()) or original(problem)
+        self.assertTrue(gc.isenabled())
+        self._eager_component("roundtrip", 3, backend=backend)
+        self.assertEqual(seen[-3:], [False] * 3)
+        self.assertTrue(gc.isenabled())
+
+    def test_graph_replay_counts_misses_but_has_no_host_gate(self):
+        timing = ep_timing.GraphTiming(_ChainBackend())
+        self.assertEqual(timing.missed_samples(), [])
+        self.assertIsNone(timing.host_holds())
+        self.assertIsNone(timing.host_stalls())
 
     # Calibrated at 20 us, a sample holds above 2.5 x 20 = 50 us and counts stalled above 100 us.
     CALIBRATION = [20.0] * ep_timing.HostGate.CALIBRATION
@@ -484,7 +647,7 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
     def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
         backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
         order, combined = [], _Combined(1.0)
-        handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
+        handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input="staged")
         graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
         backend.warm = lambda problem, count: order.append("warm")
         timing = ep_timing.GraphTiming(backend)
@@ -498,14 +661,57 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
                 mock.patch.object(ep_timing, "poison", lambda tensor: order.append(("poison", tensor))):
             result = timing.replay_output(new_problem())
         # Staging runs INSIDE the capture (staged=None). Between the upload replay and the
-        # returned one, dispatch's output and the result are poisoned, then every rank barriers:
-        # peers write into each other's buffers, so an unbarriered replay races a slow poison.
+        # returned one, dispatch's output, the staged combine input and the result are poisoned,
+        # then every rank barriers: peers write into each other's buffers, so an unbarriered
+        # replay races a slow poison.
         self.assertEqual(order, [
             "warm", ("capture", None), "replay",
-            ("poison", "recv"), ("poison", None), ("poison", None), ("poison", combined),
-            "barrier", "replay",
+            ("poison", "recv"), ("poison", None), ("poison", None), ("poison", "staged"),
+            ("poison", combined), "barrier", "replay",
         ])
         self.assertTrue(result.cloned)
+
+    def test_the_checked_replay_runs_on_rescaled_inputs_that_come_back_bitwise(self):
+        # A replay that re-sent its captured inputs instead of re-reading them would still produce
+        # finite output; scaling the inputs by an exact power of two between the upload replay and
+        # the checked one makes it disagree with the drained pair run on the same scaled inputs.
+        class Tensor:
+            def __init__(self, dtype, ptr, order):
+                self.dtype, self.ptr, self.order, self.scale = dtype, ptr, order, 1.0
+
+            def data_ptr(self):
+                return self.ptr
+
+            def mul_(self, factor):
+                self.order.append(("scale", self.ptr, factor))
+                self.scale *= factor
+                return self
+
+        backend = _ChainBackend()
+        order, combined = [], _Combined(1.0)
+        handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
+        graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
+        backend.warm = lambda problem, count: None
+        timing = ep_timing.GraphTiming(backend)
+        timing.capture_pairs = lambda problem, staged, pairs, marks: (graph, {}, combined, handle)
+        dist = types.SimpleNamespace(barrier=lambda: order.append("barrier"))
+        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(synchronize=lambda: None),
+                                     distributed=dist, bfloat16="bf16", float16="fp16",
+                                     float32="fp32")
+        x = Tensor("bf16", 1, order)
+        problem = types.SimpleNamespace(x=x, dispatch_x=x)  # one tensor under two names
+        fp8 = types.SimpleNamespace(x=Tensor("fp8", 2, order), dispatch_x=None)
+        with mock.patch.dict(sys.modules, {"torch": fake, "torch.distributed": dist}), \
+                mock.patch.object(ep_timing, "poison", lambda tensor: order.append("poison")):
+            timing.replay_output(problem)
+            self.assertEqual(order[:3], ["replay", ("scale", 1, 2.0), "poison"])
+            self.assertEqual(x.scale, 2.0)  # scaled once, not once per name
+            timing.restore_replay_inputs(problem)
+            self.assertEqual(x.scale, 1.0)
+            timing.restore_replay_inputs(problem)  # idempotent: nothing left to undo
+            self.assertEqual(x.scale, 1.0)
+            # FP8 inputs are left alone: a pre-quantized copy would not see the scale.
+            self.assertEqual(ep_timing.rescale_inputs(fp8, 2.0), [])
 
 
 class RocmGraphEventRecord(unittest.TestCase):
@@ -542,27 +748,16 @@ class RocmGraphEventRecord(unittest.TestCase):
 
 
 class EventPlacement(unittest.TestCase):
-    """Which events each sibling chain may carry. The stub charges host work nothing, so these
-    assert record placement in the trace rather than window values."""
-
-    def _sections(self, **backend_kwargs):
-        iters = 4
-        backend = _ChainBackend(**backend_kwargs)
-        run_chain(backend, iters, 1)
-        floors, period = chain_sections(backend.calls)
-        return iters, floors, period
-
     def test_the_period_pairs_carry_only_the_outer_events(self):
         # One record before the dispatch, one after the combine, nothing between: both records'
-        # host cost lands in the inter-pair gap, outside the published window.
-        iters, _, period = self._sections(
-            stage_device_work=False, fp8_consume="native", precision="bf16"
-        )
+        # host cost lands in the inter-pair gap, outside the published window. The stub charges
+        # host work nothing, so this asserts record placement rather than window values.
+        backend = _ChainBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
+        run_chain(backend, 4, 1)
+        _, period = chain_sections(backend.calls)
         self.assertEqual(
-            period,
-            ["align_spin", "all_reduce"]
-            + ["record", "dispatch", "stage", "combine", "record"] * iters,
-        )
+            period, ["all_reduce"] + ["record", "dispatch", "stage", "combine", "record"] * 4)
+
 
 class ChainBudgetGate(unittest.TestCase):
     """A budget that could publish a degenerate chain must stop the leg first: zero kept pairs
@@ -584,28 +779,21 @@ class ChainBudgetGate(unittest.TestCase):
             rc = ep_harness.run_sweep(self._args(**updates), None, None, None, None, 0, 1)
         return rc, out.getvalue()
 
-    def test_an_unusable_chain_budget_fails_closed(self):
-        for label, updates in (
-            ("no iterations", dict(chain_iters=0)),
-            ("no trials", dict(chain_trials=0)),
-            ("drop swallows every pair", dict(chain_iters=8, chain_drop=8)),
-            ("drop exceeds the chain", dict(chain_iters=8, chain_drop=9)),
+    def test_an_unusable_budget_fails_closed_naming_its_fields(self):
+        for label, updates, fields in (
+            ("no iterations", dict(chain_iters=0), "chain"),
+            ("no trials", dict(chain_trials=0), "chain"),
             # A single kept pair has an empty start-to-start series: interpair gap and settle
             # drift would silently publish as "unavailable" health for a measured period.
-            ("drop leaves a single pair", dict(chain_iters=8, chain_drop=7)),
-            ("negative drop", dict(chain_drop=-1)),
+            ("drop leaves a single pair", dict(chain_iters=8, chain_drop=7), "chain"),
+            ("negative drop", dict(chain_drop=-1), "chain"),
+            # The fresh-entry budget is still checked, and names its own fields.
+            ("no fresh-entry iterations", dict(iters=0), "iters/trials/warmup"),
         ):
             with self.subTest(budget=label):
                 rc, output = self._gate(**updates)
                 self.assertEqual(rc, 2)
-                self.assertIn("chain", output)
-
-    def test_the_chain_gate_did_not_displace_the_fresh_entry_one(self):
-        # Both budgets are checked and each names its own fields, so the failure says which
-        # profile field to fix.
-        rc, output = self._gate(iters=0)
-        self.assertEqual(rc, 2)
-        self.assertIn("iters/trials/warmup", output)
+                self.assertIn(fields, output)
 
 
 class ChainComponentContract(unittest.TestCase):
@@ -658,9 +846,6 @@ class _ValueTensor:
     def to(self, *args, **kwargs):
         return self
 
-    def __iter__(self):
-        return iter(self.data)
-
     def __sub__(self, other):
         return _ValueTensor([a - b for a, b in zip(self.data, other.data)])
 
@@ -679,24 +864,6 @@ class _ValueTensor:
 
     def min(self, dim=0):
         return self._reduce(min)
-
-    @property
-    def shape(self):
-        return (len(self.data),)
-
-
-class _ValueEvent:
-    clock = [0.0]
-
-    def __init__(self, enable_timing=False):
-        self.t = None
-
-    def record(self):
-        _ValueEvent.clock[0] += 1.0
-        self.t = _ValueEvent.clock[0]
-
-    def elapsed_time(self, other):
-        return (other.t - self.t) / 1000.0
 
 
 class _FakeDist:
@@ -727,14 +894,12 @@ class _FakeDist:
 
 def value_torch():
     torch = types.ModuleType("torch")
-    torch.float64, torch.int64, torch.bfloat16 = "f64", "i64", "bf16"
-    torch.cuda = SimpleNamespace(synchronize=lambda: None, Event=_ValueEvent)
+    torch.float64, torch.int64 = "f64", "i64"
+    torch.cuda = SimpleNamespace(synchronize=lambda: None)
     torch.tensor = lambda values, device=None, dtype=None: _ValueTensor(list(values))
     torch.empty_like = lambda x: _ValueTensor(list(x.data))
     torch.stack = lambda xs: _ValueTensor([x.data for x in xs])
     torch.equal = lambda a, b: a.data == b.data
-    torch.zeros = lambda n, device=None: _ValueTensor([0.0] * n)
-    torch.distributed = SimpleNamespace(all_reduce=lambda x: None)
     return torch
 
 
@@ -868,10 +1033,6 @@ class _HostStalledSweepBackend(_SweepBackend):
         return self._flags(self.stalled)
 
 
-class _UnstalledSweepBackend(_HostStalledSweepBackend):
-    stalled = ()
-
-
 class _HeldSweepBackend(_HostStalledSweepBackend):
     held = ("roundtrip", "dispatch")
     stalled = ()
@@ -890,6 +1051,51 @@ class _GraphSweepBackend(_SweepBackend):
         problem._cuda_graph_output_rewritten = True
         latency = {"roundtrip": 30.0, "dispatch": 11.0, "combine": 13.0}[component]
         return [latency] * iters
+
+
+class _MissedGraphSweepBackend(_GraphSweepBackend):
+    """Every roundtrip replay call outlasted the captured spin on some rank; nothing else did."""
+
+    def benchmark_component(self, component, problem, warmup, iters):
+        self._timed = (component, iters)
+        return super().benchmark_component(component, problem, warmup, iters)
+
+    def alignment_misses(self):
+        component, iters = self._timed
+        return [int(component == "roundtrip")] * iters
+
+
+class _RestoringGraphSweepBackend(_GraphSweepBackend):
+    def graph_replay_restore(self, problem):
+        self.events.append(("graph-restore", problem.T))
+
+
+class _ChainStalledSweepBackend(_SweepBackend):
+    """A dispatch that waits on the host whose every chain trial restarted one sibling and was
+    still throttled after the last restart."""
+
+    host_synced_dispatch = True
+
+    def benchmark_chain(self, problem, warmup, iters, drop):
+        result = super().benchmark_chain(problem, warmup, iters, drop)
+        result.update(host_retries=1, host_stalled=True)
+        return result
+
+
+class _StagedSweepBackend(_SweepBackend):
+    """An eager backend whose stage launches device work, so it is timed apart."""
+
+    def __init__(self):
+        super().__init__()
+        self.stage_device_work = True
+
+    def benchmark_component(self, component, problem, warmup, iters):
+        return [{"roundtrip": 30.0, "dispatch": 11.0, "combine": 13.0, "stage": 7.0}[component]] * iters
+
+
+class _ReportingSweepBackend(_SweepBackend):
+    def implementation_details(self):
+        return {"num_sms": 64, "allow_multiple_reduction": False}
 
 
 class _BrokenGraphSweepBackend(_GraphSweepBackend):
@@ -993,7 +1199,6 @@ class CombineModelGate(unittest.TestCase):
                 self.combine_reduction = "not-a-reduction"
 
         backend = _BadReduction()
-        self.assertEqual(backend.combine_weight_semantics, "unweighted-rank-sum")
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.dict(sys.modules, {"routing": fake_routing()}), \
                 mock.patch.dict(os.environ, {"COLLX_ATTEMPT_ID": "1"}), \
@@ -1015,12 +1220,6 @@ class ChainedRegimeOracleGate(unittest.TestCase):
         # The two chained verdicts are independent: a chain whose own final output is wrong
         # reds the case even when the state it leaves behind still passes a fresh oracle --
         # exactly the shape a stale-parity/aliased-signal defect presents.
-        #
-        # This check was briefly demoted to reporting-only (2026-08-07) on the theory that its
-        # tolerance was too tight for FP8. Probe 31180411148 measured the magnitude and
-        # falsified that: bf16 differs by exactly 0.0, FP8 by 1000x-2966x the tolerance. Re-armed
-        # on that number. If it is ever demoted again, demote it on a MEASURED magnitude too --
-        # the verdict alone is what justified the wrong call both times.
         run = drive(chain_output_ok=False)
         self.assertEqual(run.rc, 3)
         self.assertEqual(run.doc["outcome"]["status"], "invalid")
@@ -1054,10 +1253,6 @@ class ChainedRegimeOracleGate(unittest.TestCase):
         # it for every pair, so neither the chain's final combine nor the drained reference
         # consumes an input matching its OWN dispatch. They are two differently mismatched
         # pairs and nothing requires them to agree, so the question is not asked.
-        # Measured, h100/deepep-v2/EP8, identical but for the hoist: hoisted gives
-        # chain_last_output_error 31..93 (1000x-2966x tolerance), per-pair staging gives 0.0 at
-        # every rung, in both normal and low-latency mode. Gating on it under the hoist
-        # reddened every FP8 leg fleet-wide for a harness artifact.
         class _Hoisting(_SweepBackend):
             def __init__(self):
                 super().__init__()
@@ -1103,6 +1298,7 @@ class ChainedPublication(unittest.TestCase):
             with self.subTest(tokens=row["tokens_per_rank"]):
                 period = row["components"]["pair_period"]
                 self.assertEqual(period["percentiles_us"]["p50"], PAIR_US)
+                self.assertIsNotNone(period["percentiles_us"]["p99"])
                 self.assertEqual(period["origin"], "chained-median")
                 self.assertEqual(period["availability"], "measured")
                 self.assertEqual(period["sample_count"], 12)  # six kept pairs in each of two trials
@@ -1126,6 +1322,9 @@ class ChainedPublication(unittest.TestCase):
                 drift = health["settle_drift_us"]
                 self.assertEqual(drift["percentiles_us"]["p50"], 0.0)
                 self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
+                # No dispatch here waits on the host, so the chain has no host counts to report.
+                self.assertIsNone(health["host_retried_siblings"])
+                self.assertIsNone(health["host_stalled_trials"])
                 # Additive: the fresh-entry family keeps its meaning alongside the chain.
                 self.assertEqual(row["components"]["roundtrip"]["origin"], "measured")
                 self.assertEqual(row["components"]["roundtrip"]["percentiles_us"]["p50"], 10.0)
@@ -1152,10 +1351,8 @@ class AlignmentMissPublication(unittest.TestCase):
                                    (0.01, [1.0, 2.0, 3.0, None]), (0.05, [1.0, 2.0, None, None]),
                                    (0.1, [1.0, None, None, None]), (1.0, [1.0, None, None, None])):
             with self.subTest(fraction=fraction):
-                published = ep_harness._published_tails(self.PERCENTILES, False, fraction)
+                published = ep_harness._published_tails(self.PERCENTILES, fraction)
                 self.assertEqual(list(published.values()), expected)
-        self.assertEqual(list(ep_harness._published_tails(self.PERCENTILES, True).values()),
-                         [1.0, None, None, None])
 
     def test_a_clean_eager_row_keeps_its_tails_and_records_the_spin(self):
         swept = drive()
@@ -1219,16 +1416,6 @@ class AlignmentMissPublication(unittest.TestCase):
                 self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
         self.assertIn("missed=0.00% held=0.00% stalled=100.00% correct=True", swept.stdout)
 
-    def test_an_unstalled_host_synced_row_keeps_its_tails_and_counts_zero(self):
-        swept = drive(backend_factory=_UnstalledSweepBackend)
-        for row in swept.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
-                alignment = row["rank_alignment"]
-                self.assertEqual(alignment["host_held_samples"], {"dispatch": 0, "roundtrip": 0})
-                self.assertEqual(alignment["host_stalled_samples"], {"dispatch": 0, "roundtrip": 0})
-                self.assertEqual(alignment["host_stalled_fraction"], 0.0)
-                self.assertIsNotNone(row["components"]["dispatch"]["percentiles_us"]["p99"])
-
     def test_held_samples_opened_at_speed_and_keep_the_row_tails(self):
         # A held sample waited for its host before the window opened, so it is counted but gates
         # nothing: every tail stays published.
@@ -1236,22 +1423,90 @@ class AlignmentMissPublication(unittest.TestCase):
         self.assertEqual(swept.rc, 0)
         for row in swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
-                alignment = row["rank_alignment"]
-                self.assertEqual(alignment["host_held_samples"], {"dispatch": 8, "roundtrip": 8})
-                self.assertEqual(alignment["host_held_fraction"], 1.0)
-                self.assertEqual(alignment["host_stalled_fraction"], 0.0)
+                self.assertEqual(row["rank_alignment"], {
+                    "host_held_fraction": 1.0,
+                    "host_held_samples": {"dispatch": 8, "roundtrip": 8},
+                    "host_stalled_fraction": 0.0,
+                    "host_stalled_samples": {"dispatch": 0, "roundtrip": 0},
+                    "missed_fraction": 0.0,
+                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
+                })
                 for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
                               row["cross_rank_min_us"]["roundtrip"]):
                     self.assertIsNotNone(block["percentiles_us"]["p99"])
                 self.assertIsNotNone(row["token_rate_at_latency_percentile"]["p99"])
         self.assertIn("missed=0.00% held=100.00% stalled=0.00% correct=True", swept.stdout)
 
-    def test_graph_rows_carry_no_miss_count(self):
-        swept = drive(backend_factory=_GraphSweepBackend)
-        self.assertEqual(swept.doc["implementation"]["rank_alignment"],
-                         {"method": "in-graph-all-reduce", "spin_us": None})
+    def test_missed_replays_withhold_the_graphed_row_tails(self):
+        # A replay call that outlasted the spin may have opened its peers' windows before this
+        # rank's dispatch was submitted; graphed tails are gated exactly as eager ones.
+        swept = drive(backend_factory=_MissedGraphSweepBackend)
+        self.assertEqual(swept.rc, 0)
         for row in swept.rows:
-            self.assertIsNone(row["rank_alignment"])
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertEqual(row["rank_alignment"]["missed_samples"],
+                                 {"combine": 0, "dispatch": 0, "roundtrip": 8})
+                for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
+                              row["cross_rank_min_us"]["roundtrip"]):
+                    tails = block["percentiles_us"]
+                    self.assertIsNotNone(tails["p50"])
+                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+        self.assertIn("missed=100.00%", swept.stdout)
+
+
+class PublicationContract(unittest.TestCase):
+    def test_the_graph_value_check_restores_the_inputs_after_its_drained_reference(self):
+        swept = drive(backend_factory=_RestoringGraphSweepBackend)
+        for T in LADDER:
+            with self.subTest(T=T):
+                mine = [event for event in swept.events
+                        if event[0] in ("graph-value-check", "drained", "graph-restore")
+                        and event[-1] == T]
+                check = mine.index(("graph-value-check", T))
+                self.assertEqual(mine[check:check + 3], [("graph-value-check", T), ("drained", T),
+                                                         ("graph-restore", T)])
+
+    def test_a_trial_still_stalled_after_its_restarts_keeps_only_the_period_median(self):
+        swept = drive(backend_factory=_ChainStalledSweepBackend)
+        self.assertEqual(swept.rc, 0)
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                period = row["components"]["pair_period"]["percentiles_us"]
+                self.assertEqual(period["p50"], PAIR_US)
+                self.assertEqual([period[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                health = row["chain_health"]
+                self.assertEqual(health["host_retried_siblings"], CHAIN_TRIALS)
+                self.assertEqual(health["host_stalled_trials"], CHAIN_TRIALS)
+
+    def test_isolated_sum_adds_dispatch_and_combine_but_never_stage(self):
+        swept = drive(backend_factory=_StagedSweepBackend)
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertEqual(row["components"]["stage"]["percentiles_us"]["p50"], 7.0)
+                self.assertEqual(row["components"]["isolated_sum"]["percentiles_us"]["p50"], 24.0)
+
+    def test_the_adapter_reports_its_realized_library_config(self):
+        self.assertIsNone(drive().doc["implementation"]["library_config"])
+        self.assertEqual(drive(backend_factory=_ReportingSweepBackend).doc["implementation"]
+                         ["library_config"], {"num_sms": 64, "allow_multiple_reduction": False})
+
+    def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
+        # A stdout NOTE alone leaves a document that measured two rungs indistinguishable from
+        # one that was asked for three and capped.
+        class _Clamped(_SweepBackend):
+            def make_inputs(self, args):
+                spec = super().make_inputs(args)
+                spec.cap, spec.dropped = 8, [16]
+                return spec
+
+        swept = drive(backend_factory=_Clamped)
+        workload = swept.doc["workload"]
+        self.assertEqual(
+            (workload["ladder_measured"], workload["ladder_dropped"], workload["ladder_cap"]),
+            ([4, 8], [16], 8),
+        )
+        self.assertIn("NOTE: dropped tokens/rank [16]", swept.stdout)
 
 
 class CudaGraphPublication(unittest.TestCase):
@@ -1262,6 +1517,8 @@ class CudaGraphPublication(unittest.TestCase):
     def test_existing_component_fields_carry_graph_measurements(self):
         self.assertEqual(self.swept.rc, 0)
         self.assertIs(self.swept.doc["implementation"]["cuda_graph_replay"], True)
+        self.assertEqual(self.swept.doc["implementation"]["rank_alignment"],
+                         {"method": "in-graph-spin-then-all-reduce", "spin_us": 2000.0})
         # Graph mode keeps the chained family: the chain is captured, not dropped.
         self.assertIs(self.swept.doc["implementation"]["chained_period"], True)
         self.assertTrue(any(event[0] == "chain" for event in self.swept.events))
@@ -1281,13 +1538,23 @@ class CudaGraphPublication(unittest.TestCase):
                 self.assertIs(row["correctness"]["cuda_graph_output_rewritten"], True)
                 self.assertIs(row["correctness"]["cuda_graph_last_output_passed"], True)
                 self.assertIs(row["correctness"]["post_chain_state_passed"], True)
-                # Graphed fresh-entry tails are withheld; the chained period keeps its tails.
+                # No replay call outlasted the captured spin, so graphed rows count no suspect
+                # samples and publish every tail, as the chained period does. Replay has no
+                # host gate.
                 for name in ("roundtrip", "dispatch", "combine", "isolated_sum"):
                     tails = row["components"][name]["percentiles_us"]
-                    self.assertIsNotNone(tails["p50"])
-                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
-                self.assertIsNone(row["cross_rank_min_us"]["roundtrip"]["percentiles_us"]["p99"])
+                    self.assertTrue(all(tails[k] is not None for k in ("p50", "p90", "p95", "p99")))
+                self.assertIsNotNone(row["cross_rank_min_us"]["roundtrip"]["percentiles_us"]["p99"])
+                self.assertIsNotNone(row["token_rate_at_latency_percentile"]["p99"])
                 self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+                self.assertEqual(row["rank_alignment"], {
+                    "host_held_fraction": None,
+                    "host_held_samples": None,
+                    "host_stalled_fraction": None,
+                    "host_stalled_samples": None,
+                    "missed_fraction": 0.0,
+                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
+                })
         checked = [event[1] for event in self.swept.events if event[0] == "graph-value-check"]
         self.assertEqual(sorted(checked), sorted(LADDER))
 
@@ -1362,39 +1629,26 @@ class ChainOutputCheck(unittest.TestCase):
     across invocations -- bit equality would red healthy backends."""
 
     def test_the_verdict_and_the_magnitude_together(self):
-        # One table over the whole contract. The magnitude matters as much as the verdict: a
-        # bare bool cost two wrong diagnoses of the same FP8 failures, because it cannot
-        # separate a transport corruption from a tolerance too tight for an accumulator.
+        # The magnitude matters as much as the verdict: a bare bool cannot separate a transport
+        # corruption from a tolerance too tight for an accumulator.
         for label, chained, drained, ok, expected_error in (
             ("identical", [1.0, -3.5, 0.25], [1.0, -3.5, 0.25], True, 0.0),
             # A rank that legitimately combined nothing under this routing.
             ("empty", [], [], True, 0.0),
-            # Run-to-run jitter inside tolerance passes, and still reports its size -- a
-            # magnitude creeping toward the gate is the early warning a bool cannot give.
+            # Jitter inside tolerance passes and still reports its size.
             ("jitter", [1.01, -2.02], [1.0, -2.0], True, 0.01),
-            # The defect class this exists for lands orders of magnitude past tolerance.
             ("corruption", [1.0, 2.0], [1.0, 4.0], False, 0.5),
-            # No elementwise error is defined across shapes; infinity stops a cross-rank MAX
-            # reporting a small number for a structural mismatch.
+            # Infinity, not a small number, so a cross-rank MAX sees a structural mismatch.
             ("shape", [1.0, 2.0], [1.0, 2.0, 3.0], False, float("inf")),
+            # NaN would vanish from the cross-rank MAX and publish "failed, error 0.0".
+            ("non-finite", [float("nan"), 1.0], [1.0, 1.0], False, float("inf")),
+            # 0.0001 apart, judged under the 0.02 magnitude floor rather than against 1e-6.
+            ("near-zero", [0.000101], [0.000001], True, 0.005),
         ):
             with self.subTest(label):
                 got, error = ep_oracle.chain_output_matches(_Vec(chained), _Vec(drained))
                 self.assertIs(got, ok)
                 self.assertAlmostEqual(error, expected_error)
-
-    def test_a_non_finite_output_is_an_unbounded_mismatch_not_zero_error(self):
-        # NaN would vanish from the cross-rank MAX and publish "failed, error 0.0".
-        got, error = ep_oracle.chain_output_matches(_Vec([float("nan"), 1.0]), _Vec([1.0, 1.0]))
-        self.assertIs(got, False)
-        self.assertEqual(error, float("inf"))
-
-    def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
-        # Relative error against a denominator of 1e-6 would be huge; the floor keeps
-        # numerically-tiny elements from redding a healthy chain.
-        got, error = ep_oracle.chain_output_matches(_Vec([0.000101]), _Vec([0.000001]))
-        self.assertTrue(got)
-        self.assertAlmostEqual(error, 0.005)  # 0.0001 difference under the 0.02 magnitude floor
 
 
 ROUNDTRIP = {"p50": 100.0, "p90": 110.0, "p95": 115.0, "p99": 120.0}
@@ -1453,35 +1707,74 @@ class Headline(unittest.TestCase):
 
 
 class RunnerFilterIsContentBased(unittest.TestCase):
-    # --runner filters on the SKU the row declares, not on the result filename: results are
-    # named by case_id, which joins its factors with "-", so any filename-prefix test would
-    # match nothing and render an empty table rather than failing.
-    def _directory(self, names):
-        directory = tempfile.mkdtemp()
-        for name, sku in names:
-            record = document(with_period=True)
-            # The shared fixture omits record_type (nothing else loads from disk);
-            # load_results discriminates on it, so a written record must carry it.
-            record["record_type"] = summarize.CASE_RECORD_TYPE
-            record["identity"]["case_factors"]["sku"] = sku
-            (Path(directory) / name).write_text(json.dumps(record))
-        return directory
+    def test_runner_filters_on_the_declared_sku_not_the_filename(self):
+        # Results are named by case_id, which joins its factors with "-", so a filename-prefix
+        # filter would match nothing; and a filename claiming one SKU must not admit another's row.
+        case = "stub-deepseek-v3-low-latency-decode-ep8-uniform-bf16_TS-c000.json"
+        with tempfile.TemporaryDirectory() as directory:
+            for name, sku in ((f"stub-sku-{case}", "stub-sku"), (f"other-sku-{case}", "other-sku"),
+                              ("stub-sku_anything_TS-c000.json", "other-sku")):
+                record = document(with_period=True)
+                record["record_type"] = summarize.CASE_RECORD_TYPE  # what load_results keys on
+                record["identity"]["case_factors"]["sku"] = sku
+                (Path(directory) / name).write_text(json.dumps(record))
+            kept = summarize.load_results(directory, "stub-sku")
+        self.assertEqual([doc["identity"]["case_factors"]["sku"] for doc in kept], ["stub-sku"])
 
-    def test_case_id_named_files_still_match_their_runner(self):
-        directory = self._directory([
-            ("stub-sku-stub-deepseek-v3-low-latency-decode-ep8-uniform-bf16_TS-c000.json",
-             "stub-sku"),
-            ("other-sku-stub-deepseek-v3-low-latency-decode-ep8-uniform-bf16_TS-c000.json",
-             "other-sku"),
-        ])
-        kept = summarize.load_results(directory, "stub-sku")
-        self.assertEqual(len(kept), 1)
-        self.assertEqual(kept[0]["identity"]["case_factors"]["sku"], "stub-sku")
 
-    def test_a_foreign_sku_is_excluded_even_when_the_filename_would_match(self):
-        # The filename claims one SKU, the row declares another; the row wins.
-        directory = self._directory([("stub-sku_anything_TS-c000.json", "other-sku")])
-        self.assertEqual(summarize.load_results(directory, "stub-sku"), [])
+class GpuClockTelemetry(unittest.TestCase):
+    def test_the_document_says_why_clocks_were_not_read(self):
+        clocks = drive().doc["runtime"]["gpu_clocks"]
+        self.assertIsNone(clocks["source"])
+        self.assertIn("AttributeError", clocks["unavailable_reason"])
+        self.assertIsNone(clocks["sm_clock_ratio_min"])
+
+    def test_clock_reads_bracket_the_timed_passes_and_follow_every_burst(self):
+        class _CountingBackend(_SweepBackend):
+            def benchmark_component(self, component, problem, warmup, iters):
+                self.events.append(("component", problem.T))
+                return super().benchmark_component(component, problem, warmup, iters)
+
+        backends = []
+
+        def factory():
+            backends.append(_CountingBackend())
+            return backends[-1]
+
+        class _Monitor:
+            def __init__(self, torch, device):
+                self.reason = None
+
+            def start(self):
+                backends[-1].events.append(("clock-start",))
+
+            def sample(self, temperature=False):
+                backends[-1].events.append(("clock", "chain" if temperature else "point"))
+
+            def finish(self):
+                backends[-1].events.append(("clock-finish",))
+
+            def vector(self):
+                return [1.0 if field == "source" else 40.0 if field == "sm_clock_samples"
+                        else 1980.0 if field.startswith("sm_clock") else math.nan
+                        for field in gpu_clocks.FIELDS]
+
+        with mock.patch.object(gpu_clocks, "ClockMonitor", _Monitor):
+            run = drive(backend_factory=factory)
+        events = [event[0] if event[0] != "clock" else event for event in run.events]
+        timed = [i for i, event in enumerate(events) if event in ("component", "chain")]
+        self.assertLess(events.index("clock-start"), timed[0])
+        self.assertGreater(events.index("clock-finish"), timed[-1])
+        # One read per (trial, point) after its components, one after every chain.
+        self.assertEqual(events.count(("clock", "point")), 2 * len(LADDER))
+        self.assertEqual(events.count(("clock", "chain")), CHAIN_TRIALS * len(LADDER))
+        for i, event in enumerate(events):
+            if event == ("clock", "chain"):
+                self.assertEqual(events[i - 1], "chain")
+            if event == ("clock", "point"):
+                self.assertEqual(events[i - 1], "component")
+        self.assertEqual(run.doc["runtime"]["gpu_clocks"]["per_rank"][0]["sm_clock_mhz"]["p50"], 1980)
+        self.assertEqual(run.doc["runtime"]["gpu_clocks"]["sm_clock_ratio_min"], 1.0)
 
 
 if __name__ == "__main__":

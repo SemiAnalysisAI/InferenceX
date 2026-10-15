@@ -121,12 +121,7 @@ collx_load_operator_config() {
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
-    # No operator document: a host-utility step (no SKU) is a no-op; a known SKU uses the tracked
-    # platform_config.json baseline ("-" sentinel).
-    if [ -z "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-}}" ]; then
-      COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
-      return 0
-    fi
+    # No operator document: the SKU uses the tracked platform_config.json baseline ("-" sentinel).
     config_path="-"
   fi
   umask 077
@@ -161,7 +156,7 @@ collx_private_log_path() {
   printf '%s' "$path"
 }
 
-# Host-side utility steps never receive the complete Actions or runner environment.
+# Host-side utility steps never receive the complete runner environment.
 collx_host_exports() {
   printf '%s' 'HOME,PATH,USER,XDG_CACHE_HOME,ENROOT_CACHE_PATH'
 }
@@ -296,7 +291,7 @@ collx_apply_network_profile() {
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
   # Single-node and MNNVL runs need only the scrub above. Single-node low-latency kernels run
-  # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode, MoRI IntraNodeLL) and must NOT
+  # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode, MoRI AsyncLL) and must NOT
   # force IBGDA (/dev/gdrdrv is absent on h200). Exception: a SKU may pin a single-node HCA list.
   # DeepEP's legacy LL Buffer self-enables IBGDA even single-node, and on b300 the image's baked
   # NVSHMEM_HCA_PE_MAPPING steers that init onto the GPU-fabric RoCE rails, where ibv_create_ah
