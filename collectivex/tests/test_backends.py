@@ -583,19 +583,7 @@ class GraphReplayDefaults(unittest.TestCase):
         )
         self.assertTrue(ll.cuda_graph_supported)
 
-    def test_uccl_graphs_intranode_low_latency_except_b200_fp8(self):
-        cls = _import_stubbed("ep_uccl", deep_ep=_deep_ep("Buffer", "Config")).UCCLEPBackend
-        with mock.patch.dict(os.environ, {}, clear=True):
-            for gate, expected in (
-                (_gate(cls, "low-latency"), True),
-                (_gate(cls, "normal"), False),
-                (_gate(cls, "low-latency", world_size=16), False),
-                (_gate(cls, "low-latency", precision="fp8", runner="b200-nscale"), False),
-                (_gate(cls, "low-latency", runner="b200-nscale"), True),
-            ):
-                self.assertIs(gate.cuda_graph_supported, expected)
-        with mock.patch.dict(os.environ, {"UCCL_RDMA_ADAPTIVE_SLEEP": "1"}):
-            self.assertFalse(_gate(cls, "low-latency").cuda_graph_supported)
+    # uccl-ep's graph gate lives with its vLLM contract in test_uccl_contract.py.
 
     def test_flashinfer_and_nccl_ht_graph_decode_only(self):
         flashinfer = _import_stubbed("ep_flashinfer").FlashInferEPBackend

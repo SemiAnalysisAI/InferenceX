@@ -319,14 +319,48 @@ print(json.load(open("configs/platform_config.json"))["platforms"][sys.argv[1]][
 PY
 }
 
+# The build recipe keys the cache and is recorded beside the packages, where the adapter publishes
+# it as library_version: a from-source build has no wheel version that tells two pins apart. Bump
+# UCCL_BUILD_GEN when the recipe or the record changes without the pin moving, so caches that
+# already carry .ready are rebuilt rather than reused. PER_EXPERT_BATCHING is off by default
+# upstream but is UCCL's documented drop-in deep_ep build, and it changes the low-latency kernels.
+readonly -a UCCL_BUILD_FLAGS=(USE_DMABUF=1 PER_EXPERT_BATCHING=1)
+readonly UCCL_BUILD_GEN=rec1
+readonly UCCL_BUILD_RECORD=collx_uccl_build.json
+
 uccl_probe() {
   # import torch FIRST so libc10 is resident before the uccl.ep extension dlopens (it links
   # libc10/libtorch); importing deep_ep before torch fails with "libc10.so: cannot open".
-  python3 - <<'PY'
+  # DeepSeek's DeepEP, which the sglang images ship, has the same legacy Buffer API, so capability
+  # checks cannot tell the two apart. Identity can: UCCL's wrapper re-exports uccl.ep's Config, both
+  # must load from this cache, and its build record must name the pinned commit.
+  python3 - "$1/site" "$COLLX_UCCL_COMMIT" "$UCCL_BUILD_RECORD" <<'PY'
+import json
+import sys
+from pathlib import Path
+
 import torch  # noqa: F401
 import deep_ep
 from deep_ep import Buffer
+from uccl import ep
+
+site, commit, record = Path(sys.argv[1]).resolve(), sys.argv[2], sys.argv[3]
+assert deep_ep.Config is ep.Config, "deep_ep is not UCCL's deep_ep_wrapper"
+for module in (deep_ep, ep):
+    assert site in Path(module.__file__).resolve().parents, f"{module.__name__} is not from {site}"
+assert json.loads((site / record).read_text())["commit"] == commit, "UCCL build record is stale"
 assert hasattr(Buffer, "low_latency_dispatch") and hasattr(Buffer, "get_dispatch_layout")
+PY
+}
+
+uccl_record_build() {
+  python3 - "$1/site/$UCCL_BUILD_RECORD" "$COLLX_UCCL_COMMIT" "${UCCL_BUILD_FLAGS[*]}" "$2" <<'PY'
+import json
+import sys
+
+path, commit, build_flags, arch = sys.argv[1:]
+with open(path, "w", encoding="utf-8") as record:
+    json.dump({"commit": commit, "build_flags": build_flags, "arch": arch}, record)
 PY
 }
 
@@ -337,7 +371,7 @@ PY
 uccl_cache_root() {
   local arch
   arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
-  backend_cache_root uccl-ep "${arch#-}" "${COLLX_UCCL_COMMIT:0:12}"
+  backend_cache_root uccl-ep "${arch#-}" "${COLLX_UCCL_COMMIT:0:12}" "$UCCL_BUILD_GEN"
 }
 
 # CDNA needs UCCL's aggressive host-atomic path.
@@ -354,7 +388,7 @@ uccl_install() {
     rm -rf "$root" || { collx_log "ERROR: incomplete UCCL cache-reset failed"; return 1; }
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
-  collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (USE_DMABUF, PER_EXPERT_BATCHING)"
+  collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (${UCCL_BUILD_FLAGS[*]})"
   # Some sglang/rocm images mark the system env externally-managed (PEP 668).
   { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
       || python3 -m pip install -q --disable-pip-version-check --no-input \
@@ -374,7 +408,7 @@ uccl_install() {
     arch_env="TORCH_CUDA_ARCH_LIST=$arch"
   fi
   ( cd "$source_dir/ep" \
-      && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 "$arch_env" python3 setup.py install ) >&2 2>&1 \
+      && env "${UCCL_BUILD_FLAGS[@]}" "$arch_env" python3 setup.py install ) >&2 2>&1 \
     || { collx_log "ERROR: UCCL ep extension build failed"; return 1; }
   # --no-deps: the wrapper's install_requires=["uccl"] resolves to the PyPI uccl-cu12 wheel, absent
   # on ROCm and wrong on CUDA too, since the from-source ep build already provides uccl.ep.
@@ -388,6 +422,7 @@ uccl_install() {
   mkdir -p "$root/site" \
     && cp -R "$sp"/deep_ep* "$sp"/uccl* "$root/site/" \
     || { collx_log "ERROR: UCCL cache population failed"; return 1; }
+  uccl_record_build "$root" "$arch" || { collx_log "ERROR: UCCL build record failed"; return 1; }
   : > "$root/.ready"
 }
 
@@ -401,9 +436,9 @@ uccl_prepare() {
   fi
   shared="$(uccl_cache_root "$arch")" || shared=""
   prepare_site_cache UCCL-EP UCCL "$COLLX_UCCL_COMMIT" "$shared" \
-    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT" uccl_install "$arch" || return 1
+    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT-$UCCL_BUILD_GEN" uccl_install "$arch" || return 1
   uccl_activate "$CACHE_ROOT" || return 1
-  uccl_probe || { collx_log "ERROR: UCCL import probe failed"; return 1; }
+  uccl_probe "$CACHE_ROOT" || { collx_log "ERROR: UCCL import probe failed"; return 1; }
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
 }
 
