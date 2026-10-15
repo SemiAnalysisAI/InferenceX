@@ -194,6 +194,7 @@ override_tp4_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: 'none'
+      AGENTX_HARNESS_REF: e084b2aab279728e3f12bb5cfa601ae3a2dba733
 
 override_tp4_c40:
   roles:
@@ -269,6 +270,7 @@ override_tp4_c64:
     env:
       CONC: '64'
       KV_OFFLOADING: 'none'
+      AGENTX_HARNESS_REF: e084b2aab279728e3f12bb5cfa601ae3a2dba733
 
 override_tp4_c68:
   roles:
