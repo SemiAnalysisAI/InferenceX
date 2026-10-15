@@ -11,7 +11,7 @@ import yaml
 
 from infx.klaud import __main__ as klaud
 from infx.klaud import api, claims, github, lifecycle, reporting, validation
-from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, identity
+from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, Ownership, identity
 from infx.tests.historical_revision import (
     FAMILY,
     KEY,
@@ -307,6 +307,87 @@ def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
     assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
     pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
     assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
+
+
+def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(monkeypatch):
+    names = ["dead", "session", "sweeping", "handoff", "human", "ready", "leftover",
+             "closed-by-human", "stale-claim", "live-claim"]  # fmt: skip
+    ids = {name: f"{digit * 16}-{digit * 16}" for name, digit in zip(names, "123456789a")}
+
+    def pull(name, number, *, draft=True, labels=()):
+        return {
+            "number": number, "draft": draft, "user": {"login": "Klaud-Cold"},
+            "head": {"ref": f"klaud/auto-{ids[name]}", "repo": {"full_name": "example/project"}},
+            "labels": [{"name": label} for label in labels], "created_at": "2026-10-15T00:00:00Z",
+            "merged_at": None,
+        }  # fmt: skip
+
+    open_pulls = [
+        pull("dead", 1), pull("session", 2), pull("sweeping", 3),
+        pull("handoff", 4, labels=["klaud-handoff"]), pull("human", 5), pull("ready", 6, draft=False),
+    ]  # fmt: skip
+    closed = {"leftover": (7, "Klaud-Cold"), "closed-by-human": (8, "maintainer")}
+    smoke = {"dead": 501, "handoff": 502}
+
+    def items(_repository, path, _key=None):
+        if path.startswith("actions/workflows/e2e-tests.yml/runs?status=queued"):
+            return [{"id": run, "display_title": f"e2e Test - klaud-99-{ids[name]}",
+                     "actor": {"login": "Klaud-Cold"}} for name, run in smoke.items()]
+        if path.startswith("actions/workflows/run-sweep.yml/runs?status=in_progress"):
+            return [{"head_branch": f"klaud/auto-{ids['sweeping']}"}]
+        if path.startswith("actions/workflows/klaud-plan.yml/runs?status=in_progress"):
+            return [{"id": 77}]
+        if path.startswith("actions/runs/77/jobs"):
+            return [{"name": f"Run candidate {ids['session']} / Klaud Cold"}]
+        if path.startswith("actions/workflows/"):
+            return []
+        if path.startswith("pulls?state=open"):
+            return open_pulls
+        if path.startswith("pulls?state=all"):
+            name = next(name for name, value in ids.items() if path.endswith(
+                f"klaud%2Fauto-{value}&per_page=100"))
+            return [pull(name, closed[name][0])]
+        if path.startswith("pulls/"):
+            author = "maintainer" if path.startswith("pulls/5/") else "github-actions[bot]"
+            return [{"committer": {"login": author}}]
+        if path == "git/matching-refs/heads/klaud/auto-":
+            return [{"ref": f"refs/heads/klaud/auto-{ids[name]}", "object": {"sha": name}}
+                    for name in ("dead", "session", "leftover", "closed-by-human")]
+        raise AssertionError(path)
+
+    def read(_repository, path):
+        if path.startswith("actions/runs/"):
+            active = path == "actions/runs/2"
+            return {"status": "in_progress" if active else "completed",
+                    "conclusion": None if active else "cancelled"}
+        number = int(path.split("/")[1])
+        return {"closed_by": {"login": next(c for n, c in closed.values() if n == number)}}
+
+    writes, released = [], []
+    monkeypatch.setattr(github, "items", items)
+    monkeypatch.setattr(github, "read", read)
+    monkeypatch.setattr(github, "write", lambda _r, path, method, _p=None: writes.append(
+        (method, path)))
+    monkeypatch.setattr(claims, "family_owners", lambda _r: [
+        Ownership(run_id=run, candidates=[OwnedCandidate(
+            id=ids[name], family=f"configs/nvidia-master.yaml:{name}", base="a" * 40)])
+        for name, run in (("stale-claim", 1), ("live-claim", 2))
+    ])
+    monkeypatch.setattr(claims, "release_family", lambda _r, candidate, run: released.append(
+        (candidate.id, run)))
+
+    live = lifecycle.sweep_abandoned("example/project", set())
+
+    assert live == {ids[name] for name in
+                    ("session", "sweeping", "handoff", "human", "ready")}
+    assert released == [(ids["stale-claim"], 1)]
+    assert writes == [
+        ("POST", "actions/runs/501/cancel"),
+        ("POST", "issues/1/comments"),
+        ("PATCH", "pulls/1"),
+        ("DELETE", f"git/refs/heads/klaud/auto-{ids['dead']}"),
+        ("DELETE", f"git/refs/heads/klaud/auto-{ids['leftover']}"),
+    ]
 
 
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
