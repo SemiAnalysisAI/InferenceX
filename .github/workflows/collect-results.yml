@@ -56,8 +56,18 @@ jobs:
         run: |
           uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.results.collect_results results/ "${RESULT_PREFIX}"
 
+      # The collector exits non-zero after writing valid rows when it quarantines any.
       - name: Upload aggregated results
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: results_${{ inputs.result-prefix || 'all' }}
           path: agg_${{ inputs.result-prefix || 'all' }}.json
+
+      - name: Upload rejected rows
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rejected_rows_${{ inputs.result-prefix || 'all' }}
+          path: rejected_rows.json
+          if-no-files-found: ignore

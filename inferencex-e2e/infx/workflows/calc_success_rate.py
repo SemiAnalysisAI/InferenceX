@@ -6,6 +6,9 @@ from collections.abc import Iterable
 
 from infx import github
 from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
+from infx.results.schema import RESULT_SCHEMA_VERSION
+from infx.results.schema.models import RUN_STATS_ROW
+from infx.results.schema.quarantine import quarantine, report
 
 
 def load_hardware_labels() -> list[str]:
@@ -49,7 +52,10 @@ def calculate_hardware_success_rates() -> dict[str, dict[str, int]]:
         "jobs",
         {"filter": "all"},
     )
-    success_rates = {hardware: {"n_success": 0, "total": 0} for hardware in hardware_labels}
+    success_rates = {
+        hardware: {"result_schema_version": RESULT_SCHEMA_VERSION, "n_success": 0, "total": 0}
+        for hardware in hardware_labels
+    }
     for job in jobs:
         hardware = extract_hardware_from_name(job["name"], patterns)
         if hardware and job["conclusion"] != "skipped":
@@ -81,13 +87,18 @@ def print_success_rates(success_rates: dict[str, dict[str, int]] | None) -> None
     print("=" * 60)
 
 
-def main() -> None:
-    run_stats = calculate_hardware_success_rates()
+def main() -> int:
+    accepted, rejected = quarantine(
+        (hardware, stats, RUN_STATS_ROW)
+        for hardware, stats in calculate_hardware_success_rates().items()
+    )
+    run_stats = dict(accepted)
     print_success_rates(run_stats)
 
     with open(f"{sys.argv[1]}.json", "w") as f:
         json.dump(run_stats, f, indent=2)
+    return report(rejected)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -25,12 +25,8 @@ def invoke(tmp_path):
     return run
 
 
-@pytest.mark.parametrize("payload,expected", [
-    (None, []),
-    ('{"value": 3}', [{"value": 3}]),
-    ('[{"value": 3}, {"value": 4}]', [[{"value": 3}, {"value": 4}]]),
-])
-def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payload, expected):
+@pytest.mark.parametrize("payload", [None, '{"value": 3}', '[{"value": 3}, {"value": 4}]'])
+def test_collector_quarantines_payloads_that_are_not_result_rows(invoke, tmp_path, payload):
     inputs = tmp_path / "inputs" / "nested"
     inputs.mkdir(parents=True)
     if payload is not None:
@@ -39,9 +35,18 @@ def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payl
 
     result = invoke("infx.results.collect_results", "inputs", "test")
 
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == result.stderr == ""
-    assert json.loads((tmp_path / "agg_test.json").read_text()) == expected
+    assert json.loads((tmp_path / "agg_test.json").read_text()) == []
+    rejected = tmp_path / "rejected_rows.json"
+    if payload is None:
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == result.stderr == ""
+        assert not rejected.exists()
+        return
+    assert result.returncode == 1
+    [entry] = json.loads(rejected.read_text())
+    assert entry["source"] == "nested/result.json"
+    assert entry["row"] == json.loads(payload)
+    assert [error["type"] for error in entry["errors"]] == ["topology"]
 
 
 @pytest.mark.parametrize("published", [None, b'[{"previous": true}]\n'])

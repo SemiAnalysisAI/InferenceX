@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .schema import RESULT_SCHEMA_VERSION
+
 EVAL_RESULT_FORMAT = "inferencex-eval-v1"
 _CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 _TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?")
@@ -259,6 +261,7 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
             dp_attention = f"prefill={str(prefill_dp_attention).lower()},decode={str(decode_dp_attention).lower()}"
 
     row = {
+        "result_schema_version": RESULT_SCHEMA_VERSION,
         "is_multinode": is_multinode,
         "model_prefix": meta.get("infmax_model_prefix", "unknown"),
         "model": m.get("model") or meta.get("model", "unknown"),

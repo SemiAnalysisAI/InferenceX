@@ -109,12 +109,12 @@ def test_success_rates_include_all_pages_and_retries(
         return subprocess.CompletedProcess(args, 0, json.dumps(pages), "")
 
     monkeypatch.setattr(success_rate.github.subprocess, "run", run)
-    success_rate.main()
+    assert success_rate.main() == 0
 
     assert json.loads(run_stats_environment.read_text()) == {
-        "sample-a": {"n_success": 1, "total": 2},
-        "sample-b": {"n_success": 1, "total": 3},
-        "unused": {"n_success": 0, "total": 0},
+        "sample-a": {"result_schema_version": 1, "n_success": 1, "total": 2},
+        "sample-b": {"result_schema_version": 1, "n_success": 1, "total": 3},
+        "unused": {"result_schema_version": 1, "n_success": 0, "total": 0},
     }
     table = capsys.readouterr().out
     rows = [line.split() for line in table.splitlines() if line.startswith("sample-")]
@@ -165,9 +165,9 @@ def test_empty_job_list_still_writes_zero_counts(run_stats_environment, monkeypa
         lambda args, **kwargs: subprocess.CompletedProcess(
             args, 0, '[{"jobs": [], "total_count": 0}]', ""),
     )
-    success_rate.main()
+    assert success_rate.main() == 0
     assert json.loads(run_stats_environment.read_text()) == {
-        "sample-a": {"n_success": 0, "total": 0},
-        "sample-b": {"n_success": 0, "total": 0},
-        "unused": {"n_success": 0, "total": 0},
+        "sample-a": {"result_schema_version": 1, "n_success": 0, "total": 0},
+        "sample-b": {"result_schema_version": 1, "n_success": 0, "total": 0},
+        "unused": {"result_schema_version": 1, "n_success": 0, "total": 0},
     }

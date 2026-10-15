@@ -27,8 +27,9 @@ gh api --paginate "repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID/artifact
 
 | Evidence | Required checks |
 | --- | --- |
-| `results_bmk/agg_bmk.json` | JSON array; filter the intended model, hardware, topology, scenario, and concurrency. The collector parses JSON but does not validate or deduplicate rows. |
+| `results_bmk/agg_bmk.json` | JSON array; filter the intended model, hardware, topology, scenario, and concurrency. The collector checks row shape and types, not measurement quality, and does not deduplicate rows. |
 | `eval_results_all/agg_eval_all.json` and `eval_*` | Aggregate rows must match task, concurrency, score, and `n_eff`; retain per-config `meta_env.json`, results, and samples where needed. Collection may keep completed points from failed batches; reuse requires valid coverage. |
+| `rejected_rows_*` | Must be absent. Its `rejected_rows.json` lists rows a collector kept out of its aggregate for breaking the [result row contract](../../inferencex-e2e/infx/results/schema/models.py), with validation errors; per-config artifacts still contain them. |
 | `bmk_agentic_<suffix>` and `agentic_<suffix>` | Pair exact suffixes, including `_concN`; raw `profile_export.jsonl` is required. Preserve dataset identity, request accounting, and relevant `server_logs_*`. |
 | Power audits | Retained diagnostics or `power_valid` alone do not prove successful requests, answer quality, or publishable power. Inspect the outcome and each required window's validity. |
 

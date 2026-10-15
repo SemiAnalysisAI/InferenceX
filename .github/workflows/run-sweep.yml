@@ -864,10 +864,19 @@ jobs:
                   uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows
                   python -m infx.workflows.calc_success_rate "$STATS_FILENAME"
 
-            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+            # Exits non-zero after writing valid rows when it quarantines any.
+            - if: ${{ !cancelled() }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
+
+            - if: ${{ !cancelled() }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: rejected_rows_run_stats
+                  path: rejected_rows.json
+                  if-no-files-found: ignore
 
     compare-results:
         name: compare-results
