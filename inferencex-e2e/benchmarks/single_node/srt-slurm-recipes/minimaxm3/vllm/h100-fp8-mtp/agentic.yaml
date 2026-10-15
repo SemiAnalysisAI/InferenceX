@@ -151,7 +151,7 @@ override_tp8_c6_dram:
     env:
       CONC: '6'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1676'
 
 override_tp8_c8_dram:
   # The worker's Mooncake client and the mooncake-master both install the master config's release.
@@ -191,4 +191,4 @@ override_tp8_c8_dram:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1731'
+      TOTAL_CPU_DRAM_GB: '1676'
