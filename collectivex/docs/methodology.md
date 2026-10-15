@@ -778,12 +778,15 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
   - on NVIDIA, the clock-event reasons seen other than idle;
   - `sm_clock_ratio_min`, the slowest rank's median clock over the fastest rank's, null unless every
     rank reported. Ranks run identical work, so their GPUs should agree;
-  - `slow_gpu`, true when that ratio is below 0.95 or a rank reported a hardware, thermal or power
-    brake slowdown (which a tray clamped as a whole shows even at a ratio of 1). The run log and
-    `summarize.py` call such cases out.
+  - `slow_gpu`, true when that ratio is below 0.95, when a rank reported a hardware, thermal or
+    power brake slowdown, or when a rank spent at least 5% of the timed passes throttled by any
+    cause but sync boost. The last two catch a tray clamped as a whole, which keeps the ratio at 1;
+    only the last works on AMD, which reports no clock-event reasons. The busiest prefill cases
+    measured spent 0.01-0.02% power-capped. The run log and `summarize.py` call such cases out.
 
   Reads happen only between timed bursts, never inside a window. A probe that cannot start leaves
-  the values null and records `unavailable_reason`; it never fails the case.
+  the values null and records `unavailable_reason`: the writing rank's own failure, or the ranks
+  whose probe did not start. It never fails the case.
 - `provenance`: the mounted image tag, the source SHA, and `source_dirty` (whether `collectivex/`
   had uncommitted edits; such a result is never published), and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.

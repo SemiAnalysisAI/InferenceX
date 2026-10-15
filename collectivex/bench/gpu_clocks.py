@@ -30,6 +30,12 @@ SOURCES = {1: "nvml", 2: "amdsmi"}
 # Ranks of one case run identical work, so their GPUs reach the same clock; a rank whose median
 # falls this far below the fastest rank's ran on a slow GPU, not a slow library.
 SLOW_GPU_RATIO = 0.95
+# A rank its own limits held down for this share of the timed passes ran slow whatever its peers
+# did. amdsmi reports no clock-event reasons, so on AMD a tray throttled as a whole shows only here;
+# the busiest prefill cases measured spent 0.01-0.02% power-capped. sync_boost is left out: it holds
+# a GPU to its sync group's clock, which the ratio already compares.
+THROTTLED_FRACTION = 0.05
+SLOWING_CAUSES = tuple(cause for cause in THROTTLE_CAUSES if cause != "sync_boost")
 # One float per field crosses ranks in a single all_gather; NaN marks a value the rank could not read.
 FIELDS = ("source", "sm_clock_min", "sm_clock_p50", "sm_clock_max", "sm_clock_samples",
           "sm_clock_limit", "power_limit_w", "temperature_max_c", "reasons", "span_s",
@@ -277,15 +283,23 @@ def summarize(vectors, unavailable_reason=None) -> dict:
                     if rank["throttle_fraction"] and rank["throttle_fraction"][cause] is not None]
         worst[cause] = max(observed) if observed else None
     source = next(iter(sources)) if len(sources) == 1 else ("mixed" if sources else None)
+    # Only the writing rank's own failure text reaches here, so any other rank whose probe did not
+    # start is named instead.
+    missing = [rank["rank"] for rank in per_rank if rank["source"] is None]
+    unnamed = [rank for rank in missing if rank != 0 or not unavailable_reason]
+    reasons = ([unavailable_reason] if unavailable_reason and (0 in missing or not per_rank) else [])
+    if unnamed:
+        reasons.append("no clock probe on rank " + ", ".join(str(rank) for rank in unnamed))
     # Null unless every rank reported: a subset could hide exactly the GPU that failed to.
     ratio = (round(min(medians) / max(medians), 4)
              if per_rank and len(medians) == len(per_rank) and max(medians) > 0 else None)
     return {
         "source": source,
-        "unavailable_reason": unavailable_reason if None in sources or not per_rank else None,
+        "unavailable_reason": "; ".join(reasons) or None,
         "sm_clock_ratio_min": ratio,
         "throttle_fraction_max": worst if any(value is not None for value in worst.values()) else None,
-        # True when a GPU ran slower than its peers or reported a hardware or thermal slowdown.
+        # True when a GPU ran slower than its peers, reported a hardware or thermal slowdown, or spent
+        # THROTTLED_FRACTION of the timed passes held down by its own limits.
         "slow_gpu": bool(_problems(ratio, per_rank)) if source else None,
         "per_rank": per_rank,
     }
@@ -299,6 +313,12 @@ def _problems(ratio, per_rank) -> list:
                      for reason in rank["clock_event_reasons"] if reason in ABNORMAL_REASONS})
     if slowed:
         problems.append("ranks reported " + ", ".join(f"{reason} (rank {rank})" for rank, reason in slowed))
+    held = sorted((rank["rank"], cause, fraction) for rank in per_rank
+                  for cause, fraction in (rank.get("throttle_fraction") or {}).items()
+                  if cause in SLOWING_CAUSES and fraction is not None and fraction >= THROTTLED_FRACTION)
+    if held:
+        problems.append("ranks were throttled for " + ", ".join(
+            f"{fraction:.0%} of the timed passes by {cause} (rank {rank})" for rank, cause, fraction in held))
     return problems
 
 

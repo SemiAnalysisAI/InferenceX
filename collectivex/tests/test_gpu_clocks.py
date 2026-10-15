@@ -52,6 +52,22 @@ class Summary(unittest.TestCase):
         self.assertTrue(summary["slow_gpu"])
         self.assertIn("hw_power_brake_slowdown (rank 0)", gpu_clocks.slow_gpu_warning(summary))
 
+    def test_a_tray_throttled_as_a_whole_is_flagged_where_no_reason_bits_exist(self):
+        # amdsmi reports no clock-event reasons and the ratio stays at 1, so the residency decides.
+        for power, slow in ((0.12, True), (0.0002, False)):
+            with self.subTest(power=power):
+                ranks = [nvml_rank(1500, source=2, reasons=None, throttle_power=power,
+                                   throttle_sync_boost=0.5) for _ in range(2)]
+                summary = gpu_clocks.summarize(ranks)
+                self.assertEqual((summary["source"], summary["sm_clock_ratio_min"]), ("amdsmi", 1.0))
+                self.assertIs(summary["slow_gpu"], slow)
+                warning = gpu_clocks.slow_gpu_warning(summary)
+                if slow:
+                    self.assertIn("12% of the timed passes by power (rank 0)", warning)
+                    self.assertNotIn("sync_boost", warning)
+                else:
+                    self.assertIsNone(warning)
+
     def test_throttle_reports_the_worst_rank_per_cause(self):
         summary = gpu_clocks.summarize([
             nvml_rank(1980, throttle_power=0.0, throttle_thermal=0.0),
@@ -74,6 +90,15 @@ class Summary(unittest.TestCase):
         self.assertIsNone(summary["sm_clock_ratio_min"])
         self.assertIsNone(summary["throttle_fraction_max"])
         self.assertIsNone(summary["slow_gpu"])
+
+    def test_a_probe_missing_on_another_rank_is_named(self):
+        # The writing rank's probe ran; rank 1's did not, and its failure text never left rank 1.
+        summary = gpu_clocks.summarize([nvml_rank(1980), rank_vector(source=0, sm_clock_samples=0)])
+        self.assertEqual(summary["source"], "mixed")
+        self.assertEqual(summary["unavailable_reason"], "no clock probe on rank 1")
+        both = gpu_clocks.summarize([rank_vector(source=0, sm_clock_samples=0)] * 2, "OSError: no NVML")
+        self.assertEqual(both["unavailable_reason"], "OSError: no NVML; no clock probe on rank 1")
+        self.assertIsNone(gpu_clocks.summarize([nvml_rank(1980)] * 2, "unused")["unavailable_reason"])
 
     def test_nothing_identifies_the_hardware(self):
         # Results are public: per-rank entries carry readings, never a UUID, serial or bus id.
