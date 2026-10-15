@@ -69,8 +69,8 @@ def test_each_cluster_routes_requests_to_its_launch_path(cluster_id, env, path):
 
 
 def test_a_path_without_a_lane_on_the_cluster_is_refused():
-    with pytest.raises(LaunchError, match="cluster 'b200-cw' has no srt-multi srt-slurm lane"):
-        srt_lane("b200-cw", LaunchPath.SRT_MULTI)
+    with pytest.raises(LaunchError, match="cluster 'h100-cw' has no srt-multi srt-slurm lane"):
+        srt_lane("h100-cw", LaunchPath.SRT_MULTI)
 
 
 OVERRIDES = (

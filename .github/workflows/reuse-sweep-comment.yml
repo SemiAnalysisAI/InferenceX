@@ -2,7 +2,7 @@ name: Acknowledge Sweep Reuse
 run-name: Check sweep reuse for PR #${{ github.event.issue.number }}
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; reuse_comment.py authorizes the commenter and reacts to the comment
     types: [created, edited]
 
 permissions: {}

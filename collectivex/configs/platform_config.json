@@ -181,7 +181,7 @@
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
       "backends": {"mori": [8, 16], "uccl-ep": [8]},
-      "ll_backends": {"mori": [8]},
+      "ll_backends": {"mori": [16]},
       "fabric": {"nic": "Pollara 400GbE", "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"},
       "network": {
         "socket_ifname": "eno0",

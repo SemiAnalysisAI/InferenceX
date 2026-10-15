@@ -159,7 +159,7 @@ jobs:
 
   collect-al:
     needs: setup
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; workflow_dispatch only
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
