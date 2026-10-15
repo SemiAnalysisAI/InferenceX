@@ -356,7 +356,7 @@ clusters:
         single-node-exclusive: false
   h100-dsxe:
     gpus-per-node: 8
-    available-cpu-dram-mib: 1_998_848
+    available-cpu-dram-mib: 1_915_904
     arch: x86_64
     models:
       entries:
