@@ -182,6 +182,13 @@ class EPBackend(abc.ABC):
             raise ValueError(f"COLLX_CUDA_GRAPH must be '0' or '1', got {setting!r}")
         return self.cuda_graph_supported and setting == "1"
 
+    def implementation_details(self) -> dict:
+        """Realized library configuration, published as `implementation.library_config`: what the
+        adapter chose or the library resolved that changes what a row measures (token capacity,
+        zero-copy, SM budgets, QPs, launch tuples). JSON-serializable and read once the buffer
+        exists; empty publishes null. `library_version` stays its own top-level field."""
+        return {}
+
     def fused_quantize(self, eager):
         """The fp8 quantize the TIMED dispatch should call, keyed on mode.
 
@@ -561,12 +568,6 @@ class EPBackend(abc.ABC):
         anyway; None where the window holds no host work (graph replay, a dispatch that does not
         wait on the host, or a component without a dispatch in its window)."""
         return self.timing.host_stalls()
-
-    def implementation_details(self) -> dict:
-        """The realized library configuration the artifact publishes under
-        `implementation.library_config` (SMs, QPs, launch configs, capacity, zero-copy, scale
-        format); JSON-serializable. Empty where an adapter reports nothing beyond its labels."""
-        return {}
 
     def benchmark_chain(self, problem, warmup, iters, drop):
         """Free-running dispatch->combine pairs, no host sync between them: what a decode loop pays.
