@@ -25,9 +25,15 @@ on: # zizmor: ignore[concurrency-limits]
         required: false
         type: string
         default: 'dsv4'
+      framework:
+        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>.sh collector"
+        required: false
+        type: choice
+        options: [vllm, sglang]
+        default: 'vllm'
       image:
-        # Must be vLLM >= 0.30: thinking-on cells rely on --chat-template-kwargs (vllm-project/vllm#44244).
-        description: "vLLM container image (vLLM >= 0.30)"
+        # vLLM collectors need vLLM >= 0.30: thinking-on cells rely on --chat-template-kwargs (vllm-project/vllm#44244).
+        description: "Container image (vLLM >= 0.30 for vLLM collectors)"
         required: false
         type: string
         default: 'vllm/vllm-openai:v0.30.0'
@@ -94,14 +100,14 @@ env:
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   PRECISION: fp4
-  FRAMEWORK: vllm
+  FRAMEWORK: ${{ inputs.framework }}
   EXP_NAME: ${{ inputs.model-prefix }}_speedbench
   IMAGE: ${{ inputs.image }}
   TP: '8'
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
+  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_${{ inputs.framework }}.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
   MTP_LIST: ${{ inputs.mtp-list }}
@@ -143,9 +149,10 @@ jobs:
           entry=$(jq -cn \
             --arg runner "$RUNNER" \
             --arg model_prefix "$MODEL_PREFIX" \
+            --arg framework "$FRAMEWORK" \
             '[{
               runner: $runner,
-              framework: "vllm",
+              framework: $framework,
               "model-prefix": $model_prefix,
               precision: "fp4",
               "spec-decoding": "mtp"
