@@ -9901,4 +9901,4 @@
     - "Add Muse Spark Open NVFP4 AgentX on H200 with upstream SGLang and DFlash2 speculative decoding at TP8/EP8."
     - "Use Marlin W4A16 dense and MoE kernels, FA3 target attention, FA4 draft attention, FP8 KV, and an 8-token DFlash verification block with acceptance selected from the committed golden curve."
     - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 48, and 64 with GPU-resident KV and no layernorm sequence parallelism or MegaMoE."
-  pr-link: ""
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4148
