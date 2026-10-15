@@ -26,10 +26,10 @@ The registry's per-backend `backend_maturity` still says `candidate`.
   left to the library, which gives low-latency every SM (`nccl_ep_utils.py:251-257`).
 - **Capacity.** TensorRT-LLM sizes its one group to `min(max_num_tokens, moe_max_num_tokens)`
   (`nccl_ep.py:98-103`, default 8192) and rejects a step above it (`nccl_ep.py:124-129`). Here the
-  capacity is the ladder's top, 512 for decode: the smallest TensorRT-LLM configuration that admits
-  every rung. There is no 256-slot floor. Capacity changes what LL measures: each rank-major
-  dispatch resets every routing slot of the receive plane, `EP x capacity x top-k` entries
-  (`ll_dispatch_lsa.cuh:652-659`).
+  capacity is exactly the ladder's top, 512 for decode: the smallest TensorRT-LLM configuration that
+  admits every rung, so low-latency runs the 512 rung that the other backends' fixed 256-token
+  receive drops. Capacity changes what LL measures: each rank-major dispatch resets every routing
+  slot of the receive plane, `EP x capacity x top-k` entries (`ll_dispatch_lsa.cuh:652-659`).
 - **Zero-copy follows the regime.** TensorRT-LLM dispatches into a registered NCCL window only
   when it is not capturing. Under CUDA graph capture it dispatches into a plain tensor, and the
   library copies every received token out of its staging buffer (`nccl_ep.py:305-327`,
@@ -55,7 +55,9 @@ capacity-wide memsets, a routing-map conversion, an `ncclAllGather` of capacity 
 metadata scan over them (`nccl_ep.cc:4057-4137`, `4281`). So every rung carries a term set by the
 ladder's top, 512 for decode and 8192 for prefill. That capacity is part of `kernel_generation`,
 so a ladder change never pools with older rows. NVIDIA's `ep_bench` times the update separately.
-HT runs 16 SMs for dispatch and combine. HT also supports caller-quantized FP8 with forwarded
+HT runs 16 SMs for dispatch and combine. `-static` marks the combine input: FLAT combine takes
+the dispatch output's full static `[num_recv_slots, hidden]` receive plane, because a count-sized
+slice needs an `NCCL_EP_AUTO` group (`ep_nccl.py` `_bind_ht_recv_count`). HT also supports caller-quantized FP8 with forwarded
 scales (`QUANT_FWD`), which this suite does not measure.
 
 ## FP8
@@ -68,8 +70,10 @@ activations in BF16 (`nccl_ep.py:78-79`). The default matrix therefore omits ncc
 
 ## Row identity
 
-`kernel_generation` is `<family>[-zc][-gum1][-fp8-ds-e3m4]-cap<N>-<wheel version>`, followed by the
-harness's regime suffix. Examples:
+`kernel_generation` is a family, `nccl-ep-v02-ht-routed-zc-static` (HT, plus `-gum1` when graphed),
+`nccl-ep-v02-ll-rm` (plus `-zc` on the eager window path) or `nccl-ep-v02-ll-em`, then
+`-fp8-ds-e3m4` on FP8 rows, `-cap<N>-<wheel version>`, and the harness's regime suffix. HT's `-zc`
+is part of its family: HT always takes the window. Examples:
 
 - `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261005-cudagraph-spin-ar`: graphed low-latency, staged.
 - `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261005-eager-spin-ar`: eager low-latency, zero-copy.
@@ -81,7 +85,7 @@ harness's regime suffix. Examples:
 communicator (the routing `ncclAllGather`). The communicator runs graph usage mode 1 in every mode,
 but the mode only matters to that capture.
 
-`EPBackend.implementation_details()` returns the realized configuration, which the artifact
+`EPBackend.implementation_details()` returns the realized configuration, which the result document
 publishes as `implementation.library_config`: `capacity_tokens_per_rank`, `zero_copy`, `num_sms`
 (`dispatch` and `combine`), and `engine_contract` (`tensorrt-llm`, or null for a library row). The
 wheel version stays in `implementation.library_version`. `num_sms` repeats the library's

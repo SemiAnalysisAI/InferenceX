@@ -159,7 +159,7 @@ def _cell(row: dict, component: str, ep: int) -> str:
     p99 = _algbw_per_gpu(nbytes, percentiles.get("p99"), ep)
     if p50 is None:
         return f"{component}=n/a"
-    # Graph-replayed fresh-entry rows publish p50 only (tails withheld, see methodology).
+    # A tail the harness withheld (too many misaligned or host-stalled samples) prints as "-".
     tail = "-" if p99 is None else f"{p99:<6.1f}"
     return f"{component}={p50:6.1f}/{tail}"
 
