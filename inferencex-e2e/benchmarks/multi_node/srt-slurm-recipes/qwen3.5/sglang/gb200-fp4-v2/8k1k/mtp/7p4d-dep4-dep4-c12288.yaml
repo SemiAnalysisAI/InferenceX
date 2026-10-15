@@ -41,7 +41,7 @@ roles:
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_HEALTH_CHECK_TIMEOUT: '3600'
       SGLANG_HEALTH_STARTING_OK: '1'
       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
@@ -60,7 +60,7 @@ roles:
       enable-dp-attention: true
       enable-dp-attention-local-control-broadcast: true
       enable-dp-lm-head: true
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 2048
       attention-backend: trtllm_mha
@@ -74,7 +74,7 @@ roles:
       context-length: 9236
       max-total-tokens: 256000
       max-running-requests: 128
-      cuda-graph-max-bs: 4
+      cuda-graph-max-bs-decode: 4
       chunked-prefill-size: 262144
       max-prefill-tokens: 131072
       scheduler-recv-interval: 1
@@ -116,7 +116,7 @@ roles:
       SGLANG_DECODE_BOOTSTRAP_TIMEOUT: '1000'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_HEALTH_CHECK_TIMEOUT: '3600'
       SGLANG_HEALTH_STARTING_OK: '1'
       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
@@ -139,7 +139,7 @@ roles:
       expert-parallel-size: 4
       enable-dp-attention: true
       enable-dp-lm-head: true
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 128
       attention-backend: trtllm_mha
@@ -158,7 +158,7 @@ roles:
       disaggregation-mode: decode
       disaggregation-transfer-backend: mooncake
       disable-radix-cache: true
-      cuda-graph-max-bs: 512
+      cuda-graph-max-bs-decode: 512
       mem-fraction-static: 0.94
       context-length: 9236
       max-total-tokens: 2052736

@@ -39,7 +39,7 @@ roles:
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_HEALTH_CHECK_TIMEOUT: '3600'
       SGLANG_HEALTH_STARTING_OK: '1'
       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
@@ -55,7 +55,7 @@ roles:
       tensor-parallel-size: 2
       data-parallel-size: 1
       expert-parallel-size: 1
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 2048
       attention-backend: trtllm_mha
@@ -69,7 +69,7 @@ roles:
       context-length: 9236
       max-total-tokens: 64000
       max-running-requests: 64
-      cuda-graph-max-bs: 4
+      cuda-graph-max-bs-decode: 4
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
       scheduler-recv-interval: 10
@@ -106,7 +106,7 @@ roles:
       SGLANG_DECODE_BOOTSTRAP_TIMEOUT: '1000'
       SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
       SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-      SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
       SGLANG_HEALTH_CHECK_TIMEOUT: '3600'
       SGLANG_HEALTH_STARTING_OK: '1'
       SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
@@ -122,7 +122,7 @@ roles:
       tensor-parallel-size: 2
       data-parallel-size: 1
       expert-parallel-size: 1
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 128
       attention-backend: trtllm_mha
@@ -141,7 +141,7 @@ roles:
       max-total-tokens: 750000
       max-mamba-cache-size: 128
       max-running-requests: 86
-      cuda-graph-max-bs: 88
+      cuda-graph-max-bs-decode: 88
       chunked-prefill-size: 32768
       max-prefill-tokens: 32768
       scheduler-recv-interval: 10
