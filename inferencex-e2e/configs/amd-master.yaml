@@ -191,7 +191,7 @@ qwen3.5-fp8-mi325x-sglang:
         srt-recipe: 8k1k.yaml
 
 qwen3.5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260924
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261014@sha256:ab0f913939b4c15b6326676bfd9b135ee211b58a4e19b7f3af6b193cda73e562
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
