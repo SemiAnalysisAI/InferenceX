@@ -143,7 +143,7 @@ def smoke_entries(entries: list[dict]) -> list[dict]:
         row.pop(Fields.REQUIRE_POWER.value, None)
         if row.get("prefill") is not None:
             row["conc"] = [row["eval-conc"]]
-            row["eval-all-concs"] = False
+            row.pop("eval-all-concs", None)
         evals.append(row)
     return benchmarks + trim_conc(evals)
 

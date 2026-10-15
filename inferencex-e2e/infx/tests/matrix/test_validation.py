@@ -1335,6 +1335,17 @@ class TestMultiNodeAgenticMatrixEntry:
         with pytest.raises(ValueError):
             validate_agentic_matrix_entry(without_prefill)
 
+    def test_smoke_rows_satisfy_the_dispatch_schema(self):
+        from infx.matrix.generate import smoke_entries
+
+        row = {**MULTINODE_AGENTIC_EVAL_ROW, "conc": [8, 32]}
+        del row["eval-only"]
+        rows = smoke_entries([row])
+
+        assert [(entry["conc"], entry.get("eval-only", False)) for entry in rows] == [
+            ([8], False), ([32], True)]
+        for entry in rows:
+            validate_agentic_matrix_entry(entry)
 
 
 class TestLoadConfigFiles:

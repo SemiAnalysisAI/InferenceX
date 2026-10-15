@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
-results/
 unsupported/
 .shards/
 .collx_workloads/
