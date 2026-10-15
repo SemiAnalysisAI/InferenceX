@@ -103,8 +103,8 @@ class EPBackend(abc.ABC):
     # (source token, dest rank), rank-deduplicated; "token-expert": one row per
     # (source token, expert) assignment (the low-latency padded layouts). Selects the
     # correctness oracle and the artifact's `logical_copies.wire` label; independent
-    # of combine_weight_semantics (MoRI's AsyncLL is token-rank AND unweighted in
-    # low-latency mode).
+    # of combine_weight_semantics (MoRI's low-latency InterNodeV1LL is token-rank AND
+    # unweighted).
     receive_layout = "token-rank"
     # WHERE the top-k gate weight enters the combine. "unweighted-rank-sum": the staged
     # combine input carries the gate folded in -- adapters that reduce activations and

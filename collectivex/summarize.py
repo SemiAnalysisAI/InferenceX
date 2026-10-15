@@ -64,7 +64,7 @@ def _wire_basis(document: dict) -> str:
     """Which copy basis this backend's kernels actually move.
 
     Low-latency deepep-v2/uccl-ep/nccl-ep expert-major receive one copy per (token, expert); MoRI's
-    AsyncLL and nccl-ep rank-major deduplicate by destination rank -- ~1.5x different combine
+    InterNodeV1LL and nccl-ep rank-major deduplicate by destination rank -- ~1.5x different combine
     traffic at EP8, so not equal work.
     """
     rows = document["measurement"]["rows"]
