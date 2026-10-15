@@ -9892,3 +9892,13 @@
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#59591 (latent MoE up-proj stores only the local rank's shards), #59069 (AttnRes output fused with per-token FP8 input quantization), #60717 (vLLM's FP8 max in that fused quantization), #60446 (KDA autotune keys), #59523 (cuMem CUDA-graph pool offload on ROCm) and #59880 (speculative block reservations across KV cache groups with a KV connector)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: K3DSparkModel and get_draft_quant_config() are unchanged between the two images, so the draft keeps BF16 weights and an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3951
+
+- config-keys:
+    - musespark-fp4-h200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open NVFP4 AgentX on H200 with upstream SGLang and DFlash2 speculative decoding at TP8/EP8."
+    - "Use Marlin W4A16 dense and MoE kernels, FA3 target attention, FA4 draft attention, FP8 KV, and an 8-token DFlash verification block with acceptance selected from the committed golden curve."
+    - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 48, and 64 with GPU-resident KV and no layernorm sequence parallelism or MegaMoE."
+  pr-link: ""

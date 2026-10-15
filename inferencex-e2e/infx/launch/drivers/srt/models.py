@@ -32,6 +32,7 @@ class Override:
     served_name: str | None = None
     require_config: bool = False
     hub: bool = False
+    single_node_staged: bool = False
 
 
 OVERRIDES: dict[str, tuple[Override, ...]] = {
@@ -74,6 +75,7 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
         ),
     ),
     "h200-dgxc": (
+        Override(Match(model_glob="*/Muse-Spark-Open-816B-A42B-NVFP4"), single_node_staged=True),
         Override(Match(any_of("dsv4")), require_config=True),
         Override(
             Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-trt")),
@@ -182,7 +184,9 @@ def job_env(cluster: Cluster, request: LaunchRequest, served: str | None) -> dic
 def single_node_model_path(cluster: Cluster, request: LaunchRequest) -> str:
     """What the single-node recipe's ``hf:<MODEL>`` serves: the staged checkpoint, or the Hub."""
     srt = slurm_settings(cluster).srt_slurm
-    staged = srt is not None and srt.single_node_models == "staged"
+    staged = (srt is not None and srt.single_node_models == "staged") or (
+        _override(cluster, request, "single_node_staged") is True
+    )
     model = checkpoint(cluster, request) if staged else None
     return str(host_path(cluster, model)) if model is not None else f"hf:{request.model}"
 

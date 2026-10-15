@@ -114,15 +114,18 @@ def test_ambiguous_native_variants_are_rejected(point):
         runtime_arguments(str(path), env)
 
 
-def test_mtp_binding_uses_real_verification_and_the_chat_template(point, tmp_path):
+@pytest.mark.parametrize("algorithm,spec_decoding", [("EAGLE", "mtp"), ("DFLASH", "draft_model")])
+def test_speculative_binding_uses_real_verification_and_the_chat_template(
+    point, tmp_path, algorithm, spec_decoding
+):
     path, recipe, env = point
     recipe["roles"]["agg"]["args"].update({
-        "expert-parallel-size": 4, "speculative-algorithm": "EAGLE",
+        "expert-parallel-size": 4, "speculative-algorithm": algorithm,
         "speculative-num-steps": 2, "speculative-num-draft-tokens": 3,
     })
     recipe["roles"]["agg"]["env"] = {"SGLANG_SIMULATE_ACC_LEN": "2.5"}
     path.write_text(yaml.safe_dump({"base": recipe}))
-    env = {**env, "EP_SIZE": "4", "SPEC_DECODING": "mtp"}
+    env = {**env, "EP_SIZE": "4", "SPEC_DECODING": spec_decoding}
     _, bound = select_recipe(f"{path}:base", env)
     assert bound["benchmark"]["env"]["USE_CHAT_TEMPLATE"] == "true"
     concrete = tmp_path / "bound.yaml"
