@@ -9,10 +9,6 @@
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
-  model:
-    path: hf:moonshotai/Kimi-K3
-    container: vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
