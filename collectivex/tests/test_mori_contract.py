@@ -36,9 +36,6 @@ class _Compiled:
     def __init__(self, fn):
         self.fn = fn
 
-    def __call__(self, *args):
-        return self.fn(*args)
-
 
 class _Rows:
     """A received buffer with `rows` rows that records how it was sliced."""

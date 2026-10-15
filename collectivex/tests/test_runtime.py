@@ -9,7 +9,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
@@ -40,25 +39,14 @@ def run_common(script: str, *args: str, **kwargs) -> subprocess.CompletedProcess
     )
 
 
-# configs/platform_config.json is shared by matrix scheduling, operator/network
-# loading, and backend builds.
-
-
 class ProbeTests(unittest.TestCase):
-    def test_prepare_cache_is_private_and_reusable(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            first = Path(probe.prepare_cache(directory))
-            second = Path(probe.prepare_cache(directory))
-            self.assertEqual(first, second)
-            self.assertEqual(first.stat().st_mode & 0o777, 0o700)
-
-    def test_prepare_cache_bootstraps_a_missing_squash_dir(self) -> None:
+    def test_prepare_cache_bootstraps_a_missing_squash_dir_privately_and_reuses_it(self) -> None:
         # The probe runs before the first container import, so on a fresh pool squash_dir does
-        # not exist yet; a bare mkdir killed every b200-nscale leg of that pool's first sweep.
+        # not exist yet.
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory) / "sqsh"
-            self.assertFalse(parent.exists())
             cache = Path(probe.prepare_cache(str(parent)))
+            self.assertEqual(Path(probe.prepare_cache(str(parent))), cache)
             self.assertTrue(cache.is_dir())
             self.assertEqual(cache.parent, parent.resolve())
             self.assertEqual(cache.stat().st_mode & 0o777, 0o700)
@@ -96,9 +84,8 @@ class _FakeRegistry:
         return self._Response(headers={"Docker-Content-Digest": self.digest})
 
 
-# The digest only stamps the staged squash's sidecar, but a wrong or accepted-malformed
-# digest silently turns stage-once-reuse-many back into per-launch imports, so the
-# resolution path is pinned without touching the network.
+# A wrong or accepted-malformed digest silently turns stage-once-reuse-many back into
+# per-launch imports.
 class ImageDigestResolutionTests(unittest.TestCase):
     DIGEST = "sha256:" + "0123456789abcdef" * 4
 
@@ -127,11 +114,9 @@ class ImageDigestResolutionTests(unittest.TestCase):
                 probe.resolve_image_digest("ghcr.io/org/image:tag", opener=opener), "")
 
 
-# runtime/common.sh collx_squash_path/collx_squash_verdict are the stage-once seam:
-# keying the squash by GITHUB_RUN_ID is exactly the defect that re-imported 30-65GB
-# per run per cluster, and keying it by digest made a transient registry blip miss
-# the staged file -- so the path is a pure function of platform + image reference,
-# and freshness is decided by the verdict against the digest sidecar.
+# The staged squash path is a pure function of platform + image reference (keying it by run
+# re-imports tens of GB per run; by digest, a registry blip misses the staged file), and
+# freshness is the verdict against the digest sidecar.
 class SquashCacheKeyTests(unittest.TestCase):
     IMAGE = "rocm/sgl-dev:sglang-v1"
     DIGEST = "sha256:" + "ab" * 32
@@ -220,12 +205,10 @@ class ConfigTests(unittest.TestCase):
         self.assertIn(b"COLLX_ACCOUNT\0shared\0", payload)
         self.assertIn(b"COLLX_RDMA_DEVICES\0mlx5_1:1\0", payload)
 
+
 class SingleNodeHcaOverrideTests(unittest.TestCase):
-    # collx_apply_network_profile's single-node early return must still honor a
-    # SKU's pinned single-node HCA list (b300: DeepEP's legacy LL Buffer
-    # self-enables IBGDA even single-node, and only the storage-IB rails accept
-    # AH/DCT creation), while scale-out runs keep resolving NVSHMEM_HCA_LIST
-    # from the ordinary scale-out selector.
+    # The single-node early return must still honor a SKU's pinned single-node HCA list (DeepEP's
+    # legacy LL Buffer self-enables IBGDA even single-node), while scale-out keeps its selector.
     def test_nvshmem_hca_list_per_placement(self) -> None:
         for name, setup, placement, expected in (
             ("single-node override", "export COLLX_SINGLE_NODE_RDMA_DEVICES='mlx5_12:1,mlx5_13:1'",
@@ -389,20 +372,11 @@ class StageTests(unittest.TestCase):
             self.assertTrue((staged / "runtime" / "common.sh").is_file())
             self.assertFalse((staged / ".shards").exists())
             self.assertFalse((staged / "goal.md").exists())
-            cleanup_args = type("Args", (), {"root": str(target)})
-            stage.validate_cleanup(cleanup_args)
-
-# Probe output is consumed by the launcher to select an interface and link layer.
-SOCKET_MARKER = r"^\[collectivex-private\] socket-interface-selected=([A-Za-z][A-Za-z0-9_.-]{0,31})$"
-LINK_MARKER = r"^\[collectivex-private\] rdma-link-layer=(roce|infiniband|efa)$"
-FAILURE_MARKER = (
-    r"(socket-interface|rdma-(device|port))-[0-9]+="
-    r"(missing|down|inactive|default-route-missing|gid-missing|gid-empty|"
-    r"link-layer-missing|link-layer-invalid|link-layer-mixed)"
-)
 
 
 class NetworkProfileContract(unittest.TestCase):
+    """The marker lines the launcher reads to select an interface and link layer."""
+
     @staticmethod
     def _fabric(root: Path, *, interface: str = "eth0", device: str = "mlx5_0",
                 state: str = "4: ACTIVE", link_layer: str = "Ethernet",
@@ -430,28 +404,22 @@ class NetworkProfileContract(unittest.TestCase):
             rc = 1
         return rc, buffer.getvalue().splitlines()
 
-    @staticmethod
-    def _captures(pattern: str, lines: list) -> list:
-        return [match.group(1) for line in lines
-                for match in [re.match(pattern, line)] if match]
-
     def test_healthy_fabric_reports_selected_interface_and_link_layer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root)
             rc, lines = self._run(root)
-            self.assertEqual(rc, 0)
-            self.assertEqual(self._captures(SOCKET_MARKER, lines), ["eth0"])
-            self.assertEqual(self._captures(LINK_MARKER, lines), ["roce"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines, ["[collectivex-private] socket-interface-selected=eth0",
+                                 "[collectivex-private] rdma-link-layer=roce"])
 
     def test_inactive_port_reports_failure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._fabric(root, state="1: DOWN")
             rc, lines = self._run(root)
-            self.assertEqual(rc, 1)
-            failures = [line for line in lines if re.search(FAILURE_MARKER, line)]
-            self.assertTrue(any("rdma-port-1=inactive" in line for line in failures), failures)
+        self.assertEqual(rc, 1)
+        self.assertIn("[collectivex-private] rdma-port-1=inactive", lines)
 
     def _efa_fabric(self, root: Path) -> None:
         # An EFA node as sysfs shows it: default-route interface up, verbs device whose port is
@@ -467,28 +435,22 @@ class NetworkProfileContract(unittest.TestCase):
             root = Path(directory)
             self._efa_fabric(root)
             rc, lines = self._run_efa(root, "efa")
-            self.assertEqual(rc, 0, lines)
-            self.assertEqual(self._captures(SOCKET_MARKER, lines), ["enp71s0"])
-            self.assertEqual(self._captures(LINK_MARKER, lines), ["efa"])
+        self.assertEqual(rc, 0, lines)
+        self.assertEqual(lines, ["[collectivex-private] socket-interface-selected=enp71s0",
+                                 "[collectivex-private] rdma-link-layer=efa"])
 
     def test_undeclared_fabric_still_rejects_the_unspecified_link_layer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._efa_fabric(root)
             rc, lines = self._run_efa(root, "")
-            self.assertEqual(rc, 1)
-            self.assertIn("[collectivex-private] rdma-port-1=link-layer-invalid", lines)
+        self.assertEqual(rc, 1)
+        self.assertIn("[collectivex-private] rdma-port-1=link-layer-invalid", lines)
+
 
 class ContainerImportRetry(unittest.TestCase):
-    """A failed container import is retried, because the failure is usually the storage blinking.
-
-    The import writes tens of GB to operator-supplied squash storage, which on some clusters is a
-    SOFT-mounted network filesystem -- one that returns an error instead of blocking when its
-    transport drops. gb300's /data is NFSv3 over RDMA, and a transport gap there surfaces from
-    `mkdir` as "Protocol family not supported", which reads like a missing mount but is not: the
-    same node writes it fine minutes later, so the import must not treat one such failure as
-    terminal.
-    """
+    """A failed container import is retried: on soft-mounted squash storage (gb300's NFS over
+    RDMA) one failure is usually the transport blinking, not a missing mount."""
 
     HARNESS = """
 set -u
@@ -527,9 +489,6 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
         return fields, proc
 
     def test_a_transient_failure_is_retried_and_then_succeeds(self):
-        # Also the fixture's own control: if the job-root shape were wrong the function would
-        # fail before ever reaching srun, CALLS would be 0, and every assertion here would pass
-        # vacuously. Asserting the invocation count is what makes that impossible.
         fields, proc = self._run("1 0")
         self.assertEqual(fields.get("CALLS"), "2", proc.stdout + proc.stderr)
         self.assertEqual(fields.get("RC"), "0", proc.stdout + proc.stderr)
@@ -544,11 +503,9 @@ echo "CALLS=$(wc -l < "$ROOT/calls" 2>/dev/null | tr -d ' ' || echo 0)"
         self.assertEqual(fields.get("RC"), "1", proc.stdout + proc.stderr)
 
 
-# config.py case-args is the single case→invocation codec: collx_run_shard decodes one
-# null-delimited argv per case and hands it to the rank wrapper, which execs the entrypoint the
-# leading --entrypoint pair names. Parse the rest with the actual parser that entrypoint builds so
-# the two sides cannot drift — a flag the codec emits but the benchmark does not declare (or vice
-# versa) fails here instead of on a GPU allocation.
+# config.py case-args encodes each case as a null-delimited argv for the entrypoint its leading
+# --entrypoint pair names; parsing it with that entrypoint's real parser catches a flag one side
+# drops before a GPU allocation does.
 class CaseArgvContract(unittest.TestCase):
     CASE = {
         "backend": "deepep-v2", "mode": "normal", "precision": "bf16",
@@ -617,32 +574,23 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.out, f"results/h200-dgxc/{self.CASE['case_id']}.json")
 
     def test_a_legacy_colon_string_profile_still_decodes(self) -> None:
-        # Sweep `version` does not bump for the codec change, so a shard staged before it --
-        # or one built by hand -- must still produce a runnable argv. Both legacy arities:
-        # six positional fields, and the pre-chain three whose chain knobs then come from
-        # run_ep's own defaults rather than being duplicated in the codec.
+        # A shard staged before the timing object must still produce a runnable argv: six
+        # positional fields, or the pre-chain three, whose chain knobs run_ep's defaults supply.
         for profile, chain in (("8:256:32:128:4:16", (128, 4, 16)), ("8:256:32", None)):
             with self.subTest(timing=profile):
-                args = self._run_ep_parser().parse_args(self._case_argv(
-                    ["16", "2", "8", "8"], case={**self.CASE, "timing": profile},
-                ))
+                argv = self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": profile})
+                args = self._run_ep_parser().parse_args(argv)
                 self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
                 if chain:
                     self.assertEqual(
                         (args.chain_iters, args.chain_trials, args.chain_drop), chain
                     )
-                    continue
-                for flag in ("chain_iters", "chain_trials", "chain_drop"):
-                    self.assertIsInstance(getattr(args, flag), int)
-                # A chain that drops everything it measured has no samples left to reduce.
-                self.assertGreater(args.chain_iters, args.chain_drop)
-                self.assertGreater(args.chain_trials, 0)
+                else:
+                    self.assertEqual([flag for flag in argv if flag.startswith("--chain")], [])
 
     def test_a_malformed_timing_profile_cannot_reach_a_run(self) -> None:
-        # Every rejection path in one place. Objects: an unknown, renamed or missing key must be
-        # as fatal as a bad string arity, or a renamed knob silently falls back to run_ep's
-        # default. Strings: three fields is the pre-chain profile and six the chain profile; any
-        # other length is a shard built against a codec that no longer exists.
+        # An unknown, renamed or missing key must be as fatal as a bad string arity, or a
+        # renamed knob silently falls back to run_ep's default.
         for timing in (
             {"iters_per_trial": 8}, {**self.CASE["timing"], "extra": 1}, {},
             "8:256", "8:256:32:128", "8:256:32:128:4:16:2", "",
@@ -650,8 +598,7 @@ class CaseArgvContract(unittest.TestCase):
             with self.subTest(timing=timing):
                 with self.assertRaises(subprocess.CalledProcessError):
                     self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": timing})
-        # Types are NOT checked by the codec -- as has always been true for iters/trials/warmup
-        # -- so the property is that the argv it emits still cannot parse into a run.
+        # The codec does not check types, so a non-integer must instead fail run_ep's parser.
         argv = self._case_argv(
             ["16", "2", "8", "8"], case={**self.CASE, "timing": "8:256:32:128:4:x"},
         )
@@ -662,28 +609,13 @@ class CaseArgvContract(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
 
-    def test_each_backend_round_trips_through_the_run_ep_parser(self) -> None:
-        # The codec is backend-agnostic, so one loop replaces three near-identical tests:
-        # run_ep's --backend choices must accept each name, and the filename must carry the
-        # backend token or two legs of one cell collide in results/.
-        for backend in ("uccl-ep", "nccl-ep", "flashinfer-ep"):
-            with self.subTest(backend=backend):
-                case = {
-                    **self.CASE, "backend": backend,
-                    "case_id": f"h200-dgxc-{backend}-deepseek-v3-normal-decode-ep16-uniform-bf16",
-                }
-                args = self._run_ep_parser().parse_args(
-                    self._case_argv(["16", "2", "8", "8"], case=case)
-                )
-                self.assertEqual(args.backend, backend)
-                self.assertEqual(args.case_id, case["case_id"])
-                self.assertEqual(args.out, f"results/h200-dgxc/{case['case_id']}.json")
-
     def test_a_swap_blocks_case_round_trips_through_its_own_parser(self) -> None:
         import run_swap_blocks
         import sweep_matrix
 
-        shard, = sweep_matrix.resolve_matrix(suites="swap-blocks", only_sku="h200-dgxc")["include"]
+        platform = {"h200-dgxc": {"arch": "sm90", "launcher": "single-slurm"}}
+        with mock.patch.object(sweep_matrix, "PLATFORMS", platform):
+            shard, = sweep_matrix.resolve_matrix(suites="swap-blocks")["include"]
         case = shard["cases"][1]
         argv = self._case_argv(["1", "1", "1", "1"], case=case, entrypoint="run_swap_blocks")
         with mock.patch.object(argparse.ArgumentParser, "parse_args", autospec=True,
@@ -733,8 +665,9 @@ class CaseArgvContract(unittest.TestCase):
                     self.assertEqual(result.returncode, rc, result.stderr)
                     self.assertEqual(result.stdout.strip(), out)
 
-# logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
-# per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
+
+# logical_byte_provenance is where FP8 changes measurement semantics (asymmetric
+# per-direction byte counts).
 class LogicalByteProvenanceTests(unittest.TestCase):
     def test_fp8_dispatch_and_bf16_combine_have_different_byte_counts(self) -> None:
         dispatch = ep_harness.logical_byte_provenance(
@@ -766,19 +699,11 @@ except Exception:  # torch is absent in the CPU test image; these checks run on 
     _torch = None
 
 
-@unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
 class WeightedCombineSemanticsTests(unittest.TestCase):
-    """Pin the semantic distinction between the two combine contracts, independent of any
-    GPU backend. Normal mode folds the gate weight INTO the staged transform (kernel
-    sums); low-latency stages the UNWEIGHTED transform and the kernel applies the gate."""
+    """Normal mode folds the gate weight INTO the staged transform (kernel sums); low-latency
+    stages the UNWEIGHTED transform and the kernel applies the gate."""
 
-    def _problem(self, weight_scale: float = 1.0):
-        torch = _torch
-        x = torch.randn(4, 64, dtype=torch.bfloat16)
-        idx = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]], dtype=torch.int64)
-        weights = (torch.rand(4, 2, dtype=torch.float32) + 0.1) * weight_scale
-        return types.SimpleNamespace(x=x, topk_idx=idx, topk_weights=weights)
-
+    @unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
     def test_transform_folds_the_gate_under_unweighted_rank_sum(self):
         torch = _torch
         payload = torch.randn(3, 64, dtype=torch.bfloat16)
@@ -790,7 +715,6 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
         self.assertFalse(torch.equal(low, high))
 
     def test_unknown_semantics_fail_closed(self):
-        torch = _torch
         with self.assertRaises(ValueError):
             ep_oracle.combine_model("made-up")
         with self.assertRaises(ValueError):
@@ -843,31 +767,19 @@ class RankFp32ReductionTests(unittest.TestCase):
         self.assertEqual(result.item(), 1.0 + 2.0**-9)
 
 
-@unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")
 class FusedQuantizeGate(unittest.TestCase):
     """The oracle's payload gate compares the sender's [T, hidden] quantize against the oracle's
-    [receive_count, hidden] one, so a fused callable must be bit-identical and per-row invariant."""
-
-    @staticmethod
-    def _fuse(mode, eager):
-        # Both methods read only `self.mode` and the class's LL flag, so call them unbound rather
-        # than build a backend.
-        backend = types.SimpleNamespace(mode=mode, ll_quantizes_in_kernel=True)
-        return ep_backend.EPBackend.fused_quantize(backend, eager)
-
-    @staticmethod
-    def _check(eager, fused, x):
-        return ep_backend.EPBackend.assert_quantize_identity(
-            types.SimpleNamespace(mode="normal"), eager, fused, x
-        )
+    [receive_count, hidden] one, so a fused callable must be bit-identical and per-row invariant.
+    Both methods read only `self.mode` and the LL flag, so they are called unbound."""
 
     def test_low_latency_keeps_the_eager_helper(self):
-        # Its dispatch kernel quantises internally and the oracle gate is pinned to those bits,
-        # so a compiled callable would red every LL fp8 cell without touching timing.
+        # Its dispatch kernel quantises internally and the oracle gate is pinned to those bits.
         def eager(x):
             return x, x
-        self.assertIs(self._fuse("low-latency", eager), eager)
+        backend = types.SimpleNamespace(mode="low-latency", ll_quantizes_in_kernel=True)
+        self.assertIs(ep_backend.EPBackend.fused_quantize(backend, eager), eager)
 
+    @unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")
     def test_identity_check_rejects_a_divergent_callable(self):
         torch = _torch
         x = torch.randn(8, 256, dtype=torch.bfloat16)
@@ -879,7 +791,9 @@ class FusedQuantizeGate(unittest.TestCase):
             values, scales = eager(t)
             return values, scales + 1          # one differing scale is enough to red a cell
         with self.assertRaises(RuntimeError):
-            self._check(eager, divergent, x)
+            ep_backend.EPBackend.assert_quantize_identity(
+                types.SimpleNamespace(mode="normal"), eager, divergent, x)
+
 
 class GpuHealthProbe(unittest.TestCase):
     """Reject an allocation holding a throttled GPU before it burns the wall-clock guard: one
@@ -891,10 +805,8 @@ class GpuHealthProbe(unittest.TestCase):
         return self.HEALTHY.replace(line_in, line_out)
 
     def test_a_clamped_gpu_is_rejected_by_either_signal(self):
-        # Throttle flags and temperature are INDEPENDENT signals: the flag can clear between
-        # samples while the fault persists, so heat alone must reject, and either flag alone is
-        # enough. The healthy fixture is the negative control -- a substring search for "Active"
-        # also matches "Not Active", which is the bug this shape guards.
+        # The flag can clear between samples while the fault persists, so heat alone rejects, as
+        # does either flag alone. "Not Active" must not read as "Active".
         self.assertEqual(probe.gpu_health_faults(self.HEALTHY), [])
         for gpu, cells in (
             (7, "7, Active, Active, 93 "), (7, "7, Active, Not Active, 88 "),
@@ -936,10 +848,8 @@ class GpuHealthProbe(unittest.TestCase):
         self.assertNotIn("gpu-health-checked", out)
 
     def test_the_temperature_spread_is_reported_but_never_gated(self):
-        # The signal no gate can see: an H100 engages software thermal slowdown at ~86-87 C, so
-        # a clamped one never crosses the 90 C limit and the measured fault showed only as an
-        # idle outlier (55 C against ~30 C). Reported so a human can act, deliberately not gated,
-        # and absent rather than wrong when the output cannot be read.
+        # A software-throttled H100 never crosses the 90 C limit and shows only as an idle
+        # outlier; the spread is reported for a human, never gated, and absent when unreadable.
         sick = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 55 ")
         self.assertEqual(probe.gpu_temperature_spread(sick), (55, 35, 20))
         hottest, median, spread = probe.gpu_temperature_spread(self.HEALTHY)

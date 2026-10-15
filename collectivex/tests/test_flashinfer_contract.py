@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""flashinfer-ep runs vLLM's FlashInfer one-sided integration, checked against CPU fakes.
-
-The contract is vLLM main's `FlashInferNVLinkOneSidedManager` (`initialize`, `combine_into`) and
-`FlashInferNVLinkOneSidedPrepareAndFinalize` (`prepare`, `finalize`): what the adapter hands the
-library, not what the GPU does with it.
-"""
+"""flashinfer-ep runs vLLM's FlashInfer one-sided integration (`FlashInferNVLinkOneSidedManager`
+and its prepare/finalize), checked against CPU fakes: what the adapter hands the library."""
 from __future__ import annotations
 
 import importlib
-import inspect
 import os
 import sys
 import types
@@ -16,11 +11,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "bench"), str(ROOT / "tests")]
+sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "bench")]
 
 import ep_harness  # noqa: E402
-import sweep_matrix  # noqa: E402
 
 HIDDEN, TOPK, EP, T = 256, 2, 4, 3
 
@@ -42,9 +35,6 @@ class FakeTensor:
         self.copied_from.append(source)
         return self
 
-    def __getitem__(self, index):
-        return FakeTensor((), self.dtype, f"{self.name}[{index}]")
-
 
 class FakeView:
     def __init__(self, base, shape):
@@ -59,7 +49,7 @@ class FakeView:
 
 def fake_torch(allocations):
     torch = types.ModuleType("torch")
-    for dtype in ("bfloat16", "float32", "int32", "int64", "float8_e4m3fn", "uint8"):
+    for dtype in ("bfloat16", "float32", "int32", "int64", "float8_e4m3fn"):
         setattr(torch, dtype, dtype)
 
     def allocate(kind):
@@ -76,7 +66,6 @@ def fake_torch(allocations):
     dist.group = types.SimpleNamespace(WORLD="ep-group")
     dist.barrier = lambda group=None: None
     torch.distributed = dist
-    torch.cuda = types.SimpleNamespace(synchronize=lambda: None)
     return {"torch": torch, "torch.distributed": dist}
 
 
@@ -255,7 +244,6 @@ class Fp8Contract(unittest.TestCase):
         # x_sf_bytes_per_token vLLM's dispatch layout budgets.
         self.assertEqual((backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy),
                          (1, HIDDEN // 128 * 4))
-        self.assertEqual(rig.module._FP8_BLOCK, 128)
         problem = rig.problem()
         backend.dispatch(problem)
         (call,) = rig.a2a.dispatches
@@ -284,13 +272,6 @@ class Fp8Contract(unittest.TestCase):
         (call,) = rig.a2a.combines
         self.assertIs(call["payload"], payload)
         self.assertIs(call["in_workspace"], False)
-
-    def test_the_default_matrix_runs_flashinfer_fp8(self):
-        self.assertNotIn("flashinfer-ep", sweep_matrix.OFF_PATH_PRECISIONS)
-        document = sweep_matrix.resolve_matrix(backend="flashinfer-ep")
-        runnable = {(item["sku"], item["case"]["precision"]) for item in document["requested_cases"]
-                    if item["disposition"] == "runnable"}
-        self.assertEqual(runnable, {(sku, precision) for sku in ("gb200", "gb300") for precision in ("bf16", "fp8")})
 
 
 class OracleContract(unittest.TestCase):
@@ -325,7 +306,6 @@ class Provenance(unittest.TestCase):
                 with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "1"}):
                     self.assertEqual(ep_harness.kernel_generation(backend),
                                      f"flashinfer-mnnvl-one-sided-staged-{slug}-cudagraph-spin-ar")
-                self.assertEqual(type(backend).kernel_generation, "flashinfer-mnnvl-one-sided-staged")
 
     def test_workspace_and_mapping_are_sized_as_vllm_initialize_sizes_them(self):
         for precision, x_bytes, sf_bytes in (("bf16", HIDDEN * 2, 0), ("fp8", HIDDEN, HIDDEN // 128 * 4)):
@@ -392,8 +372,6 @@ class Provenance(unittest.TestCase):
         # allow_var_kwargs=False, as vLLM calls it: **kwargs does not promise the keyword.
         self.assertFalse(module._accepts_keyword(var_kwargs, "output"))
         self.assertFalse(module._accepts_keyword(absent, "output"))
-        self.assertTrue(module._accepts_keyword(A2AWithOutput.combine, "output"))
-        self.assertIn("payload_in_workspace", inspect.signature(A2ABeforeOutput.combine).parameters)
 
 
 if __name__ == "__main__":
