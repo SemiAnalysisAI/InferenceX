@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""CollectiveX MoRI adapter: native BF16 dispatch/combine over mori.ops."""
+"""CollectiveX MoRI adapter: dispatch/combine over mori.ops, configured as the engines run it."""
 from __future__ import annotations
 
 import os
 import sys
 import types
+from importlib import metadata
+from typing import NamedTuple
 
 # MoRI reads the symmetric-heap size when the heap is created (at shmem init,
 # once a process group exists — see create_buffer). The pinned upstream
@@ -24,6 +26,76 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     print(f"ERROR: mori import failed: {exc!r}", file=sys.stderr)
     raise
 
+# vLLM (block-quantized models) and SGLang quantize FP8 dispatch per 1x128 with FP32 scales.
+_FP8_BLOCK = 128
+
+
+class _Launch(NamedTuple):
+    """One engine's EpDispatchCombineConfig launch fields for a cell."""
+
+    kernel: str
+    generation: str
+    contract: str
+    block_num: int
+    rdma_block_num: int
+    warp_num_per_block: int
+    num_qp_per_pe: int
+
+
+# vLLM's MoriAll2AllManager: one node runs IntraNode under both mori_* selectors; multi-node
+# mori_high_throughput runs InterNodeV1 with a per-arch tuple; num_qp_per_pe is MoRI's default 1.
+_VLLM_INTRANODE = _Launch("IntraNode", "intranode-vllm", "vllm", 80, 0, 16, 1)
+_VLLM_INTERNODE_V1 = {
+    "gfx950": _Launch("InterNodeV1", "inter-node-v1-vllm", "vllm", 64, 32, 8, 1),
+    "gfx942": _Launch("InterNodeV1", "inter-node-v1-vllm", "vllm", 32, 16, 16, 1),
+}
+# vLLM has no single-node low-latency kernel; SGLang's moriep runs EpMode.LOW_LATENCY as AsyncLL.
+_SGLANG_ASYNC_LL = _Launch("AsyncLL", "async-ll-sglang", "sglang", 64, 32, 8, 2)
+
+
+def _gfx_arch(device) -> str:
+    """The realized CDNA arch; vLLM's MoRI integration supports gfx942 and gfx950 only."""
+    arch = torch.cuda.get_device_properties(device).gcnArchName
+    for name in ("gfx950", "gfx942"):
+        if arch.startswith(name):
+            return name
+    raise RuntimeError(f"MoRI supports gfx942 and gfx950, not {arch!r}")
+
+
+def _env_enabled(name: str) -> bool:
+    """MoRI's env::IsEnvVarEnabled: unset, empty, 0, false, off and no are off; anything else is on."""
+    value = os.environ.get(name, "")
+    return bool(value) and value.lower() not in ("0", "false", "off", "no")
+
+
+def _mori_version() -> str:
+    """Installed MoRI build; setuptools-scm stamps an untagged build with its commit."""
+    version = getattr(mori, "__version__", None)
+    if version and version != "unknown":
+        return str(version)
+    try:
+        return metadata.version("amd_mori")
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def _blockwise_codec(fp8_dtype, fp8_max):
+    """(quantize, dequantize) for per-1x128 e4m3 with FP32 scales [m, n // 128]."""
+
+    def quantize(x):
+        m, n = x.shape
+        blocks = x.view(m, -1, _FP8_BLOCK)
+        amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
+        values = (blocks * (fp8_max / amax.unsqueeze(2))).to(fp8_dtype).view(m, n)
+        return values, (amax / fp8_max).view(m, -1)
+
+    def dequantize(values, scales):
+        m, n = values.shape
+        blocks = values.view(m, -1, _FP8_BLOCK).float()
+        return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
+
+    return quantize, dequantize
+
 
 class MoRIBackend(EPBackend):
     name = "mori"
@@ -34,91 +106,71 @@ class MoRIBackend(EPBackend):
     # slices by the per-rung `recv_tokens`, fixed for a rung, so it is safe to capture.
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     requires_fresh_pair = True
+    # AsyncLL takes a caller-quantized tensor, as IntraNode does.
+    ll_quantizes_in_kernel = False
+
+    @property
+    def cuda_graph_supported(self) -> bool:
+        # Decode only: vLLM captures at most 512 tokens by default, so prefill batches run eager.
+        return super().cuda_graph_supported and getattr(self.args, "phase", None) == "decode"
+
+    @property
+    def library_version(self) -> str:
+        return _mori_version()
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
         self._fp8 = self.precision == "fp8"
-        # MoRI's FP8 wire format is the SKU's arch fact, not a scheduled axis: gfx942
-        # (MI300X/MI325X) uses AMD's unsigned-zero e4m3fnuz, gfx950 (MI355X) the OCP
-        # e4m3fn. Read from the realized device so it never has to be plumbed through
-        # argv. FP8 dispatch is caller-prequantized: MoRI's dispatch kernel keys purely
-        # on the passed tensor dtype, so handing it an e4m3 tensor selects the FP8
-        # dispatch kernel with no in-kernel cast. Combine stays genuinely BF16 (quant_type
-        # "none"). With use_external_inp_buf True (pinned below) the launcher selects
-        # EpCombineIntraNodeKernel_bf16_nop2p; _p2p is the registered path, _fp8cast unreachable.
-        self._fp8_dtype = None
-        if self._fp8:
-            arch = torch.cuda.get_device_properties(device).gcnArchName
-            if arch.startswith("gfx950"):
-                self._fp8_dtype = torch.float8_e4m3fn
-                self.dispatch_dtype = "fp8-e4m3fn"
-            elif arch.startswith("gfx942"):
-                self._fp8_dtype = torch.float8_e4m3fnuz
-                self.dispatch_dtype = "fp8-e4m3fnuz"
-            else:
-                raise RuntimeError(f"MoRI FP8 dispatch unsupported on arch {arch!r}")
-            self.dispatch_value_bytes = 1
-            self.dispatch_scale_bytes_per_copy = 0  # plain e4m3 cast: no scale payload
         self.experts_per_rank = args.experts // world_size
+        arch = _gfx_arch(device)
         scale_out = args.scope == "scale-out"
-
-        # NORMAL mode: the kernel is a pinned function of the cell, not an operator
-        # choice. Scale-up uses the direct IntraNode kernel on every CDNA SKU (mori's
-        # default; `kernel_type` kwarg omitted); scale-out EP16 uses InterNodeV1, whose
-        # required enum member is an image-lineage check.
-        # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
-        # Scale-up matches what the engines pin: vLLM and SGLang both set block_num 80,
-        # rdma_block_num 0 and one warp_num_per_block of 16 for dispatch and combine alike. 16 is
-        # also the kernel ceiling (kMaxWarpGroups 8 x kWarpsPerGroup 2).
-        kernel_name, self.kernel_generation, blocks = (
-            ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
-            else ("IntraNode", "intranode", (80, 0, 16, 16))
-        )
         if self.mode == "low-latency":
-            # LOW-LATENCY (decode) mode: AsyncLL, because that is what production selects —
-            # SGLang's moriep dispatcher maps EpMode.LOW_LATENCY to AsyncLL (split-phase
-            # dispatch_send/dispatch_recv + combine_send/combine_recv) with block_num 64,
-            # rdma_block_num 32, warp_num_per_block 8, and its low-latency impl asserts the
-            # kernel IS AsyncLL. AsyncLL must be driven split-phase: mori.ops'
-            # dispatch()/combine() under this kernel_type launch only the SEND side and return
-            # without the payload landing, so the timed dispatch here is send+recv back-to-back
-            # — the full transport the serving step pays, merely without the expert GEMM
-            # interleaved between the phases.
-            # Combine keeps weights=None (gate not applied in-kernel), and the receive is the
-            # same compact rank-deduplicated [max_recv, hidden] layout, so semantics stay
-            # "unweighted-rank-sum" over "token-rank" and the wire basis stays
-            # rank-deduplicated. Scale-up EP8 decode only; scale-out EP16 LL stays out of
-            # ll_backends.
             if scale_out:
                 raise RuntimeError(
                     "MoRI low-latency is scale-up EP8 only (scale-out EP16 low-latency "
                     "is out of scope; see platform_config ll_backends)"
                 )
-            kernel_name, self.kernel_generation, blocks = (
-                "AsyncLL", "async-ll", (64, 32, 8, 8)
+            self.launch = _SGLANG_ASYNC_LL
+            # AsyncLL as SGLang deploys it on AMD, on the copy engines; an explicit setting wins. Set
+            # here because MoRI snapshots it at shmem init, in create_buffer.
+            os.environ.setdefault("MORI_ENABLE_SDMA", "1")
+        else:
+            self.launch = _VLLM_INTERNODE_V1[arch] if scale_out else _VLLM_INTRANODE
+        # Of the EP kernels only AsyncLL's same-node transfer changes with it (copy engines instead
+        # of one thread per peer and queue pair); vLLM leaves it unset (off).
+        self._sdma = _env_enabled("MORI_ENABLE_SDMA")
+        self.kernel_generation = self.launch.generation + ("-sdma" if self._sdma else "")
+        kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
+        if kernel_enum is None or not hasattr(kernel_enum, self.launch.kernel):
+            raise RuntimeError(f"this MoRI image lacks EpDispatchCombineKernelType.{self.launch.kernel}")
+        self._kernel_type = getattr(kernel_enum, self.launch.kernel)
+        # AsyncLL's dispatch()/combine() launch only the send kernels and the payload lands in the
+        # recv phase, so each timed component runs send+recv back-to-back, as SGLang's _b steps do.
+        self._split_phase = self.launch.kernel == "AsyncLL"
+        self._inter_node = self.launch.kernel == "InterNodeV1"
+        self._fp8_dtype = None
+        if self._fp8:
+            if args.hidden % _FP8_BLOCK:
+                raise ValueError(f"MoRI FP8 dispatch needs hidden divisible by {_FP8_BLOCK}, got {args.hidden}")
+            # vLLM's current_platform.fp8_dtype(): AMD's e4m3fnuz on gfx94x, OCP e4m3fn on gfx950.
+            self._fp8_dtype, fp8_max, label = (
+                (torch.float8_e4m3fn, 448.0, "fp8-e4m3fn") if arch == "gfx950"
+                else (torch.float8_e4m3fnuz, 240.0, "fp8-e4m3fnuz")
             )
-        self._kernel_type = None
-        if kernel_name != "IntraNode":
-            kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
-            if kernel_enum is None or not hasattr(kernel_enum, kernel_name):
-                raise RuntimeError(
-                    f"this MoRI image lacks EpDispatchCombineKernelType.{kernel_name}"
-                )
-            self._kernel_type = getattr(kernel_enum, kernel_name)
-        # AsyncLL's dispatch()/combine() launch only the SEND kernels; the payload lands in
-        # the recv phase, so both timed components must run send+recv back-to-back.
-        self._split_phase = kernel_name == "AsyncLL"
-        self._inter_node = kernel_name == "InterNodeV1"
-        self.num_qps = 1
-        self.block_num, self.rdma_block_num, self.dispatch_warps, self.combine_warps = blocks
-        # External-input kernels consume the dispatch output directly, so stage has no copy of
-        # its own; under FP8 it still dequantizes the received fp8 payload to BF16, so it is a
-        # timed device component in that precision only.
+            self._enable_fp8(label, *_blockwise_codec(self._fp8_dtype, fp8_max))
+        # External-input kernels consume the dispatch output directly, so stage has no copy of its
+        # own; under FP8 it dequantizes the received payload with its scales.
         self.stage_device_work = self._fp8
+        self._library_config = {}
 
     def create_buffer(self, spec):
-        args, world_size, rank = self.args, self.world_size, self.rank
-        gpus_per_node = int(args.gpus_per_node)
+        args, world_size, rank, launch = self.args, self.world_size, self.rank, self.launch
+        # vLLM passes min(8, EP size), which names this placement's node size on 8-GPU nodes only.
+        gpu_per_node = min(8, world_size)
+        if gpu_per_node != min(int(args.gpus_per_node), world_size):
+            raise RuntimeError(
+                f"MoRI gpu_per_node {gpu_per_node} does not match {args.gpus_per_node} GPUs per node"
+            )
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
@@ -134,74 +186,43 @@ class MoRIBackend(EPBackend):
                 "ROCm 7.2 (ROCm/mori#610)"
             )
         mori.shmem.shmem_torch_process_group_init("default")
-        realized_qps = int(mori.shmem.shmem_num_qp_per_pe())
-        if realized_qps < self.num_qps:
+        # The op clamps num_qp_per_pe to the QPs shmem created (MORI_NUM_QP_PER_PE, default 4).
+        shmem_qps = int(mori.shmem.shmem_num_qp_per_pe())
+        if shmem_qps < launch.num_qp_per_pe:
             raise RuntimeError(
-                f"MoRI realized {realized_qps} QPs per PE; {self.num_qps} required"
+                f"MoRI shmem created {shmem_qps} QPs per PE; {launch.num_qp_per_pe} required"
             )
 
         # MoRI preallocates one communicator buffer for the case's entire ladder, at least the
         # low-latency cap (see `buffer_cap`). Normal mode still takes the larger ladder maximum.
         self._cap = max(self.LL_LADDER_CAP, spec.max_tokens_per_rank)
-        # quant_type stays "none" for both precisions: dispatch precision is carried by
-        # the passed tensor dtype (caller-prequantized e4m3 under FP8, BF16 otherwise),
-        # and "none" keeps combine a genuine BF16 send. data_type is deprecated upstream
-        # (kernel launch dtype is inferred from the runtime tensor) so it is left BF16.
-        # max_token_type_size sizes the shared token buffer and must cover the widest
-        # element moved across BOTH directions: FP8 dispatch is 1 byte, the BF16 combine
-        # input copied into the registered buffer is 2, so size for BF16 unconditionally.
-        token_type_size = torch.tensor([], dtype=torch.bfloat16).element_size()
-        config_kwargs = {
-            "data_type": torch.bfloat16,
-            "rank": rank,
-            "world_size": world_size,
-            "hidden_dim": args.hidden,
-            "scale_dim": 0,
-            "scale_type_size": 1,
-            "max_token_type_size": token_type_size,
-            "max_num_inp_token_per_rank": self._cap,
-            "num_experts_per_rank": self.experts_per_rank,
-            "num_experts_per_token": args.topk,
-            # External input buffer everywhere, as the engines run it. It must move together
-            # with `combine_warps`: MoRI's tuned tables key combine on `zero_copy`, so 16 warps
-            # belong to this mode and 4-8 to the registered one. methodology.md has the cost of
-            # mismatching them.
-            "use_external_inp_buf": True,
-            "quant_type": "none",
-        }
-        if self._kernel_type is not None:
-            config_kwargs["kernel_type"] = self._kernel_type
-        # Only InterNodeV1 carries explicit launch/topology fields (and the heap-mode + realized-
-        # config asserts). IntraNode and AsyncLL take the base config (plus kernel_type for
-        # AsyncLL), the default STATIC heap, and the per-call block/warp launch args.
-        if self._inter_node:
-            config_kwargs.update({
-                "block_num": self.block_num,
-                "warp_num_per_block": self.dispatch_warps,
-                "gpu_per_node": gpus_per_node,
-                "rdma_block_num": self.rdma_block_num,
-                "num_qp_per_pe": self.num_qps,
-            })
-        self.config = mori.ops.EpDispatchCombineConfig(**config_kwargs)
-        expected_config = {
-            "data_type": torch.bfloat16,
-            "scale_dim": 0,
-            "scale_type_size": 1,
-            "use_external_inp_buf": True,
-            "quant_type": config_kwargs["quant_type"],
-        }
-        if self._inter_node:
-            expected_config.update({
-                "block_num": self.block_num,
-                "warp_num_per_block": self.dispatch_warps,
-                "gpu_per_node": gpus_per_node,
-                "rdma_block_num": 64,
-                "num_qp_per_pe": 1,
-            })
-        if any(getattr(self.config, key, None) != value for key, value in expected_config.items()):
-            raise RuntimeError("MoRI requested launch/topology configuration was not realized")
-        # The newer pinned MoRI revision can otherwise replace explicit values
-        # with token-dependent tuning rules from the image.
+        scale_dim = args.hidden // _FP8_BLOCK if self._fp8 else 0
+        scale_type_size = torch.float32.itemsize if self._fp8 else 0
+        # The engines' call: the launch tuple lives in the config and dispatch/combine pass no
+        # per-call override. The external input buffer (MoRI's default) feeds combine from the
+        # caller's tensor; quant_type "none" keeps combine BF16, so max_token_type_size covers BF16.
+        self.config = mori.ops.EpDispatchCombineConfig(
+            data_type=self._fp8_dtype if self._fp8 else torch.bfloat16,
+            rank=rank,
+            world_size=world_size,
+            hidden_dim=args.hidden,
+            scale_dim=scale_dim,
+            scale_type_size=scale_type_size,
+            max_token_type_size=torch.bfloat16.itemsize,
+            max_num_inp_token_per_rank=self._cap,
+            num_experts_per_rank=self.experts_per_rank,
+            num_experts_per_token=args.topk,
+            warp_num_per_block=launch.warp_num_per_block,
+            block_num=launch.block_num,
+            use_external_inp_buf=True,
+            kernel_type=self._kernel_type,
+            gpu_per_node=gpu_per_node,
+            rdma_block_num=launch.rdma_block_num,
+            num_qp_per_pe=launch.num_qp_per_pe,
+            quant_type="none",
+        )
+        # MANUAL is MoRI's default and neither engine overrides it; AUTO would replace the config's
+        # tuple with token-dependent tuning rules from the image.
         os.environ["MORI_EP_LAUNCH_CONFIG_MODE"] = "MANUAL"
         self.op = mori.ops.EpDispatchCombineOp(self.config)
         if getattr(self.op, "launch_config_mode", None) != "MANUAL":
@@ -216,11 +237,37 @@ class MoRIBackend(EPBackend):
                 "this MoRI image's AsyncLL lacks the split-phase "
                 "dispatch_recv/combine_recv API the deployed low-latency path drives"
             )
+        # Read back the handle's realized config (MoRI's get_handle_info snapshot, in its key names).
+        requested = {
+            "block_num": launch.block_num,
+            "rdma_block_num": launch.rdma_block_num,
+            "warp_num_per_block": launch.warp_num_per_block,
+            "gpu_per_node": gpu_per_node,
+            "scale_dim": scale_dim,
+            "scale_type_size": scale_type_size,
+            "use_external_inp_buffer": True,
+        }
+        info = getattr(self.op, "_handle_info", None)
+        realized = {key: info.get(key) for key in requested} if isinstance(info, dict) else dict(requested)
+        drift = {key: (value, realized[key]) for key, value in requested.items() if realized[key] != value}
+        if drift:
+            raise RuntimeError(f"MoRI realized a different launch/topology configuration: {drift}")
+        self._library_config = {
+            "contract": launch.contract,
+            "kernel": launch.kernel,
+            **realized,
+            "realized_from": "handle" if isinstance(info, dict) else "request",
+            # Shmem created at least this many (checked above), so the op keeps the request.
+            "num_qp_per_pe": launch.num_qp_per_pe,
+            "shmem_num_qp_per_pe": shmem_qps,
+            "quant_type": "none",
+            "sdma": self._sdma,
+            "heap_mode": heap_mode,
+            "launch_config_mode": "MANUAL",
+        }
 
-    def semantic_payload(self, x):
-        if not self._fp8:
-            return x
-        return x.to(self._fp8_dtype).to(torch.bfloat16)
+    def implementation_details(self):
+        return dict(self._library_config)
 
     def _topk_idx_dtype(self):
         return torch.int32
@@ -228,48 +275,38 @@ class MoRIBackend(EPBackend):
     def make_problem(self, T, idx, weights, x):
         problem = super().make_problem(T, idx, weights, x)
         problem.indices, problem.weights = problem.topk_idx, problem.topk_weights
-        problem.scales = torch.empty((T, 0), dtype=torch.uint8, device=self.device)
         return problem
 
     def dispatch(self, p):
-        # Cast inside dispatch, where production pays it: vLLM and SGLang both run an aiter quant
-        # immediately before mori's dispatch. MoRI's cast is a single eager elementwise kernel, so
-        # it needs no compile. Low-latency casts here too: MoRI's AsyncLL takes a
-        # caller-prequantized tensor, unlike deepep-v2/uccl-ep whose LL kernels quantise in-kernel.
-        dispatch_x = p.dispatch_x.to(self._fp8_dtype) if self._fp8 else p.dispatch_x
-        dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num = (
-            self.op.dispatch(
-                dispatch_x,
-                p.weights,
-                p.scales,
-                p.indices,
-                block_num=self.block_num,
-                rdma_block_num=self.rdma_block_num,
-                warp_per_block=self.dispatch_warps,
-            )
-        )
+        # Quantize inside dispatch, where vLLM's prepare() pays it, then make vLLM's call.
+        x, scales = self._quant(p.dispatch_x) if self._fp8 else (p.dispatch_x, None)
+        output, weights, out_scales, indices, recv_num = self.op.dispatch(x, p.weights, scales, p.indices)
         if self._split_phase:
-            # AsyncLL: the call above launched only the send kernels; production pays the
-            # recv phase in the same step (SGLang's dispatch_b), so the timed window does too.
             self.op.dispatch_recv()
         return types.SimpleNamespace(
-            dispatch_output=dispatch_output,
-            dispatch_weights=dispatch_weights,
-            dispatch_indices=dispatch_indices,
+            dispatch_output=output,
+            dispatch_scales=out_scales,
+            dispatch_weights=weights,
+            dispatch_indices=indices,
             recv_num=recv_num[0],
             combine_input=None,
         )
+
+    def _received(self, h, rows):
+        """BF16 view of the first `rows` received tokens: the payload, or its blockwise dequant."""
+        if not self._fp8:
+            return h.dispatch_output[:rows]
+        if h.dispatch_scales is None:
+            raise RuntimeError("MoRI FP8 dispatch returned no scales")
+        return self._fp8_codec[1](h.dispatch_output[:rows], h.dispatch_scales[:rows])
 
     def stage(self, p, h):
         rows = getattr(p, "recv_tokens", None)
         if not isinstance(rows, int) or rows < 0 or rows > h.dispatch_output.size(0):
             raise RuntimeError("MoRI receive count was not validated before staging")
         # The kernel's staging loop is bounded by `tokenIdx < totalRecvTokenNum` over
-        # `args.inpTokenBuf`, not by the buffer, so it never reads past `rows` and only the
-        # filled rows need converting. (intranode.hpp:542's P2P loop is dead on this path.)
-        h.combine_input = (
-            h.dispatch_output[:rows].to(torch.bfloat16) if self._fp8 else h.dispatch_output
-        )
+        # `args.inpTokenBuf`, not by the buffer, so only the filled rows need converting.
+        h.combine_input = self._received(h, rows) if self._fp8 else h.dispatch_output
         return None
 
     def combine(self, p, h):
@@ -281,16 +318,8 @@ class MoRIBackend(EPBackend):
         # upstream now rejects the mismatched row count, ROCm/mori#546). The intranode
         # kernels reach the gather through dispatch-side metadata instead and do not
         # consume the routing content, which is why EP8 was always clean.
-        combined, _weights = self.op.combine(
-            h.combine_input,
-            None,
-            p.indices,
-            block_num=self.block_num,
-            rdma_block_num=self.rdma_block_num,
-            warp_per_block=self.combine_warps,
-        )
+        combined, _weights = self.op.combine(h.combine_input, None, p.indices)
         if self._split_phase:
-            # AsyncLL combine is send-only until the recv phase lands the reduction.
             self.op.combine_recv()
         return combined[:p.T]
 
@@ -298,17 +327,13 @@ class MoRIBackend(EPBackend):
         count = self.recv_tokens(h)
         if h.dispatch_weights is None:
             raise RuntimeError("MoRI dispatch did not expose gate weights")
-        if count < 0 or any(
-            tensor.ndim == 0 or count > tensor.size(0)
-            for tensor in (h.dispatch_output, h.dispatch_indices, h.dispatch_weights)
-        ):
+        received = (h.dispatch_output, h.dispatch_indices, h.dispatch_weights)
+        if self._fp8 and h.dispatch_scales is not None:
+            received += (h.dispatch_scales,)
+        if count < 0 or any(tensor.ndim == 0 or count > tensor.size(0) for tensor in received):
             raise RuntimeError("MoRI receive count exceeds dispatch metadata")
-        # FP8: the oracle compares a BF16 payload, so dequantize the received fp8 slice.
-        payload = h.dispatch_output[:count]
-        if self._fp8:
-            payload = payload.to(torch.bfloat16)
         return self._global_id_view(
-            payload,
+            self._received(h, count),
             h.dispatch_indices[:count].to(torch.int64),
             h.dispatch_weights[:count].to(torch.float32),
             self.experts_per_rank,

@@ -38,7 +38,7 @@ SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
 # Dispatch precisions each backend realizes. BF16 is the universal control; FP8 is a
-# caller-prequantized dispatch (DeepEP blockwise e4m3fn; MoRI per-SKU e4m3 tensor cast).
+# caller-prequantized dispatch (per-128-block e4m3 with FP32 scales; e4m3fnuz on gfx942).
 # A precision the backend does not list is gated out at generation (no case emitted).
 BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),

@@ -850,8 +850,10 @@ class FusedQuantizeGate(unittest.TestCase):
 
     @staticmethod
     def _fuse(mode, eager):
-        # Both methods read only `self.mode`, so call them unbound rather than build a backend.
-        return ep_backend.EPBackend.fused_quantize(types.SimpleNamespace(mode=mode), eager)
+        # Both methods read only `self.mode` and the class's LL flag, so call them unbound rather
+        # than build a backend.
+        backend = types.SimpleNamespace(mode=mode, ll_quantizes_in_kernel=True)
+        return ep_backend.EPBackend.fused_quantize(backend, eager)
 
     @staticmethod
     def _check(eager, fused, x):

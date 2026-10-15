@@ -296,7 +296,7 @@ collx_apply_network_profile() {
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
   # Single-node and MNNVL runs need only the scrub above. Single-node low-latency kernels run
-  # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode, MoRI IntraNodeLL) and must NOT
+  # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode, MoRI AsyncLL) and must NOT
   # force IBGDA (/dev/gdrdrv is absent on h200). Exception: a SKU may pin a single-node HCA list.
   # DeepEP's legacy LL Buffer self-enables IBGDA even single-node, and on b300 the image's baked
   # NVSHMEM_HCA_PE_MAPPING steers that init onto the GPU-fabric RoCE rails, where ibv_create_ah

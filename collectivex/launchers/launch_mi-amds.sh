@@ -33,7 +33,7 @@ case "$COLLX_BENCH" in
 esac
 
 export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
-export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
+# MORI_ENABLE_SDMA stays unset (off, as vLLM runs); ep_mori turns it on for AsyncLL as SGLang deploys it.
 export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
 export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
 export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
