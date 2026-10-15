@@ -579,6 +579,40 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         )
 
 
+@pytest.mark.parametrize("disagg, workers, published, matches", [
+    (False, 1, (True, 1, 1, 8), True),
+    (False, 1, (False, 0, 0, 8), True),
+    (False, 2, (True, 2, 2, 8), True),
+    (False, 2, (False, 0, 0, 8), False),
+    (False, 1, (True, 1, 0, 8), False),
+    (True, 1, (True, 1, 1, 8), True),
+    (True, 1, (False, 0, 0, 8), False),
+])  # fmt: skip
+def test_multinode_identity_matches_published_aggregate_encodings(
+    disagg, workers, published, matches
+):
+    entry = {
+        "model-prefix": "dsv4", "runner": "cluster:b200-nscale", "framework": "dynamo-sglang",
+        "precision": "fp4", "spec-decoding": "mtp", "disagg": disagg,
+        "scenario-type": "agentic-coding", "kv-offloading": "dram", "conc": 4,
+        "image": "example/image:1",
+        "prefill": {"num-worker": workers, "tp": 8, "ep": 1, "dp-attn": False},
+        "decode": {"num-worker": int(disagg), "tp": 8 if disagg else 4, "ep": 1, "dp-attn": False},
+    }
+    multinode, prefill_workers, decode_workers, decode_tp = published
+    row = {
+        "model": "dsv4", "hardware": "b200", "framework": "dynamo-sglang", "precision": "fp4",
+        "spec_method": "mtp", "disagg": disagg, "is_multinode": multinode,
+        "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "on",
+        "conc": 4, "image": "example/image:1", "prefill_tp": 8, "prefill_ep": 1,
+        "prefill_dp_attention": False, "prefill_num_workers": prefill_workers,
+        "decode_tp": decode_tp, "decode_ep": 1, "decode_dp_attention": False,
+        "decode_num_workers": decode_workers,
+    }  # fmt: skip
+
+    assert reporting._matches_public_point(row, reporting.public_point(entry)) is matches
+
+
 @pytest.fixture
 def family_configs():
     master = {
