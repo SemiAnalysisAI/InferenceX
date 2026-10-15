@@ -8602,12 +8602,8 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # TP4 with tensor-parallel experts (EP1) at C1-C8 and C32; the KV cache stays GPU-resident.
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 32], srt-recipe: agentic.yaml }
-      # TP4/EP4 at C16; the KV cache stays GPU-resident.
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16], srt-recipe: agentic.yaml }
-      # TP4/EP4 with DP attention and MegaMoE behind sglang-router; HiCache extends the
-      # prefix cache into host DRAM.
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
