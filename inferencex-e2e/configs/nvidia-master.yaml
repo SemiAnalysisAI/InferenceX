@@ -8546,7 +8546,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark:
 
 # Sweep supported DP8 attention alongside the retained plain TP8 curve.
 dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260922-582389ce@sha256:0e1b14e302619a42ef5581b87db6804651d4f946301cf543d74a3a1eb1c33b40
+  image: lmsysorg/sglang:nightly-dev-cu13-20261015-a6a8c560@sha256:0a1ba33aa4e032b8c5bcebdc69c45664074c032074add4f7db01629ec1fcc381
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h100-dgxc
