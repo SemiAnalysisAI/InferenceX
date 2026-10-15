@@ -9897,4 +9897,4 @@
   description:
     - "Add Muse Spark Open NVFP4 SGLang DFlash2 AgentX on B300 at TP4/EP4 with GPU-resident KV and concurrency 1 to 128."
     - "Use the committed golden curve for DFlash acceptance and the staged checkpoint for serving and tokenization."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4146
