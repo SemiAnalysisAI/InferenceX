@@ -206,14 +206,15 @@ def test_finish_requires_specific_baseline_reason_before_touching_session(
 def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferrals(
     monkeypatch,
 ):
-    blocked, deferred, unreadable, superseded, untried = (
-        f"{digit * 16}-{digit * 16}" for digit in "12345"
+    blocked, deferred, unreadable, superseded, untried, not_started = (
+        f"{digit * 16}-{digit * 16}" for digit in "123456"
     )
     outcomes = {
         1: ("readiness-blocked", "targeted"),
         2: ("capacity-deferred", "targeted"),
         4: ("capacity-deferred", "targeted"),
         5: ("failed", "targeted"),
+        7: ("unexpected-error", "unknown"),
     }
 
     def items(_repository, path, key):
@@ -225,7 +226,7 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
             ]
         run_artifacts = {
             41: [(1, blocked), (3, unreadable), (5, superseded)],
-            42: [(2, deferred), (4, superseded)],
+            42: [(2, deferred), (4, superseded), (7, not_started)],
             40: [(6, untried)],
         }
         run_id = int(path.split("/")[2])
@@ -240,9 +241,10 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
         outcome, phase = outcomes[artifact["id"]]
         record = {"outcome": outcome, "phase": phase, "pull-request": None, "run-ids": [],
                   "repairs-used": 0}
-        (destination / "candidate-diagnostics.json").write_text(
-            json.dumps({"candidate-outcome": record})
-        )
+        diagnostics = {"candidate-outcome": record}
+        if phase == "unknown":
+            diagnostics["action-outcome"] = "skipped"
+        (destination / "candidate-diagnostics.json").write_text(json.dumps(diagnostics))
 
     monkeypatch.setattr(klaud, "github_items", items)
     monkeypatch.setattr(klaud, "download_json", download)
@@ -253,11 +255,12 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
         unreadable: None,
         deferred: "capacity-deferred",
         superseded: "capacity-deferred",
+        not_started: "agent-not-started",
     }
     candidates = [{"id": candidate} for candidate in (deferred, blocked, untried, unreadable,
-                                                      superseded)]
+                                                      superseded, not_started)]
     assert [candidate["id"] for candidate in klaud.order_by_cooldown(candidates, recent)] == [
-        untried, deferred, superseded]
+        untried, deferred, superseded, not_started]
 
 
 def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
@@ -362,6 +365,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     selection = json.loads((tmp_path / "selection.json").read_text())
     assert selection["candidates"] == [second_id]
     assert selection["baseline-deferred-candidates"] == [first_id]
+    assert selection["baseline-deferral-reasons"] == {first_id: "OSError: transient"}
     assert selection["deferred-reason"] is None
     preflight = reporting.BaselinePreflight.model_validate_json(
         (tmp_path / second_id / "baseline-preflight.json").read_text()
@@ -1166,6 +1170,30 @@ def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_pat
     with pytest.raises(validation.ProducerRegenerationError) as failure:
         validation.producer_matrix("example/project", "f" * 40, FAMILY)
     assert f"not our ref {'f' * 40}" in failure.value.stderr
+
+
+def test_producer_predating_no_evals_regenerates_throughput_rows(tmp_path, monkeypatch):
+    from infx.tests.historical_revision import GENERATOR
+
+    commit_history(tmp_path)
+    legacy = GENERATOR.replace(
+        '    parser.add_argument("--no-evals", action="store_true")\n', ""
+    ).replace(
+        "    return result\n",
+        "    result[0] = {**result[0], \"run-eval\": True}\n"
+        "    return result + [{**result[0], \"eval-only\": True, \"run-eval\": True}]\n",
+    )
+    (tmp_path / "infx/matrix/generate.py").write_text(legacy)
+    subprocess.run(["git", "commit", "-qam", "generator without --no-evals"], cwd=tmp_path, check=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    monkeypatch.chdir(tmp_path)
+
+    rows = validation.producer_matrix("example/project", head, FAMILY)["single_node"]["all"]
+
+    assert [(row["conc"], row["run-eval"], row.get("eval-only")) for row in rows] == [
+        (2, False, None), (6, False, None)]
 
 
 def test_failing_producer_keeps_its_stderr_and_never_sees_credentials(tmp_path, monkeypatch):

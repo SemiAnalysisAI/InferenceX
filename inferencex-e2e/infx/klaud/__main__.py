@@ -35,7 +35,7 @@ from .models import (
 )
 
 PRODUCERS = "producers.json"
-RETRY_NEXT_WAVE = frozenset({"capacity-deferred"})
+RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started"})
 
 
 def observation_key(row: dict) -> tuple:
@@ -203,10 +203,10 @@ def recorded_outcome(repository: str, artifact: dict) -> str | None:
     with tempfile.TemporaryDirectory() as scratch:
         try:
             download_json(repository, artifact, Path(scratch))
-            outcome = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())[
-                "candidate-outcome"
-            ]
-            return CandidateOutcome.model_validate(outcome).outcome
+            diagnostics = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())
+            if diagnostics.get("action-outcome") == "skipped":
+                return "agent-not-started"
+            return CandidateOutcome.model_validate(diagnostics["candidate-outcome"]).outcome
         except (
             OSError,
             ValueError,
@@ -662,6 +662,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             deferred = "capacity-unavailable"
     capacity_deferred = []
     baseline_deferred = []
+    baseline_reasons: dict[str, str] = {}
     baseline_mismatches = []
     preflights = {}
     families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
@@ -700,16 +701,24 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 ),
                 baseline,
             )
-        except VerificationError:
+        except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = str(error)
             families.add(decision.family)
             continue
-        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, ReadError):
+        except subprocess.SubprocessError as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = type(error).__name__
+            families.add(decision.family)
+            continue
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = f"{type(error).__name__}: {str(error)[:300]}"
             families.add(decision.family)
             continue
         if missing:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = "baseline-point-mismatch"
             baseline_mismatches.append(
                 {
                     "id": candidate["id"],
@@ -759,6 +768,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 "deferred-reason": deferred,
                 "capacity-deferred-candidates": capacity_deferred,
                 "baseline-deferred-candidates": baseline_deferred,
+                "baseline-deferral-reasons": baseline_reasons,
                 "baseline-mismatch-candidates": baseline_mismatches,
                 **review.model_dump(by_alias=True),
             },
@@ -779,7 +789,13 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
         )
     if baseline_deferred:
-        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline."
+        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (
+            "; ".join(
+                f"{count}× {reason[:120]}"
+                for reason, count in Counter(baseline_reasons.values()).most_common()
+            )
+            + "."
+        )
     if baseline_mismatches:
         summary += (
             f" {len(baseline_mismatches)} of them have frozen baseline points"
