@@ -321,25 +321,49 @@ production by accuracy-sensitive customers.
 - FAIL with the exact flag/value if architecture FLOPs are reduced without native
   model support.
 
-EXPLICIT PROHIBITION: `publish_events_and_metrics: false` is not allowed.
-FAIL Check 8 if an affected benchmark's effective serving configuration disables
-`publish_events_and_metrics`, including equivalent false values recognized by the
-pinned implementation in YAML/JSON, CLI overrides, inherited configuration, shared
-launchers/helpers, or container/image defaults. Apply this to added, modified, and
-re-enabled benchmarks, including image-only bumps, across agentic/non-agentic and
-single-node/multi-node paths. Inspect the effective recipe at the PINNED head SHA,
-including unchanged referenced files; do not limit review to added diff lines.
-- Where the setting is supported, verify that it is enabled. An omitted setting
+METRICS PUBLICATION: verify effective metric collection and publication using the
+pinned Dynamo implementation, rather than requiring one flag spelling.
+- Resolve the installed Dynamo version/revision from the recipe's package install
+  and overrides as well as the container. A TRT-LLM container tag alone does not
+  establish the Dynamo version when the recipe installs a different wheel.
+- Dynamo builds containing [ai-dynamo/dynamo#12162](https://github.com/ai-dynamo/dynamo/pull/12162)
+  (merged as `e15800b8e4d620b36b9d799c1565a88f5740c940`) support independent
+  `--publish-metrics` / `DYN_TRTLLM_PUBLISH_METRICS` and KV-event controls.
+  `1.6.0.dev20261010` is an example version with this interface, not a minimum
+  version guarantee for every release or custom build.
+  Confirm support in the pinned package source or worker CLI.
+- On those builds, accept `engine.publish_metrics: true` when the pinned launcher
+  translates it to `--publish-metrics` on every affected worker role. A false or
+  omitted `publish_events_and_metrics` is not itself a failure when metrics are
+  enabled. The deprecated combined CLI flag remains an alias for both independent
+  controls in that implementation; KV-event publication alone does not enable
+  metrics. Do not require KV events just to satisfy this metrics check.
+- For older builds, inspect their actual behavior. Require the combined flag when
+  that implementation needs it to enable metrics; accept unconditional metric
+  publication only when the pinned source confirms it. Do not pass
+  `--publish-metrics` to a build that does not support it, or infer compatibility
+  from a version comparison alone.
+- Trace YAML/JSON settings, CLI and environment overrides, inherited configuration,
+  shared launchers/helpers, and image defaults through to the effective engine
+  settings. Verify that iteration/KV-cache metric collection and publication are
+  enabled; a publication flag is insufficient if engine overrides disable the
+  required collectors, such as `enable_iter_perf_stats: false`. An omitted setting
   is compliant only when the pinned implementation confirms its effective default
-  is enabled. If the effective value cannot be verified, FAIL as
-  "Event/metric publication could not be verified", naming the missing evidence.
-- Report the affected config/script, the disabling value, and where it comes from.
-  Require enabling publication and verifying the effective setting. Passing evals,
-  an upstream recipe, or historical runs do not exempt the prohibition.
+  is enabled.
+- Apply this to added, modified, and re-enabled benchmarks, including image-only
+  bumps, across agentic/non-agentic and single-node/multi-node paths. Inspect the
+  effective recipe at the PINNED head SHA, including unchanged referenced files;
+  do not limit review to added diff lines.
+- FAIL if required metrics are effectively disabled. Report the affected
+  config/script, disabling value, and its source. If the effective behavior cannot
+  be verified, FAIL as "Metric publication could not be verified", naming the
+  missing version, implementation, or configuration evidence. Passing evals, a
+  recipe reference, or historical runs do not exempt the requirement.
 - Comments, documentation examples, and removed diff lines are not runtime
-  disablement. A framework that does not support this setting need not add it.
-- PASS Check 8 only when both the architecture rule and this prohibition are
-  satisfied. Use N/A only if the PR affects no benchmark serving configuration,
+  disablement. A framework that does not support these Dynamo settings need not
+  add them.
+- PASS Check 8 only when both the architecture rule and this metrics requirement
+  are satisfied. Use N/A only if the PR affects no benchmark serving configuration,
   image, or launch path.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
