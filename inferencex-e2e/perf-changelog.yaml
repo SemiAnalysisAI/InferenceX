@@ -9892,3 +9892,13 @@
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#59591 (latent MoE up-proj stores only the local rank's shards), #59069 (AttnRes output fused with per-token FP8 input quantization), #60717 (vLLM's FP8 max in that fused quantization), #60446 (KDA autotune keys), #59523 (cuMem CUDA-graph pool offload on ROCm) and #59880 (speculative block reservations across KV cache groups with a KV connector)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: K3DSparkModel and get_draft_quant_config() are unchanged between the two images, so the draft keeps BF16 weights and an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3951
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Update the SGLang image from lmsysorg/sglang:v0.5.12-rocm720-mi30x to lmsysorg/sglang:v0.5.19-rocm720-mi30x. On v0.5.12 every scheduler rank crashes on the first EAGLE draft-extend step that falls back to eager mode: the aiter backend calls generate_attn_arg_prefill on EagleDraftInput, which does not define it (AttributeError), and the server never becomes healthy."
+    - "v0.5.19 builds draft extend from EagleDraftExtendInput (sgl-project/sglang#24860) and fixes the eager aiter draft-extend metadata (sgl-project/sglang#36915), but its eager aiter draft extend still memory-faults (sgl-project/sglang#39517). Startup reaches that path at concurrency 4: the six tokenizer workers each send a warmup request, so the first batch holds 6 sequences while graphs are captured only up to batch 4."
+    - "Set max-running-requests equal to the concurrency at every point, as the mi355x MTP recipe already does, so admission never exceeds the captured graph batch and verify, draft-decode and draft-extend always replay a graph. The client keeps exactly CONC requests in flight, so the measured points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3972
