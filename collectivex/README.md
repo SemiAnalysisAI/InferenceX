@@ -12,7 +12,8 @@ matrix and pool launchers (`run.sh <sku> --suite swap-blocks`).
 CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Committing the
 results is the publish step: the dashboard builds from whatever `results/` holds on `main`. It does
 not rank, recommend, or select. Any downstream display or comparison is the consumer's
-responsibility. The full measurement methodology is in [docs/methodology.md](docs/methodology.md).
+responsibility. [docs/methodology-summary.md](docs/methodology-summary.md) states the measurement
+methodology in brief; [docs/methodology.md](docs/methodology.md) has it in full, with the evidence.
 
 ## Execution Profile
 
@@ -63,10 +64,10 @@ samples per component) with 32 synchronized full roundtrip warmups before each m
 every trial/point. Component measurement order rotates each trial so every timed component occupies
 every position in the sequence, and each iteration takes the cross-rank maximum before nearest-rank
 p50/p90/p95/p99. A keyed BLAKE2b counter produces
-byte-identical routing and gate weights on every runtime. Graph-compatible backend/mode pairs (mostly decode; MoRI and prefill
-stay eager) run these measurements under CUDA graph replay by default, where graphed fresh-entry
-components publish only p50; `COLLX_CUDA_GRAPH=0` restores eager (see the methodology's CUDA Graph
-Replay section).
+byte-identical routing and gate weights on every runtime. Graph-compatible backend/mode pairs
+(decode on most backends, both phases on MoRI) run these measurements under CUDA graph replay by
+default, with the same percentiles as eager rows; `COLLX_CUDA_GRAPH=0` restores eager (see the
+methodology's CUDA Graph Replay section).
 
 Those components all measure **fresh entry** (the GPU is drained around every timed window), the
 latency of an idle pipeline, not what a decode loop pays. So every row also carries the **chained

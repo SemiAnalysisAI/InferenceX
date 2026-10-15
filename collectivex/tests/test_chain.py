@@ -1154,10 +1154,8 @@ class AlignmentMissPublication(unittest.TestCase):
                                    (0.01, [1.0, 2.0, 3.0, None]), (0.05, [1.0, 2.0, None, None]),
                                    (0.1, [1.0, None, None, None]), (1.0, [1.0, None, None, None])):
             with self.subTest(fraction=fraction):
-                published = ep_harness._published_tails(self.PERCENTILES, False, fraction)
+                published = ep_harness._published_tails(self.PERCENTILES, fraction)
                 self.assertEqual(list(published.values()), expected)
-        self.assertEqual(list(ep_harness._published_tails(self.PERCENTILES, True).values()),
-                         [1.0, None, None, None])
 
     def test_a_clean_eager_row_keeps_its_tails_and_records_the_spin(self):
         swept = drive()
@@ -1283,13 +1281,15 @@ class CudaGraphPublication(unittest.TestCase):
                 self.assertIs(row["correctness"]["cuda_graph_output_rewritten"], True)
                 self.assertIs(row["correctness"]["cuda_graph_last_output_passed"], True)
                 self.assertIs(row["correctness"]["post_chain_state_passed"], True)
-                # Graphed fresh-entry tails are withheld; the chained period keeps its tails.
+                # The in-graph barrier keeps late launches out of the window, so graphed rows count
+                # no suspect samples and publish every tail, as the chained period does.
                 for name in ("roundtrip", "dispatch", "combine", "isolated_sum"):
                     tails = row["components"][name]["percentiles_us"]
-                    self.assertIsNotNone(tails["p50"])
-                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
-                self.assertIsNone(row["cross_rank_min_us"]["roundtrip"]["percentiles_us"]["p99"])
+                    self.assertTrue(all(tails[k] is not None for k in ("p50", "p90", "p95", "p99")))
+                self.assertIsNotNone(row["cross_rank_min_us"]["roundtrip"]["percentiles_us"]["p99"])
+                self.assertIsNotNone(row["token_rate_at_latency_percentile"]["p99"])
                 self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+                self.assertIsNone(row["rank_alignment"])
         checked = [event[1] for event in self.swept.events if event[0] == "graph-value-check"]
         self.assertEqual(sorted(checked), sorted(LADDER))
 

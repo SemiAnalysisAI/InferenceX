@@ -6,6 +6,8 @@ files is the publish step. It does **not** rank, recommend, select, or decide wh
 displays. The frontend reads `results/cases.json` and the committed result documents and makes its
 own coverage and display decisions. This document describes how a case is scheduled, measured,
 checked, and recorded, not a publication or qualification contract.
+[methodology-summary.md](methodology-summary.md) states the same rules in brief; this document
+keeps the evidence and history behind each one.
 
 ## Product Boundary
 
@@ -339,10 +341,17 @@ Only the launch mechanism changes; every family keeps its eager meaning:
 - **Fresh-entry components** (`roundtrip`, `dispatch`, `combine`) capture one pair with event
   nodes around the timed window. An all-reduce is captured before the first timing event,
   including its stream dependencies, so alignment stays outside the measured interval without
-  a host-side handoff or spin kernel. This reduces skew but does not guarantee simultaneous
-  release across ranks. A rank whose host launches
-  late still stalls the others, so these series publish **only p50** (p90/p95/p99 and the matching
-  token rate are null). Component origin is `cuda-graph-replay`.
+  a host-side handoff or spin kernel. A rank whose host launches its replay late reaches that
+  all-reduce late, and the other ranks wait for it there, before their windows open, so these
+  series publish every percentile. Component origin is `cuda-graph-replay`.
+
+  Graphed rows published only p50 while alignment ran ahead of the replay: a late launch then
+  stalled the other ranks inside the window (gb200 flashinfer EP8 T=1 roundtrip p99 858 µs against
+  a combine p99 of 30 µs). With the all-reduce in the graph (#3727), that cell measured 49 µs at
+  p99 against 46 µs at p50 on 2026-10-15. Across the graphed decode rows rechecked that day, the
+  roundtrip p99 ran 1.01-1.09x its p50 on h200 EP8 (deepep-v2, nccl-ep HT and low-latency) and
+  gb200 flashinfer EP8, and 1.03-1.19x on mi325x MoRI, where the row's own pair-period p99 ran
+  1.02-1.16x its p50. The per-sample cross-rank spread stayed at 5-26 µs at p99.
 - **The chained family** (`pair_period`, floors, health) captures each sibling chain as one graph
   of `chain_iters` unrolled pairs, the shape of a decode graph, replayed once untimed and once
   behind the barrier. Its oracle, output check and tails apply unchanged.

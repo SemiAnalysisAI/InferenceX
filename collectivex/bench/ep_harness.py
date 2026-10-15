@@ -147,16 +147,13 @@ CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
 CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 
 
-def _published_tails(percentiles, graph_replay, suspect_fraction=0.0):
-    """Under graph replay only the median: a rank whose host is late to launch its replay stalls
-    the others, so graphed fresh-entry tails measure host jitter (gb200 flashinfer T=1 roundtrip
-    p99 858us vs combine p99 30us). Eager tails are withheld once the suspect samples, those whose
-    alignment may have failed or whose host stalled inside the window, could fill everything above
-    them: p99 at 1% of samples, p95 at 5%, p90 at 10%."""
+def _published_tails(percentiles, suspect_fraction=0.0):
+    """Fresh-entry tails are withheld once the suspect samples, those whose alignment may have
+    failed or whose host stalled inside the window, could fill everything above them: p99 at 1% of
+    samples, p95 at 5%, p90 at 10%. Graphed rows have none: their alignment is captured in the graph,
+    so a rank whose host launches its replay late waits at the barrier, outside the window."""
     if percentiles is None:
         return None
-    if graph_replay:
-        return {key: (value if key == "p50" else None) for key, value in percentiles.items()}
     return {key: (None if key != "p50" and 100 * suspect_fraction >= 100 - int(key[1:]) else value)
             for key, value in percentiles.items()}
 
@@ -644,7 +641,7 @@ class Sweep:
         held_fraction = largest_share(point.host_held) if point.host_held else None
 
         def pub(pcts):
-            return _published_tails(pcts, graph, largest_share(point.suspect))
+            return _published_tails(pcts, largest_share(point.suspect))
 
         def measured(samples, pcts=None):
             return _component(pub(pcts or _pcts(samples)), len(samples), origin=origin)
