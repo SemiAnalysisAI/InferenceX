@@ -51,6 +51,8 @@ base:
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Diagnostic branch only: build the harness from this agentx-harness commit.
+      AGENTX_HARNESS_REF: e084b2aab279728e3f12bb5cfa601ae3a2dba733
 
 # One variant per point. Admission is 2x CONC and the graph batch is CONC,
 # capped at 64. TP4 tokenizes with six workers to keep 256k warmups inside the
