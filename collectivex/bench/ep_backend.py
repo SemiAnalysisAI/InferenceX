@@ -548,7 +548,7 @@ class EPBackend(abc.ABC):
 
     def alignment_misses(self):
         """Per sample of the last component, 1 where this rank's alignment spin ran out before its
-        window opened; None under graph replay."""
+        timed work was enqueued (eager) or before its replay call returned (graphed)."""
         return self.timing.missed_samples()
 
     def host_holds(self):
@@ -561,6 +561,12 @@ class EPBackend(abc.ABC):
         anyway; None where the window holds no host work (graph replay, a dispatch that does not
         wait on the host, or a component without a dispatch in its window)."""
         return self.timing.host_stalls()
+
+    def implementation_details(self) -> dict:
+        """The realized library configuration the artifact publishes under
+        `implementation.library_config` (SMs, QPs, launch configs, capacity, zero-copy, scale
+        format); JSON-serializable. Empty where an adapter reports nothing beyond its labels."""
+        return {}
 
     def benchmark_chain(self, problem, warmup, iters, drop):
         """Free-running dispatch->combine pairs, no host sync between them: what a decode loop pays.
@@ -580,6 +586,10 @@ class EPBackend(abc.ABC):
     def graph_replay_output(self, problem):
         """Graph replay's value check (GraphTiming.replay_output)."""
         return self.timing.replay_output(problem)
+
+    def graph_replay_restore(self, problem):
+        """Undo the value check's input rescale once its drained reference has run."""
+        self.timing.restore_replay_inputs(problem)
 
     def finalize(self, rc):
         """Barrier and tear down the process group; returns rc."""

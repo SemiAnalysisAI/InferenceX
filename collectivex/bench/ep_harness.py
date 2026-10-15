@@ -201,10 +201,11 @@ def _write_json_atomic(path: str, value) -> None:
 def kernel_generation(backend) -> str:
     """Identify the kernel family and the rank-alignment regime it was timed under."""
     family = backend.kernel_generation or "n-a"
-    # Historical -cudagraph rows used an external barrier and alignment spin; historical eager
-    # rows (bare family) had no per-sample alignment.
+    # Historical -cudagraph rows used an external barrier and alignment spin, and -in-graph-ar rows
+    # an in-graph all-reduce without a spin; historical eager rows (bare family) had no per-sample
+    # alignment.
     if backend.cuda_graph_enabled:
-        return f"{family}-cudagraph-in-graph-ar"
+        return f"{family}-cudagraph-spin-ar"
     return f"{family}-eager-spin-ar"
 
 
@@ -279,7 +280,10 @@ class Point:
     counts the samples whose start some rank held until its throttled host recovered, and
     `host_stalled` the samples some rank's host ran throttled around anyway; `suspect` counts the
     samples that were missed or stalled, once. The chained family runs on its own trials:
-    `chain`/`chain_spread` are per-iteration, `gap` and `settle` one scalar per trial.
+    `chain`/`chain_spread` are per-iteration, `gap` and `settle` one scalar per trial;
+    `chain_host_retries` and `chain_host_stalled` count, for a dispatch that waits on the host, the
+    chain siblings restarted for a throttled host and the trials still throttled after the last
+    restart (None elsewhere).
     """
 
     T: int
@@ -317,6 +321,8 @@ class Point:
     host_held: dict = field(default_factory=dict)
     host_stalled: dict = field(default_factory=dict)
     suspect: dict = field(default_factory=dict)
+    chain_host_retries: "int | None" = None
+    chain_host_stalled: "int | None" = None
 
     def inputs_unchanged(self, torch):
         x, idx, weights = self.snapshot
@@ -514,8 +520,10 @@ class Sweep:
         for point in self.points:
             point.graph_output_rewritten &= bool(getattr(point.problem, "_cuda_graph_output_rewritten", False))
             replayed = self.backend.graph_replay_output(point.problem)
+            # The replay ran on rescaled inputs; so does this drained reference, then they come back.
             drained = self.backend.run_roundtrip(point.problem)
             self.torch.cuda.synchronize()
+            self.backend.graph_replay_restore(point.problem)
             ok, error = chain_output_matches(replayed, drained)
             point.graph_output_ok &= ok
             point.graph_output_error = max(point.graph_output_error, error)
@@ -554,6 +562,9 @@ class Sweep:
                 half = len(pair) // 2
                 drifts = self.reduce.scalars(_pcts(pair[half:])["p50"] - _pcts(pair[:half])["p50"])
                 point.settle.append(max(drifts, key=abs))
+                if chained.get("host_retries") is not None:
+                    point.chain_host_retries = (point.chain_host_retries or 0) + chained["host_retries"]
+                    point.chain_host_stalled = (point.chain_host_stalled or 0) + int(chained["host_stalled"])
                 if final:
                     point.oracle_chain = self._oracle(point)
 
@@ -627,6 +638,9 @@ class Sweep:
         global_tokens = T * self.world_size
         dp, sp, cp, rtp = _pcts(point.dispatch), _pcts(point.stage), _pcts(point.combine), _pcts(point.roundtrip)
         chainp = _pcts(point.chain)
+        if point.chain_host_stalled and chainp is not None:
+            # A trial still throttled after its restarts: its pairs may carry the host's pace.
+            chainp = {key: (value if key == "p50" else None) for key, value in chainp.items()}
         origin = CUDA_GRAPH_ORIGIN if graph else None
         # Stage is local work, so only the cross-rank series gate the tails.
         def largest_share(counts):
@@ -646,10 +660,9 @@ class Sweep:
         def measured(samples, pcts=None):
             return _component(pub(pcts or _pcts(samples)), len(samples), origin=origin)
 
-        # isolated_sum adds the isolated percentiles; not a measured chained operation, never a
-        # throughput basis. Stage contributes zero where it is not timed.
-        isum = ({key: dp[key] + (sp[key] if sp is not None else 0.0) + cp[key] for key in dp}
-                if dp and cp else None)
+        # isolated_sum adds the isolated dispatch and combine percentiles; not a measured chained
+        # operation, never a throughput basis. Stage is reported apart and never summed in.
+        isum = {key: dp[key] + cp[key] for key in dp} if dp and cp else None
         received = point.oracle_pre["receive_count"]
         recv_total = reduce.integer(received, ops.SUM)
         recv_max = reduce.integer(received, ops.MAX)
@@ -690,6 +703,10 @@ class Sweep:
                 "interpair_gap_us": _component(_pcts(point.gap), len(point.gap)),
                 "pair_spread_us": _component(_pcts(point.chain_spread), len(point.chain_spread)),
                 "settle_drift_us": _component(_pcts(point.settle), len(point.settle)),
+                # Dispatch that waits on the host only (null elsewhere): siblings restarted for a
+                # throttled host, and trials still throttled after the last restart.
+                "host_retried_siblings": point.chain_host_retries,
+                "host_stalled_trials": point.chain_host_stalled,
             },
             # Same iterations reduced by cross-rank MIN: how much of a point is rank stagger.
             "cross_rank_min_us": {
@@ -699,12 +716,13 @@ class Sweep:
             },
             # Diagnostic, not a latency: large next to the roundtrip means skew-inflated.
             "cross_rank_spread_us": _component(_pcts(point.spread), len(point.spread)),
-            # Eager only: per series, the samples some rank entered after its spin ran out and,
-            # where the dispatch waits on the host (null elsewhere), the samples whose start some
-            # rank held for its throttled host and the samples some rank's host ran throttled
-            # around anyway, each with its largest cross-rank series share. Held samples opened at
-            # speed; tails are withheld once the missed or stalled samples could fill them.
-            "rank_alignment": None if graph else {
+            # Per series, the samples some rank entered after its spin ran out (eager: the host
+            # enqueue; graphed: the replay call) and, where the dispatch waits on the host (null
+            # elsewhere), the samples whose start some rank held for its throttled host and the
+            # samples some rank's host ran throttled around anyway, each with its largest
+            # cross-rank series share. Held samples opened at speed; tails are withheld once the
+            # missed or stalled samples could fill them.
+            "rank_alignment": {
                 "host_held_fraction": held_fraction,
                 "host_held_samples": dict(sorted(point.host_held.items())) or None,
                 "host_stalled_fraction": stalled_fraction,
@@ -743,7 +761,7 @@ class Sweep:
                   f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(point.roundtrip)} "
                   f"fanout={rstats['fanout_mean']:.2f} "
                   f"recv[min/mean/max]={recv_min}/{recv_total // self.world_size}/{recv_max} "
-                  f"{'' if graph else f'missed={missed_fraction:.2%} '}"
+                  f"missed={missed_fraction:.2%} "
                   f"{host_log}"
                   f"correct={point_ok}")
         return row
@@ -810,6 +828,9 @@ class Sweep:
                 },
             },
             "implementation": {
+                # What the library was realized with (SMs, QPs, launch configs, capacity,
+                # zero-copy, scale format): the adapter's own report, null where it has none.
+                "library_config": backend.implementation_details() or None,
                 "fp8_consume": backend.fp8_consume,
                 "kernel_generation": kernel_generation(backend),
                 "rank_alignment": backend.timing.alignment,
