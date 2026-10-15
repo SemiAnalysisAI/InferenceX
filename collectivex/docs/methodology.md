@@ -362,8 +362,8 @@ Only the launch mechanism changes; every family keeps its eager meaning:
   tight (one rank's tail), while the same node and image ran eager at 1.02-1.14x. That is the
   node-by-node submission above. With the spin captured ahead of the all-reduce, graphed decode ran
   its roundtrip p99 at 1.02-1.13x its p50 on both mi300x and mi325x at every rung, no replay call
-  outlasted the spin, and mi300x's small-T dispatch p99 fell from 47.6-56.4 µs to 29.8-36.0 µs:
-  the eager tails of the same SKU.
+  outlasted the spin, mi300x's small-T dispatch p99 fell from 47.6-56.4 µs to 29.8-36.0 µs, and
+  its per-sample cross-rank spread p99 from 15-28 µs to 9 µs: the eager tails of the same SKU.
 - **The chained family** (`pair_period`, floors, health) captures each sibling chain as one graph
   of `chain_iters` unrolled pairs, the shape of a decode graph, replayed once untimed and once
   behind the barrier. Its oracle, output check and tails apply unchanged.
