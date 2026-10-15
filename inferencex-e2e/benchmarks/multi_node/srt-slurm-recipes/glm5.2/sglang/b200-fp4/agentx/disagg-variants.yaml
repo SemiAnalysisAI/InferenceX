@@ -72,7 +72,8 @@ base:
         dsa-decode-backend: trtllm
         moe-runner-backend: flashinfer_cutlass
         fp4-gemm-backend: flashinfer_cutlass
-        enable-flashinfer-allreduce-fusion: true
+        # auto picks mnnvl on SM100, whose DEP8 MoE EP all-reduce fails with invalid argument.
+        flashinfer-allreduce-fusion-backend: trtllm
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load": true}'
         mem-fraction-static: 0.8
