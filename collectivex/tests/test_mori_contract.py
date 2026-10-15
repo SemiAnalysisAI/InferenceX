@@ -7,7 +7,6 @@ import os
 import sys
 import types
 import unittest
-from importlib import metadata
 from pathlib import Path
 from unittest import mock
 
@@ -313,9 +312,12 @@ class MoriContract(unittest.TestCase):
         backend = self.backend()
         self.assertEqual(backend.library_version, "1.2.3.dev45+g12d1bc32d")
         self.mori.__version__ = "unknown"
-        with mock.patch.object(metadata, "version", return_value="1.2.3.post1"):
+        # Patch the metadata module ep_mori bound: another suite's sys.modules restore can leave
+        # this file's `metadata` a different object from the one the adapter imported.
+        used = self.module.metadata
+        with mock.patch.object(used, "version", return_value="1.2.3.post1"):
             self.assertEqual(backend.library_version, "1.2.3.post1")
-        with mock.patch.object(metadata, "version", side_effect=metadata.PackageNotFoundError):
+        with mock.patch.object(used, "version", side_effect=used.PackageNotFoundError):
             self.assertEqual(backend.library_version, "unknown")
 
 
