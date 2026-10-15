@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import itertools
 import sys
 import types
 import unittest
@@ -149,14 +150,18 @@ class ChainedPairPeriod(unittest.TestCase):
     def test_the_loop_is_free_running_dispatch_combine_pairs(self):
         # A host sync inside the loop drains the GPU and turns the period back into a sequence of
         # drained roundtrips; a cross-rank call between pairs re-aligns the ranks and buys back
-        # the very stagger the chain exists to amortise. Neither may appear.
+        # the very stagger the chain exists to amortise. Neither may appear. Each sibling is
+        # aligned once, before its first event, as the graph chain is.
         iters = 6
         backend = _ChainBackend()
         run_chain(backend, iters, 2)
         self.assertEqual(
             timed_tail(backend.calls, iters, 2), ["dispatch", "combine"] * iters
         )
-        self.assertNotIn("all_reduce", backend.calls)
+        for section in chain_sections(backend.calls):
+            first_event = section.index("record")
+            self.assertEqual(section[:first_event], ["align_spin", "all_reduce"])
+            self.assertNotIn("all_reduce", section[first_event:])
         self.assertNotIn("dist_barrier", backend.calls)
 
     def test_a_hoisted_stage_runs_once_and_stays_out_of_every_pair_window(self):
@@ -292,6 +297,189 @@ class CudaGraphRoundtrip(unittest.TestCase):
             backend.timed_components()
 
 
+class EagerAlignment(unittest.TestCase):
+    """Eager samples are aligned the way DeepEP's bench_kineto aligns them: a GPU spin, then a
+    device all-reduce, both queued ahead of the sample, with no host sync before the window."""
+
+    def _eager_component(self, component, iters=3, backend=None, env=None):
+        backend = backend or _ChainBackend()
+        with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "0", **(env or {})}, clear=True), \
+                trace_torch(backend.clock, backend.calls):
+            backend.benchmark_component(component, new_problem(), warmup=2, iters=iters)
+        return backend.calls
+
+    def test_every_eager_sample_opens_with_a_spin_then_a_device_all_reduce(self):
+        iters = 3
+        for component in ("roundtrip", "dispatch", "combine"):
+            with self.subTest(component=component):
+                calls = self._eager_component(component, iters)
+                barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
+                self.assertEqual(len(barriers), iters)
+                for i in barriers:
+                    self.assertEqual(calls[i - 1], "align_spin")
+                    # The window opens with no host sync after the barrier.
+                    window_start = calls.index("record", i)
+                    self.assertNotIn("sync", calls[i:window_start])
+
+    def test_the_spin_is_calibrated_after_the_warm_up_and_before_the_first_sample(self):
+        for component in ("roundtrip", "dispatch", "combine"):
+            with self.subTest(component=component):
+                calls = self._eager_component(component)
+                # `_sleep` counts SM cycles: a clock ramp, then a spin bracketed by two events and
+                # a sync converts the spin's wall time to cycles at the clocks warm-up left behind.
+                calibration = calls.index("align_spin")
+                self.assertEqual(calls[calibration:calibration + 5],
+                                 ["align_spin", "record", "align_spin", "record", "sync"])
+                self.assertIn("combine", calls[:calibration])
+                self.assertLess(calibration, calls.index("all_reduce"))
+
+    def test_a_fresh_pair_series_aligns_ahead_of_its_untimed_dispatch(self):
+        # The barrier releases the untimed dispatch, so a host sync inside it (normal mode) would
+        # open the window late; LL adapters, the ones that require fresh pairs, do not sync.
+        backend = _ChainBackend()
+        backend.requires_fresh_pair = True
+        iters = 3
+        calls = self._eager_component("combine", iters, backend=backend)
+        barriers = [i for i, call in enumerate(calls) if call == "all_reduce"]
+        self.assertEqual(len(barriers), iters)
+        for i in barriers:
+            self.assertEqual(calls[i - 1:i + 7], ["align_spin", "all_reduce", "dispatch", "stage",
+                                                  "record", "combine", "record", "sync"])
+
+    def test_a_sample_counts_as_missed_when_its_host_outruns_the_spin(self):
+        # One fake millisecond per perf_counter() read: every sample's lead is 1000 us.
+        for spin_us, missed in (("500", 1), ("2000", 0)):
+            with self.subTest(spin_us=spin_us):
+                backend = _ChainBackend()
+                ticks = (tick / 1000.0 for tick in itertools.count())
+                with mock.patch.object(ep_timing.time, "perf_counter", lambda: next(ticks)):
+                    self._eager_component("roundtrip", 4, backend=backend,
+                                          env={"COLLX_ALIGN_SPIN_US": spin_us})
+                self.assertEqual(backend.alignment_misses(), [missed] * 4)
+                self.assertEqual(backend.timing.alignment["spin_us"], float(spin_us))
+
+    def test_graph_replay_has_no_host_step_to_miss(self):
+        self.assertIsNone(ep_timing.GraphTiming(_ChainBackend()).missed_samples())
+        self.assertIsNone(ep_timing.GraphTiming(_ChainBackend()).host_holds())
+        self.assertIsNone(ep_timing.GraphTiming(_ChainBackend()).host_stalls())
+
+    # Calibrated at 20 us, a sample holds above 2.5 x 20 = 50 us and counts stalled above 100 us.
+    CALIBRATION = [20.0] * ep_timing.HostGate.CALIBRATION
+
+    def _gated_component(self, component, probe_us, iters=4, backend=None, tick_s=None):
+        """Run one eager series on a backend whose dispatch waits on the host, every CPU probe
+        logged into the trace and timed from `probe_us` (calibration reads first); with `tick_s`,
+        every perf_counter() read advances a fake clock by that much."""
+        backend = backend or _ChainBackend()
+        backend.host_synced_dispatch = True
+        readings = iter(probe_us)
+
+        def probe():
+            backend.calls.append("probe")
+            return next(readings)
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(ep_timing, "cpu_probe_us", probe))
+            if tick_s is not None:
+                ticks = (tick * tick_s for tick in itertools.count())
+                stack.enter_context(
+                    mock.patch.object(ep_timing.time, "perf_counter", lambda: next(ticks)))
+            self._eager_component(component, iters, backend=backend)
+        self.assertRaises(StopIteration, next, readings)  # every reading was taken
+        return backend
+
+    def test_a_host_synced_series_probes_the_cpu_around_each_sample_outside_its_window(self):
+        calibration = ep_timing.HostGate.CALIBRATION
+        for component, ops in (("roundtrip", ["dispatch", "combine"]), ("dispatch", ["dispatch"])):
+            with self.subTest(component=component):
+                iters = 3
+                readings = [20.0] * (calibration + 2 * iters)
+                backend = self._gated_component(component, readings, iters)
+                calls = backend.calls
+                first = calls.index("all_reduce") - 2
+                self.assertEqual(calls[first - calibration:first], ["probe"] * calibration)
+                # Before the spin, and after the sample's final sync: never between its events.
+                sample = ["probe", "align_spin", "all_reduce", "record", *ops, "record", "sync",
+                          "probe"]
+                self.assertEqual(calls[first:], sample * iters)
+                self.assertEqual(backend.host_holds(), [0] * iters)
+                self.assertEqual(backend.host_stalls(), [0] * iters)
+
+    def test_a_series_without_a_host_synced_dispatch_takes_no_probe(self):
+        backend = self._gated_component("combine", [], iters=3)
+        self.assertNotIn("probe", backend.calls)
+        self.assertIsNone(backend.host_holds())
+        self.assertIsNone(backend.host_stalls())
+        backend = _ChainBackend()
+        self._eager_component("roundtrip", 3, backend=backend)
+        self.assertIsNone(backend.host_holds())
+        self.assertIsNone(backend.host_stalls())
+
+    def test_a_sample_opens_only_once_its_slow_host_runs_at_speed_again(self):
+        # The second sample's first probe runs throttled (400 us) and the next one still winding
+        # down (100 us, above the 50 us hold bar): its spin and barrier are enqueued only after the
+        # probe back under the bar, 2 fake ms later.
+        backend = self._gated_component(
+            "dispatch", self.CALIBRATION + [20.0, 20.0, 400.0, 100.0, 40.0, 20.0, 20.0, 20.0],
+            iters=3, tick_s=1e-3)
+        calls = backend.calls
+        second = calls.index("all_reduce", calls.index("all_reduce") + 1)
+        self.assertEqual(calls[second - 6:second + 1],
+                         ["sync", "probe", "probe", "probe", "probe", "align_spin", "all_reduce"])
+        self.assertEqual(backend.host_holds(), [0, 1, 0])
+        self.assertEqual(backend.host_stalls(), [0, 0, 0])
+        self.assertEqual(backend.alignment_misses(), [0, 0, 0])
+
+    def test_a_hold_shorter_than_a_millisecond_was_an_interrupt_and_is_not_counted(self):
+        backend = self._gated_component(
+            "dispatch", self.CALIBRATION + [20.0, 20.0, 60.0, 20.0, 20.0, 20.0, 20.0], iters=3,
+            tick_s=1e-4)
+        self.assertEqual(backend.calls.count("probe"), ep_timing.HostGate.CALIBRATION + 7)
+        self.assertEqual(backend.host_holds(), [0, 0, 0])
+        self.assertEqual(backend.host_stalls(), [0, 0, 0])
+
+    def test_a_throttle_that_begins_inside_the_window_counts_the_sample_stalled(self):
+        # Opened at speed, throttled by the probe after the final sync: the relaunch inside the
+        # window may have run slow, and nothing held it. A probe under the stall bar is not.
+        backend = self._gated_component(
+            "dispatch", self.CALIBRATION + [20.0, 20.0, 20.0, 400.0, 20.0, 99.0, 20.0, 20.0])
+        self.assertEqual(backend.host_holds(), [0, 0, 0, 0])
+        self.assertEqual(backend.host_stalls(), [0, 1, 0, 0])
+
+    def test_a_hold_that_runs_out_opens_the_sample_and_counts_it_stalled_if_still_throttled(self):
+        # Every perf_counter() read advances 300 fake ms against a 0.5 s hold limit: the second
+        # sample gives up still throttled, the third still winding down (60 us, under the stall
+        # bar).
+        backend = self._gated_component(
+            "dispatch", self.CALIBRATION + [20.0, 20.0, 400.0, 400.0, 400.0, 20.0,
+                                            60.0, 60.0, 60.0, 20.0], iters=3, tick_s=0.3)
+        self.assertEqual(backend.host_holds(), [0, 1, 1])
+        self.assertEqual(backend.host_stalls(), [0, 1, 0])
+
+    def test_the_hold_budget_spans_the_run(self):
+        # Every perf_counter() read advances 300 fake ms: the first series' hold spends 0.6 s of a
+        # 0.5 s budget, so the next series' throttled sample opens without waiting, counted stalled.
+        backend = _ChainBackend()
+        with mock.patch.object(ep_timing.HostGate, "BUDGET_S", 0.5):
+            self._gated_component(
+                "dispatch", self.CALIBRATION + [400.0, 400.0, 20.0, 20.0, 20.0, 20.0], iters=2,
+                backend=backend, tick_s=0.3)
+            self.assertEqual((backend.host_holds(), backend.host_stalls()), ([1, 0], [0, 0]))
+            self._gated_component("dispatch", self.CALIBRATION + [400.0, 20.0, 20.0, 20.0],
+                                  iters=2, backend=backend, tick_s=0.3)
+        self.assertEqual((backend.host_holds(), backend.host_stalls()), ([0, 0], [1, 0]))
+
+    def test_a_calibration_taken_while_throttled_cannot_raise_the_bar(self):
+        # The run keeps its lowest calibration: a series calibrated inside a throttle (400 us)
+        # still judges its samples against the 20 us an earlier series measured at speed.
+        backend = self._gated_component("dispatch", self.CALIBRATION + [20.0] * 8)
+        self._gated_component("dispatch", [400.0] * ep_timing.HostGate.CALIBRATION
+                              + [20.0, 150.0] + [20.0] * 6, backend=backend)
+        self.assertEqual(backend.host_holds(), [0, 0, 0, 0])
+        self.assertEqual(backend.host_stalls(), [1, 0, 0, 0])
+        self.assertEqual(backend.timing.gate.probe_us, 20.0)
+
+
 class GraphAlignmentAndValueCheck(unittest.TestCase):
     def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
         backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
@@ -372,7 +560,8 @@ class EventPlacement(unittest.TestCase):
         )
         self.assertEqual(
             period,
-            ["record", "dispatch", "stage", "combine", "record"] * iters,
+            ["align_spin", "all_reduce"]
+            + ["record", "dispatch", "stage", "combine", "record"] * iters,
         )
 
 class ChainBudgetGate(unittest.TestCase):
@@ -636,6 +825,56 @@ class _SweepBackend(ep_backend.EPBackend):
 
     def combine_transformed(self, problem, handle, transformed):
         return transformed
+
+
+class _MisalignedSweepBackend(_SweepBackend):
+    """Every roundtrip sample was entered by some rank after its spin ran out; nothing else was."""
+
+    def benchmark_component(self, component, problem, warmup, iters):
+        self._timed = (component, iters)
+        return super().benchmark_component(component, problem, warmup, iters)
+
+    def alignment_misses(self):
+        component, iters = self._timed
+        return [int(component == "roundtrip")] * iters
+
+
+class _HostStalledSweepBackend(_SweepBackend):
+    """A dispatch that waits on the host; `held` names the series whose every sample some rank held
+    for its throttled host, `stalled` those whose every sample some rank's host ran throttled
+    around anyway. Only roundtrip and dispatch carry a host-synced dispatch in the window."""
+
+    host_synced_dispatch = True
+    held = ()
+    stalled = ("dispatch",)
+
+    def benchmark_component(self, component, problem, warmup, iters):
+        self._timed = (component, iters)
+        return super().benchmark_component(component, problem, warmup, iters)
+
+    def alignment_misses(self):
+        return [0] * self._timed[1]
+
+    def _flags(self, names):
+        component, iters = self._timed
+        if component not in ("roundtrip", "dispatch"):
+            return None
+        return [int(component in names)] * iters
+
+    def host_holds(self):
+        return self._flags(self.held)
+
+    def host_stalls(self):
+        return self._flags(self.stalled)
+
+
+class _UnstalledSweepBackend(_HostStalledSweepBackend):
+    stalled = ()
+
+
+class _HeldSweepBackend(_HostStalledSweepBackend):
+    held = ("roundtrip", "dispatch")
+    stalled = ()
 
 
 class _GraphSweepBackend(_SweepBackend):
@@ -902,6 +1141,119 @@ class ChainedPublication(unittest.TestCase):
         self.assertNotIn("period=n/a", self.swept.stdout)
 
 
+class AlignmentMissPublication(unittest.TestCase):
+    """Eager rows publish how many samples some rank entered after its spin ran out, and withhold
+    the tails those samples could fill."""
+
+    PERCENTILES = {"p50": 1.0, "p90": 2.0, "p95": 3.0, "p99": 4.0}
+
+    def test_a_tail_is_withheld_once_missed_samples_could_fill_it(self):
+        for fraction, expected in ((0.0, [1.0, 2.0, 3.0, 4.0]), (0.009, [1.0, 2.0, 3.0, 4.0]),
+                                   (0.01, [1.0, 2.0, 3.0, None]), (0.05, [1.0, 2.0, None, None]),
+                                   (0.1, [1.0, None, None, None]), (1.0, [1.0, None, None, None])):
+            with self.subTest(fraction=fraction):
+                published = ep_harness._published_tails(self.PERCENTILES, False, fraction)
+                self.assertEqual(list(published.values()), expected)
+        self.assertEqual(list(ep_harness._published_tails(self.PERCENTILES, True).values()),
+                         [1.0, None, None, None])
+
+    def test_a_clean_eager_row_keeps_its_tails_and_records_the_spin(self):
+        swept = drive()
+        self.assertEqual(swept.doc["implementation"]["rank_alignment"],
+                         {"method": "gpu-spin-then-all-reduce", "spin_us": 2000.0})
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertEqual(row["rank_alignment"], {
+                    "host_held_fraction": None,
+                    "host_held_samples": None,
+                    "host_stalled_fraction": None,
+                    "host_stalled_samples": None,
+                    "missed_fraction": 0.0,
+                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
+                })
+                self.assertIsNotNone(row["components"]["roundtrip"]["percentiles_us"]["p99"])
+
+    def test_missed_roundtrips_withhold_the_row_tails(self):
+        swept = drive(backend_factory=_MisalignedSweepBackend)
+        self.assertEqual(swept.rc, 0)
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertEqual(row["rank_alignment"], {
+                    "host_held_fraction": None,
+                    "host_held_samples": None,
+                    "host_stalled_fraction": None,
+                    "host_stalled_samples": None,
+                    "missed_fraction": 1.0,
+                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 8},
+                })
+                for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
+                              row["cross_rank_min_us"]["roundtrip"]):
+                    tails = block["percentiles_us"]
+                    self.assertEqual(tails["p50"], 10.0)
+                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                self.assertIsNone(row["token_rate_at_latency_percentile"]["p99"])
+                # The chained family aligns once per sibling and keeps its tails.
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+
+    def test_host_stalled_dispatches_withhold_the_row_tails(self):
+        # A host throttled around a host-synced dispatch stretched the relaunch inside its window
+        # on every rank, so those samples gate the tails the way missed ones do; misses stay apart.
+        swept = drive(backend_factory=_HostStalledSweepBackend)
+        self.assertEqual(swept.rc, 0)
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertEqual(row["rank_alignment"], {
+                    "host_held_fraction": 0.0,
+                    "host_held_samples": {"dispatch": 0, "roundtrip": 0},
+                    "host_stalled_fraction": 1.0,
+                    "host_stalled_samples": {"dispatch": 8, "roundtrip": 0},
+                    "missed_fraction": 0.0,
+                    "missed_samples": {"combine": 0, "dispatch": 0, "roundtrip": 0},
+                })
+                for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
+                              row["cross_rank_min_us"]["dispatch"]):
+                    tails = block["percentiles_us"]
+                    self.assertEqual(tails["p50"], 10.0)
+                    self.assertEqual([tails[k] for k in ("p90", "p95", "p99")], [None] * 3)
+                self.assertIsNone(row["token_rate_at_latency_percentile"]["p99"])
+                self.assertIsNotNone(row["components"]["pair_period"]["percentiles_us"]["p99"])
+        self.assertIn("missed=0.00% held=0.00% stalled=100.00% correct=True", swept.stdout)
+
+    def test_an_unstalled_host_synced_row_keeps_its_tails_and_counts_zero(self):
+        swept = drive(backend_factory=_UnstalledSweepBackend)
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                alignment = row["rank_alignment"]
+                self.assertEqual(alignment["host_held_samples"], {"dispatch": 0, "roundtrip": 0})
+                self.assertEqual(alignment["host_stalled_samples"], {"dispatch": 0, "roundtrip": 0})
+                self.assertEqual(alignment["host_stalled_fraction"], 0.0)
+                self.assertIsNotNone(row["components"]["dispatch"]["percentiles_us"]["p99"])
+
+    def test_held_samples_opened_at_speed_and_keep_the_row_tails(self):
+        # A held sample waited for its host before the window opened, so it is counted but gates
+        # nothing: every tail stays published.
+        swept = drive(backend_factory=_HeldSweepBackend)
+        self.assertEqual(swept.rc, 0)
+        for row in swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                alignment = row["rank_alignment"]
+                self.assertEqual(alignment["host_held_samples"], {"dispatch": 8, "roundtrip": 8})
+                self.assertEqual(alignment["host_held_fraction"], 1.0)
+                self.assertEqual(alignment["host_stalled_fraction"], 0.0)
+                for block in (row["components"]["roundtrip"], row["components"]["dispatch"],
+                              row["cross_rank_min_us"]["roundtrip"]):
+                    self.assertIsNotNone(block["percentiles_us"]["p99"])
+                self.assertIsNotNone(row["token_rate_at_latency_percentile"]["p99"])
+        self.assertIn("missed=0.00% held=100.00% stalled=0.00% correct=True", swept.stdout)
+
+    def test_graph_rows_carry_no_miss_count(self):
+        swept = drive(backend_factory=_GraphSweepBackend)
+        self.assertEqual(swept.doc["implementation"]["rank_alignment"],
+                         {"method": "in-graph-all-reduce", "spin_us": None})
+        for row in swept.rows:
+            self.assertIsNone(row["rank_alignment"])
+
+
 class CudaGraphPublication(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1122,14 +1474,14 @@ class RunnerFilterIsContentBased(unittest.TestCase):
             ("other-sku-stub-deepseek-v3-low-latency-decode-ep8-uniform-bf16_TS-c000.json",
              "other-sku"),
         ])
-        kept = summarize.load_results(directory, "stub-sku", None)
+        kept = summarize.load_results(directory, "stub-sku")
         self.assertEqual(len(kept), 1)
         self.assertEqual(kept[0]["identity"]["case_factors"]["sku"], "stub-sku")
 
     def test_a_foreign_sku_is_excluded_even_when_the_filename_would_match(self):
         # The filename claims one SKU, the row declares another; the row wins.
         directory = self._directory([("stub-sku_anything_TS-c000.json", "other-sku")])
-        self.assertEqual(summarize.load_results(directory, "stub-sku", None), [])
+        self.assertEqual(summarize.load_results(directory, "stub-sku"), [])
 
 
 if __name__ == "__main__":

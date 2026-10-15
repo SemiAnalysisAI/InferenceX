@@ -93,6 +93,10 @@ class EPBackend(abc.ABC):
     # handle is either reusable or it is not -- no adapter has ever needed one
     # direction without the other.
     requires_fresh_pair = False
+    # The timed dispatch waits on the host for its receive counts (DeepEP-legacy normal mode's
+    # notify, ElasticBuffer's do_cpu_sync), so the host's relaunch of the transfer runs inside the
+    # eager window and its samples pass through the host gate (ep_timing.HostGate).
+    host_synced_dispatch = False
     # Shape of the receive plane dispatch delivers -- "token-rank": one row per
     # (source token, dest rank), rank-deduplicated; "token-expert": one row per
     # (source token, expert) assignment (the low-latency padded layouts). Selects the
@@ -541,6 +545,22 @@ class EPBackend(abc.ABC):
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""
         return self.timing.component(component, problem, warmup, iters)
+
+    def alignment_misses(self):
+        """Per sample of the last component, 1 where this rank's alignment spin ran out before its
+        window opened; None under graph replay."""
+        return self.timing.missed_samples()
+
+    def host_holds(self):
+        """Per sample of the last component, 1 where its start waited for this rank's throttled
+        host; None where the window holds no host work (as `host_stalls`)."""
+        return self.timing.host_holds()
+
+    def host_stalls(self):
+        """Per sample of the last component, 1 where this rank's host ran throttled around it
+        anyway; None where the window holds no host work (graph replay, a dispatch that does not
+        wait on the host, or a component without a dispatch in its window)."""
+        return self.timing.host_stalls()
 
     def benchmark_chain(self, problem, warmup, iters, drop):
         """Free-running dispatch->combine pairs, no host sync between them: what a decode loop pays.

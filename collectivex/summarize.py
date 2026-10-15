@@ -12,11 +12,10 @@ from pathlib import Path
 CASE_RECORD_TYPE = "case-attempt"
 
 
-def load_results(directory: str, runner: str | None, timestamp: str | None) -> list[dict]:
+def load_results(directory: str, runner: str | None) -> list[dict]:
     documents: list[dict] = []
-    for path in sorted(Path(directory).glob("*.json")):
-        if timestamp and timestamp not in path.name:
-            continue
+    # results/<sku>/<case_id>.json; recursive, so one SKU's folder or the whole tree both work.
+    for path in sorted(Path(directory).rglob("*.json")):
         try:
             with path.open() as handle:
                 document = json.load(handle)
@@ -168,11 +167,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Summarize CollectiveX native v1 outcomes")
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--runner")
-    parser.add_argument("--ts")
     args = parser.parse_args()
-    documents = load_results(args.results_dir, args.runner, args.ts)
+    documents = load_results(args.results_dir, args.runner)
     print(render(documents))
-    # Pure renderer — never gates CI. The per-case leg gate lives in ep_harness.run_sweep: a
+    # Pure renderer — gates nothing. The per-case gate lives in ep_harness.run_sweep: a
     # non-success outcome returns nonzero and fails the shard (see collx_run_shard).
     return 0
 

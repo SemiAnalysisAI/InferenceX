@@ -487,9 +487,10 @@ nccl_ep_prepare() {
   collx_log "NCCL EP ready ($COLLX_NCCL_EP_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
 }
 
-# Multi-node EFA shards build aws-ofi-nccl against the host libfabric the enroot hook mounts, from
-# a hash-pinned release tarball; the rank wrapper's EFA profile then loads it in place of the
-# host's (see COLLX_OFI_NCCL_VERSION). Proxy GIN only: configure finds no libfabric GDA ops.
+# Multi-node EFA shards whose host plugin predates aws-ofi-nccl 1.21 build it against the host
+# libfabric the launcher binds, from a hash-pinned release tarball; the rank wrapper's EFA profile
+# then loads it in place of the host's (see COLLX_OFI_NCCL_VERSION). Proxy GIN only: configure finds
+# no libfabric GDA ops on those hosts.
 ofi_nccl_ready() { [ -f "$1/.ready" ] && [ -r "$1/lib/libnccl-net-ofi.so" ]; }
 
 ofi_nccl_install() {
@@ -517,7 +518,14 @@ ofi_nccl_install() {
 
 ofi_nccl_prepare() {
   local root
+  unset COLLX_OFI_NCCL_LIB_DIR
   [ "${COLLX_RDMA_FABRIC:-}" = efa ] && [ "${COLLX_NODES:-1}" -gt 1 ] || return 0
+  # ncclGinPlugin_v14 (the EFA GDA op table) first shipped in 1.21.0: such a host plugin already has
+  # the worker signal path (b300's 1.21.1, EFA installer 1.50.0).
+  if grep -qF ncclGinPlugin_v14 /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so; then
+    collx_log "aws-ofi-nccl: using the host plugin"
+    return 0
+  fi
   root="$(backend_cache_root ofi-nccl efa "$COLLX_OFI_NCCL_VERSION")" \
     || root="/tmp/collectivex-ofi-nccl-$COLLX_OFI_NCCL_VERSION"
   with_cache_lock "aws-ofi-nccl" "$root" ofi_nccl_ready ofi_nccl_install || return 1
@@ -551,7 +559,7 @@ write_rank_env() {
 }
 
 validate_container_network() {
-  local interface device rdma_name
+  local interface device rdma_name efa_domains
   local -a interfaces devices
   if [ "${COLLX_NODES:-1}" -le 1 ] || [ "${COLLX_TRANSPORT:-}" = mnnvl ]; then
     return 0
@@ -559,11 +567,22 @@ validate_container_network() {
   collx_restore_exact_hca_selector || return 1
   local rdma_selector="${NCCL_IB_HCA:-}"
   if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
-    # No verbs selector on EFA; the probe-validated device list is the contract, and the
-    # libfabric NCCL plugin the enroot hook mounts is what actually carries the traffic.
+    # No verbs selector on EFA; the probe-validated device list is the contract, and the host's
+    # libfabric NCCL plugin (collx_efa_host_mounts) is what actually carries the traffic. A verbs
+    # provider from another rdma-core loads nothing and says nothing, so require the host libfabric
+    # to reach every listed device through the bound user space.
     rdma_selector="${COLLX_RDMA_DEVICES:-}"
     [ -r /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so ] \
-      || { collx_log "ERROR: aws-ofi-nccl plugin is absent inside the container"; return 1; }
+      && [ -r "$COLLX_EFA_HOST_ROOT/lib/libibverbs.so.1" ] \
+      || { collx_log "ERROR: the host EFA user space is absent inside the container"; return 1; }
+    efa_domains="$(/opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM 2>&1)" \
+      || { collx_log "ERROR: the host libfabric finds no EFA device"; return 1; }
+    IFS=, read -r -a devices <<< "$rdma_selector"
+    for device in "${devices[@]}"; do
+      [[ "$efa_domains" == *"domain: ${device%%:*}-rdm"* ]] \
+        || { collx_log "ERROR: a configured EFA device is unusable through the host libfabric"
+             return 1; }
+    done
   fi
   [ -n "${GLOO_SOCKET_IFNAME:-}" ] && [ -n "$rdma_selector" ] \
     || { collx_log "ERROR: scale-out network selectors are unavailable"; return 1; }

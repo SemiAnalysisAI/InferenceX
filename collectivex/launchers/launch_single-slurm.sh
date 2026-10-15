@@ -65,6 +65,8 @@ collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BEN
 collx_select_image "$IMAGE"
 
 collx_stage_with_backend_cache
+# Multi-node shards on the EFA pools (b300, h100-dgxc) carry the host EFA user space themselves.
+collx_add_efa_host_mounts
 
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$COLLX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
@@ -126,5 +128,5 @@ fi
 
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable "${SRUN_EXTRA[@]}")
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
-collx_log "done - result artifacts collected"
+collx_log "done - results collected"
 exit "$FINAL_RC"

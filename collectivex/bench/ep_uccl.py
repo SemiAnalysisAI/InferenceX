@@ -156,6 +156,8 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
             )
         if self.mode == "low-latency":
             self._enable_ll("uccl-legacy-buffer-ll")
+        # Normal dispatch polls its receive counters on the host before launching the transfer.
+        self.host_synced_dispatch = self.mode == "normal"
 
     # ---- buffer construction ---------------------------------------------------------------
 
