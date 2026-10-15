@@ -966,9 +966,10 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
 # Both throughput bands use thinking_on golden AL 3.77; eval uses real
 # acceptance. Keep the historical config key for changelog compatibility.
 # C256 and C384 offload KV to an LMCache MP server whose 1000 GB L1 fits the
-# 1019 GB budget of dram-utilization 0.34.
+# 1019 GB budget of dram-utilization 0.34. Every point runs ATOM's bounded
+# state replay with prompt-end state checkpoints only.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610071700
+  image: rocm/atom-dev:nightly_202610141644
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
