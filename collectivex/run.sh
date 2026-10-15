@@ -111,8 +111,7 @@ for row in "${rows[@]}"; do
   # of each other's stage directory.
   execution="manual-$stamp-$$-$id"
   echo "=== shard $id: $backend, ${nodes}x${gpn} GPUs, $ncases case(s)"
-  # What the sweep workflow used to set per matrix cell. A subshell keeps one shard's image and
-  # placement from leaking into the next.
+  # A subshell keeps one shard's image and placement from leaking into the next.
   (
     unset COLLX_NGPUS
     export COLLX_SHARD_FILE="$control" COLLX_SHARD_SKU="$SKU" COLLX_BENCH="$backend"

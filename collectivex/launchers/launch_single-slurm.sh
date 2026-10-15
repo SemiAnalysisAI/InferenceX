@@ -15,23 +15,23 @@ case "$RUNNER" in
   h100-dgxc)
     # AWS p5.48xlarge on EFA, laid out like the b300 dsxe pool, so it takes the same Slurm and
     # pyxis flags and imports the image on the login node.
-    PRODUCT=h100; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     ALLOC_EXTRA=(--mem=0)
     SRUN_EXTRA=(--mpi=none --container-remap-root)
     LOCAL_IMPORT=1
     ;;
   h200-dgxc)
-    PRODUCT=h200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=0
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=0
     SRUN_EXTRA=(--container-remap-root)
     ;;
   b200-nscale)
     # Bare-metal B200 (nsc): native IB rails + gdrdrv make the deepep low-latency EP16 rows
     # dispatchable, unlike the virtualized dgxc pool. 45 min covers first-run backend builds.
-    PRODUCT=b200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     ALLOC_EXTRA=(--mem=0)
     ;;
   b300)
-    PRODUCT=b300; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     # -N 1 here would block two-node B300 jobs.
     ALLOC_EXTRA=(--mem=0)
     SRUN_EXTRA=(--mpi=none --container-remap-root)
@@ -41,7 +41,7 @@ case "$RUNNER" in
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
 export COLLX_VENDOR=nvidia
-collx_launcher_prologue "$RUNNER"
+collx_launcher_prologue
 
 collx_set_placement 1 8 8 nvlink
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"

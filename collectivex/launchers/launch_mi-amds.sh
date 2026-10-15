@@ -20,7 +20,7 @@ case "$RUNNER" in
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
 export COLLX_VENDOR=amd
-collx_launcher_prologue "$RUNNER"
+collx_launcher_prologue
 
 collx_set_placement 1 8 8 xgmi
 TIME_MIN="${COLLX_TIME:-60}"
