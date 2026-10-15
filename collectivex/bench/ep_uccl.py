@@ -275,7 +275,7 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
             is_intranode=not self._internode,
         )
         self._record_buffer(
-            num_max_dispatch_tokens_per_rank=self.max_tokens,
+            receive_capacity=self.max_tokens,
             num_nvl_bytes=_VLLM_DEEPEP_BUFFER_BYTES,
             num_rdma_bytes=int(num_rdma_bytes),
             num_qps_per_rank=num_qps_per_rank,
@@ -289,7 +289,8 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
                                 "is_intranode": not self._internode, "cpu_proxy_threads": proxies}
 
     def implementation_details(self) -> dict:
-        return dict(self._library_config)
+        # On top of the shared low-latency keys (ep_legacy_ll), which name the same values the same.
+        return {**super().implementation_details(), **self._library_config}
 
     # ---- transport contract (the shared low-latency pieces live in ep_legacy_ll) ---------
 

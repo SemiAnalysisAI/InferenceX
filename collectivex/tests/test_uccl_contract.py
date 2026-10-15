@@ -86,7 +86,7 @@ class FakeBuffer:
 def _stubs(*, hip=None, foreign_config=False):
     torch = types.ModuleType("torch")
     torch.version = types.SimpleNamespace(cuda=None if hip else "13.0", hip=hip)
-    # Hopper: the shared LL path keys its UE8M0 FP8 cast on the device's compute capability.
+    # Hopper: the shared low-latency path keys its Blackwell-only FP8 scale format on this.
     torch.cuda = types.SimpleNamespace(get_device_capability=lambda device=None: (9, 0))
     torch.float8_e4m3fn, torch.float8_e4m3fnuz = "e4m3fn", "e4m3fnuz"
     torch.bfloat16, torch.float32, torch.int64, torch.int = "bfloat16", "float32", "int64", "int"
@@ -240,7 +240,7 @@ class LowLatencyContract(unittest.TestCase):
         self.assertEqual(buffer.kwargs, {
             "low_latency_mode": True, "num_qps_per_rank": 48, "allow_nvlink_for_low_latency_mode": True,
             "allow_mnnvl": False, "explicitly_destroy": True, "is_intranode": True})
-        self.assertEqual(backend.implementation_details()["num_max_dispatch_tokens_per_rank"], 256)
+        self.assertEqual(backend.implementation_details()["receive_capacity"], 256)
         with self.assertRaisesRegex(RuntimeError, "exceeds the LL buffer cap"):
             _built(self.module, mode="low-latency", max_tokens=512)
 
