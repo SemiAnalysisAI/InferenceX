@@ -8583,17 +8583,14 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# Official CUDA 13 nightly, verified 2026-10-11 (amd64 + arm64):
-# manifest sha256:8346c975515af7ec6b2692faadd5332f789001f78f958335175d4d34e170537c
-# arm64 sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d.
+# Official CUDA 13 nightly, verified 2026-10-14 (amd64 + arm64):
+# manifest sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
+# arm64 sha256:2b9d5dd760cbaf6a521b1c56d2896dfbb5c6ed76521ac3df5e84ba6872362be2.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
-# throughput, real verification for evals. The KV cache stays GPU-resident.
-# TP4/EP4 from C1 to C16; aggregated TP4/EP4 with DP attention behind
-# sglang-router from C32 to C192. Native backends resolve automatically
-# (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+# throughput, real verification for evals.
 dsv41flash-fp4-gb200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:8346c975515af7ec6b2692faadd5332f789001f78f958335175d4d34e170537c
+  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
@@ -8605,8 +8602,13 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64, 128, 192], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      # TP4 with tensor-parallel experts (EP1) at C1-C8 and C32; the KV cache stays GPU-resident.
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 32], srt-recipe: agentic.yaml }
+      # TP4/EP4 at C16; the KV cache stays GPU-resident.
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16], srt-recipe: agentic.yaml }
+      # TP4/EP4 with DP attention and MegaMoE behind sglang-router; HiCache extends the
+      # prefix cache into host DRAM.
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7
