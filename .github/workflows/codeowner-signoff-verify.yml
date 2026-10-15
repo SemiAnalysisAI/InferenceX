@@ -1,7 +1,7 @@
 name: CODEOWNER Sign-off Verify
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] trusted default-branch code; read-only agent job, maintainer-gated; writes only in publish
     types: [created, edited]
   pull_request_review:
     types: [submitted, edited]
@@ -30,10 +30,13 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) &&
        contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review_comment' &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
     runs-on: ubuntu-latest
     concurrency:
@@ -145,8 +148,7 @@ jobs:
           # /proc is denied so file tools cannot read credentials from process environments.
           claude_args: |
             --model 'claude-opus-5-5'
-            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
-            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,mcp__fetch__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
+            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
             --disallowedTools "Read(//proc/**),Write(//proc/**)"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the

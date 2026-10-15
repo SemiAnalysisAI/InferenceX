@@ -718,7 +718,7 @@ This is a listing check, separate from Check 3's recipe-completeness requirement
   establish coverage. If no such coverage exists, this check is N/A for that
   pair; retain any Check 3 failure. Do not suppress this check merely because
   an existing upstream recipe is incomplete under Check 3.
-- Fetch the live NVIDIA overview with WebFetch or the fetch MCP tool. Inspect
+- Fetch the live NVIDIA overview with WebFetch. Inspect
   both the Framework Recipes and Dynamo Disaggregated Recipes tables. A
   populated cell for the same model and underlying engine in either table
   counts for this model/framework listing check; this does not establish

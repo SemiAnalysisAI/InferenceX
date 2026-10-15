@@ -2,7 +2,7 @@ name: Acknowledge Sweep Reuse
 run-name: Check sweep reuse for PR #${{ github.event.issue.number }}
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] trusted default-branch code only; maintainer-gated below and in reuse_comment.py
     types: [created, edited]
 
 permissions: {}
@@ -16,6 +16,7 @@ jobs:
     name: acknowledge
     if: >-
       github.event.issue.pull_request &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
       (contains(github.event.comment.body, '/reuse-sweep-run') ||
        contains(github.event.changes.body.from, '/reuse-sweep-run') ||
        contains(github.event.comment.body, '/use') ||
