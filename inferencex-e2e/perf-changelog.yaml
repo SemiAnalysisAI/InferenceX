@@ -9873,5 +9873,5 @@
     - agentic-coding
   description:
     - "Append GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX c5120 (8P1D) and c6656 (10P1D) points using the agentx-harness 1.0.10 release already pinned on main."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4126
   append-only: true
