@@ -9843,3 +9843,9 @@
     - "Extend TP2 AgentX to concurrency 32 so TP-only overlaps DP2 at c32."
     - "Enable SGLANG_OPT_HIP_FLYDSL_MXFP8=1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4050
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Bump vLLM ROCm image from nightly-rocm100-5555a2d8 to nightly-rocm100-3f1bcfd8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4096
