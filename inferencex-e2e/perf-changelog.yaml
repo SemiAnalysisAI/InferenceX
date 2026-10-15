@@ -9931,3 +9931,13 @@
     - "Concurrency 1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24 and 32, with max-running-requests equal to concurrency."
     - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4141
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4) agentic-coding on MI355X via SGLang (lmsysorg/sglang-rocm:muse-spark-open, digest sha256:72065dfc0b87818ab415f96c0fc08848233d25f22b002ac8f28c33fad6ec82a4) with DFlash2 speculative decoding (RadixArk/Muse-Spark-Open-DFlash2, 8 draft tokens)."
+    - "Serve flags follow AMD's model card: AITER attention (SGLANG_USE_AITER=1, SGLANG_USE_AITER_UNIFIED_ATTN=1), FlyDSL MoE (MUSE_MOE_BACKEND=flydsl), page size 16, fp8_e4m3 KV, mem-fraction-static 0.85, triton draft attention, muse reasoning and tool-call parsers."
+    - "TP4/EP4 and TP8/EP8, both at conc 1, 4, 8, 12, 16 with GPU-resident KV (no offloading)."
+  pr-link: TBD
