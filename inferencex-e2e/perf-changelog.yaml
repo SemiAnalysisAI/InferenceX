@@ -9866,3 +9866,9 @@
   description:
     - "Upgrade agentx-harness from 1.0.9 to 1.0.10: pin SPAWN subagents to one client worker to prevent duplicate session state accumulating across workers. Metric collection, calculations, and exports are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4119
+
+- config-keys:
+    - glm5.2-fp8-b300-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4123
