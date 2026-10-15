@@ -276,6 +276,36 @@ def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
     assert [pr["number"] for pr in klaud.active_pulls(pulls, now, 7)] == [1, 3, 4]
 
 
+def test_capacity_wait_charges_one_budget_across_calls(tmp_path, monkeypatch):
+    clock = [0.0]
+    polls = iter(
+        [api.ReadError("clusters"), set(), set(), {"other"}, {"mi355x"}]
+        + [set()] * 20
+    )
+
+    def fetch(_policy):
+        result = next(polls)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(klaud, "fetch_capacity", fetch)
+    monkeypatch.setattr(klaud.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(klaud.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    monkeypatch.setattr(klaud, "CAPACITY_CALL_SECONDS", 180)
+    ledger = tmp_path / klaud.CAPACITY_LEDGER
+    wait = lambda: klaud.wait_for_capacity({"mi355x"}, ledger, 6)  # noqa: E731
+
+    assert wait() == 1
+    assert wait() == 0
+    assert json.loads(ledger.read_text()) == {"waited-seconds": 180}
+    assert wait() == 2
+    assert json.loads(ledger.read_text()) == {"waited-seconds": 360}
+    spent_at = clock[0]
+    assert wait() == 2
+    assert clock[0] == spent_at
+
+
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
     first_id = "1" * 16 + "-" + "2" * 16
     second_id = "3" * 16 + "-" + "4" * 16

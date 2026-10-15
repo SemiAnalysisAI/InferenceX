@@ -12,6 +12,7 @@ import secrets
 import shlex
 import subprocess
 import tempfile
+import time
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -36,6 +37,31 @@ from .models import (
 
 PRODUCERS = "producers.json"
 RETRY_NEXT_WAVE = frozenset({"capacity-deferred"})
+CAPACITY_LEDGER = "capacity-wait.json"
+CAPACITY_POLL_SECONDS = 60
+CAPACITY_CALL_SECONDS = 540
+
+
+def capacity_available(clusters: set[str]) -> bool:
+    try:
+        return clusters <= fetch_capacity(Policy())
+    except ReadError:
+        return False
+
+
+def wait_for_capacity(clusters: set[str], ledger: Path, budget_minutes: int) -> int:
+    waited = json.loads(ledger.read_text())["waited-seconds"] if ledger.exists() else 0
+    deadline = time.monotonic() + CAPACITY_CALL_SECONDS
+    while True:
+        if capacity_available(clusters):
+            return 0
+        if waited + CAPACITY_POLL_SECONDS > budget_minutes * 60:
+            return 2
+        if time.monotonic() + CAPACITY_POLL_SECONDS > deadline:
+            return 1
+        waited += CAPACITY_POLL_SECONDS
+        ledger.write_text(json.dumps({"waited-seconds": waited}) + "\n")
+        time.sleep(CAPACITY_POLL_SECONDS)
 
 
 def observation_key(row: dict) -> tuple:
@@ -854,13 +880,18 @@ def main() -> int:
     )
     capacity = commands.add_parser(
         "check-capacity",
-        help="Exit 0 with available nodes below 80%% utilization; otherwise nonzero, without printing telemetry",
+        help="Exit 0 with available nodes below 80%% utilization; otherwise nonzero, without printing telemetry. With --wait: 1 means call again, 2 means the wait budget is spent",
     )
     capacity.add_argument(
         "--cluster",
         required=True,
         action="append",
         help="Exact telemetry cluster; repeat for every possible recipe target",
+    )
+    capacity.add_argument(
+        "--wait",
+        action="store_true",
+        help="Poll for up to 9 minutes, charged to the KLAUD_CAPACITY_WAIT_MINUTES budget",
     )
     commands.add_parser(
         "check-stop",
@@ -1036,6 +1067,15 @@ def main() -> int:
                 parser.error("--max-candidates-per-run must be between 1 and 256")
             select(args.directory, args.max_candidates_per_run, args.execution_file)
             return 0
+        if args.wait:
+            budget = os.environ.get("KLAUD_CAPACITY_WAIT_MINUTES", "")
+            if not budget.isdigit() or "KLAUD_EVIDENCE" not in os.environ:
+                parser.error("--wait needs KLAUD_EVIDENCE and KLAUD_CAPACITY_WAIT_MINUTES")
+            return wait_for_capacity(
+                set(args.cluster),
+                Path(os.environ["KLAUD_EVIDENCE"]) / CAPACITY_LEDGER,
+                int(budget),
+            )
         return 0 if set(args.cluster) <= fetch_capacity(Policy()) else 1
     except ReadError as error:
         if args.command == "plan":

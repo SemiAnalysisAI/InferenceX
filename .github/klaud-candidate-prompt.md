@@ -48,12 +48,16 @@ maintainer ownership: leave PR/branch/labels/jobs intact, report handoff and sto
 Never add or remove it yourself.
 
 Check capacity before edits/branch/PR creation, every targeted dispatch, the final label
-transition and capacity-related recovery: `check-capacity --cluster ID` (repeat for ALL
-actual targets). Require fresh, available telemetry and utilization strictly below 80%.
+transition and capacity-related recovery: `check-capacity --cluster ID` (repeat --cluster for
+ALL actual targets). Require fresh, available telemetry and utilization strictly below 80%.
 Queue eligible work with normal scheduler controls; no priority overrides.
-If the check fails, report capacity-deferred and call finish. A utilization increase after
-dispatch never justifies cancelling healthy work. A benchmark capacity error alone is
-insufficient: recheck capacity before deciding to defer.
+Before the PR exists, a failed check means report capacity-deferred and call finish.
+Once the PR exists, wait instead: rerun the same command with `--wait` and a 600000 ms Bash
+timeout while it exits 1;
+exit 0 means proceed, exit 2 means the KLAUD_CAPACITY_WAIT_MINUTES budget is spent, so
+report capacity-deferred and call finish. Keep passing smoke evidence while waiting; never
+redispatch it. A utilization increase after dispatch never justifies cancelling healthy work.
+A benchmark capacity error alone is insufficient: recheck capacity before deciding to defer.
 
 Freeze the COMPLETE original public baseline point roster before attempts, using
 candidate.source.date, verified old-image producer IDs/SHAs and full recipe/workload/topology/

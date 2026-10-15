@@ -30,6 +30,7 @@ jobs:
     env:
       # Repair attempts after the initial update; the baseline is already published.
       MAX_REPAIRS: '5'
+      KLAUD_CAPACITY_WAIT_MINUTES: '120'
       KLAUD_BRANCH: klaud/auto-${{ inputs.candidate }}
       KLAUD_TEST_NAME: klaud-${{ github.run_id }}-${{ inputs.candidate }}
     steps:
