@@ -75,9 +75,11 @@ class EPBackend(abc.ABC):
 
     name: str = ""
     # "production" = an engine can select this transport today (vLLM `--all2all-backend`,
-    # SGLang `--moe-a2a-backend`); "candidate" = a real transport we benchmark that no engine
-    # ships a selector for, so its numbers describe the library, not a deployable config.
-    # Mirrored by hand in configs/platform_config.json `backend_maturity`; nothing checks the two agree.
+    # SGLang `--moe-a2a-backend`, or TensorRT-LLM's MoE communication strategy where vLLM exposes
+    # none); "candidate" = a real transport we benchmark that no engine ships a selector for, so its
+    # numbers describe the library, not a deployable config. An adapter whose engine runs only some
+    # of its modes sets it per row (nccl-ep). Mirrored by hand in configs/platform_config.json
+    # `backend_maturity`; nothing checks the two agree.
     maturity: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
     # Dispatch precisions the adapter realizes. BF16 is the universal control; an

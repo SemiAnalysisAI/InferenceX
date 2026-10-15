@@ -184,6 +184,8 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         backend._algorithm = "LL" if low_latency else "HT"
         backend._layout = module.Layout.RANK_MAJOR if low_latency else module.Layout.FLAT
         backend._bootstrap_comm = lambda: None
+        # create_buffer stamps the installed wheel into kernel_generation.
+        module.metadata = types.SimpleNamespace(version=lambda name: "0.2.0.dev20261005")
         backend._recv_window_for_test = types.SimpleNamespace(
             is_valid=True, close=lambda: None
         )
@@ -256,7 +258,7 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
     def test_ll_receive_grows_with_requested_ladder(self):
         module = self._module()
         spec = types.SimpleNamespace(max_tokens_per_rank=99)
-        for requested, expected in [(99, 256), (512, 512), (1024, 1024)]:
+        for requested, expected in [(99, 99), (512, 512), (1024, 1024)]:
             sized = self._backend(module, low_latency=True)
             sized.create_buffer(types.SimpleNamespace(max_tokens_per_rank=requested))
             self.assertEqual(sized.created_configs[0].max_dispatch_tokens_per_rank, expected)
@@ -287,7 +289,7 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         backend._comm.register_window.assert_called_once_with(
             backend._recv_x, flags=module.nccl_core.WindowFlag.COLL_SYMMETRIC
         )
-        self.assertEqual(backend._recv_x.shape, (8, 256, 7168))
+        self.assertEqual(backend._recv_x.shape, (8, 64, 7168))
         self.assertEqual(backend._recv_count.shape, (8,))
         self.assertIs(backend._recv_x_t.window, backend._recv_window)
 
