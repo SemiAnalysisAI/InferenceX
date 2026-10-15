@@ -354,7 +354,7 @@ PY
 }
 
 uccl_record_build() {
-  python3 - "$1/site/$UCCL_BUILD_RECORD" "$COLLX_UCCL_COMMIT" "${UCCL_BUILD_FLAGS[*]}" "$2" <<'PY'
+  python3 - "$1/site/$UCCL_BUILD_RECORD" "$COLLX_UCCL_COMMIT" "${3:-${UCCL_BUILD_FLAGS[*]}}" "$2" <<'PY'
 import json
 import sys
 
@@ -384,11 +384,21 @@ uccl_activate() {
 
 uccl_install() {
   local root="$1" arch="$2" source_dir="/tmp/collectivex-uccl-$COLLX_UCCL_COMMIT" arch_env sp
+  local -a flags=("${UCCL_BUILD_FLAGS[@]}")
+  # UCCL builds its EFA transport whenever EFA_HOME (/opt/amazon/efa) exists. The EFA pools'
+  # containers carry that directory beside an image rdma-core whose efadv.h predates the fields UCCL
+  # uses (h100-dgxc: efadv_qp_init_attr has no sl or flags), so the build fails. uccl-ep never
+  # leaves one node there, and inside one node UCCL starts no proxy, so those pools build without it.
+  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+    [ "${COLLX_NODES:-1}" -le 1 ] \
+      || { collx_log "ERROR: UCCL-EP across EFA needs an EFA build against the host rdma-core"; return 1; }
+    flags+=(EFA_HOME=/nonexistent)
+  fi
   if [ -e "$root" ] || [ -L "$root" ]; then
     rm -rf "$root" || { collx_log "ERROR: incomplete UCCL cache-reset failed"; return 1; }
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
-  collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (${UCCL_BUILD_FLAGS[*]})"
+  collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (${flags[*]})"
   # Some sglang/rocm images mark the system env externally-managed (PEP 668).
   { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
       || python3 -m pip install -q --disable-pip-version-check --no-input \
@@ -408,7 +418,7 @@ uccl_install() {
     arch_env="TORCH_CUDA_ARCH_LIST=$arch"
   fi
   ( cd "$source_dir/ep" \
-      && env "${UCCL_BUILD_FLAGS[@]}" "$arch_env" python3 setup.py install ) >&2 2>&1 \
+      && env "${flags[@]}" "$arch_env" python3 setup.py install ) >&2 2>&1 \
     || { collx_log "ERROR: UCCL ep extension build failed"; return 1; }
   # --no-deps: the wrapper's install_requires=["uccl"] resolves to the PyPI uccl-cu12 wheel, absent
   # on ROCm and wrong on CUDA too, since the from-source ep build already provides uccl.ep.
@@ -422,7 +432,8 @@ uccl_install() {
   mkdir -p "$root/site" \
     && cp -R "$sp"/deep_ep* "$sp"/uccl* "$root/site/" \
     || { collx_log "ERROR: UCCL cache population failed"; return 1; }
-  uccl_record_build "$root" "$arch" || { collx_log "ERROR: UCCL build record failed"; return 1; }
+  uccl_record_build "$root" "$arch" "${flags[*]}" \
+    || { collx_log "ERROR: UCCL build record failed"; return 1; }
   : > "$root/.ready"
 }
 
