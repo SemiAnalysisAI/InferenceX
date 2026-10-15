@@ -45,7 +45,7 @@ def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
     return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
 
 
-MULTI = dict(IS_MULTINODE="true", CONFIG_FILE="recipes/x.yaml")
+MULTI = dict(IS_MULTINODE="true")
 SINGLE = dict(IS_MULTINODE="false")
 
 
@@ -117,38 +117,25 @@ def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
     assert job_env(c, point, served)["MODEL_PATH"] == "/point/m"
 
 
-BUNDLE = """base:
-  model: {path: alias-a}
-override_x:
-  model: {path: alias-b}
-zip_override_y:
-  model: {path: [alias-c, "hf:org/M"]}
-"""
-
-
-@pytest.mark.parametrize(("recipe", "model", "paths"), [
-    (BUNDLE, "org/M", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
-    ("model: {path: /abs/m}\n", "org/Unstaged", {}),
-    ("model: {path: alias-a}\n", "org/Unstaged", LaunchError),
+@pytest.mark.parametrize(("model", "agentic", "overrides", "paths"), [
+    ("org/M", "0", (), {"hf:org/M": "nvme/m"}),
+    ("org/Unstaged", "0", (), LaunchError),
+    ("org/Unstaged", "1", (), {}),
+    ("org/M", "0", (Override(Match(), hub=True),), {}),
+    ("org/Unstaged", "0", (Override(Match(), hub=True),), {}),
 ])  # fmt: skip
-def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, recipe, model, paths):
-    mirror = tmp_path / "ws/benchmarks/multi_node/srt-slurm-recipes/r.yaml"
-    mirror.parent.mkdir(parents=True)
-    mirror.write_text(recipe)
-    c = cluster(tmp_path)
-    point = request(MODEL=model, GITHUB_WORKSPACE=str(tmp_path / "ws"))
+def test_the_bound_model_maps_to_its_checkpoint_unless_served_from_the_hub(
+    tmp_path, monkeypatch, model, agentic, overrides, paths
+):
+    monkeypatch.setitem(models.OVERRIDES, "c", overrides)
+    c, point = cluster(tmp_path), request(MODEL=model, IS_AGENTIC=agentic)
+    served = served_path(c, point, checkpoint(c, point))
     if paths is LaunchError:
         with pytest.raises(LaunchError, match="stages no checkpoint"):
-            model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
+            model_paths(c, point, served)
         return
-    resolved = model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
-    assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
-
-
-def test_missing_recipe_fails_before_model_resolution(tmp_path):
-    c, point = cluster(tmp_path), request(MODEL="org/M", GITHUB_WORKSPACE=str(tmp_path))
-    with pytest.raises(LaunchError, match="not in the recipe mirror"):
-        model_paths(c, point, "recipes/missing.yaml", "/m")
+    resolved = model_paths(c, point, served)
+    assert resolved == {name: str(tmp_path / path) for name, path in paths.items()}
 
 
 def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeypatch):

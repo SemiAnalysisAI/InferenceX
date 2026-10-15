@@ -53,7 +53,6 @@ output.mkdir(parents=True)
 """,
 }
 
-# The container's python3; its /logs mount lives under the test's tmp directory.
 PYTHON3 = f"""#!/bin/sh
 for arg; do
     shift
@@ -63,7 +62,6 @@ done
 exec "{sys.executable}" "$@"
 """
 
-# The container's uv: records each call and fails those naming STUB_UV_FAIL.
 UV = f"""#!{sys.executable}
 import json, os, sys
 with open(os.environ["STUB_UV_TRACE"], "a") as trace:
@@ -197,7 +195,6 @@ def test_single_node_shim_stages_the_eval_in_the_checkout_and_records_its_status
     assert [uv_step(argv) for argv in trace(tmp_path / "uv.jsonl")][:1] == ["install lm-eval[api]"]
     [run] = trace(tmp_path / "lm_eval.jsonl")
     assert run["tasks_found"] and run["patched"]
-    # MAX_MODEL_LEN 10240 is capped at the checkpoint's 8192; 4096 of it stays for the prompt.
     assert {"model=served-model", "num_concurrent=8", "max_length=8192"} <= set(model_args(run))
     assert run["argv"][run["argv"].index("--gen_kwargs") + 1].startswith("max_tokens=4096,")
     assert json.loads((checkout / "meta_env.json").read_text()) == {
@@ -257,7 +254,7 @@ def test_batched_lm_eval_defers_a_failed_concurrency_to_score_validation(
 ):
     staged = tmp_path / "eval_results"
     staged.mkdir()
-    (staged / "results_stub_conc8.json").write_text("{}")  # left behind by an earlier eval
+    (staged / "results_stub_conc8.json").write_text("{}")
     env = {**base_env, **MULTI_NODE, "STUB_LM_EVAL_FAIL_AT": "4"}
 
     assert evaluate(openai.url, "1 4 8", staged, environ=env) == 0
@@ -377,7 +374,6 @@ def test_eval_only_vendor_evals_wait_for_the_served_model(
     }  # fmt: skip
 
     assert evaluate(openai.url, "1", tmp_path / "out", environ=env) == 0
-    # The server lists only MODEL_NAME, so readiness passes only for the name eval requests use.
     expected = [("GET", "/v1/models"), ("GET", "/v1/chat/completions")]
     assert seen == (expected if polled else [])
 

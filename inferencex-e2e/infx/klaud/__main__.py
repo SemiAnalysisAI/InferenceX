@@ -11,13 +11,19 @@ import re
 import secrets
 import shlex
 import subprocess
+import tempfile
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
 from .api import PUBLIC, ReadError, capacity_context, fetch_capacity, fetch_catalog
-from .github import VerificationError, items as github_items, read as github_read
+from .github import (
+    VerificationError,
+    download_json,
+    items as github_items,
+    read as github_read,
+)
 from .models import (
     CandidateOutcome,
     OwnedCandidate,
@@ -29,6 +35,7 @@ from .models import (
 )
 
 PRODUCERS = "producers.json"
+RETRY_NEXT_WAVE = frozenset({"capacity-deferred"})
 
 
 def observation_key(row: dict) -> tuple:
@@ -70,10 +77,9 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
             family = f"{path.relative_to(root).as_posix()}:{key}"
             try:
                 entries = generate_test_config_sweep(
-                    SimpleNamespace(config_keys=[key]), configs, runners
+                    SimpleNamespace(config_keys=[key]), configs, runners, root
                 )
             except ValueError:
-                # One unrenderable family must not hide unrelated working recipes.
                 print(f"::warning::Klaud live-family-unrenderable: {family}")
                 continue
             for entry in entries:
@@ -100,15 +106,10 @@ def choose(
     occupied: set[str],
     families: dict[tuple, set[str]],
 ) -> list[dict]:
-    # Preserve claims made before the agent's spelling was corrected.
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     seen = set()
-    # The public feed is benchmark history, not an image-release authority.
-    # Every current family with an exact published baseline is eligible for
-    # independent upstream inspection by Klaud.
     valid = [item for item in items if item["source-status"] == "baseline"]
-    # Prefer the latest matching baseline within each live family before shuffling.
     for item in sorted(
         valid,
         key=lambda item: (item["source"]["date"], item["source-id"]),
@@ -158,8 +159,7 @@ def choose(
     return selected
 
 
-def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set[str]:
-    """Return same-base candidates recently given an agent, as a soft ordering hint."""
+def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str, str | None]:
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     try:
         runs = github_items(
@@ -169,38 +169,75 @@ def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set
         )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return set()
-    result = set()
+        return {}
+    dated = []
     for run in runs:
         try:
             created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
-            if created < cutoff or run.get("head_sha") != base:
-                continue
+            if created >= cutoff:
+                dated.append((created, int(run["id"])))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    result: dict[str, str | None] = {}
+    for _, run_id in sorted(dated, reverse=True):
+        try:
             artifacts = github_items(
-                repository, f"actions/runs/{int(run['id'])}/artifacts?per_page=100", "artifacts"
+                repository, f"actions/runs/{run_id}/artifacts?per_page=100", "artifacts"
             )
-        except (
-            AttributeError,
-            KeyError,
-            OSError,
-            TypeError,
-            ValueError,
-            subprocess.SubprocessError,
-        ):
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
             continue
         for artifact in artifacts:
             try:
                 match = re.fullmatch(
                     r"klaud-candidate-([0-9a-f]{16}-[0-9a-f]{16})", artifact["name"]
                 )
-                if match and not artifact.get("expired", True):
-                    result.add(match[1])
+                if not match or artifact.get("expired", True) or match[1] in result:
+                    continue
             except (AttributeError, KeyError, TypeError):
                 continue
+            result[match[1]] = recorded_outcome(repository, artifact)
     return result
 
 
-def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: int) -> None:
+def recorded_outcome(repository: str, artifact: dict) -> str | None:
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, artifact, Path(scratch))
+            outcome = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())[
+                "candidate-outcome"
+            ]
+            return CandidateOutcome.model_validate(outcome).outcome
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            subprocess.SubprocessError,
+        ):
+            return None
+
+
+def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
+    fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
+    deferred = [
+        candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
+    ]
+    return fresh + deferred
+
+
+def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
+    cutoff = now - timedelta(days=stale_days)
+    return [
+        pr
+        for pr in pulls
+        if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
+        or datetime.fromisoformat(pr["updated_at"].replace("Z", "+00:00")) >= cutoff
+    ]
+
+
+def plan(
+    root: Path, directory: Path, review_batch_size: int, cooldown_hours: int, stale_pr_days: int
+) -> None:
     from . import claims
 
     policy = Policy()
@@ -233,10 +270,9 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    recent = recent_candidate_ids(repository, base, cooldown_hours)
-    candidates = [candidate for candidate in candidates if candidate["id"] not in recent] + [
-        candidate for candidate in candidates if candidate["id"] in recent
-    ]
+    candidates = order_by_cooldown(
+        candidates, recent_candidate_outcomes(repository, cooldown_hours)
+    )
     candidates = candidates[:review_batch_size]
     contexts = [
         {
@@ -262,8 +298,9 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
             "branch": pr["head"]["ref"],
             "head": pr["head"]["sha"],
         }
-        for page in pulls
-        for pr in page
+        for pr in active_pulls(
+            [pr for page in pulls for pr in page], datetime.now(UTC), stale_pr_days
+        )
     ]
     if candidates:
         for pr in open_prs:
@@ -291,7 +328,6 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
         json.dumps(contexts, indent=2, allow_nan=False) + "\n"
     )
     (directory / "open-prs.json").write_text(json.dumps(open_prs, indent=2) + "\n")
-    # Private selection hints for the read-only reviewer; excluded from artifacts.
     (directory / "capacity.json").write_text(json.dumps(capacity) + "\n")
     if filename := os.environ.get("GITHUB_OUTPUT"):
         schema = PRReview.model_json_schema(by_alias=True)
@@ -502,7 +538,6 @@ def save_diagnostics(
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 failure = "lifecycle-unverified"
     if failure is not None:
-        # Never echo invalid structured output, which could contain private data.
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
             outcome="unexpected-error",
@@ -659,8 +694,6 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-            # The final sweep must reproduce every unretired frozen point; an agent cannot fix a
-            # roster that the current family no longer generates.
             missing = missing_baseline_points(
                 validation.canonical_matrix(
                     os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
@@ -791,7 +824,13 @@ def main() -> int:
         "--cooldown-hours",
         type=int,
         required=True,
-        help="Soft same-base candidate cooldown before review (1-168)",
+        help="Hours a recently attempted candidate waits before another agent (1-168)",
+    )
+    prepare.add_argument(
+        "--stale-pr-days",
+        type=int,
+        required=True,
+        help="Days without activity after which another open PR stops owning a family (1-90)",
     )
     regeneration = commands.add_parser(
         "regenerate-producers",
@@ -885,7 +924,7 @@ def main() -> int:
             if args.command == "prepare-baseline":
                 if args.output.exists():
                     Baseline.model_validate_json(args.output.read_text())
-                    return 0  # A retry never silently refreshes the baseline.
+                    return 0
                 session = current_session()
                 context = json.loads(
                     (Path(os.environ["KLAUD_EVIDENCE"]) / "candidate.json").read_text()
@@ -929,11 +968,8 @@ def main() -> int:
             try:
                 reconcile(session)
             except PendingCleanup:
-                # Healthy child work keeps its claim for the next recovery pass.
                 pass
             else:
-                # This trusted step also releases no-PR/no-run sessions whose SDK
-                # response was missing or unverifiable.
                 claims.release_family(
                     session.repository,
                     session.candidate,
@@ -982,7 +1018,15 @@ def main() -> int:
                 parser.error("--review-batch-size must be between 1 and 256")
             if not 1 <= args.cooldown_hours <= 168:
                 parser.error("--cooldown-hours must be between 1 and 168")
-            plan(args.root, args.directory, args.review_batch_size, args.cooldown_hours)
+            if not 1 <= args.stale_pr_days <= 90:
+                parser.error("--stale-pr-days must be between 1 and 90")
+            plan(
+                args.root,
+                args.directory,
+                args.review_batch_size,
+                args.cooldown_hours,
+                args.stale_pr_days,
+            )
             return 0
         if args.command == "regenerate-producers":
             regenerate_producers(args.directory)
@@ -995,7 +1039,6 @@ def main() -> int:
         return 0 if set(args.cluster) <= fetch_capacity(Policy()) else 1
     except ReadError as error:
         if args.command == "plan":
-            # ReadError contains fixed codes only, never response bodies or credentials.
             message = f"Klaud Cold preparation failed: {error}"
             print(f"::error::{message}")
             if filename := os.environ.get("GITHUB_STEP_SUMMARY"):

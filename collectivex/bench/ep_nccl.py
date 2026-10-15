@@ -11,10 +11,9 @@ GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per c
                  contract used by inference frameworks, followed by an unweighted rank-sum combine.
 Both modes use the existing CollectiveX combine oracle.
 
-BF16 only for now: v0.2 grows a real quantization surface (DispatchQuantizationRecipe.FWD /
-DS_FP8E3M4 for FP8 dispatch, experimental CombineQuantizationRecipe.NVFP4), but wiring it into
-the fp8_consume model is its own bring-up, so this adapter keeps the base BF16-only
-SUPPORTED_PRECISIONS.
+FP8 is enabled only for low-latency decode, using NCCL EP's native DS_FP8E3M4 recipe.
+Received E4M3 values are dequantized into a BF16 staging plane, so the BF16 combine and
+correctness oracle remain the common comparison contract. Normal mode remains BF16-only.
 
 Communicator bootstrap: NCCL EP forms its OWN NCCL communicator (separate from PyTorch's
 process group) via ``Communicator.init(nranks, rank, unique_id)``. Upstream broadcasts the
@@ -65,15 +64,34 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 # ncclUniqueId is a fixed 128-byte blob; we still broadcast the length first so a future size
 # change can't silently truncate the id on the non-root ranks.
 _UNIQUE_ID_MAX_BYTES = 256
+_FP8_BLOCK_SIZE = 128
 
-# Low-latency receive sizing, deliberately two numbers, mirroring ep_deepep_v2: _LL_BUFFER_CAP
-# sizes the pre-allocated receive (and so the transport footprint), _LL_LADDER_CAP bounds which
-# token counts are measured. Separating them lets the ladder be clamped around a kernel defect
-# without moving the footprint and silently re-basing the rungs that remain. The ladder runs the
-# full buffer because the v0.2 LL combine recv pipeline carries DeepEP's #642 shared-memory fence
-# (without it the top rung corrupts); the correctness oracle re-verifies that rung on every run.
-_LL_BUFFER_CAP = 256
-_LL_LADDER_CAP = _LL_BUFFER_CAP
+# Preserve the historical receive footprint for short ladders; grow for larger requests.
+_LL_BUFFER_MIN = 256
+
+
+def _blockwise_cast_to_fp8(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Untimed oracle reference for native DS per-128-channel quantization."""
+    if x.dim() != 2 or x.size(1) % _FP8_BLOCK_SIZE:
+        raise ValueError(
+            "NCCL EP FP8 requires a 2D hidden dimension divisible by "
+            f"{_FP8_BLOCK_SIZE}, got {tuple(x.shape)}"
+        )
+    rows, hidden = x.shape
+    blocks = x.view(rows, -1, _FP8_BLOCK_SIZE)
+    amax = blocks.abs().float().amax(dim=2).clamp(1e-4)
+    values = (blocks * (448.0 / amax.unsqueeze(2))).to(torch.float8_e4m3fn)
+    return values.view(rows, hidden), (amax / 448.0).view(rows, -1)
+
+
+def _blockwise_cast_back_into(
+    values: torch.Tensor, scales: torch.Tensor, out: torch.Tensor
+) -> torch.Tensor:
+    hidden = values.shape[-1]
+    value_blocks = values.to(torch.float32).view(*values.shape[:-1], -1, _FP8_BLOCK_SIZE)
+    scale_blocks = scales.to(torch.float32).view(*scales.shape, 1)
+    out.copy_((value_blocks * scale_blocks).view(*values.shape[:-1], hidden).to(torch.bfloat16))
+    return out
 
 
 class NCCLEPBackend(EPBackend):
@@ -94,6 +112,7 @@ class NCCLEPBackend(EPBackend):
     # Graphed HT decode appends "-gum1": its communicator runs graph usage mode 1 (`_comm_config`).
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
     SUPPORTED_MODES = ("normal", "low-latency")
+    SUPPORTED_PRECISIONS = ("bf16", "fp8")
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     zero_copy = True
     _ll_expert_major = False
@@ -125,6 +144,10 @@ class NCCLEPBackend(EPBackend):
         self.num_local_experts = self.experts_per_rank
         self._internode = world_size > int(args.scale_up_domain)
         self._ll = self.mode == "low-latency"
+        self._fp8 = getattr(self, "precision", "bf16") == "fp8"
+        if self._fp8 and (not self._ll or args.phase != "decode"):
+            raise ValueError("NCCL EP FP8 is enabled for low-latency decode only")
+        self.stage_device_work = self._fp8
         # LL layout: rank-major (TensorRT-LLM's NCCL EP contract, the default) or expert-major
         # (DeepEP LL's contract, as vLLM/SGLang decode consume it). Both are native LL layouts.
         layout = os.environ.get("COLLX_NCCL_LL_LAYOUT", "rank-major")
@@ -133,6 +156,10 @@ class NCCLEPBackend(EPBackend):
         self._ll_expert_major = self._ll and layout == "expert-major"
         # LL rank-major follows the inference-framework contract. Direct windows are scale-up only.
         self.zero_copy = (not self._ll or not self._internode) and not self._ll_expert_major
+        # NCCL EP v0.2 supports rank-major LL zero-copy only for unquantized and FWD dispatch.
+        # DS_FP8E3M4 generates scales internally and must use its staged LL path.
+        if self._ll and self._fp8:
+            self.zero_copy = False
         if self._ll_expert_major:
             # Weighted source-side combine over a per-expert padded receive: deepep-v2 LL's
             # contract, so this is the like-for-like row against the DeepEP-API backends.
@@ -154,6 +181,12 @@ class NCCLEPBackend(EPBackend):
             # Only graphed HT captures a host NCCL collective (the routing ncclAllGather), so
             # only its rows change with the communicator's graph usage mode.
             self.kernel_generation = f"{type(self).kernel_generation}-gum1"
+        if self._fp8:
+            self.kernel_generation = f"{self.kernel_generation}-fp8-ds-e3m4"
+            self.dispatch_dtype = "fp8-e4m3fn"
+            self.dispatch_value_bytes = 1
+            self.dispatch_scale_bytes_per_copy = (args.hidden // _FP8_BLOCK_SIZE) * 4
+            self._dequant_into = self.fused_quantize(_blockwise_cast_back_into)
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
@@ -166,7 +199,10 @@ class NCCLEPBackend(EPBackend):
         # send_only=0 runs each dispatch/combine as a complete SEND|RECV operation.
         # FWD pass carries top-k weights on dispatch (HT) and forbids them on the HT combine
         # input (the combine is a plain rank sum).
-        self._dispatch_cfg = DispatchConfig(send_only=0, round_scales=0)
+        dispatch_kwargs = {"send_only": 0, "round_scales": 0}
+        if self._fp8:
+            dispatch_kwargs["quantization_recipe"] = nccl_ep.DispatchQuantizationRecipe.DS_FP8E3M4
+        self._dispatch_cfg = DispatchConfig(**dispatch_kwargs)
         self._combine_cfg = CombineConfig(send_only=0)
         self._comm = None
         self._ep_group = None
@@ -175,9 +211,7 @@ class NCCLEPBackend(EPBackend):
         self._bound = None
 
     def buffer_cap(self, args):
-        if self._ll:
-            # Bounds which token counts are MEASURED; see the constants above.
-            return _LL_LADDER_CAP
+        # Override EPBackend's shared 256-token LL default; receive sizing grows with the ladder.
         return None
 
     # ---- helpers -----------------------------------------------------------------------------
@@ -251,21 +285,24 @@ class NCCLEPBackend(EPBackend):
     def create_buffer(self, spec):
         """Bootstrap the communicator, create the EP group sized from the ladder maximum, and
         allocate the persistent receive/combine buffers reused across every ladder shape."""
-        # Sized from the BUFFER cap, not from the measured ladder, so clamping the ladder
-        # around the combine race does not also shrink the transport footprint -- which drives
-        # recv-slot memory traffic and would change what the remaining rungs measure.
-        self.max_dispatch = _LL_BUFFER_CAP if self._ll else spec.max_tokens_per_rank
+        # Unit tests construct a deliberately partial adapter without __init__.
+        self._fp8 = getattr(self, "_fp8", False)
+        self.max_dispatch = (
+            max(_LL_BUFFER_MIN, spec.max_tokens_per_rank) if self._ll else spec.max_tokens_per_rank
+        )
         hidden = self.args.hidden
         self._bootstrap_comm()
         # max_recv_tokens_per_rank: HT requires >0 and >= max_dispatch; LL auto-derives when 0.
         # world*max_dispatch is the recv-slot budget (every peer sends all its tokens here).
         max_recv = self.max_dispatch * self.world_size
+        if self._fp8 and hidden % _FP8_BLOCK_SIZE:
+            raise ValueError("NCCL EP DS FP8 requires hidden divisible by 128")
         config = GroupConfig(
             algorithm=self._algorithm,
             num_experts=self.args.experts,
             max_dispatch_tokens_per_rank=self.max_dispatch,
             max_recv_tokens_per_rank=max_recv,
-            max_token_bytes=hidden * 2,  # bfloat16 payload
+            max_token_bytes=hidden * 2,  # BF16 input/combine bounds FP8 payload plus scales
             zero_copy=ZeroCopyMode.ON if self.zero_copy else ZeroCopyMode.OFF,
         )
         self._ep_group = nccl_ep.Group.create(self._comm, config)
@@ -274,21 +311,37 @@ class NCCLEPBackend(EPBackend):
         if self._ll_expert_major:
             # EXPERT_MAJOR recv: [num_local_experts, max_dispatch*num_ranks, hidden].
             slots = self.max_dispatch * self.world_size
-            self._recv_x = torch.empty(
-                (self.num_local_experts, slots, hidden), dtype=torch.bfloat16, device=dev
+            self._recv_x = nccl_core.torch.empty(
+                (self.num_local_experts, slots, hidden),
+                dtype=torch.float8_e4m3fn if self._fp8 else torch.bfloat16, device=dev
             )
             # Per-local-expert received-token counts, written by NCCL EP during dispatch.
             self._recv_count = torch.empty(
                 (self.num_local_experts,), dtype=torch.int32, device=dev
             )
-            # Zeroed scratch the combine oracle scatters the transformed rows into.
-            self._combine_scratch = torch.empty_like(self._recv_x)
+            self._combine_scratch = nccl_core.torch.empty(
+                (self.num_local_experts, slots, hidden), dtype=torch.bfloat16, device=dev
+            )
+            if self._fp8:
+                self._recv_scales = nccl_core.torch.empty(
+                    (self.num_local_experts, slots, hidden // _FP8_BLOCK_SIZE),
+                    dtype=torch.float32, device=dev,
+                )
             self._recv_count_t = self._t(self._recv_count)
         elif self._ll:
             # RANK_MAJOR receive: [source rank, source slot, hidden].
             self._recv_x = nccl_core.torch.empty(
+                (self.world_size, self.max_dispatch, hidden),
+                dtype=torch.float8_e4m3fn if self._fp8 else torch.bfloat16, device=dev
+            )
+            self._combine_scratch = nccl_core.torch.empty(
                 (self.world_size, self.max_dispatch, hidden), dtype=torch.bfloat16, device=dev
             )
+            if self._fp8:
+                self._recv_scales = nccl_core.torch.empty(
+                    (self.world_size, self.max_dispatch, hidden // _FP8_BLOCK_SIZE),
+                    dtype=torch.float32, device=dev,
+                )
             # Per-source-rank received-token counts, written during dispatch.
             self._recv_count = torch.empty(
                 (self.world_size,), dtype=torch.int32, device=dev
@@ -341,6 +394,9 @@ class NCCLEPBackend(EPBackend):
         else:
             self._recv_window = None
             self._recv_x_t = self._t(self._recv_x)
+            if self._fp8:
+                self._recv_scales_t = self._t(self._recv_scales)
+                self._combine_x_t = self._t(self._combine_scratch)
 
     def _ensure_handle(self, p):
         """Bind the group's single handle to p's routing, creating it on first use.
@@ -367,6 +423,7 @@ class NCCLEPBackend(EPBackend):
         the oracle passes), never inside a timed window. Re-entering with the already-bound
         problem returns immediately without a collective or a sync.
         """
+        self._fp8 = getattr(self, "_fp8", False)
         cached = getattr(p, "_nccl", None)
         if cached is not None:
             if self._bound is not cached:
@@ -382,9 +439,11 @@ class NCCLEPBackend(EPBackend):
             # Expert-major applies the gate in its combine kernel, not on dispatch. Wrapped once
             # per handle: `time_us` charges the wrapper's host work to the window.
             h.combine_weights_t = self._t(p.topk_weights)
+            h.dispatch_inputs = DispatchInputs(tokens=h.in_tokens_t)
         else:
             # HT carries weights on dispatch; LL rank-major transports them with dispatch too.
             h.in_weights_t = self._t(p.topk_weights)
+            h.dispatch_inputs = DispatchInputs(tokens=h.in_tokens_t, topk_weights=h.in_weights_t)
         # combined output is restored to original token order: [num_tokens, hidden].
         h.out = torch.empty((p.T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
         h.out_t = self._t(h.out)
@@ -403,6 +462,16 @@ class NCCLEPBackend(EPBackend):
         # LL takes layout_info only on dispatch (the API forbids it on create/update); HT needs
         # it here so this problem's counters receive its own metadata-exchange results.
         h.layout_info = ht_layout_info
+        if self._fp8:
+            if self._ll_expert_major:
+                h.dispatch_outputs = DispatchOutputs(tokens=self._recv_x_t, scales=self._recv_scales_t)
+                h.dispatch_layout_info = LayoutInfo(expert_counters=self._recv_count_t)
+            else:
+                h.dispatch_outputs = DispatchOutputs(
+                    tokens=self._recv_x_t, topk_weights=self._recv_w_t,
+                    topk_idx=self._recv_idx_t, scales=self._recv_scales_t,
+                )
+                h.dispatch_layout_info = LayoutInfo(src_rank_counters=self._recv_count_t)
         if self._handle is None:
             self._handle = self._ep_group.create_handle(
                 self._layout,
@@ -452,6 +521,13 @@ class NCCLEPBackend(EPBackend):
 
     # ---- transport contract ------------------------------------------------------------------
 
+    def semantic_payload(self, x):
+        if not self._fp8:
+            return x
+        values, scales = _blockwise_cast_to_fp8(x)
+        out = torch.empty_like(x, dtype=torch.bfloat16)
+        return _blockwise_cast_back_into(values, scales, out)
+
     def dispatch(self, p):
         h = self._ensure_handle(p)
         stream = self._stream()
@@ -470,10 +546,14 @@ class NCCLEPBackend(EPBackend):
             # LL EXPERT_MAJOR: tokens in, 3D per-expert padded tokens out, per-expert recv
             # counts written into expert_counters. No weights on the dispatch (the gate is
             # applied by the combine kernel at the source).
+            if self._fp8:
+                dispatch_outputs = h.dispatch_outputs
+                layout_info = h.dispatch_layout_info
+            else:
+                dispatch_outputs = DispatchOutputs(tokens=self._recv_x_t)
+                layout_info = LayoutInfo(expert_counters=self._recv_count_t)
             h.handle.dispatch(
-                DispatchInputs(tokens=h.in_tokens_t),
-                DispatchOutputs(tokens=self._recv_x_t),
-                layout_info=LayoutInfo(expert_counters=self._recv_count_t),
+                h.dispatch_inputs, dispatch_outputs, layout_info=layout_info,
                 config=self._dispatch_cfg,
                 stream=stream,
             )
@@ -481,14 +561,16 @@ class NCCLEPBackend(EPBackend):
             h.recv_count = self._recv_count
         elif self._ll:
             # LL RANK_MAJOR returns one plane per source rank.
+            if self._fp8:
+                dispatch_outputs = h.dispatch_outputs
+                layout_info = h.dispatch_layout_info
+            else:
+                dispatch_outputs = DispatchOutputs(
+                    tokens=self._recv_x_t, topk_weights=self._recv_w_t, topk_idx=self._recv_idx_t
+                )
+                layout_info = LayoutInfo(src_rank_counters=self._recv_count_t)
             h.handle.dispatch(
-                DispatchInputs(tokens=h.in_tokens_t, topk_weights=h.in_weights_t),
-                DispatchOutputs(
-                    tokens=self._recv_x_t,
-                    topk_weights=self._recv_w_t,
-                    topk_idx=self._recv_idx_t,
-                ),
-                layout_info=LayoutInfo(src_rank_counters=self._recv_count_t),
+                h.dispatch_inputs, dispatch_outputs, layout_info=layout_info,
                 config=self._dispatch_cfg,
                 stream=stream,
             )
@@ -500,7 +582,7 @@ class NCCLEPBackend(EPBackend):
             # HT FLAT: tokens + top-k weights in (FWD requires weights); received tokens,
             # received top-k weights and GLOBAL top-k expert ids out.
             h.handle.dispatch(
-                DispatchInputs(tokens=h.in_tokens_t, topk_weights=h.in_weights_t),
+                h.dispatch_inputs,
                 DispatchOutputs(
                     tokens=self._recv_x_t,
                     topk_weights=self._recv_w_t,
@@ -516,9 +598,11 @@ class NCCLEPBackend(EPBackend):
         return h
 
     def stage(self, p, h):
-        # BF16 combine input is the received buffer itself; HT needs received rows only.
-        # Still an nccl.ep tensor wrapper, not a torch tensor; shared code passes it through.
-        h.combine_input = self._recv_x_t if self._ll else h.combine_in_t
+        if self._fp8:
+            self._dequant_into(self._recv_x, self._recv_scales, self._combine_scratch)
+            h.combine_input = self._combine_x_t
+        else:
+            h.combine_input = self._recv_x_t if self._ll else h.combine_in_t
 
     def combine(self, p, h):
         stream = self._stream()
@@ -550,22 +634,31 @@ class NCCLEPBackend(EPBackend):
 
     def _ll_inspect_dispatch(self, p, h):
         """Flat valid-slot view over the RANK_MAJOR inference-framework receive model."""
-        recv_bf16 = h.recv_x  # [source rank, source slot, hidden] BF16
+        recv_bf16 = h.recv_x
         slots = recv_bf16.shape[1]
         counts = h.recv_count.to(torch.int64)
         valid = torch.arange(slots, device=recv_bf16.device).unsqueeze(0) < counts.unsqueeze(1)
         source_rank, source_slot = valid.nonzero(as_tuple=True)
         h.source_rank = source_rank
         h.source_slot = source_slot
+        payload = recv_bf16[source_rank, source_slot]
+        if self._fp8:
+            payload = _blockwise_cast_back_into(
+                payload, self._recv_scales[source_rank, source_slot], torch.empty_like(payload, dtype=torch.bfloat16)
+            )
         return self._local_id_view(
-            recv_bf16[source_rank, source_slot], h.recv_idx[source_rank, source_slot],
+            payload, h.recv_idx[source_rank, source_slot],
             h.recv_w[source_rank, source_slot], self.num_local_experts,
         )
 
     def inspect_dispatch(self, p, h):
         if self._ll_expert_major:
             # EXPERT_MAJOR is deepep-v2 LL's padded [E, S, hidden] receive.
-            return self._expert_major_view(h, h.recv_x, h.recv_count)
+            payload = h.recv_x
+            if self._fp8:
+                self._dequant_into(h.recv_x, self._recv_scales, self._combine_scratch)
+                payload = self._combine_scratch
+            return self._expert_major_view(h, payload, h.recv_count)
         if self._ll:
             return self._ll_inspect_dispatch(p, h)
         # HT FLAT normal recv: front-packed to recv_total_counter, one row per received token.
@@ -583,13 +676,14 @@ class NCCLEPBackend(EPBackend):
 
     def _ll_combine_transformed(self, p, h, transformed):
         """Scatter pre-reduced oracle rows into the LL combine plane."""
-        combine_buf = self._recv_x
+        combine_buf = self._combine_scratch if self._fp8 else self._recv_x
         combine_buf.zero_()
         combine_buf[h.source_rank, h.source_slot] = transformed.to(combine_buf.dtype)
         stream = self._stream()
         h.handle.combine(
             CombineInputs(
-                tokens=self._window_t(combine_buf) if self.zero_copy else self._t(combine_buf)
+                tokens=self._combine_x_t if self._fp8 else
+                (self._window_t(combine_buf) if self.zero_copy else self._t(combine_buf))
             ),
             CombineOutputs(tokens=h.out_t),
             config=self._combine_cfg,

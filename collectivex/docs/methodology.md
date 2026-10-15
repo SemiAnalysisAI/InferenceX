@@ -82,7 +82,10 @@ inside it. Compiling the quantize reduces this rather than causing it. An eager 
 quantize op into an already-busy stream, so the small-T end of an FP8 `normal` row is the least
 production-representative number the suite emits. Compare FP8 and BF16 at the top of the ladder.
 `low-latency` rows are unaffected: those kernels quantize internally or take pre-quantized input by
-API contract. NCCL EP is BF16-only this release, so its cells carry the control alone. The
+API contract. NCCL EP supports FP8 only for low-latency decode, using native DS_FP8E3M4
+dispatch with zero-copy disabled and BF16 combine. Native-consume roundtrip excludes
+dequantization staging; normal mode and prefill remain BF16-only.
+The
 per-backend precision set lives in `sweep_matrix.py`'s `BACKEND_PRECISIONS` and a backend never
 emits a case for a precision it does not support. `normal`-mode cases use the
 `layout-and-dispatch-v1` semantics. `low-latency` cases use each backend's decode-kernel semantics
@@ -332,9 +335,10 @@ every check, without changing its contract.
 Only the launch mechanism changes; every family keeps its eager meaning:
 
 - **Fresh-entry components** (`roundtrip`, `dispatch`, `combine`) capture one pair with event
-  nodes around the timed window. Each timed replay starts behind a device-side rank barrier (an
-  all-reduce, then a spin of fixed wall time, calibrated per GPU because `torch.cuda._sleep`
-  counts SM cycles); without it b200 EP16 ranks entered ~75 µs apart. A rank whose host launches
+  nodes around the timed window. An all-reduce is captured before the first timing event,
+  including its stream dependencies, so alignment stays outside the measured interval without
+  a host-side handoff or spin kernel. This reduces skew but does not guarantee simultaneous
+  release across ranks. A rank whose host launches
   late still stalls the others, so these series publish **only p50** (p90/p95/p99 and the matching
   token rate are null). Component origin is `cuda-graph-replay`.
 - **The chained family** (`pair_period`, floors, health) captures each sibling chain as one graph

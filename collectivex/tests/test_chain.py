@@ -241,19 +241,18 @@ class CudaGraphRoundtrip(unittest.TestCase):
         backend.mode, backend.CUDA_GRAPH_MODES = "normal", ("normal",)
         return backend
 
-    def _aligned_replays(self, calls):
-        """Replays preceded by the device-side rank barrier (all-reduce, then the spin)."""
-        return [i for i, call in enumerate(calls)
-                if call == "graph_replay" and calls[i - 2:i] == ["all_reduce", "align_spin"]]
-
-    def test_every_timed_replay_starts_behind_a_device_side_rank_barrier(self):
-        # Without it each replay restarts from the preceding sync and ranks enter ~75us apart.
+    def test_alignment_is_captured_before_the_timed_window_without_spin(self):
         backend = self._graph_backend()
         with mock.patch.dict(os.environ, {}, clear=True), \
                 trace_torch(backend.clock, backend.calls):
             backend.benchmark_component("roundtrip", new_problem(), warmup=2, iters=3)
-        replays = [i for i, call in enumerate(backend.calls) if call == "graph_replay"]
-        self.assertEqual(self._aligned_replays(backend.calls), replays[2:5])
+        calls = backend.calls
+        begin, end = calls.index("capture_begin"), calls.index("capture_end")
+        first_event = calls.index("record", begin)
+        self.assertEqual(calls[begin:first_event].count("all_reduce"), 1)
+        self.assertNotIn("all_reduce", calls[first_event:end])
+        self.assertNotIn("all_reduce", calls[end:])
+        self.assertNotIn("align_spin", calls)
 
     def test_the_graph_chain_is_one_capture_of_unrolled_pairs_per_sibling(self):
         iters, drop = 5, 1
@@ -269,7 +268,11 @@ class CudaGraphRoundtrip(unittest.TestCase):
         for lo, hi in zip(begin, end):
             self.assertEqual(ops_only(calls[lo:hi]), ["dispatch", "stage", "combine"] * iters)
         self.assertEqual(calls.count("graph_replay"), 4)
-        self.assertEqual(len(self._aligned_replays(calls)), 2)
+        self.assertNotIn("align_spin", calls)
+        for lo, hi in zip(begin, end):
+            first_event = calls.index("record", lo)
+            self.assertEqual(calls[lo:first_event].count("all_reduce"), 1)
+            self.assertNotIn("all_reduce", calls[first_event:hi])
         self.assertEqual({len(series[k]) for k in ("pair", "dispatch", "combine")}, {iters - drop})
         self.assertEqual(len(series["start_to_start"]), iters - drop - 1)
         self.assertTrue(series["combined"].cloned)
@@ -290,25 +293,6 @@ class CudaGraphRoundtrip(unittest.TestCase):
 
 
 class GraphAlignmentAndValueCheck(unittest.TestCase):
-    def test_the_alignment_spin_is_sized_to_wall_time_not_a_cycle_count(self):
-        # A GPU spinning twice as fast (the probe spin takes half the time) must be handed twice
-        # the cycles, so every rank releases after the same wall time whatever its SM clock.
-        spins = []
-        fake = types.SimpleNamespace(cuda=types.SimpleNamespace(
-            _sleep=spins.append, synchronize=lambda: None,
-            Event=lambda **kwargs: types.SimpleNamespace(
-                record=lambda: None, elapsed_time=lambda other: probe_ms,
-            ),
-        ))
-        timing = ep_timing.GraphTiming(_ChainBackend())
-        results = {}
-        for probe_ms in (0.1, 0.05):  # the 200k-cycle probe took 100us, then 50us
-            with mock.patch.dict(sys.modules, {"torch": fake}):
-                timing.calibrate_align_spin()
-            results[probe_ms] = timing.align_cycles
-        self.assertEqual(results[0.1], 200_000)  # the default 100us spin at 2 cycles/ns
-        self.assertEqual(results[0.05], 2 * results[0.1])
-
     def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
         backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
         order, combined = [], _Combined(1.0)

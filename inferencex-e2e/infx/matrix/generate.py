@@ -6,18 +6,23 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 
 from infx.clusters import CLUSTER_LABEL_PREFIX
-from infx.config import repository_root
+from infx.clusters.slurm import Fabric
+from infx.srt_slurm.variants import deep_merge, expand_variants
+from infx.srt_slurm.workload import resolve_fabric
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
     Fields,
+    config_root,
     load_config_files,
     load_runner_file,
+    srt_recipe_path,
     validate_agentic_matrix_entry,
     validate_matrix_entry,
 )
@@ -32,7 +37,6 @@ AUTOMATIC_AGENTIC_VENDOR_EVALS = {
 }
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
-# 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
 MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -99,8 +103,6 @@ def trim_conc(entries: list[dict]) -> list[dict]:
             )
         )
         if entry.get("eval-only"):
-            # A standalone eval job (e.g. GSM8K beside a vendor suite) is its
-            # own shape: never merge it with throughput or another suite.
             key += (
                 (
                     "eval-only",
@@ -141,7 +143,7 @@ def smoke_entries(entries: list[dict]) -> list[dict]:
         row.pop(Fields.REQUIRE_POWER.value, None)
         if row.get("prefill") is not None:
             row["conc"] = [row["eval-conc"]]
-            row["eval-all-concs"] = False
+            row.pop("eval-all-concs", None)
         evals.append(row)
     return benchmarks + trim_conc(evals)
 
@@ -236,19 +238,6 @@ def _worker_node_override(worker: dict, setting_name: str) -> int | None:
     return values[0]
 
 
-def _merge_recipe(base: dict, override: dict) -> dict:
-    """Deep-merge an srt-slurm override variant over its base, as srtctl does."""
-    merged = dict(base)
-    for key, value in override.items():
-        if value is None:
-            merged.pop(key, None)
-        elif isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _merge_recipe(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
-
-
 def recipe_auxiliary_node_count(recipe: dict) -> int:
     """Count service pools and dedicated nodes, matching srtctl's placement policy."""
     services = [service for service in recipe.get("services", []) if service.get("enabled", True)]
@@ -277,41 +266,16 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(prefill: dict, decode: dict) -> int | None:
-    """Read the authoritative node count from a checked-in srt-slurm recipe."""
-    config_files = {
-        setting.split("=", 1)[1]
-        for worker in (prefill, decode)
-        for setting in (worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or [])
-        if setting.startswith("CONFIG_FILE=")
-    }
-    if not config_files:
-        return None
-    if len(config_files) != 1:
-        raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
-
-    config_file, _, selector = config_files.pop().partition(":")
-    repo_root = repository_root()
-    recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
-    if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
-        recipe_path = repo_root / config_file
-    else:
-        recipe_path = recipe_root / config_file.removeprefix("recipes/")
-    if not recipe_path.exists():
-        # Some srt-slurm recipes live only in the runtime image. Their master
-        # config topology remains the best available scheduling estimate.
-        return None
-
+def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
+    """Read the authoritative node count from the row's checked-in srt-slurm recipe."""
+    path, _, selector = srt_recipe.partition(":")
+    recipe_path = root / path
     recipe = yaml.safe_load(recipe_path.read_text())
     if "base" in recipe:
-        # srtctl merges a named variant over base (null deletes a key) and
-        # carries a top-level schema into it. Zip groups and non-schema-2
-        # variant files have no authoritative count here; the selected master
-        # topology supplies the estimate.
-        if not (selector == "base" or (selector.startswith("override_") and selector in recipe)):
+        if not (selector == "base" or selector.startswith("override_")):
             return None
         schema = recipe.get("schema")
-        recipe = _merge_recipe(recipe["base"], recipe.get(selector) or {})
+        recipe = deep_merge(recipe["base"], recipe[selector] or {})
         recipe.setdefault("schema", schema)
         if recipe.get("schema") != 2:
             return None
@@ -319,8 +283,6 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
     roles = recipe.get("roles")
     if roles:
-        # Schema 2 groups node allocations by role. A colocated decode role
-        # shares prefill nodes and does not reserve another allocation.
         for name, role in roles.items():
             if "nodes" not in role:
                 raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
@@ -329,6 +291,38 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         )
         return worker_nodes + recipe_auxiliary_node_count(recipe)
     raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+
+
+def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
+    """The fabric of each cluster that runs ``label``: a scheduling label or one runner."""
+    labels = runner_labels(runner_data)
+    runners = set(labels.get(label, [label]))
+    fabrics = {}
+    for cluster_label, members in labels.items():
+        if cluster_label.startswith(CLUSTER_LABEL_PREFIX) and runners & set(members):
+            cluster_id = cluster_label.removeprefix(CLUSTER_LABEL_PREFIX)
+            record = runner_data["clusters"][cluster_id]
+            srt = (record.get("slurm") or {}).get("srt-slurm") or {}
+            fabrics[cluster_id] = Fabric.model_validate(srt.get("fabric") or {})
+    return fabrics
+
+
+def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data: dict) -> None:
+    """Fail a recipe whose ``'@fabric.<name>'`` values name no fabric field, or one that a
+    cluster ``label`` runs on does not set."""
+    path, _, selector = srt_recipe.partition(":")
+    variants = expand_variants(yaml.safe_load((root / path).read_text()), selector or None)
+    fabrics = {
+        f"cluster {cluster_id!r}": fabric.rendered()
+        for cluster_id, fabric in _label_fabrics(label, runner_data).items()
+    }
+    fabrics = fabrics or {f"runner {label!r}": dict.fromkeys(Fabric().rendered(), "")}
+    for reach, fabric in fabrics.items():
+        for _, recipe in variants:
+            try:
+                resolve_fabric(recipe, fabric)
+            except ValueError as error:
+                raise ValueError(f"{srt_recipe}: {error} ({reach})") from None
 
 
 def worker_node_count(
@@ -359,9 +353,13 @@ def multinode_node_count(
     decode: dict,
     runner: str,
     runner_data: dict,
+    srt_recipe: str | None,
+    root: Path | None,
 ) -> int:
     """Return the total Slurm node request represented by a matrix row."""
-    recipe_count = recipe_node_count(prefill, decode)
+    if srt_recipe is not None and root is None:
+        raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
+    recipe_count = recipe_node_count(root, srt_recipe) if srt_recipe is not None else None
     if recipe_count is not None:
         return recipe_count
     return worker_node_count(prefill, "prefill", runner, runner_data) + worker_node_count(
@@ -373,6 +371,7 @@ def add_multinode_node_count(
     entry: dict,
     runner_data: dict,
     num_nodes: int | None,
+    root: Path | None,
 ) -> dict:
     """Annotate a multi-node row with its scheduling node count."""
     if not entry[Fields.DISAGG.value] and num_nodes is not None:
@@ -385,6 +384,8 @@ def add_multinode_node_count(
             entry[Fields.DECODE.value],
             entry[Fields.RUNNER.value],
             runner_data,
+            entry.get(Fields.SRT_RECIPE.value),
+            root,
         )
     return entry
 
@@ -567,6 +568,19 @@ def component_metadata(benchmark: dict, config: dict) -> dict:
     return metadata
 
 
+def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
+    """The row's srt-recipe and eval-srt-recipe, relative to the project root."""
+    return {
+        field.value: srt_recipe_path(
+            config.get(Fields.MULTINODE.value, False),
+            config[Fields.SRT_RECIPE_DIR.value],
+            benchmark[field.value],
+        )
+        for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE)
+        if benchmark.get(field.value) is not None
+    }
+
+
 def _multinode_parallelism_key(entry: dict) -> tuple:
     """Identify a multi-node config independently of eval/concurrency fields.
 
@@ -672,7 +686,6 @@ def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
         if free == concs:
             continue
         if free:
-            # Only batched all-concurrency evals cover several concurrencies.
             row[Fields.CONC.value] = free
             continue
         row[Fields.RUN_EVAL.value] = False
@@ -707,7 +720,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
     eval_indices = set()
-    mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
+    mn_eval_conc = {}
 
     def _eligible_eval_concs(entry: dict) -> list[int]:
         conc = entry[Fields.CONC.value]
@@ -726,8 +739,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             conc_values = conc if isinstance(conc, list) else [conc]
             mn_eval_conc[i] = max(conc_values)
 
-    # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
-    # Only 8k1k entries with a top-level TP (single-node schema).
     sn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value not in entry:
@@ -756,8 +767,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             if e[Fields.CONC.value] in target_concs:
                 eval_indices.add(i)
 
-    # Multi-node: group rows that differ only in concurrency, then evaluate each
-    # distinct parallelism configuration at its highest configured concurrency.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -776,14 +785,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Agentic GSM8K: the eval runs as a separate eval-only job, so every
-    # agentic throughput result is preserved. Vendor-suite models take part
-    # too; their GSM8K pick becomes an extra eval-only row below.
     ag_sn_groups = defaultdict(list)
-    # Multi-node agentic: same "highest eligible conc per distinct
-    # parallelism config" policy as the fixed-seq-len mn_groups above. A
-    # deployment with no topology at MIN_EVAL_CONC or above (e.g. a
-    # conc-1-only engine) still gets one GSM8K, at its highest conc overall.
     ag_mn_groups = defaultdict(list)
     ag_mn_fallback: dict[tuple, tuple[int, int]] = {}
     for i, entry in enumerate(matrix_values):
@@ -806,8 +808,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             continue
         conc = entry[Fields.CONC.value]
         conc_val = max(conc) if isinstance(conc, list) else conc
-        # Same keys as single-node 8k1k, plus image so configs that differ
-        # only by image (e.g. an image bump) each get their own eval.
         key = (
             entry[Fields.MODEL.value],
             entry[Fields.RUNNER.value],
@@ -818,7 +818,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.IMAGE.value],
         )
         ag_sn_groups[key].append((i, conc_val))
-    gsm8k_picks: dict[int, int | None] = {}  # index -> multinode eval conc
+    gsm8k_picks: dict[int, int | None] = {}
     for entries in ag_sn_groups.values():
         gsm8k_picks[max(entries, key=lambda item: item[1])[0]] = None
     for entries in ag_mn_groups.values():
@@ -859,7 +859,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     for i, eval_conc in extra_gsm8k.items():
         matrix_values.append(_gsm8k_eval_only_row(matrix_values[i], eval_conc))
 
-    # An eval-only GSM8K copy that loses its app identity has nothing left to run.
     return [
         row
         for row in drop_app_colliding_evals(matrix_values)
@@ -919,7 +918,6 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
                 eval_entry[Fields.CONC.value] = sorted(set(conc_values))
                 eval_entry[Fields.EVAL_CONC.value] = max(conc_values)
             expanded_entries.append(eval_entry)
-            # GSM8K too: continue with a copy free of the vendor eval fields.
             entry = {
                 key: value
                 for key, value in entry.items()
@@ -957,8 +955,6 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             expanded_entries.append(eval_entry)
             continue
 
-        # Only 8k1k is eligible for evals; leave other sequence lengths as-is
-        # (their RUN_EVAL stays False, so the evals-only filter drops them).
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             expanded_entries.append(entry)
             continue
@@ -1015,6 +1011,7 @@ def _fixed_sequence_entries(
     conc_values: list[int],
     runners: list[str],
     runner_data: dict,
+    root: Path | None,
 ) -> list[dict]:
     """Build fixed-sequence rows after the command has selected runners and points.
 
@@ -1036,8 +1033,6 @@ def _fixed_sequence_entries(
         dp_attn = benchmark.get(Fields.DP_ATTN.value)
 
     entries = []
-    # Multi-node rows carry the whole concurrency list; single-node rows carry
-    # one point. Keep point-major, runner-minor order for existing consumers.
     for conc in [conc_values] if is_multinode else conc_values:
         for runner in runners:
             entry = {
@@ -1076,8 +1071,9 @@ def _fixed_sequence_entries(
                         Fields.SPEC_DECODING.value: spec_decoding,
                     }
                 )
-                if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                    entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
+            entry.update(srt_recipe_fields(config, benchmark))
+            if benchmark.get(Fields.POWER.value):
+                entry[Fields.POWER.value] = True
             entry.update(
                 {
                     Fields.EXP_NAME.value: f"{model_code}_{seq_len_to_str(isl, osl)}",
@@ -1087,7 +1083,9 @@ def _fixed_sequence_entries(
             )
             entry.update(component_metadata(benchmark, config))
             if is_multinode:
-                add_multinode_node_count(entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+                add_multinode_node_count(
+                    entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
+                )
             entries.append(validate_matrix_entry(entry, is_multinode))
     return entries
 
@@ -1103,6 +1101,7 @@ def _agentic_entries(
     min_conc: int | None = None,
     max_conc: int | None = None,
     conc_filter: list[int] | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     """Expand one AgentX deployment for either generator command.
 
@@ -1146,8 +1145,6 @@ def _agentic_entries(
     if not conc_values:
         return []
 
-    # Every AgentX point owns a server allocation. Multi-node points retain
-    # singleton lists for the reusable workflow's shared concurrency-list input.
     if is_multinode:
         offload_suffix = (
             f"_{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
@@ -1177,6 +1174,7 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
+
             exp_name = multinode_agentic_exp_name(model_code, prefill, decode, conc, offload_suffix)
         else:
             entry.update(
@@ -1191,13 +1189,14 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
             exp_name = (
                 f"{model_code}_tp{tp}_conc{conc}_"
                 f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
                 + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
             )
+        entry.update(srt_recipe_fields(config, benchmark))
+        if benchmark.get(Fields.POWER.value):
+            entry[Fields.POWER.value] = True
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,
@@ -1213,7 +1212,9 @@ def _agentic_entries(
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))
         if is_multinode:
-            add_multinode_node_count(entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+            add_multinode_node_count(
+                entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
+            )
         entries.append(validate_agentic_matrix_entry(entry))
     return entries
 
@@ -1242,6 +1243,7 @@ def generate_full_sweep(
     args: argparse.Namespace,
     all_config_data: dict,
     runner_data: dict,
+    root: Path | None = None,
 ) -> list[dict]:
     """Compatibility adapter for callers passing the full-sweep CLI namespace."""
     return expand_full_sweep(
@@ -1263,6 +1265,7 @@ def generate_full_sweep(
             max_tp=args.max_tp,
             max_ep=args.max_ep,
         ),
+        root=root,
     )
 
 
@@ -1271,6 +1274,7 @@ def expand_full_sweep(
     runner_data: dict,
     *,
     options: FullSweepOptions = FullSweepOptions(),
+    root: Path | None = None,
 ) -> list[dict]:
     """Expand validated configs in declaration order, before eval selection."""
     if options.step_size <= 1:
@@ -1290,7 +1294,6 @@ def expand_full_sweep(
                 f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
             )
 
-    # Full-sweep validates sequence names even when no config matches.
     seq_filter = {seq_len_stoi[sl] for sl in options.seq_lens} if options.seq_lens else None
     configs = (
         config
@@ -1307,6 +1310,7 @@ def expand_full_sweep(
         scenario_types=options.scenario_types,
         runner_node_filter=options.runner_node_filter,
         full_sweep=options,
+        root=root,
     )
 
 
@@ -1376,7 +1380,6 @@ def _runner_values_for_filter(
         return [runner]
     candidates = runner_nodes_for_label(runner, runner_data)
     if not include_label:
-        # Full-sweep expands concrete nodes in inventory order, including repeats.
         return [node for node in candidates if runner_node_filter in node]
     if runner_node_filter in runner:
         candidates = [runner, *candidates]
@@ -1387,6 +1390,7 @@ def generate_test_config_sweep(
     args: argparse.Namespace,
     all_config_data: dict,
     runner_data: dict | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     """Compatibility API for selected-key expansion without eval selection."""
     return _expand_selected_configs(
@@ -1397,6 +1401,7 @@ def generate_test_config_sweep(
         seq_lens=getattr(args, "seq_lens", None),
         scenario_types=getattr(args, "scenario_type", None),
         concurrencies=getattr(args, "conc", None),
+        root=root,
     )
 
 
@@ -1409,6 +1414,7 @@ def _expand_selected_configs(
     seq_lens: list[str] | None = None,
     scenario_types: tuple[str, ...] | list[str] | None = None,
     concurrencies: list[int] | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     resolved_keys = expand_config_keys(config_keys, all_config_data.keys())
     return _expand_configs(
@@ -1418,6 +1424,7 @@ def _expand_selected_configs(
         seq_lens=seq_lens,
         scenario_types=scenario_types,
         concurrencies=concurrencies,
+        root=root,
     )
 
 
@@ -1431,6 +1438,7 @@ def _expand_configs(
     scenario_types: tuple[str, ...] | list[str] | None = None,
     concurrencies: list[int] | None = None,
     full_sweep: FullSweepOptions | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     """Traverse configs and scenarios once for both generation commands.
 
@@ -1440,7 +1448,6 @@ def _expand_configs(
     rows = []
     for config in configs:
         multinode = config.get(Fields.MULTINODE.value, False)
-        # Full-sweep reads scenarios before runner filtering; selected keys defer it.
         if full_sweep is not None:
             scenarios = config[Fields.SCENARIOS.value]
             fixed = (
@@ -1497,7 +1504,7 @@ def _expand_configs(
                     continue
                 rows.extend(
                     _fixed_sequence_entries(
-                        config, benchmark, sequence, values, runners, runner_data
+                        config, benchmark, sequence, values, runners, runner_data, root
                     )
                 )
 
@@ -1521,8 +1528,18 @@ def _expand_configs(
                         min_conc=full_sweep.min_conc if full_sweep is not None else None,
                         max_conc=full_sweep.max_conc if full_sweep is not None else None,
                         conc_filter=concurrencies,
+                        root=root,
                     )
                 )
+    if root is not None:
+        selected = {
+            (row[field.value], row[Fields.RUNNER.value])
+            for row in rows
+            for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE)
+            if row.get(field.value)
+        }
+        for srt_recipe, label in sorted(selected):
+            check_fabric_references(root, srt_recipe, label, runner_data)
     return rows
 
 
@@ -1536,7 +1553,7 @@ def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]
     Raises ValueError if a pattern matches nothing or an exact key is missing.
     """
     available = list(available_keys)
-    seen = {}  # use dict to preserve insertion order
+    seen = {}
     for key in config_keys:
         if "*" in key or "?" in key:
             matches = fnmatch.filter(available, key)
@@ -1628,22 +1645,22 @@ def generate_config_matrix(
     *,
     scenario_types: tuple[str, ...] | list[str] | None = None,
     eval_mode: EvalMode = "default",
+    root: Path | None = None,
 ) -> list[dict]:
     """Build selected configs and evals without a generator subprocess.
 
-    Every call builds independent rows. The caller loads master/runner inputs;
-    node-count resolution still reads checked-in recipes. Default,
-    throughput-only, subset-only, all-eval, and smoke modes use the same policy as the CLI.
+    Every call builds independent rows. Multi-node node counts read recipes under
+    ``root``. Default, throughput-only, subset-only, all-eval, and smoke modes use
+    the same policy as the CLI.
     """
     rows = _expand_selected_configs(
         config_keys,
         master_config,
         runner_data,
         scenario_types=scenario_types,
+        root=root,
     )
     rows = select_matrix_evals(rows, mode=eval_mode)
-    # Retain the former JSON boundary: values and nested objects cannot leak
-    # between generation passes, and unsupported values still reject.
     return json.loads(json.dumps(rows))
 
 
@@ -1847,11 +1864,12 @@ def main() -> list[dict]:
 
     all_config_data = load_config_files(args.config_files)
     runner_data = load_runner_file(args.runner_config)
+    root = config_root(args.config_files)
 
     if args.command == "full-sweep":
-        matrix_values = generate_full_sweep(args, all_config_data, runner_data)
+        matrix_values = generate_full_sweep(args, all_config_data, runner_data, root)
     elif args.command == "test-config":
-        matrix_values = generate_test_config_sweep(args, all_config_data, runner_data)
+        matrix_values = generate_test_config_sweep(args, all_config_data, runner_data, root)
     else:
         parser.error(f"Unknown command: {args.command}")
 

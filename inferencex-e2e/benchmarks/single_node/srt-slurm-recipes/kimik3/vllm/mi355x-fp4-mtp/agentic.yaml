@@ -72,10 +72,7 @@ base:
         # Route DCP multi-token verify through the AITER ASM round-robin decode.
         VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: moonshotai/Kimi-K3
       # Long agentic turns against a 1M context are prefill-bound on the server.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
@@ -105,7 +102,6 @@ override_tp8_c1:
       CONC: '1'
       KV_OFFLOADING: 'none'
 
-# c1 with dcp8: the KV read sharded across all 8 GPUs, still GPU-resident.
 override_tp8_c1_dcp8:
   roles:
     agg:
@@ -146,7 +142,6 @@ override_tp8_c2_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
-# c4 with dcp8: the KV read sharded across all 8 GPUs, backed by the DRAM tier.
 override_tp8_c4_dcp8_simple:
   roles:
     agg:
@@ -167,8 +162,6 @@ override_tp8_c4_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
-# Mid band: dcp-size 8 shards the KV read across all 8 GPUs, backed by
-# vLLM's SimpleCPUOffloadConnector DRAM tier, with the DSpark draft.
 override_tp8_c10_dcp8_simple:
   roles:
     agg:
