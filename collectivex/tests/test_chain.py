@@ -668,7 +668,7 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
     def test_the_replay_value_check_poisons_what_dispatch_wrote_before_replaying(self):
         backend = _ChainBackend(stage_device_work=True, fp8_consume="native", precision="fp8")
         order, combined = [], _Combined(1.0)
-        handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input=None)
+        handle = types.SimpleNamespace(recv_x="recv", recv_scales=None, combine_input="staged")
         graph = types.SimpleNamespace(replay=lambda: order.append("replay"))
         backend.warm = lambda problem, count: order.append("warm")
         timing = ep_timing.GraphTiming(backend)
@@ -682,12 +682,13 @@ class GraphAlignmentAndValueCheck(unittest.TestCase):
                 mock.patch.object(ep_timing, "poison", lambda tensor: order.append(("poison", tensor))):
             result = timing.replay_output(new_problem())
         # Staging runs INSIDE the capture (staged=None). Between the upload replay and the
-        # returned one, dispatch's output and the result are poisoned, then every rank barriers:
-        # peers write into each other's buffers, so an unbarriered replay races a slow poison.
+        # returned one, dispatch's output, the staged combine input and the result are poisoned,
+        # then every rank barriers: peers write into each other's buffers, so an unbarriered
+        # replay races a slow poison.
         self.assertEqual(order, [
             "warm", ("capture", None), "replay",
-            ("poison", "recv"), ("poison", None), ("poison", None), ("poison", combined),
-            "barrier", "replay",
+            ("poison", "recv"), ("poison", None), ("poison", None), ("poison", "staged"),
+            ("poison", combined), "barrier", "replay",
         ])
         self.assertTrue(result.cloned)
 

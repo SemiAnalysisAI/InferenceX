@@ -514,8 +514,9 @@ class GraphTiming(_SpinAlignment):
     """
 
     graph = True
-    # Handle attributes dispatch writes; the replay value check poisons them.
-    DISPATCH_OUTPUT_FIELDS = ("recv_x", "recv_scales", "dispatch_output")
+    # Handle attributes dispatch and the captured stage write; the replay value check poisons them,
+    # so a replay that skipped the stage cannot pass on the payload the upload replay staged.
+    DISPATCH_OUTPUT_FIELDS = ("recv_x", "recv_scales", "dispatch_output", "combine_input")
     # The replay value check rescales the inputs by this exact power of two, so a replay that
     # re-sent stale data cannot match the drained pair run on the rescaled inputs.
     REPLAY_INPUT_SCALE = 2.0
