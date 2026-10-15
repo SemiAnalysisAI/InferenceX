@@ -49,19 +49,18 @@ BACKEND_PRECISIONS = {
     "nccl-ep": ("bf16", "fp8"),
     # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
     # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
-    # comparable. Realizable, but off every deployed path -- see OFF_PATH_PRECISIONS.
+    # comparable. vLLM selects it on this transport for DeepSeek blockwise FP8 from v0.29.0.
     "flashinfer-ep": ("bf16", "fp8"),
 }
 # Precisions a backend REALIZES but that no serving engine can select on that transport. Kept
 # out of the default matrix so a production sweep measures deployable configurations, and still
 # reachable by naming the precision explicitly (`--precisions fp8`) for transport comparison.
-# vLLM accepts only nvfp4/mxfp8/bf16 on FlashInfer's one-sided all-to-all, so its FP8 row
-# measures the collective off any path an engine selects. TensorRT-LLM, the one engine with an
-# NCCL EP selector, never asks NCCL EP to quantize: its NcclEP sends DeepSeek-FP8 activations in
-# BF16 (`uses_internal_fp8_dispatch = False`), so nccl-ep's DS_FP8E3M4 row is the library's.
-# Declared here rather than on the adapter because this generator must resolve the matrix with
-# no vendor imports.
-OFF_PATH_PRECISIONS = {"flashinfer-ep": ("fp8",), "nccl-ep": ("fp8",)}
+# TensorRT-LLM, the one engine with an NCCL EP selector, never asks NCCL EP to quantize: its NcclEP
+# sends DeepSeek-FP8 activations in BF16 (`uses_internal_fp8_dispatch = False`), so nccl-ep's
+# DS_FP8E3M4 row is the library's. FlashInfer FP8 left this list when vLLM v0.29.0 accepted
+# DeepSeek blockwise FP8 on the one-sided all-to-all. Declared here rather than on the adapter
+# because this generator must resolve the matrix with no vendor imports.
+OFF_PATH_PRECISIONS = {"nccl-ep": ("fp8",)}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
 _MODE_SLUG = {"low-latency": "ll"}
