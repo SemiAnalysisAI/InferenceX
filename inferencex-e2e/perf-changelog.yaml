@@ -9843,3 +9843,9 @@
     - "Extend TP2 AgentX to concurrency 32 so TP-only overlaps DP2 at c32."
     - "Enable SGLANG_OPT_HIP_FLYDSL_MXFP8=1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4050
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+  description:
+    - "Update the ATOM image to v0.1.7 (rocm/atom-dev:nightly_202610080328) and keep prefix caching disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4099
