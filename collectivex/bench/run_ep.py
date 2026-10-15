@@ -105,7 +105,7 @@ def main() -> int:
 
     # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
     # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an
-    # uncaught exception is otherwise invisible in CI. Print on every rank (prefixed) then re-raise.
+    # uncaught exception is otherwise invisible. Print on every rank (prefixed) then re-raise.
     try:
         backend = Backend(args, rank, world_size, local_rank, device)
         if rank == 0:

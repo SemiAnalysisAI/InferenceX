@@ -174,8 +174,7 @@ def _sort_key(document: dict):
 
 
 def _provenance(document: dict) -> str:
-    """Enough identity to tell two attempts of one case apart — CI result directories
-    routinely hold both, and they can disagree."""
+    """Enough identity to tell two attempts of one case apart."""
     run_id = document["identity"].get("allocation_factors", {}).get("run_id")
     attempt = document["identity"].get("attempt_ordinal")
     parts = ((document.get("generated_at") or "")[:19],

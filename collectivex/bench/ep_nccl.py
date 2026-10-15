@@ -33,8 +33,7 @@ bytes over the already-initialized torch process group (see ``_bootstrap_comm``)
 Python bindings are split across two wheels since v0.2: ``nccl-extensions`` owns ``nccl.ep``
 (the libnccl_ep.so JIT runtime + Cython bindings) and ``nccl4py`` provides ``nccl.core``
 (Communicator/UniqueId). The API surface used here is verified against the published
-nccl-extensions wheel and driven exactly as upstream's ep_test.py drives it — every class and
-signature this adapter touches is unchanged from v0.1.
+nccl-extensions wheel and driven exactly as upstream's ep_test.py drives it.
 """
 from __future__ import annotations
 
@@ -139,13 +138,9 @@ class NCCLEPBackend(EPBackend):
     #   normal      -> HT / FLAT layout / unweighted-rank-sum combine.
     #   low-latency -> LL / RANK_MAJOR layout / TensorRT-LLM's NcclEP contract.
     # "-routed" marks the generation whose timed HT dispatch charges the per-step
-    # ncclEpUpdateHandle (see dispatch()); earlier "nccl-ep-ht" rows excluded it and the
-    # docs record that those cannot be separated by any other field — this suffix is the
-    # per-row discriminator that change lacked. "v02" marks the nccl-extensions v0.2 mover
-    # (new kernels: LL combine fence, B200 EP16 fix, HT gains) so pre-upgrade rows never
-    # pool with post-upgrade rows.
+    # ncclEpUpdateHandle (see dispatch()); "v02" marks the nccl-extensions v0.2 kernels.
     # "-static" marks the combine input bound to the full static receive plane (see
-    # `_bind_ht_recv_count`); "-zc" rows before it sliced that input to the received count.
+    # `_bind_ht_recv_count`).
     # Graphed HT decode appends "-gum1": its communicator runs graph usage mode 1 (`_comm_config`),
     # which changes nothing outside a capture.
     kernel_generation = "nccl-ep-v02-ht-routed-zc-static"
@@ -223,8 +218,6 @@ class NCCLEPBackend(EPBackend):
         if self._ll_expert_major:
             # Weighted source-side combine over a per-expert padded receive: deepep-v2 LL's
             # contract, so this is the like-for-like row against the DeepEP-API backends.
-            # "-em" separates this from the pre-#3370 "nccl-ep-v02-ll" rows, whose timed windows
-            # also carried a handle.complete() per op; v0.2 needs complete() only after send_only.
             self.kernel_generation = "nccl-ep-v02-ll-em"
             self.receive_layout = "token-expert"
             self.combine_weight_semantics = "weighted-kernel-sum"
@@ -484,7 +477,7 @@ class NCCLEPBackend(EPBackend):
 
         `ncclEpInitHandle` takes no token count and `ncclEpUpdateHandle` is documented as a
         "per-step collective: prepare the handle for the given top-k routing decisions", so
-        rebinding IS the intended lifecycle. This also matches the other three backends, which
+        rebinding IS the intended lifecycle. This also matches the other backends, which
         each allocate one object sized to the ladder maximum and vary the token count per call.
 
         Both create_handle and update are collective, and HT additionally performs the metadata
@@ -800,7 +793,7 @@ class NCCLEPBackend(EPBackend):
         torch.cuda.synchronize()
         stream = self._stream()
         h.handle.combine(
-            # Same sliced input the timed path uses, so the two cannot diverge in shape.
+            # Same input the timed path uses, so the two cannot diverge in shape.
             CombineInputs(tokens=h.combine_in_t),
             CombineOutputs(tokens=h.out_t),
             config=self._combine_cfg,

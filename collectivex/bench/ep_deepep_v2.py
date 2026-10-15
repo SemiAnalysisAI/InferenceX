@@ -26,8 +26,7 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 # The source pin in runtime/common.sh is upstream main, which carries #630 and #640. This
 # adapter does not check the wheel's commit tag, only that the loaded deep_ep exposes
 # ElasticBuffer. The pin is mirrored here for `library_version`, since the wheel reports
-# 2.1.0+local (the build patches the tree, so setup.py finds no clean git hash); a unit test
-# fails if the two drift.
+# 2.1.0+local (the build patches the tree, so setup.py finds no clean git hash).
 _DEEPEP_COMMIT = "01dc3aaac82068020353dce2c302e38153c0bfaa"
 
 # vLLM's ElasticBuffer flags: VLLM_DEEPEP_V2_PREFER_OVERLAP and
@@ -128,8 +127,7 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     #                  source-side weighted-kernel-sum combine (ep_legacy_ll). kernel_generation
     #                  and the combine semantics are switched to their LL values in __init__.
     # Normal rows run vLLM's flags (overlap off, single reduction) without the host sync in both
-    # phases; "-vllm-nosync" keeps them from pooling with the overlap-on rows before them
-    # (v2-elastic-buffer-nosync decode, v2-elastic-buffer host-synced prefill).
+    # phases ("-vllm-nosync").
     kernel_generation = "v2-elastic-buffer-vllm-nosync"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")

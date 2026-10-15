@@ -307,7 +307,6 @@ class MoRIBackend(EPBackend):
         # The kernel's staging loop is bounded by `tokenIdx < totalRecvTokenNum` over
         # `args.inpTokenBuf`, not by the buffer, so only the filled rows need converting.
         h.combine_input = self._received(h, rows) if self._fp8 else h.dispatch_output
-        return None
 
     def combine(self, p, h):
         # `indices` must be this rank's own [T, topk] routing -- the tensor handed to

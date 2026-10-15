@@ -401,7 +401,7 @@ def run_expert_oracle(torch, routing, backend, problem, global_idx, global_weigh
     torch.cuda.synchronize()
     try:
         view = backend.inspect_dispatch(problem, handle)
-        source_ids = routing.decode_source_ids(view.payload, seed)
+        source_ids = routing.decode_source_ids(view.payload)
     except Exception as inspection_error:
         # Drain the in-flight dispatch before reporting: an abandoned handle deadlocks the peers.
         try:

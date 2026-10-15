@@ -251,11 +251,6 @@ class EagerTiming(_SpinAlignment):
     def alignment(self):
         return {"method": "gpu-spin-then-all-reduce", "spin_us": self.spin_us}
 
-    def missed_samples(self):
-        """Per sample of the last timed series, 1 where this rank's host outran the spin before the
-        timed op was enqueued: its window may have opened after the barrier released the others."""
-        return super().missed_samples()
-
     def host_holds(self):
         """1 per sample of the last timed series whose start waited for this rank's throttled host
         to recover. None for a series whose dispatch does not wait on the host."""

@@ -115,8 +115,7 @@ class LegacyBufferLL:
             # The kernel now casts at power-of-two scales, so the oracle's payload model follows
             # it; the wire still carries one FP32 scale per 128-value block.
             self._enable_fp8(self.dispatch_dtype, ue8m0_cast_to_fp8, self._fp8_codec[1])
-        # "-hook" marks the split send/receive kernels and "-ue8m0" the power-of-two FP8 cast, so
-        # neither series pools with the single-kernel FP32-scale rows measured before them.
+        # "-hook" marks the split send/receive kernels and "-ue8m0" the power-of-two FP8 cast.
         self.kernel_generation = (
             kernel_generation + ("-hook" if self.ll_recv_hook else "")
             + ("-ue8m0" if self._ll_ue8m0 else "")
