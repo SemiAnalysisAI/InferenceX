@@ -62,8 +62,9 @@ scales (`QUANT_FWD`), which this suite does not measure.
 
 FP8 uses NCCL EP's internal `DS_FP8E3M4` recipe, for low-latency decode only. TensorRT-LLM never
 selects it: `NcclEP` sets `uses_internal_fp8_dispatch = False` and transports DeepSeek-FP8
-activations in BF16 (`nccl_ep.py:78-79`). The default matrix therefore omits nccl-ep FP8, as it
-omits FlashInfer FP8 (`sweep_matrix.OFF_PATH_PRECISIONS`). `--precisions fp8` adds it back.
+activations in BF16 (`nccl_ep.py:78-79`). The default matrix therefore omits nccl-ep FP8
+(`sweep_matrix.OFF_PATH_PRECISIONS`, which lists no other precision for any backend).
+`--precisions fp8` adds it back.
 
 ## Row identity
 
@@ -76,8 +77,9 @@ harness's regime suffix. Examples:
   HT decode.
 - `nccl-ep-v02-ht-routed-zc-static-cap8192-0.2.0.dev20261005-eager-spin-ar`: HT prefill.
 
-`-gum1` appears only on graphed rows. The communicator runs graph usage mode 1 in every mode, but
-the mode only matters to a capture.
+`-gum1` appears only on graphed HT rows, the only capture that holds a host collective on this
+communicator (the routing `ncclAllGather`). The communicator runs graph usage mode 1 in every mode,
+but the mode only matters to that capture.
 
 `EPBackend.implementation_details()` returns the realized configuration, which the artifact
 publishes as `implementation.library_config`: `capacity_tokens_per_rank`, `zero_copy`, `num_sms`

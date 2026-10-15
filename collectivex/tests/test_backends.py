@@ -351,8 +351,8 @@ class RoundtripStagingGate(unittest.TestCase):
 
     def test_the_gate_truth_table(self):
         table = (
-            # A real device copy hoists regardless of precision, so MoRI BF16 scale-up and
-            # FlashInfer BF16 are excluded on the same terms as every fp8 stage...
+            # A real device copy hoists regardless of precision, as MoRI BF16 scale-up and
+            # FlashInfer BF16 once did, on the same terms as every fp8 stage...
             (True, "native", "bf16", True),
             (True, "native", "fp8", True),
             # ...a pointer-assignment stage never does: hoisting would hand a low-latency

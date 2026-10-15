@@ -444,8 +444,11 @@ def _communicator(group):
     `CommBackend` declares them abstract, not because the fabric path calls them: `MnnvlMemory`
     exchanges handles with `allgather` alone. What the ordering actually needs is the explicit
     `torch.distributed.barrier` in create_buffer.
-    Built as a subclass of the upstream ABC so a future interface change is an
-    import-time error here rather than another asynchronous fault on the cluster.
+    Built as a subclass of the upstream class, which in the image's 0.6.8.post1 is an ABC, so an
+    interface change is an import-time error here rather than another asynchronous fault on the
+    cluster. Later wheels (0.6.18.post1, 0.7.0.post1) make `CommBackend` a `typing.Protocol`
+    (flashinfer/comm/abstractions.py), under which a missing method raises nothing at import:
+    recheck this class against the protocol when the pin moves.
     """
     import torch.distributed as dist
     from flashinfer.comm.mnnvl import CommBackend

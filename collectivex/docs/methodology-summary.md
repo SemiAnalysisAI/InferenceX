@@ -20,7 +20,8 @@ not rank or recommend.
 - **`T` is tokens per rank**: decode 1-512 and prefill 1024-8192, in powers of two. A rung a backend
   cannot reach goes in `ladder_dropped` rather than vanishing.
 - **Precision**: dispatch is BF16, or FP8 where the backend supports it upstream. Combine is always
-  BF16.
+  BF16. Every FP8 codec is per-128-block e4m3 with FP32 scales on the wire. nccl-ep's FP8 is off
+  every engine's path, so only `--precisions fp8` runs it.
 - **Scale**: EP8 is one 8-GPU node (2x4 MNNVL on GB200/GB300). EP16 is 2x8 over RDMA on the x86 and
   AMD pools and 4x4 MNNVL on GB200/GB300, so GB EP16 stays scale-up.
 - **Coverage**: `configs/platform_config.json` says which backend runs where, and
@@ -28,19 +29,23 @@ not rank or recommend.
 
 ## Backends run as engines run them
 
-Each backend runs the configuration an inference engine selects, not a common denominator, so a
-cross-backend comparison compares deployed contracts.
+Each backend runs the configuration its reference engine selects (vLLM for most, TensorRT-LLM for
+nccl-ep, SGLang for MoRI low-latency), not a common denominator, so a cross-backend comparison
+compares deployed contracts.
 
 | Backend | Maturity | Launch | Contract |
 |---|---|---|---|
-| deepep-v2 | production | graph; normal prefill eager | Normal decode as vLLM graphs it: no CPU sync, receive sized to the next power of two of `T`. Normal prefill keeps its host sync. The LL receive is fixed at 256, so LL stops at T=256. |
-| nccl-ep | candidate | graph; HT prefill eager | HT dispatch includes the per-step routing update (`ncclEpUpdateHandle`, an all-gather sized to the handle's capacity, the ladder's top rung). The communicator uses graph usage mode 1. LL is rank-major and pre-reduced (TensorRT-LLM's contract), and zero-copy inside one NVLink/MNNVL domain. FP8 exists only for LL decode, without zero-copy. |
-| uccl-ep | candidate | normal eager (host-synced); LL graph, eager on b200 FP8 | DeepEP's legacy API over CPU-proxy RDMA. |
-| mori | production | graph | The engines' launch configuration: 80 blocks, 16 warps, external input buffer. EP16 uses the STATIC_HEAP symmetric heap. |
-| flashinfer-ep | production | graph decode; eager prefill | GB200/GB300 only (one-sided MNNVL). FP8 is off by default because no engine selects it. |
+| deepep-v2 | production | graph; normal prefill eager | vLLM's `deepep_v2` in both phases: overlap off (64 SMs), a single reduction, no CPU sync, receive sized to the next power of two of `T`. LL as vLLM's `deepep_low_latency`: send kernel plus receive hook, MNNVL on GB only, UE8M0 FP8 scales on Blackwell. The LL receive is fixed at 256, so LL stops at T=256. |
+| nccl-ep | production for LL rank-major BF16 (TensorRT-LLM's `NcclEP`); candidate otherwise | graph; HT prefill eager | LL runs TensorRT-LLM's configuration: rank-major, pre-reduced, one group sized to the ladder's top. Graphed dispatch stages, because TensorRT-LLM dispatches into a plain tensor under capture; eager dispatch is zero-copy inside one NVLink/MNNVL domain. HT is a library row: dispatch includes the per-step routing update, whose memsets, all-gather and scan are sized by the capacity (`-cap512` decode, `-cap8192` prefill), not by T. The communicator uses graph usage mode 1. FP8 (DS_FP8E3M4, LL decode) is off by default because no engine selects it. |
+| uccl-ep | candidate | normal eager (host-synced); LL graph | DeepEP's legacy API over CPU-proxy RDMA (proxies run only at b200 EP16), in vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`: `deepep_ht` launch configs at 20 SMs and 1 GiB buffers; LL called as deepep-v2's, with a 256-token receive. |
+| mori | production | graph decode; eager prefill | vLLM's MoRI configuration: IntraNode at 80 blocks, 16 warps (EP8), InterNodeV1 at 64/32/8 on STATIC_HEAP (EP16), external input buffer, one QP per PE. LL is SGLang's AsyncLL (64/32/8, 2 QPs per PE, `MORI_ENABLE_SDMA` on), driven split-phase. |
+| flashinfer-ep | production | graph decode; eager prefill | GB200/GB300 only (one-sided MNNVL). vLLM's integration: combine stages a caller-owned payload (`payload_in_workspace=False`) into a caller-owned output. FP8 is DeepSeek blockwise, which vLLM selects from v0.29.0. `kernel_generation` carries the wheel version. |
 
-`production` means vLLM or SGLang can select the backend today. `candidate` rows describe the
-library, not a deployable configuration.
+`production` means an engine can select the configuration today: vLLM or SGLang, or, for a library
+vLLM does not expose, the engine that does (TensorRT-LLM's `NcclEP` for nccl-ep's low-latency
+rank-major BF16 rows). `candidate` rows describe the library, not a deployable configuration.
+nccl-ep sets maturity per row. uccl-ep runs vLLM's DeepEP configuration but stays `candidate`,
+because no engine ships its selector.
 
 ## Timing
 
@@ -91,13 +96,13 @@ with a 2 ms GPU spin, then a device all-reduce, with no host sync (DeepEP's `ben
   second speed.
 - **`combine`** is timed behind its own untimed dispatch, a fresh pair with the stage hoisted, in
   both regimes.
-- **Host-synced eager series** (uccl-ep normal, deepep-v2 normal prefill) also wait out a throttled
-  host. A CPU probe holds the sample while the probe runs more than 2.5x slow, capped at 0.5 s per
-  sample and 60 s per run. A probe more than 5x slow on either side of the window marks the sample
-  **stalled**. Their untimed dispatch ahead of a timed `combine` runs before the alignment, so its
-  wait cannot spend the spin. Their chain siblings are held the same way and restart, on every rank
-  together, when any host ran throttled (at most 3 times); a trial still throttled publishes only
-  its period p50.
+- **Host-synced eager series** (uccl-ep normal, the only dispatch left that waits on the host) also
+  wait out a throttled host. A CPU probe holds the sample while the probe runs more than 2.5x slow,
+  capped at 0.5 s per sample and 60 s per run. A probe more than 5x slow on either side of the
+  window marks the sample **stalled**. Their untimed dispatch ahead of a timed `combine` runs
+  before the alignment, so its wait cannot spend the spin. Their chain siblings are held the same
+  way and restart, on every rank together, when any host ran throttled (at most 3 times); a trial
+  still throttled publishes only its period p50.
 
 **Order.** Each shape is warmed in ascending order (8 untimed round trips) and checked for
 correctness before any timing. Every measured component and chain trial follows 32 warmup pairs, and
@@ -113,7 +118,7 @@ component and ladder order rotate per trial.
   - `wire_byte_provenance` counts what the kernels move: one copy per (token, rank) for
     rank-deduplicated layouts, and one per (token, expert) for the LL kernels that weight inside
     combine.
-  - Blockwise FP8 codecs add per-128-value FP32 scales.
+  - Every FP8 codec adds per-128-value FP32 scales.
   - This is a logical payload rate, never physical link utilization.
 - **FP8 `stage`** stands in for the expert GEMM consuming FP8. It is timed separately and excluded
   from `roundtrip` and `pair_period`. Do not sum it into a total or compare it across backends.
@@ -129,21 +134,26 @@ Every row is gated. Any failed rank or point makes the case `invalid`.
 - **After the chain**, its last output must match a drained pair, and the full oracle reruns on the
   state the chain leaves. The last-output check is null where FP8 staging is hoisted out of the
   chain.
-- **The expected combine models each backend's reduction**:
+- **The expected combine models each backend's reduction** (`combine_reduction`):
   - FP32 inside a scale-up domain, with one BF16 cast per domain for scale-out;
+  - one BF16 row per destination rank, summed in FP32 at the source (deepep-v2, nccl-ep LL
+    rank-major);
   - source-side gate weighting for LL;
   - FlashInfer's BF16 tree before 0.6.16.
 
   FP8 is modelled by applying the backend's exact cast. The tolerance is 8 x 2^-8, relative.
 - **Graphed rows**: every timed capture's output is poisoned and must be rewritten by its replay.
-  A separate check scales the inputs by 2 and poisons dispatch's output before a replay whose output
-  must then match an eager pair on the same inputs, so a replay that re-sent stale data fails.
+  A separate check scales the inputs by 2 and poisons dispatch's output and the staged combine input
+  before a replay whose output must then match an eager pair on the same inputs, so a replay that
+  re-sent stale data fails.
 
 ## Reading results
 
 - **Rank on `pair_period` p50.** Each case is a single run, and run-to-run drift is about 2-6%, so a
   smaller gap is not a result. For fresh-entry rows, call a winner only where MAX and MIN agree.
 - **Do not rank multi-node decode on fresh-entry p99 of MAX.** Worst-rank stalls own that tail.
+- **Generations do not pool.** The move to each engine's configuration changed every backend's
+  `kernel_generation`; compare a row only with rows of the same generation.
 - **Cross-backend rows compare contracts.**
   - nccl-ep's rank-major LL moves fewer bytes than the expert-major layout DeepEP and UCCL-EP use
     (27% fewer at b200 EP8, T=8).

@@ -27,10 +27,23 @@ placement, and one pinned fixed resource profile per backend/topology. Combine i
 Dispatch precision is a swept dimension, with a BF16 control and, on the backends whose FP8 dispatch is
 supported upstream (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch (`bf16`, `fp8`),
 caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
-DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). That caller-side quantize is charged
+DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). Every one of these codecs is per-128-block
+e4m3 with FP32 scales: 7168 value bytes plus 224 scale bytes per copy at hidden 7168. For MoRI that
+is what vLLM's MoRI `prepare()` runs for a block-quantized model (aiter `per_1x128`, `scale_dim =
+hidden/128`), and what SGLang runs, in e4m3fnuz on gfx942 and OCP e4m3fn on gfx950, as vLLM's
+`fp8_dtype()` selects. On Blackwell (CUDA capability 10.x or 12.x) the DeepEP and UCCL-EP
+low-latency kernels round each per-128 scale up to a power of two and hand the receiver packed UE8M0
+exponents (`round_scale=True, use_ue8m0=True`), because that is what vLLM's DeepEP LL path asks for
+when its DeepGEMM expert kernel takes UE8M0 scales; on Hopper they keep plain FP32 scales, as vLLM
+does. The wire carries FP32 scales in both cases, so FP8 byte counts do not change, and those rows
+carry the `-ue8m0` generation suffix. The `normal`-mode codecs of DeepEP V2, UCCL-EP and FlashInfer
+EP keep unrounded FP32 scales, where vLLM's `per_token_group_quant_fp8` rounds them to powers of two
+whenever DeepGEMM's E8M0 path is on (vLLM main a9fe30e9f6 `fp8_utils.py:663-664`): byte-identical
+and timing-neutral, but not bit-identical to vLLM's quantize. That caller-side quantize is charged
 **inside the measured dispatch**, because a production forward pass pays it on the critical path. It
-is one fused kernel on DeepEP V2, UCCL-EP and FlashInfer EP, guarded bitwise against its eager
-reference. MoRI's is a plain dtype cast and needs neither. So an FP8 `normal` dispatch covers
+is one compiled kernel on DeepEP V2, UCCL-EP, FlashInfer EP and MoRI, guarded bitwise against its
+eager reference; MoRI compiles it in `low-latency` too, because AsyncLL takes a caller-quantized
+tensor. So an FP8 `normal` dispatch covers
 quantize-plus-transport while its BF16 control covers transport alone, and is not comparable to a row
 measured before that change. The sweep `version` deliberately stays 1 across it, so
 `implementation.stage_excluded_from_roundtrip` and the presence of a `stage` component are the
@@ -52,6 +65,28 @@ combine sizing there is **no per-row discriminator at all**. `kernel_generation`
 both sides, so pre-change rows for those two backends cannot be separated from post-change rows by
 any field, and must be excluded from the store rather than keyed around.
 
+The engine-contract change, which runs each backend in the configuration its reference engine uses
+(vLLM for most, TensorRT-LLM for NCCL EP low-latency, SGLang for MoRI low-latency), is keyed by
+`kernel_generation` on every row it moves, ahead of the harness's regime suffix
+(`-cudagraph-spin-ar` or `-eager-spin-ar`); none of its rows has a hardware A/B against its
+predecessor yet. DeepEP V2 `normal` reads `v2-elastic-buffer-vllm-nosync` in both phases (decode was
+`v2-elastic-buffer-nosync`, host-synced prefill `v2-elastic-buffer`), and its low-latency rows
+`legacy-buffer-ll-hook`, or `legacy-buffer-ll-hook-ue8m0` for Blackwell FP8 (`legacy-buffer-ll`
+before). UCCL-EP `normal` reads `uccl-legacy-buffer-vllm-ht`, on vLLM's `deepep_ht` launch configs
+(20 SMs at EP8 instead of a test script's 24 on CUDA and 64 on HIP) with row-major FP8 scales, so one
+fewer copy sits in the FP8 window (`uccl-legacy-buffer` before); its low-latency rows read
+`uccl-legacy-buffer-ll-hook`, or `uccl-legacy-buffer-ll-hook-ue8m0` for b200 FP8
+(`uccl-legacy-buffer-ll` before).
+MoRI reads `intranode-vllm` (EP8), `inter-node-v1-vllm` (EP16) and `async-ll-sglang-sdma`
+(low-latency). Its earlier `intranode`, `inter-node-v1` and `async-ll` FP8 rows are the plain-cast
+codec and its earlier EP16 and low-latency rows the old launch tuples, so do not pool them with the
+new rows. The `-sdma` suffix records whether `MORI_ENABLE_SDMA` was on: a low-latency row run with it
+explicitly off reads `async-ll-sglang`, and a normal row run with it on gains the suffix. NCCL EP
+appends `-cap<N>-<wheel version>` to every family (see the HT routing paragraph below). FlashInfer
+reads `flashinfer-mnnvl-one-sided-staged-<wheel version>` (`flashinfer-mnnvl-one-sided` before),
+whose `combine` and `roundtrip` carry FlashInfer's payload staging copy on purpose, as vLLM's combine
+pays it, where the earlier rows skipped it.
+
 If the sweep version is ever bumped, **skip 2 and go to 3.** A short-lived bump to 2 during this
 branch's development left stored documents tagged `version: 2` that are currently invisible only
 because the frontend reader accepts `[1]`. Publishing support for 2 would silently resurface that
@@ -68,14 +103,18 @@ corpus). The reverse does **not** hold: reconstructing native as `dequant - stag
 T=1, -5% at T=64, and converges only by T=256. This is worst precisely in the decode regime the headline
 reports. So measure native and derive dequant, never the other way round. The hatch reproduces
 historical deepep-v2/uccl-ep numbers for regression checks (302.0µs against 302.5µs in run
-30177021271 at T=1). It does not reproduce MoRI fp8, whose stage now casts only the rows dispatch
-filled, nor any pre-hoist BF16 roundtrip.
+30177021271 at T=1). It does not reproduce MoRI fp8, whose stage now dequantizes only the rows
+dispatch filled, nor any pre-hoist BF16 roundtrip.
 
-Read that charge as a **fixed per-call cost, not a payload-proportional one**. On DeepEP V2 decode,
-FP8 dispatch p50 minus its BF16 control is 65us on h100, 59us on b200, 27us on b300 and 57us on
-gb300 at T=1, flat within a microsecond or two through T=64, then decaying. By T=512 it is slightly
-negative on h100 and b300, where halved payload bytes more than repay it. FlashInfer EP carries
-~107us on gb300 (its own codec, and a fourth dispatch payload under FP8). At T=1 the FP8 path moves
+Read that charge as a **fixed per-call cost, not a payload-proportional one**. On the eager DeepEP V2
+decode rows that preceded graph replay (generation `v2-elastic-buffer`), FP8 dispatch p50 minus its
+BF16 control was 65us on h100, 59us on b200, 27us on b300 and 57us on gb300 at T=1, flat within a
+microsecond or two through T=64, then decaying. By T=512 it was slightly negative on h100 and b300,
+where halved payload bytes more than repay it. FlashInfer EP carried ~107us on gb300 under eager
+timing, when its FP8 rows were opt-in (its own codec, and a fourth dispatch payload under FP8).
+Graph-replayed DeepEP V2 rows do not show the charge (gb200 EP8: +2.1us at T=1, -22.5us at T=512,
+run 38523177277, per the 2026-10-15 audit); FlashInfer's graph-replayed FP8 rows and the
+`v2-elastic-buffer-vllm-nosync` rows have not been measured yet. At T=1 the FP8 path moves
 *fewer* bytes than BF16, so this is per-call work, not transport, and it exceeds the fused quantize's
 own device time (1.5-3.6us per SKU) by more than an order of magnitude: the timing window has no host
 sync before its start event (see below), so a near-idle stream at T=1 lets host-side launch cost land
@@ -83,10 +122,17 @@ inside it. Compiling the quantize reduces this rather than causing it. An eager 
 33-39us worse per decode dispatch on h100 through the same window, but production issues one custom
 quantize op into an already-busy stream, so the small-T end of an FP8 `normal` row is the least
 production-representative number the suite emits. Compare FP8 and BF16 at the top of the ladder.
-`low-latency` rows are unaffected: those kernels quantize internally or take pre-quantized input by
-API contract. NCCL EP supports FP8 only for low-latency decode, using native DS_FP8E3M4
-dispatch with zero-copy disabled and BF16 combine. Native-consume roundtrip excludes
-dequantization staging; normal mode and prefill remain BF16-only.
+DeepEP V2 and UCCL-EP `low-latency` rows are unaffected: those kernels quantize internally. MoRI's
+AsyncLL takes a caller-quantized tensor by API contract, so its `low-latency` FP8 rows carry the same
+compiled quantize inside dispatch as its `normal` rows. NCCL EP's FP8 is its internal DS_FP8E3M4 recipe, for low-latency decode only, staged
+(never zero-copy) with a BF16 combine. It is the one (backend, precision) pair here that is
+realizable but off every deployed path: TensorRT-LLM's `NcclEP`, the only engine integration, sends
+DeepSeek-FP8 activations in BF16 (`uses_internal_fp8_dispatch = False`), so `sweep_matrix.py`'s
+`OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only
+configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it
+back in: the one place a precision filter ADDS rows rather than only removing them. Native-consume
+roundtrip excludes dequantization staging. Normal mode and prefill remain BF16-only here, although
+the library also offers HT a caller-quantized FP8 path with forwarded scales (`QUANT_FWD`).
 The
 per-backend precision set lives in `sweep_matrix.py`'s `BACKEND_PRECISIONS` and a backend never
 emits a case for a precision it does not support. `normal`-mode cases use the
@@ -146,9 +192,18 @@ minimal pure-scale-up fix, the #640 library matcher that excludes NCCL shared-me
 the #642 low-latency combine fence. Scale-up cases
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
-represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
+represented by two physical RDMA ranks, with eight scale-up ranks per domain. The adapter checks the
+realized LSA team against the registry's scale-up domain before measuring
+(`library_config.lsa_team_ranks`), which is also what makes its hybrid choice the one vLLM's
+`VLLM_DEEPEP_V2_ALLOW_HYBRID_MODE=1` autoselect would make (DeepEP goes hybrid only when the LSA team
+is smaller than the world). Hybrid EP16 allocates 33 GIN QPs per peer rank (a fixed 512-QP budget)
+instead of upstream's and vLLM's automatic 65/129, which exhaust the per-NIC QP budget on CX-7
+(`ibv_create_qp` ENOMEM in `ncclDevCommCreate`; 49x16 initializes, 65x16 does not). The 64-SM
+kernels ask for 64 x 16 + 1 QPs and are capped at that allocation, so the hybrid channels share 32
+data QPs plus one notify QP (`library_config.num_allocated_qps`, `num_qps`). GB EP16 remains MNNVL
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU. MoRI EP16 runs the InterNodeV1
-kernel on mi355x over the Pollara RoCE rails with MoRI's default STATIC_HEAP symmetric heap.
+kernel on mi355x over the Pollara RoCE rails with MoRI's default STATIC_HEAP symmetric heap, at
+vLLM's gfx950 launch tuple (below; rows before the engine-contract change ran 96/64/8).
 Two defects had to be removed before that row could publish. `combine()` takes the rank's own
 routing tensor, not dispatch's returned recv-slot indices (part of the ROCm/mori#475 corruption
 was that caller-side mix-up, guarded upstream by ROCm/mori#546). The residual stochastic
@@ -163,71 +218,139 @@ fabric. UCCL-EP EP16 stays off mi355x: its CPU-proxy RDMA is functional on the P
 roughly 13x under its upstream-documented bandwidth (~6 GB/s vs 82 GB/s), unchanged by GPU-memory
 registration mode (DMA-BUF vs peer-memory) or traffic class — an ionic-driver-level suspect.
 UCCL-EP EP16 is registered on b200-nscale, where it runs at full health on bare-metal IB.
-MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
-run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80,
-rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, on dispatch and combine
-alike (neither passes a per-call override), with an external input buffer, MoRI's default, which
-SGLang sets explicitly. The two are pinned together deliberately: MoRI's tuning tables key combine on
+MoRI runs vLLM's configuration (`MoriAll2AllManager`) under its MANUAL launch mode, which is MoRI's
+default and which neither vLLM nor SGLang overrides. The launch tuple lives in the
+`EpDispatchCombineConfig`, and dispatch and combine pass no per-call override, exactly as vLLM's
+`prepare`/`finalize` call them. One node runs IntraNode at block_num 80, rdma_block_num 0 and
+`warp_num_per_block` 16 on dispatch and combine alike, the tuple vLLM uses under both
+`mori_high_throughput` and `mori_low_latency` and SGLang pins too; two nodes run InterNodeV1 at
+64/32/8 on gfx950 (32/16/16 on gfx942). `num_qp_per_pe` is MoRI's default of 1, the input buffer is
+external (MoRI's default, which SGLang sets explicitly), and combine `quant_type` is `none`.
+`implementation.library_config` records the tuple the handle realized, as MoRI's `get_handle_info`
+reports it, and the adapter fails closed if any field differs from the request;
+`implementation.library_version` records the installed MoRI build. The warp count and the buffer
+mode are pinned together deliberately: MoRI's tuning tables key combine on
 `zero_copy`, selecting roughly 16 warps for external input against 4-8 for a registered buffer, and
 the mismatch is measurable in both directions. On MI300X, MI325X and MI355X,
 **in registered-buffer mode** 16 warps costs +13-18% combine at T=128 and +61-78% at T=512 against 8.
 **In the external-input mode the engines actually run** the same 16 warps *wins* by 14-19% at T=128,
 26-27% at T=256, and 9-14% at every prefill rung including T=8192. Below T=32 it gives up 0.2-2.5us,
 the only range where 8 is ahead. All arms were correct at every rung. With an external input buffer
-the kernel does its own staging copy, bounded by the receive count, so BF16 rows hand over the
-dispatch output unchanged and declare `stage` as an explicit unavailable marker (null percentiles,
-zero samples). FP8 rows still stage for real, to dequantize the received payload. These numbers
-describe the engine-integrated configuration, not MoRI's peak: its shipped tuning tables reach a
-faster combine with per-shape block and warp counts no engine selects, and AUTO would not reproduce
-them uniformly. Gfx950 ships no IntraNodeLL combine table and no BF16 rule for normal-mode
+combine's push kernel writes each received row straight into its destination's staging slot. That
+copy is the transfer itself, bounded by the receive count, so BF16 rows hand over the dispatch output
+unchanged and declare `stage` as an explicit unavailable marker (null percentiles, zero samples).
+FP8 rows still stage for real, to dequantize the received payload with its per-block scales. These
+numbers describe the engine-integrated configuration, not MoRI's peak: its shipped tuning tables
+reach a faster combine with per-shape block and warp counts no engine selects, and AUTO would not
+reproduce them uniformly. Gfx950 ships no IntraNodeLL combine table and no BF16 rule for normal-mode
 IntraNode dispatch, so AUTO defaults exactly those two (coupling the result to whichever MoRI
 revision is pinned) while tuning the other two, which is not one number about the hardware. How far
 off peak is arch-dependent: across buffer modes on MI355X, with
 the registered mode's excluded BF16 stage added back, a registered buffer at 8 warps is still 15%
 faster at T=512 decode and 8% at T=8192 prefill than the shipped pairing, but that did not reproduce
 on gfx942, so treat 0-15% as the honest range for a configuration no engine runs. The low-latency
-arm has no engine-integrated configuration to match at all: SGLang's low-latency path pins `AsyncLL`
-at 8 warps while this suite uses `IntraNodeLL` (`AsyncLL` is split-phase and fails silently under a
-single-call harness), so its launch config is inherited from the normal-mode tuple by choice rather
-than by precedent. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
+arm follows SGLang, not vLLM, and says so (`library_config.contract = "sglang"`, generation
+`async-ll-sglang-sdma`): vLLM exposes `mori_low_latency`, but its single-node branch builds the same
+IntraNode kernel as `mori_high_throughput`, so vLLM has no MoRI low-latency kernel at EP8, and the
+normal-mode decode rows already measure that kernel. SGLang's `EpMode.LOW_LATENCY` runs `AsyncLL` at
+block_num 64, rdma_block_num 32 and 8 warps with `num_qp_per_pe` 2, which on a same-node peer splits
+each peer's chunk across two copy lanes; it drives the four phases split-phase (`dispatch_send`,
+`dispatch_recv`, `combine_send`, `combine_recv`) and runs with `MORI_ENABLE_SDMA` on, so the
+same-node transfer runs on the copy engines. AsyncLL derives its grid from the CU count, so its
+block_num is inert.
+
+`MORI_ENABLE_SDMA` follows the engine of each row. MoRI reads it once, at shmem init, and among the
+EP kernels it changes only AsyncLL's same-node transfer: copy engines when on, and when off a single
+GPU thread per (peer, queue pair) doing 16-byte stores (MoRI 12d1bc32
+`low_latency_async.cpp:247-258`, `shmem_p2p_kernels.hpp:45`). The normal rows, vLLM's configuration, leave it unset, MoRI's default
+(off), because vLLM never sets it; MoRI calls it "currently only effective for AsyncLL", so IntraNode
+and InterNodeV1 do not change with it (`dispatch_combine.cpp:138-140`). The low-latency rows,
+SGLang's configuration, run with it on, as SGLang deploys AsyncLL on AMD, and the adapter sets it
+before shmem init unless the caller already set it. This repo's AMD SGLang recipes set
+`MORI_ENABLE_SDMA=true` (introduced in f8f0a3a0f, `benchmarks/multi_node/amd_utils/env.sh`; today
+`inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:190`,
+`:258`, `:436`, `:513`, `:593`), and in SGLang that setting itself selects AsyncLL (`moriep.py` main
+`:376-378`). SGLang's own log calls AsyncLL "the AsyncLL copy-engine kernel" (`moriep.py` main
+`:1636-1643`), and MoRI warns that "AsyncLL without SDMA uses compute units for communication,
+which provides little overlap benefit and can severely degrade performance"
+(`dispatch_combine.cpp:141-146`). SGLang's bare env default is off (`moriep.py` main `:964`), and its
+CI `TestLowLatency` runs without it, but that is not the deployed configuration. A row run with SDMA
+on carries the `-sdma` generation suffix and `library_config.sdma = true`. The launcher no longer
+exports `MORI_ENABLE_SDMA=1` for every row: that export was inherited from the original AsyncLL-era
+environment, not from a correctness need, and SDMA=0 was validated correct on mi300x-tw
+(c1040b46a).
+
+UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
 `dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
 `libibverbs`, with no NVSHMEM/IBGDA and with software message ordering, atomics, and flow control. Its
 scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
-never MNNVL) and its EP16 scale-out uses the same per-SKU RDMA rails as the other backends. NCCL EP
+never MNNVL) and its EP16 scale-out uses the same per-SKU RDMA rails as the other backends. No engine
+ships a UCCL selector, but engines deploy it as a drop-in `deep_ep` (UCCL's `deep_ep_wrapper`, the
+route UCCL documents for vLLM), so vLLM's DeepEP backends drive this Buffer, and the adapter runs
+vLLM's configuration (main, 2026-10-15). In `normal` mode that is the `deepep_ht` path. It asks
+`Buffer.get_dispatch_config` and `get_combine_config` for the EP size on every call, and it calls
+`set_num_sms` only under dual-batch overlap, which is off by default, clamping it to 20 there, so the
+budget is UCCL's class default of 20 SMs at EP8 and EP16, on HIP as on CUDA. FP8 scales go out
+row-major, as vLLM's block quantize emits them. The Buffer gets 1 GiB of NVLink buffer, plus 1 GiB of
+RDMA buffer and 10 QPs per rank when it spans nodes. In `low-latency` mode the receive is sized to
+vLLM's fixed 256-token batched-DP budget rather than to the ladder, the NVLink buffer is the same
+1 GiB, which the low-latency kernels never touch, and each collective is split into a send kernel and
+a receive hook as on DeepEP V2 (below). vLLM's `enable_shrink=False` is the one argument the pinned
+Buffer rejects (uccl#1043 adds it). `implementation.library_version` reads `uccl@<pin>
+deep_ep==<wrapper> <build flags>`, taken from the record the prepare step writes beside the
+from-source build, and the import probe rejects DeepSeek's `deep_ep` (same API), any `deep_ep`
+loaded from outside the prepared cache, and any cache recorded for another commit. NCCL EP
 is NVIDIA's native MoE dispatch/combine on the NCCL Device API, shipped since v0.2 as the
 `nccl-extensions` wheel (which owns `nccl.ep`; `nccl4py`, pinned alongside, provides `nccl.core`).
 `normal` mode selects its `HIGH_THROUGHPUT` algorithm, whose FLAT `[N, hidden]` receive and
-unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same oracle applies. It is
+unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same oracle applies.
+No engine runs that algorithm (TensorRT-LLM's `NcclEP`, the only engine integration, is
+low-latency rank-major only), so HT rows are library rows (`candidate`). It is
 NVIDIA-only and CUDA 13 only, and runs EP8 and EP16 on all six NVIDIA SKUs: EP16 stays inside the
 MNNVL scale-up domain on GB200/GB300 and is a 2x8 RDMA scale-out over the cross-node GIN path on
 H100/H200/B200/B300. Under v0.1 that GIN path faulted inside `nccl_ep.cc` identically on RoCE and IB
 on every x86 pool; v0.2 clears it, revalidated on-metal on B200, H100 and H200, and on B300 over
-EFA proxy GIN (full decode and prefill ladders correct). FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM. It is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32. The adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. Its FP8 dispatch is the one (backend, precision) pair here that is realizable but off every deployed path. vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it back in for transport comparison against DeepEP V2/UCCL-EP at matching bytes and block size: the one place a precision filter ADDS rows rather than only removing them.
+EFA proxy GIN (full decode and prefill ladders correct). FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM. It is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32. The adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. It runs vLLM's integration of that kernel (`--all2all-backend flashinfer_nvlink_one_sided`): dispatch sends `[x, x_sf, topk_ids, topk_weights]` (no `x_sf` under BF16) with `invalid_token_expert_id=-1`, and combine is handed a caller-owned payload with `payload_in_workspace` at its `False` default, so FlashInfer's own staging copy of the filled slots into the workspace runs, and is timed, inside `combine`, as in vLLM. Writing the expert output straight into the workspace instead is TensorRT-LLM's path (and SGLang's with its `flashinfer_cutlass` runner only). The result lands in a caller-owned tensor (`output=` from 0.6.16; before that the returned tensor is copied into it, as vLLM's `combine_into` does). Its FP8 dispatch is DeepSeek blockwise FP8 (e4m3 with FP32 1x128 scales, vLLM's `per_token_group_quant_fp8` at block 128), which vLLM accepts on this transport from v0.29.0 (vllm#51924), so it is in the default matrix like every other backend's FP8.
 
 A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
 the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
 which deliver a per-expert padded receive buffer and apply the top-k gate weights inside a source-side
-combine (weighted-kernel-sum). For the scoped single-node EP8 cells these run over the intra-node
-NVLink low-latency path (`allow_nvlink_for_low_latency_mode`). NVSHMEM/IBGDA (and thus `/dev/gdrdrv`)
+combine (weighted-kernel-sum). It builds and calls them as vLLM's `deepep_low_latency` path does:
+`num_qps_per_rank` equal to the local expert count, NVLink allowed, MNNVL allowed only on the GB
+pools (vLLM's `VLLM_DEEPEP_LOW_LATENCY_USE_MNNVL`, which its env doc says to turn on "for better
+latency on GB200 like system"), and each collective split into a send kernel and a receive hook
+(`return_recv_hook=True`). vLLM's default non-DBO path splits both dispatch and combine that way and
+runs the hook straight after the send unless a shared expert is scheduled in between; here nothing
+is, so the hook follows immediately. Those rows carry the `-hook` generation suffix. UCCL-EP issues
+the same calls, as vLLM drives UCCL's drop-in Buffer. For the scoped single-node EP8 cells these run
+over the intra-node NVLink low-latency path (`allow_nvlink_for_low_latency_mode`). NVSHMEM/IBGDA (and
+thus `/dev/gdrdrv`)
 is only exercised on the wire by a multi-node scale-out (EP16) run, and single-node EP8 was validated
-on H200 with `/dev/gdrdrv` absent. On MoRI it selects the `IntraNodeLL` kernel, a single-call,
-pure-intranode decode kernel that keeps the same rank-deduplicated compact layout and plain unweighted
-rank-sum combine as the throughput `IntraNode` kernel, so it differs only by kernel type and timing
-(the split-phase RDMA-staged `AsyncLL` kernel is deliberately not used because its separate receive phase
-does not fit the single-call dispatch/combine contract). Low latency is a decode-phase-only addition
+on H200 with `/dev/gdrdrv` absent. On MoRI it selects SGLang's `AsyncLL` kernel, with SGLang's launch
+(64/32/8, 2 queue pairs per PE) and `MORI_ENABLE_SDMA` on, as SGLang deploys it on AMD. The kernel is
+driven split-phase: each timed dispatch is send then recv, and each timed combine is send then recv,
+the full transport SGLang's `dispatch_b`/`combine_b` pay, without the expert GEMM interleaved between
+the phases. It keeps the same rank-deduplicated compact layout and plain unweighted rank-sum combine
+as the throughput `IntraNode` kernel. Low latency is a decode-phase-only addition
 whose runnable set is narrower than and distinct from the throughput kernels', so it is enabled
 cell-by-cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs. It is
-currently enabled for DeepEP V2 at EP8 on H100/H200 and at EP8 and EP16 on B200 (the nscale
+currently enabled for DeepEP V2 at EP8 on H200 and at EP8 and EP16 on B200 (the nscale
 bare-metal pool: IBGDA over native IB rails with `/dev/gdrdrv`, which an x86 low-latency scale-out
 needs and no virtualized pool has) and on GB200/GB300 (EP16 inside the MNNVL scale-up domain), MoRI
-EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy
+EP8 on MI355X only (the MI300X/MI325X registries carry no low-latency rows), and UCCL-EP EP8 on
+H100/H200/B200 only (the legacy
 `Buffer` low-latency kernels, which at EP8 run `cudaIpc` over NVLink, not the CPU-proxy RDMA path,
 because the adapter passes `is_intranode` and UCCL then never starts its proxies. The AMD SKUs drop
 LL: upstream raised `kNumMaxTopK` 9 -> 16 six days before our pin, and the resulting host assert
-cannot hold on AMD's 16 warp groups), and NCCL EP at EP8 on H100/H200/B300 and at EP8 and EP16 on
-B200/GB200/GB300. NCCL EP's `LOW_LATENCY` algorithm uses rank-major receive with caller-side
-weighted expert pre-reduction and an unweighted rank-sum combine, as used by inference frameworks.
-Its direct zero-copy receive is enabled within one LSA/MNNVL domain and staged for scale-out.
+cannot hold on AMD's 16 warp groups. uccl#1057 (341835e, 2026-09-27) fixes it upstream by checking
+the runtime `num_topk + 1`, so this exclusion is the pin's, not the library's), and NCCL EP at EP8
+on H100/H200/B300 and at EP8 and EP16 on B200/GB200/GB300. NCCL EP's `LOW_LATENCY` algorithm runs
+TensorRT-LLM's `NcclEP` configuration: rank-major receive with caller-side weighted expert
+pre-reduction and an unweighted rank-sum combine, one group sized to the ladder's top (TensorRT-LLM
+sizes it to `min(max_num_tokens, moe_max_num_tokens)`), and the engine's zero-copy policy. Graphed
+rows dispatch into a plain tensor that the library stages, as TensorRT-LLM does under CUDA graph
+capture; eager rows write a registered window directly within one LSA/MNNVL domain; scale-out stages
+in both regimes (see [nccl-ep.md](nccl-ep.md)).
 These rows were held while v0.1's combine
 recv pipeline — a port of DeepEP's PRE-FIX code, missing the `fence.proxy.async.shared::cta` DeepEP
 added in #642 — raced on every rung (observed 1-in-5 bimodal corruption at T=256 on gb300 EP8,
@@ -237,8 +360,9 @@ ships that fence (`fence_view_async_shared` before the `emptyBarriers` arrive in
 which is the documented restore condition: the ladder runs unclamped to the full receive and the
 rows are enabled, subject as always to the correctness oracle. (Historically those rows also wedged
 on stale peer signals, [NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303), fixed by the
-single-handle adapter.) B300's only low-latency coverage beyond DeepEP V2 EP8 is this `candidate`
-NCCL EP row.
+single-handle adapter.) B300's only low-latency coverage is this NCCL EP row (the registry enables
+no DeepEP V2 low-latency row there), `production` at BF16 because it runs TensorRT-LLM's
+configuration.
 Whether a given SKU/backend/EP/mode cell is attempted is a capability
 fact. Whether it succeeded is decided only by the emitted artifact.
 
@@ -271,10 +395,15 @@ converts the received FP8 payload to the BF16 combine sends, something productio
 the FP8 lands in the expert GEMM, which reads FP8 operands natively and emits the BF16 combine
 receives. This suite measures the collective, not the layer, so `stage` stands in for that GEMM,
 which is why it is excluded from `roundtrip` and why **`stage` must not be summed into a total or
-compared between backends**: each adapter converts a different amount. DeepEP V2 and UCCL-EP convert
-only the received rows in `normal` mode but the whole padded plane in `low-latency`, where the
-receive buffer is `[experts, cap * ranks, hidden]` regardless of token count. MoRI converts only the
-received rows. FlashInfer only converts the filled slots. The one production path that *does* pay a separate
+compared between backends**: each adapter converts a different amount. UCCL-EP converts only the
+received rows in `normal` mode. DeepEP V2 runs `normal` mode without the host sync, so its receive is
+the worst-case `[next_pow2(T) * ranks, hidden]` plane and combine must be handed that whole plane (it
+reads only the valid prefix on device); its `stage` converts all of it, in decode and prefill alike.
+Both convert the whole padded plane in `low-latency`, where the receive buffer is `[experts, cap *
+ranks, hidden]` regardless of token count. MoRI dequantizes only the received rows, with their
+per-block scales. FlashInfer converts only the filled slots, and only under FP8: its BF16 stage is a
+pointer hand-off, because FlashInfer's payload staging copy is part of its `combine`. The one
+production path that *does* pay a separate
 materialised dequant is a quant-format mismatch fallback (vLLM dequantises when `block_k` disagrees
 with DeepEP's block size), which `CX_FP8_CONSUME=dequant` models. It is not the default because it
 is not the fast path.
@@ -283,7 +412,9 @@ Read `implementation.stage_excluded_from_roundtrip` as "there was device-work st
 hoisted out of the chain", not as "this row's roundtrip is stage-free". It is gated on whether the
 backend's `stage()` does device work at all, so `false` covers two unrelated situations that the
 `stage` component separates: **absent** means the backend has nothing to stage (a bare pointer
-assignment, as for NCCL EP and every BF16 row that hands the receive buffer straight to combine),
+assignment, as for NCCL EP and every BF16 row that hands the receive buffer straight to combine,
+FlashInfer's included; FlashInfer's own payload staging copy then runs inside `combine`, as vLLM's
+does, and is part of `combine` and `roundtrip` there),
 **present alongside `false`** means the `dequant` hatch put the conversion back inside the chain.
 Reading `false` alone as "roundtrip includes staging" subtracts a cost the row never paid. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
@@ -319,23 +450,35 @@ rather than per-operation costs. The paired roundtrip is the comparable quantity
 ### CUDA Graph Replay
 
 Serving engines capture their decode step, so graph-compatible backend/mode pairs are measured
-under `CUDAGraph.replay()` by default: each library's best measured configuration that passed
-every check, without changing its contract.
+under `CUDAGraph.replay()` by default at decode, as the backend's engine captures it, without
+changing its contract. Prefill stays eager on every backend, as the engines run it.
 
-- **nccl-ep** low-latency and HT **decode**. HT decode replays as a captured decode step would
-  run it. Its per-step routing `ncclAllGather` is the one host NCCL collective in any capture, so
-  nccl-ep's communicator runs NCCL graph usage mode 1 (one graph at a time): the default mixing
-  mode wraps every captured collective in an external event wait and record, which left ~14 µs
-  idle before each all-gather (h100 EP8 trace). Rows carry the `-gum1` generation suffix. Across
+- **nccl-ep** low-latency and HT **decode**. Graphed low-latency dispatch writes a plain tensor
+  that the library stages, as TensorRT-LLM's captured decode does, so it carries no `-zc`;
+  `COLLX_CUDA_GRAPH=0` restores the eager window path (`-zc`). HT decode replays as a captured
+  decode step would run it. Its per-step routing `ncclAllGather` is the one host NCCL collective
+  in any capture, so nccl-ep's communicator runs NCCL graph usage mode 1 (one graph at a time):
+  the default mixing mode wraps every captured collective in an external event wait and record,
+  which left ~14 µs idle before each all-gather (h100 EP8 trace). Graphed HT rows carry the
+  `-gum1` generation suffix; eager rows never do, since the mode only affects a capture. Across
   nodes the captured all-gather is still proxy-driven, and NCCL fronts it with a host-callback
   node on every replay (about +50 µs of dispatch at EP16). HT prefill stays eager.
 - **flashinfer-ep** decode; prefill stays eager (graphs change nothing there).
-- **uccl-ep** low-latency, intranode only, except b200 FP8 (faster eager). Normal mode host-syncs.
-- **deepep-v2** low-latency and normal **decode**, run as vLLM's graphed `deepep_v2` decode runs
-  ElasticBuffer (`do_cpu_sync=False`, receive sized to the next power of two of T; kernel
-  generation `v2-elastic-buffer-nosync`). Normal prefill keeps its host sync and stays eager.
-- **MoRI** both modes. ROCm torch before 2.13 rejects external events, so the timing events are
-  captured with `hipEventRecordWithFlags(..., hipEventRecordExternal)`, the call newer torch makes.
+- **uccl-ep** low-latency, intranode only, on every SKU and precision, as vLLM's captured decode
+  step runs it. Until `uccl-legacy-buffer-vllm-ht` landed, b200 FP8 ran eager; that exception
+  rested on a 0.98x-vs-1.04x pair-period gap measured before per-sample alignment existed in either
+  regime (b0d7acf17, 2026-09-26), which is drift-sized. Normal mode host-syncs and stays eager.
+- **deepep-v2** low-latency and normal **decode**. Normal mode runs ElasticBuffer as vLLM does with
+  CUDA graphs on, which is its default and keys on the model-level flag (`use_cudagraph = not
+  enforce_eager`), so prefill takes the same path as decode: `do_cpu_sync=False`, `do_expand=False`,
+  receive sized to the next power of two of T, and vLLM's buffer flags
+  (`prefer_overlap_with_compute=False`, `allow_multiple_reduction=False`). Prefill runs that path
+  eager, because vLLM runs large prefill batches uncaptured. No deepep-v2 dispatch waits on the host
+  any more.
+- **MoRI** normal and low-latency **decode**; prefill stays eager, since vLLM captures at most 512
+  tokens by default on ROCm and runs its prefill batches uncaptured. ROCm torch before 2.13 rejects
+  external events, so the timing events are captured with `hipEventRecordWithFlags(...,
+  hipEventRecordExternal)`, the call newer torch makes.
 
 Only the launch mechanism changes; every family keeps its eager meaning:
 
@@ -374,9 +517,10 @@ API call that is unsafe during capture, from any thread, fails the capture inste
 recorded into a graph no engine could build. Every graphed row is value-checked: each timed
 capture's output is poisoned and must be rewritten by a further replay (a point fails if any of its
 captures did not), and a separate capture with staging inside it is replayed once to upload, then
-has its inputs scaled by exactly 2 in place and dispatch's output and its result overwritten with
-0xFF bytes before its checked replay, whose output must then match an eager drained pair run on the
-same scaled inputs (`cuda_graph_last_output_passed`); the inputs are scaled back afterwards. A
+has its inputs scaled by exactly 2 in place and dispatch's output, the staged combine input and its
+result overwritten with 0xFF bytes before its checked replay, whose output must then match an eager
+drained pair run on the same scaled inputs (`cuda_graph_last_output_passed`); the inputs are scaled
+back afterwards. A
 replay that re-sent its captured data instead of re-reading its inputs fails that check. Graphed
 rows carry a `-cudagraph` suffix on
 `kernel_generation`, so the durable store never pools them with eager rows; the artifact also
@@ -411,12 +555,13 @@ samples, p95 at 5%, p90 at 10%. `implementation.rank_alignment` records the meth
 regimes: each combine sample is a fresh pair whose combine input is the stage hoisted once, untimed
 (see `stage_excluded_from_roundtrip`), so the window opens at that dispatch's exit and inherits its
 per-rank exit stagger. A dispatch that waits on the host would spend the spin on its wait if it
-followed the barrier, so in those series (uccl-ep normal, deepep-v2 normal prefill, eager only) it
-runs before the alignment and the window opens at the barrier's exit instead.
+followed the barrier, so in those series (uccl-ep normal, which is always eager) it runs before the
+alignment and the window opens at the barrier's exit instead.
 
 **Host-synced series wait out a throttled host.** In modes whose dispatch waits on the host
-(uccl-ep normal, deepep-v2 normal prefill) the barrier aligns the dispatch launch, and the host's
-poll and relaunch sit inside the window. That is their production cost, and it carries the host's
+(uccl-ep normal, the only one left; deepep-v2 normal prefill was one until it moved to vLLM's
+no-sync path) the barrier aligns the dispatch launch, and the host's poll and relaunch sit inside
+the window. That is their production cost, and it carries the host's
 speed into the window. While uccl-ep EP16 runs, b200-nscale nodes intermittently run the cores of
 both sockets at about 200 MHz effective (`scaling_cur_freq`, an APERF/MPERF average) for 100-200 ms,
 every 2-5 s, while the GPUs keep their clocks and the thermal-throttle counters stay at zero. An
@@ -518,11 +663,13 @@ The two chains publish five statistics, and only five:
   `period − Σfloors` is a real quantity with a meaning in each sign, and neither sign is an error:
   - **Positive** is the per-pair inter-rank wait that the MIN deliberately strips. Where a backend
     is synchronization-dominated it rivals the floor sum and sits *flat in T*, as gb200
-    flashinfer-ep normal decode (run 31089556516) holds ~70µs bf16 / ~100µs fp8 at every rung,
-    vanishing by T=512 and in prefill as the floors grow into it. That is `period = max(sync
-    budget, work)`, not instrumentation. It is invisible to `pair_spread_us` (2.7–8.5µs against
-    62–107µs gaps) because the period is conserved while the wait migrates between op windows. This is
-    the same steady-state stagger that bans chained per-op medians below.
+    flashinfer-ep normal decode held ~70µs bf16 / ~100µs fp8 at every rung under eager timing
+    (run 31089556516), vanishing by T=512 and in prefill as the floors grow into it. That is
+    `period = max(sync budget, work)`, not instrumentation. It is invisible to `pair_spread_us`
+    (2.7–8.5µs against 62–107µs gaps) because the period is conserved while the wait migrates
+    between op windows. This is the same steady-state stagger that bans chained per-op medians
+    below. The graph-replayed rows of that cell show +2.8µs at T=1 and negative values from T=2
+    (2026-10-15 audit), and the staged-combine generation has not been measured.
   - **Negative** is the floors chain's own four-records-per-pair host cost (~10–12µs) inflating
     *its* windows wherever the device outruns the host: the very effect the two-chain split
     evicted from the period, still present and harmless in the floors (gb200/h200 fp8 LL, run
@@ -562,7 +709,8 @@ about one iteration, which is only sound where the receive plane tolerates it: e
 double-buffers per dispatch, enforces strict pairing by contract, or completes each op on a reusable
 handle, and DeepEP V2's **normal** mode (the one genuinely unaudited cell) was hand-probed with
 256 un-synchronized pairs at T=128, EP8+EP16, both precisions (2026-08-06, pin `01dc3aaa`, the
-then-current dgxc pool's hybrid GIN over RoCE): all passed, outputs finite, timed inputs unchanged,
+then-current dgxc pool's hybrid GIN over RoCE, under the earlier overlap-on, multiple-reduction
+flags; not yet re-probed under vLLM's): all passed, outputs finite, timed inputs unchanged,
 cross-rank period agreement within 1µs, and the chain-vs-synced gap is the size of the effect this
 section is about (EP8 105.4 vs 125.4µs BF16, 216.6 vs 272.3µs FP8, while EP16 838 vs 863µs and 820 vs
 897µs). A backend that cannot run free belongs behind a fix, not a measurement variant: re-aligning
@@ -572,22 +720,27 @@ period.
 
 Every backend's timed HT dispatch now carries its routing work. nccl-ep binds routing with
 `ncclEpUpdateHandle`, documented as a "per-step collective: prepare the handle for the given top-k
-routing decisions" — and production routing changes every MoE layer, so a serving step pays that
-collective before every dispatch, at the handle's full token capacity. Earlier generations excluded
-it (as NVIDIA's own `ep_bench` does: CUDA events around dispatch and combine only, handle update
-outside the loop) on the argument that its capacity-proportional cost would import a ladder-max
-term into dispatch; that argument describes exactly what production pays, since engines size the
-handle to their max token capacity and update it per step. The timed window now includes the
-update; rows carry `kernel_generation` `nccl-ep-v02-ht-routed-zc-static`
-(`nccl-ep-v02-ll-rm-zc` for scale-up low-latency and `nccl-ep-v02-ll-rm` for scale-out;
-`nccl-ep-v02-ll-em` under `COLLX_NCCL_LL_LAYOUT=expert-major`). `-static` marks HT combine taking
-the full static receive plane the FLAT contract requires; earlier `-zc` rows sliced it to the
-received count.
+routing decisions", so the API requires it before every dispatch whose routing changed. No engine
+runs NCCL EP's HT algorithm (TensorRT-LLM's `NcclEP` is low-latency only), so these rows are
+library rows and reproduce no engine's cost. The update's HT work is sized by the handle's
+capacity, not by T: capacity-wide memsets, a routing-map conversion, an `ncclAllGather` of
+capacity rows and a metadata scan over them (nccl-extensions `nccl_ep.cc:4057-4137`, `4281`). Every
+rung, the smallest included, therefore carries a term set by the ladder's top (512 for decode, 8192
+for prefill). NVIDIA's own `ep_bench` excludes the update (CUDA events around dispatch and combine
+only) and times it in a separate micro-benchmark. Rows carry `kernel_generation`
+`nccl-ep-v02-ht-routed-zc-static[-gum1]-cap<N>-<wheel>`. Low-latency rows are
+`nccl-ep-v02-ll-rm-zc-cap<N>-<wheel>` eager within one LSA/MNNVL domain,
+`nccl-ep-v02-ll-rm-cap<N>-<wheel>` when graphed or scaled out, and `nccl-ep-v02-ll-em-cap<N>-<wheel>`
+under `COLLX_NCCL_LL_LAYOUT=expert-major` (`-fp8-ds-e3m4` precedes `-cap` on FP8 rows). `-cap<N>`
+is the group's token capacity, and `<wheel>` is the installed `nccl-extensions` version with its
+nightly date, so neither a ladder change nor a pin bump pools with older rows. `-static` marks HT
+combine taking the full static receive plane the FLAT contract requires; earlier `-zc` rows sliced
+it to the received count.
 The `v02` component discriminates the `nccl-extensions` v0.2 mover from earlier wheels, and
 pre-change `nccl-ep-ht`/`nccl-ep-ht-routed` rows are a different measurement contract or mover —
-the per-row discriminator the earliest NCCL changes lacked. HT uses zero-copy. LL uses the
-rank-major, pre-reduced inference-framework contract; zero-copy applies only within one LSA/MNNVL
-domain.
+the per-row discriminator the earliest NCCL changes lacked. HT uses zero-copy. LL follows
+TensorRT-LLM: rank-major and pre-reduced, staged under CUDA graphs and zero-copy when eager, within
+one LSA/MNNVL domain only.
 Low-latency mode has nothing to include: `ncclEpUpdateHandle` returns immediately there and the
 kernel reads
 the cached routing inside the timed dispatch. The other backends already carried this cost --
@@ -633,8 +786,10 @@ headline to read above such a table by at least the max-versus-mean gap; the ear
 predates per-sample alignment. `cross_rank_min_us` is the per-row figure to place beside one.
 Where a like-for-like comparison exists we match or beat: our skew-excluded MoRI dispatch is
 0.96x MoRI's own shipped tuning-config best at the same shape and byte count, DeepEP V2 on B300
-reproduces DeepEP's published 8x2 figure within 3%, and FlashInfer EP matches NVIDIA's published
-one-sided kernel within 4% across eight byte-normalized points.
+reproduced DeepEP's published 8x2 figure within 3% (under the overlap-on, multiple-reduction flags
+it ran before vLLM's), and FlashInfer EP matched NVIDIA's published one-sided kernel within 4%
+across eight byte-normalized points, on rows whose combine skipped the payload staging copy
+(`flashinfer-mnnvl-one-sided`); re-check both against the current generations before citing them.
 
 Logical payload bandwidth is:
 
@@ -644,19 +799,23 @@ Every row carries two byte accountings and each excludes expert metadata, paddin
 buffer capacity. `byte_provenance` is the canonical comparable basis: rank-deduplicated
 token-rank activations, one copy per unique (token, dest-rank) pair. `wire_byte_provenance` is
 what the kernels actually move: identical to the canonical basis for every layout that
-deduplicates per rank (all normal modes, and MoRI's low-latency kernels, whose combine is an
-unweighted rank-sum), and one copy per (token, expert) assignment for the low-latency kernels
-that apply top-k weights inside combine (DeepEP V2, UCCL-EP, NCCL EP). For a token whose experts
-share a destination rank the deduplicated count is a lower bound on those kernels' traffic —
-34% low on nccl-ep low-latency EP8 at T=128 — which is why every emitted GB/s divides from the
+deduplicates per rank (all normal modes, MoRI's low-latency kernels, whose combine is an
+unweighted rank-sum, and NCCL EP's default rank-major low-latency layout, which deduplicates per
+destination rank), and one copy per (token, expert) assignment for the low-latency kernels that
+apply top-k weights inside combine (DeepEP V2, UCCL-EP, and NCCL EP's expert-major layout under
+`COLLX_NCCL_LL_LAYOUT=expert-major`). For a token whose experts share a destination rank the
+deduplicated count is a lower bound on those kernels' traffic — 34% low on nccl-ep's expert-major
+low-latency EP8 at T=128 (measured 2026-08-30, when expert-major was its only layout) — which is
+why every emitted GB/s divides from the
 WIRE basis; a rate derived from `byte_provenance` on such a row is a lower bound, not the wire
 rate, and is not comparable across backends. Artifacts written before `wire_byte_provenance`
 existed fall back to the deduplicated basis, which only ever understates. `logical_copies`
 states each row's wire basis (`routed`, `assignments`, `wire`), so the two are never silently
 mixed. BF16 moves 2 bytes per value with no scale payload. An FP8 dispatch moves 1 byte per
-value, plus per-128-block FP32 scales for every blockwise codec here (DeepEP V2, UCCL-EP and
-FlashInfer EP, which carries them as a fourth dispatch payload), and none for MoRI's plain e4m3
-cast, while combine stays BF16, so the dispatch and combine directions can carry different byte
+value, plus per-128-block FP32 scales, for every FP8 codec here: DeepEP V2, UCCL-EP, MoRI, NCCL
+EP's DS-FP8, and FlashInfer EP, which carries them as a fourth dispatch payload (the low-latency
+kernels send FP32 scales even where they hand the receiver packed UE8M0 ones). Combine stays BF16,
+so the dispatch and combine directions can carry different byte
 counts and the roundtrip is their per-field sum. Latency (the headline) is
 measured directly and is unaffected. Algorithm bandwidth, bus bandwidth,
 wire utilization, and physical-link utilization are not emitted without a defined primitive model or
@@ -736,17 +895,18 @@ uniformly shortens the combine would publish a fast period no surviving check co
 standing probe for the intersection is the `dequant` hatch. `CX_FP8_CONSUME=dequant` stages every
 pair from its own dispatch, restoring this check on FP8's own free-running pairs. Run one whenever
 an FP8 chained period moves in a way its BF16 sibling does not, and before first publishing a new
-FP8 backend. flashinfer-ep hoists at BF16 as well (its stage is the workspace staging copy), so its
-rows are null at every precision and the hatch does not reach it, and its coverage is an open
-follow-up.
+FP8 backend. flashinfer-ep no longer hoists at BF16: its stage is a pointer hand-off and its payload
+staging copy runs inside combine, so its BF16 rows carry this check like every BF16 row (a bit-exact
+match is expected), while its FP8 rows are null like every hoisted FP8 row and the `dequant` hatch
+reaches them.
 
 Check 6 also publishes `correctness.chain_last_output_error`, the worst chained-vs-drained
 relative error, cross-rank MAX, **reported whether or not the verdict passed**. Read it before
 reading the verdict. The check assumes a regime defect lands orders of magnitude past
 `COMBINE_REL_TOL` while ordinary kernel non-determinism stays well inside it, and that assumption
-is not free: FlashInfer EP accumulates its combine in the payload dtype (a BF16 slot-tree) rather
-than FP32, so its rounding over a large receive plane is far coarser than a backend reducing in
-FP32. A verdict alone cannot separate "the transport corrupted this" from "this tolerance is too
+is not free: FlashInfer EP before 0.6.16 (the image's 0.6.8.post1 included) accumulates its combine
+in the payload dtype (a BF16 slot-tree) rather than FP32, so its rounding over a large receive
+plane is far coarser than a backend reducing in FP32. A verdict alone cannot separate "the transport corrupted this" from "this tolerance is too
 tight for this accumulator", and the two call for opposite responses. The magnitude is the
 discriminator. A failure reported without it should not be read as evidence of corruption.
 (`post_chain_state_passed` was previously published as `chain_regime_passed`, a name that
@@ -758,15 +918,25 @@ wherever the chain hoists staging, which is every FP8 row outside the `dequant` 
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine and derives the expected combine from the values
-actually communicated, reproducing the two-level reduction: each destination rank casts its FP32
-aggregate to the payload dtype (BF16) exactly as the adapter does. Ranks sharing a scale-up domain
-(NVLink/MNNVL) reduce in FP32, and each domain casts its aggregate to BF16 for the scale-out send
-before those partials are summed. A group that fits in one scale-up domain (`ep_size <=
-scale_up_domain`, including every EP8 case and the MNNVL EP16 cases) has a single domain and no scale-out
-rounding. A multi-node RoCE EP16 group carries one BF16 partial per node. Modelling that per-domain
-cast is what lets the gate stay tight (max elementwise relative error (denominator clamped at 0.02)
-below `8 * 2^-8`, the residual accumulation-order ambiguity) across scale-up and scale-out topologies
-alike (omitting it left multi-node EP16 ~0.048 off, above the gate).
+actually communicated: each destination rank casts its FP32 aggregate to the payload dtype (BF16)
+exactly as the adapter does, and `implementation.combine_reduction` names how those rows are then
+reduced. `domain-fp32` is the two-level reduction: ranks sharing a scale-up domain (NVLink/MNNVL)
+reduce in FP32, and each domain casts its aggregate to BF16 for the scale-out send before those
+partials are summed. A group that fits in one scale-up domain (`ep_size <= scale_up_domain`,
+including every EP8 case and the MNNVL EP16 cases) has a single domain and no scale-out rounding; a
+multi-node RoCE EP16 group carries one BF16 partial per node, and omitting that cast left multi-node
+EP16 ~0.048 off, above the gate. deepep-v2 no longer forms those partials: it runs vLLM's
+`allow_multiple_reduction=False`, under which hybrid forwarders relay each scale-up rank's BF16 row
+unreduced into the source's top-k slot (DeepEP at the pin, `hybrid_combine.cuh:453-494`) and the
+source sums the first slot of each unique destination rank in FP32
+(`combine_reduce_epilogue.cuh:74-95`). Its rows
+therefore use `rank-fp32`, the model nccl-ep low-latency rank-major already uses, at every scope;
+inside one scale-up domain the two models agree up to the final BF16 cast. Both keep the gate tight
+(max elementwise relative error (denominator clamped at 0.02) below `8 * 2^-8`, the residual
+accumulation-order ambiguity). On x86 EP16 the single reduction moves one scale-out row per unique
+remote destination rank instead of one per remote node, about 2.6x the combine scale-out bytes for
+uniform top-6 routing over 384 experts on 2x8; the canonical `token-rank` byte basis already counts
+it that way.
 
 Low-latency adapters instead use a source-side gate-weighted combine: the kernel multiplies each
 expert's returned message by that assignment's top-k weight, so the adapter stages the UNWEIGHTED
@@ -795,20 +965,38 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
   BF16 or the SKU's FP8 format) and semantics, `payload_unit` (`token-rank`), `sampling`, and the
   per-point `rows`.
 - `implementation`: backend name, kernel generation, and `maturity`, which indicates whether a production
-  inference engine can select this transport today (`production` = exposed by vLLM's
-  `--all2all-backend` or SGLang's `--moe-a2a-backend`, while `candidate` = a real transport we
-  benchmark that no engine ships a selector for, so its numbers describe the library rather
-  than a deployable configuration). The same map is in the registry's `backend_maturity`. It also
+  inference engine can select this configuration today (`production` = exposed by vLLM's
+  `--all2all-backend` or SGLang's `--moe-a2a-backend`, or, for a library vLLM does not expose, by
+  the engine that does: TensorRT-LLM's `NcclEP` for NCCL EP's low-latency rank-major BF16 rows;
+  `candidate` = a real transport or mode we benchmark that no engine ships a selector for, so its
+  numbers describe the library rather than a deployable configuration). uccl-ep stays `candidate`
+  although its rows run vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`, which is how
+  engines deploy it, because no engine ships a UCCL selector. nccl-ep sets maturity per row, while
+  the registry's `backend_maturity` keeps one value per backend (`candidate` for nccl-ep). It also
   carries `fp8_consume` (which FP8 consumption path the chained roundtrip modelled (see above)),
   `combine_reduction` and `library_version` (which reduction the oracle held the kernel to, and
-  the installed library that selected it), and two generation discriminators:
+  the installed library that selected it; deepep-v2 reports the wheel string at the pinned commit,
+  e.g. `2.1.0+local@01dc3aaac82068020353dce2c302e38153c0bfaa`, since the patched build cannot embed a
+  clean git hash, and uccl-ep, a from-source build, names its pinned commit and build flags beside
+  the wrapper version), and two generation discriminators:
   `stage_excluded_from_roundtrip` (whether `roundtrip` excludes expert-output staging, discussed
   above), `chained_period` (whether this document's rows carry the chained family),
   `cuda_graph_supported` (whether the adapter declares this mode graph-safe), and
   `cuda_graph_replay` (whether the existing measurement pipeline used replay). `library_config` is
-  the adapter's own report of what the library was realized with (SMs, QPs, launch configuration,
-  receive capacity, zero-copy, scale format), null where an adapter reports nothing beyond its
-  labels.
+  the adapter's `EPBackend.implementation_details()`: what it chose or the library resolved that
+  changes what a row measures, null where an adapter records none. deepep-v2 records
+  `engine_contract` (`vllm`) in both modes and, in `normal`, its SM and QP counts, allocated QPs,
+  LSA team, hybrid choice, vLLM's buffer flags, host-sync, expand and receive sizing
+  (`sm_model_rdma_gbs` on EFA only); the shared low-latency path records its receive capacity, QPs
+  per rank, receive hook, zero-copy and FP8 scale format, plus deepep-v2's NVLink and MNNVL flags;
+  uccl-ep its verified `deep_ep` identity, buffer bytes, QPs,
+  `is_intranode` and running CPU-proxy threads, with `Buffer.num_sms` and the dispatch and combine
+  `Config`s as the constructor rounded them in `normal` mode; MoRI the launch tuple its handle
+  realized, QPs, quant type, SDMA, heap and launch-config modes and whose contract (`vllm` or
+  `sglang`) it follows; nccl-ep `capacity_tokens_per_rank`, `zero_copy`, `num_sms` (`dispatch`,
+  `combine`) and `engine_contract` (`tensorrt-llm`, or null for a library row); FlashInfer its
+  combine contract (`payload_in_workspace`, `combine_output`), dispatch scale format and workspace
+  sizing.
 - `topology`: requested SKU/product, placement, `gpus_per_node`, nodes, scale-up domain, `scope`,
   `topology_class`, world size, and three distinct transport fields, `scale_up_transport` and
   `scale_out_transport` (the components), plus `transport`, the derived summary that folds them

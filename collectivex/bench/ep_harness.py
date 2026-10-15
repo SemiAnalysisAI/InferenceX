@@ -48,8 +48,8 @@ CONDITIONING_ROUNDS_PER_SHAPE = 8
 def logical_byte_provenance(logical_copies: int, hidden: int, value_bytes: int = 2,
                             scale_bytes_per_copy: int = 0) -> dict[str, int]:
     """Comparable logical activation bytes for one direction. BF16 moves 2 bytes/value with no
-    scales; FP8 moves 1 byte/value, plus per-block FP32 scales for a blockwise codec (DeepEP) and
-    none for a plain e4m3 cast (MoRI). Combine is always BF16."""
+    scales; FP8 moves 1 byte/value plus per-128-block FP32 scales (every FP8 codec here). Combine
+    is always BF16."""
     if logical_copies < 0 or hidden < 0:
         raise ValueError("logical byte dimensions must be non-negative")
     if value_bytes <= 0 or scale_bytes_per_copy < 0:

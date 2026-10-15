@@ -96,8 +96,9 @@ class EPBackend(abc.ABC):
     # direction without the other.
     requires_fresh_pair = False
     # The timed dispatch waits on the host for its receive counts (DeepEP-legacy normal mode's
-    # notify, ElasticBuffer's do_cpu_sync), so the host's relaunch of the transfer runs inside the
-    # eager window and its samples pass through the host gate (ep_timing.HostGate).
+    # notify, as uccl-ep normal runs it; deepep-v2 left ElasticBuffer's do_cpu_sync for vLLM's
+    # no-sync path), so the host's relaunch of the transfer runs inside the eager window and its
+    # samples pass through the host gate (ep_timing.HostGate).
     host_synced_dispatch = False
     # Shape of the receive plane dispatch delivers -- "token-rank": one row per
     # (source token, dest rank), rank-deduplicated; "token-expert": one row per
