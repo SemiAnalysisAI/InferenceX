@@ -163,8 +163,8 @@ Every row is gated. Any failed rank or point makes the case `invalid`.
 - Routing is uniform. Real routing has hot experts.
 - L2 is not flushed between samples.
 - GPU clocks are not locked. Each case records every rank's clock and throttle time in
-  `runtime.gpu_clocks`, and `slow_gpu` flags a GPU below 95% of its peers' clock or one reporting a
-  hardware slowdown. Do not compare a flagged case.
+  `runtime.gpu_clocks`, and `slow_gpu` flags a GPU below 95% of its peers' clock, one reporting a
+  hardware slowdown, or one throttled for 5% of the timed passes. Do not compare a flagged case.
 - Held samples measure the library on a host running at speed. A platform that throttles under that
   host load costs production more; b200-nscale under uccl-ep EP16 does.
 - Interior chain pairs are not validated; only the last pair and the post-chain state are.

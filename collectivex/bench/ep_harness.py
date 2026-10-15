@@ -150,8 +150,8 @@ CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 def _published_tails(percentiles, suspect_fraction=0.0):
     """Fresh-entry tails are withheld once the suspect samples, those whose alignment may have
     failed or whose host stalled inside the window, could fill everything above them: p99 at 1% of
-    samples, p95 at 5%, p90 at 10%. Graphed rows have none: their alignment is captured in the graph,
-    so a rank whose host launches its replay late waits at the barrier, outside the window."""
+    samples, p95 at 5%, p90 at 10%. Graphed rows pass through the same gate: a replay call that
+    outlasted the captured spin counts as missed, as an eager sample's late enqueue does."""
     if percentiles is None:
         return None
     return {key: (None if key != "p50" and 100 * suspect_fraction >= 100 - int(key[1:]) else value)
@@ -275,8 +275,9 @@ class Point:
 
     Fresh-entry series carry one value per timed iteration pooled across trials: MAX-reduced for
     the published latencies, MIN-reduced (`_min`) for the skew-excluded companions, `spread` the
-    roundtrip's max-min, and `missed` counts each eager series' samples that some rank entered
-    after its alignment spin ran out. For series whose dispatch waits on the host, `host_held`
+    roundtrip's max-min, and `missed` counts each series' samples that some rank entered after its
+    alignment spin ran out (eager: its enqueue; graphed: its replay call). For series whose dispatch
+    waits on the host, `host_held`
     counts the samples whose start some rank held until its throttled host recovered, and
     `host_stalled` the samples some rank's host ran throttled around anyway; `suspect` counts the
     samples that were missed or stalled, once. The chained family runs on its own trials:
