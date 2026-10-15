@@ -66,8 +66,9 @@ every position in the sequence, and each iteration takes the cross-rank maximum 
 p50/p90/p95/p99. A keyed BLAKE2b counter produces
 byte-identical routing and gate weights on every runtime. Graph-compatible backend/mode pairs
 (decode on most backends, both phases on MoRI) run these measurements under CUDA graph replay by
-default, with the same percentiles as eager rows; `COLLX_CUDA_GRAPH=0` restores eager (see the
-methodology's CUDA Graph Replay section).
+default, with the same alignment (a GPU spin, then an all-reduce, ahead of every window) and the
+same percentile gating as eager rows; `COLLX_CUDA_GRAPH=0` restores eager (see the methodology's
+CUDA Graph Replay section).
 
 Those components all measure **fresh entry** (the GPU is drained around every timed window), the
 latency of an idle pipeline, not what a decode loop pays. So every row also carries the **chained

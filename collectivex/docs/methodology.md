@@ -287,7 +287,8 @@ assignment, as for NCCL EP and every BF16 row that hands the receive buffer stra
 **present alongside `false`** means the `dequant` hatch put the conversion back inside the chain.
 Reading `false` alone as "roundtrip includes staging" subtracts a cost the row never paid. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
-`isolated_sum` is derived.
+`isolated_sum` is derived: the isolated dispatch and combine percentiles added, on every row
+(eager rows also summed `stage` until the 2026-10 rerun).
 
 Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
 Pair Period below) for every row that carries one, graph-replayed or eager. The earlier eager flip shipped **held** while the
@@ -339,11 +340,16 @@ every check, without changing its contract.
 Only the launch mechanism changes; every family keeps its eager meaning:
 
 - **Fresh-entry components** (`roundtrip`, `dispatch`, `combine`) capture one pair with event
-  nodes around the timed window. An all-reduce is captured before the first timing event,
-  including its stream dependencies, so alignment stays outside the measured interval without
-  a host-side handoff or spin kernel. A rank whose host launches its replay late reaches that
-  all-reduce late, and the other ranks wait for it there, before their windows open, so these
-  series publish every percentile. Component origin is `cuda-graph-replay`.
+  nodes around the timed window. The eager alignment (below), a calibrated spin and then an
+  all-reduce, is captured ahead of the first timing event with its stream dependencies, so it stays
+  outside the measured interval with no host-side handoff after it. CUDA launches a replay whole: a
+  rank whose host launches late reaches the all-reduce late, and the other ranks wait for it there,
+  before their windows open. HIP submits a replay node by node from the host, and its captured
+  event records become host-enqueued markers, so on ROCm a host that lags after submitting the
+  all-reduce lets its peers' windows open before its own dispatch is queued. The spin gives that
+  host time to submit the whole replay before the barrier releases anyone, and a replay call that
+  outlasts it counts as **missed**, exactly as an eager sample does, gating the row's tails the same
+  way. Component origin is `cuda-graph-replay`.
 
   Graphed rows published only p50 while alignment ran ahead of the replay: a late launch then
   stalled the other ranks inside the window (gb200 flashinfer EP8 T=1 roundtrip p99 858 µs against
@@ -351,16 +357,28 @@ Only the launch mechanism changes; every family keeps its eager meaning:
   p99 against 46 µs at p50 on 2026-10-15. Across the graphed decode rows rechecked that day, the
   roundtrip p99 ran 1.01-1.09x its p50 on h200 EP8 (deepep-v2, nccl-ep HT and low-latency) and
   gb200 flashinfer EP8, and 1.03-1.19x on mi325x MoRI, where the row's own pair-period p99 ran
-  1.02-1.16x its p50. The per-sample cross-rank spread stayed at 5-26 µs at p99.
+  1.02-1.16x its p50. The per-sample cross-rank spread stayed at 5-26 µs at p99. Graphed mi300x
+  MoRI decode did not: its roundtrip p99 ran 1.30-1.55x its p50 at small T, with the cross-rank MIN
+  tight (one rank's tail), while the same node and image ran eager at 1.02-1.14x. That is the
+  node-by-node submission above. With the spin captured ahead of the all-reduce, graphed decode ran
+  its roundtrip p99 at 1.02-1.13x its p50 on both mi300x and mi325x at every rung, no replay call
+  outlasted the spin, and mi300x's small-T dispatch p99 fell from 47.6-56.4 µs to 29.8-36.0 µs:
+  the eager tails of the same SKU.
 - **The chained family** (`pair_period`, floors, health) captures each sibling chain as one graph
   of `chain_iters` unrolled pairs, the shape of a decode graph, replayed once untimed and once
   behind the barrier. Its oracle, output check and tails apply unchanged.
 
 `stage` is not separately timed under replay. `COLLX_CUDA_GRAPH=0` restores the eager pipeline.
-Every graphed row is value-checked: each timed capture's output is poisoned and must be rewritten
-by a further replay, and a separate capture with staging inside it has dispatch's output and its
-result overwritten with 0xFF bytes before its only replay, whose output must then match an eager
-drained pair (`cuda_graph_last_output_passed`). Graphed rows carry a `-cudagraph` suffix on
+Capture uses torch's default (`global`) error mode, as vLLM's and SGLang's decode captures do: an
+API call that is unsafe during capture, from any thread, fails the capture instead of being
+recorded into a graph no engine could build. Every graphed row is value-checked: each timed
+capture's output is poisoned and must be rewritten by a further replay (a point fails if any of its
+captures did not), and a separate capture with staging inside it is replayed once to upload, then
+has its inputs scaled by exactly 2 in place and dispatch's output and its result overwritten with
+0xFF bytes before its checked replay, whose output must then match an eager drained pair run on the
+same scaled inputs (`cuda_graph_last_output_passed`); the inputs are scaled back afterwards. A
+replay that re-sent its captured data instead of re-reading its inputs fails that check. Graphed
+rows carry a `-cudagraph` suffix on
 `kernel_generation`, so the durable store never pools them with eager rows; the artifact also
 records `implementation.cuda_graph_replay` and `cuda_graph_supported`.
 
@@ -377,13 +395,24 @@ its host's launch: the entry skew and the first kernel's launch latency both lea
 doubled and spread p99 rose from ~20 to 185-293 µs.
 
 A sample counts as **missed** when some rank's host took longer than the spin to get from the
-spin's enqueue to the start event's record, so that rank's window may have opened after the barrier
-released the others. Each eager row publishes `rank_alignment.missed_samples` per series and
-`missed_fraction`, the largest share among roundtrip, dispatch and combine (staging is local work).
-Every fresh-entry tail in the row (components, `cross_rank_min_us` and the token rates) is withheld
-once the samples that were missed or host-stalled (below), each counted once, could fill everything
-above it: p99 at 1% of samples, p95 at 5%, p90 at 10%. `implementation.rank_alignment` records the
-method and spin; graphed rows say `in-graph-all-reduce` and carry `rank_alignment: null`.
+spin's enqueue to the end of its timed operation's enqueue (eager) or to the return of its replay
+call (graphed), so that rank's window may have opened, or its timed work started, after the barrier
+released the others. A dispatch that waits on the host returns only after its own device work, so
+for those series the lead stops at the start event and the host gate below covers the rest. Garbage
+collection is off for the length of every timed series, so a collection cannot stall a host inside
+a window. Every row publishes `rank_alignment.missed_samples` per series and `missed_fraction`, the
+largest share among roundtrip, dispatch and combine (staging is local work). Every fresh-entry tail
+in the row (components, `cross_rank_min_us` and the token rates) is withheld once the samples that
+were missed or host-stalled (below), each counted once, could fill everything above it: p99 at 1% of
+samples, p95 at 5%, p90 at 10%. `implementation.rank_alignment` records the method and spin
+(`gpu-spin-then-all-reduce` eager, `in-graph-spin-then-all-reduce` graphed).
+
+`combine` (and eager `stage`) is timed behind its own untimed dispatch, as a pair runs it, in both
+regimes: each combine sample is a fresh pair whose combine input is the stage hoisted once, untimed
+(see `stage_excluded_from_roundtrip`), so the window opens at that dispatch's exit and inherits its
+per-rank exit stagger. A dispatch that waits on the host would spend the spin on its wait if it
+followed the barrier, so in those series (uccl-ep normal, deepep-v2 normal prefill, eager only) it
+runs before the alignment and the window opens at the barrier's exit instead.
 
 **Host-synced series wait out a throttled host.** In modes whose dispatch waits on the host
 (uccl-ep normal, deepep-v2 normal prefill) the barrier aligns the dispatch launch, and the host's
@@ -428,16 +457,27 @@ with few throttles can look clean.
 
 Three limits:
 
-- A series whose untimed setup contains a host wait (FP8 `stage` in normal mode) is not aligned at
-  all, and counts its misses without gating the row.
 - The probes see the host only at the two ends of a sample, a spin and a window apart: a slowdown
   under 5x after the sample opened, or a throttle that starts and ends between them, still lands in
-  the window uncounted. The chained family is not held.
+  the window uncounted. The chained family is held per sibling chain (below), not per pair.
 - Unlike `bench_kineto`, nothing flushes L2 between samples.
 
-Each chain sibling is aligned once, before its first event, as the graph chain is. Eager rows carry
-the `-eager-spin-ar` suffix. Earlier eager rows (the bare family) had no per-sample alignment, so
-their small-T latency included host launch skew.
+Each chain sibling is aligned once, before its first event. An eager sibling opens with the
+all-reduce alone: a spin in front lets the host queue a backlog that the GPU then drains faster
+than the host can refill it, so a host-bound chain's kept pairs mix two speeds. Eager mi300x MoRI
+decode, which the host paces, published a 78 µs period with a +25 µs settle drift at T=64 behind
+a spin; behind the all-reduce alone it runs 82-84 µs at every rung to T=128 with settle drift
+between -3.6 and -0.6 µs. Garbage collection is off inside both siblings. A graphed
+sibling keeps the captured spin, since its replay is one host call. In modes whose dispatch waits
+on the host, each eager sibling also passes through the host gate: it opens once this host runs at
+speed, and after its final sync every rank's host probes again and the ranks agree, by a MAX
+all-reduce, whether any of them ran throttled. If one did, every rank restarts the sibling
+together, up to three times. `chain_health.host_retried_siblings` counts the restarts and
+`host_stalled_trials` the trials still throttled after the last one, whose `pair_period` keeps its
+p50 and withholds its tails; both are null where the dispatch does not wait on the host. Eager rows
+carry the `-eager-spin-ar` suffix and graphed rows `-cudagraph-spin-ar`; `-cudagraph-in-graph-ar`
+rows captured the all-reduce without a spin, and earlier eager rows (the bare family) had no
+per-sample alignment, so their small-T latency included host launch skew.
 
 ### Chained Pair Period
 
@@ -765,7 +805,10 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
   `stage_excluded_from_roundtrip` (whether `roundtrip` excludes expert-output staging, discussed
   above), `chained_period` (whether this document's rows carry the chained family),
   `cuda_graph_supported` (whether the adapter declares this mode graph-safe), and
-  `cuda_graph_replay` (whether the existing measurement pipeline used replay).
+  `cuda_graph_replay` (whether the existing measurement pipeline used replay). `library_config` is
+  the adapter's own report of what the library was realized with (SMs, QPs, launch configuration,
+  receive capacity, zero-copy, scale format), null where an adapter reports nothing beyond its
+  labels.
 - `topology`: requested SKU/product, placement, `gpus_per_node`, nodes, scale-up domain, `scope`,
   `topology_class`, world size, and three distinct transport fields, `scale_up_transport` and
   `scale_out_transport` (the components), plus `transport`, the derived summary that folds them
@@ -802,7 +845,7 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
 
 Each `rows` entry carries point latency (`components`, graph-replayed by default where supported,
 plus `components.pair_period`, `chain_floor_us` and `chain_health` (see Chained Pair Period)), the
-eager alignment's `rank_alignment` misses (see CUDA Graph Replay), byte accounting, token rate,
+alignment's `rank_alignment` misses (see CUDA Graph Replay), byte accounting, token rate,
 correctness, load, and fanout, while
 per-point statistics are summarized in place, not emitted as separate documents. Each run of a case
 writes exactly this one raw result document, replacing the case's previous file, while unsupported

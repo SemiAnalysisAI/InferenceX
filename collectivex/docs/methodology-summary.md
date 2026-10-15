@@ -74,20 +74,30 @@ Free-running pairs let ranks drift apart by up to one pair. Every current backen
 through a double-buffered receive, strict pairing, or a reusable handle.
 
 **Launch.** Graph-safe backend/mode pairs replay CUDA graphs, as engines capture decode, and the
-rest run eager. Under graphs the chain is one graph of 128 unrolled pairs. Graphed and eager rows
-carry different `kernel_generation` suffixes (`-cudagraph`, `-eager-spin-ar`) and never pool.
+rest run eager. Under graphs the chain is one graph of 128 unrolled pairs. Capture uses torch's
+default (`global`) error mode, as vLLM and SGLang capture. Graphed and eager rows carry different
+`kernel_generation` suffixes (`-cudagraph-spin-ar`, `-eager-spin-ar`) and never pool.
 
-**Rank alignment** keeps launch skew out of the cross-rank MAX:
+**Rank alignment** keeps launch skew out of the cross-rank MAX. Every fresh-entry sample opens
+with a 2 ms GPU spin, then a device all-reduce, with no host sync (DeepEP's `bench_kineto` method):
 
-- **Graphed**: an all-reduce is captured in each graph before its first timing event, on every
-  fresh-entry replay and once per chain graph.
-- **Eager**: before each sample (and once per chain), a 2 ms GPU spin, then a device all-reduce, with
-  no host sync. This is DeepEP's `bench_kineto` method. A sample whose host took longer than the
-  spin to reach its start event is a **miss**.
+- **Eager**: queued ahead of each sample. A sample whose host took longer than the spin to finish
+  enqueuing its timed op is a **miss**. Garbage collection is off inside every timed series.
+- **Graphed**: captured in each graph before its first timing event. HIP submits a replay node by
+  node from the host, so on ROCm the spin is what lets a lagging host queue the whole replay before
+  the barrier releases its peers; a replay call that outlasts it is a **miss**.
+- **Chains** align once per sibling: graphed chains keep the captured spin, eager siblings open
+  with the all-reduce alone, so a host-bound chain cannot queue a backlog it then drains at a
+  second speed.
+- **`combine`** is timed behind its own untimed dispatch, a fresh pair with the stage hoisted, in
+  both regimes.
 - **Host-synced eager series** (uccl-ep normal, deepep-v2 normal prefill) also wait out a throttled
   host. A CPU probe holds the sample while the probe runs more than 2.5x slow, capped at 0.5 s per
   sample and 60 s per run. A probe more than 5x slow on either side of the window marks the sample
-  **stalled**.
+  **stalled**. Their untimed dispatch ahead of a timed `combine` runs before the alignment, so its
+  wait cannot spend the spin. Their chain siblings are held the same way and restart, on every rank
+  together, when any host ran throttled (at most 3 times); a trial still throttled publishes only
+  its period p50.
 
 **Order.** Each shape is warmed in ascending order (8 untimed round trips) and checked for
 correctness before any timing. Every measured component and chain trial follows 32 warmup pairs, and
@@ -97,9 +107,8 @@ component and ladder order rotate per trial.
 
 - **Headline**: `pair_period` p50, with its p99 beside it. Fresh-entry `roundtrip` p50 is the
   isolated-call latency.
-- **Fresh-entry tails**: graphed rows publish every percentile, because a late replay launch waits
-  at the in-graph barrier, outside the window. Eager rows withhold p99, p95 and p90 once misses plus
-  stalls reach 1%, 5% and 10% of samples, and report the counts in `rank_alignment`.
+- **Fresh-entry tails**: every row, graphed or eager, withholds p99, p95 and p90 once misses plus
+  stalls reach 1%, 5% and 10% of samples, and reports the counts in `rank_alignment`.
 - **Bandwidth** is wire payload bytes divided by latency.
   - `wire_byte_provenance` counts what the kernels move: one copy per (token, rank) for
     rank-deduplicated layouts, and one per (token, expert) for the LL kernels that weight inside
@@ -126,8 +135,9 @@ Every row is gated. Any failed rank or point makes the case `invalid`.
   - FlashInfer's BF16 tree before 0.6.16.
 
   FP8 is modelled by applying the backend's exact cast. The tolerance is 8 x 2^-8, relative.
-- **Graphed rows**: outputs are poisoned, must be rewritten by the replay, and must match an eager
-  pair.
+- **Graphed rows**: every timed capture's output is poisoned and must be rewritten by its replay.
+  A separate check scales the inputs by 2 and poisons dispatch's output before a replay whose output
+  must then match an eager pair on the same inputs, so a replay that re-sent stale data fails.
 
 ## Reading results
 
