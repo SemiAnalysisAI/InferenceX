@@ -3,7 +3,7 @@ name: Stage PR Results
 run-name: Stage results for PR #${{ github.event.issue.number }}
 
 on:
-  issue_comment: # zizmor: ignore[dangerous-triggers] trusted default-branch code only; maintainer-gated below and in stage_results.py
+  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; stage_results.py requires write access before using FRONTEND_PAT
     types: [created]
 
 permissions: {}
@@ -17,7 +17,6 @@ jobs:
     name: Authorize and dispatch staging
     if: >-
       github.event.issue.pull_request &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
       (startsWith(github.event.comment.body, '/stage-results') ||
        startsWith(github.event.comment.body, '/use'))
     runs-on: ubuntu-latest

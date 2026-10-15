@@ -1,7 +1,7 @@
 name: CODEOWNER Sign-off Verify
 
 on:
-  issue_comment: # zizmor: ignore[dangerous-triggers] trusted default-branch code; read-only agent job, maintainer-gated; writes only in publish
+  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; signoff_resolve checks eligibility before the read-only agent; only publish writes
     types: [created, edited]
   pull_request_review:
     types: [submitted, edited]
@@ -30,13 +30,10 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
-       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
-       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association) &&
        contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review_comment' &&
-       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
     runs-on: ubuntu-latest
     concurrency:
