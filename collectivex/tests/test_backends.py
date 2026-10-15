@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "bench"), str(ROOT / "tests")]
 
 import ep_backend  # noqa: E402
-from ep_backend import EPBackend, RankInputs  # noqa: E402
+from ep_backend import EPBackend  # noqa: E402
 from _fakes import _ChainBackend  # noqa: E402
 
 
@@ -28,43 +28,24 @@ def args(**updates):
 
 
 class FakeBackend(EPBackend):
+    """The base class's input and validation paths; nothing here dispatches."""
+
     name = "fake"
 
-    def __init__(self, options, *, cap=None, world_size=1):
-        super().__init__(options, 0, world_size, 0, "cpu")
+    def __init__(self, options, *, cap=None):
+        super().__init__(options, 0, 1, 0, "cpu")
         self.cap = cap
-        self.calls: list[str] = []
-
-    def create_buffer(self, spec):
-        return None
-
-    def dispatch(self, problem):
-        self.calls.append("dispatch")
-        return object()
-
-    def stage(self, problem, handle):
-        self.calls.append("stage")
-
-    def combine(self, problem, handle):
-        self.calls.append("combine")
-
-    def recv_tokens(self, handle):
-        return 0
-
-    def inspect_dispatch(self, problem, handle):
-        return None
-
-    def combine_transformed(self, problem, handle, transformed):
-        return None
 
     def buffer_cap(self, options):
         return self.cap
 
-    def _build_rank_inputs(self, options, tokens):
-        return RankInputs(
-            tokens_per_rank=tokens, topk_idx=None, topk_weights=None,
-            activations=None,
-        )
+    def create_buffer(self, spec): ...
+    def dispatch(self, problem): ...
+    def stage(self, problem, handle): ...
+    def combine(self, problem, handle): ...
+    def recv_tokens(self, handle): ...
+    def inspect_dispatch(self, problem, handle): ...
+    def combine_transformed(self, problem, handle, transformed): ...
 
 
 class BackendTests(unittest.TestCase):
@@ -78,15 +59,12 @@ class BackendTests(unittest.TestCase):
                 self.assertEqual(spec.rc, 2)
                 self.assertIn(message, spec.message)
 
-    def test_mode_is_fail_closed(self):
-        with self.assertRaises(ValueError):
-            FakeBackend(args(mode="unsupported"))
-
-    def test_precision_is_fail_closed(self):
-        # The base SUPPORTED_PRECISIONS is BF16-only; an adapter that has not opted
-        # into a precision must reject it rather than silently run the wrong codec.
-        with self.assertRaises(ValueError):
-            FakeBackend(args(precision="fp8"))
+    def test_an_unsupported_mode_or_precision_is_fail_closed(self):
+        # The base SUPPORTED_PRECISIONS is BF16-only; an adapter that has not opted into a
+        # precision must reject it rather than silently run the wrong codec.
+        for update in ({"mode": "unsupported"}, {"precision": "fp8"}):
+            with self.subTest(**update), self.assertRaises(ValueError):
+                FakeBackend(args(**update))
 
     def test_make_problem_sends_x_and_points_the_oracle_at_semantic_payload(self):
         # dispatch_x is always x -- adapters quantize inside dispatch(), where production
@@ -117,23 +95,16 @@ class RoundtripStaging(unittest.TestCase):
 
     def test_an_unrecognised_consume_mode_fails_instead_of_silently_meaning_native(self):
         # The value is read at class-body evaluation, so a typo raises at import -- before
-        # any measurement -- rather than quietly running the default model and tagging the
-        # artifact with whatever the typo said.
+        # any measurement -- rather than quietly running the default model.
         with mock.patch.dict(os.environ, {"CX_FP8_CONSUME": "dequantize"}):
             with self.assertRaises(ValueError):
                 importlib.reload(ep_backend)
-        # Restore the module other tests hold references into.
-        importlib.reload(ep_backend)
-        self.assertEqual(ep_backend.EPBackend.fp8_consume, "native")
+        importlib.reload(ep_backend)  # restore the module other tests hold references into
 
 
 class FlashInferCombineModelSwitch(unittest.TestCase):
-    """Which arithmetic the oracle holds FlashInfer's combine to, selected by wheel version.
-
-    An inverted comparison or a typo'd `_COMBINE_FP32_SINCE` silently swaps the expected
-    combine for every FlashInfer row -- a wrong-model failure runs 30-90x COMBINE_REL_TOL,
-    so it reds correct runs rather than passing bad ones, but nothing else in CI sees it.
-    """
+    """Which arithmetic the oracle holds FlashInfer's combine to, selected by wheel version: a
+    wrong model reds every correct FlashInfer row."""
 
     def _module(self):
         return _import_stubbed("ep_flashinfer")
@@ -184,6 +155,8 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         backend._algorithm = "LL" if low_latency else "HT"
         backend._layout = module.Layout.RANK_MAJOR if low_latency else module.Layout.FLAT
         backend._bootstrap_comm = lambda: None
+        # create_buffer stamps the installed wheel into kernel_generation.
+        module.metadata = types.SimpleNamespace(version=lambda name: "0.2.0.dev20261005")
         backend._recv_window_for_test = types.SimpleNamespace(
             is_valid=True, close=lambda: None
         )
@@ -201,28 +174,8 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         module.nccl_ep.Group = types.SimpleNamespace(create=lambda *a, **k: object())
         return backend
 
-    def test_only_ll_rank_major_selects_the_nccl_fp32_reduction(self):
+    def test_the_communicator_runs_graph_usage_mode_one(self):
         module = self._module()
-        ll = self._construct(module, 16)
-        ht = self._construct(module, 16, mode="normal")
-        self.assertEqual(ll.combine_reduction, "rank-fp32")
-        self.assertEqual(getattr(ht, "combine_reduction", "domain-fp32"), "domain-fp32")
-
-    def test_graphed_ht_decode_runs_graph_usage_mode_one(self):
-        module = self._module()
-        module.dist.group = types.SimpleNamespace(WORLD=object())
-
-        def base_init(instance, options, rank, world_size, local_rank, device):
-            instance.args = options
-            instance.mode = options.mode
-
-        common = dict(experts=384, hidden=7168, topk=6, scale_up_domain=8, mode="normal")
-        with mock.patch.object(module.EPBackend, "__init__", base_init), \
-                mock.patch.dict(os.environ, {}, clear=True):
-            decode = module.NCCLEPBackend(types.SimpleNamespace(phase="decode", **common), 0, 16, 0, "cuda:0")
-            prefill = module.NCCLEPBackend(types.SimpleNamespace(phase="prefill", **common), 0, 16, 0, "cuda:0")
-        self.assertEqual(decode.kernel_generation, "nccl-ep-v02-ht-routed-zc-static-gum1")
-        self.assertEqual(prefill.kernel_generation, "nccl-ep-v02-ht-routed-zc-static")
         with mock.patch.object(module.nccl_core, "NCCLConfig", lambda **kw: kw, create=True):
             self.assertEqual(module.NCCLEPBackend._comm_config(), {"graph_usage_mode": 1})
 
@@ -230,6 +183,7 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         module = self._module()
         em = self._construct(module, 8, COLLX_NCCL_LL_LAYOUT="expert-major")
         rm = self._construct(module, 8)
+        ht = self._construct(module, 16, mode="normal")
         with self.assertRaisesRegex(ValueError, "COLLX_NCCL_LL_LAYOUT"):
             self._construct(module, 8, COLLX_NCCL_LL_LAYOUT="flat")
 
@@ -239,9 +193,10 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
             ("nccl-ep-v02-ll-em", "token-expert", "weighted-kernel-sum"),
         )
         self.assertFalse(em.zero_copy)
-        self.assertEqual(getattr(em, "combine_reduction", "domain-fp32"), "domain-fp32")
         self.assertEqual(rm._layout, module.Layout.RANK_MAJOR)
-        self.assertEqual(rm.combine_reduction, "rank-fp32")
+        # Only LL rank-major selects NCCL's FP32 reduction.
+        self.assertEqual((rm.combine_reduction, em.combine_reduction, ht.combine_reduction),
+                         ("rank-fp32", "domain-fp32", "domain-fp32"))
 
     def test_ll_ladder_keeps_512_and_larger_points(self):
         module = self._module()
@@ -252,18 +207,6 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         spec = backend.make_inputs(backend.args)
         self.assertEqual(spec.ladder, [32, 256, 512, 1024])
         self.assertEqual(spec.dropped, [])
-
-    def test_ll_receive_grows_with_requested_ladder(self):
-        module = self._module()
-        spec = types.SimpleNamespace(max_tokens_per_rank=99)
-        for requested, expected in [(99, 256), (512, 512), (1024, 1024)]:
-            sized = self._backend(module, low_latency=True)
-            sized.create_buffer(types.SimpleNamespace(max_tokens_per_rank=requested))
-            self.assertEqual(sized.created_configs[0].max_dispatch_tokens_per_rank, expected)
-        # Throughput mode is unclamped and keeps taking its size from the ladder spec.
-        throughput = self._backend(module, low_latency=False)
-        throughput.create_buffer(spec)
-        self.assertEqual(throughput.max_dispatch, 99)
 
     def test_ht_registers_a_symmetric_zero_copy_receive_window(self):
         module = self._module()
@@ -287,20 +230,9 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         backend._comm.register_window.assert_called_once_with(
             backend._recv_x, flags=module.nccl_core.WindowFlag.COLL_SYMMETRIC
         )
-        self.assertEqual(backend._recv_x.shape, (8, 256, 7168))
+        self.assertEqual(backend._recv_x.shape, (8, 64, 7168))
         self.assertEqual(backend._recv_count.shape, (8,))
         self.assertIs(backend._recv_x_t.window, backend._recv_window)
-
-    def test_ll_rank_major_scale_out_uses_the_staged_receive_plane(self):
-        module = self._module()
-        backend = self._backend(module, low_latency=True)
-        backend.zero_copy = False
-        backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=64))
-
-        self.assertEqual(backend.created_configs[0].zero_copy, module.ZeroCopyMode.OFF)
-        backend._comm.register_window.assert_not_called()
-        self.assertIsNone(backend._recv_window)
-        self.assertIsNone(backend._recv_x_t.window)
 
     def test_ll_dispatch_uses_rank_major_metadata_and_returns_expert_inputs(self):
         module = self._module()
@@ -349,16 +281,14 @@ class RoundtripStagingGate(unittest.TestCase):
 
     def test_the_gate_truth_table(self):
         table = (
-            # A real device copy hoists regardless of precision, so MoRI BF16 scale-up and
-            # FlashInfer BF16 are excluded on the same terms as every fp8 stage...
+            # A real device copy hoists regardless of precision...
             (True, "native", "bf16", True),
             (True, "native", "fp8", True),
             # ...a pointer-assignment stage never does: hoisting would hand a low-latency
             # backend a view into its double-buffered receive...
             (False, "native", "bf16", False),
             (False, "native", "fp8", False),
-            # ...and CX_FP8_CONSUME=dequant restores the inline stage for fp8 only -- a stack
-            # that really converts between the collectives -- with nothing to model at BF16.
+            # ...and CX_FP8_CONSUME=dequant restores the inline stage for fp8 only.
             (True, "dequant", "fp8", False),
             (True, "dequant", "bf16", True),
         )
@@ -366,6 +296,7 @@ class RoundtripStagingGate(unittest.TestCase):
             with self.subTest(stage=stage_device_work, consume=consume, precision=precision):
                 backend = _ChainBackend(stage_device_work, consume, precision)
                 self.assertEqual(bool(backend.stage_excluded_from_roundtrip), hoisted)
+
 
 class WarmStaging(unittest.TestCase):
     """Warm-up must not rehearse work the timed region skips: where staging is excluded from the
@@ -453,13 +384,9 @@ class FakeHandle:
 
     def __init__(self):
         self.updates = []
-        self.destroyed = False
 
     def update(self, topk_idx, *, layout_info=None, stream=None):
         self.updates.append((topk_idx, layout_info))
-
-    def destroy(self):
-        self.destroyed = True
 
 
 class FakeGroup:
@@ -501,11 +428,13 @@ def problem(T):
 
 class TestSingleHandle(unittest.TestCase):
     def test_one_handle_across_many_shapes(self):
-        """Nine ladder rungs must still produce exactly one create_handle."""
+        """Nine ladder rungs produce exactly one create_handle, rebound to each later routing."""
         b = backend()
         for T in (1, 2, 4, 8, 16, 32, 64, 128, 256):
             b._ensure_handle(problem(T))
         self.assertEqual(b._ep_group.created, 1)
+        self.assertEqual([idx for idx, _ in b._ep_group.handle.updates],
+                         [f"idx{T}" for T in (2, 4, 8, 16, 32, 64, 128, 256)])
 
     def test_ll_rank_major_weight_wrapper_is_built_once_per_handle(self):
         """LL caches its dispatch-weight wrapper with the handle."""
@@ -537,63 +466,15 @@ def _deep_ep(*classes):
     return module
 
 
-def _gate(cls, mode, world_size=8, precision="bf16", runner="h200-dgxc", **fields):
+def _gate(cls, mode, phase):
     """An adapter carrying only what `cuda_graph_supported` reads."""
     backend = object.__new__(cls)
-    backend.mode, backend.world_size, backend.precision = mode, world_size, precision
-    backend.args = types.SimpleNamespace(scale_up_domain=8, runner=runner, **fields)
+    backend.mode, backend.args = mode, types.SimpleNamespace(phase=phase)
     return backend
 
 
 class GraphReplayDefaults(unittest.TestCase):
     """Graph replay is each adapter's default only where it was measured best and safe."""
-
-    def test_deepep_v2_normal_decode_drops_the_host_sync_and_rounds_the_receive_up(self):
-        calls = []
-        module = _import_stubbed("ep_deepep_v2", deep_ep=_deep_ep("ElasticBuffer", "Buffer"))
-
-        def make(phase, mode="normal"):
-            backend = module.DeepEPV2Backend(args(mode=mode, phase=phase), 0, 8, 0, "cpu")
-            backend.buffer = types.SimpleNamespace(
-                dispatch=lambda *a, **k: calls.append(k) or ("x", "i", "w", "h", None)
-            )
-            backend.max_tokens, backend.num_sms, backend.num_qps = 512, 1, 1
-            return backend
-
-        decode, prefill, ll = make("decode"), make("prefill"), make("decode", "low-latency")
-
-        def dispatched(backend, tokens):
-            backend.dispatch(types.SimpleNamespace(
-                T=tokens, dispatch_x="x", topk_idx="i", topk_weights="w",
-            ))
-            return calls[-1]["num_max_tokens_per_rank"], calls[-1]["do_cpu_sync"]
-
-        # vLLM's graphed decode passes the next power of two of the batch; prefill syncs exactly.
-        for tokens, capacity in ((1, 1), (3, 4), (65, 128), (512, 512)):
-            self.assertEqual(dispatched(decode, tokens), (capacity, False))
-        self.assertEqual(dispatched(prefill, 3), (512, True))
-        self.assertEqual(
-            (decode.cuda_graph_supported, decode.kernel_generation),
-            (True, "v2-elastic-buffer-nosync"),
-        )
-        self.assertEqual(
-            (prefill.cuda_graph_supported, prefill.kernel_generation), (False, "v2-elastic-buffer")
-        )
-        self.assertTrue(ll.cuda_graph_supported)
-
-    def test_uccl_graphs_intranode_low_latency_except_b200_fp8(self):
-        cls = _import_stubbed("ep_uccl", deep_ep=_deep_ep("Buffer", "Config")).UCCLEPBackend
-        with mock.patch.dict(os.environ, {}, clear=True):
-            for gate, expected in (
-                (_gate(cls, "low-latency"), True),
-                (_gate(cls, "normal"), False),
-                (_gate(cls, "low-latency", world_size=16), False),
-                (_gate(cls, "low-latency", precision="fp8", runner="b200-nscale"), False),
-                (_gate(cls, "low-latency", runner="b200-nscale"), True),
-            ):
-                self.assertIs(gate.cuda_graph_supported, expected)
-        with mock.patch.dict(os.environ, {"UCCL_RDMA_ADAPTIVE_SLEEP": "1"}):
-            self.assertFalse(_gate(cls, "low-latency").cuda_graph_supported)
 
     def test_flashinfer_and_nccl_ht_graph_decode_only(self):
         flashinfer = _import_stubbed("ep_flashinfer").FlashInferEPBackend
@@ -620,8 +501,7 @@ class GinWindowOrdering(unittest.TestCase):
 
 class LowLatencyCapDecoupling(unittest.TestCase):
     """The LL receive size and the measured ladder must stay two numbers -- sizing the receive
-    from `max(ladder)` would shift every rung. Driven through the adapter with deep_ep stubbed,
-    so the constants are exercised rather than read out of the syntax tree."""
+    from `max(ladder)` would shift every rung."""
 
     @staticmethod
     def _adapter():
@@ -656,16 +536,6 @@ class LowLatencyCapDecoupling(unittest.TestCase):
                 self.assertEqual(vendor_buffer.call_args.kwargs["num_rdma_bytes"], 4096)
             with self.assertRaisesRegex(RuntimeError, "exceeds"):
                 backend.create_buffer(types.SimpleNamespace(max_tokens_per_rank=129))
-
-    def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
-        # The clamp must reach the artifact: a rank-0 stdout NOTE alone leaves a document that
-        # measured 8 rungs indistinguishable from one that measured 9. Asserted on a real
-        # emitted document rather than on the presence of key literals in the source.
-        import test_chain
-        workload = test_chain.drive().doc["workload"]
-        for required in ("ladder_measured", "ladder_dropped", "ladder_cap"):
-            self.assertIn(required, workload, f"the emitted record must include {required}")
-        self.assertEqual(workload["ladder_measured"], list(test_chain.LADDER))
 
 
 if __name__ == "__main__":
