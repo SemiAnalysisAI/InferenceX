@@ -296,6 +296,15 @@ class ChainHostGate(unittest.TestCase):
                     self.assertIs(timing._host_stalled_anywhere(), expected)
                 self.assertEqual(timing.gate.stalled, [0])  # this rank's own check ran
 
+    def test_garbage_collection_is_off_inside_both_sibling_chains(self):
+        backend = _ChainBackend()
+        seen = []
+        original = backend.dispatch
+        backend.dispatch = lambda problem: seen.append(gc.isenabled()) or original(problem)
+        run_chain(backend, 4, 1)
+        self.assertEqual(seen[-8:], [False] * 8)
+        self.assertTrue(gc.isenabled())
+
     def test_a_chain_without_a_host_synced_dispatch_takes_no_probe(self):
         backend = _ChainBackend()
         with mock.patch.object(ep_timing, "cpu_probe_us",

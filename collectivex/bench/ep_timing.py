@@ -404,19 +404,26 @@ class EagerTiming(_SpinAlignment):
         if gated:
             self.gate.calibrate()
         retries = stalled = 0
-        for sibling in (floors_chain, period_chain):
-            for attempt in range(self.CHAIN_RETRIES + 1):
-                if gated:
-                    self.gate.hold()
-                self._all_reduce()
-                sibling()
-                torch.cuda.synchronize()
-                if not gated or not self._host_stalled_anywhere():
-                    break
-                if attempt == self.CHAIN_RETRIES:
-                    stalled += 1
-                else:
-                    retries += 1
+        # Off for the chains too: a host-bound chain's pair window carries the host's pace.
+        collecting = gc.isenabled()
+        gc.disable()
+        try:
+            for sibling in (floors_chain, period_chain):
+                for attempt in range(self.CHAIN_RETRIES + 1):
+                    if gated:
+                        self.gate.hold()
+                    self._all_reduce()
+                    sibling()
+                    torch.cuda.synchronize()
+                    if not gated or not self._host_stalled_anywhere():
+                        break
+                    if attempt == self.CHAIN_RETRIES:
+                        stalled += 1
+                    else:
+                        retries += 1
+        finally:
+            if collecting:
+                gc.enable()
         result = _chain_result(pair, floors, drop, out["combined"])
         result["host_retries"] = retries if gated else None
         result["host_stalled"] = bool(stalled) if gated else None
