@@ -9435,7 +9435,7 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
         srt-recipe: agentic.yaml
 
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
+  image: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
