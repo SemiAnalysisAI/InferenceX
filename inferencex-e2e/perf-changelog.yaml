@@ -9832,3 +9832,13 @@
     - "Append the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX 8P1D point at concurrency 4096 to the existing curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4071
   append-only: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the MI355X Kimi-K3 FP4 ATOM AgentX submission to image rocm/atom-dev:nightly_202610131505."
+    - "Widen the DSpark draft from 3 to 4 tokens at concurrency 14 and 16, which moves the golden acceptance length from 3.00 to 3.36."
+    - "Run the same 4-token DSpark draft with ReplaySSM at concurrency 48, 56 and 72, which previously served without a draft model. Concurrency 1 and 4 keep the 7-token draft."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
