@@ -71,16 +71,19 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# SGLang's speed-bench loader only accepts the throughput-split categories on the CLI, so
-# filter the qualitative split to $CATEGORY here and hand it the filtered file.
+# SGLang's speed-bench loader only accepts the throughput-split categories on the CLI and
+# reads prompts from "turns", while prepare.py writes "messages". Filter the qualitative
+# split to $CATEGORY and restore "turns" from the user messages.
 CATEGORY_JSONL="$SPEEDBENCH_DIR/qualitative_${CATEGORY}.jsonl"
 python3 - "$SPEEDBENCH_DIR/qualitative.jsonl" "$CATEGORY_JSONL" "$CATEGORY" <<'EOF'
 import json, sys
 src, dst, category = sys.argv[1:]
 with open(src) as f, open(dst, "w") as out:
     for line in f:
-        if json.loads(line).get("category") == category:
-            out.write(line)
+        row = json.loads(line)
+        if row.get("category") == category:
+            row["turns"] = [m["content"] for m in row["messages"] if m["role"] == "user"]
+            out.write(json.dumps(row) + "\n")
 EOF
 NUM_PROMPTS=$(wc -l < "$CATEGORY_JSONL")
 if [[ "$NUM_PROMPTS" -eq 0 ]]; then
