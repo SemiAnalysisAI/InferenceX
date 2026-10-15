@@ -2,7 +2,7 @@
 
 `bench/run_swap_blocks.py` measures `from vllm._custom_ops import swap_blocks`
 on one CUDA or ROCm GPU using an installed, compatible vLLM build. Run it directly
-with Python inside that environment, or dispatch the suite through the GitHub Action below.
+with Python inside that environment, or run the suite on a pool with `run.sh` (below).
 It does not use `torchrun` or execute EP workloads.
 The installed vLLM version is recorded. Both the older three-argument wrapper and
 the explicit `block_size_in_bytes` wrapper are supported.
@@ -33,8 +33,8 @@ nearest-rank p50/p90/p95/p99 latency in microseconds, and payload GB/s at each
 latency percentile (`num_blocks * block_bytes / elapsed_seconds / 1e9`). Payload
 counts copied bytes once, not read-plus-write traffic. Records include direction,
 layout, seed, API variant, device and runtime versions. The EP summarizer and
-bandwidth consumer do not consume this schema. Output directories must already
-exist; the benchmark creates no directories. Large cases require memory for both
+bandwidth consumer do not consume this schema. The output directory is created if
+missing. Large cases require memory for both
 transfer buffers and CPU correctness references. Optional `--max-payload-bytes`
 filters out points above `block_bytes * num_blocks` before allocation. An empty
 selection fails. JSON `selection` records the requested grid, budget, and excluded
@@ -51,31 +51,24 @@ python3 -m unittest discover collectivex/tests -p 'test_swap_blocks.py' -v
 
 CPU-only machines run measurement/mapping tests and skip the real GPU test.
 
-## GitHub GPU Action
+## Running on a pool
 
-swap-blocks is a suite of **CollectiveX Sweep**. Set `suites: swap-blocks` (or
-`ep,swap-blocks` to run both), or dispatch:
+swap-blocks is a CollectiveX suite. From the pool's login node:
 
 ```bash
-gh workflow run collectivex-sweep.yml --ref main \
-  -f suites=swap-blocks -f swap_profile=smoke
+collectivex/run.sh h200-dgxc --suite swap-blocks --swap-profile smoke
 ```
 
-Blank `only_sku` selects every registered GPU pool; set it to `h200-dgxc`, `h100-dgxc`,
-`b200-nscale`, `b300`, `gb200`, `gb300`, `mi300x`, `mi325x`, or `mi355x` for one pool.
-`exclude_skus` accepts a comma-separated exclusion list. The EP filters (`backend`,
-`ep_sizes`, `modes`) apply to the `ep` suite only, and the matrix rejects them when that
-suite is not selected.
-
-Each pool gets one shard with two cases, one per layout. The shard runs on the pool's
-own launcher, so it inherits that pool's allocation, node validation, container import,
-and cleanup. It asks for one node and one GPU for 45 minutes. `config.py` encodes each
-case as `run_swap_blocks.py` argv, and the rank wrapper execs it in place of `run_ep.py`.
+`run.sh` runs both suites by default; `--suite swap-blocks` runs only this one. Each pool gets one
+shard with two cases, one per layout. The shard runs on the pool's own launcher, so it inherits that
+pool's allocation, node validation, container import, and cleanup. It asks for one node and one GPU
+for 45 minutes. `config.py` encodes each case as `run_swap_blocks.py` argv, and the rank wrapper
+execs it in place of `run_ep.py`.
 
 The grid and the images are data in `configs/swap_sweep.json`. CUDA and AMD pools use the
 official vLLM images it names; GB pools get the ARM64 variant through the registry's
 `image_platform`, and `sku_images` pins a pool to its own image. To run another vLLM version,
-change the config on a branch and dispatch from it. Every profile covers all three directions and
+change the config and commit it before running. Every profile covers all three directions and
 both layouts, and checks the actual GPU copies before and after timing; backend preparation asserts
 the `swap_blocks` import before any case runs. `smoke` (the default, up to 256 KiB blocks, 168
 points) and `standard` (4 KiB to 1 MiB, 126 points) keep every grid point under their 2 GiB
@@ -83,10 +76,9 @@ payload cap. `large-blocks` sweeps 257 B to 1 GiB blocks under a **1 GiB copied-
 larger products are excluded and recorded (294 measured points, 126 excluded); each buffer also
 holds two guard blocks, so a 1 GiB block case allocates 3 GiB per buffer plus CPU references.
 
-Download `cxshard-<sku>-swap-blocks-<run_id>-<attempt>` for the two JSON results,
-named `<case_id>_<timestamp>-c<index>.json`. Each case_id is
-`<sku>-swap-blocks-<profile>-<layout>`. Each artifact records the actual GPU,
-framework versions, image, source SHA, correctness status, and measurements. The EP
+The two results land in `collectivex/results/<sku>/<case_id>.json`, where each case_id is
+`<sku>-swap-blocks-<profile>-<layout>`. Each records its case_id, profile and pool, the actual
+GPU, framework versions, image, source SHA, correctness status, and measurements. The EP
 summary tables skip these documents. CPU CI is separate and does not establish GPU
 correctness.
 
@@ -94,6 +86,5 @@ A pool that cannot import an image itself can name an operator-staged cache in
 `sku_images` (`staged_image_dir`). H100 does: it first looks in
 `/mnt/nfs/lustre/containers` for the exact requested tag, using the serving launchers'
 filename convention, and reuses a valid squash without importing inside the compute
-pod. If the file is absent, the regular import path runs. `refresh_image=true`
-bypasses the staged cache and requests a fresh import. The workflow selects
-`/var/tmp` for H100 container-import scratch and `/tmp` for other pools.
+pod. If the file is absent, the regular import path runs. `COLLX_IMAGE_REFRESH=1`
+bypasses the staged cache and requests a fresh import.

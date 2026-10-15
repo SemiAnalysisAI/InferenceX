@@ -1583,10 +1583,10 @@ glm5.3-fp8-mi355x-tilert-agentic:
           ep: 1
           dp-attn: false
 
-# SGLang ROCm 7.2 MI35X release image. TP2/EP1 and TP4/EP1 up to c16, DP2
-# attention with TP MoE at c32 and c64. Host Engram tables on all of them.
+# SGLang ROCm 7.2 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
+# DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261012
+  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261013
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1598,7 +1598,7 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 

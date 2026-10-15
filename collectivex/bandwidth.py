@@ -226,11 +226,10 @@ def main() -> int:
         description="CollectiveX per-component EP bandwidth (pure consumer; gates nothing)")
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--runner")
-    parser.add_argument("--ts")
     parser.add_argument("--all", action="store_true",
                         help="include non-success outcomes (skipped by default)")
     args = parser.parse_args()
-    documents = load_results(args.results_dir, args.runner, args.ts)
+    documents = load_results(args.results_dir, args.runner)
     if not args.all:
         documents = [d for d in documents if d["outcome"]["status"] == "success"]
     print(render(documents))
