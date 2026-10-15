@@ -577,6 +577,7 @@ clusters:
         MiniMax-M3-NVFP4: {root: lustre-models, dir: MiniMax-M3-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: lustre-models, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4-V2}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: lustre-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         GLM-5.2-NVFP4: {root: sa-shared-models, dir: GLM-5.2-NVFP4}
         DeepSeek-R1-0528: {root: numa1, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: numa1, dir: DeepSeek-R1-0528-NVFP4-v2}
@@ -613,6 +614,7 @@ clusters:
           rdma-gid-index: 3
         job-tag: gb200
         default-time-limit: "6:00:00"
+        single-node-models: staged
         preflight: false
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang]
