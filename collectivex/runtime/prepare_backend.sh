@@ -414,10 +414,8 @@ uccl_install() {
     sed -i 's/cudaMallocManaged/cudaMallocHost/g' \
       "$source_dir/ep/src/uccl_ep.cc" "$source_dir/ep/src/uccl_proxy.cpp" \
       || { collx_log "ERROR: UCCL AMD managed-memory patch failed"; return 1; }
-    # uccl#963 (A100 support) moved the DISABLE_SM90_FEATURES launch, which AMD builds also take,
-    # to a cooperative cudaLaunchKernelEx. The ROCm images' torch hipify cannot map it, and once
-    # mapped it costs ~30 us per launch on gfx942 (mi325x A/B at df000fd), so AMD keeps the plain
-    # launch it ran before #963. The macros are #ifndef-guarded, so defining them first wins.
+    # Plain launch on AMD: hipify cannot map the cooperative cudaLaunchKernelEx path, which also
+    # costs ~30 us per launch on gfx942. Defined ahead of the #ifndef-guarded upstream macros.
     python3 - "$source_dir/ep/include/ep_launch.cuh" <<'PY' \
       || { collx_log "ERROR: UCCL AMD launch patch failed"; return 1; }
 import sys
