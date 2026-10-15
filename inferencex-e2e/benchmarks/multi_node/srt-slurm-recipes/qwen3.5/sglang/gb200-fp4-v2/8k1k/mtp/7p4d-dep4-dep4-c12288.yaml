@@ -73,6 +73,7 @@ roles:
       max-total-tokens: 256000
       max-running-requests: 128
       cuda-graph-max-bs-decode: 4
+      cuda-graph-backend-prefill: disabled
       chunked-prefill-size: 262144
       max-prefill-tokens: 131072
       scheduler-recv-interval: 1
