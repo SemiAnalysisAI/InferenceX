@@ -9858,3 +9858,11 @@
     - "ATOM changes in the new image that matter here: with the replay on, C256 and C384 store the PAGE KV alone in LMCache with no state image, and a hit LMCache holds past HBM loads that KV and replays below it (ROCm/ATOM#2571, #2579); DP attention points balance each lockstep prefill step by estimated chunk cost through the prefill delayer they enable (#2551); FP4 decode top-k is scored in the batch-keyed graph core and DP-padded empty tails no longer abort V4-Pro DEP decode (#2543, #2572, #2556); unconsumed LMCache lookups no longer leak L1 read locks (#2518); the compile cache is keyed on the speculative method and width (#2566)."
     - "No data-type or precision change to the DSpark draft: the bundled mtp.* layers of deepseek-ai/DeepSeek-V4-Pro-0813 (FP8 E4M3 attention projections, shared experts and main_proj with UE8M0 block scales, MXFP4 routed experts, BF16 norms, gate and heads) load through the target's checkpoint quant config with no online quantization, and the draft window KV follows the target's kv-cache-dtype, so at C1 to C16 it moves from BF16 to FP8 with the target, as CONTRIBUTING.md allows for an FP8 target."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4065
+
+- config-keys:
+    - "*"
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Upgrade agentx-harness from 1.0.9 to 1.0.10: pin SPAWN subagents to one client worker to prevent duplicate session state accumulating across workers. Metric collection, calculations, and exports are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
