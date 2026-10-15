@@ -70,9 +70,9 @@ omits FlashInfer FP8 (`sweep_matrix.OFF_PATH_PRECISIONS`). `--precisions fp8` ad
 `kernel_generation` is `<family>[-zc][-gum1][-fp8-ds-e3m4]-cap<N>-<wheel version>`, followed by the
 harness's regime suffix. Examples:
 
-- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261005-cudagraph-in-graph-ar`: graphed low-latency, staged.
+- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261005-cudagraph-spin-ar`: graphed low-latency, staged.
 - `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261005-eager-spin-ar`: eager low-latency, zero-copy.
-- `nccl-ep-v02-ht-routed-zc-static-gum1-cap512-0.2.0.dev20261005-cudagraph-in-graph-ar`: graphed
+- `nccl-ep-v02-ht-routed-zc-static-gum1-cap512-0.2.0.dev20261005-cudagraph-spin-ar`: graphed
   HT decode.
 - `nccl-ep-v02-ht-routed-zc-static-cap8192-0.2.0.dev20261005-eager-spin-ar`: HT prefill.
 

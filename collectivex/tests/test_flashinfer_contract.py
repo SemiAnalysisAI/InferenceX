@@ -324,7 +324,7 @@ class Provenance(unittest.TestCase):
                 self.assertEqual(backend.combine_reduction, reduction)
                 with mock.patch.dict(os.environ, {"COLLX_CUDA_GRAPH": "1"}):
                     self.assertEqual(ep_harness.kernel_generation(backend),
-                                     f"flashinfer-mnnvl-one-sided-staged-{slug}-cudagraph-in-graph-ar")
+                                     f"flashinfer-mnnvl-one-sided-staged-{slug}-cudagraph-spin-ar")
                 self.assertEqual(type(backend).kernel_generation, "flashinfer-mnnvl-one-sided-staged")
 
     def test_workspace_and_mapping_are_sized_as_vllm_initialize_sizes_them(self):
