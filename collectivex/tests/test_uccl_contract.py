@@ -68,8 +68,15 @@ class FakeBuffer:
         FakeBuffer.hints.append(args)
         return 4096
 
+    def _hooked(self, name, kwargs, result):
+        self.calls.append((name, kwargs))
+        return (*result, lambda: self.calls.append((f"{name}-hook", {})))
+
     def low_latency_dispatch(self, *args, **kwargs):
-        raise AssertionError("not exercised")
+        return self._hooked("ll-dispatch", kwargs, ("recv", "count", "ll-handle", None))
+
+    def low_latency_combine(self, *args, **kwargs):
+        return self._hooked("ll-combine", kwargs, ("ll-combined", None))
 
     def get_dispatch_layout(self, topk_idx, num_experts):
         return "per-rank", None, "per-expert", "in-rank", None
@@ -244,6 +251,20 @@ class LowLatencyContract(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "exceeds the LL buffer cap"):
             _built(self.module, mode="low-latency", max_tokens=512)
 
+    def test_both_collectives_split_into_send_and_receive_kernels_as_vllm_runs_them(self):
+        backend, buffer = _built(self.module, mode="low-latency")
+        problem = types.SimpleNamespace(T=4, dispatch_x="x", topk_idx="i", topk_weights="w")
+        handle = backend.dispatch(problem)
+        handle.combine_input = "staged"
+        backend.combine(problem, handle)
+        self.assertEqual([name for name, _ in buffer.calls],
+                         ["ll-dispatch", "ll-dispatch-hook", "ll-combine", "ll-combine-hook"])
+        for name, kwargs in buffer.calls[::2]:
+            with self.subTest(name):
+                self.assertEqual((kwargs["return_recv_hook"], kwargs["async_finish"]), (True, False))
+        self.assertIs(buffer.calls[2][1]["zero_copy"], False)
+        self.assertIs(backend.implementation_details()["return_recv_hook"], True)
+
     def test_every_intranode_low_latency_cell_replays(self):
         # No per-SKU eager exception: b200 FP8 replays like every other cell, and the proxy sleep
         # switch is inert where the proxies never start.
@@ -266,7 +287,7 @@ class Provenance(unittest.TestCase):
 
     def test_kernel_generations_split_the_vllm_normal_rows_from_the_test_script_rows(self):
         self.assertEqual(_backend(self.module).kernel_generation, "uccl-legacy-buffer-vllm-ht")
-        self.assertEqual(_backend(self.module, mode="low-latency").kernel_generation, "uccl-legacy-buffer-ll")
+        self.assertEqual(_backend(self.module, mode="low-latency").kernel_generation, "uccl-legacy-buffer-ll-hook")
 
     def test_library_version_round_trips_the_record_the_prepare_step_writes(self):
         with tempfile.TemporaryDirectory() as tmp:

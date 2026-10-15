@@ -160,6 +160,10 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
     # LL's only host state is the double-buffer toggle; captures hold whole pairs, so it returns
     # to where it started. Normal mode host-syncs on its receive counters.
     CUDA_GRAPH_MODES = ("low-latency",)
+    # vLLM's default (non-DBO) DeepEP low-latency path issues both collectives as a send kernel plus
+    # a receive hook (its modular kernel takes prepare_async/finalize_async), and it drives UCCL's
+    # drop-in Buffer the same way; deepep-v2 runs the same split.
+    ll_recv_hook = True
 
     @property
     def cuda_graph_supported(self) -> bool:
@@ -337,10 +341,7 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
 
     def combine(self, p, h):
         if self.mode == "low-latency":
-            combined_x, _event, _hook = self.buffer.low_latency_combine(
-                h.combine_input, p.topk_idx, p.topk_weights, h.ll_handle
-            )
-            return combined_x[: p.T]
+            return self._ll_combine(p, h, h.combine_input)
         # Normal combine is the activation-only unweighted rank-sum: topk_weights are intentionally
         # NOT passed so the kernel sums the per-token expert aggregates across ranks without
         # applying the gate (matches combine_weight_semantics and the two-level oracle).
