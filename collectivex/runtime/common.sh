@@ -30,7 +30,7 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
-COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
+COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 
 # nccl-extensions (github.com/NVIDIA/nccl-extensions) owns nccl.ep, which nccl4py >= 0.4 does
 # not bundle; its combine-recv fence (DeepEP's LOW_LATENCY_COMBINE_RECV analogue) releases the
