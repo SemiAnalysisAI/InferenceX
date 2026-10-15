@@ -48,12 +48,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point (2026-10-14 nightly). TP4 points (C1-C24) use the
-# shortest-prefill-first schedule (lpm at C1); C4/C8 add TRT-LLM sparse
-# attention and the fused mHC prefill. DP4 points (C48-C256) run DP attention
-# behind sglang-router with MegaMoE, the MXFP4 FlashInfer MoE runner, TRT-LLM
-# sparse attention, HiCache (host DRAM, ratio 2) and shortest-prefill-first; the
-# prefill-decode interval falls with concurrency.
 override_tp4_c1:
   roles:
     agg:
