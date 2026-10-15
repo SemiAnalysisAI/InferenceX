@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "bench")]
 
 PREPARE = ROOT / "runtime" / "prepare_backend.sh"
-PIN = "fc1b582031221645ea9fce58aeb57187713145e3"
+PIN = "df000fd3001da04a397253fd6a2204bde62d32aa"
 GIB = 1024 * 1024 * 1024
 
 
@@ -298,7 +298,7 @@ class Provenance(unittest.TestCase):
                     mock.patch.object(self.module.metadata, "version", return_value="0.1.0"):
                 # The flags the build recorded are the flags every row publishes.
                 self.assertEqual(self.module._library_version(),
-                                 f"uccl@fc1b58203122 deep_ep==0.1.0 {record['build_flags']}")
+                                 f"uccl@df000fd3001d deep_ep==0.1.0 {record['build_flags']}")
                 record_path.unlink()
                 self.assertEqual(self.module._library_version(), "uccl@unrecorded deep_ep==0.1.0")
 
@@ -307,7 +307,7 @@ class Provenance(unittest.TestCase):
             "COLLX_BACKEND_CACHE_ROOT": "/cache", "COLLECTIVEX_IMAGE": "img", "COLLX_UCCL_COMMIT": PIN})
         self.assertEqual(rooted.returncode, 0, rooted.stderr)
         # cache root, backend, cpu, arch, image, commit prefix, then the build generation.
-        self.assertRegex(rooted.stdout, r"^/cache/uccl-ep-[^/]+-9\.0-img-fc1b58203122-[^/-]+$")
+        self.assertRegex(rooted.stdout, r"^/cache/uccl-ep-[^/]+-9\.0-img-df000fd3001d-[^/-]+$")
 
 
 class ImportProbe(unittest.TestCase):

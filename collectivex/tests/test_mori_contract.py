@@ -73,15 +73,9 @@ class _FakeOp:
         self.calls.append(("dispatch", args, kwargs))
         return _Rows("recv_x"), _Rows("recv_w"), _Rows("recv_scales"), _Rows("recv_idx"), ["count"]
 
-    def dispatch_recv(self, *args, **kwargs):
-        self.calls.append(("dispatch_recv", args, kwargs))
-
     def combine(self, *args, **kwargs):
         self.calls.append(("combine", args, kwargs))
         return list(range(8)), None
-
-    def combine_recv(self, *args, **kwargs):
-        self.calls.append(("combine_recv", args, kwargs))
 
 
 def _fake_torch():
@@ -111,7 +105,7 @@ def _fake_mori():
     mori.__version__ = "1.2.3.dev45+g12d1bc32d"
     mori.ops = types.SimpleNamespace(
         EpDispatchCombineKernelType=types.SimpleNamespace(
-            IntraNode="IntraNode", InterNodeV1="InterNodeV1", AsyncLL="AsyncLL"
+            IntraNode="IntraNode", InterNodeV1="InterNodeV1", InterNodeV1LL="InterNodeV1LL"
         ),
         EpDispatchCombineConfig=lambda **kwargs: types.SimpleNamespace(**kwargs),
         EpDispatchCombineOp=_FakeOp,
@@ -213,25 +207,26 @@ class MoriContract(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "gfx942 and gfx950"):
             self.backend(arch="gfx90a")
 
-    def test_low_latency_runs_sglangs_async_ll_and_drives_both_phases(self):
-        backend = self.backend(mode="low-latency", max_tokens=256)
-        config = backend.config
-        self.assertEqual(
-            (config.kernel_type, config.block_num, config.rdma_block_num, config.warp_num_per_block,
-             config.num_qp_per_pe),
-            ("AsyncLL", 64, 32, 8, 2),
-        )
-        self.roundtrip(backend)
-        self.assertEqual(
-            [call[0] for call in backend.op.calls], ["dispatch", "dispatch_recv", "combine", "combine_recv"]
-        )
-        self.assertEqual(
-            (backend.kernel_generation, backend.implementation_details()["contract"]),
-            ("async-ll-sglang-sdma", "sglang"),
-        )
-        # Two queue pairs per peer must exist before the op is built over them.
-        self.mori.shmem.shmem_num_qp_per_pe = lambda: 1
-        with self.assertRaisesRegex(RuntimeError, "QPs per PE"):
+    def test_low_latency_runs_vllms_internode_v1ll_tuple_across_nodes_only(self):
+        # vLLM's mori_low_latency: InterNodeV1LL with the arch's tuple across nodes, called as
+        # dispatch()/combine() like every vLLM MoRI path; one node runs the normal row's IntraNode.
+        for arch, launch in (("gfx950", (64, 32, 8)), ("gfx942", (32, 16, 16))):
+            with self.subTest(arch=arch):
+                backend = self.backend(arch=arch, world_size=16, scope="scale-out", mode="low-latency",
+                                       max_tokens=256)
+                config = backend.config
+                self.assertEqual(
+                    (config.kernel_type, config.block_num, config.rdma_block_num,
+                     config.warp_num_per_block, config.num_qp_per_pe),
+                    ("InterNodeV1LL", *launch, 1),
+                )
+                self.roundtrip(backend)
+                self.assertEqual([call[0] for call in backend.op.calls], ["dispatch", "combine"])
+                self.assertEqual(
+                    (backend.kernel_generation, backend.implementation_details()["contract"]),
+                    ("inter-node-v1ll-vllm", "vllm"),
+                )
+        with self.assertRaisesRegex(RuntimeError, "scale-out only"):
             self.backend(mode="low-latency", max_tokens=256)
 
     def test_fp8_carries_per_128_scales_in_the_arch_format(self):
@@ -266,8 +261,9 @@ class MoriContract(unittest.TestCase):
         self.assertEqual(backend.semantic_payload("x"), "bf16")
         self.assertEqual(dequantized, [("recv_x[:3]", "recv_scales[:3]"), ("q(x)", "s(x)")])
 
-    def test_low_latency_compiles_the_quantize_because_async_ll_is_caller_quantized(self):
-        backend = self.backend(mode="low-latency", precision="fp8", max_tokens=256)
+    def test_low_latency_compiles_the_quantize_because_v1ll_is_caller_quantized(self):
+        backend = self.backend(world_size=16, scope="scale-out", mode="low-latency", precision="fp8",
+                               max_tokens=256)
         self.assertIsInstance(backend._quant, _Compiled)
         self.assertIs(backend._quant.fn, backend._fp8_codec[0])
 
@@ -275,20 +271,18 @@ class MoriContract(unittest.TestCase):
         self.assertTrue(self.backend(phase="decode").cuda_graph_supported)
         self.assertFalse(self.backend(phase="prefill", max_tokens=8192).cuda_graph_supported)
 
-    def test_low_latency_turns_sdma_on_before_shmem_init_unless_the_caller_set_it(self):
-        # MoRI snapshots MORI_ENABLE_SDMA at shmem init, so that is where the value must already be.
-        for mode, preset, seen, generation in (
-            ("low-latency", None, "1", "async-ll-sglang-sdma"),
-            ("low-latency", "0", "0", "async-ll-sglang"),
-            ("normal", None, None, "intranode-vllm"),
+    def test_no_path_turns_sdma_on_as_vllm_never_sets_it(self):
+        # MoRI snapshots MORI_ENABLE_SDMA at shmem init; vLLM leaves it unset on every path.
+        for mode, world_size, scope, generation in (
+            ("normal", 8, "scale-up", "intranode-vllm"),
+            ("normal", 16, "scale-out", "inter-node-v1-vllm"),
+            ("low-latency", 16, "scale-out", "inter-node-v1ll-vllm"),
         ):
-            with self.subTest(mode=mode, preset=preset), mock.patch.dict(os.environ):
-                if preset is not None:
-                    os.environ["MORI_ENABLE_SDMA"] = preset
-                backend = self.backend(mode=mode, max_tokens=256)
-                self.assertEqual(self.mori.sdma_at_shmem_init[-1], seen)
+            with self.subTest(mode=mode, world_size=world_size):
+                backend = self.backend(world_size=world_size, scope=scope, mode=mode, max_tokens=256)
+                self.assertIsNone(self.mori.sdma_at_shmem_init[-1])
                 self.assertEqual(backend.kernel_generation, generation)
-                self.assertIs(backend.implementation_details()["sdma"], seen == "1")
+                self.assertIs(backend.implementation_details()["sdma"], False)
 
     def test_sdma_is_read_as_mori_reads_it_and_tags_the_rows(self):
         for value, enabled in (
