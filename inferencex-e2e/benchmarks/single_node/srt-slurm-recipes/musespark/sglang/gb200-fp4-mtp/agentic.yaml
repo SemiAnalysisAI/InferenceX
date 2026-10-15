@@ -90,6 +90,16 @@ override_tp4_c4:
     env:
       CONC: '4'
 
+override_tp4_c6:
+  roles:
+    agg:
+      args:
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+  benchmark:
+    env:
+      CONC: '6'
+
 override_tp4_c8:
   roles:
     agg:
@@ -99,6 +109,16 @@ override_tp4_c8:
   benchmark:
     env:
       CONC: '8'
+
+override_tp4_c10:
+  roles:
+    agg:
+      args:
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+  benchmark:
+    env:
+      CONC: '10'
 
 override_tp4_c12:
   roles:

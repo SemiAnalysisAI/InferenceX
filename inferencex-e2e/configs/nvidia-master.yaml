@@ -8377,7 +8377,7 @@ musespark-fp4-gb200-sglang-agentic-dflash:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 12, 16, 24, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 10, 12, 16, 24, 32], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7

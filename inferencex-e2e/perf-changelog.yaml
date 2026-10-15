@@ -9898,7 +9898,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on one GB200 node via SGLang (lmsysorg/sglang:dev-muse-spark-open, multiarch digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) at TP4/EP4, concurrency 1, 2, 4, 8, 12, 16, 24 and 32, GPU-resident KV."
+    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on one GB200 node via SGLang (lmsysorg/sglang:dev-muse-spark-open, multiarch digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) at TP4/EP4, concurrency 1, 2, 4, 6, 8, 10, 12, 16, 24 and 32, GPU-resident KV."
     - "Serve flags follow the SGLang cookbook's NVFP4 cell: modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE prefill, DFlash2 draft RadixArk/Muse-Spark-Open-DFlash2 with fa4 draft attention and 8 verify tokens (7 drafts), muse reasoning and tool-call parsers. Prefill CUDA graphs are off and mem-fraction-static is 0.88 to leave room for the KV pool; admission and the decode graph batch are 2x concurrency."
     - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
     - "The checkpoint is served from the staged Lustre copy; the AgentX client reads its tokenizer from it."
