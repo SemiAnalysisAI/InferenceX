@@ -167,7 +167,7 @@
         "switch": "n/a (single-node scale-up)"
       },
       "operator": {
-        "partition": "compute",
+        "partition": "MI325X-UBUNTU",
         "squash_dir": "/raid/squash"
       }
     },
