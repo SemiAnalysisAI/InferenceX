@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 import copy
 import json
+import math
 import os
 import statistics
 import tempfile
@@ -26,6 +27,7 @@ import ep_backend  # noqa: E402
 import ep_harness  # noqa: E402
 import ep_oracle  # noqa: E402
 import ep_timing  # noqa: E402
+import gpu_clocks  # noqa: E402
 import summarize  # noqa: E402
 from _fakes import COMBINE_MS, DISPATCH_MS, _ChainBackend, _Combined  # noqa: E402
 
@@ -1482,6 +1484,61 @@ class RunnerFilterIsContentBased(unittest.TestCase):
         # The filename claims one SKU, the row declares another; the row wins.
         directory = self._directory([("stub-sku_anything_TS-c000.json", "other-sku")])
         self.assertEqual(summarize.load_results(directory, "stub-sku"), [])
+
+
+class GpuClockTelemetry(unittest.TestCase):
+    def test_the_document_says_why_clocks_were_not_read(self):
+        clocks = drive().doc["runtime"]["gpu_clocks"]
+        self.assertIsNone(clocks["source"])
+        self.assertIn("AttributeError", clocks["unavailable_reason"])
+        self.assertIsNone(clocks["sm_clock_ratio_min"])
+
+    def test_clock_reads_bracket_the_timed_passes_and_follow_every_burst(self):
+        class _CountingBackend(_SweepBackend):
+            def benchmark_component(self, component, problem, warmup, iters):
+                self.events.append(("component", problem.T))
+                return super().benchmark_component(component, problem, warmup, iters)
+
+        backends = []
+
+        def factory():
+            backends.append(_CountingBackend())
+            return backends[-1]
+
+        class _Monitor:
+            def __init__(self, torch, device):
+                self.reason = None
+
+            def start(self):
+                backends[-1].events.append(("clock-start",))
+
+            def sample(self, temperature=False):
+                backends[-1].events.append(("clock", "chain" if temperature else "point"))
+
+            def finish(self):
+                backends[-1].events.append(("clock-finish",))
+
+            def vector(self):
+                return [1.0 if field == "source" else 40.0 if field == "sm_clock_samples"
+                        else 1980.0 if field.startswith("sm_clock") else math.nan
+                        for field in gpu_clocks.FIELDS]
+
+        with mock.patch.object(gpu_clocks, "ClockMonitor", _Monitor):
+            run = drive(backend_factory=factory)
+        events = [event[0] if event[0] != "clock" else event for event in run.events]
+        timed = [i for i, event in enumerate(events) if event in ("component", "chain")]
+        self.assertLess(events.index("clock-start"), timed[0])
+        self.assertGreater(events.index("clock-finish"), timed[-1])
+        # One read per (trial, point) after its components, one after every chain.
+        self.assertEqual(events.count(("clock", "point")), 2 * len(LADDER))
+        self.assertEqual(events.count(("clock", "chain")), CHAIN_TRIALS * len(LADDER))
+        for i, event in enumerate(events):
+            if event == ("clock", "chain"):
+                self.assertEqual(events[i - 1], "chain")
+            if event == ("clock", "point"):
+                self.assertEqual(events[i - 1], "component")
+        self.assertEqual(run.doc["runtime"]["gpu_clocks"]["per_rank"][0]["sm_clock_mhz"]["p50"], 1980)
+        self.assertEqual(run.doc["runtime"]["gpu_clocks"]["sm_clock_ratio_min"], 1.0)
 
 
 if __name__ == "__main__":

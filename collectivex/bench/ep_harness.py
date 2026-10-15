@@ -17,6 +17,7 @@ from ep_oracle import (
     chain_output_matches,
     run_expert_oracle,
 )
+import gpu_clocks
 
 _CASE_ID = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
@@ -235,6 +236,11 @@ class _Collectives:
         return [float(g.item()) for g in self._gather(
             self.torch.tensor([float(val)], device=self.device, dtype=self.torch.float64))]
 
+    def rows(self, vals):
+        """Every rank's copy of one per-rank vector, in rank order."""
+        return [[float(x) for x in g.tolist()] for g in self._gather(
+            self.torch.tensor(vals, device=self.device, dtype=self.torch.float64))]
+
     def integer(self, v, op) -> int:
         t = self.torch.tensor([int(v)], device=self.device, dtype=self.torch.int64)
         self.dist.all_reduce(t, op=op)
@@ -372,10 +378,15 @@ class Sweep:
         self.points = [point for point, _ in prepared]
         # status=valid also requires a proven-identical routing trace across ranks.
         self.routing_consistent = all([consistent for _, consistent in prepared])
+        # Clocks over the timed passes only; reads land between bursts, never inside a window.
+        self.clocks = gpu_clocks.ClockMonitor(self.torch, self.device)
+        self.clocks.start()
         self._sample_fresh()
         if self.graph:
             self._check_graph_replay()
         self._sample_chain()
+        self.clocks.finish()
+        self.gpu_clocks = gpu_clocks.summarize(self.reduce.rows(self.clocks.vector()), self.clocks.reason)
         for point in self.points:
             self._final_oracle(point)
         rows = [self._row(point) for point in self.points]
@@ -484,6 +495,8 @@ class Sweep:
                             point.host_stalled[name] = point.host_stalled.get(name, 0) + int(sum(slow))
                             suspect = [max(late, stall) for late, stall in zip(suspect, slow)]
                         point.suspect[name] = point.suspect.get(name, 0) + int(sum(suspect))
+                # The GPU has just run this point's bursts, so its clock is the one they ran at.
+                self.clocks.sample()
                 if measured["dispatch"]:
                     point.dispatch += self.reduce.vec(measured["dispatch"], MAX)
                     point.combine += self.reduce.vec(measured["combine"], MAX)
@@ -523,6 +536,7 @@ class Sweep:
                 chained = self.backend.benchmark_chain(
                     point.problem, self.args.warmup, self.args.chain_iters, self.args.chain_drop
                 )
+                self.clocks.sample(temperature=True)
                 drained = self.backend.run_roundtrip(point.problem)
                 self.torch.cuda.synchronize()
                 if self.chain_output_applicable:
@@ -824,7 +838,7 @@ class Sweep:
                 "transport": args.transport,
                 "world_size": self.world_size,
             },
-            "runtime": getattr(args, "runtime", {}),
+            "runtime": {**getattr(args, "runtime", {}), "gpu_clocks": self.gpu_clocks},
             "provenance": {
                 "image": getattr(args, "image", "") or None,
                 "source_sha": git_run.get("source_sha"),
@@ -858,6 +872,9 @@ class Sweep:
               f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={self.routing_consistent}, "
               f"{' '.join(point_summary(row) for row in summary_rows)} "
               f"-> {self.args.out}")
+        warning = gpu_clocks.slow_gpu_warning(doc["runtime"].get("gpu_clocks"))
+        if warning:
+            print(warning)
 
 
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:

@@ -763,7 +763,27 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
   into one string (`nvlink` scale-up-only, `nvlink-rdma` once a case scales out).
 - `runtime`: the realized software stack, `vendor`, `framework` (the torch version),
   `accelerator_runtime` (the CUDA or HIP version torch was built against), and
-  `collective_library` (`nccl`/`rccl` and the version actually loaded into the process).
+  `collective_library` (`nccl`/`rccl` and the version actually loaded into the process), plus
+  `gpu_clocks`, what each rank's GPU ran at over the timed passes. A clamped or throttled GPU looks
+  exactly like a slow library, and clocks are not locked, so every case records them, through NVML
+  on NVIDIA and amdsmi on AMD:
+  - per rank, the SM clock read right after each point's timed bursts and after each chain (min,
+    p50, max, sample count), the clock limit, the power limit and the highest temperature. A read
+    right after a burst still shows the burst's clock: an MI325X held ~1.5 GHz for the first
+    millisecond after a power-bound burst and only then climbed back toward its 2.1 GHz limit;
+  - `throttle_fraction`, the share of the timed passes the clock was held down, by cause: NVML's
+    violation counters (power, thermal, sync boost, board limit, reliability) and amdsmi's residency
+    accumulators (power, thermal, HBM and VR thermal, PROCHOT). Null where the GPU does not report a
+    cause;
+  - on NVIDIA, the clock-event reasons seen other than idle;
+  - `sm_clock_ratio_min`, the slowest rank's median clock over the fastest rank's, null unless every
+    rank reported. Ranks run identical work, so their GPUs should agree;
+  - `slow_gpu`, true when that ratio is below 0.95 or a rank reported a hardware, thermal or power
+    brake slowdown (which a tray clamped as a whole shows even at a ratio of 1). The run log and
+    `summarize.py` call such cases out.
+
+  Reads happen only between timed bursts, never inside a window. A probe that cannot start leaves
+  the values null and records `unavailable_reason`; it never fails the case.
 - `provenance`: the mounted image tag, the source SHA, and `source_dirty` (whether `collectivex/`
   had uncommitted edits; such a result is never published), and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.

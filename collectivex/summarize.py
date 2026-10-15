@@ -137,6 +137,17 @@ def render(documents: list[dict]) -> str:
             f"{phase} | {routing} | {ep} | {topo} | {wire} | "
             f"{document['outcome']['status']} | {token} | {p50} | {p99} | {min50} | {skew} |"
         )
+    slow = [
+        (document["identity"]["case_id"], clocks.get("sm_clock_ratio_min"))
+        for document in documents
+        if (clocks := (document.get("runtime") or {}).get("gpu_clocks") or {}).get("slow_gpu")
+    ]
+    if slow:
+        lines.append(
+            f"\n> **{len(slow)} case(s) ran a slow or throttled GPU** (`runtime.gpu_clocks.slow_gpu`; "
+            "slowest/fastest rank clock in brackets): "
+            + ", ".join(f"`{case}` ({'n/a' if ratio is None else f'{ratio:.2f}'})" for case, ratio in slow)
+        )
     if not documents:
         lines.append("\n> No valid native outcome documents found.")
     # The starred columns can hold two different quantities, so the table always says which — and
