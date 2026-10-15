@@ -319,13 +319,14 @@ combine (weighted-kernel-sum). It builds and calls them as vLLM's `deepep_low_la
 `num_qps_per_rank` equal to the local expert count, NVLink allowed, MNNVL allowed only on the GB
 pools (vLLM's `VLLM_DEEPEP_LOW_LATENCY_USE_MNNVL`, which its env doc says to turn on "for better
 latency on GB200 like system"), and each collective split into a send kernel and a receive hook
-(`return_recv_hook=True`). vLLM's default non-DBO path splits both dispatch and combine that way and
-runs the hook straight after the send unless a shared expert is scheduled in between; here nothing
-is, so the hook follows immediately. Those rows carry the `-hook` generation suffix. UCCL-EP issues
-the same calls, as vLLM drives UCCL's drop-in Buffer. For the scoped single-node EP8 cells these run
-over the intra-node NVLink low-latency path (`allow_nvlink_for_low_latency_mode`). NVSHMEM/IBGDA (and
-thus `/dev/gdrdrv`)
-is only exercised on the wire by a multi-node scale-out (EP16) run, and single-node EP8 was validated
+(`return_recv_hook=True`). vLLM's default non-DBO path splits both dispatch and combine that way
+(vLLM main a9fe30e9f6 `modular_kernel.py:1214-1273`, `1405-1446`; `deepep_ll.py:222-223`, `309`,
+`402`) and runs the hook straight after the send unless a shared expert is scheduled in between;
+here nothing is, so the hook follows immediately. Those rows carry the `-hook` generation suffix.
+UCCL-EP issues the same calls, as vLLM drives UCCL's drop-in Buffer, so its low-latency rows carry
+`-hook` too. For the scoped single-node EP8 cells these run over the intra-node NVLink low-latency
+path (`allow_nvlink_for_low_latency_mode`). NVSHMEM/IBGDA (and thus `/dev/gdrdrv`) is only exercised
+on the wire by a multi-node scale-out (EP16) run, and single-node EP8 was validated
 on H200 with `/dev/gdrdrv` absent. On MoRI it selects SGLang's `AsyncLL` kernel, with SGLang's launch
 (64/32/8, 2 queue pairs per PE) and `MORI_ENABLE_SDMA` on, as SGLang deploys it on AMD. The kernel is
 driven split-phase: each timed dispatch is send then recv, and each timed combine is send then recv,
@@ -987,13 +988,13 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
   changes what a row measures, null where an adapter records none. deepep-v2 records
   `engine_contract` (`vllm`) in both modes and, in `normal`, its SM and QP counts, allocated QPs,
   LSA team, hybrid choice, vLLM's buffer flags, host-sync, expand and receive sizing
-  (`sm_model_rdma_gbs` on EFA only); the shared low-latency path records its receive capacity, QPs
-  per rank, receive hook, zero-copy and FP8 scale format, plus deepep-v2's NVLink and MNNVL flags;
-  uccl-ep its verified `deep_ep` identity, buffer bytes, QPs,
-  `is_intranode` and running CPU-proxy threads, with `Buffer.num_sms` and the dispatch and combine
-  `Config`s as the constructor rounded them in `normal` mode; MoRI the launch tuple its handle
-  realized, QPs, quant type, SDMA, heap and launch-config modes and whose contract (`vllm` or
-  `sglang`) it follows; nccl-ep `capacity_tokens_per_rank`, `zero_copy`, `num_sms` (`dispatch`,
+  (`sm_model_rdma_gbs` on EFA only); the shared low-latency path, on deepep-v2 and uccl-ep alike,
+  records `receive_capacity`, `num_qps_per_rank`, `return_recv_hook`, `zero_copy` and
+  `fp8_scales`, plus deepep-v2's NVLink and MNNVL flags; uccl-ep adds its verified `deep_ep`
+  identity, buffer bytes, QPs, `is_intranode` and running CPU-proxy threads, with `Buffer.num_sms`
+  and the dispatch and combine `Config`s as the constructor rounded them in `normal` mode; MoRI the
+  launch tuple its handle realized, QPs, quant type, SDMA, heap and launch-config modes and whose
+  contract (`vllm` or `sglang`) it follows; nccl-ep `capacity_tokens_per_rank`, `zero_copy`, `num_sms` (`dispatch`,
   `combine`) and `engine_contract` (`tensorrt-llm`, or null for a library row); FlashInfer its
   combine contract (`payload_in_workspace`, `combine_output`), dispatch scale format and workspace
   sizing.
