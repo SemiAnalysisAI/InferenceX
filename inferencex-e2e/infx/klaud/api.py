@@ -25,7 +25,7 @@ PRIVATE = "https://dash.inferencex.semianalysis.com"
 ENDPOINTS = {
     "images": PUBLIC + "/api/v1/latest-images",
     "releases": PUBLIC + "/api/v1/framework-releases",
-    "clusters": PRIVATE + "/api/status/clusters",
+    "scheduler": PRIVATE + "/api/status/scheduler",
     "benchmarks": PUBLIC + "/api/v1/benchmarks",
     "workflow-info": PUBLIC + "/api/v1/workflow-info",
     "evaluations": PUBLIC + "/api/v1/evaluations",
@@ -86,7 +86,7 @@ def fetch(
             query["exact"] = "true"
     url = ENDPOINTS[resource] + ("?" + urllib.parse.urlencode(query) if query else "")
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
-    if resource == "clusters":
+    if resource == "scheduler":
         if not token or not token.strip():
             raise ReadError("private-status-key-unavailable")
         if any(ord(char) < 33 or ord(char) > 126 for char in token.strip()):
@@ -231,57 +231,34 @@ def fresh(value: Any, now: datetime, policy: Policy) -> bool:
 
 
 def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
-    """Return clusters below 80% node utilization; never publish private status."""
+    """Return clusters whose running plus queued nodes are at most 200% of schedulable nodes."""
     try:
         raw = feed.payload
+        snapshot = raw["data"]["snapshot"]
+        snapshot_age = (utc(now) - utc(snapshot["snapshotAt"])).total_seconds()
         if (
             feed.error
             or not fresh(feed.retrieved_at, now, policy)
-            or raw["kind"] != "inferencex.status.clusters"
+            or raw["kind"] != "inferencex.status.scheduler"
             or not fresh(raw["generatedAt"], now, policy)
             or raw["data"]["available"] is not True
+            or snapshot["stalled"] is not False
+            or not -policy.clock_skew_seconds <= snapshot_age <= policy.scheduler_max_age_seconds
         ):
             return set()
         available: set[str] = set()
         seen: set[str] = set()
-        for cluster in raw["data"]["clusters"]:
-            cluster_id = cluster["clusterId"]
-            if not isinstance(cluster_id, str) or not cluster_id or cluster_id in seen:
+        for metric in snapshot["packingMetrics"]:
+            label = metric["clusterLabel"]
+            if not isinstance(label, str) or not label.startswith("cluster:") or label in seen:
                 return set()
-            seen.add(cluster_id)
-            observed, received = utc(cluster["observedAt"]), utc(cluster["receivedAt"])
-            generated = utc(raw["generatedAt"])
-            if (
-                cluster["stale"] is not False
-                or cluster["status"] not in ("operational", "degraded")
-                or (observed - received).total_seconds() > policy.clock_skew_seconds
-                or (received - generated).total_seconds() > policy.clock_skew_seconds
-            ):
+            seen.add(label)
+            schedulable = metric["schedulableNodes"]
+            demand = (metric["allocatedNodes"], metric["queuedNodes"])
+            if type(schedulable) is not int or any(type(n) is not int or n < 0 for n in demand):
                 continue
-            summary = cluster["summary"]
-            total = summary["totalNodes"]
-            counts = [
-                summary[k]
-                for k in (
-                    "allocatedNodes",
-                    "mixedNodes",
-                    "idleNodes",
-                    "downNodes",
-                    "otherNodes",
-                )
-            ]
-            if (
-                type(total) is not int
-                or total <= 0
-                or any(type(n) is not int or n < 0 for n in counts)
-                or sum(counts) != total
-            ):
-                continue
-            if (
-                summary["idleNodes"] > 0
-                and (summary["allocatedNodes"] + summary["mixedNodes"]) * 5 < total * 4
-            ):
-                available.add(cluster_id)
+            if schedulable > 0 and sum(demand) <= 2 * schedulable:
+                available.add(label.removeprefix("cluster:"))
         return available
     except (KeyError, ValueError, TypeError, AttributeError):
         return set()
@@ -289,7 +266,7 @@ def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
 
 def fetch_capacity(policy: Policy) -> set[str]:
     return available_clusters(
-        fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
+        fetch("scheduler", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
         policy,
         datetime.now(UTC),
     )
@@ -297,19 +274,19 @@ def fetch_capacity(policy: Policy) -> set[str]:
 
 def capacity_context(policy: Policy) -> dict:
     """Private routing hints for review, without node counts or raw responses."""
-    feed = fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY"))
+    feed = fetch("scheduler", token=os.environ.get("KLAUD_DASHBOARD_API_KEY"))
     available = available_clusters(feed, policy, datetime.now(UTC))
     try:
         clusters = sorted(
             {
-                cluster["clusterId"]
-                for cluster in feed.payload["data"]["clusters"]
-                if isinstance(cluster["clusterId"], str)
+                metric["clusterLabel"].removeprefix("cluster:")
+                for metric in feed.payload["data"]["snapshot"]["packingMetrics"]
+                if isinstance(metric["clusterLabel"], str)
             }
         )
     except (KeyError, TypeError):
         clusters = []
     return {
-        "telemetry-clusters": clusters,
-        "eligible-telemetry-clusters": sorted(available),
+        "clusters": clusters,
+        "eligible-clusters": sorted(available),
     }
