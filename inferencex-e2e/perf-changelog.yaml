@@ -9866,3 +9866,12 @@
   description:
     - "Upgrade agentx-harness from 1.0.9 to 1.0.10: pin SPAWN subagents to one client worker to prevent duplicate session state accumulating across workers. Metric collection, calculations, and exports are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4119
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX c5120 (8P1D) and c6656 (10P1D) points using the agentx-harness 1.0.10 release already pinned on main."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  append-only: true
