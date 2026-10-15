@@ -9849,7 +9849,10 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Move the MI355X Kimi-K3 FP4 ATOM AgentX submission to image rocm/atom-dev:nightly_202610131505."
+    - "Move the MI355X Kimi-K3 FP4 ATOM AgentX submission from image rocm/atom-dev:nightly_202609251613 (ATOM 0.1.7.dev36+g68e0df5e7) to rocm/atom-dev:nightly_202610131505 (ATOM 0.1.8.dev44+g661ef7661), and pin the recipe frontend to that tag's digest sha256:b78300a6caf6c1fec3b1f27b4f7333326c9d34911bfc7ae229d13d2ebbc43884."
+    - "Keep the published concurrency set [1, 4, 14, 16, 48, 56, 72]; no points are added or removed."
     - "Widen the DSpark draft from 3 to 4 tokens at concurrency 14 and 16, which moves the golden acceptance length from 3.00 to 3.36."
-    - "Run the same 4-token DSpark draft with ReplaySSM at concurrency 48, 56 and 72, which previously served without a draft model. Concurrency 1 and 4 keep the 7-token draft."
+    - "Serve concurrency 48, 56 and 72 with the same 4-token DSpark draft and ReplaySSM (ATOM_ENABLE_REPLAYSSM=1) instead of no draft model. Concurrency 1 and 4 keep the 7-token draft at AL 3.84. max-num-seqs, the CUDA-graph ladders, dcp-size, LMCache sizing and the prefill-delayer settings are unchanged."
+    - "The new image carries the Kimi-K3 prefill gated RMSNorm pipeline (ROCm/ATOM#2458) and moves the LMCache wheel that the in-process lmcache_offload connector imports from 0.5.6.dev98 to 0.5.6.dev139 (ROCm/ATOM#2438)."
+    - "No change to the Inferact/Kimi-K3-DSpark draft's precision: the checkpoint is BF16 throughout, and at ATOM 661ef7661 online_quant_config still excludes every draft linear (layers.*, context_proj), so its weights and activations stay BF16 at every drafted point, including the newly drafted concurrency 48, 56 and 72, and it shares the target's FP8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4085
