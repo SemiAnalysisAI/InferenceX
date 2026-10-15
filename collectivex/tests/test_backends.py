@@ -570,16 +570,17 @@ class GraphReplayDefaults(unittest.TestCase):
             ))
             return calls[-1]["num_max_tokens_per_rank"], calls[-1]["do_cpu_sync"]
 
-        # vLLM's graphed decode passes the next power of two of the batch; prefill syncs exactly.
+        # vLLM (graphs on) passes the next power of two of the batch, in prefill as in decode.
         for tokens, capacity in ((1, 1), (3, 4), (65, 128), (512, 512)):
             self.assertEqual(dispatched(decode, tokens), (capacity, False))
-        self.assertEqual(dispatched(prefill, 3), (512, True))
+        self.assertEqual(dispatched(prefill, 3), (4, False))
         self.assertEqual(
             (decode.cuda_graph_supported, decode.kernel_generation),
-            (True, "v2-elastic-buffer-nosync"),
+            (True, "v2-elastic-buffer-vllm-nosync"),
         )
         self.assertEqual(
-            (prefill.cuda_graph_supported, prefill.kernel_generation), (False, "v2-elastic-buffer")
+            (prefill.cuda_graph_supported, prefill.kernel_generation),
+            (False, "v2-elastic-buffer-vllm-nosync"),
         )
         self.assertTrue(ll.cuda_graph_supported)
 
