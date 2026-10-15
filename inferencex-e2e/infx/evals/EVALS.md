@@ -619,8 +619,6 @@ are gated.
   `test-sweep-multi-node-agentic-evals` (multi-node agentic)
 - `run-sweep.yml`: `sweep-evals`, `sweep-multi-node-evals`, `sweep-agentic-evals`, and
   `sweep-multi-node-agentic-evals` (same four-way split)
-- In `run-sweep.yml`, the eval jobs wait for every throughput job to finish (any result), so
-  performance runs go first; with `evals-only` the throughput jobs are skipped and evals start immediately
 - All four use their respective benchmark templates (`benchmark-tmpl.yml` for single-node,
   `benchmark-multinode-tmpl.yml` for multi-node) with `eval-only: true`, `run-eval: true`
 - `al-gate-prompts` runs before the two agentic eval jobs (see [Speculative acceptance gate](#speculative-acceptance-gate))
