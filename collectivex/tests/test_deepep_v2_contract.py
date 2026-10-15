@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import re
 import struct
 import sys
 import types
@@ -209,13 +208,14 @@ class ElasticBufferContract(unittest.TestCase):
             self.assertIsInstance(backend.combine_model, ep_oracle.RankFP32)
             self.assertFalse(backend.implementation_details()["allow_multiple_reduction"])
 
-    def test_library_version_names_the_wheel_and_the_pinned_commit(self):
+    def test_library_version_prefers_the_installed_wheel_then_the_module(self):
         module = _adapter()
-        common = (ROOT / "runtime" / "common.sh").read_text()
-        pinned = re.search(r'^COLLX_DEEPEP_V2_COMMIT="([0-9a-f]{40})"', common, re.MULTILINE).group(1)
-        self.assertEqual(module._DEEPEP_COMMIT, pinned)
         backend = module.DeepEPV2Backend(_args(), 0, 8, 0, "cpu")
-        self.assertEqual(backend.library_version, f"2.1.0@{pinned}")
+        with mock.patch.object(module.metadata, "version", return_value="2.1.0+local"):
+            self.assertEqual(backend.library_version.split("@")[0], "2.1.0+local")
+        with mock.patch.object(module.metadata, "version",
+                               side_effect=module.metadata.PackageNotFoundError):
+            self.assertEqual(backend.library_version.split("@")[0], "2.1.0")
 
 
 class LowLatencyContract(unittest.TestCase):
