@@ -283,7 +283,7 @@ jobs:
       - name: Prepare launcher Python
         env: *uv-setup-env
         run: |
-          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          launch_venv="$(mktemp -d "$RUNNER_TEMP/infx-launch-venv.XXXXXX")"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
             -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
