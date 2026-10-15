@@ -82,9 +82,8 @@ GPU, framework versions, image, source SHA, correctness status, and measurements
 summary tables skip these documents. CPU CI is separate and does not establish GPU
 correctness.
 
-A pool that cannot import an image itself can name an operator-staged cache in
-`sku_images` (`staged_image_dir`). H100 does: it first looks in
-`/mnt/nfs/lustre/containers` for the exact requested tag, using the serving launchers'
-filename convention, and reuses a valid squash without importing inside the compute
-pod. If the file is absent, the regular import path runs. `COLLX_IMAGE_REFRESH=1`
-bypasses the staged cache and requests a fresh import.
+A pool can name an operator-staged image cache in `sku_images` (`staged_image_dir`).
+h100-dgxc's entry names `/mnt/nfs/lustre/containers`: the launcher reuses a valid squash
+of the exact requested tag there, named by the serving launchers' filename convention,
+and imports as usual when the file is absent. `COLLX_IMAGE_REFRESH=1` bypasses the
+staged cache and requests a fresh import.
