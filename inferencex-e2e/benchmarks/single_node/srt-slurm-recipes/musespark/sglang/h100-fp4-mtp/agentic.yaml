@@ -68,8 +68,9 @@ zip_override_tp8:
     agg:
       args:
         max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128]
-        # Each graph slot reserves seven full-context int32 page tables.
-        cuda-graph-max-bs-decode: [2, 4, 8, 16, 16, 16, 16, 16, 16]
+        # Each graph slot reserves seven full-context int32 page tables, and
+        # bs=16 graphs leave too little headroom for the vision encoder.
+        cuda-graph-max-bs-decode: [2, 4, 8, 8, 8, 8, 8, 8, 8]
   benchmark:
     env:
       CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64']
