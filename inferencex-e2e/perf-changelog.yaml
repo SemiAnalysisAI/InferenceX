@@ -10022,3 +10022,9 @@
     - "Append GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX c5120 (8P1D) and c6656 (10P1D) points using the agentx-harness 1.0.10 release already pinned on main."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4126
   append-only: true
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+  description:
+    - "Update the ATOM image from nightly_202610080328 (v0.1.7) to nightly_202610161458 (0.1.8.dev75)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4192
