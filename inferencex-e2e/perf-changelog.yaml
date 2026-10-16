@@ -10052,3 +10052,11 @@
     - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
     - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Extend the Qwen3.5 FP8 MI355X SGLang 8k1k (ISL 8192 / OSL 1024, TP4 EP1) concurrency ladder from 4-256 to 1-256 in amd-master.yaml and the matching srt-slurm zip_override. The reused sweep measured and validated GPU power at every point. Leave the MTP arm unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3380
