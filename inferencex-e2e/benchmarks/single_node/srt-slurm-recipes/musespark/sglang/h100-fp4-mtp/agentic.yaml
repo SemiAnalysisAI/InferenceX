@@ -36,8 +36,6 @@ base:
         # Full-attention KV must fit 256k prompts; SWA retains its 2048-token window.
         swa-full-tokens-ratio: 0.1
         disable-prefill-cuda-graph: true
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
         # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
@@ -65,7 +63,12 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
-override_tp8_c1:
+zip_override_tp8:
+  roles:
+    agg:
+      args:
+        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128]
+        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 96, 128]
   benchmark:
     env:
-      CONC: '1'
+      CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64']

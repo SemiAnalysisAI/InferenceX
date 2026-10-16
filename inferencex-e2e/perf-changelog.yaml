@@ -9904,10 +9904,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4147
 
 - config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on one GB200 node via SGLang (lmsysorg/sglang:dev-muse-spark-open, multiarch digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) at TP4/EP4, concurrency 1, 2, 4, 6, 8, 10, 12, 16, 24 and 32, with HiCache host KV offload (120 GB per rank)."
+    - "Serve flags follow the SGLang cookbook's NVFP4 cell: modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE prefill, DFlash2 draft RadixArk/Muse-Spark-Open-DFlash2 with fa4 draft attention and 8 verify tokens (7 drafts), muse reasoning and tool-call parsers. Prefill CUDA graphs are off and mem-fraction-static is 0.88 to leave room for the KV pool; admission and the decode graph batch are 2x concurrency."
+    - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
+    - "The checkpoint is served from the staged Lustre copy; the AgentX client reads its tokenizer from it."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4140
+
+- config-keys:
     - musespark-fp4-h100-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
   description:
     - "Add Muse Spark Open NVFP4 AgentX on H100 at TP8/EP8 with upstream Marlin dense/MoE kernels, FA3 target attention, FA4 draft attention, and FP8 KV."
-    - "Start at concurrency 1 with DFlash2, GPU-resident KV, a 0.97 static memory fraction, 1024-token prefill chunks, a 0.1 SWA/full KV token ratio, and prefill CUDA graphs disabled; use the committed golden acceptance curve for throughput and real verification for evals."
+    - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 48, and 64 with DFlash2, GPU-resident KV, a 0.97 static memory fraction, 1024-token prefill chunks, a 0.1 SWA/full KV token ratio, and prefill CUDA graphs disabled; use the committed golden acceptance curve for throughput and real verification for evals."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4149
