@@ -49,6 +49,8 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
+        # Eager sampling supports admission above the captured graph batch size.
+        SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
   health_check:
