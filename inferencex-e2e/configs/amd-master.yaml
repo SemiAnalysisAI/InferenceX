@@ -1604,7 +1604,8 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 
-# DFlash2 speculative decoding with GPU-resident KV.
+# DFlash2 speculative decoding: GPU-resident KV through conc 8, HiCache DRAM
+# offload (180 GB per rank) at conc 12 and 16.
 musespark-fp4-mi355x-sglang-agentic-dflash:
   image: lmsysorg/sglang-rocm:muse-spark-open@sha256:72065dfc0b87818ab415f96c0fc08848233d25f22b002ac8f28c33fad6ec82a4
   model: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
@@ -1616,9 +1617,12 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
   srt-recipe-dir: musespark/sglang/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    - search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
+    - dram-utilization: 0.85
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [12, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [12, 16], srt-recipe: agentic.yaml }
 
 # Native Kimi-K3 PD with TP8 workers and MoRIIO READ.
 kimik3-fp4-mi355x-vllm-disagg-agentic:

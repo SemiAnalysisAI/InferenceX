@@ -172,6 +172,23 @@ def test_candidate_outcome_rejects_raw_reason_and_preserves_legacy_receipts():
         )
 
 
+@pytest.mark.parametrize(("outcome", "phase", "reason", "valid"), [
+    ("readiness-blocked", "targeted", "weights-missing", True),
+    ("failed", "targeted", "weights-missing", False),
+    ("failed", "baseline", "weights-missing", False),
+    ("readiness-blocked", "targeted", "baseline-other", False),
+    ("failed", "baseline", "baseline-other", True),
+])  # fmt: skip
+def test_reason_codes_pair_only_with_their_outcome(outcome, phase, reason, valid):
+    record = {"outcome": outcome, "phase": phase, "pull-request": None, "run-ids": [],
+              "repairs-used": 0, "reason-code": reason}
+    if valid:
+        assert CandidateOutcome.model_validate(record).reason_code == reason
+    else:
+        with pytest.raises(ValueError):
+            CandidateOutcome.model_validate(record)
+
+
 def test_finish_requires_specific_baseline_reason_before_touching_session(
     tmp_path, monkeypatch, capfd
 ):
@@ -206,15 +223,21 @@ def test_finish_requires_specific_baseline_reason_before_touching_session(
 def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferrals(
     monkeypatch,
 ):
-    blocked, deferred, unreadable, superseded, untried, not_started = (
-        f"{digit * 16}-{digit * 16}" for digit in "123456"
+    blocked, deferred, unreadable, superseded, untried, not_started, weightless = (
+        f"{digit * 16}-{digit * 16}" for digit in "1234567"
     )
     outcomes = {
-        1: ("readiness-blocked", "targeted"),
-        2: ("capacity-deferred", "targeted"),
-        4: ("capacity-deferred", "targeted"),
-        5: ("failed", "targeted"),
-        7: ("unexpected-error", "unknown"),
+        1: ("readiness-blocked", "targeted", None),
+        2: ("capacity-deferred", "targeted", None),
+        4: ("capacity-deferred", "targeted", None),
+        5: ("failed", "targeted", None),
+        7: ("unexpected-error", "unknown", None),
+        8: ("readiness-blocked", "targeted", "weights-missing"),
+    }
+    sources = {
+        blocked: {"model": "dsr1", "precision": "fp8", "hardware": "b200"},
+        deferred: {"model": "glm5.2", "precision": "fp4", "hardware": "b200"},
+        weightless: {"model": "dsr1", "precision": "fp4", "hardware": "b200"},
     }
 
     def items(_repository, path, key):
@@ -225,22 +248,27 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
                 {"id": 40, "created_at": "2000-01-01T00:00:00Z", "head_sha": "c" * 40},
             ]
         run_artifacts = {
-            41: [(1, blocked), (3, unreadable), (5, superseded)],
-            42: [(2, deferred), (4, superseded), (7, not_started)],
+            41: [(1, blocked), (3, unreadable), (5, superseded), (91, "plan")],
+            42: [(2, deferred), (4, superseded), (7, not_started), (8, weightless), (92, "plan")],
             40: [(6, untried)],
         }
         run_id = int(path.split("/")[2])
         return [
-            {"id": artifact, "name": f"klaud-candidate-{candidate}", "expired": False}
+            {"id": artifact, "expired": False,
+             "name": "klaud-plan" if candidate == "plan" else f"klaud-candidate-{candidate}"}
             for artifact, candidate in run_artifacts[run_id]
         ]
 
     def download(_repository, artifact, destination):
+        if artifact["id"] in (91, 92):
+            (destination / "candidates.json").write_text(json.dumps(
+                [{"id": candidate, "source": source} for candidate, source in sources.items()]))
+            return
         if artifact["id"] not in outcomes:
             raise github.VerificationError("Invalid artifact archive")
-        outcome, phase = outcomes[artifact["id"]]
+        outcome, phase, reason = outcomes[artifact["id"]]
         record = {"outcome": outcome, "phase": phase, "pull-request": None, "run-ids": [],
-                  "repairs-used": 0}
+                  "repairs-used": 0, "reason-code": reason}
         diagnostics = {"candidate-outcome": record}
         if phase == "unknown":
             diagnostics["action-outcome"] = "skipped"
@@ -249,13 +277,15 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
     monkeypatch.setattr(klaud, "github_items", items)
     monkeypatch.setattr(klaud, "download_json", download)
 
-    recent = klaud.recent_candidate_outcomes("example/project", 24)
+    recent, missing_weights = klaud.recent_candidate_outcomes("example/project", 24)
+    assert missing_weights == {("dsr1", "fp4", "b200")}
     assert recent == {
         blocked: "readiness-blocked",
         unreadable: None,
         deferred: "capacity-deferred",
         superseded: "capacity-deferred",
         not_started: "agent-not-started",
+        weightless: "weights-missing",
     }
     candidates = [{"id": candidate} for candidate in (deferred, blocked, untried, unreadable,
                                                       superseded, not_started)]
@@ -307,6 +337,38 @@ def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
     assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
     pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
     assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
+
+
+@pytest.mark.parametrize(("run_status", "reconcile_status", "taken"), [
+    ("completed", None, True),
+    ("in_progress", "completed", True),
+    ("in_progress", "in_progress", False),
+    ("in_progress", None, False),
+])  # fmt: skip
+def test_recovery_lease_frees_once_the_holders_reconcile_job_ends(
+    monkeypatch, run_status, reconcile_status, taken
+):
+    monkeypatch.setenv("GITHUB_RUN_ID", "200")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    monkeypatch.setattr(claims, "ref", lambda _r, _name: {"object": {"sha": "b" * 40}})
+    monkeypatch.setattr(claims, "record", lambda _r, _value: {"run-id": 100, "run-attempt": 2})
+    monkeypatch.setattr(github, "read", lambda _r, path: {
+        "path": ".github/workflows/klaud-plan.yml", "head_branch": "main", "status": run_status,
+        "conclusion": "success" if run_status == "completed" else None,
+    } if path == "actions/runs/100" else pytest.fail(path))
+    jobs = [{"name": "Run candidate x / Klaud Cold", "status": "completed"}] + (
+        [{"name": "Reconcile interrupted candidates", "status": reconcile_status}]
+        if reconcile_status else [])
+    monkeypatch.setattr(github, "items", lambda _r, path, _key=None: (
+        jobs if path == "actions/runs/100/attempts/2/jobs?per_page=100" else pytest.fail(path)))
+    created = []
+    monkeypatch.setattr(claims, "create", lambda _r, name, owner, _base, _previous: (
+        created.append((name, owner)) or True))
+    candidate = OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+
+    assert claims.recovery_lease("example/project", 42, candidate) is taken
+    assert created == ([(f"klaud/recovery-42-{CANDIDATE_ID}", {"run-id": 200, "run-attempt": 1})]
+                       if taken else [])
 
 
 @pytest.mark.parametrize("other_recovery", ["in_progress", "completed"])
@@ -409,7 +471,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
         "configs/nvidia-master.yaml:second-family",
     ]
     contexts = [
-        {"id": candidate_id, "family": family, "base": base, "source": {}}
+        {"id": candidate_id, "family": family, "base": base, "source": {}, "clusters": ["cluster-a"]}
         for candidate_id, family in zip((first_id, second_id), families, strict=True)
     ]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -419,7 +481,6 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
                 "candidate-id": candidate_id,
                 "decision": "proceed",
                 "family": family,
-                "clusters": ["cluster-a"],
                 "pull-requests": [],
                 "baseline-model": "Model",
                 "reason": "No overlap",
@@ -466,6 +527,50 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     assert preflight.source_identity == identity({})
     selected = json.loads((tmp_path / second_id / "candidate.json").read_text())
     assert selected["baseline-model"] == "Model"
+
+
+@pytest.mark.parametrize(("eligible", "selected", "deferred"), [
+    ({"h100-dsxe"}, ["exact"], ["spanning"]),
+    ({"h100-cw", "h100-dsxe"}, ["spanning", "exact"], []),
+])  # fmt: skip
+def test_select_needs_every_planner_target_cluster_eligible(
+    tmp_path, monkeypatch, eligible, selected, deferred
+):
+    ids = {"spanning": "1" * 16 + "-" + "2" * 16, "exact": "3" * 16 + "-" + "4" * 16}
+    targets = {"spanning": ["h100-cw", "h100-dsxe"], "exact": ["h100-dsxe"]}
+    contexts = [
+        {"id": ids[name], "family": f"configs/nvidia-master.yaml:{name}", "base": "a" * 40,
+         "source": {}, "clusters": targets[name]}
+        for name in ("spanning", "exact")
+    ]  # fmt: skip
+    (tmp_path / "candidates.json").write_text(json.dumps(contexts))
+    (tmp_path / "producers.json").write_text("{}\n")
+    review = {"decisions": [
+        {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
+         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+        for context in contexts
+    ]}  # fmt: skip
+
+    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+        return reporting.Baseline(
+            family=candidate.family, date="2026-09-19", image="example/image:1",
+            goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
+            sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"], points=[],
+        )  # fmt: skip
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: eligible)
+    monkeypatch.setattr(reporting, "resolve_baseline", resolve)
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
+    monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
+
+    klaud.select(tmp_path, 5)
+
+    selection = json.loads((tmp_path / "selection.json").read_text())
+    assert selection["candidates"] == [ids[name] for name in selected]
+    assert selection["capacity-deferred-candidates"] == [ids[name] for name in deferred]
 
 
 def test_prepare_baseline_uses_bound_preflight_and_rejects_source_drift(
@@ -819,13 +924,13 @@ def review_candidate(directory, monkeypatch, source):
     """Write one FAMILY candidate observed at ``source`` and a review that proceeds with it."""
     directory.mkdir()
     (directory / "candidates.json").write_text(json.dumps(
-        [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source}]
+        [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source,
+          "clusters": ["cluster-a"]}]
     ))
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
-        "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY,
-        "clusters": ["cluster-a"], "pull-requests": [],
+        "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY, "pull-requests": [],
         "baseline-model": "DeepSeek-R1", "reason": "No overlap",
     }]}))
 
@@ -1265,6 +1370,97 @@ def test_finish_and_recovery_rederive_retirements_before_readiness(monkeypatch):
         session.validation({"id": 9, "head_sha": "c" * 40, "run_attempt": 1})
 
 
+def attempt_comment(number, en, zh, *, author="Klaud-Cold", parent=42, candidate=CANDIDATE_ID,
+                    run=9, chunked=False):
+    record = reporting.Attempt(
+        kind="initial", number=0, head="c" * 40, image="example/image:next", run_id=run,
+        run_attempt=1, status="cancelled", change=reporting.Prose(en="Pin the image.", zh="固定镜像。"),
+        next=reporting.Prose.model_construct(en=en, zh=zh), benchmarks_expected=1,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=[],
+    ).model_dump(by_alias=True)
+    data = {"record": record, "chunks": [f"run-{run}-1-part-1-{'0' * 16}"]} if chunked else record
+    return {"id": number, "user": {"login": author}, "body": (
+        f"<!-- klaud-report:{parent}:{candidate}:run-{run}-1\n{json.dumps(data)}\n-->\nRendered.")}
+
+
+def finish_report(monkeypatch, outcome, comments, recovering=False):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
+        recovering=recovering,
+    )
+    validated = outcome == "validated"
+    pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": not validated,
+            "state": "open" if validated else "closed",
+            "labels": [{"name": "full-sweep-enabled"}] if validated else []}
+    run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
+           "created_at": "2026-10-15T00:00:00Z", "status": "completed",
+           "conclusion": "success" if validated else "cancelled"}
+    posted = []
+    monkeypatch.setattr(session, "pulls", lambda: [pull])
+    monkeypatch.setattr(session, "runs", lambda: [run])
+    monkeypatch.setattr(session, "refresh", lambda _pull: pull)
+    monkeypatch.setattr(session, "validation", lambda _run: None)
+    monkeypatch.setattr(reporting, "publish_final", lambda *_: None)
+    monkeypatch.setattr(claims, "release_family", lambda *_: None)
+    monkeypatch.setattr(github, "items", lambda _repository, path, _key=None: (
+        comments if path == "issues/7/comments?per_page=100" else []))
+    monkeypatch.setattr(github, "write", lambda _repository, _path, _method, payload: (
+        posted.append(payload["body"])))
+
+    session.finish(CandidateOutcome(
+        outcome=outcome, phase="final-sweep" if validated else "targeted", pull_request=7,
+        run_ids=[9], repairs_used=0,
+    ))
+
+    [report] = [body for body in posted if body.startswith(session.marker)]
+    return report.split("\n-->\n", 1)[1]
+
+
+STOP = ("Stop as uncertain: the new image stalls every deployment.",
+        "以 uncertain 结束：新镜像使所有部署停滞。")
+
+
+@pytest.mark.parametrize(("outcome", "latest", "chunked", "recovering", "shown"), [
+    pytest.param("uncertain", None, False, False, False, id="no-own-attempt"),
+    pytest.param("uncertain", STOP, False, False, True, id="own-attempt"),
+    pytest.param("uncertain", STOP, True, False, True, id="chunked-own-attempt"),
+    pytest.param("uncertain", ("Traceback:\n<pre>CUDA error</pre>", "日志"), False, False, False,
+                 id="raw-log"),
+    pytest.param("validated", STOP, False, False, False, id="validated"),
+    pytest.param("uncertain", STOP, False, True, False, id="recovered-session"),
+])  # fmt: skip
+def test_closing_report_states_why_from_the_latest_own_attempt(
+    monkeypatch, outcome, latest, chunked, recovering, shown
+):
+    other = ("Retry with another image.", "换用其他镜像重试。")
+    own = [
+        attempt_comment(1, "Repair the launcher flags.", "修复启动参数。", run=8),
+        attempt_comment(2, *latest, chunked=chunked),
+    ] if latest else []
+    comments = [
+        *own,
+        attempt_comment(3, *other, author="maintainer"),
+        attempt_comment(4, *other, parent=41),
+        attempt_comment(5, *other, candidate="3" * 16 + "-" + "4" * 16),
+        {"id": 6, "user": {"login": "Klaud-Cold"}, "body": (
+            f"<!-- klaud-report:42:{CANDIDATE_ID}:run-9-1-part-1-{'0' * 16}\n"
+            '{"points": [], "evals": []}\n-->\nRendered.')},
+    ]
+    runs = "[9](https://github.com/example/project/actions/runs/9)"
+    done = {
+        "uncertain": ("PR closed; branch deleted for retry.", "PR 已关闭；分支已删除，可重新尝试。"),
+        "validated": ("Full sweep verified; ready for review.", "完整 sweep 已验证；已就绪，等待审查。"),
+    }[outcome]
+    why = (f"**Reason:** {latest[0]}  \n", f"**原因：**{latest[1]}  \n") if shown else ("", "")
+
+    assert finish_report(monkeypatch, outcome, comments, recovering) == (
+        f"**{outcome}** · Repairs: 0 · Runs: {runs}  \n{why[0]}All owned runs ended. {done[0]}"
+        "\n\n<details>\n<summary>中文</summary>\n\n"
+        f"**{outcome}** · 修复次数：0 · 运行：{runs}  \n{why[1]}所有自有运行均已结束。{done[1]}"
+        "\n\n</details>"
+    )
+
+
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):
     remote = tmp_path / "remote"
     remote.mkdir()
@@ -1356,7 +1552,7 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture"},
+         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
     }
 
 
@@ -1391,5 +1587,61 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture"},
+         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
     }
+
+
+def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runners(
+    tmp_path, family_configs, capsys
+):
+    master, runners = family_configs
+    fixture, record = master["fixture"], runners["clusters"]["fixture"]
+    master = {
+        "spanning": {**fixture, "runner": "h100"},
+        "exact": {**fixture, "runner": "cluster:h100-dsxe"},
+        "unmapped": {**fixture, "runner": "h100-retired"},
+    }
+    runners = {
+        "labels": {
+            "h100": ["h100-cw_00", "h100-dsxe_00"],
+            "cluster:h100-cw": ["h100-cw_00"],
+            "cluster:h100-dsxe": ["h100-dsxe_00"],
+        },
+        "clusters": {"h100-cw": record, "h100-dsxe": record},
+    }
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(tmp_path)
+
+    families = klaud.live_families(tmp_path)
+
+    assert capsys.readouterr().out == (
+        "::warning::Klaud live-family-clusters-unresolved: configs/nvidia-master.yaml:unmapped\n"
+    )
+    assert families == {
+        ("dsr1", "h100", "sglang", "fp8", "none", False, "single_turn",
+         1024, 1024, "example/image:stable"): {
+            "configs/nvidia-master.yaml:spanning": {"h100-cw", "h100-dsxe"},
+            "configs/nvidia-master.yaml:exact": {"h100-dsxe"},
+        },
+    }  # fmt: skip
+    source = {
+        "model": "dsr1", "hardware": "h100", "framework": "sglang", "precision": "fp8",
+        "spec_method": "none", "disagg": False, "benchmark_type": "single_turn", "isl": 1024,
+        "osl": 1024, "image": "example/image:stable", "date": "2026-09-19",
+    }  # fmt: skip
+    items = [{"source-status": "baseline", "source-id": "1", "source": source}]
+
+    def chosen(available):
+        return sorted(
+            (candidate["family"].removeprefix("configs/nvidia-master.yaml:"), candidate["clusters"])
+            for candidate in klaud.choose(items, available, set(), families)
+        )
+
+    assert chosen({"h100-cw"}) == []
+    assert chosen({"h100-dsxe"}) == [("exact", ["h100-dsxe"])]
+    assert chosen({"h100-cw", "h100-dsxe"}) == [
+        ("exact", ["h100-dsxe"]), ("spanning", ["h100-cw", "h100-dsxe"]),
+    ]

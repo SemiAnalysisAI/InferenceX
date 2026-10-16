@@ -94,11 +94,6 @@ on:
         type: boolean
         required: false
         default: false
-      total-cpu-dram-gb:
-        description: "Total CPU DRAM in GB for KV offloading"
-        required: false
-        type: string
-        default: '600'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -160,7 +155,8 @@ env:
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config)['kv-offload-backend'] && toJSON(fromJSON(inputs.config)['kv-offload-backend']) || '' }}
   ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config)['kv-p2p-transfer'] || '' }}
-  TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  TOTAL_CPU_DRAM_GB: ${{ fromJSON(inputs.config)['total-cpu-dram-gb'] || '0' }}
+  DECODE_CPU_DRAM_GB: ${{ fromJSON(inputs.config)['decode-cpu-dram-gb'] || '0' }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 

@@ -10036,6 +10036,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4033
 
 - config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable SGLang HiCache CPU DRAM KV offloading above conc 8: the TP4/EP4 and TP8/EP8 conc 12 and 16 points add enable-hierarchical-cache with hicache-size 180 GB per rank and write_through (720 GB at TP4, 1.44 TB at TP8; dram-utilization 0.85), matching the GLM-5.2 MXFP4 MI355X SGLang sibling."
+    - "Conc 1, 4 and 8 stay GPU-resident with no KV offloading. Image, serve flags, DFlash2 draft and golden AL are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4201
+
+- config-keys:
+    - musespark-fp4-h200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
+    - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
   scenario-type:
