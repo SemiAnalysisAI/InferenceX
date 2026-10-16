@@ -5466,7 +5466,8 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
   srt-recipe-dir: minimaxm3/trtllm/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
+    # TP2/TP4 host caches take the 3 TB policy share per GPU.
+    - dram-utilization: 1.0
       search-space:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [20, 25, 30], srt-recipe: agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30], srt-recipe: agentic.yaml }
@@ -5480,37 +5481,6 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
 # throughput. Dynamo KV routing and AIPerf conversation-aware routing remain
 # enabled by framework=dynamo-vllm.
 
-# B200 sibling of minimaxm3-fp4-b300-vllm-agentic-mtp: same image, same
-# EAGLE3-GQA draft at 3 speculative tokens, same golden AL 2.78, and the same
-# SimpleCPU offload arm, so the two SKU curves are directly comparable. This is
-# MiniMax-M3's only active B200 configuration -- the 8k1k scenario that carried
-# the previous B200 curves was removed in #2493.
-#
-# TP4-only. The B300 sibling also runs a TP2 arm, but TP2 does not fit on B200:
-# the ~250 GB NVFP4 checkpoint leaves a 31.72 GiB KV pool at
-# --gpu-memory-utilization 0.9, and one request at the model's 1,048,576-token
-# max_model_len needs 37.62 GiB, so vLLM raises in _check_enough_kv_cache_memory
-# and the engine never reaches serving (run 31141913741 -- both TP2 cells, c1
-# and c2, died identically at init; every TP4 cell passed). This is structural,
-# not a concurrency cliff: the estimated max model length at TP2 is 883,840,
-# below the corpus context, so no conc-list would have made the arm run.
-#
-# Concurrency on the surviving arms still differs from B300, whose TP4 pool is
-# ~787 GB against B200's ~398 GB:
-#   TP4   B300 runs 1-20; B200 samples 5-15 densely because the cliff lands
-#         inside that range at roughly half the KV, and retains 20 past it.
-#   TP4 + SimpleCPU  picks up at 20 rather than B300's 30, since the host tier
-#         has to start absorbing the working set one step earlier, and stops at
-#         40 rather than following B300 to 75. Past 40 the host tier is
-#         absorbing a working set that never fit in B200's ~398 GB TP4 pool to
-#         begin with, so those points cost four engine starts each to trace a
-#         tail that is offload bandwidth, not the SKU.
-#
-# dram-utilization 0.683 is the B300 value verbatim, and it resolves to the same
-# 1,024 GB engine-level CPU KV budget at TP4: b200-nscale and b300-nv both report
-# more installed DRAM than MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB, so both clamp to
-# the same 3 TB AgentX ceiling before the proportional-GPU rule is applied.
-# GPU-resident points receive a zero budget.
 minimaxm3-fp4-b200-vllm-agentic-mtp:
   image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
   model: nvidia/MiniMax-M3-NVFP4
@@ -5540,12 +5510,13 @@ minimaxm3-fp4-b200-trtllm-agentic-mtp:
   srt-recipe-dir: minimaxm3/trtllm/b200-fp4-mtp
   scenarios:
     agentic-coding:
-    # The benchmark script pins TRT-LLM kv_cache_config.host_cache_size for
-    # every point, so dram-utilization only reports a nominal budget here and
-    # does not size the pool.
-    - dram-utilization: 0.8
+    # host_cache_size is pinned per rank: TP4 ranks split this budget and TP8
+    # ranks hold 200 GiB each.
+    - dram-utilization: 1.0
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30, 35, 40, 45], srt-recipe: agentic.yaml }
+    - dram-utilization: 0.8
+      search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5], srt-recipe: agentic.yaml }
 # Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
 # two NVL4 nodes, and TP4 lazy SimpleCPU KV offload variants. The pinned
@@ -8340,17 +8311,14 @@ dsv41flash-fp4-gb200-vllm-agentic-dspark:
 
 # SGLang arm for DeepSeek-V4.1-Flash AgentX on GB200, from the SGLang cookbook
 # (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# Official CUDA 13 nightly, verified 2026-10-11 (amd64 + arm64):
-# manifest sha256:8346c975515af7ec6b2692faadd5332f789001f78f958335175d4d34e170537c
-# arm64 sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d.
+# Official CUDA 13 nightly, verified 2026-10-14 (amd64 + arm64):
+# manifest sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
+# arm64 sha256:2b9d5dd760cbaf6a521b1c56d2896dfbb5c6ed76521ac3df5e84ba6872362be2.
 # Native five-token DSpark (--speculative-algorithm DSPARK
 # --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
-# throughput, real verification for evals. The KV cache stays GPU-resident.
-# TP4/EP4 from C1 to C16; aggregated TP4/EP4 with DP attention behind
-# sglang-router from C32 to C192. Native backends resolve automatically
-# (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
+# throughput, real verification for evals.
 dsv41flash-fp4-gb200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:8346c975515af7ec6b2692faadd5332f789001f78f958335175d4d34e170537c
+  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
@@ -8362,8 +8330,54 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64, 128, 192], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+
+musespark-fp4-gb200-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/gb200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 10, 12, 16, 24, 32], srt-recipe: agentic.yaml }
+
+musespark-fp4-b200-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 12], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 24, 32, 48], srt-recipe: agentic.yaml }
+
+musespark-fp4-h200-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/h200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7
@@ -8406,17 +8420,8 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       # DEP4 is native TP1 x DP4 + EP4 with MegaMoE behind the same router.
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
-# SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
-# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# Latest CUDA 13 nightly verified 2026-09-21, pinned to its multi-arch digest.
-# Per-rank host Engram shards permit anonymous huge-page backing on this pool.
-# Native five-token DSpark (--speculative-algorithm DSPARK
-# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
-# throughput, real verification for evals. The KV cache stays GPU-resident.
-# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
-# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
 dsv41flash-fp4-b200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9@sha256:7cfd4dd8e0e902d2a3c0560565963c4e172091e1586aaed15ff5a0a131394d34
+  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
@@ -8428,8 +8433,9 @@ dsv41flash-fp4-b200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [48, 128], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 24], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [48, 64, 96, 128, 192, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7
@@ -8919,9 +8925,9 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
           ep: 2
           dp-attn: false
 
-# Official 2026-10-04 CUDA 13 nightly, multiarch manifest pinned for B300.
+# Official 2026-10-14 CUDA 13 nightly, multiarch manifest pinned for B300.
 dsv41flash-fp4-b300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9@sha256:7cfd4dd8e0e902d2a3c0560565963c4e172091e1586aaed15ff5a0a131394d34
+  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -8933,9 +8939,10 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4], srt-recipe: agentic.yaml }
-      - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 16, 24, 32, 48], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [192], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 20], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32, 48], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
@@ -9205,6 +9212,20 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
         kv-offload-backend: { name: hicache }
         conc-list: [1, 2, 4, 8, 16, 32, 48, 64]
         srt-recipe: agentic.yaml
+
+musespark-fp4-gb300-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/gb300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32], srt-recipe: agentic.yaml }
 
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
   image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
@@ -9661,3 +9682,33 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
           tp: 16
           ep: 16
           dp-attn: true
+
+musespark-fp4-b300-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64, 128], srt-recipe: agentic.yaml }
+
+musespark-fp4-h100-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:h100-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/h100-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [2, 4, 8], srt-recipe: agentic.yaml }
