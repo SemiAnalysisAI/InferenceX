@@ -9892,3 +9892,42 @@
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#59591 (latent MoE up-proj stores only the local rank's shards), #59069 (AttnRes output fused with per-token FP8 input quantization), #60717 (vLLM's FP8 max in that fused quantization), #60446 (KDA autotune keys), #59523 (cuMem CUDA-graph pool offload on ROCm) and #59880 (speculative block reservations across KV cache groups with a KV connector)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: K3DSparkModel and get_draft_quant_config() are unchanged between the two images, so the draft keeps BF16 weights and an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3951
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open NVFP4 AgentX on B200 with upstream SGLang and DFlash2 speculative decoding at TP4/EP4."
+    - "Use modelopt_fp4, flashinfer_trtllm MoE, FP8 KV, layernorm sequence parallelism with MegaMoE, and an 8-token DFlash verification block with acceptance selected from the committed golden curve."
+    - "Disable prefill CUDA graphs and use mem-fraction-static 0.88 to preserve KV capacity. Sweep concurrency 1, 2, 4, 8, 12, 16, 24, and 32 with GPU-resident KV."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4147
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on one GB200 node via SGLang (lmsysorg/sglang:dev-muse-spark-open, multiarch digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) at TP4/EP4, concurrency 1, 2, 4, 6, 8, 10, 12, 16, 24 and 32, with HiCache host KV offload (120 GB per rank)."
+    - "Serve flags follow the SGLang cookbook's NVFP4 cell: modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE prefill, DFlash2 draft RadixArk/Muse-Spark-Open-DFlash2 with fa4 draft attention and 8 verify tokens (7 drafts), muse reasoning and tool-call parsers. Prefill CUDA graphs are off and mem-fraction-static is 0.88 to leave room for the KV pool; admission and the decode graph batch are 2x concurrency."
+    - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
+    - "The checkpoint is served from the staged Lustre copy; the AgentX client reads its tokenizer from it."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4140
+
+- config-keys: [musespark-fp4-b300-sglang-agentic-dflash]
+  description:
+    - "Add Muse Spark Open NVFP4 SGLang DFlash2 AgentX on B300 at TP4/EP4 with GPU-resident KV and concurrency 1 to 128."
+    - "Use the committed golden curve for DFlash acceptance and the staged checkpoint for serving and tokenization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4146
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on GB300 via single-node SGLang (lmsysorg/sglang:dev-muse-spark-open, digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) with DFlash2 speculative decoding (RadixArk/Muse-Spark-Open-DFlash2, 8-token verification block)."
+    - "Serve flags follow the verified GB300 NVFP4 cell of the SGLang Muse Spark cookbook: TP4/EP4, modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE, fa4 draft attention, muse reasoning and tool-call parsers. KV stays GPU-resident (no HiCache)."
+    - "mem-fraction-static 0.85 and swa-full-tokens-ratio 0.1: 46 of 62 layers use a 2048-token sliding window, so shrinking the SWA pool raises the full-attention KV pool from 2.1M to 5.5M tokens."
+    - "Concurrency 1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24 and 32, with max-running-requests equal to concurrency."
+    - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4141

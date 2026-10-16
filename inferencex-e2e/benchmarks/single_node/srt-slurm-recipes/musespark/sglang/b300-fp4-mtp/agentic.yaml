@@ -1,0 +1,68 @@
+base:
+  schema: 2
+  name: musespark-fp4-b300-sglang-agentic
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.8
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  # Cold 533 GB weight loads from shared storage plus graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable with the job token; tokenize from the staged checkpoint.
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+zip_override_tp4:
+  roles:
+    agg:
+      args:
+        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128, 256]
+        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 96, 128, 256]
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64', '128']

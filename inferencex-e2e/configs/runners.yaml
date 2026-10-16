@@ -460,6 +460,7 @@ clusters:
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
@@ -474,6 +475,7 @@ clusters:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/aiperf-cache}
         scratch: {path: /scratch/models, visibility: node-local}
+        data-models: {path: /data/models, visibility: shared}
       squash:
         dir: /data/home/sa-shared/containers
         visibility: shared
@@ -523,6 +525,7 @@ clusters:
         MiniMax-M3: {root: scratch, dir: MiniMax-M3}
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
@@ -577,6 +580,7 @@ clusters:
         MiniMax-M3-NVFP4: {root: lustre-models, dir: MiniMax-M3-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: lustre-models, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4-V2}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: lustre-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         GLM-5.2-NVFP4: {root: sa-shared-models, dir: GLM-5.2-NVFP4}
         DeepSeek-R1-0528: {root: numa1, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: numa1, dir: DeepSeek-R1-0528-NVFP4-v2}
@@ -613,6 +617,7 @@ clusters:
           rdma-gid-index: 3
         job-tag: gb200
         default-time-limit: "6:00:00"
+        single-node-models: staged
         preflight: false
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang]
@@ -636,6 +641,7 @@ clusters:
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3-MXFP8: {root: data-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
@@ -671,6 +677,7 @@ clusters:
           rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
         job-tag: gb300
         segment-directive: false
+        single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, v0.5.11, v0.5.13.post1]
         nginx-aliases: [nginx-sqsh]
         env:
