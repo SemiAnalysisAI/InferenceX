@@ -3325,7 +3325,7 @@ dsr1-fp4-b200-dynamo-sglang:
           ep: 8
           dp-attn: true
 dsr1-fp8-b200-dynamo-sglang:
-  image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
+  image: lmsysorg/sglang:v0.5.21-cu130@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: cluster:b200-nscale
@@ -3349,7 +3349,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 1
           dp-attn: true
-        router: { name: dynamo-router, version: "0.9.1" }
+        router: { name: dynamo-router, version: "1.5.1" }
         decode:
           num-worker: 3
           tp: 8
@@ -3363,7 +3363,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 1
           dp-attn: true
-        router: { name: dynamo-router, version: "0.9.1" }
+        router: { name: dynamo-router, version: "1.5.1" }
         decode:
           num-worker: 4
           tp: 8
@@ -3377,7 +3377,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 1
           dp-attn: true
-        router: { name: dynamo-router, version: "0.9.1" }
+        router: { name: dynamo-router, version: "1.5.1" }
         decode:
           num-worker: 6
           tp: 8
@@ -3392,7 +3392,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 1
           dp-attn: true
-        router: { name: dynamo-router, version: "0.9.1" }
+        router: { name: dynamo-router, version: "1.5.1" }
         decode:
           num-worker: 2
           tp: 8
@@ -3406,7 +3406,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 1
           dp-attn: true
-        router: { name: dynamo-router, version: "0.9.1" }
+        router: { name: dynamo-router, version: "1.5.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -3420,7 +3420,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 1
           dp-attn: true
-        router: { name: dynamo-router, version: "0.9.1" }
+        router: { name: dynamo-router, version: "1.5.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -3434,7 +3434,7 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 1
           dp-attn: true
-        router: { name: dynamo-router, version: "0.9.1" }
+        router: { name: dynamo-router, version: "1.5.1" }
         decode:
           num-worker: 1
           tp: 8
