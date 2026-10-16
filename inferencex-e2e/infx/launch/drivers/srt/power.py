@@ -144,15 +144,29 @@ class PowerDecision:
 
 NO_POWER = PowerDecision(dcgm=False, agentx=False)
 
+NVL72_POWER_CLUSTERS = frozenset({"gb200-nv", "gb300-nv"})
+
 
 def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -> PowerDecision:
     """Apply the lane's rules when the point's ``power`` field is on.
 
     Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
-    if not request.power:
+    default = cluster_id in NVL72_POWER_CLUSTERS and path == LaunchPath.SRT_MULTI
+    if default and request.eval_only:
+        return NO_POWER
+    if not request.power and not default:
         return NO_POWER
     lane = POWER_LANES.get((cluster_id, path))
+    if default:
+        matched = next((rule for rule in lane.rules if rule.when(request)), None) if lane else None
+        return PowerDecision(
+            dcgm=True,
+            agentx=request.is_agentic,
+            adapter=matched.adapter if matched else False,
+            require=matched.require if request.power and matched else False,
+            cpu=True,
+        )
     if lane is None:
         raise PowerPolicyError(f"cluster {cluster_id!r} measures no DCGM power on {path}")
     for rule in lane.rules:

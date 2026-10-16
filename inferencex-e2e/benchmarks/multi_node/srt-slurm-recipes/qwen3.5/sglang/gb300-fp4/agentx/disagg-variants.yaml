@@ -18,14 +18,19 @@ base:
     - name: etcd
       type: etcd
       placement:
-        node: dedicated
+        node: head
     - name: nats
       type: nats
       placement:
-        node: dedicated
+        node: head
       options:
         max_payload_mb: 8
+  benchmark:
+    placement:
+      node: head
   frontend:
+    placement:
+      node: head
     type: dynamo
     nginx_session_affinity: true
     enable_multiple_frontends: true

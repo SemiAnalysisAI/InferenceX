@@ -72,7 +72,13 @@ base:
         stream_interval: 100
         num_postprocess_workers: 4
 
+  benchmark:
+    placement:
+      node: head
+
   frontend:
+    placement:
+      node: head
     type: "dynamo"
     nginx_container: "nginx-sqsh"
 
@@ -86,11 +92,11 @@ base:
     - name: etcd
       type: etcd
       placement:
-        node: dedicated
+        node: head
     - name: nats
       type: nats
       placement:
-        node: dedicated
+        node: head
 
 override_1p4d_tep8_b8_eplb0_mtp3:
   roles:

@@ -35,10 +35,10 @@ CASES = [
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
     ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
     ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", DCGM),
-    ("gb200-nv", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", ERR),
+    ("gb200-nv", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", DCGM),
     ("gb300-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
-    ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", DCGM),
-    ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", ERR),
+    ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
+    ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", DCGM),
     ("b300-dsxe", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", DCGM),
     ("b300-dsxe", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
     ("b300-dsxe", MULTI, "1", "dsv4", "fp4", "dynamo-sglang", ERR),
@@ -74,14 +74,25 @@ def test_power_eligibility_of_each_cluster_lane(
         True, expected == AGENTX, expected == ADAPTER,
     )  # fmt: skip
     assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv"))
-    assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
+    assert decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm is (
+        cluster in power.NVL72_POWER_CLUSTERS
+    )
 
 
-def test_gb200_reports_agentic_misses_distinctly():
+@pytest.mark.parametrize(("power", "cpu_power"), [
+    ("1", "1"), ("1", "0"), ("0", "1"), ("0", "0"),
+])  # fmt: skip
+def test_nvl72_cpu_power_is_default(power, cpu_power):
+    request = _multinode(IS_AGENTIC="0", MODEL_PREFIX="dsr1", PRECISION="fp8",
+                         FRAMEWORK="dynamo-sglang", POWER=power, CPU_POWER=cpu_power)  # fmt: skip
+    assert decide_power("gb200-nv", MULTI, request).cpu
+
+
+def test_gb200_new_agentic_model_collects_by_default():
     request = _multinode(IS_AGENTIC="1", MODEL_PREFIX="dsv4", PRECISION="fp4",
                          FRAMEWORK="dynamo-sglang", CONC="4", CONC_LIST="4", POWER="1")  # fmt: skip
-    with pytest.raises(PowerPolicyError, match="AgentX dcgm-power requires GLM-5.2"):
-        decide_power("gb200-nv", MULTI, request)
+    decision = decide_power("gb200-nv", MULTI, request)
+    assert decision.dcgm and decision.agentx and decision.cpu and not decision.require
 
 
 def test_a_power_lane_needs_its_clusters_exporter_port(monkeypatch):

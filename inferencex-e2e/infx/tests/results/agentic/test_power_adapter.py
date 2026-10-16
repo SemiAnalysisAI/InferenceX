@@ -56,7 +56,8 @@ def test_single_node_collector_finalizes_native_agentx_power(
     request = SimpleNamespace(is_agentic=True, eval_only=False, run_eval=False,
                               require_power=require_power, inferencex_results_python=sys.executable,
                               result_filename="point", env=env)
-    run = SimpleNamespace(request=request, env=env, workspace=tmp_path)
+    run = SimpleNamespace(request=request, env=env, workspace=tmp_path,
+                          cluster=SimpleNamespace(id="h200-dgxc"))  # fmt: skip
     producer_sha = "b" * 40 if failure == "producer_commit_mismatch" else PRODUCER_SHA
     assert finalize_single_node_results(run, pkg.logs_root, producer_sha) == int(require_power and failure is not None)
     aggregate = json.loads(aggregate_path.read_text())

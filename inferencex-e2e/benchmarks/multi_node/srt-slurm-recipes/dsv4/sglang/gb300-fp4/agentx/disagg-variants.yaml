@@ -27,11 +27,11 @@ base:
     - name: etcd
       type: etcd
       placement:
-        node: dedicated
+        node: head
     - name: nats
       type: nats
       placement:
-        node: dedicated
+        node: head
       options:
         max_payload_mb: 32
     - name: mooncake-master
@@ -83,7 +83,12 @@ base:
       readiness:
         port: 8803
         timeout_seconds: 600
+  benchmark:
+    placement:
+      node: head
   frontend:
+    placement:
+      node: head
     type: dynamo
     nginx_session_affinity: true
     nginx_session_affinity_header: X-Dynamo-Session-ID
@@ -261,10 +266,8 @@ base:
     mem: "0"
     container-remap-root: ""
   benchmark:
-    # The replay client holds ~300 GB of host memory; on the default head node it
-    # shares prefill_0's node and OOMs it. Put it on the etcd/nats node instead.
     placement:
-      node: dedicated
+      node: head
     env:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"

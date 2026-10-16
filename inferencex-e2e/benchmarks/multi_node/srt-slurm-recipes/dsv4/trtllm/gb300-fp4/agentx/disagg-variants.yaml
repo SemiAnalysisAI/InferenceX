@@ -144,7 +144,7 @@ base:
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
     placement:
-      node: first_decode
+      node: head
   benchmark:
     env:
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
@@ -153,7 +153,7 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
       SERVED_MODEL_NAME: DeepSeek-V4-Pro
     placement:
-      node: last_decode
+      node: head
 
 override_1p4d_dep4_tep8_c4_b1:
   name: dynamo-disagg-gb300-1p4d-dep4-tep8-c4-b1-mtp

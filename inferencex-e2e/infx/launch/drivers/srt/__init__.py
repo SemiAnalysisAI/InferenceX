@@ -54,6 +54,22 @@ def run_single_node(launch: Launch) -> int:
     model_path = models.single_node_model_path(launch.cluster, request)
     staged = {"MODEL_PATH": model_path} if model_path.startswith("/") else {}
     run = SrtRun.create(launch, request, staged)
+    if (
+        run.cluster.id in power.NVL72_POWER_CLUSTERS
+        and not request.eval_only
+        and run.srt.cpu_power_exporter is None
+    ):
+        raise LaunchError(f"cluster {run.cluster.id!r} declares no NVL72 CPU power exporter")
+    cpu_source = (
+        run.srt.cpu_power_exporter.source
+        if run.cluster.id in power.NVL72_POWER_CLUSTERS
+        and not request.eval_only
+        and run.srt.cpu_power_exporter is not None
+        else None
+    )
+    if cpu_source and (github_env := request.env.get("GITHUB_ENV")):
+        with Path(github_env).open("a") as handle:
+            handle.write("CPU_POWER=1\n")
     hf_cache = models.single_node_hf_cache(run.cluster, request)
     time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
@@ -64,6 +80,8 @@ def run_single_node(launch: Launch) -> int:
     if rc := submit.bind_point(run, checkout, root / "arguments"):
         return rc
     selected, runtime_args = submit.bound_arguments(root / "arguments")
+    if cpu_source:
+        runtime_args += ["--set", f"telemetry.cpu_power_exporter.source={cpu_source}"]
     containers = {}
     if not request.eval_only:
         image, reference = config.stage_gpu_exporter(run, single_node=True)
@@ -83,7 +101,7 @@ def run_single_node(launch: Launch) -> int:
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))
-    if rc := run_setup(run, checkout):
+    if rc := run_setup(run, checkout, cpu_power_exporter=cpu_source is not None):
         return rc
 
     fetched = root / "fetched-outputs"
@@ -147,6 +165,9 @@ def run_multinode(launch: Launch) -> int:
     if not recipe_mirror_path(request.workspace, srt_recipe).is_file():
         raise LaunchError(f"{srt_recipe} is not in the recipe mirror")
     decision = power.decide_power(launch.cluster.id, launch.path, request)
+    if decision.cpu and (github_env := request.env.get("GITHUB_ENV")):
+        with Path(github_env).open("a") as handle:
+            handle.write("CPU_POWER=1\n")
     model = models.checkpoint(launch.cluster, request)
     served = models.served_path(launch.cluster, request, model)
     model_paths = models.model_paths(launch.cluster, request, served)

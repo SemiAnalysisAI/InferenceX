@@ -67,7 +67,13 @@ base:
         print_iter_log: true
         stream_interval: 100
 
+  benchmark:
+    placement:
+      node: head
+
   frontend:
+    placement:
+      node: head
     type: "dynamo"
     enable_multiple_frontends: false
 
@@ -85,11 +91,11 @@ base:
     - name: etcd
       type: etcd
       placement:
-        node: dedicated
+        node: head
     - name: nats
       type: nats
       placement:
-        node: dedicated
+        node: head
 
 override_1p4d_tep8_b1_mtp3_c8:
   roles:

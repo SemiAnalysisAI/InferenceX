@@ -29,6 +29,7 @@ from infx.launch.artifacts import (
 )
 from infx.launch.backends.base import BackendError
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
+from infx.launch.drivers.srt.power import NVL72_POWER_CLUSTERS
 from infx.launch.drivers.srt.run import SrtRun, require
 
 if TYPE_CHECKING:
@@ -114,6 +115,7 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
             request.inferencex_results_python, run.workspace, logs, logs / "agentic",
             logs / f"{request.result_filename}.json", producer_sha,
             "--validation-result", str(run.workspace / sidecar), "--audit-source", sidecar,
+            *(["--expected-cpu-power"] if run.cluster.id in NVL72_POWER_CLUSTERS else []),
             require_power=request.require_power,
         )  # fmt: skip
     if request.run_eval or request.eval_only:

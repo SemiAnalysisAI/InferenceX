@@ -193,7 +193,7 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     placement:
-      node: dedicated
+      node: head
 
 override_1p1d_tp8_c1_b1_mtp5:
   name: dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5

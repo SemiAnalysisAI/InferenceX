@@ -67,7 +67,13 @@ base:
         print_iter_log: true
         stream_interval: 100
 
+  benchmark:
+    placement:
+      node: head
+
   frontend:
+    placement:
+      node: head
     type: "dynamo"
     nginx_container: "nginx-sqsh"
 
@@ -85,11 +91,11 @@ base:
     - name: etcd
       type: etcd
       placement:
-        node: dedicated
+        node: head
     - name: nats
       type: nats
       placement:
-        node: dedicated
+        node: head
 
 override_3p1d_dep8_b64_mtp3_c666:
   roles:
