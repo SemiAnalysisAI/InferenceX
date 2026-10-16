@@ -17,6 +17,7 @@ from infx.matrix.generate import (
     apply_node_type_defaults,
     expand_config_keys,
     filter_exp_names,
+    filter_tp,
     generate_full_sweep,
     generate_test_config_sweep,
     mark_all_eval_entries,
@@ -3220,6 +3221,45 @@ class TestFilterExpNames:
         with pytest.raises(ValueError, match=message):
             filter_exp_names(entries, names)
 
+
+
+class TestFilterTp:
+    @pytest.mark.parametrize(
+        ("entries", "message"),
+        (
+            ([{"tp": 8}], "not found: 4"),
+            ([{"prefill": {"tp": 4}, "decode": {"tp": 4}}], "single-node rows only"),
+        ),
+    )
+    def test_rejects_absent_tp_or_multinode(self, entries, message):
+        with pytest.raises(ValueError, match=message):
+            filter_tp(entries, [4])
+
+    def test_test_config_keeps_only_requested_tp(
+        self, monkeypatch, sample_single_node_config, sample_runner_config
+    ):
+        config = copy.deepcopy(sample_single_node_config)
+        sequence = config["dsr1-fp8-mi300x-sglang"]["scenarios"]["fixed-seq-len"][1]
+        sequence["search-space"] = [
+            {"tp": 8, "conc-start": 1, "conc-end": 4},
+            {"tp": 4, "conc-start": 1, "conc-end": 64},
+        ]
+        monkeypatch.setattr(generate_sweep_configs, "load_config_files", lambda _: config)
+        monkeypatch.setattr(
+            generate_sweep_configs, "load_runner_file", lambda _: sample_runner_config
+        )
+        monkeypatch.setattr(sys, "argv", [
+            "generate_sweep_configs.py", "test-config",
+            "--config-files", "dummy.yaml",
+            "--config-keys", "dsr1-fp8-mi300x-sglang",
+            "--seq-lens", "8k1k", "--tp", "4", "--conc", "1", "2", "4", "--no-evals",
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert sorted((entry["tp"], entry["conc"]) for entry in result) == [
+            (4, 1), (4, 2), (4, 4),
+        ]
 
 
 class TestExpandConfigKeys:

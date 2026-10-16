@@ -1441,6 +1441,15 @@ def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
     return [entry for entry in entries if entry.get(Fields.EXP_NAME.value) in requested]
 
 
+def filter_tp(entries: list[dict], tps: list[int]) -> list[dict]:
+    if any(Fields.TP.value not in entry for entry in entries):
+        raise ValueError("--tp filters single-node rows only")
+    missing = sorted(set(tps) - {entry[Fields.TP.value] for entry in entries})
+    if missing:
+        raise ValueError("TP value(s) not found: " + ", ".join(map(str, missing)))
+    return [entry for entry in entries if entry[Fields.TP.value] in tps]
+
+
 def apply_node_type_defaults(args: argparse.Namespace) -> argparse.Namespace:
     if (
         hasattr(args, "single_node")
@@ -1667,6 +1676,13 @@ def main() -> list[dict]:
         help="Only include these concurrency values. Values must exist in the config conc-range/list.",
     )
     test_config_keys_parser.add_argument(
+        "--tp",
+        nargs="+",
+        type=int,
+        required=False,
+        help="Only include single-node rows with these TP sizes.",
+    )
+    test_config_keys_parser.add_argument(
         "--exp-names",
         nargs="+",
         required=False,
@@ -1710,6 +1726,12 @@ def main() -> list[dict]:
         matrix_values = generate_test_config_sweep(args, all_config_data, runner_data, root)
     else:
         parser.error(f"Unknown command: {args.command}")
+
+    if args.command == "test-config" and args.tp:
+        try:
+            matrix_values = filter_tp(matrix_values, args.tp)
+        except ValueError as error:
+            parser.error(str(error))
 
     if args.command == "test-config" and args.exp_names:
         try:
