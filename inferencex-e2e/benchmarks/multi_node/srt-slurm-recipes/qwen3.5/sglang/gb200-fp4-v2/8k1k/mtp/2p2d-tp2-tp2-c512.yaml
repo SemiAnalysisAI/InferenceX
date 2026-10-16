@@ -58,7 +58,7 @@ roles:
       tensor-parallel-size: 2
       data-parallel-size: 1
       expert-parallel-size: 1
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 2048
       attention-backend: trtllm_mha
@@ -72,7 +72,7 @@ roles:
       context-length: 9236
       max-total-tokens: 64000
       max-running-requests: 64
-      cuda-graph-max-bs: 4
+      cuda-graph-max-bs-decode: 4
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
       scheduler-recv-interval: 10
@@ -126,7 +126,7 @@ roles:
       tensor-parallel-size: 2
       data-parallel-size: 1
       expert-parallel-size: 1
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 128
       attention-backend: trtllm_mha
@@ -145,7 +145,7 @@ roles:
       max-total-tokens: 750000
       max-mamba-cache-size: 128
       max-running-requests: 84
-      cuda-graph-max-bs: 88
+      cuda-graph-max-bs-decode: 88
       chunked-prefill-size: 32768
       max-prefill-tokens: 32768
       scheduler-recv-interval: 10

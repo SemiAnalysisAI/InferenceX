@@ -58,7 +58,7 @@ roles:
       expert-parallel-size: 4
       enable-dp-attention: true
       enable-dp-lm-head: true
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 2048
       attention-backend: trtllm_mha
@@ -72,7 +72,7 @@ roles:
       context-length: 9236
       max-total-tokens: 128000
       max-running-requests: 128
-      cuda-graph-max-bs: 4
+      cuda-graph-max-bs-decode: 4
       chunked-prefill-size: 65536
       max-prefill-tokens: 65536
       scheduler-recv-interval: 1
@@ -129,7 +129,7 @@ roles:
       expert-parallel-size: 16
       enable-dp-attention: true
       enable-dp-lm-head: true
-      mamba-scheduler-strategy: no_buffer
+      mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
       mamba-track-interval: 128
       attention-backend: trtllm_mha
@@ -147,7 +147,7 @@ roles:
       disaggregation-mode: decode
       disaggregation-transfer-backend: mooncake
       disable-radix-cache: true
-      cuda-graph-max-bs: 256
+      cuda-graph-max-bs-decode: 256
       mem-fraction-static: 0.8
       context-length: 9236
       max-total-tokens: 2200000
