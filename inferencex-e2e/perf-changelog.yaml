@@ -9983,3 +9983,9 @@
     - "TP arms: point-specific prefill-decode interval and request caps; shortest-prefill-first on TP2; trtllm DSv4 attention at TP4 C8/C20 and TP2 C48; decoder SWA bounded replay with breakable prefill CUDA graphs at TP4 C16 and TP2 C16; lpm with one running request at TP4 C1."
     - "DEP2 and DEP4 arms: MegaMoE all-to-all with flashinfer_mxfp4 runner, trtllm DSv4 attention, HiCache (ratio 4 on DEP2, 2 on DEP4), shortest-prefill-first, DP spec-prefill coordination, and sglang-router 0.3.2 consistent hashing with correlation-ID affinity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4094
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+  description:
+    - "Update SGLang ROCm image from v0.5.20-rocm720-mi35x-20260924 to v0.5.22-rocm720-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4173
