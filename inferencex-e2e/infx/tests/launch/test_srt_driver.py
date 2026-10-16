@@ -93,7 +93,8 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     """Environment of a fixed-sequence single-node point with its recipe in the workspace."""
     recipe = {"base": POINT_RECIPE, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
     (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump(recipe))
-    return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), **overrides}
+    runner = overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id)
+    return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner, **overrides}
 
 
 def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides: str) -> dict[str, str]:
@@ -129,9 +130,9 @@ def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
 
 def test_single_node_point_stages_workflow_artifacts(harness):
     workspace = harness.workspace
-    env = single_node_env(harness, "h200-cw")
+    env = single_node_env(harness, "h100-cw")
     records = yaml.safe_load(harness.config.read_text())
-    records["clusters"]["h200-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
+    records["clusters"]["h100-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
     harness.config.write_text(yaml.safe_dump(records))
     fragment = yaml.safe_load((workspace / "recipe.yaml").read_text())
     fragment["base"]["roles"]["agg"]["env"] = {"NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}
@@ -161,7 +162,7 @@ def test_single_node_point_stages_workflow_artifacts(harness):
 
 @pytest.mark.parametrize("require_power", ["0", "1"])
 @pytest.mark.parametrize(("cluster_id", "kind", "port"), [
-    ("mi355x-amds", "custom", 19500), ("h200-cw", "dcgm", 9401),
+    ("mi355x-amds", "custom", 19500), ("h100-cw", "dcgm", 9401),
 ])  # fmt: skip
 def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
     env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power)
@@ -213,10 +214,37 @@ def test_single_node_eval_requires_a_successful_eval(harness):
 
 
 def test_single_node_failed_allocation_fails_the_launch(harness):
-    env = single_node_env(harness, "b200-nb", FAKE_STATE="FAILED|1:0")
+    env = single_node_env(harness, "h100-cw", FAKE_STATE="FAILED|1:0")
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 1
     assert (harness.workspace / "point-identity.json").is_file()
+
+
+@pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
+    (8000, True, {}, {"mem": "0"}),
+    (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
+    (None, True, {}, {}),
+])  # fmt: skip
+def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive, step, job):
+    slurm = {
+        "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
+        "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
+        "srt-slurm": {
+            "network-interface": "", "single-node-exclusive": exclusive,
+            "extra": {"default_gpu_exporter": {"container_image": "exporter:tag", "port": 9400}},
+        },
+    }  # fmt: skip
+    cluster = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
+    if dram is not None:
+        cluster["available-cpu-dram-mib"] = dram
+    config = harness.tmp / "dram-runners.yaml"
+    config.write_text(yaml.safe_dump({"labels": {"cluster:lab": ["lab_00"]}, "clusters": {"lab": cluster}}))
+    env = single_node_env(harness, "lab", RUNNER_NAME="lab_00", GPU_COUNT="4")
+    assert_ok(launch(env, config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    assert json.loads(call["env"]["SRT_SRUN_OPTIONS"]) == {"container-remap-root": "", **step}
+    assert srtslurm(harness.workspace).get("default_sbatch_directives", {}) == job
 
 
 LABS = {
@@ -407,7 +435,7 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     active, tailing = harness.tmp / "active", harness.tmp / "tailing"
     extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing)}
     if shape == "single":
-        env = single_node_env(harness, "h200-cw", **extra)
+        env = single_node_env(harness, "h100-cw", **extra)
     else:
         env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
                        MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
@@ -573,7 +601,7 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
 
 
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
-    ("h100-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
+    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
                        SRT_RECIPE=f"{MIRROR}/test/missing.yaml"), "is not in the recipe mirror"),
@@ -596,7 +624,7 @@ def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, mi
         env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
                        FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
     else:
-        env = single_node_env(harness, "b300-dsxe" if shape == "batch" else "h200-cw")
+        env = single_node_env(harness, "b300-dsxe" if shape == "batch" else "h100-cw")
     if shape == "batch":
         env.update(MODEL_PREFIX="dsv41flash", PRECISION="fp8", IS_AGENTIC="1", DURATION="600")
     for name, value in overrides.items():
@@ -613,7 +641,7 @@ def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
         "HF_TOKEN": "hf_fixture", "GITHUB_TOKEN": "ghs_fixture", "PORT": "8888",
         "EVAL_EMPTY": "", "EVAL_NOT-A-NAME": "x", "SLURM_JOB_ID": "99",
     }  # fmt: skip
-    env = single_node_env(harness, "h200-cw", **handed, **withheld)
+    env = single_node_env(harness, "h100-cw", **handed, **withheld)
     assert_ok(launch(env, harness.config, harness.workspace))
     [call] = srtctl_calls(harness.logs)
     [names] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]

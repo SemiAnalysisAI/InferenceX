@@ -103,7 +103,7 @@ jobs:
       # Keep every shard eligible: a second matrix cap can strand priority labels
       # on GitHub-held jobs. Runner/node admission is owned by the scheduler.
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; this job runs only on workflow_dispatch
       ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format('["self-hosted",{0},"nodes:1",{1},{2}]',
           toJSON(matrix.pool),

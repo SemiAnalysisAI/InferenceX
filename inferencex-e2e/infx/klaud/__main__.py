@@ -259,7 +259,7 @@ def plan(
         if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
     )
     capacity = capacity_context(policy)
-    available = set(capacity["eligible-telemetry-clusters"])
+    available = set(capacity["eligible-clusters"])
     candidates = choose(items, available, occupied, live_families(root))
     blocked = {
         candidate.family
@@ -669,7 +669,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        if not set(decision.telemetry_clusters) <= available:
+        if not set(decision.clusters) <= available:
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(
@@ -854,13 +854,13 @@ def main() -> int:
     )
     capacity = commands.add_parser(
         "check-capacity",
-        help="Exit 0 with available nodes below 80%% utilization; otherwise nonzero, without printing telemetry",
+        help="Exit 0 when running plus queued nodes are at most 200%% of schedulable nodes; otherwise nonzero, without printing scheduler data",
     )
     capacity.add_argument(
         "--cluster",
         required=True,
         action="append",
-        help="Exact telemetry cluster; repeat for every possible recipe target",
+        help="Exact cluster name from runners.yaml without the cluster: prefix; repeat for every possible recipe target",
     )
     commands.add_parser(
         "check-stop",

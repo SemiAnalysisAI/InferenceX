@@ -75,9 +75,11 @@ class EPBackend(abc.ABC):
 
     name: str = ""
     # "production" = an engine can select this transport today (vLLM `--all2all-backend`,
-    # SGLang `--moe-a2a-backend`); "candidate" = a real transport we benchmark that no engine
-    # ships a selector for, so its numbers describe the library, not a deployable config.
-    # Mirrored by hand in configs/platform_config.json `backend_maturity`; nothing checks the two agree.
+    # SGLang `--moe-a2a-backend`, or TensorRT-LLM's MoE communication strategy where vLLM exposes
+    # none); "candidate" = a real transport we benchmark that no engine ships a selector for, so its
+    # numbers describe the library, not a deployable config. An adapter whose engine runs only some
+    # of its modes sets it per row (nccl-ep). Mirrored by hand in configs/platform_config.json
+    # `backend_maturity`; nothing checks the two agree.
     maturity: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
     # Dispatch precisions the adapter realizes. BF16 is the universal control; an
@@ -94,15 +96,15 @@ class EPBackend(abc.ABC):
     # direction without the other.
     requires_fresh_pair = False
     # The timed dispatch waits on the host for its receive counts (DeepEP-legacy normal mode's
-    # notify, ElasticBuffer's do_cpu_sync), so the host's relaunch of the transfer runs inside the
+    # notify, as uccl-ep normal runs it), so the host's relaunch of the transfer runs inside the
     # eager window and its samples pass through the host gate (ep_timing.HostGate).
     host_synced_dispatch = False
     # Shape of the receive plane dispatch delivers -- "token-rank": one row per
     # (source token, dest rank), rank-deduplicated; "token-expert": one row per
     # (source token, expert) assignment (the low-latency padded layouts). Selects the
     # correctness oracle and the artifact's `logical_copies.wire` label; independent
-    # of combine_weight_semantics (MoRI's IntraNodeLL is token-rank AND unweighted in
-    # low-latency mode).
+    # of combine_weight_semantics (MoRI's low-latency InterNodeV1LL is token-rank AND
+    # unweighted).
     receive_layout = "token-rank"
     # WHERE the top-k gate weight enters the combine. "unweighted-rank-sum": the staged
     # combine input carries the gate folded in -- adapters that reduce activations and
@@ -121,6 +123,9 @@ class EPBackend(abc.ABC):
     dispatch_scale_bytes_per_copy = 0
     # (eager quantize, dequantize) of an adopted blockwise FP8 codec; see `_enable_fp8`.
     _fp8_codec = None
+    # The low-latency dispatch quantises FP8 in-kernel from BF16, so its caller-side quantize only
+    # models those bits for the oracle. False where low-latency is caller-prequantized like normal.
+    ll_quantizes_in_kernel = True
     # Low-latency receives are pre-allocated at a fixed per-rank slot count, so this bounds the
     # measured ladder: every backend's LL ladder ends at the same rung. 256 is also vLLM's
     # DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP.
@@ -182,6 +187,13 @@ class EPBackend(abc.ABC):
             raise ValueError(f"COLLX_CUDA_GRAPH must be '0' or '1', got {setting!r}")
         return self.cuda_graph_supported and setting == "1"
 
+    def implementation_details(self) -> dict:
+        """Realized library configuration, published as `implementation.library_config`: what the
+        adapter chose or the library resolved that changes what a row measures (token capacity,
+        zero-copy, SM budgets, QPs, launch tuples). JSON-serializable and read once the buffer
+        exists; empty publishes null. `library_version` stays its own top-level field."""
+        return {}
+
     def fused_quantize(self, eager):
         """The fp8 quantize the TIMED dispatch should call, keyed on mode.
 
@@ -189,13 +201,13 @@ class EPBackend(abc.ABC):
         the harness compiles it once outside the timed window: charging the eager 9-launch
         composite (19.2us H100, 53.6us MI300X, against ~1.5-4.9us compiled) would publish this
         harness's kernel count rather than production's cost and flip fp8-vs-bf16 verdicts on
-        that basis. Low-latency keeps the eager form -- its dispatch quantises internally so that
-        cost is already in-window, and the oracle's payload gate must keep matching the eager
-        helper's bits. `dynamic=False` because a dynamic build measured 6.3x slower; the cache
-        limit is raised because ~20+ shapes exceed the default of 8 and overflow falls back to
-        eager SILENTLY.
+        that basis. Low-latency keeps the eager form where its dispatch quantises internally
+        (`ll_quantizes_in_kernel`) -- that cost is already in-window, and the oracle's payload gate
+        must keep matching the eager helper's bits. `dynamic=False` because a dynamic build
+        measured 6.3x slower; the cache limit is raised because ~20+ shapes exceed the default of 8
+        and overflow falls back to eager SILENTLY.
         """
-        if self.mode == "low-latency":
+        if self.mode == "low-latency" and self.ll_quantizes_in_kernel:
             return eager
         import torch
 
@@ -252,7 +264,6 @@ class EPBackend(abc.ABC):
         self.args = args
         self.rank = rank
         self.world_size = world_size
-        self.local_rank = local_rank
         self.device = device
         self.mode = args.mode
         if self.mode not in self.SUPPORTED_MODES:
@@ -359,8 +370,8 @@ class EPBackend(abc.ABC):
 
     def _enable_fp8(self, dispatch_dtype, quantize, dequantize):
         """Adopt a blockwise FP8 dispatch codec: 1 byte/value plus one FP32 scale per 128-value
-        block. The timed dispatch calls `self._quant`, compiled outside the window except in
-        low-latency (see fused_quantize)."""
+        block. The timed dispatch calls `self._quant`, compiled outside the window except for an
+        in-kernel-quantising low-latency dispatch (see fused_quantize)."""
         self.dispatch_dtype = dispatch_dtype
         self.dispatch_value_bytes = 1
         self.dispatch_scale_bytes_per_copy = ((self.args.hidden + 127) // 128) * 4
@@ -548,7 +559,7 @@ class EPBackend(abc.ABC):
 
     def alignment_misses(self):
         """Per sample of the last component, 1 where this rank's alignment spin ran out before its
-        window opened; None under graph replay."""
+        timed work was enqueued (eager) or before its replay call returned (graphed)."""
         return self.timing.missed_samples()
 
     def host_holds(self):
@@ -580,6 +591,10 @@ class EPBackend(abc.ABC):
     def graph_replay_output(self, problem):
         """Graph replay's value check (GraphTiming.replay_output)."""
         return self.timing.replay_output(problem)
+
+    def graph_replay_restore(self, problem):
+        """Undo the value check's input rescale once its drained reference has run."""
+        self.timing.restore_replay_inputs(problem)
 
     def finalize(self, rc):
         """Barrier and tear down the process group; returns rc."""

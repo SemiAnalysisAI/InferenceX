@@ -40,12 +40,11 @@ def validate_cleanup(args) -> None:
 # positional argv; there are no optional flags. That argv shape is a string contract with
 # common.sh — a subcommand or flag common.sh passes but this parser does not declare fails
 # with "unrecognized arguments" and aborts the leg at repository-stage. Keep the two halves in
-# lockstep (see tests/test_runtime.py::StageContract), which is exactly the contract that broke
-# when the --allow-* flags were dropped here but left on the common.sh callers.
+# lockstep.
 SPECS = {
-    "validate-stage-path": (("repo",), ("base",), ("child",)),
-    "create-stage": (("stage",),), "copy-repository": (("source",), ("target",)),
-    "validate-cleanup": (("root",),),
+    "validate-stage-path": ("repo", "base", "child"),
+    "create-stage": ("stage",), "copy-repository": ("source", "target"),
+    "validate-cleanup": ("root",),
 }
 
 
@@ -56,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, arguments in SPECS.items():
         command = commands.add_parser(name)
         for item in arguments:
-            command.add_argument(item[0], nargs=item[1] if len(item) > 1 else None, default="")
+            command.add_argument(item)
         command.set_defaults(handler=handlers[name.replace("-", "_")])
     return parser
 
