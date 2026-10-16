@@ -21,7 +21,7 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 4
         data-parallel-size: 1
-        cuda-graph-max-bs: 256
+        cuda-graph-max-bs-decode: 256
         max-running-requests: 256
         mem-fraction-static: 0.85
         kv-cache-dtype: fp8_e4m3
@@ -30,7 +30,7 @@ base:
         quantization: modelopt_fp4
         enable-flashinfer-allreduce-fusion: true
         scheduler-recv-interval: 10
-        disable-piecewise-cuda-graph: true
+        cuda-graph-backend-prefill: disabled
         attention-backend: trtllm_mla
         moe-runner-backend: flashinfer_trtllm
         stream-interval: 10
