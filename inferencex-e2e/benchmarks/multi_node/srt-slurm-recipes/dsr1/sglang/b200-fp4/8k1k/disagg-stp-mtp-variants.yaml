@@ -4,10 +4,9 @@ base:
   name: "b200-fp4-stp-8k1k"
 
   dynamo:
-    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
     request_plane: "nats"
     source:
-      pypi: 0.8.1
+      pypi: 1.5.1
 
   frontend:
     type: dynamo
@@ -104,7 +103,7 @@ base:
         chunked-prefill-size: 32768
         context-length: 9600
         max-running-requests: 512
-        cuda-graph-max-bs: 512
+        cuda-graph-max-bs-decode: 512
 
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -180,5 +179,5 @@ override_stp_maxtpt_7p2d:
         enable-dp-lm-head: true
         moe-dense-tp-size: 1
         max-running-requests: 2048
-        cuda-graph-max-bs: 1024
+        cuda-graph-max-bs-decode: 1024
         fp4-gemm-backend: "flashinfer_cutlass"
