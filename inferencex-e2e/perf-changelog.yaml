@@ -10022,3 +10022,9 @@
     - "Append GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX c5120 (8P1D) and c6656 (10P1D) points using the agentx-harness 1.0.10 release already pinned on main."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4126
   append-only: true
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130 and drop a removed SWA env var."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4176
