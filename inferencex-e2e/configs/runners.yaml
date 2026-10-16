@@ -444,7 +444,7 @@ clusters:
         power-exporter-port: 9401
   b200-nscale:
     gpus-per-node: 8
-    available-cpu-dram-mib: 2_048_000
+    available-cpu-dram-mib: 2_047_536
     arch: x86_64
     models:
       entries:
@@ -689,7 +689,7 @@ clusters:
         power-exporter-port: 19401
   mi300x-amd:
     gpus-per-node: 8
-    available-cpu-dram-mib: 1_547_820
+    available-cpu-dram-mib: 1_531_436
     arch: x86_64
     scheduler: slurm
     slurm:
@@ -739,7 +739,7 @@ clusters:
   # Barite shares its login and NFS with mi300x-amd, but not its GPU partition.
   mi325x-amd:
     gpus-per-node: 8
-    available-cpu-dram-mib: 2_321_549
+    available-cpu-dram-mib: 2_305_165
     arch: x86_64
     scheduler: slurm
     slurm:
@@ -773,7 +773,7 @@ clusters:
             export TRITON_CACHE_DIR="/tmp/triton-cache-$SLURM_JOB_ID"
   mi355x-amds:
     gpus-per-node: 8
-    available-cpu-dram-mib: 3_095_781
+    available-cpu-dram-mib: 3_079_397
     arch: x86_64
     env:
       MORI_RDMA_TC: '@fabric.rdma-tc'
