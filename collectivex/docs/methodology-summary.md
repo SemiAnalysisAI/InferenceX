@@ -30,8 +30,8 @@ not rank or recommend.
 
 ## Backends run as engines run them
 
-Each backend runs the configuration its reference engine selects (vLLM for most, TensorRT-LLM for
-nccl-ep, SGLang for MoRI low-latency), not a common denominator, so a cross-backend comparison
+Each backend runs the configuration its reference engine selects (vLLM, and TensorRT-LLM for
+nccl-ep low-latency), not a common denominator, so a cross-backend comparison
 compares deployed contracts.
 
 | Backend | Maturity | Launch | Contract |
@@ -39,7 +39,7 @@ compares deployed contracts.
 | deepep-v2 | production | graph; normal prefill eager | vLLM's `deepep_v2` in both phases: overlap off (64 SMs), a single reduction, no CPU sync, receive sized to the next power of two of `T`. LL as vLLM's `deepep_low_latency`: send kernel plus receive hook, MNNVL on GB only, UE8M0 FP8 scales on Blackwell. The LL receive is fixed at 256, so LL stops at T=256. |
 | nccl-ep | production for LL rank-major BF16 (TensorRT-LLM's `NcclEP`); candidate otherwise | graph; HT prefill eager | LL runs TensorRT-LLM's configuration: rank-major, pre-reduced, one group sized to the ladder's top. Graphed dispatch stages, because TensorRT-LLM dispatches into a plain tensor under capture; eager dispatch is zero-copy inside one NVLink/MNNVL domain. HT is a library row: dispatch includes the per-step routing update, whose memsets, all-gather and scan are sized by the capacity (`-cap512` decode, `-cap8192` prefill), not by T. The communicator uses graph usage mode 1. FP8 (DS_FP8E3M4, LL decode) is off by default because no engine selects it. |
 | uccl-ep | candidate | normal eager (host-synced); LL graph | DeepEP's legacy API over CPU-proxy RDMA (proxies run only at b200 EP16), in vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`: `deepep_ht` launch configs at 20 SMs and 1 GiB buffers; LL called as deepep-v2's, with a 256-token receive. |
-| mori | production | graph decode; eager prefill | vLLM's MoRI configuration: IntraNode at 80 blocks, 16 warps (EP8), InterNodeV1 at 64/32/8 on STATIC_HEAP (EP16), external input buffer, one QP per PE. LL is SGLang's AsyncLL (64/32/8, 2 QPs per PE, `MORI_ENABLE_SDMA` on), driven split-phase. |
+| mori | production | graph decode; eager prefill | vLLM's MoRI configuration: IntraNode at 80 blocks, 16 warps (EP8), InterNodeV1 at 64/32/8 on STATIC_HEAP (EP16), external input buffer, one QP per PE. LL is vLLM's `mori_low_latency`: InterNodeV1LL at 64/32/8 on STATIC_HEAP, EP16 only (one node runs the normal rows' IntraNode). `MORI_ENABLE_SDMA` unset, as vLLM leaves it. |
 | flashinfer-ep | production | graph decode; eager prefill | GB200/GB300 only (one-sided MNNVL). vLLM's integration: combine stages a caller-owned payload (`payload_in_workspace=False`) into a caller-owned output. FP8 is DeepSeek blockwise, which vLLM selects from v0.29.0. `kernel_generation` carries the wheel version. |
 
 `production` means an engine can select the configuration today: vLLM or SGLang, or, for a library

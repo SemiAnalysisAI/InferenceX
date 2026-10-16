@@ -91,7 +91,7 @@ for a precision it does not support. Every FP8 codec here is per-128-block e4m3 
 The caller-side quantize is charged **inside the measured dispatch**, because a production forward
 pass pays it on the critical path. It is one compiled kernel on DeepEP V2, UCCL-EP, FlashInfer EP and
 MoRI, checked bitwise against its eager reference, and per row across batch sizes, before timing;
-MoRI compiles it in `low-latency` too, because AsyncLL takes a caller-quantized tensor. The DeepEP V2
+MoRI compiles it in `low-latency` too, because InterNodeV1LL takes a caller-quantized tensor. The DeepEP V2
 and UCCL-EP `low-latency` kernels quantize internally from BF16. So an FP8 `normal` dispatch covers
 quantize-plus-transport while its BF16 control covers transport alone.
 
@@ -128,9 +128,8 @@ roundtrip inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons.
 
 ## Backends
 
-Each backend runs the configuration its reference engine selects (vLLM for most, TensorRT-LLM for
-NCCL EP low-latency, SGLang for MoRI low-latency), so a cross-backend comparison compares deployed
-contracts. `implementation.maturity` is `production` where an engine can select the configuration
+Each backend runs the configuration its reference engine selects (vLLM, except TensorRT-LLM for
+NCCL EP low-latency), so a cross-backend comparison compares deployed contracts. `implementation.maturity` is `production` where an engine can select the configuration
 today and `candidate` where the row describes the library (see [Result Document](#result-document)).
 
 ### DeepEP V2
@@ -301,37 +300,21 @@ bf16 and fp8 rung, decode 1..512 and prefill 1024..8192 (run 34939333022), while
 the corruption (run 34941185534). A scale-out MoRI case now fails closed under any heap mode but
 STATIC_HEAP.
 
-`low-latency` follows SGLang, not vLLM, and says so (`library_config.contract = "sglang"`): vLLM
-exposes `mori_low_latency`, but its single-node branch builds the same IntraNode kernel as
-`mori_high_throughput`, so vLLM has no MoRI low-latency kernel at EP8, and the `normal` decode rows
-already measure that kernel. SGLang's `EpMode.LOW_LATENCY` runs `AsyncLL` at block_num 64,
-rdma_block_num 32 and 8 warps with `num_qp_per_pe` 2, which on a same-node peer splits each peer's
-chunk across two copy lanes. The kernel is driven split-phase (`dispatch_send`, `dispatch_recv`,
-`combine_send`, `combine_recv`): each timed dispatch is send then recv, and each timed combine is
-send then recv, the full transport SGLang's `dispatch_b`/`combine_b` pay, without the expert GEMM
-interleaved between the phases. It keeps the rank-deduplicated compact layout and plain unweighted
-rank-sum combine of IntraNode. AsyncLL derives its grid from the CU count, so its block_num is inert.
+`low-latency` follows vLLM's `mori_low_latency`, which differs from `mori_high_throughput` only
+across nodes. One node builds the same IntraNode kernel under either selector, which the `normal`
+decode rows already measure, so MoRI has no EP8 low-latency cell. Across nodes it runs
+`InterNodeV1LL` with the arch's tuple (block_num 64, rdma_block_num 32 and 8 warps on gfx950; 32, 16
+and 16 on gfx942) and one QP per PE (`MoriAll2AllManager._make_all2all_kwargs`; the selection
+landed in vllm#41751 and ships from v0.27.0), called through the same single-call `dispatch()` and
+`combine()` as every vLLM MoRI path (`MoriPrepareAndFinalize.supports_async()` is False). It keeps
+InterNodeV1's rank-deduplicated layout, unweighted rank-sum combine and STATIC_HEAP requirement.
 
-`MORI_ENABLE_SDMA` follows the engine of each row. MoRI reads it once, at shmem init, and among the
-EP kernels it changes only AsyncLL's same-node transfer: copy engines when on, and when off a single
-GPU thread per (peer, queue pair) doing 16-byte stores (MoRI 12d1bc32
-`low_latency_async.cpp:247-258`, `shmem_p2p_kernels.hpp:45`). MoRI calls it "currently only
-effective for AsyncLL", so IntraNode and InterNodeV1 do not change with it
-(`dispatch_combine.cpp:138-140`). The `normal` rows, vLLM's configuration, leave it unset, MoRI's
-default (off), because vLLM never sets it. The low-latency rows, SGLang's configuration, run with it
-on, and the adapter sets it before shmem init unless the caller already set it. This repo's
-mi355x FP4 SGLang recipes set `MORI_ENABLE_SDMA=true` only on the prefill role of each variant that
-selects `moe-a2a-backend: mori`
-(`inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/dsr1/sglang/mi355x-fp4/8k1k/disagg-variants.yaml:190`,
-`:258`, `:436`, `:513`, `:593`), a `deepep-mode: normal` role; their decode roles keep the base
-environment's `'false'` (`:40`, `:94`), and the FP8 recipes leave SGLang's default. In SGLang the
-setting itself selects AsyncLL (`moriep.py` main `:376-378`). SGLang's own log calls AsyncLL "the AsyncLL
-copy-engine kernel" (`moriep.py` main `:1636-1643`), and MoRI warns that "AsyncLL without SDMA uses
-compute units for communication, which provides little overlap benefit and can severely degrade
-performance" (`dispatch_combine.cpp:141-146`). SGLang's bare env default is off (`moriep.py` main
-`:964`) and its CI `TestLowLatency` runs without it, so in this repo the case for SDMA on the
-low-latency rows rests on that copy-engine design, not on a decode deployment. A
-row run with SDMA on carries the `-sdma` generation suffix and `library_config.sdma = true`.
+`MORI_ENABLE_SDMA` stays unset, MoRI's default (off), on every row, because vLLM never sets it.
+MoRI reads it once, at shmem init, and calls it "currently only effective for AsyncLL"
+(`dispatch_combine.cpp:138-140`), a kernel no vLLM path selects. A row run with it set on carries
+the `-sdma` generation suffix and `library_config.sdma = true`. SGLang deploys MoRI low-latency
+differently, as `AsyncLL` (64/32/8 with 2 QPs per PE, driven split-phase, selected by
+`MORI_ENABLE_SDMA`), which this suite does not measure.
 
 ### NCCL EP
 
@@ -763,7 +746,7 @@ Every row carries two byte accountings and each excludes expert metadata, paddin
 capacity. `byte_provenance` is the canonical comparable basis: rank-deduplicated token-rank
 activations, one copy per unique (token, dest-rank) pair. `wire_byte_provenance` is what the kernels
 actually move: identical to the canonical basis for every layout that deduplicates per rank (every
-`normal` mode, MoRI's AsyncLL, whose combine is an unweighted rank-sum, and NCCL EP's default
+`normal` mode, MoRI's InterNodeV1LL, whose combine is an unweighted rank-sum, and NCCL EP's default
 rank-major low-latency layout, which deduplicates per destination rank), and one copy per (token,
 expert) assignment for the low-latency kernels that apply top-k weights inside combine (DeepEP V2,
 UCCL-EP, and NCCL EP's expert-major layout under `COLLX_NCCL_LL_LAYOUT=expert-major`). For a token
@@ -872,7 +855,7 @@ reducing in FP32. A verdict alone cannot separate "the transport corrupted this"
 is too tight for this accumulator", and the two call for opposite responses. The magnitude is the
 discriminator. A failure reported without it should not be read as evidence of corruption.
 
-Every `normal` mode, MoRI's AsyncLL and nccl-ep's rank-major low-latency layout use an
+Every `normal` mode, MoRI's InterNodeV1LL and nccl-ep's rank-major low-latency layout use an
 activation-only, unweighted rank-sum combine. The oracle builds each rank's gate-weighted expert
 aggregate before combine and derives the expected combine from the values
 actually communicated: each destination rank casts its FP32 aggregate to the payload dtype (BF16)
@@ -950,8 +933,8 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
     plus deepep-v2's NVLink and MNNVL flags; uccl-ep adds its verified `deep_ep` identity, buffer
     bytes, QPs, `is_intranode` and running CPU-proxy threads, with `Buffer.num_sms` and the dispatch
     and combine `Config`s as the constructor rounded them in `normal` mode; mori the launch tuple its
-    handle realized, QPs, quant type, SDMA, heap and launch-config modes and whose contract (`vllm` or
-    `sglang`) it follows; nccl-ep `capacity_tokens_per_rank`, `zero_copy`, `num_sms` (`dispatch`,
+    handle realized, QPs, quant type, SDMA, heap and launch-config modes and the contract (`vllm`) it
+    follows; nccl-ep `capacity_tokens_per_rank`, `zero_copy`, `num_sms` (`dispatch`,
     `combine`) and `engine_contract` (`tensorrt-llm`, or null for a library row); flashinfer-ep its
     combine contract (`payload_in_workspace`, `combine_output`), dispatch scale format and workspace
     sizing.
@@ -1019,7 +1002,7 @@ generation:
 |---|---|
 | deepep-v2 | `v2-elastic-buffer-vllm-nosync`, plus `-relaxed-ordering` on h200 EP16; `legacy-buffer-ll-hook`, plus `-ue8m0` for Blackwell FP8 |
 | uccl-ep | `uccl-legacy-buffer-vllm-ht`; `uccl-legacy-buffer-ll-hook`, plus `-ue8m0` for B200 FP8 |
-| mori | `intranode-vllm`, `inter-node-v1-vllm` and `async-ll-sglang`, each plus `-sdma` when `MORI_ENABLE_SDMA` was on (low-latency by default) |
+| mori | `intranode-vllm`, `inter-node-v1-vllm` and `inter-node-v1ll-vllm`, each plus `-sdma` when `MORI_ENABLE_SDMA` was set on |
 | nccl-ep | `nccl-ep-v02-ht-routed-zc-static` (plus `-gum1` when graphed), `nccl-ep-v02-ll-rm` (plus `-zc` on the eager window path) or `nccl-ep-v02-ll-em`, then `-fp8-ds-e3m4` on FP8 rows and `-cap<N>-<wheel version>` ([nccl-ep.md](nccl-ep.md)) |
 | flashinfer-ep | `flashinfer-mnnvl-one-sided-staged-<wheel version>` |
 
