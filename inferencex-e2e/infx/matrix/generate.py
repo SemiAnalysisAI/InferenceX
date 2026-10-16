@@ -441,7 +441,9 @@ def agentic_dram_offload_gb(
         return share_gb(worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)), 0
     if Fields.PREFILL.value in benchmark:
         return (
-            share_gb(worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node, "prefill")),
+            share_gb(
+                worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node, "prefill")
+            ),
             share_gb(worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node, "decode")),
         )
     gpu_count = effective_gpu_count(benchmark)
