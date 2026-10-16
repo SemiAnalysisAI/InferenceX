@@ -43,16 +43,10 @@ seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
 
 def seq_len_to_str(isl: int, osl: int) -> str:
-    """Convert sequence lengths to short string representation.
-
-    Returns the short name (e.g., '1k1k') if it exists in the mapping,
-    otherwise returns 'isl_osl' format.
-    """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 
 def freeze_config_value(value: Any) -> Any:
-    """Convert JSON-shaped config values into deterministic hashable values."""
     if isinstance(value, dict):
         return tuple(sorted((key, freeze_config_value(item)) for key, item in value.items()))
     if isinstance(value, list):
@@ -61,13 +55,6 @@ def freeze_config_value(value: Any) -> Any:
 
 
 def trim_conc(entries: list[dict]) -> list[dict]:
-    """Retain the lowest concurrency for each generated deployment shape.
-
-    Entries are grouped by every non-eval field except ``conc`` and the
-    generated ``exp-name``. Multi-node rows may encode concurrency either as a
-    list within one row or as one-row list chunks; both representations collapse
-    to one row whose ``conc`` and dispatch-facing ``eval-conc`` use the minimum.
-    """
     ignored_fields = {
         "conc",
         "exp-name",
@@ -129,11 +116,6 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
 
 def smoke_entries(entries: list[dict]) -> list[dict]:
-    """Minimum-concurrency throughput plus one canonical eval per deployment shape.
-
-    Eval concurrency comes from the existing default selection, never from the
-    throughput minimum. Keep separate eval-only rows so neither client is run twice.
-    """
     benchmarks = trim_conc([{**row, "run-eval": False} for row in entries])
     evals = []
     for row in entries:
@@ -149,12 +131,10 @@ def smoke_entries(entries: list[dict]) -> list[dict]:
 
 
 def runner_labels(runner_data: dict) -> dict:
-    """Return runner scheduling labels."""
     return runner_data["labels"]
 
 
 def runner_hardware(runner_data: dict) -> dict:
-    """Return node facts (gpus-per-node, available-cpu-dram-mib) keyed by ``cluster:<id>``."""
     node_fields = (Fields.GPUS_PER_NODE.value, Fields.AVAILABLE_CPU_DRAM_MIB.value)
     return {
         f"{CLUSTER_LABEL_PREFIX}{cluster_id}": {
@@ -165,12 +145,10 @@ def runner_hardware(runner_data: dict) -> dict:
 
 
 def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:
-    """Return concrete runner names for a scheduling label."""
     return runner_labels(runner_data).get(runner, [])
 
 
 def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
-    """Return an integer hardware field for a runner label."""
     hardware = runner_hardware(runner_data).get(runner, {})
     value = hardware.get(field)
     if value is None:
@@ -183,28 +161,18 @@ def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
 
 
 def runner_available_cpu_dram_mib(runner: str, runner_data: dict) -> int:
-    """Return available CPU DRAM for a runner label."""
     return runner_hardware_int(runner, runner_data, Fields.AVAILABLE_CPU_DRAM_MIB.value)
 
 
 def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
-    """Return GPUs per node for a runner label."""
     return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
 
 
 def _hardware_family(label: str) -> str:
-    """Return the GPU family encoded in a runner or cluster label."""
     return label.removeprefix("cluster:").split("-", 1)[0]
 
 
 def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
-    """Resolve GPUs per node for an abstract runner or worker hardware label.
-
-    Legacy scheduling labels may not duplicate the hardware facts stored under
-    their canonical ``cluster:`` label. Fall back to the
-    GPU family when the exact label has no hardware record, while rejecting
-    ambiguous families that disagree about node shape.
-    """
     hardware = runner_hardware(runner_data)
     exact = hardware.get(label)
     if exact is not None:
@@ -224,7 +192,6 @@ def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
 
 
 def _worker_node_override(worker: dict, setting_name: str) -> int | None:
-    """Read an explicit role node count from additional settings."""
     pattern = re.compile(rf"^{re.escape(setting_name)}=(\d+)$")
     values = []
     for setting in worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []:
@@ -239,7 +206,6 @@ def _worker_node_override(worker: dict, setting_name: str) -> int | None:
 
 
 def recipe_auxiliary_node_count(recipe: dict) -> int:
-    """Count service pools and dedicated nodes, matching srtctl's placement policy."""
     services = [service for service in recipe.get("services", []) if service.get("enabled", True)]
     pool_nodes = sum(service.get("nodes") or 0 for service in services)
     infra_dedicated = recipe.get("infra", {}).get("etcd_nats_dedicated_node", False)
@@ -267,7 +233,6 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
 
 
 def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
-    """Read the authoritative node count from the row's checked-in srt-slurm recipe."""
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
     recipe = yaml.safe_load(recipe_path.read_text())
@@ -294,7 +259,6 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
 
 
 def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
-    """The fabric of each cluster that runs ``label``: a scheduling label or one runner."""
     labels = runner_labels(runner_data)
     runners = set(labels.get(label, [label]))
     fabrics = {}
@@ -308,8 +272,6 @@ def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
 
 
 def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data: dict) -> None:
-    """Fail a recipe whose ``'@fabric.<name>'`` values name no fabric field, or one that a
-    cluster ``label`` runs on does not set."""
     path, _, selector = srt_recipe.partition(":")
     variants = expand_variants(yaml.safe_load((root / path).read_text()), selector or None)
     fabrics = {
@@ -331,7 +293,6 @@ def worker_node_count(
     runner: str,
     runner_data: dict,
 ) -> int:
-    """Return physical nodes consumed by one prefill or decode role."""
     override = _worker_node_override(worker, f"{role.upper()}_NODES")
     if override is not None:
         return override
@@ -356,7 +317,6 @@ def multinode_node_count(
     srt_recipe: str | None,
     root: Path | None,
 ) -> int:
-    """Return the total Slurm node request represented by a matrix row."""
     if srt_recipe is not None and root is None:
         raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
     recipe_count = recipe_node_count(root, srt_recipe) if srt_recipe is not None else None
@@ -373,7 +333,6 @@ def add_multinode_node_count(
     num_nodes: int | None,
     root: Path | None,
 ) -> dict:
-    """Annotate a multi-node row with its scheduling node count."""
     if not entry[Fields.DISAGG.value] and num_nodes is not None:
         entry[Fields.NODE_COUNT.value] = num_nodes
     elif num_nodes is not None:
@@ -391,7 +350,6 @@ def add_multinode_node_count(
 
 
 def effective_gpu_count(benchmark: dict) -> int:
-    """Return GPUs used by a single-node TP/PP/PCP topology."""
     return (
         benchmark[Fields.TP.value]
         * benchmark.get(Fields.PP.value, 1)
@@ -400,7 +358,6 @@ def effective_gpu_count(benchmark: dict) -> int:
 
 
 def with_worker_parallelism_defaults(worker: dict) -> dict:
-    """Return a worker config with explicit parallelism defaults."""
     return {
         **worker,
         Fields.PP.value: worker.get(Fields.PP.value, 1),
@@ -410,7 +367,6 @@ def with_worker_parallelism_defaults(worker: dict) -> dict:
 
 
 def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
-    """Return the legacy prefill/decode matrix pair for a master entry."""
     if disagg:
         return (
             with_worker_parallelism_defaults(benchmark[Fields.PREFILL.value]),
@@ -435,20 +391,6 @@ def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
 
 
 def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
-    """Return GPUs a single worker replica occupies on one node.
-
-    The DRAM offload budget is sized per server process (per replica), matching
-    the single-node path: a replica claims the node-DRAM fraction that mirrors
-    its GPU footprint on the node. Topologies that do not tile a node cleanly
-    are rejected rather than silently truncated, keeping parity with the
-    single-node "must fit the node" rule:
-
-    * A replica larger than one node (tp*pp*pcp*dwdp > gpus-per-node) must fill whole
-      nodes, i.e. be an exact multiple of gpus-per-node; each of its nodes is
-      then fully occupied (fraction 1).
-    * A replica within one node must divide it evenly so co-located replicas of
-      the same role tile the node without overlap.
-    """
     gpus_per_replica = (
         worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
@@ -478,16 +420,6 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
 def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
 ) -> int:
-    """Return the DRAM offload budget (GB) for one agentic server node.
-
-    The budget scales the node's (MAX-capped) available CPU DRAM by the
-    utilization and by the fraction of the node's GPUs in use:
-
-    * Single-node entries use the TP/PP/PCP topology, which must fit one node.
-    * Disaggregated multinode entries use the prefill worker's per-node GPU
-      footprint, since only prefill offloads KV to CPU DRAM today (decode can be
-      budgeted separately if it ever gains its own pool).
-    """
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
     if kv_offloading != "dram":
         return 0
@@ -523,7 +455,6 @@ def agentic_kv_offload_suffix(
     kv_offloading: str,
     kv_offload_backend: dict | None,
 ) -> str:
-    """Return a compact exp-name suffix for agentic KV offload settings."""
     if kv_offloading == "none":
         return "kvnone"
     return f"kv{kv_offloading}-{kv_offload_backend['name']}"
@@ -536,7 +467,6 @@ def multinode_agentic_exp_name(
     conc_batch: list[int],
     offload_suffix: str,
 ) -> str:
-    """Build a multinode agentic exp-name that encodes topology, not just TP."""
 
     def _worker_tag(worker: dict, role_prefix: str) -> str:
         ep = worker.get(Fields.EP.value, 1)
@@ -559,7 +489,6 @@ def multinode_agentic_exp_name(
 
 
 def component_metadata(benchmark: dict, config: dict) -> dict:
-    """Resolve optional component metadata from its validated scope."""
     metadata = {}
     for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
         value = benchmark.get(field.value, config.get(field.value))
@@ -569,7 +498,6 @@ def component_metadata(benchmark: dict, config: dict) -> dict:
 
 
 def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
-    """The row's srt-recipe and eval-srt-recipe, relative to the project root."""
     return {
         field.value: srt_recipe_path(
             config.get(Fields.MULTINODE.value, False),
@@ -582,14 +510,6 @@ def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
 
 
 def _multinode_parallelism_key(entry: dict) -> tuple:
-    """Identify a multi-node config independently of eval/concurrency fields.
-
-    exp-name is derived from (and ignored alongside) conc: fixed-seq-len
-    exp-names never embed conc, but agentic exp-names do (each concurrency
-    gets its own single-conc allocation), so entries for the
-    same topology at different concurrencies would otherwise falsely land in
-    different groups.
-    """
     ignored_fields = {
         Fields.CONC.value,
         Fields.RUN_EVAL.value,
@@ -610,20 +530,12 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
 
 
 def automatic_agentic_vendor_eval(entry: dict) -> tuple[str, str] | None:
-    """Return the default vendor evaluator for supported agentic models."""
     if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
         return None
     return AUTOMATIC_AGENTIC_VENDOR_EVALS.get(entry.get(Fields.MODEL_PREFIX.value))
 
 
 def app_eval_identity(entry: dict, conc: int) -> tuple:
-    """Return the InferenceX-app eval identity of one eval point.
-
-    The app stores one eval result per run for each config natural key
-    (model, hardware, framework, precision, speculative method, disaggregation
-    and per-role TP/EP/DP-attention/workers), task, sequence lengths and
-    concurrency. Image and KV offloading are not part of it.
-    """
     if Fields.PREFILL.value in entry:
         topology = tuple(
             tuple(
@@ -657,7 +569,6 @@ def app_eval_identity(entry: dict, conc: int) -> tuple:
 
 
 def _eval_concs(entry: dict) -> list[int]:
-    """Return the concurrencies one eval row evaluates."""
     conc = entry[Fields.CONC.value]
     conc_values = conc if isinstance(conc, list) else [conc]
     if Fields.PREFILL.value in entry and not entry.get(Fields.EVAL_ALL_CONCS.value):
@@ -666,14 +577,6 @@ def _eval_concs(entry: dict) -> list[int]:
 
 
 def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
-    """Keep at most one eval per InferenceX-app eval identity.
-
-    Rows that differ only by image or KV offloading share an app identity, so
-    the app would keep one of their results and overwrite the other. The
-    first row without KV offloading keeps the eval, otherwise the first row.
-    A losing row stops evaluating; a batched eval that loses only some
-    concurrencies keeps the rest. Throughput selection is unchanged.
-    """
     claimed: set[tuple] = set()
     candidates = sorted(
         (row for row in rows if row.get(Fields.RUN_EVAL.value)),
@@ -700,22 +603,6 @@ def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
 
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
-    """Apply the default eval selection policy.
-
-    Every agentic model gets GSM8K. Single-node agentic rows use it at the
-    highest concurrency in each group of model, runner, framework, precision,
-    spec-decoding, dp-attn and image (the fixed-sequence keys plus image);
-    multi-node agentic rows at the highest eligible concurrency per topology,
-    falling back to one highest-concurrency eval for a deployment with none.
-    Kimi K3 and MiniMax M3 additionally run their full vendor suites at every
-    generated concurrency; where such a row is also the GSM8K pick, an extra
-    eval-only GSM8K row is appended. Eval rows run as separate eval-only jobs,
-    so every agentic throughput point is still benchmarked.
-
-    Fixed-sequence selection is unchanged: single-node 8k1k rows use the
-    highest and median concurrency per model/runtime group, while multi-node
-    8k1k rows use the highest eligible concurrency per parallelism topology.
-    """
     from collections import defaultdict
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
@@ -867,7 +754,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
 
 def _gsm8k_eval_only_row(entry: dict, eval_conc: int | None = None) -> dict:
-    """An eval-only GSM8K copy of ``entry``, alongside its vendor-suite eval."""
     row = {
         **entry,
         Fields.RUN_EVAL.value: True,
@@ -882,18 +768,6 @@ def _gsm8k_eval_only_row(entry: dict, eval_conc: int | None = None) -> dict:
 
 
 def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
-    """Expand eval selection across all eligible entries.
-
-    Every agentic entry runs GSM8K through lm-eval. Kimi K3 and MiniMax M3
-    rows also keep one vendor-suite eval job per generated concurrency.
-    Agentic multi-node GSM8K rows are merged by topology and select the
-    highest resulting concurrency. Eval-only GSM8K copies from
-    ``mark_eval_entries`` are dropped and regenerated here.
-
-    Fixed-sequence evals only run at 8k1k. Multi-node rows with the same engine
-    topology are merged into one eval row that runs every concurrency
-    sequentially against the live engine.
-    """
     expanded_entries: list[dict] = []
     multinode_indices: dict[tuple, int] = {}
     multinode_agentic_indices: dict[tuple, int] = {}
@@ -994,7 +868,6 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
 
 def _concurrency_range(start: int, end: int, step: int) -> list[int]:
-    """Expand a validated positive range, including its end even after overshoot."""
     values = []
     while start <= end:
         values.append(start)
@@ -1013,11 +886,6 @@ def _fixed_sequence_entries(
     runner_data: dict,
     root: Path | None,
 ) -> list[dict]:
-    """Build fixed-sequence rows after the command has selected runners and points.
-
-    Callers retain filtering and overrides; this owns row defaults, derived
-    identity, topology and validation for both full-sweep and test-config.
-    """
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
@@ -1103,12 +971,6 @@ def _agentic_entries(
     conc_filter: list[int] | None = None,
     root: Path | None = None,
 ) -> list[dict]:
-    """Expand one AgentX deployment for either generator command.
-
-    Resolve topology and the offload budget before filtering concurrency so an
-    invalid deployment still fails when its points are filtered out. Agentic
-    bounds filter existing points; they never introduce a capped point.
-    """
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     model_code = config[Fields.MODEL_PREFIX.value]
@@ -1221,8 +1083,6 @@ def _agentic_entries(
 
 @dataclass(frozen=True)
 class FullSweepOptions:
-    """Full-sweep selection and overrides, independent of the CLI parser."""
-
     model_prefix: list[str] | None = None
     precision: list[str] | None = None
     framework: list[str] | None = None
@@ -1245,7 +1105,6 @@ def generate_full_sweep(
     runner_data: dict,
     root: Path | None = None,
 ) -> list[dict]:
-    """Compatibility adapter for callers passing the full-sweep CLI namespace."""
     return expand_full_sweep(
         all_config_data,
         runner_data,
@@ -1276,7 +1135,6 @@ def expand_full_sweep(
     options: FullSweepOptions = FullSweepOptions(),
     root: Path | None = None,
 ) -> list[dict]:
-    """Expand validated configs in declaration order, before eval selection."""
     if options.step_size <= 1:
         raise ValueError("step_size must be greater than 1")
     if (
@@ -1321,12 +1179,6 @@ def _fixed_sequence_concurrencies(
     full_sweep: FullSweepOptions | None,
     concurrencies: list[int] | None,
 ) -> list[int] | None:
-    """Keep full-sweep capping separate from selected-key intersection.
-
-    Single-node ranges are clipped before expansion; multi-node ranges and
-    explicit lists are expanded first. AgentX only filters its existing points.
-    None skips a deployment; an empty list retains the legacy empty batch.
-    """
     if full_sweep is None:
         values = (
             benchmark[Fields.CONC_LIST.value]
@@ -1392,7 +1244,6 @@ def generate_test_config_sweep(
     runner_data: dict | None = None,
     root: Path | None = None,
 ) -> list[dict]:
-    """Compatibility API for selected-key expansion without eval selection."""
     return _expand_selected_configs(
         args.config_keys,
         all_config_data,
@@ -1440,11 +1291,6 @@ def _expand_configs(
     full_sweep: FullSweepOptions | None = None,
     root: Path | None = None,
 ) -> list[dict]:
-    """Traverse configs and scenarios once for both generation commands.
-
-    Selection retains each command's ordering and overrides. Row builders own
-    identity, topology and validation; eval policy is applied by the caller.
-    """
     rows = []
     for config in configs:
         multinode = config.get(Fields.MULTINODE.value, False)
@@ -1544,14 +1390,6 @@ def _expand_configs(
 
 
 def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]) -> list[str]:
-    """Expand config key patterns (glob wildcards) against available keys.
-
-    Keys containing '*' or '?' are treated as glob patterns and expanded via
-    fnmatch.filter(). Plain keys are validated for existence. Results are
-    deduplicated while preserving order.
-
-    Raises ValueError if a pattern matches nothing or an exact key is missing.
-    """
     available = list(available_keys)
     seen = {}
     for key in config_keys:
@@ -1575,7 +1413,6 @@ def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]
 
 
 def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
-    """Select exact generated experiment identities and reject ambiguity."""
     requested = set(exp_names)
     if len(requested) != len(exp_names):
         raise ValueError("--exp-names contains duplicate values")
@@ -1596,7 +1433,6 @@ def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
 
 
 def apply_node_type_defaults(args: argparse.Namespace) -> argparse.Namespace:
-    """Default both single_node and multi_node to True when neither is specified."""
     if (
         hasattr(args, "single_node")
         and hasattr(args, "multi_node")
@@ -1617,7 +1453,6 @@ def select_matrix_evals(
     mode: EvalMode = "default",
     trim: bool = False,
 ) -> list[dict]:
-    """Apply eval policy and optional trimming to freshly generated rows."""
     if mode not in ("default", "none", "subset", "all", "smoke"):
         raise ValueError(f"Unknown eval mode: {mode!r}")
     if mode == "smoke" and trim:
@@ -1647,12 +1482,6 @@ def generate_config_matrix(
     eval_mode: EvalMode = "default",
     root: Path | None = None,
 ) -> list[dict]:
-    """Build selected configs and evals without a generator subprocess.
-
-    Every call builds independent rows. Multi-node node counts read recipes under
-    ``root``. Default, throughput-only, subset-only, all-eval, and smoke modes use
-    the same policy as the CLI.
-    """
     rows = _expand_selected_configs(
         config_keys,
         master_config,
