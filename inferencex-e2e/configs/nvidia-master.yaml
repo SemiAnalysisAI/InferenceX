@@ -1731,7 +1731,7 @@ dsr1-fp8-h200-trt:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp8-h200-trt-mtp:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.4.0rc0
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0rc0
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
