@@ -143,7 +143,7 @@ permissions:
 
 jobs:
   benchmark:
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (

@@ -869,8 +869,9 @@ def public_point(entry: dict) -> dict:
         "conc": int(entry["conc"]),
         "image": normalized_image(entry["image"]),
     }
+    aggregate = multi and not point["disagg"] and not entry["decode"].get("num-worker")
     for role in ("prefill", "decode"):
-        topology = entry[role] if multi else entry
+        topology = entry["prefill" if aggregate else role] if multi else entry
         point.update(
             {
                 f"{role}_tp": topology["tp"],
@@ -886,14 +887,20 @@ def _matches_public_point(row: dict, point: dict) -> bool:
     """Compare a public row with a generated identity using canonical image spelling."""
     from .models import normalized_image
 
-    for key, value in point.items():
-        observed = row.get(key)
-        if key == "image":
-            if not isinstance(observed, str) or normalized_image(observed) != value:
-                return False
-        elif observed != value:
-            return False
-    return True
+    encodings = [point]
+    if point["is_multinode"] and not point["disagg"] and point["prefill_num_workers"] == 1:
+        encodings.append(
+            {**point, "is_multinode": False, "prefill_num_workers": 0, "decode_num_workers": 0}
+        )
+    return any(
+        all(
+            isinstance(row.get(key), str) and normalized_image(row[key]) == value
+            if key == "image"
+            else row.get(key) == value
+            for key, value in encoding.items()
+        )
+        for encoding in encodings
+    )
 
 
 def matrix_points(matrix: dict) -> list[dict]:

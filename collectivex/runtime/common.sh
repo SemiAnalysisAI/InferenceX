@@ -30,7 +30,7 @@ COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
-COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
+COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 
 # nccl-extensions (github.com/NVIDIA/nccl-extensions) owns nccl.ep, which nccl4py >= 0.4 does
 # not bundle; its combine-recv fence (DeepEP's LOW_LATENCY_COMBINE_RECV analogue) releases the
@@ -291,8 +291,8 @@ collx_apply_network_profile() {
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
   # Single-node and MNNVL runs need only the scrub above. Single-node low-latency kernels run
-  # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode, MoRI AsyncLL) and must NOT
-  # force IBGDA (/dev/gdrdrv is absent on h200). Exception: a SKU may pin a single-node HCA list.
+  # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode) and must NOT force IBGDA
+  # (/dev/gdrdrv is absent on h200). Exception: a SKU may pin a single-node HCA list.
   # DeepEP's legacy LL Buffer self-enables IBGDA even single-node, and on b300 the image's baked
   # NVSHMEM_HCA_PE_MAPPING steers that init onto the GPU-fabric RoCE rails, where ibv_create_ah
   # fails at every GID index; the storage-IB rails accept AH/DCT creation and carry init-time

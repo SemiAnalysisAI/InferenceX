@@ -28,7 +28,7 @@ runs the decode and prefill ladders; `low-latency` is decode-only.
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
 | `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H200. EP8, EP16: B200, GB200, GB300 |
-| `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8: MI300X, MI325X, MI355X. EP16: MI355X | EP8: MI355X |
+| `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8: MI300X, MI325X, MI355X. EP16: MI355X | EP16: MI355X |
 | `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: B200 | EP8: H100, H200, B200 |
 | `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H100, H200, B300. EP8, EP16: B200, GB200, GB300 |
 | `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8, EP16: GB200, GB300 | none |

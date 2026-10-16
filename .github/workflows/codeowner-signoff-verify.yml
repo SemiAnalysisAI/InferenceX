@@ -1,7 +1,7 @@
 name: CODEOWNER Sign-off Verify
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; signoff_resolve checks eligibility before the read-only agent; only publish writes
     types: [created, edited]
   pull_request_review:
     types: [submitted, edited]
@@ -145,8 +145,7 @@ jobs:
           # /proc is denied so file tools cannot read credentials from process environments.
           claude_args: |
             --model 'claude-opus-5-5'
-            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}}}'
-            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,mcp__fetch__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
+            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
             --disallowedTools "Read(//proc/**),Write(//proc/**)"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
