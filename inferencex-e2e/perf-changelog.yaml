@@ -9980,5 +9980,5 @@
     - agentic-coding
   description:
     - "Add Muse Spark Open NVFP4 AgentX on H100 at TP8/EP8 with upstream Marlin dense/MoE kernels, FA3 target attention, FA4 draft attention, and FP8 KV."
-    - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 48, and 64 with DFlash2, GPU-resident KV, a 0.97 static memory fraction, 1024-token prefill chunks, a 0.1 SWA/full KV token ratio, and prefill CUDA graphs disabled; cap decode graphs at batch 8 to leave vision-encoder headroom and use eager DFlash draft sampling above graph capacity while retaining 2x concurrency request capacity. Use the committed golden acceptance curve for throughput and real verification for evals."
+    - "Sweep concurrency 1, 2, 4, 8, and 16 with DFlash2, GPU-resident KV, a 0.97 static memory fraction, 1024-token prefill chunks, a 0.1 SWA/full KV token ratio, and prefill CUDA graphs disabled; cap decode graphs and running requests at batch 8, since eager batches above graph capacity OOM with ~1 GB free per GPU; concurrency 16 measures queueing at that cap. Use the committed golden acceptance curve for throughput and real verification for evals."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4149

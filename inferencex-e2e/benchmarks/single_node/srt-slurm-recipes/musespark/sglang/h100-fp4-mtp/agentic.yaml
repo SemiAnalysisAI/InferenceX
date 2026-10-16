@@ -69,10 +69,11 @@ zip_override_tp8:
   roles:
     agg:
       args:
-        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128]
+        # Eager batches above the decode graphs OOM in the MoE with ~1 GB free.
+        max-running-requests: [2, 4, 8, 8, 8]
         # Each graph slot reserves seven full-context int32 page tables, and
         # bs=16 graphs leave too little headroom for the vision encoder.
-        cuda-graph-max-bs-decode: [2, 4, 8, 8, 8, 8, 8, 8, 8]
+        cuda-graph-max-bs-decode: [2, 4, 8, 8, 8]
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64']
+      CONC: ['1', '2', '4', '8', '16']
