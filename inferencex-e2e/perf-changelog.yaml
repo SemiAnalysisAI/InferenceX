@@ -10034,3 +10034,11 @@
     - "TP4 c1 admits one request at a time, enables decoder SWA bounded replay and disables the prefill CUDA graph."
     - "Add DEP2 c160 with the c128 settings, a prefill-decode interval of 8, mem-fraction-static 0.85, 256 max running requests and a 128 decode graph batch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4033
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP4/EP4 DRAM HiCache MTP points at concurrency 8 and 12 for Qwen3.5-397B FP8 on H200 with SGLang."
+    - "为 H200 上 SGLang 的 Qwen3.5-397B FP8 新增并发 8 和 12 的 TP4/EP4 DRAM HiCache MTP 点。"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4209

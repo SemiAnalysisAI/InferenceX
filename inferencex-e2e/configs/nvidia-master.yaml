@@ -5092,6 +5092,8 @@ qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [2, 4, 8, 10, 12, 16, 20, 24], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12], srt-recipe: agentic.yaml }
 
 qwen3.5-fp8-h100-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260914-4358a161
