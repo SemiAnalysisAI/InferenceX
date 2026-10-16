@@ -20,6 +20,7 @@ BOT = "Klaud-Cold"
 COMMITTER = "github-actions[bot]"
 ACTIVE_STATUSES = ("requested", "waiting", "pending", "queued", "in_progress")
 CANDIDATE_ID = r"[0-9a-f]{16}-[0-9a-f]{16}"
+RECONCILE_JOB = "Reconcile interrupted candidates"
 SWEEP_LABELS = {
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
@@ -612,9 +613,10 @@ def recover() -> None:
     )
 
 
-def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]]]:
+def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]], set[int]]:
     live: set[str] = set()
     targeted: dict[str, list[int]] = {}
+    planners: set[int] = set()
     for status in ACTIVE_STATUSES:
         query = urlencode({"status": status, "per_page": 100})
         for run in github.items(
@@ -636,7 +638,9 @@ def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]]]:
             ):
                 if match := re.search(rf"Run candidate ({CANDIDATE_ID})", job["name"]):
                     live.add(match[1])
-    return live, targeted
+                elif job["name"] == RECONCILE_JOB and job["status"] != "completed":
+                    planners.add(run["id"])
+    return live, targeted, planners
 
 
 def bot_committed(commits: list[dict]) -> bool:
@@ -646,7 +650,7 @@ def bot_committed(commits: list[dict]) -> bool:
 
 
 def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
-    sessions, targeted = owned_activity(repository)
+    sessions, targeted, planners = owned_activity(repository)
     live = live | sessions
     pulls = github.items(repository, "pulls?state=open&per_page=100")
     abandoned = []
@@ -676,6 +680,17 @@ def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
             github.read(repository, f"actions/runs/{owner.run_id}")
         ):
             claims.release_family(repository, candidate, owner.run_id)
+    if planners <= {int(os.environ.get("GITHUB_RUN_ID", "0"))}:
+        finished: dict[int, bool] = {}
+        for lease in github.items(repository, "git/matching-refs/heads/klaud/recovery-"):
+            match = re.fullmatch(rf"refs/heads/klaud/recovery-(\d+)-({CANDIDATE_ID})", lease["ref"])
+            if not match or match[2] in live:
+                continue
+            parent = int(match[1])
+            if parent not in finished:
+                finished[parent] = terminal(github.read(repository, f"actions/runs/{parent}"))
+            if finished[parent]:
+                github.write(repository, "git/" + lease["ref"], "DELETE")
     for pull in abandoned:
         github.write(
             repository,
