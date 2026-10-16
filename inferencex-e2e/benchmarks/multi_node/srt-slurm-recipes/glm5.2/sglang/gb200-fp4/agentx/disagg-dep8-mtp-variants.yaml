@@ -7,8 +7,8 @@ base:
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
     container: {}
     frameworks:
-      dynamo: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
-      sglang: 0.5.18
+      dynamo: 5c8b22b3d9b9e2fb19ba8a6ec862d8793e49e5f7
+      sglang: 0.5.21
   resources:
     gpu_type: gb200
     gpus_per_node: 4
@@ -28,7 +28,7 @@ base:
   dynamo:
     install: true
     source:
-      rev: 71eb001e17fa73c742f0afe1a6ed96836cb135fd
+      rev: 5c8b22b3d9b9e2fb19ba8a6ec862d8793e49e5f7
   engine: sglang
   roles:
     prefill:
@@ -48,12 +48,11 @@ base:
         NCCL_CUMEM_ENABLE: '1'
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
         SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-        SGLANG_ENABLE_THINKING: '1'
-        SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        SGLANG_DEFAULT_THINKING: '1'
         SGLANG_HICACHE_DEBUG_LOG: '1'
         SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
-        SGLANG_REASONING_EFFORT: max
+        SGLANG_DSV4_REASONING_EFFORT: max
         PIP_BREAK_SYSTEM_PACKAGES: '1'
         UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
         NVSHMEM_REMOTE_TRANSPORT: none
@@ -75,10 +74,10 @@ base:
         chunked-prefill-size: 65536
         max-prefill-tokens: 16384
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         disable-cuda-graph: true
-        nsa-prefill-backend: trtllm
-        nsa-decode-backend: trtllm
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
         moe-runner-backend: flashinfer_cutlass
         fp4-gemm-backend: flashinfer_cutlass
         enable-flashinfer-allreduce-fusion: true
@@ -112,13 +111,13 @@ base:
         NCCL_CUMEM_ENABLE: '1'
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
         SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
         SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
         SGLANG_MOE_NVFP4_DISPATCH: '1'
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
-        SGLANG_ENABLE_THINKING: '1'
+        SGLANG_DEFAULT_THINKING: '1'
         SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
-        SGLANG_REASONING_EFFORT: max
+        SGLANG_DSV4_REASONING_EFFORT: max
         PIP_BREAK_SYSTEM_PACKAGES: '1'
         UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
         NVSHMEM_REMOTE_TRANSPORT: none
@@ -142,11 +141,11 @@ base:
         enable-dp-attention: false
         enable-dp-lm-head: false
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         chunked-prefill-size: 64
         context-length: 1048576
-        nsa-prefill-backend: trtllm
-        nsa-decode-backend: trtllm
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
         moe-runner-backend: flashinfer_trtllm
         fp4-gemm-backend: flashinfer_cutlass
         skip-tokenizer-init: true
@@ -217,7 +216,7 @@ override_2p1d_dep16_c128:
         enable-dp-attention: true
         enable-dp-lm-head: true
         max-running-requests: 144
-        cuda-graph-max-bs: 144
+        cuda-graph-max-bs-decode: 144
         moe-runner-backend: flashinfer_cutedsl
         mem-fraction-static: 0.85
         deepep-config: /configs/deepep_config.json
