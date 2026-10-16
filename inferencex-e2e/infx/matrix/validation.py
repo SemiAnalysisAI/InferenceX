@@ -727,6 +727,11 @@ class AgenticCodingConfig(BaseModel):
                     f"{Fields.KV_OFFLOADING.value}='dram' requires "
                     f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
                 )
+            if entry.prefill is not None and entry.prefill.hardware is not None:
+                raise ValueError(
+                    f"{Fields.KV_OFFLOADING.value}='dram' does not support per-worker "
+                    f"'{Fields.HARDWARE.value}'"
+                )
         return self
 
 

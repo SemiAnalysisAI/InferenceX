@@ -2867,8 +2867,9 @@ class TestAgenticGeneration:
         assert result[0]["total-cpu-dram-gb"] == 2399
         assert result[0]["decode-cpu-dram-gb"] == 1199
 
-    def test_multinode_agentic_rejects_node_misaligned_prefill(
-        self, sample_runner_config, generate_agentic_sweep
+    @pytest.mark.parametrize(("prefill_tp", "decode_tp", "role"), [(6, 8, "prefill"), (8, 6, "decode")])
+    def test_multinode_agentic_rejects_node_misaligned_worker(
+        self, sample_runner_config, generate_agentic_sweep, prefill_tp, decode_tp, role
     ):
         config = {
             "dsv4-agentic-hicache-misaligned": {
@@ -2888,16 +2889,57 @@ class TestAgenticGeneration:
                             "conc-list": [16],
                             "kv-offloading": "dram",
                             "kv-offload-backend": {"name": "hicache"},
-                            "prefill": {"num-worker": 1, "tp": 6, "ep": 1, "dp-attn": False},
-                            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                            "prefill": {"num-worker": 1, "tp": prefill_tp, "ep": 1, "dp-attn": False},
+                            "decode": {"num-worker": 1, "tp": decode_tp, "ep": 1, "dp-attn": False},
                         }],
                     }],
                 },
             },
         }
 
-        with pytest.raises(ValueError, match="does not divide"):
+        with pytest.raises(ValueError, match=rf"^{role} tp\*pp\*pcp-size=6 does not divide"):
             generate_agentic_sweep(config, sample_runner_config)
+
+    @pytest.mark.parametrize(
+        ("kv_offloading", "workers"),
+        [
+            ("none", {
+                "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            }),
+            ("dram", {"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}),
+        ],
+    )
+    def test_multinode_agentic_omits_zero_decode_budget(
+        self, sample_runner_config, generate_agentic_sweep, kv_offloading, workers
+    ):
+        offload = {"kv-offloading": kv_offloading}
+        if kv_offloading == "dram":
+            offload["kv-offload-backend"] = {"name": "hicache"}
+        config = {
+            "dsv4-agentic-no-decode-budget": {
+                "image": "sglang-rocm",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "sglang-disagg",
+                "runner": "cluster:mi355x-amds",
+                "multinode": True,
+                "disagg": "prefill" in workers,
+                **({"kv-p2p-transfer": "mori"} if "prefill" in workers else {}),
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [{"conc-list": [16], **offload, **workers}],
+                    }],
+                },
+            },
+        }
+
+        result = generate_agentic_sweep(config, sample_runner_config)
+
+        assert len(result) == 1
+        assert "decode-cpu-dram-gb" not in result[0]
 
 
 

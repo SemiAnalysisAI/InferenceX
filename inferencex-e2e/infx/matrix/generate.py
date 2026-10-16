@@ -390,7 +390,7 @@ def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
     return prefill, decode
 
 
-def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
+def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker") -> int:
     gpus_per_replica = (
         worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
@@ -403,14 +403,14 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
     if gpus_per_replica > gpus_per_node:
         if gpus_per_replica % gpus_per_node != 0:
             raise ValueError(
-                f"worker {factors}"
+                f"{role} {factors}"
                 f"={gpus_per_replica} spans multiple nodes but is not a multiple "
                 f"of {Fields.GPUS_PER_NODE.value}={gpus_per_node}"
             )
         return gpus_per_node
     if gpus_per_node % gpus_per_replica != 0:
         raise ValueError(
-            f"worker {factors}"
+            f"{role} {factors}"
             f"={gpus_per_replica} does not divide "
             f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} evenly"
         )
@@ -441,8 +441,8 @@ def agentic_dram_offload_gb(
         return share_gb(worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)), 0
     if Fields.PREFILL.value in benchmark:
         return (
-            share_gb(worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node)),
-            share_gb(worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node)),
+            share_gb(worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node, "prefill")),
+            share_gb(worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node, "decode")),
         )
     gpu_count = effective_gpu_count(benchmark)
     if gpu_count > gpus_per_node:
@@ -1073,7 +1073,8 @@ def _agentic_entries(
             }
         )
         if is_multinode:
-            entry[Fields.DECODE_CPU_DRAM_GB.value] = decode_cpu_dram_gb
+            if decode_cpu_dram_gb:
+                entry[Fields.DECODE_CPU_DRAM_GB.value] = decode_cpu_dram_gb
             entry[Fields.DISAGG.value] = disagg
         entry[Fields.SCENARIO_TYPE.value] = "agentic-coding"
         if kv_offload_backend is not None:
