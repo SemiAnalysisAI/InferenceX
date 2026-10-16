@@ -9930,3 +9930,15 @@
     - "Sweep concurrency 1, 2, 4, 8 and 12 with GPU-resident KV; enable layernorm SP, MegaMoE and HiCache at 16, 24, 32 and 48, with 120 GB per rank at 16 and 160 GB per rank at 24/32/48 so the DFlash2 draft host pool also fits in host DRAM."
     - "Keep synthetic acceptance selected from the committed musespark_dflash golden curve for seven draft tokens."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4155
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on GB300 via single-node SGLang (lmsysorg/sglang:dev-muse-spark-open, digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) with DFlash2 speculative decoding (RadixArk/Muse-Spark-Open-DFlash2, 8-token verification block)."
+    - "Serve flags follow the verified GB300 NVFP4 cell of the SGLang Muse Spark cookbook: TP4/EP4, modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE, fa4 draft attention, muse reasoning and tool-call parsers. KV stays GPU-resident (no HiCache)."
+    - "mem-fraction-static 0.85 and swa-full-tokens-ratio 0.1: 46 of 62 layers use a 2048-token sliding window, so shrinking the SWA pool raises the full-attention KV pool from 2.1M to 5.5M tokens."
+    - "Concurrency 1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24 and 32, with max-running-requests equal to concurrency."
+    - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4141

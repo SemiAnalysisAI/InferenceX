@@ -641,6 +641,7 @@ clusters:
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3-MXFP8: {root: data-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
@@ -676,6 +677,7 @@ clusters:
           rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_2:1, mlx5_3:1]
         job-tag: gb300
         segment-directive: false
+        single-node-models: staged
         container-aliases: [dynamo-trtllm, dynamo-sglang, v0.5.11, v0.5.13.post1]
         nginx-aliases: [nginx-sqsh]
         env:
