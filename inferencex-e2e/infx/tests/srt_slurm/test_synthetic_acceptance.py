@@ -241,6 +241,24 @@ def test_engine_token_selection_and_environment(
     assert result["environment"] == {"KEEP_GLOBAL": "yes"}
 
 
+@pytest.mark.parametrize("width", [None, True, 1, 4.0])
+def test_dflash_rejects_invalid_verification_block(golden_dir: Path, width: Any) -> None:
+    recipe = {
+        "roles": {
+            "agg": {
+                "args": {
+                    "speculative-algorithm": "DFLASH",
+                    "speculative-num-draft-tokens": width,
+                }
+            }
+        }
+    }
+    with pytest.raises(ValueError, match="positive integer draft length"):
+        build_overrides(
+            recipe, "sglang", {**ENV, "MODEL_PREFIX": "musespark"}, golden_dir=golden_dir
+        )
+
+
 @pytest.mark.parametrize(
     "environment",
     [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}],
