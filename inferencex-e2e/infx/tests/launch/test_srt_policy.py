@@ -96,6 +96,15 @@ def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, p
     assert single_node_model_path(cluster(tmp_path, "hub"), point) == f"hf:{env['MODEL']}"
 
 
+def test_single_node_staging_can_be_selected_for_one_workload(tmp_path, monkeypatch):
+    monkeypatch.setitem(models.OVERRIDES, "c", (
+        Override(Match(model_glob="org/M"), single_node_staged=True),
+    ))
+    c = cluster(tmp_path, "hub")
+    assert single_node_model_path(c, request(MODEL="org/M")) == str(tmp_path / "nvme/m")
+    assert single_node_model_path(c, request(MODEL="org/S")) == "hf:org/S"
+
+
 def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, monkeypatch):
     monkeypatch.setitem(models.OVERRIDES, "c", OVERRIDES)
     with pytest.raises(LaunchError, match="no readable .*/s/config.json"):
