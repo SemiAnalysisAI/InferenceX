@@ -9235,6 +9235,20 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
         conc-list: [1, 2, 4, 8, 16, 32, 48, 64]
         srt-recipe: agentic.yaml
 
+musespark-fp4-gb300-sglang-agentic-dflash:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/gb300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32], srt-recipe: agentic.yaml }
+
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
   image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
   model: Qwen/Qwen3.5-397B-A17B-FP8
