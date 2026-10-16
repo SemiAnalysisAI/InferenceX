@@ -9894,6 +9894,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3951
 
 - config-keys:
+    - musespark-fp4-h200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open NVFP4 AgentX on H200 with upstream SGLang and DFlash2 speculative decoding at TP8/EP8."
+    - "Use Marlin W4A16 dense and MoE kernels, FA3 target attention, FA4 draft attention, FP8 KV, and an 8-token DFlash verification block with acceptance selected from the committed golden curve."
+    - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 48, and 64 with GPU-resident KV and no layernorm sequence parallelism or MegaMoE."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4148
+
+- config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
@@ -9982,3 +9992,15 @@
     - "Add Muse Spark Open NVFP4 AgentX on H100 at TP8/EP8 with upstream Marlin dense/MoE kernels, FA3 target attention, FA4 draft attention, and FP8 KV."
     - "Sweep concurrency 1, 2, 4, 8, and 16 with DFlash2, GPU-resident KV, a 0.97 static memory fraction, 1024-token prefill chunks, a 0.1 SWA/full KV token ratio, and prefill CUDA graphs disabled; cap decode graphs and running requests at batch 8, since eager batches above graph capacity OOM with ~1 GB free per GPU; concurrency 16 measures queueing at that cap. Use the committed golden acceptance curve for throughput and real verification for evals."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4149
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4) agentic-coding on MI355X via SGLang (lmsysorg/sglang-rocm:muse-spark-open, digest sha256:72065dfc0b87818ab415f96c0fc08848233d25f22b002ac8f28c33fad6ec82a4) with DFlash2 speculative decoding (RadixArk/Muse-Spark-Open-DFlash2, 8 draft tokens)."
+    - "Serve flags follow AMD's model card: AITER attention (SGLANG_USE_AITER=1, SGLANG_USE_AITER_UNIFIED_ATTN=1), FlyDSL MoE (MUSE_MOE_BACKEND=flydsl), page size 16, fp8_e4m3 KV, mem-fraction-static 0.85, triton draft attention, muse reasoning and tool-call parsers."
+    - "TP4/EP4 and TP8/EP8, both at conc 1, 4, 8, 12, 16 with GPU-resident KV (no offloading)."
+    - "Synthetic acceptance follows the committed musespark_dflash golden curve (#4138, #4139): AL 4.05 at 7 draft tokens, thinking_on."
+    - "The server loads the checkpoint and draft from the pre-seeded shared HF cache with HF_HUB_OFFLINE=1, so concurrent points make no Hub API calls."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4127
