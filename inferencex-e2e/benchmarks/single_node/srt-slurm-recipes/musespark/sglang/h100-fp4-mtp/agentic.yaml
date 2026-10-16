@@ -77,3 +77,19 @@ zip_override_tp8:
   benchmark:
     env:
       CONC: ['1', '2', '4', '8', '16']
+      KV_OFFLOADING: none
+
+# The GPU KV pool is a few GB per rank, so agentic prefixes evict between turns;
+# HiCache keeps them in host DRAM instead of recomputing them.
+zip_override_tp8_hicache:
+  roles:
+    agg:
+      args:
+        max-running-requests: [4, 8, 8]
+        cuda-graph-max-bs-decode: [4, 8, 8]
+        enable-hierarchical-cache: true
+        hicache-size: 160
+  benchmark:
+    env:
+      CONC: ['2', '4', '8']
+      KV_OFFLOADING: dram

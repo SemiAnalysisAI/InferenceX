@@ -10004,3 +10004,12 @@
     - "Synthetic acceptance follows the committed musespark_dflash golden curve (#4138, #4139): AL 4.05 at 7 draft tokens, thinking_on."
     - "The server loads the checkpoint and draft from the pre-seeded shared HF cache with HF_HUB_OFFLINE=1, so concurrent points make no Hub API calls."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4127
+
+- config-keys:
+    - musespark-fp4-h100-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a HiCache host-DRAM KV offload arm at concurrency 2, 4 and 8 with 160 GB per rank, alongside the GPU-resident sweep; the few-GB GPU KV pool left by 67 GB of weights per H100 evicts agentic prefixes between turns."
+    - "Keep the batch-8 cap on running requests and decode graphs from the GPU-resident sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
