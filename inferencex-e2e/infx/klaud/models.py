@@ -118,6 +118,7 @@ class CandidateOutcome(Contract):
             "baseline-eval-unverified",
             "baseline-api-unavailable",
             "baseline-other",
+            "weights-missing",
         ]
         | None
     ) = None
@@ -132,7 +133,12 @@ class CandidateOutcome(Contract):
             raise ValueError("Validated requires final-sweep evidence")
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Run IDs must be distinct")
-        if self.reason_code is not None and (self.outcome != "failed" or self.phase != "baseline"):
+        if self.reason_code == "weights-missing":
+            if self.outcome != "readiness-blocked":
+                raise ValueError("weights-missing requires a readiness-blocked outcome")
+        elif self.reason_code is not None and (
+            self.outcome != "failed" or self.phase != "baseline"
+        ):
             raise ValueError("Baseline reason codes require a failed baseline outcome")
         return self
 

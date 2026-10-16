@@ -30,6 +30,8 @@ Release notes alone are insufficient; retain source links and provenance uncerta
 attempt comments. Pin mutable image tags by digest. Before GPU dispatch, inspect the
 actual launcher/recipe's effective image, staged weights/config/tokenizer and mount paths.
 Missing assets are readiness-blocked; never map to an older image or different weights.
+When the model checkpoint itself is not staged on the target cluster, add
+`reason-code: weights-missing` so the planner pauses that model and precision on that hardware.
 Check the exact selected launch path for existing engine patches as well as proposed ones.
 
 Edit only the family's master image and its already referenced, unshared recipe's

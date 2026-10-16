@@ -159,7 +159,13 @@ def choose(
     return selected
 
 
-def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str, str | None]:
+def weights_key(source: dict) -> tuple:
+    return (source.get("model"), source.get("precision"), source.get("hardware"))
+
+
+def recent_candidate_outcomes(
+    repository: str, cooldown_hours: int
+) -> tuple[dict[str, str | None], set[tuple]]:
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     try:
         runs = github_items(
@@ -169,7 +175,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
         )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return {}
+        return {}, set()
     dated = []
     for run in runs:
         try:
@@ -179,6 +185,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
         except (AttributeError, KeyError, TypeError, ValueError):
             continue
     result: dict[str, str | None] = {}
+    missing_weights: set[tuple] = set()
     for _, run_id in sorted(dated, reverse=True):
         try:
             artifacts = github_items(
@@ -186,6 +193,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
             )
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
             continue
+        blocked = set()
         for artifact in artifacts:
             try:
                 match = re.fullmatch(
@@ -196,7 +204,30 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
             except (AttributeError, KeyError, TypeError):
                 continue
             result[match[1]] = recorded_outcome(repository, artifact)
-    return result
+            if result[match[1]] == "weights-missing":
+                blocked.add(match[1])
+        if blocked:
+            missing_weights |= {
+                weights_key(candidate["source"])
+                for candidate in planned_candidates(repository, artifacts)
+                if candidate.get("id") in blocked
+            }
+    return result, missing_weights
+
+
+def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
+    plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
+    if not plan:
+        return []
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, plan, Path(scratch))
+            candidates = json.loads((Path(scratch) / "candidates.json").read_text())
+            return [
+                c for c in candidates if isinstance(c, dict) and isinstance(c.get("source"), dict)
+            ]
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            return []
 
 
 def recorded_outcome(repository: str, artifact: dict) -> str | None:
@@ -206,7 +237,10 @@ def recorded_outcome(repository: str, artifact: dict) -> str | None:
             diagnostics = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())
             if diagnostics.get("action-outcome") == "skipped":
                 return "agent-not-started"
-            return CandidateOutcome.model_validate(diagnostics["candidate-outcome"]).outcome
+            outcome = CandidateOutcome.model_validate(diagnostics["candidate-outcome"])
+            return (
+                outcome.reason_code if outcome.reason_code == "weights-missing" else outcome.outcome
+            )
         except (
             OSError,
             ValueError,
@@ -270,9 +304,13 @@ def plan(
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    candidates = order_by_cooldown(
-        candidates, recent_candidate_outcomes(repository, cooldown_hours)
-    )
+    recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
+    candidates = [
+        candidate
+        for candidate in candidates
+        if weights_key(candidate["source"]) not in missing_weights
+    ]
+    candidates = order_by_cooldown(candidates, recent)
     candidates = candidates[:review_batch_size]
     contexts = [
         {

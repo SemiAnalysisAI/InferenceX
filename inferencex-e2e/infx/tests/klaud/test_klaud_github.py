@@ -172,6 +172,23 @@ def test_candidate_outcome_rejects_raw_reason_and_preserves_legacy_receipts():
         )
 
 
+@pytest.mark.parametrize(("outcome", "phase", "reason", "valid"), [
+    ("readiness-blocked", "targeted", "weights-missing", True),
+    ("failed", "targeted", "weights-missing", False),
+    ("failed", "baseline", "weights-missing", False),
+    ("readiness-blocked", "targeted", "baseline-other", False),
+    ("failed", "baseline", "baseline-other", True),
+])  # fmt: skip
+def test_reason_codes_pair_only_with_their_outcome(outcome, phase, reason, valid):
+    record = {"outcome": outcome, "phase": phase, "pull-request": None, "run-ids": [],
+              "repairs-used": 0, "reason-code": reason}
+    if valid:
+        assert CandidateOutcome.model_validate(record).reason_code == reason
+    else:
+        with pytest.raises(ValueError):
+            CandidateOutcome.model_validate(record)
+
+
 def test_finish_requires_specific_baseline_reason_before_touching_session(
     tmp_path, monkeypatch, capfd
 ):
@@ -206,15 +223,21 @@ def test_finish_requires_specific_baseline_reason_before_touching_session(
 def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferrals(
     monkeypatch,
 ):
-    blocked, deferred, unreadable, superseded, untried, not_started = (
-        f"{digit * 16}-{digit * 16}" for digit in "123456"
+    blocked, deferred, unreadable, superseded, untried, not_started, weightless = (
+        f"{digit * 16}-{digit * 16}" for digit in "1234567"
     )
     outcomes = {
-        1: ("readiness-blocked", "targeted"),
-        2: ("capacity-deferred", "targeted"),
-        4: ("capacity-deferred", "targeted"),
-        5: ("failed", "targeted"),
-        7: ("unexpected-error", "unknown"),
+        1: ("readiness-blocked", "targeted", None),
+        2: ("capacity-deferred", "targeted", None),
+        4: ("capacity-deferred", "targeted", None),
+        5: ("failed", "targeted", None),
+        7: ("unexpected-error", "unknown", None),
+        8: ("readiness-blocked", "targeted", "weights-missing"),
+    }
+    sources = {
+        blocked: {"model": "dsr1", "precision": "fp8", "hardware": "b200"},
+        deferred: {"model": "glm5.2", "precision": "fp4", "hardware": "b200"},
+        weightless: {"model": "dsr1", "precision": "fp4", "hardware": "b200"},
     }
 
     def items(_repository, path, key):
@@ -225,22 +248,27 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
                 {"id": 40, "created_at": "2000-01-01T00:00:00Z", "head_sha": "c" * 40},
             ]
         run_artifacts = {
-            41: [(1, blocked), (3, unreadable), (5, superseded)],
-            42: [(2, deferred), (4, superseded), (7, not_started)],
+            41: [(1, blocked), (3, unreadable), (5, superseded), (91, "plan")],
+            42: [(2, deferred), (4, superseded), (7, not_started), (8, weightless), (92, "plan")],
             40: [(6, untried)],
         }
         run_id = int(path.split("/")[2])
         return [
-            {"id": artifact, "name": f"klaud-candidate-{candidate}", "expired": False}
+            {"id": artifact, "expired": False,
+             "name": "klaud-plan" if candidate == "plan" else f"klaud-candidate-{candidate}"}
             for artifact, candidate in run_artifacts[run_id]
         ]
 
     def download(_repository, artifact, destination):
+        if artifact["id"] in (91, 92):
+            (destination / "candidates.json").write_text(json.dumps(
+                [{"id": candidate, "source": source} for candidate, source in sources.items()]))
+            return
         if artifact["id"] not in outcomes:
             raise github.VerificationError("Invalid artifact archive")
-        outcome, phase = outcomes[artifact["id"]]
+        outcome, phase, reason = outcomes[artifact["id"]]
         record = {"outcome": outcome, "phase": phase, "pull-request": None, "run-ids": [],
-                  "repairs-used": 0}
+                  "repairs-used": 0, "reason-code": reason}
         diagnostics = {"candidate-outcome": record}
         if phase == "unknown":
             diagnostics["action-outcome"] = "skipped"
@@ -249,13 +277,15 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
     monkeypatch.setattr(klaud, "github_items", items)
     monkeypatch.setattr(klaud, "download_json", download)
 
-    recent = klaud.recent_candidate_outcomes("example/project", 24)
+    recent, missing_weights = klaud.recent_candidate_outcomes("example/project", 24)
+    assert missing_weights == {("dsr1", "fp4", "b200")}
     assert recent == {
         blocked: "readiness-blocked",
         unreadable: None,
         deferred: "capacity-deferred",
         superseded: "capacity-deferred",
         not_started: "agent-not-started",
+        weightless: "weights-missing",
     }
     candidates = [{"id": candidate} for candidate in (deferred, blocked, untried, unreadable,
                                                       superseded, not_started)]
