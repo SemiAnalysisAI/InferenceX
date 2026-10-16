@@ -6,8 +6,18 @@ import argparse
 import json
 import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+@dataclass(frozen=True)
+class AgenticValidation:
+    successes: float | None
+    errors: float | None
+    completed: float | None
+    failed_request_threshold: float
+    failures: tuple[str, ...]
 
 
 def _resolve_aggregate_path(artifact_dir: Path) -> Path:
@@ -45,47 +55,49 @@ def _metric_avg(aggregate: dict[str, Any], name: str) -> float | None:
     return value
 
 
-def validate_result(artifact_dir: Path, failed_request_threshold: float) -> list[str]:
-    """Return validation errors for an aiperf artifact directory."""
+def validate_result(artifact_dir: Path, failed_request_threshold: float) -> AgenticValidation:
     aggregate_path = _resolve_aggregate_path(artifact_dir)
+    successes = errors = completed = None
+
+    def result(*failures: str) -> AgenticValidation:
+        return AgenticValidation(successes, errors, completed, failed_request_threshold, failures)
+
     if not aggregate_path.is_file():
-        return [f"{aggregate_path} not found"]
+        return result(f"{aggregate_path} not found")
 
     try:
         with open(aggregate_path) as f:
             aggregate = json.load(f)
         if not isinstance(aggregate, dict):
-            return [f"{aggregate_path} must contain a JSON object"]
+            return result(f"{aggregate_path} must contain a JSON object")
 
         successes = _metric_avg(aggregate, "request_count")
         errors = _metric_avg(aggregate, "error_request_count") or 0.0
         completed = _metric_avg(aggregate, "completed_request_count")
     except (OSError, json.JSONDecodeError, ValueError) as exc:
-        return [f"failed to read {aggregate_path}: {exc}"]
+        return result(f"failed to read {aggregate_path}: {exc}")
 
     if successes is None:
-        return ["request_count.avg is missing"]
+        return result("request_count.avg is missing")
     if completed is None:
         completed = successes + errors
     if completed <= 0:
-        return ["aiperf completed zero requests"]
+        return result("aiperf completed zero requests")
 
     error_rate = errors / completed
     if error_rate > failed_request_threshold:
-        return [
-            (
-                "aiperf request error rate exceeded the benchmark limit: "
-                f"{errors:g}/{completed:g} = {error_rate:.3%} > "
-                f"{failed_request_threshold:.3%}"
-            )
-        ]
+        return result(
+            "aiperf request error rate exceeded the benchmark limit: "
+            f"{errors:g}/{completed:g} = {error_rate:.3%} > "
+            f"{failed_request_threshold:.3%}"
+        )
 
     print(
         "Validated aiperf request error rate: "
         f"{errors:g}/{completed:g} = {error_rate:.3%} <= "
         f"{failed_request_threshold:.3%}"
     )
-    return []
+    return result()
 
 
 def main() -> int:
@@ -102,10 +114,10 @@ def main() -> int:
     if not 0 <= args.failed_request_threshold <= 1:
         parser.error("--failed-request-threshold must be between 0 and 1")
 
-    errors = validate_result(args.artifact_dir, args.failed_request_threshold)
-    for error in errors:
+    validation = validate_result(args.artifact_dir, args.failed_request_threshold)
+    for error in validation.failures:
         print(f"ERROR: {error}", file=sys.stderr)
-    return 1 if errors else 0
+    return 1 if validation.failures else 0
 
 
 if __name__ == "__main__":

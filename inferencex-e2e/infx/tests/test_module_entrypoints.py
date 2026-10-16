@@ -64,6 +64,69 @@ def test_collector_does_not_publish_partial_output_on_invalid_json(invoke, tmp_p
         assert output.read_bytes() == published
 
 
+def test_collector_excludes_failed_benchmarks_and_retains_diagnostics(invoke, tmp_path):
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    rows = {
+        "legacy": {"conc": 4},
+        "passed": {"conc": 8, "benchmark_outcome": {
+            "status": "passed", "attempt_id": "good", "finalized": True,
+        }},
+        "failed": {"conc": 16, "benchmark_outcome": {
+            "status": "failed", "attempt_id": "partial", "finalized": False,
+        }},
+        "fixed_seq": {"conc": 32, "benchmark_outcome": {
+            "status": "passed", "requested": 100, "completed": 99,
+            "failed": 1, "max_failure_rate": 0.05,
+        }},
+    }
+    for name, row in rows.items():
+        (inputs / f"{name}.json").write_text(json.dumps(row))
+    before = {path.name: path.read_bytes() for path in inputs.iterdir()}
+
+    result = invoke("infx.results.collect_results", "inputs", "bmk")
+
+    assert result.returncode == 0, result.stderr
+    assert sorted(json.loads((tmp_path / "agg_bmk.json").read_text()), key=lambda r: r["conc"]) == [
+        rows["legacy"], rows["passed"], rows["fixed_seq"],
+    ]
+    assert {path.name: path.read_bytes() for path in inputs.iterdir()} == before
+
+
+@pytest.mark.parametrize("outcome", [
+    None, {"status": "unknown"},
+    {"status": "passed", "attempt_id": "partial", "finalized": False},
+    {"status": "passed", "attempt_id": "partial"},
+    {"status": "passed", "attempt_id": "partial", "finalized": 1},
+    {"status": "passed", "finalized": True},
+    {"status": "failed", "attempt_id": "", "finalized": False},
+])
+def test_collector_refuses_malformed_present_outcomes(invoke, tmp_path, outcome):
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    (inputs / "result.json").write_text(json.dumps({"benchmark_outcome": outcome}))
+    output = tmp_path / "agg_bmk.json"
+    output.write_text("previous aggregate")
+
+    result = invoke("infx.results.collect_results", "inputs", "bmk")
+
+    assert result.returncode != 0
+    assert "benchmark_outcome" in result.stderr
+    assert output.read_text() == "previous aggregate"
+
+
+def test_collector_preserves_eval_payloads_without_benchmark_filtering(invoke, tmp_path):
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    payload = {"results": {"task": {"acc": 0.5}}, "benchmark_outcome": {"status": "other"}}
+    (inputs / "eval.json").write_text(json.dumps(payload))
+
+    result = invoke("infx.results.collect_results", "inputs", "eval")
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads((tmp_path / "agg_eval.json").read_text()) == [payload]
+
+
 def test_filename_entrypoint_retains_environment_and_point_arguments(invoke):
     result = invoke("infx.results.result_filename",
                     RESULT_FILENAME_BASE="model_tp8", RECIPE_FINGERPRINT="abc")

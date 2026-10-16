@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import shlex
 import sys
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from infx.bench import env as inputs, proc, server
 from infx.bench.agentic.replay import (
@@ -19,6 +21,8 @@ from infx.bench.agentic.replay import (
     replay_argv,
 )
 from infx.bench.agentic.venv import Runtime, bootstrap
+from infx.results.agentic.validate_agentic_result import validate_result
+from infx.results.power.common import _write_json_atomic
 
 REQUIRED = (
     "RESULT_DIR",
@@ -55,10 +59,9 @@ class Plan:
         matrix_point = env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding"
         switches = inputs.require(*POWER_SWITCHES, env=env) if multinode or matrix_point else {}
         result_dir = Path(values["RESULT_DIR"]).absolute()
-        result_filename = values["RESULT_FILENAME"]
+        output_dir, result_filename = _result_destination(env)
         if multinode:
             result_dir /= f"conc_{values['CONC']}"
-            result_filename += f"_conc{values['CONC']}"
         replay = ReplayConfig.from_env(env, result_dir)
         _require_single_point(env, values["CONC"])
         if matrix_point:
@@ -67,13 +70,20 @@ class Plan:
         return cls(
             replay=replay,
             result_dir=result_dir,
-            output_dir=Path(env.get("AGENTIC_OUTPUT_DIR") or proc.REPO_ROOT).absolute(),
+            output_dir=output_dir,
             result_filename=result_filename,
             chat_budget=server.chat_route_budget(env) if eval_only else None,
             power=_power_mode(switches, env),
             require_power=switches.get("REQUIRE_POWER") in TRUE_VALUES,
             required_metric_prefix=inputs.optional("AIPERF_REQUIRED_SERVER_METRIC_PREFIX", env),
         )
+
+
+def _result_destination(env: Mapping[str, str]) -> tuple[Path, str]:
+    filename = inputs.require("RESULT_FILENAME", env=env)["RESULT_FILENAME"]
+    if inputs.flag("IS_MULTINODE", env):
+        filename += f"_conc{inputs.require('CONC', env=env)['CONC']}"
+    return Path(env.get("AGENTIC_OUTPUT_DIR") or proc.REPO_ROOT).absolute(), filename
 
 
 def _require_single_point(env: Mapping[str, str], conc: str) -> None:
@@ -112,6 +122,7 @@ def _power_mode(switches: Mapping[str, str], env: Mapping[str, str]) -> PowerMod
 
 def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     """Run ``plan`` with ``runtime``'s tools; ``environ`` seeds every child's environment."""
+    _retire_previous_result(plan.output_dir / f"{plan.result_filename}.json")
     cfg = plan.replay
     python = str(runtime.python)
     env = {
@@ -119,6 +130,7 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
         "RESULT_DIR": str(plan.result_dir),
         "RESULT_FILENAME": plan.result_filename,
         "AGENTIC_OUTPUT_DIR": str(plan.output_dir),
+        "AGENTIC_ATTEMPT_ID": str(uuid4()),
         "PYTHONPATH": proc.pythonpath(environ),
     }
     rc = _download_traces(cfg, runtime, env)
@@ -141,6 +153,15 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     if signals.received:
         return 128 + signals.received
     return _score(plan, python, env, replay_rc)
+
+
+def _retire_previous_result(result_path: Path) -> None:
+    previous_path = result_path.with_name(f"{result_path.name}.superseded-{uuid4()}")
+    try:
+        result_path.rename(previous_path)
+    except FileNotFoundError:
+        return
+    print(f"Preserved prior AgentX result at {previous_path}", flush=True)
 
 
 def _download_traces(cfg: ReplayConfig, runtime: Runtime, env: Mapping[str, str]) -> int:
@@ -170,8 +191,11 @@ def _score(plan: Plan, python: str, env: Mapping[str, str], replay_rc: int) -> i
     audit = _power_audit(plan, replay_rc)
     power_rc = _power_adapter(plan, python, env, *audit) if audit else 0
     _results(python, env, "agentic.analyze_benchmark_distributions", artifacts, "-o", result_dir)
-    threshold = ["--failed-request-threshold", FAILED_REQUEST_THRESHOLD]
-    validation_rc = _results(python, env, "agentic.validate_agentic_result", artifacts, *threshold)
+    validation = validate_result(plan.replay.artifact_dir, float(FAILED_REQUEST_THRESHOLD))
+    for error in validation.failures:
+        print(f"ERROR: {error}", file=sys.stderr)
+    validation_rc = int(bool(validation.failures))
+    exit_code = 0
     for failed, message in (
         (replay_rc, f"agentic trace replay exited with code {replay_rc} after writing results"),
         (aggregate_rc, f"AgentX aggregation exited with code {aggregate_rc}"),
@@ -180,9 +204,55 @@ def _score(plan: Plan, python: str, env: Mapping[str, str], replay_rc: int) -> i
     ):
         if failed:
             print(f"ERROR: {message}", file=sys.stderr)
-            return failed
-    _check_server_metrics(plan.replay.artifact_dir, plan.required_metric_prefix)
-    return 0
+            exit_code = failed
+            break
+    metrics_error = None
+    metrics_status = "not_required" if plan.required_metric_prefix is None else "skipped"
+    if not exit_code and plan.required_metric_prefix is not None:
+        try:
+            _check_server_metrics(plan.replay.artifact_dir, plan.required_metric_prefix)
+            metrics_status = "passed"
+        except inputs.BenchError as exc:
+            metrics_error = exc
+            metrics_status = "failed"
+            exit_code = 1
+    result_path = plan.output_dir / f"{plan.result_filename}.json"
+    try:
+        result = json.loads(result_path.read_text())
+        outcome = result["benchmark_outcome"]
+        if (
+            outcome["attempt_id"] != env["AGENTIC_ATTEMPT_ID"]
+            or outcome["result_filename"] != result_path.name
+        ):
+            raise ValueError("aggregate belongs to another measurement attempt")
+        outcome.update(
+            {
+                "status": "failed" if exit_code else "passed",
+                "finalized": True,
+                "exit_code": exit_code,
+                "replay_exit_code": replay_rc,
+                "aggregate_exit_code": aggregate_rc,
+                "validation": asdict(validation),
+                "power": {
+                    "required": plan.require_power,
+                    "mode": plan.power,
+                    "checked": audit is not None,
+                    "exit_code": power_rc,
+                },
+                "server_metrics": {
+                    "required_prefix": plan.required_metric_prefix,
+                    "status": metrics_status,
+                    "error": str(metrics_error) if metrics_error else None,
+                },
+            }
+        )
+        _write_json_atomic(result_path, result)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"ERROR: cannot finalize current AgentX result {result_path}: {exc}", file=sys.stderr)
+        exit_code = exit_code or 1
+    if metrics_error:
+        raise metrics_error
+    return exit_code
 
 
 def _power_audit(plan: Plan, replay_rc: int) -> list[str] | None:
@@ -244,6 +314,8 @@ def main(argv: list[str]) -> int:
         prog="python3 -m infx.bench agentic",
         description="Replay AgentX traces at one concurrency against a ready server.",
     ).parse_args(argv)
+    output_dir, result_filename = _result_destination(os.environ)
+    _retire_previous_result(output_dir / f"{result_filename}.json")
     plan = Plan.from_env(os.environ)
     runtime = Runtime.for_job(os.environ)
     if not runtime.active():

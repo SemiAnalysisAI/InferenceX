@@ -50,20 +50,26 @@ POINT = {
 FAKE_PYTHON = r"""#!/bin/bash
 case "$2" in
     infx.results.agentic.process_agentic_result)
-        echo "aggregate $RESULT_FILENAME" >> "$EVENTS"; exit "${AGGREGATE_RC:-0}" ;;
+        echo "aggregate $RESULT_FILENAME" >> "$EVENTS"
+        exec "$REAL_PYTHON" "$@" ;;
     infx.results.agentic.power_adapter)
         echo "adapter ${*:3}" >> "$EVENTS"; exit "${POWER_RC:-0}" ;;
-    infx.results.agentic.validate_agentic_result)
-        echo validate >> "$EVENTS"; exit "${VALIDATE_RC:-0}" ;;
     infx.results.agentic.analyze_benchmark_distributions) echo analyze >> "$EVENTS" ;;
     *) echo "unexpected $*" >> "$EVENTS"; exit 99 ;;
 esac
 """
 FAKE_AIPERF = f"""#!{sys.executable}
-import os, time
+import json, os, pathlib, sys, time
 with open(os.environ["EVENTS"], "a") as events:
     events.write("replay\\n")
 time.sleep(float(os.environ.get("REPLAY_SECONDS", "0")))
+out = pathlib.Path(sys.argv[sys.argv.index("--output-artifact-dir") + 1])
+out.mkdir(parents=True, exist_ok=True)
+(out / "profile_export.jsonl").write_text("invalid" if os.environ.get("AGGREGATE_RC", "0") != "0" else "")
+errors = 99 if os.environ.get("VALIDATE_RC", "0") != "0" else 0
+(out / "profile_export_aiperf.json").write_text(json.dumps({{
+    "request_count": {{"avg": 1}}, "error_request_count": {{"avg": errors}},
+}}))
 raise SystemExit(int(os.environ.get("REPLAY_RC", "0")))
 """
 FAKE_HF = '#!/bin/sh\nexit "${HF_RC:-0}"\n'
@@ -176,7 +182,10 @@ WINDOW = {
 MISSING = {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"}
 MARK = "adapter --result-dir {results}/conc_8 --concurrency 8 --write-multinode-window"
 OFFSET = "agentic_power_timezone_offset.txt"
-REPLAYED = {"benchmark.log", "benchmark_command.txt"}
+REPLAYED = {
+    "benchmark.log", "benchmark_command.txt",
+    "aiperf_artifacts/profile_export.jsonl", "aiperf_artifacts/profile_export_aiperf.json",
+}
 
 
 def test_single_node_native_power_records_windows_without_local_sampler(tmp_path):
@@ -187,9 +196,25 @@ def test_single_node_native_power_records_windows_without_local_sampler(tmp_path
     mark = f"adapter --result-dir {results} --concurrency 8 --write-multinode-window"
     assert _events(tmp_path) == [
         f"{mark} running", "replay", "aggregate agentx", f"{mark} completed",
-        "analyze", "validate",
+        "analyze",
     ]
     assert not (results / "gpu_metrics.csv").exists()
+
+
+def test_replay_attempts_get_distinct_outcomes_even_with_a_reused_output_path(tmp_path):
+    env = _point(tmp_path, AGENTIC_ATTEMPT_ID="old-attempt")
+    runtime = _runtime(tmp_path)
+    plan = Plan.from_env(env)
+    output = tmp_path / "agentx.json"
+
+    assert execute(plan, runtime, env) == 0
+    first = json.loads(output.read_text())["benchmark_outcome"]
+    assert execute(plan, runtime, env) == 0
+    second = json.loads(output.read_text())["benchmark_outcome"]
+
+    assert first["status"] == second["status"] == "passed"
+    assert first["attempt_id"] != second["attempt_id"]
+    assert "old-attempt" not in (first["attempt_id"], second["attempt_id"])
 
 
 @pytest.mark.parametrize(
@@ -198,15 +223,16 @@ def test_single_node_native_power_records_windows_without_local_sampler(tmp_path
         pytest.param(
             {},
             0,
-            ["replay", "aggregate agentx", "analyze", "validate"],
+            ["replay", "aggregate agentx", "analyze"],
             REPLAYED,
             id="power-off",
         ),
         pytest.param(
             {**WINDOW, "ENABLE_AGENTX_POWER": "0", "KV_OFFLOADING": "dram",
-             "KV_OFFLOAD_BACKEND": "lmcache", "TOTAL_CPU_DRAM_GB": "2400"},
+             "KV_OFFLOAD_BACKEND": "lmcache", "TOTAL_CPU_DRAM_GB": "2400",
+             "KV_OFFLOAD_BACKEND_METADATA": '{"name":"lmcache","version":"test"}'},
             0,
-            ["replay", "aggregate agentx_conc8", "analyze", "validate"],
+            ["replay", "aggregate agentx_conc8", "analyze"],
             {f"conc_8/{name}" for name in REPLAYED},
             id="multi-node-opt-out",
         ),
@@ -216,7 +242,7 @@ def test_single_node_native_power_records_windows_without_local_sampler(tmp_path
             [
                 "replay", "aggregate agentx", "adapter --result-dir {results} --agg-result {out}/agentx.json"
                 " --multinode-contract-missing --require-power",
-                "analyze", "validate",
+                "analyze",
             ],
             REPLAYED,
             id="single-node-without-native-window",
@@ -225,14 +251,14 @@ def test_single_node_native_power_records_windows_without_local_sampler(tmp_path
             WINDOW,
             0,
             [f"{MARK} running", "replay", "aggregate agentx_conc8", f"{MARK} completed",
-             "analyze", "validate"],
+             "analyze"],
             {f"conc_8/{name}" for name in (OFFSET, *REPLAYED)},
             id="multi-node-window",
         ),
         pytest.param(
             {**WINDOW, "REPLAY_RC": "143"},
             143,
-            [f"{MARK} running", "replay", "aggregate agentx_conc8", "analyze", "validate"],
+            [f"{MARK} running", "replay", "aggregate agentx_conc8", "analyze"],
             {f"conc_8/{name}" for name in (OFFSET, *REPLAYED)},
             id="failed-replay-leaves-the-window-running",
         ),
@@ -249,7 +275,7 @@ def test_single_node_native_power_records_windows_without_local_sampler(tmp_path
             [
                 "replay", "aggregate agentx_conc8", "adapter --result-dir {results}/conc_8 --agg-result {out}/agentx_conc8.json"
                 " --multinode-contract-missing",
-                "analyze", "validate",
+                "analyze",
             ],
             {f"conc_8/{name}" for name in REPLAYED},
             id="multi-node-without-window",
@@ -272,8 +298,8 @@ def test_point_shape_decides_the_steps_status_and_artifacts(tmp_path, overrides,
     ("replay", "aggregate", "validate", "power", "expected"),
     [
         ("7", "1", "3", "5", 7),
-        ("0", "2", "3", "5", 2),
-        ("0", "0", "3", "5", 3),
+        ("0", "1", "3", "5", 1),
+        ("0", "0", "3", "5", 1),
         ("0", "0", "0", "5", 5),
     ],
 )
@@ -291,7 +317,7 @@ def test_every_step_runs_and_the_first_failure_in_precedence_wins(
 
     assert rc == expected
     assert [event.split()[0] for event in _events(tmp_path)] == [
-        "replay", "aggregate", "adapter", "analyze", "validate",
+        "replay", "aggregate", "adapter", "analyze",
     ]  # fmt: skip
 
 

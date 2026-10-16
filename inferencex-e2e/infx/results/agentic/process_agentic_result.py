@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from infx.results.agentic import build_result
 from infx.results.agentic.common import round_floats
+from infx.results.power.common import _write_json_atomic
 
 from .artifacts import (
     find_server_log_paths,
@@ -56,9 +57,18 @@ def main() -> int:
     )
 
     output_path = output_dir / f"{result_filename}.json"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(agg, f, indent=2)
+    agg["benchmark_outcome"] = {
+        "status": "failed",
+        "finalized": False,
+        "attempt_id": os.environ.get("AGENTIC_ATTEMPT_ID") or str(uuid4()),
+        "result_filename": output_path.name,
+        "provenance": {
+            key.lower(): os.environ[key]
+            for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_JOB", "SLURM_JOB_ID")
+            if os.environ.get(key)
+        },
+    }
+    _write_json_atomic(output_path, agg)
 
     print(f"Saved aggregated agentic result to {output_path}")
     print(
