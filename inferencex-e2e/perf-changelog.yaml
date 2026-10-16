@@ -9921,6 +9921,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4146
 
 - config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Muse Spark Open B200 from TP4/EP4 to TP8/EP8 using the LMSYS AgentX recipe, with the same NVFP4 checkpoint, pinned SGLang image and DFlash2 draft."
+    - "Enable block verification and breakable prefill CUDA graphs; use mem-fraction-static 0.9, SWA/full ratio 0.4, admission 192 and decode graph batch 128."
+    - "Sweep concurrency 1, 2, 4, 8 and 12 with GPU-resident KV; enable layernorm SP, MegaMoE and HiCache at 16, 24, 32 and 48, with 120 GB per rank at 16 and 160 GB per rank at 24/32/48 so the DFlash2 draft host pool also fits in host DRAM."
+    - "Keep synthetic acceptance selected from the committed musespark_dflash golden curve for seven draft tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4155
+
+- config-keys:
     - musespark-fp4-gb300-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
