@@ -75,6 +75,7 @@ class Fields(Enum):
     ROUTER = "router"
     KV_P2P_TRANSFER = "kv-p2p-transfer"
     TOTAL_CPU_DRAM_GB = "total-cpu-dram-gb"
+    DECODE_CPU_DRAM_GB = "decode-cpu-dram-gb"
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
     DRAM_UTILIZATION = "dram-utilization"
     GPUS_PER_NODE = "gpus-per-node"
@@ -401,6 +402,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
+    decode_cpu_dram_gb: int = Field(default=0, alias=Fields.DECODE_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool

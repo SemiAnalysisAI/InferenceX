@@ -195,6 +195,8 @@ def build_result(
         "request_accounting": request_accounting,
     }
     agg.update(multinode_fields)
+    if agg["is_multinode"]:
+        agg["decode_allocated_cpu_dram_gb"] = _env_int(env, "DECODE_CPU_DRAM_GB", 0)
 
     router = _optional_component_metadata(env, "ROUTER_METADATA")
     if router is not None:

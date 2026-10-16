@@ -2832,10 +2832,9 @@ class TestAgenticGeneration:
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
         assert result[0]["total-cpu-dram-gb"] == 2399
 
-    def test_multinode_agentic_budget_ignores_decode_topology(
+    def test_multinode_agentic_budgets_each_role_from_its_own_gpus(
         self, sample_runner_config, generate_agentic_sweep
     ):
-        """Only prefill offloads today, so decode's topology does not shrink it."""
         config = {
             "dsv4-agentic-hicache-asym": {
                 "image": "sglang-rocm",
@@ -2866,6 +2865,7 @@ class TestAgenticGeneration:
 
         assert len(result) == 1
         assert result[0]["total-cpu-dram-gb"] == 2399
+        assert result[0]["decode-cpu-dram-gb"] == 1199
 
     def test_multinode_agentic_rejects_node_misaligned_prefill(
         self, sample_runner_config, generate_agentic_sweep

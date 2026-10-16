@@ -208,7 +208,9 @@ schema; unknown keys fail.
 - Matrix generation reads `gpus-per-node` and `available-cpu-dram-mib` from the cluster a
   master config's `cluster:<id>` label names; broad SKU labels use the GPU family when its
   clusters agree. Agentic master configs must use a `cluster:<id>` label; their DRAM
-  KV-offload matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`.
+  KV-offload matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`
+  (prefill or aggregate server) and `decode-cpu-dram-gb` (decode server), each sized from
+  that server's GPUs.
 - `available-cpu-dram-mib` is the host DRAM a benchmark job can use on a node: the lower of
   Slurm's `RealMemory - MemSpecLimit` and `MemTotal` less 16 GiB for the OS, over the
   cluster's GPU nodes; omit it where unmeasured. With `slurm.srt-slurm.single-node-exclusive`

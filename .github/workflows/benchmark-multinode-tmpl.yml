@@ -161,6 +161,7 @@ env:
   ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config)['kv-p2p-transfer'] || '' }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  DECODE_CPU_DRAM_GB: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config)['decode-cpu-dram-gb'] || '0' }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 

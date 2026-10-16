@@ -477,20 +477,10 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
 
 def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
-) -> int:
-    """Return the DRAM offload budget (GB) for one agentic server node.
-
-    The budget scales the node's (MAX-capped) available CPU DRAM by the
-    utilization and by the fraction of the node's GPUs in use:
-
-    * Single-node entries use the TP/PP/PCP topology, which must fit one node.
-    * Disaggregated multinode entries use the prefill worker's per-node GPU
-      footprint, since only prefill offloads KV to CPU DRAM today (decode can be
-      budgeted separately if it ever gains its own pool).
-    """
+) -> tuple[int, int]:
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
     if kv_offloading != "dram":
-        return 0
+        return 0, 0
 
     available_mib = min(
         runner_available_cpu_dram_mib(runner, runner_data),
@@ -499,24 +489,29 @@ def agentic_dram_offload_gb(
     utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
 
+    def share_gb(gpu_count: int) -> int:
+        proportional_bytes = (
+            Decimal(available_mib) * BYTES_PER_MIB * utilization * gpu_count / gpus_per_node
+        )
+        return int(proportional_bytes / BYTES_PER_GB)
+
     if Fields.WORKER.value in benchmark:
-        gpu_count = worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)
-    elif Fields.PREFILL.value in benchmark:
-        gpu_count = worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node)
-    else:
-        gpu_count = effective_gpu_count(benchmark)
-        if gpu_count > gpus_per_node:
-            raise ValueError(
-                f"tp={benchmark[Fields.TP.value]} with "
-                f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
-                f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
-                f"requires {gpu_count} GPUs and exceeds "
-                f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
-            )
-    proportional_bytes = (
-        Decimal(available_mib) * BYTES_PER_MIB * utilization * gpu_count / gpus_per_node
-    )
-    return int(proportional_bytes / BYTES_PER_GB)
+        return share_gb(worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)), 0
+    if Fields.PREFILL.value in benchmark:
+        return (
+            share_gb(worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node)),
+            share_gb(worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node)),
+        )
+    gpu_count = effective_gpu_count(benchmark)
+    if gpu_count > gpus_per_node:
+        raise ValueError(
+            f"tp={benchmark[Fields.TP.value]} with "
+            f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
+            f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
+            f"requires {gpu_count} GPUs and exceeds "
+            f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
+        )
+    return share_gb(gpu_count), 0
 
 
 def agentic_kv_offload_suffix(
@@ -1125,7 +1120,7 @@ def _agentic_entries(
         kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
     spec_decoding = benchmark.get(Fields.SPEC_DECODING.value, "none")
     kv_offload_backend = benchmark.get(Fields.KV_OFFLOAD_BACKEND.value)
-    total_cpu_dram_gb = agentic_dram_offload_gb(
+    total_cpu_dram_gb, decode_cpu_dram_gb = agentic_dram_offload_gb(
         scenario, benchmark, config[Fields.RUNNER.value], runner_data
     )
 
@@ -1206,6 +1201,7 @@ def _agentic_entries(
             }
         )
         if is_multinode:
+            entry[Fields.DECODE_CPU_DRAM_GB.value] = decode_cpu_dram_gb
             entry[Fields.DISAGG.value] = disagg
         entry[Fields.SCENARIO_TYPE.value] = "agentic-coding"
         if kv_offload_backend is not None:

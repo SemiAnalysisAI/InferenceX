@@ -71,6 +71,7 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         )
         if agentic:
             environment["CONC"] = str(point["conc"][0])
+            environment["DECODE_CPU_DRAM_GB"] = str(point.get("decode-cpu-dram-gb", 0))
         return environment
     return {
         **environment,
