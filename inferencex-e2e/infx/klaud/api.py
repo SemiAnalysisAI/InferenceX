@@ -270,23 +270,3 @@ def fetch_capacity(policy: Policy) -> set[str]:
         policy,
         datetime.now(UTC),
     )
-
-
-def capacity_context(policy: Policy) -> dict:
-    """Private routing hints for review, without node counts or raw responses."""
-    feed = fetch("scheduler", token=os.environ.get("KLAUD_DASHBOARD_API_KEY"))
-    available = available_clusters(feed, policy, datetime.now(UTC))
-    try:
-        clusters = sorted(
-            {
-                metric["clusterLabel"].removeprefix("cluster:")
-                for metric in feed.payload["data"]["snapshot"]["packingMetrics"]
-                if isinstance(metric["clusterLabel"], str)
-            }
-        )
-    except (KeyError, TypeError):
-        clusters = []
-    return {
-        "clusters": clusters,
-        "eligible-clusters": sorted(available),
-    }
