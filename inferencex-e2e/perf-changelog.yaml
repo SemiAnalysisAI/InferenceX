@@ -10034,3 +10034,12 @@
     - "TP4 c1 admits one request at a time, enables decoder SWA bounded replay and disables the prefill CUDA graph."
     - "Add DEP2 c160 with the c128 settings, a prefill-decode interval of 8, mem-fraction-static 0.85, 256 max running requests and a 128 decode graph batch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4033
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable SGLang HiCache CPU DRAM KV offloading above conc 8: the TP4/EP4 and TP8/EP8 conc 12 and 16 points add enable-hierarchical-cache with hicache-size 180 GB per rank and write_through (720 GB at TP4, 1.44 TB at TP8; dram-utilization 0.85), matching the GLM-5.2 MXFP4 MI355X SGLang sibling."
+    - "Conc 1, 4 and 8 stay GPU-resident with no KV offloading. Image, serve flags, DFlash2 draft and golden AL are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4201
