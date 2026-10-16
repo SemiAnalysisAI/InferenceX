@@ -11,7 +11,15 @@ from .backends.base import (
     apply_profile_totals,
     empty_server_metrics,
 )
+from .cache_validity import summarize_cache_validity
 from .common import index_server_metrics
+from .phase_validity import (
+    PhaseContext,
+    export_context,
+    phase_windows,
+    summarize,
+    warmup_totals,
+)
 from .request_metrics import extract_per_record_ints
 
 
@@ -89,11 +97,24 @@ def compute_server_metrics(
     endpoint_roles: Mapping[str, str] | None = None,
     request_scope: Mapping[str, Any] | None = None,
     deployment: Mapping[str, Any] | None = None,
+    disaggregated: bool | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     metrics = index_server_metrics(server_metrics)
     flat = SERVER_CACHE_FLAT_FIELDS.copy()
     warnings: list[str] = []
     nested = empty_server_metrics(bool(metrics), len(metrics))
+    windows = phase_windows(server_metrics)
+    exported = export_context(server_metrics, windows)
+    unscraped = exported["endpoints"]["unscraped"]
+    context = PhaseContext(
+        windows=windows,
+        warmup_totals=warmup_totals(server_metrics),
+        unscraped=None if unscraped is None else tuple(unscraped),
+        disaggregated=disaggregated,
+    )
+    nested["validity"].update(exported)
+    nested["validity"]["deployment"] = {"disaggregated": disaggregated}
+    nested["validity"].update(summarize(metrics, windows, context.warmup_totals))
     adapter = detect_backend(metrics, framework)
 
     if not metrics:
@@ -106,6 +127,7 @@ def compute_server_metrics(
         nested["tokens"]["prompt_total"] = flat["total_prompt_tokens"]
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
         nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
+        nested["cache_validity"] = summarize_cache_validity(nested)
         return flat, nested, warnings
 
     if adapter is None:
@@ -117,7 +139,7 @@ def compute_server_metrics(
     nested["adapter"] = adapter.name
     if getattr(adapter, "accepts_context", False):
         warmup = server_metrics.get("warmup_metrics")
-        context = {
+        adapter_context = {
             "framework": framework,
             "endpoint_roles": endpoint_roles,
             "profiling_window": _profiling_window(server_metrics),
@@ -126,9 +148,10 @@ def compute_server_metrics(
             **dict(deployment or {}),
             "warnings": warnings,
         }
-        adapter.populate(metrics, flat, nested, context=context)
+        adapter.populate(metrics, flat, nested, context=adapter_context)
     else:
         adapter.populate(metrics, flat, nested)
+    adapter.apply_validity(metrics, flat, nested, context)
 
     if framework.lower() == "dynamo-sglang" and adapter.name == "sglang":
         nested["kv_cache"]["gpu_total_tokens"] = None
@@ -147,4 +170,5 @@ def compute_server_metrics(
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
     nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
 
+    nested["cache_validity"] = summarize_cache_validity(nested)
     return flat, nested, warnings

@@ -491,3 +491,18 @@ def test_only_profiling_errors_from_the_loader_block_pricing(
     assert accounting["records_warmup_dropped"] == failed_phases.count("warmup")
     expected_categories = {"Timeout": len(failed_phases)} if failed_phases else {}
     assert accounting["error_categories"] == expected_categories
+
+
+def test_cache_validity_core_classifies_atom_states() -> None:
+    complete, _ = _run(_pd())
+    partial, _ = _run(_pd(offload=None), deployment={"disagg": True, "kv_offloading": "dram"})
+    refused, _ = _run(_pd(prefix_cache_cached_tokens=(0, 700, 600, 0)))
+
+    assert complete["cache_validity"]["status_class"] == "VALID_COMPLETE"
+    assert complete["cache_validity"]["published"] is True
+    assert complete["cache_validity"]["basis"] == "tiers"
+    assert partial["cache_validity"]["status_class"] == "PARTIAL"
+    assert partial["cache_validity"]["published"] is True
+    assert partial["cache_validity"]["pricing_eligible"] is False
+    assert refused["cache_validity"]["status_class"] == "INVALID"
+    assert refused["cache_validity"]["published"] is False

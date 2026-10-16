@@ -225,6 +225,7 @@ def build_result(
         endpoint_roles=endpoint_roles_from_env(env),
         request_scope=request_scope_from_records(records, request_accounting),
         deployment=deployment_from_env(env),
+        disaggregated=agg["disagg"] if env.get("DISAGG") not in (None, "") else None,
     )
 
     if "total_tput_tps" in request_flat and num_gpus > 0:
