@@ -9914,6 +9914,12 @@
     - "The checkpoint is served from the staged Lustre copy; the AgentX client reads its tokenizer from it."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4140
 
+- config-keys: [musespark-fp4-b300-sglang-agentic-dflash]
+  description:
+    - "Add Muse Spark Open NVFP4 SGLang DFlash2 AgentX on B300 at TP4/EP4 with GPU-resident KV and concurrency 1 to 128."
+    - "Use the committed golden curve for DFlash acceptance and the staged checkpoint for serving and tokenization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4146
+
 - config-keys:
     - musespark-fp4-h100-sglang-agentic-dflash
   scenario-type:
