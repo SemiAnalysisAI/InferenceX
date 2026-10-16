@@ -11,13 +11,19 @@ import re
 import secrets
 import shlex
 import subprocess
+import tempfile
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
 from .api import PUBLIC, ReadError, capacity_context, fetch_capacity, fetch_catalog
-from .github import VerificationError, items as github_items, read as github_read
+from .github import (
+    VerificationError,
+    download_json,
+    items as github_items,
+    read as github_read,
+)
 from .models import (
     CandidateOutcome,
     OwnedCandidate,
@@ -29,6 +35,7 @@ from .models import (
 )
 
 PRODUCERS = "producers.json"
+RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started"})
 
 
 def observation_key(row: dict) -> tuple:
@@ -152,8 +159,7 @@ def choose(
     return selected
 
 
-def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set[str]:
-    """Return same-base candidates recently given an agent, as a soft ordering hint."""
+def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str, str | None]:
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     try:
         runs = github_items(
@@ -163,38 +169,75 @@ def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set
         )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return set()
-    result = set()
+        return {}
+    dated = []
     for run in runs:
         try:
             created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
-            if created < cutoff or run.get("head_sha") != base:
-                continue
+            if created >= cutoff:
+                dated.append((created, int(run["id"])))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    result: dict[str, str | None] = {}
+    for _, run_id in sorted(dated, reverse=True):
+        try:
             artifacts = github_items(
-                repository, f"actions/runs/{int(run['id'])}/artifacts?per_page=100", "artifacts"
+                repository, f"actions/runs/{run_id}/artifacts?per_page=100", "artifacts"
             )
-        except (
-            AttributeError,
-            KeyError,
-            OSError,
-            TypeError,
-            ValueError,
-            subprocess.SubprocessError,
-        ):
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
             continue
         for artifact in artifacts:
             try:
                 match = re.fullmatch(
                     r"klaud-candidate-([0-9a-f]{16}-[0-9a-f]{16})", artifact["name"]
                 )
-                if match and not artifact.get("expired", True):
-                    result.add(match[1])
+                if not match or artifact.get("expired", True) or match[1] in result:
+                    continue
             except (AttributeError, KeyError, TypeError):
                 continue
+            result[match[1]] = recorded_outcome(repository, artifact)
     return result
 
 
-def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: int) -> None:
+def recorded_outcome(repository: str, artifact: dict) -> str | None:
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, artifact, Path(scratch))
+            diagnostics = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())
+            if diagnostics.get("action-outcome") == "skipped":
+                return "agent-not-started"
+            return CandidateOutcome.model_validate(diagnostics["candidate-outcome"]).outcome
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            subprocess.SubprocessError,
+        ):
+            return None
+
+
+def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
+    fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
+    deferred = [
+        candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
+    ]
+    return fresh + deferred
+
+
+def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
+    cutoff = now - timedelta(days=stale_days)
+    return [
+        pr
+        for pr in pulls
+        if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
+        or datetime.fromisoformat(pr["updated_at"].replace("Z", "+00:00")) >= cutoff
+    ]
+
+
+def plan(
+    root: Path, directory: Path, review_batch_size: int, cooldown_hours: int, stale_pr_days: int
+) -> None:
     from . import claims
 
     policy = Policy()
@@ -216,7 +259,7 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
         if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
     )
     capacity = capacity_context(policy)
-    available = set(capacity["eligible-telemetry-clusters"])
+    available = set(capacity["eligible-clusters"])
     candidates = choose(items, available, occupied, live_families(root))
     blocked = {
         candidate.family
@@ -227,10 +270,9 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    recent = recent_candidate_ids(repository, base, cooldown_hours)
-    candidates = [candidate for candidate in candidates if candidate["id"] not in recent] + [
-        candidate for candidate in candidates if candidate["id"] in recent
-    ]
+    candidates = order_by_cooldown(
+        candidates, recent_candidate_outcomes(repository, cooldown_hours)
+    )
     candidates = candidates[:review_batch_size]
     contexts = [
         {
@@ -256,8 +298,9 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
             "branch": pr["head"]["ref"],
             "head": pr["head"]["sha"],
         }
-        for page in pulls
-        for pr in page
+        for pr in active_pulls(
+            [pr for page in pulls for pr in page], datetime.now(UTC), stale_pr_days
+        )
     ]
     if candidates:
         for pr in open_prs:
@@ -619,6 +662,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             deferred = "capacity-unavailable"
     capacity_deferred = []
     baseline_deferred = []
+    baseline_reasons: dict[str, str] = {}
     baseline_mismatches = []
     preflights = {}
     families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
@@ -626,7 +670,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        if not set(decision.telemetry_clusters) <= available:
+        if not set(decision.clusters) <= available:
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(
@@ -657,16 +701,24 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 ),
                 baseline,
             )
-        except VerificationError:
+        except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = str(error)
             families.add(decision.family)
             continue
-        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, ReadError):
+        except subprocess.SubprocessError as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = type(error).__name__
+            families.add(decision.family)
+            continue
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = f"{type(error).__name__}: {str(error)[:300]}"
             families.add(decision.family)
             continue
         if missing:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = "baseline-point-mismatch"
             baseline_mismatches.append(
                 {
                     "id": candidate["id"],
@@ -716,6 +768,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 "deferred-reason": deferred,
                 "capacity-deferred-candidates": capacity_deferred,
                 "baseline-deferred-candidates": baseline_deferred,
+                "baseline-deferral-reasons": baseline_reasons,
                 "baseline-mismatch-candidates": baseline_mismatches,
                 **review.model_dump(by_alias=True),
             },
@@ -736,7 +789,13 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
         )
     if baseline_deferred:
-        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline."
+        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (
+            "; ".join(
+                f"{count}× {reason[:120]}"
+                for reason, count in Counter(baseline_reasons.values()).most_common()
+            )
+            + "."
+        )
     if baseline_mismatches:
         summary += (
             f" {len(baseline_mismatches)} of them have frozen baseline points"
@@ -781,7 +840,13 @@ def main() -> int:
         "--cooldown-hours",
         type=int,
         required=True,
-        help="Soft same-base candidate cooldown before review (1-168)",
+        help="Hours a recently attempted candidate waits before another agent (1-168)",
+    )
+    prepare.add_argument(
+        "--stale-pr-days",
+        type=int,
+        required=True,
+        help="Days without activity after which another open PR stops owning a family (1-90)",
     )
     regeneration = commands.add_parser(
         "regenerate-producers",
@@ -805,13 +870,13 @@ def main() -> int:
     )
     capacity = commands.add_parser(
         "check-capacity",
-        help="Exit 0 with available nodes below 80%% utilization; otherwise nonzero, without printing telemetry",
+        help="Exit 0 when running plus queued nodes are at most 200%% of schedulable nodes; otherwise nonzero, without printing scheduler data",
     )
     capacity.add_argument(
         "--cluster",
         required=True,
         action="append",
-        help="Exact telemetry cluster; repeat for every possible recipe target",
+        help="Exact cluster name from runners.yaml without the cluster: prefix; repeat for every possible recipe target",
     )
     commands.add_parser(
         "check-stop",
@@ -969,7 +1034,15 @@ def main() -> int:
                 parser.error("--review-batch-size must be between 1 and 256")
             if not 1 <= args.cooldown_hours <= 168:
                 parser.error("--cooldown-hours must be between 1 and 168")
-            plan(args.root, args.directory, args.review_batch_size, args.cooldown_hours)
+            if not 1 <= args.stale_pr_days <= 90:
+                parser.error("--stale-pr-days must be between 1 and 90")
+            plan(
+                args.root,
+                args.directory,
+                args.review_batch_size,
+                args.cooldown_hours,
+                args.stale_pr_days,
+            )
             return 0
         if args.command == "regenerate-producers":
             regenerate_producers(args.directory)

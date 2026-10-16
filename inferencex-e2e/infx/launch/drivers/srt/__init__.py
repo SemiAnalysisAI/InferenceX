@@ -59,7 +59,10 @@ def run_single_node(launch: Launch) -> int:
     root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
     checkout = prepare_checkout(run, root / "checkout", power=not request.eval_only)
     install_srtctl(run, checkout)
-    if (options := config.srun_options(run.backend.settings)) is not None:
+    step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
+    if run.srt.single_node_exclusive and job_mib is not None:
+        step_mib, job_mib = None, 0
+    if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
         run.env["SRT_SRUN_OPTIONS"] = options
     if rc := submit.bind_point(run, checkout, root / "arguments"):
         return rc
@@ -80,6 +83,7 @@ def run_single_node(launch: Launch) -> int:
         mounts=[(str(hf_cache), request.hf_hub_cache)],
         single_node=True,
         account=run.account,
+        mem_mib=job_mib,
     )
     config.create_volume_mounts(run)
     config.write(checkout.root / "srtslurm.yaml", config.render(run.cluster, job_config))

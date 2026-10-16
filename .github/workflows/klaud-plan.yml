@@ -4,7 +4,7 @@ name: Klaud Cold auto-sweep
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */2 * * *'
 
 permissions:
   contents: read
@@ -81,9 +81,9 @@ jobs:
       actions: read # Read workflow runs and artifacts.
       pull-requests: read # Read PR metadata.
     env:
-      # Bound one semantic-overlap review; recently attempted same-base candidates sort last.
       REVIEW_BATCH_SIZE: '64'
       CANDIDATE_COOLDOWN_HOURS: '24'
+      STALE_PR_DAYS: '7'
     outputs:
       review: ${{ steps.review.outputs.structured_output }}
       outcome: ${{ steps.review.outcome }}
@@ -122,6 +122,7 @@ jobs:
           --directory "$RUNNER_TEMP/klaud"
           --review-batch-size "$REVIEW_BATCH_SIZE"
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
+          --stale-pr-days "$STALE_PR_DAYS"
       # Uploaded before the agent runs, so selection reads the planner's files, not agent-touched ones.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -135,9 +136,14 @@ jobs:
         id: claude_cli
         if: steps.prepare.outputs.has_candidates == 'true'
         run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
-          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
           claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
-          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
+          for attempt in 1 2; do
+            rm -rf "$RUNNER_TEMP/claude-code"
+            npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282 &&
+              [ "$("$claude_cli" --version 2>&1)" = "2.1.282 (Claude Code)" ] && break
+            [ "$attempt" = 2 ] && exit 1
+            sleep 15
+          done
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Check for overlapping open PRs
         id: review
@@ -163,8 +169,9 @@ jobs:
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
           prompt: |
             Use Read on candidates.json, open-prs.json and capacity.json under ${{ runner.temp }}/klaud/.
-            Review candidates in the supplied shuffled order against current recipes and the complete open-PR index,
-            including drafts and arbitrary branches. Changed-file paths are already fetched;
+            Review candidates in the supplied shuffled order against current recipes and the open-PR index,
+            including drafts and arbitrary branches. The index omits PRs idle for ${{ env.STALE_PR_DAYS }} days
+            (other than Klaud candidate PRs); those no longer own any family. Changed-file paths are already fetched;
             inspect relevant PR bodies/diffs with direct gh pr view/diff commands. For API reads,
             use gh api --method GET. Use Read/Glob/Grep for local inspection, not shell file commands
             or Python. Run one allowed gh/git command per Bash call, without cd/env wrappers,
@@ -179,15 +186,18 @@ jobs:
             Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
             a different family. For every proceed decision, resolve baseline-model to the exact display
             model accepted by the public benchmark API using the supplied OpenAPI schema.
-            Resolve ALL possible target clusters from its runner and inferencex-e2e/configs/runners.yaml to the
-            exact IDs in capacity.json. Same-hardware sibling clusters cannot stand in for the
-            recipe's target. Proceed only if every target is in eligible-telemetry-clusters;
+            Resolve ALL possible target clusters from its runner and inferencex-e2e/configs/runners.yaml
+            (cluster:NAME labels, written as NAME) to the exact IDs in capacity.json. Same-hardware sibling
+            clusters cannot stand in for the recipe's target. Proceed only if every target is in eligible-clusters;
             unproven mappings or unavailable targets mean uncertain. Continue to later candidates
             to fill the cap. Never copy private eligibility data into reasons or reports.
             Mark duplicate when an open PR owns that family's image refresh or overlapping
             compatibility work, even with another image tag; unrelated work on the same hardware
-            is not a duplicate. Return the supplied schema: candidate-id, decision
-            (proceed/duplicate/uncertain), family (null if unresolved), telemetry-clusters (exact
+            is not a duplicate. A cross-cutting PR (launcher, telemetry, refactor or shared-schema
+            work spanning many families) is a duplicate only if its diff changes this family's
+            image or the exact engine flags/environment a refresh edits; touching the same recipe
+            file for unrelated settings is not overlap. Return the supplied schema: candidate-id, decision
+            (proceed/duplicate/uncertain), family (null if unresolved), clusters (exact
             target IDs, empty if unresolved), pull-requests (overlapping
             PR numbers), baseline-model (required for proceed; otherwise null), reason (brief evidence).
             Missing evidence or ambiguity means uncertain.
