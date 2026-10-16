@@ -10057,21 +10057,5 @@
     - qwen3.5-fp8-h200-sglang
     - qwen3.5-fp8-h200-sglang-mtp
   description:
-    - "Require validated GPU power for the retained Qwen3.5 H200 FP8 8k1k points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3172
-
-- config-keys:
-    - qwen3.5-fp8-h200-sglang
-  scenario-type:
-    - fixed-seq-len
-  description:
-    - "Extend Qwen3.5 H200 FP8 STP coverage to c1-c128 while retaining required power and existing MTP coverage."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3172
-
-- config-keys:
-    - qwen3.5-fp8-h200-sglang
-  scenario-type:
-    - fixed-seq-len
-  description:
-    - "Add c1, c2, and c128 to the Qwen3.5 H200 FP8 STP zip_override_concurrency lists so they match the changelog-selected c1-c128 matrix (canary is c1)."
+    - "Extend Qwen3.5 H200 FP8 STP 8k1k coverage from c4-c64 to c1-c128 in nvidia-master.yaml and the matching srt-slurm zip_override_concurrency lists, and re-measure the existing MTP c4-c128 points. The reused sweep measured and validated GPU power at every point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3172
