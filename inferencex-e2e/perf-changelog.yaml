@@ -10013,3 +10013,24 @@
     - "Add a HiCache host-DRAM KV offload arm at concurrency 2, 4 and 8 with 160 GB per rank, alongside the GPU-resident sweep; the few-GB GPU KV pool left by 67 GB of weights per H100 evicts agentic prefixes between turns."
     - "Keep the batch-8 cap on running requests and decode graphs from the GPU-resident sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4181
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX c5120 (8P1D) and c6656 (10P1D) points using the agentx-harness 1.0.10 release already pinned on main."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4126
+  append-only: true
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump the image to lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a, which ships the fastokens tokenizer and decoder SWA bounded replay with DP attention."
+    - "Use tokenizer-backend fastokens on every point except DEP2 c160, which keeps the HuggingFace tokenizer."
+    - "Enable decoder SWA bounded replay on DEP2 c64 and c128."
+    - "TP4 c1 admits one request at a time, enables decoder SWA bounded replay and disables the prefill CUDA graph."
+    - "Add DEP2 c160 with the c128 settings, a prefill-decode interval of 8, mem-fraction-static 0.85, 256 max running requests and a 128 decode graph batch."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4033

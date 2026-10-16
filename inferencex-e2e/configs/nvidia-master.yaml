@@ -8946,7 +8946,7 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261012-e6072935@sha256:b5c488694d74c13587af6057b90220498c4869571c8e1e3c43dd6f43ae721306
+  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -8959,7 +8959,7 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 2, ep: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32], srt-recipe: agentic.yaml }
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 160], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 16], srt-recipe: agentic.yaml }
 dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-20260928-81f27fb3@sha256:d9e4917808cfaa4b3be033a0c85a3a73d71eb93c17accbfa2ac3e96f551f3a33
@@ -9179,6 +9179,36 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
         conc-list: [4096]
         prefill:
           num-worker: 8
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep2_dep16_c5120
+        conc-list: [5120]
+        prefill:
+          num-worker: 8
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_10p1d_dep2_dep16_c6656
+        conc-list: [6656]
+        prefill:
+          num-worker: 10
           tp: 2
           ep: 2
           dp-attn: true

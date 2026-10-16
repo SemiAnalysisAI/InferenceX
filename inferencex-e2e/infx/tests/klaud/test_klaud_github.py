@@ -11,7 +11,7 @@ import yaml
 
 from infx.klaud import __main__ as klaud
 from infx.klaud import api, claims, github, lifecycle, reporting, validation
-from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, identity
+from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, Ownership, identity
 from infx.tests.historical_revision import (
     FAMILY,
     KEY,
@@ -206,14 +206,15 @@ def test_finish_requires_specific_baseline_reason_before_touching_session(
 def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferrals(
     monkeypatch,
 ):
-    blocked, deferred, unreadable, superseded, untried = (
-        f"{digit * 16}-{digit * 16}" for digit in "12345"
+    blocked, deferred, unreadable, superseded, untried, not_started = (
+        f"{digit * 16}-{digit * 16}" for digit in "123456"
     )
     outcomes = {
         1: ("readiness-blocked", "targeted"),
         2: ("capacity-deferred", "targeted"),
         4: ("capacity-deferred", "targeted"),
         5: ("failed", "targeted"),
+        7: ("unexpected-error", "unknown"),
     }
 
     def items(_repository, path, key):
@@ -225,7 +226,7 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
             ]
         run_artifacts = {
             41: [(1, blocked), (3, unreadable), (5, superseded)],
-            42: [(2, deferred), (4, superseded)],
+            42: [(2, deferred), (4, superseded), (7, not_started)],
             40: [(6, untried)],
         }
         run_id = int(path.split("/")[2])
@@ -240,9 +241,10 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
         outcome, phase = outcomes[artifact["id"]]
         record = {"outcome": outcome, "phase": phase, "pull-request": None, "run-ids": [],
                   "repairs-used": 0}
-        (destination / "candidate-diagnostics.json").write_text(
-            json.dumps({"candidate-outcome": record})
-        )
+        diagnostics = {"candidate-outcome": record}
+        if phase == "unknown":
+            diagnostics["action-outcome"] = "skipped"
+        (destination / "candidate-diagnostics.json").write_text(json.dumps(diagnostics))
 
     monkeypatch.setattr(klaud, "github_items", items)
     monkeypatch.setattr(klaud, "download_json", download)
@@ -253,11 +255,12 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
         unreadable: None,
         deferred: "capacity-deferred",
         superseded: "capacity-deferred",
+        not_started: "agent-not-started",
     }
     candidates = [{"id": candidate} for candidate in (deferred, blocked, untried, unreadable,
-                                                      superseded)]
+                                                      superseded, not_started)]
     assert [candidate["id"] for candidate in klaud.order_by_cooldown(candidates, recent)] == [
-        untried, deferred, superseded]
+        untried, deferred, superseded, not_started]
 
 
 def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
@@ -304,6 +307,97 @@ def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
     assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
     pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
     assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
+
+
+@pytest.mark.parametrize("other_recovery", ["in_progress", "completed"])
+def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
+    monkeypatch, other_recovery
+):
+    names = ["dead", "session", "sweeping", "handoff", "human", "ready", "leftover",
+             "closed-by-human", "stale-claim", "live-claim"]  # fmt: skip
+    ids = {name: f"{digit * 16}-{digit * 16}" for name, digit in zip(names, "123456789a")}
+
+    def pull(name, number, *, draft=True, labels=()):
+        return {
+            "number": number, "draft": draft, "user": {"login": "Klaud-Cold"},
+            "head": {"ref": f"klaud/auto-{ids[name]}", "repo": {"full_name": "example/project"}},
+            "labels": [{"name": label} for label in labels], "created_at": "2026-10-15T00:00:00Z",
+            "merged_at": None,
+        }  # fmt: skip
+
+    open_pulls = [
+        pull("dead", 1), pull("session", 2), pull("sweeping", 3),
+        pull("handoff", 4, labels=["klaud-handoff"]), pull("human", 5), pull("ready", 6, draft=False),
+    ]  # fmt: skip
+    closed = {"leftover": (7, "Klaud-Cold"), "closed-by-human": (8, "maintainer")}
+    smoke = {"dead": 501, "handoff": 502}
+
+    def items(_repository, path, _key=None):
+        if path.startswith("actions/workflows/e2e-tests.yml/runs?status=queued"):
+            return [{"id": run, "display_title": f"e2e Test - klaud-99-{ids[name]}",
+                     "actor": {"login": "Klaud-Cold"}} for name, run in smoke.items()]
+        if path.startswith("actions/workflows/run-sweep.yml/runs?status=in_progress"):
+            return [{"head_branch": f"klaud/auto-{ids['sweeping']}"}]
+        if path.startswith("actions/workflows/klaud-plan.yml/runs?status=in_progress"):
+            return [{"id": 77}]
+        if path.startswith("actions/runs/77/jobs"):
+            return [{"name": f"Run candidate {ids['session']} / Klaud Cold"},
+                    {"name": "Reconcile interrupted candidates", "status": other_recovery}]
+        if path.startswith("actions/workflows/"):
+            return []
+        if path.startswith("pulls?state=open"):
+            return open_pulls
+        if path.startswith("pulls?state=all"):
+            name = next(name for name, value in ids.items() if path.endswith(
+                f"klaud%2Fauto-{value}&per_page=100"))
+            return [pull(name, closed[name][0])]
+        if path.startswith("pulls/"):
+            author = "maintainer" if path.startswith("pulls/5/") else "github-actions[bot]"
+            return [{"committer": {"login": author}}]
+        if path == "git/matching-refs/heads/klaud/auto-":
+            return [{"ref": f"refs/heads/klaud/auto-{ids[name]}", "object": {"sha": name}}
+                    for name in ("dead", "session", "leftover", "closed-by-human")]
+        if path == "git/matching-refs/heads/klaud/recovery-":
+            return [{"ref": f"refs/heads/klaud/recovery-{parent}-{ids[name]}"}
+                    for parent, name in ((1, "dead"), (1, "session"), (2, "leftover"))]
+        raise AssertionError(path)
+
+    def read(_repository, path):
+        if path.startswith("actions/runs/"):
+            active = path == "actions/runs/2"
+            return {"status": "in_progress" if active else "completed",
+                    "conclusion": None if active else "cancelled"}
+        number = int(path.split("/")[1])
+        return {"closed_by": {"login": next(c for n, c in closed.values() if n == number)}}
+
+    writes, released = [], []
+    monkeypatch.setenv("GITHUB_RUN_ID", "1000")
+    monkeypatch.setattr(github, "items", items)
+    monkeypatch.setattr(github, "read", read)
+    monkeypatch.setattr(github, "write", lambda _r, path, method, _p=None: writes.append(
+        (method, path)))
+    monkeypatch.setattr(claims, "family_owners", lambda _r: [
+        Ownership(run_id=run, candidates=[OwnedCandidate(
+            id=ids[name], family=f"configs/nvidia-master.yaml:{name}", base="a" * 40)])
+        for name, run in (("stale-claim", 1), ("live-claim", 2))
+    ])
+    monkeypatch.setattr(claims, "release_family", lambda _r, candidate, run: released.append(
+        (candidate.id, run)))
+
+    live = lifecycle.sweep_abandoned("example/project", set())
+
+    assert live == {ids[name] for name in
+                    ("session", "sweeping", "handoff", "human", "ready")}
+    assert released == [(ids["stale-claim"], 1)]
+    assert writes == [
+        ("POST", "actions/runs/501/cancel"),
+        *([("DELETE", f"git/refs/heads/klaud/recovery-1-{ids['dead']}")]
+          if other_recovery == "completed" else []),
+        ("POST", "issues/1/comments"),
+        ("PATCH", "pulls/1"),
+        ("DELETE", f"git/refs/heads/klaud/auto-{ids['dead']}"),
+        ("DELETE", f"git/refs/heads/klaud/auto-{ids['leftover']}"),
+    ]
 
 
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
@@ -362,6 +456,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     selection = json.loads((tmp_path / "selection.json").read_text())
     assert selection["candidates"] == [second_id]
     assert selection["baseline-deferred-candidates"] == [first_id]
+    assert selection["baseline-deferral-reasons"] == {first_id: "OSError: transient"}
     assert selection["deferred-reason"] is None
     preflight = reporting.BaselinePreflight.model_validate_json(
         (tmp_path / second_id / "baseline-preflight.json").read_text()
@@ -573,6 +668,40 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             reporting.Prose(en="Update the image.", zh="更新镜像。"),
             producers,
         )
+
+
+@pytest.mark.parametrize("disagg, workers, published, matches", [
+    (False, 1, (True, 1, 1, 8), True),
+    (False, 1, (False, 0, 0, 8), True),
+    (False, 2, (True, 2, 2, 8), True),
+    (False, 2, (False, 0, 0, 8), False),
+    (False, 1, (True, 1, 0, 8), False),
+    (True, 1, (True, 1, 1, 8), True),
+    (True, 1, (False, 0, 0, 8), False),
+])  # fmt: skip
+def test_multinode_identity_matches_published_aggregate_encodings(
+    disagg, workers, published, matches
+):
+    entry = {
+        "model-prefix": "dsv4", "runner": "cluster:b200-nscale", "framework": "dynamo-sglang",
+        "precision": "fp4", "spec-decoding": "mtp", "disagg": disagg,
+        "scenario-type": "agentic-coding", "kv-offloading": "dram", "conc": 4,
+        "image": "example/image:1",
+        "prefill": {"num-worker": workers, "tp": 8, "ep": 1, "dp-attn": False},
+        "decode": {"num-worker": int(disagg), "tp": 8 if disagg else 4, "ep": 1, "dp-attn": False},
+    }
+    multinode, prefill_workers, decode_workers, decode_tp = published
+    row = {
+        "model": "dsv4", "hardware": "b200", "framework": "dynamo-sglang", "precision": "fp4",
+        "spec_method": "mtp", "disagg": disagg, "is_multinode": multinode,
+        "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "on",
+        "conc": 4, "image": "example/image:1", "prefill_tp": 8, "prefill_ep": 1,
+        "prefill_dp_attention": False, "prefill_num_workers": prefill_workers,
+        "decode_tp": decode_tp, "decode_ep": 1, "decode_dp_attention": False,
+        "decode_num_workers": decode_workers,
+    }  # fmt: skip
+
+    assert reporting._matches_public_point(row, reporting.public_point(entry)) is matches
 
 
 @pytest.fixture
@@ -1166,6 +1295,30 @@ def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_pat
     with pytest.raises(validation.ProducerRegenerationError) as failure:
         validation.producer_matrix("example/project", "f" * 40, FAMILY)
     assert f"not our ref {'f' * 40}" in failure.value.stderr
+
+
+def test_producer_predating_no_evals_regenerates_throughput_rows(tmp_path, monkeypatch):
+    from infx.tests.historical_revision import GENERATOR
+
+    commit_history(tmp_path)
+    legacy = GENERATOR.replace(
+        '    parser.add_argument("--no-evals", action="store_true")\n', ""
+    ).replace(
+        "    return result\n",
+        "    result[0] = {**result[0], \"run-eval\": True}\n"
+        "    return result + [{**result[0], \"eval-only\": True, \"run-eval\": True}]\n",
+    )
+    (tmp_path / "infx/matrix/generate.py").write_text(legacy)
+    subprocess.run(["git", "commit", "-qam", "generator without --no-evals"], cwd=tmp_path, check=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    monkeypatch.chdir(tmp_path)
+
+    rows = validation.producer_matrix("example/project", head, FAMILY)["single_node"]["all"]
+
+    assert [(row["conc"], row["run-eval"], row.get("eval-only")) for row in rows] == [
+        (2, False, None), (6, False, None)]
 
 
 def test_failing_producer_keeps_its_stderr_and_never_sees_credentials(tmp_path, monkeypatch):
