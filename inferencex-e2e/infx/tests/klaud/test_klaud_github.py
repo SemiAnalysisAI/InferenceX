@@ -309,6 +309,38 @@ def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
     assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
 
 
+@pytest.mark.parametrize(("run_status", "reconcile_status", "taken"), [
+    ("completed", None, True),
+    ("in_progress", "completed", True),
+    ("in_progress", "in_progress", False),
+    ("in_progress", None, False),
+])  # fmt: skip
+def test_recovery_lease_frees_once_the_holders_reconcile_job_ends(
+    monkeypatch, run_status, reconcile_status, taken
+):
+    monkeypatch.setenv("GITHUB_RUN_ID", "200")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    monkeypatch.setattr(claims, "ref", lambda _r, _name: {"object": {"sha": "b" * 40}})
+    monkeypatch.setattr(claims, "record", lambda _r, _value: {"run-id": 100, "run-attempt": 2})
+    monkeypatch.setattr(github, "read", lambda _r, path: {
+        "path": ".github/workflows/klaud-plan.yml", "head_branch": "main", "status": run_status,
+        "conclusion": "success" if run_status == "completed" else None,
+    } if path == "actions/runs/100" else pytest.fail(path))
+    jobs = [{"name": "Run candidate x / Klaud Cold", "status": "completed"}] + (
+        [{"name": "Reconcile interrupted candidates", "status": reconcile_status}]
+        if reconcile_status else [])
+    monkeypatch.setattr(github, "items", lambda _r, path, _key=None: (
+        jobs if path == "actions/runs/100/attempts/2/jobs?per_page=100" else pytest.fail(path)))
+    created = []
+    monkeypatch.setattr(claims, "create", lambda _r, name, owner, _base, _previous: (
+        created.append((name, owner)) or True))
+    candidate = OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+
+    assert claims.recovery_lease("example/project", 42, candidate) is taken
+    assert created == ([(f"klaud/recovery-42-{CANDIDATE_ID}", {"run-id": 200, "run-attempt": 1})]
+                       if taken else [])
+
+
 @pytest.mark.parametrize("other_recovery", ["in_progress", "completed"])
 def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
     monkeypatch, other_recovery

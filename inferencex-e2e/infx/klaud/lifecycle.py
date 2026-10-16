@@ -20,7 +20,6 @@ BOT = "Klaud-Cold"
 COMMITTER = "github-actions[bot]"
 ACTIVE_STATUSES = ("requested", "waiting", "pending", "queued", "in_progress")
 CANDIDATE_ID = r"[0-9a-f]{16}-[0-9a-f]{16}"
-RECONCILE_JOB = "Reconcile interrupted candidates"
 SWEEP_LABELS = {
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
@@ -635,7 +634,7 @@ def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]], set
             ):
                 if match := re.search(rf"Run candidate ({CANDIDATE_ID})", job["name"]):
                     live.add(match[1])
-                elif job["name"] == RECONCILE_JOB and job["status"] != "completed":
+                elif job["name"] == claims.RECONCILE_JOB and job["status"] != "completed":
                     planners.add(run["id"])
     return live, targeted, planners
 
