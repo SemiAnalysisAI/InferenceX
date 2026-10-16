@@ -129,7 +129,7 @@ env:
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offload-backend && toJSON(fromJSON(inputs.config).kv-offload-backend) || '' }}
   ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config).kv-p2p-transfer || '' }}
-  TOTAL_CPU_DRAM_GB: ${{ inputs.scenario-type != 'agentic-coding' && '0' || fromJSON(inputs.config).total-cpu-dram-gb }}
+  TOTAL_CPU_DRAM_GB: ${{ fromJSON(inputs.config).total-cpu-dram-gb || '0' }}
   DURATION: ${{ inputs.duration }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
