@@ -8404,17 +8404,8 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
       # DEP4 is native TP1 x DP4 + EP4 with MegaMoE behind the same router.
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
-# SGLang arm for DeepSeek-V4.1-Flash AgentX on B200, from the SGLang cookbook
-# (https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1).
-# Latest CUDA 13 nightly verified 2026-09-21, pinned to its multi-arch digest.
-# Per-rank host Engram shards permit anonymous huge-page backing on this pool.
-# Native five-token DSpark (--speculative-algorithm DSPARK
-# --speculative-dspark-block-size 5), thinking on, golden AL 3.51 for
-# throughput, real verification for evals. The KV cache stays GPU-resident.
-# Follows the cookbook's verified Blackwell TP4/EP4 low-latency cell; backends
-# resolve automatically (dsv4 / flashinfer_mxfp4 / flashinfer_cutedsl).
 dsv41flash-fp4-b200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9@sha256:7cfd4dd8e0e902d2a3c0560565963c4e172091e1586aaed15ff5a0a131394d34
+  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b200-nscale
@@ -8426,8 +8417,9 @@ dsv41flash-fp4-b200-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [48, 128], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 24], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [48, 64, 96, 128, 192, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7
