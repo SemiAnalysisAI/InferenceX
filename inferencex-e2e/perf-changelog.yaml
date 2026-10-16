@@ -10034,3 +10034,12 @@
     - "TP4 c1 admits one request at a time, enables decoder SWA bounded replay and disables the prefill CUDA graph."
     - "Add DEP2 c160 with the c128 settings, a prefill-decode interval of 8, mem-fraction-static 0.85, 256 max running requests and a 128 decode graph batch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4033
+
+- config-keys:
+    - musespark-fp4-h200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (160 GB per rank, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
+    - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
