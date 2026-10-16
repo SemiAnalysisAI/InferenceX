@@ -10052,3 +10052,11 @@
     - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
     - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Require validated DCGM GPU power for every Qwen3.5 FP8 GB200 Dynamo SGLang 8k1k point, including 8P1D STP (power: true on the 8P1D row), and colocate etcd and nats on the head node for the supported telemetry clock."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3381

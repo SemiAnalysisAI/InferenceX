@@ -10,11 +10,11 @@ services:
   - name: etcd
     type: etcd
     placement:
-      node: dedicated
+      node: head
   - name: nats
     type: nats
     placement:
-      node: dedicated
+      node: head
 dynamo:
   install: true
 
