@@ -7,7 +7,7 @@ base:
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
     container: {}
     frameworks:
-      dynamo: 5c8b22b3d9b9e2fb19ba8a6ec862d8793e49e5f7
+      dynamo: b208989fbe1cfbfde64d11334d8af4ff04fe1a99
       sglang: 0.5.21
   resources:
     gpu_type: gb200
@@ -28,7 +28,7 @@ base:
   dynamo:
     install: true
     source:
-      rev: 5c8b22b3d9b9e2fb19ba8a6ec862d8793e49e5f7
+      rev: b208989fbe1cfbfde64d11334d8af4ff04fe1a99
   engine: sglang
   roles:
     prefill:
