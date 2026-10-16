@@ -1,8 +1,9 @@
 # CollectiveX Methodology in Brief
 
 What CollectiveX measures, how it measures it, and how to read the results.
-[methodology.md](methodology.md) holds the evidence and history behind each rule. Where the two
-disagree, the code in `collectivex/bench/` is authoritative.
+[methodology.md](methodology.md) holds the evidence behind each rule, and the
+[README](../README.md) holds usage and the coverage tables. Where the docs and the code in
+`collectivex/bench/` disagree, the code is authoritative.
 
 ## Scope
 
@@ -24,13 +25,13 @@ not rank or recommend.
   every engine's path, so only `--precisions fp8` runs it.
 - **Scale**: EP8 is one 8-GPU node (2x4 MNNVL on GB200/GB300). EP16 is 2x8 over RDMA on the x86 and
   AMD pools and 4x4 MNNVL on GB200/GB300, so GB EP16 stays scale-up.
-- **Coverage**: `configs/platform_config.json` says which backend runs where, and
-  `results/cases.json` lists every requested case, runnable or not.
+- **Coverage**: `configs/platform_config.json` says which backend runs where (the README's coverage
+  table), and `results/cases.json` lists every requested case, runnable or not.
 
 ## Backends run as engines run them
 
-Each backend runs the configuration its reference engine selects (vLLM for most, TensorRT-LLM for
-nccl-ep, SGLang for MoRI low-latency), not a common denominator, so a cross-backend comparison
+Each backend runs the configuration its reference engine selects (vLLM, and TensorRT-LLM for
+nccl-ep low-latency), not a common denominator, so a cross-backend comparison
 compares deployed contracts.
 
 | Backend | Maturity | Launch | Contract |
@@ -38,7 +39,7 @@ compares deployed contracts.
 | deepep-v2 | production | graph; normal prefill eager | vLLM's `deepep_v2` in both phases: overlap off (64 SMs), a single reduction, no CPU sync, receive sized to the next power of two of `T`. LL as vLLM's `deepep_low_latency`: send kernel plus receive hook, MNNVL on GB only, UE8M0 FP8 scales on Blackwell. The LL receive is fixed at 256, so LL stops at T=256. |
 | nccl-ep | production for LL rank-major BF16 (TensorRT-LLM's `NcclEP`); candidate otherwise | graph; HT prefill eager | LL runs TensorRT-LLM's configuration: rank-major, pre-reduced, one group sized to the ladder's top. Graphed dispatch stages, because TensorRT-LLM dispatches into a plain tensor under capture; eager dispatch is zero-copy inside one NVLink/MNNVL domain. HT is a library row: dispatch includes the per-step routing update, whose memsets, all-gather and scan are sized by the capacity (`-cap512` decode, `-cap8192` prefill), not by T. The communicator uses graph usage mode 1. FP8 (DS_FP8E3M4, LL decode) is off by default because no engine selects it. |
 | uccl-ep | candidate | normal eager (host-synced); LL graph | DeepEP's legacy API over CPU-proxy RDMA (proxies run only at b200 EP16), in vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`: `deepep_ht` launch configs at 20 SMs and 1 GiB buffers; LL called as deepep-v2's, with a 256-token receive. |
-| mori | production | graph decode; eager prefill | vLLM's MoRI configuration: IntraNode at 80 blocks, 16 warps (EP8), InterNodeV1 at 64/32/8 on STATIC_HEAP (EP16), external input buffer, one QP per PE. LL is SGLang's AsyncLL (64/32/8, 2 QPs per PE, `MORI_ENABLE_SDMA` on), driven split-phase. |
+| mori | production | graph decode; eager prefill | vLLM's MoRI configuration: IntraNode at 80 blocks, 16 warps (EP8), InterNodeV1 at 64/32/8 on STATIC_HEAP (EP16), external input buffer, one QP per PE. LL is vLLM's `mori_low_latency`: InterNodeV1LL at 64/32/8 on STATIC_HEAP, EP16 only (one node runs the normal rows' IntraNode). `MORI_ENABLE_SDMA` unset, as vLLM leaves it. |
 | flashinfer-ep | production | graph decode; eager prefill | GB200/GB300 only (one-sided MNNVL). vLLM's integration: combine stages a caller-owned payload (`payload_in_workspace=False`) into a caller-owned output. FP8 is DeepSeek blockwise, which vLLM selects from v0.29.0. `kernel_generation` carries the wheel version. |
 
 `production` means an engine can select the configuration today: vLLM or SGLang, or, for a library
@@ -53,8 +54,8 @@ Every window is a pair of CUDA events on the stream. Each point produces two fam
 
 **Fresh entry** times one drained call per sample for `roundtrip`, `dispatch` and `combine`: 256
 trials x 8 = 2048 samples. Each sample is reduced across ranks by MAX, because a layer finishes
-with its slowest rank. `cross_rank_min_us` (MIN) and `cross_rank_spread_us` (MAX - MIN) come from
-the same samples.
+with its slowest rank. `cross_rank_min_us` (MIN) and `cross_rank_spread_us` (roundtrip MAX - MIN)
+come from the same samples.
 
 **Chained** times dispatch-combine pairs issued back to back with no host sync, as a decode loop
 issues them: 4 trials x (128 pairs - 16 pipeline-fill pairs) = 448 pairs. Each trial runs two
@@ -96,13 +97,13 @@ with a 2 ms GPU spin, then a device all-reduce, with no host sync (DeepEP's `ben
   second speed.
 - **`combine`** is timed behind its own untimed dispatch, a fresh pair with the stage hoisted, in
   both regimes.
-- **Host-synced eager series** (uccl-ep normal, the only dispatch left that waits on the host) also
+- **Host-synced eager series** (uccl-ep normal, the only dispatch that waits on the host) also
   wait out a throttled host. A CPU probe holds the sample while the probe runs more than 2.5x slow,
   capped at 0.5 s per sample and 60 s per run. A probe more than 5x slow on either side of the
   window marks the sample **stalled**. Their untimed dispatch ahead of a timed `combine` runs
   before the alignment, so its wait cannot spend the spin. Their chain siblings are held the same
-  way and restart, on every rank together, when any host ran throttled (at most 3 times); a trial
-  still throttled publishes only its period p50.
+  way and restart, on every rank together, when any host ran throttled (at most 3 times); a point
+  with a trial still throttled after the last restart publishes only its period p50.
 
 **Order.** Each shape is warmed in ascending order (8 untimed round trips) and checked for
 correctness before any timing. Every measured component and chain trial follows 32 warmup pairs, and
@@ -114,14 +115,16 @@ component and ladder order rotate per trial.
   isolated-call latency.
 - **Fresh-entry tails**: every row, graphed or eager, withholds p99, p95 and p90 once misses plus
   stalls reach 1%, 5% and 10% of samples, and reports the counts in `rank_alignment`.
-- **Bandwidth** is wire payload bytes divided by latency.
+- **Bandwidth** is wire payload bytes divided by latency, derived by `bandwidth.py` and the
+  dashboard; rows carry the bytes, the latencies and a token rate.
   - `wire_byte_provenance` counts what the kernels move: one copy per (token, rank) for
     rank-deduplicated layouts, and one per (token, expert) for the LL kernels that weight inside
     combine.
   - Every FP8 codec adds per-128-value FP32 scales.
   - This is a logical payload rate, never physical link utilization.
-- **FP8 `stage`** stands in for the expert GEMM consuming FP8. It is timed separately and excluded
-  from `roundtrip` and `pair_period`. Do not sum it into a total or compare it across backends.
+- **FP8 `stage`** stands in for the expert GEMM consuming FP8. It is excluded from `roundtrip` and
+  `pair_period`, and timed separately on eager rows only. Do not sum it into a total or compare it
+  across backends.
 
 ## Correctness
 
@@ -134,12 +137,13 @@ Every row is gated. Any failed rank or point makes the case `invalid`.
 - **After the chain**, its last output must match a drained pair, and the full oracle reruns on the
   state the chain leaves. The last-output check is null where FP8 staging is hoisted out of the
   chain.
-- **The expected combine models each backend's reduction** (`combine_reduction`):
-  - FP32 inside a scale-up domain, with one BF16 cast per domain for scale-out;
-  - one BF16 row per destination rank, summed in FP32 at the source (deepep-v2, nccl-ep LL
-    rank-major);
-  - source-side gate weighting for LL;
-  - FlashInfer's BF16 tree before 0.6.16.
+- **The expected combine models each backend's reduction**:
+  - `domain-fp32`: FP32 inside a scale-up domain, with one BF16 cast per domain for scale-out;
+  - `rank-fp32`: one BF16 row per destination rank, summed in FP32 at the source (deepep-v2,
+    nccl-ep LL rank-major);
+  - `topk-slot-tree`: FlashInfer's BF16 tree before 0.6.16;
+  - source-side gate weighting for the weighted low-latency kernels (deepep-v2, uccl-ep, nccl-ep
+    expert-major), whose `combine_reduction` field the model ignores.
 
   FP8 is modelled by applying the backend's exact cast. The tolerance is 8 x 2^-8, relative.
 - **Graphed rows**: every timed capture's output is poisoned and must be rewritten by its replay.
@@ -149,11 +153,14 @@ Every row is gated. Any failed rank or point makes the case `invalid`.
 
 ## Reading results
 
-- **Rank on `pair_period` p50.** Each case is a single run, and run-to-run drift is about 2-6%, so a
-  smaller gap is not a result. For fresh-entry rows, call a winner only where MAX and MIN agree.
+- **Rank on `pair_period` p50.** Each case is a single run and run-to-run drift is not
+  characterized (before the host gate, host-synced uccl-ep EP16 periods moved 27-40% across nine
+  b200 runs), so treat a small gap as no result. For fresh-entry rows, call a winner only where MAX
+  and MIN agree.
 - **Do not rank multi-node decode on fresh-entry p99 of MAX.** Worst-rank stalls own that tail.
-- **Generations do not pool.** The move to each engine's configuration changed every backend's
-  `kernel_generation`; compare a row only with rows of the same generation.
+- **Generations do not pool.** `kernel_generation` names the kernel family, its configuration and the
+  graph or eager regime (plus capacity and wheel version where those change what a row measures);
+  rows of one backend pool only within one generation.
 - **Cross-backend rows compare contracts.**
   - nccl-ep's rank-major LL moves fewer bytes than the expert-major layout DeepEP and UCCL-EP use
     (27% fewer at b200 EP8, T=8).
@@ -182,5 +189,5 @@ Every row is gated. Any failed rank or point makes the case `invalid`.
 ## Provenance and publishing
 
 A result records its source SHA, image tag, library versions, `kernel_generation` and topology. Only
-clean checkouts publish. Committing `results/<sku>/<case_id>.json` to `main` publishes a result, and
-the test suite checks every committed result against `results/cases.json`.
+results measured from committed code publish, by a reviewed commit of `results/<sku>/<case_id>.json`
+to `main` ([README](../README.md#running-by-hand)).

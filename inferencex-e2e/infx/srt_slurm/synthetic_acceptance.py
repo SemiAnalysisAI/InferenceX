@@ -77,6 +77,16 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         algorithm = next(iter(algorithms), "")
         if not algorithm:
             return {}
+        if algorithm == "dflash":
+            # DFlash verifies a block of the current token plus its drafts.
+            width = args.get("speculative-num-draft-tokens")
+            return {
+                "method": "dflash",
+                "num_speculative_tokens": width - 1
+                if isinstance(width, int) and not isinstance(width, bool)
+                else None,
+                "model": args.get("speculative-draft-model-path", ""),
+            }
         return {
             "method": "dspark" if algorithm == "dspark" else algorithm,
             "num_speculative_tokens": args.get(

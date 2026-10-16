@@ -1,7 +1,6 @@
 """GPU clock telemetry: the vendor probes, the per-rank monitor and the published summary."""
 from __future__ import annotations
 
-import ctypes
 import math
 import sys
 import types
@@ -307,11 +306,6 @@ class NvmlProbe(unittest.TestCase):
         with mock.patch.object(gpu_clocks.ctypes, "CDLL", lambda name: _FakeNvmlLibrary(init_rc=9)), \
                 self.assertRaises(OSError):
             gpu_clocks._Nvml(self.cuda_torch("x"), "cuda:0")
-
-    def test_the_byref_out_parameter_is_the_object_passed(self):
-        # The fake library above relies on CPython exposing the referent of byref() as `_obj`.
-        value = ctypes.c_uint()
-        self.assertIs(ctypes.byref(value)._obj, value)
 
 
 class SummaryRender(unittest.TestCase):

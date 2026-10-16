@@ -57,9 +57,8 @@ BACKEND_PRECISIONS = {
 # reachable by naming the precision explicitly (`--precisions fp8`) for transport comparison.
 # TensorRT-LLM, the one engine with an NCCL EP selector, never asks NCCL EP to quantize: its NcclEP
 # sends DeepSeek-FP8 activations in BF16 (`uses_internal_fp8_dispatch = False`), so nccl-ep's
-# DS_FP8E3M4 row is the library's. FlashInfer FP8 left this list when vLLM v0.29.0 accepted
-# DeepSeek blockwise FP8 on the one-sided all-to-all. Declared here rather than on the adapter
-# because this generator must resolve the matrix with no vendor imports.
+# DS_FP8E3M4 row is the library's. Declared here rather than on the adapter because this
+# generator must resolve the matrix with no vendor imports.
 OFF_PATH_PRECISIONS = {"nccl-ep": ("fp8",)}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
@@ -191,7 +190,7 @@ def resolve_matrix(
     suites: str = "ep",
     swap_profile: str = "smoke",
 ) -> dict[str, Any]:
-    """Resolve the selected suites into allocation-sized workflow shards."""
+    """Resolve the selected suites into allocation-sized shards."""
     selected_suites = _comma_subset("suites", suites, SUITES)
     if not selected_suites:
         raise SystemExit("--suites selects no suite")
@@ -325,8 +324,6 @@ def resolve_matrix(
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
     for (sku, target, mode, nodes, precision), cases in sorted(shards.items()):
-        # Normal-mode shard IDs are unchanged (no mode segment) so existing references
-        # stay valid; a non-normal mode inserts a short slug (low-latency -> "ll").
         mode_segment = "" if mode == "normal" else f"-{_MODE_SLUG[mode]}"
         shards_by_sku.setdefault(sku, []).append(_shard(
             sku, f"{sku}-{target}{mode_segment}-{precision}-n{nodes}", target, cases, mode=mode,
