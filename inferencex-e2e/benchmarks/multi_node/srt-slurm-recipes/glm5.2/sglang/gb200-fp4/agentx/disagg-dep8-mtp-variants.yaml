@@ -79,7 +79,10 @@ base:
         dsa-prefill-backend: trtllm
         dsa-decode-backend: trtllm
         moe-runner-backend: flashinfer_cutlass
+        # v0.5.21 EP-all-reduces the DP-local FP4 all-gather output, crashing or hanging DP-idle ranks (sglang PR 41072).
+        disable-flashinfer-cutlass-moe-fp4-allgather: true
         fp4-gemm-backend: flashinfer_cutlass
+        enable-flashinfer-allreduce-fusion: true
         weight-loader-prefetch-checkpoints: true
         model-loader-extra-config: '{"enable_multithread_load": true}'
         mem-fraction-static: 0.8
