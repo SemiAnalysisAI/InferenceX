@@ -37,6 +37,8 @@ base:
         speculative-draft-attention-backend: fa4
         speculative-num-draft-tokens: 8
         mm-feature-transport: cpu
+        enable-hierarchical-cache: true
+        hicache-size: 120
         reasoning-parser: muse
         tool-call-parser: muse
         watchdog-timeout: 3600
