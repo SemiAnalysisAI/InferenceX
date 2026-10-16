@@ -31,7 +31,10 @@ base:
         kv-cache-dtype: fp8_e4m3
         # Loaded target and draft weights require a static fraction above 0.94.
         mem-fraction-static: 0.97
-        # Reserve H100 memory for the target, draft, and required AgentX context.
+        # Bound prefill activations while retaining the full request context.
+        chunked-prefill-size: 1024
+        # Full-attention KV must fit 256k prompts; SWA retains its 2048-token window.
+        swa-full-tokens-ratio: 0.1
         disable-prefill-cuda-graph: true
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
