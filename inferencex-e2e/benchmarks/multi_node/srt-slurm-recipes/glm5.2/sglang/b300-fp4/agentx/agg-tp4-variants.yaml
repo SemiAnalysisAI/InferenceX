@@ -125,7 +125,7 @@ override_c1:
     agg:
       args:
         max-running-requests: 8
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
 
 override_c8:
   name: glm52-b300-agg-tp4-c8-mtp
@@ -133,7 +133,7 @@ override_c8:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
 
 override_c16:
   name: glm52-b300-agg-tp4-c16-mtp
@@ -141,7 +141,7 @@ override_c16:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
 
 override_c20:
   name: glm52-b300-agg-tp4-c20-mtp
@@ -149,7 +149,7 @@ override_c20:
     agg:
       args:
         max-running-requests: 64
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
 
 # DP4 attention over the TP4 engine with the prefill delayer: four attention
 # ranks share the MoE, so the throughput end batches more decode per step.
@@ -166,7 +166,7 @@ override_c24:
         mem-fraction-static: 0.85
         hicache-size: 295
         max-running-requests: 128
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
 
 override_c32:
   name: glm52-b300-agg-tp4-dp4attn-c32-mtp
@@ -179,7 +179,7 @@ override_c32:
         enable-symm-mem: true
         chunked-prefill-size: 32768
         max-running-requests: 64
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
 
 override_c48:
   name: glm52-b300-agg-tp4-dp4attn-c48-mtp
@@ -194,4 +194,4 @@ override_c48:
         chunked-prefill-size: 32768
         mem-fraction-static: 0.85
         max-running-requests: 128
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
