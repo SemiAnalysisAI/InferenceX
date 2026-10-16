@@ -65,6 +65,8 @@ roles:
       mm-attention-backend: triton_attn
       moe-runner-backend: flashinfer_trtllm
       linear-attn-decode-backend: flashinfer
+      # v0.5.21 no longer auto-disables breakable prefill graphs under DP attention; capture OOMs at c12288.
+      cuda-graph-backend-prefill: disabled
       disaggregation-mode: prefill
       disaggregation-transfer-backend: mooncake
       disable-radix-cache: true
