@@ -198,6 +198,34 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     assert recipe["benchmark"]["concurrencies"] == [8]
 
 
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_cpu_power_point_binds_the_clusters_grace_exporter_or_fails(
+    project, power_lane, tmp_path, capsys, declared
+):
+    master = project / "configs/master.yaml"
+    config = yaml.safe_load(master.read_text())
+    config["agentx-multi"]["scenarios"]["agentic-coding"][0]["search-space"][0]["cpu-power"] = True
+    master.write_text(yaml.safe_dump(config))
+    if declared:
+        runners = project / "configs/runners.yaml"
+        inventory = yaml.safe_load(runners.read_text())
+        srt = inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]
+        srt["cpu-power-exporter"] = {"source": "acpi"}
+        runners.write_text(yaml.safe_dump(inventory))
+    output = tmp_path / "out"
+
+    if not declared:
+        with pytest.raises(SystemExit):
+            generate(project, output, "agentx-multi")
+        assert "declares no srt-slurm.cpu-power-exporter" in capsys.readouterr().err
+        assert not output.exists()
+        return
+    assert generate(project, output, "agentx-multi") == 0
+    [(_, recipe)] = written(output)
+    assert recipe["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert recipe["telemetry"]["dcgm_exporter"]["port"] == 9555
+
+
 def test_a_multinode_agentx_point_without_power_turns_its_clients_power_off(
     project, power_lane, tmp_path
 ):

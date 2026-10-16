@@ -173,6 +173,16 @@ class Fabric(Record):
         return self.model_dump(by_alias=True)
 
 
+class CpuPowerExporter(Record):
+    """The Grace CPU power exporter srt-slurm scrapes on this cluster's compute trays.
+
+    A point that selects ``cpu-power`` binds ``telemetry.cpu_power_exporter`` with this source.
+    Only ACPI serves the Grace socket meter the CPU leg integrates.
+    """
+
+    source: Literal["acpi"]
+
+
 class SrtSlurmSettings(Record):
     """Cluster-owned srtslurm.yaml facts; job-specific values are added by the driver."""
 
@@ -203,6 +213,7 @@ class SrtSlurmSettings(Record):
     mounts: dict[str, str] = Field(default_factory=dict)
     workspace_mounts: dict[str, str] = Field(default_factory=dict, alias="workspace-mounts")
     power_exporter_port: int | None = Field(default=None, alias="power-exporter-port", gt=0)
+    cpu_power_exporter: CpuPowerExporter | None = Field(default=None, alias="cpu-power-exporter")
     extra: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("workspace_mounts")

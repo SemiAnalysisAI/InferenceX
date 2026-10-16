@@ -3726,12 +3726,14 @@ qwen3.5-fp8-gb200-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P1D STP: TP4 prefill + TP4 decode (pure tensor parallel). 2 nodes (1+1).
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         srt-recipe: disagg-1p1d-tp4-tp4-stp.yaml
         power: true
+        cpu-power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -3747,6 +3749,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
         conc-list: [1024]
         srt-recipe: disagg-4p1d-dep4-dep16-stp.yaml
         power: true
+        cpu-power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -3761,6 +3764,8 @@ qwen3.5-fp8-gb200-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [2048, 4096]
         srt-recipe: disagg-8p1d-dep4-dep16-stp.yaml
+        power: true
+        cpu-power: true
         prefill:
           num-worker: 8
           tp: 4
@@ -6198,6 +6203,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
         num-nodes: 4
         srt-recipe: agg-dcp16-dspark4-maxseq2-mooncake.yaml
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 16
@@ -6225,6 +6231,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
         num-nodes: 4
         srt-recipe: agg-dcp16-nospec-mooncake.yaml
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 16
@@ -6361,6 +6368,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c16
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6375,6 +6383,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c32
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6388,6 +6397,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c48
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6401,6 +6411,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c72
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6414,6 +6425,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
         num-nodes: 4
         srt-recipe: agg-tp8pp2-variants.yaml:override_tp8pp2_c96
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 8
@@ -6679,12 +6691,14 @@ qwen3.5-fp8-gb300-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P1D STP: TP4 prefill + TP4 decode (pure tensor parallel). 2 nodes (1+1).
       - spec-decoding: "none"
         conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         srt-recipe: disagg-1p1d-tp4-tp4-stp.yaml
         power: true
+        cpu-power: true
         prefill:
           num-worker: 1
           tp: 4
@@ -6700,6 +6714,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
         conc-list: [1024]
         srt-recipe: disagg-4p1d-dep4-dep16-stp.yaml
         power: true
+        cpu-power: true
         prefill:
           num-worker: 4
           tp: 4
@@ -6714,6 +6729,8 @@ qwen3.5-fp8-gb300-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [2048, 4096]
         srt-recipe: disagg-8p1d-dep4-dep16-stp.yaml
+        power: true
+        cpu-power: true
         prefill:
           num-worker: 8
           tp: 4
@@ -7869,6 +7886,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         conc-list: [48, 56]
         srt-recipe: disagg-variants.yaml:override_1p1d_dcp8_dcp8_dspark4
         power: true
+        cpu-power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7882,6 +7900,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         conc-list: [48, 64]
         srt-recipe: disagg-variants.yaml:override_1p2d_dcp8_dcp8_dspark4
         power: true
+        cpu-power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7895,6 +7914,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         conc-list: [1]
         srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark7
         power: true
+        cpu-power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7908,6 +7928,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         conc-list: [48]
         srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark4
         power: true
+        cpu-power: true
         prefill:
           num-worker: 1
           tp: 8
@@ -7937,6 +7958,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         num-nodes: 2
         srt-recipe: agg-variants.yaml:override_dcp8_dspark7_maxseq2
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 8
@@ -7950,6 +7972,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
         num-nodes: 2
         srt-recipe: agg-variants.yaml:override_dcp8_dspark4
         power: true
+        cpu-power: true
         worker:
           num-worker: 1
           tp: 8
