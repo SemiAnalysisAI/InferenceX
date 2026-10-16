@@ -10052,3 +10052,11 @@
     - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
     - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add TP4/EP1 concurrency 1 to the Qwen3.5 FP8 B200 SGLang 8k1k recipe zip_override (cuda-graph-max-bs-decode 1, scheduler-recv-interval 10) so the c1 matrix point matches, and add the configs/powerx-article-b200.yaml selector for TP4/EP1 c1-c128 article repeats. The reused sweep measured and validated GPU power at every point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
