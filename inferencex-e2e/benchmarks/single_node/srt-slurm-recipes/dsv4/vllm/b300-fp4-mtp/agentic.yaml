@@ -66,6 +66,8 @@ zip_override_tp:
       gpus: [8, 8, 8, 8, 8, 4]
       args:
         tensor-parallel-size: [8, 8, 8, 8, 8, 4]
+        # TP4 CPU affinity is constrained, so vLLM cannot auto-detect GPU NUMA nodes.
+        numa-bind: [true, true, true, true, true, false]
         data-parallel-size: 1
         disable-custom-all-reduce: true
         gpu-memory-utilization: 0.95
