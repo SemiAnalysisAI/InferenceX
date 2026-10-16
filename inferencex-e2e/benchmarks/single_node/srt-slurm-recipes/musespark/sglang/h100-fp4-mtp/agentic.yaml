@@ -29,7 +29,8 @@ base:
         fp4-gemm-backend: marlin
         attention-backend: fa3
         kv-cache-dtype: fp8_e4m3
-        mem-fraction-static: 0.85
+        # Loaded target and draft weights require a static fraction above 0.94.
+        mem-fraction-static: 0.97
         # Reserve H100 memory for the target, draft, and required AgentX context.
         disable-prefill-cuda-graph: true
         max-running-requests: 2
