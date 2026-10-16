@@ -9941,4 +9941,5 @@
     - "Serve flags follow AMD's model card: AITER attention (SGLANG_USE_AITER=1, SGLANG_USE_AITER_UNIFIED_ATTN=1), FlyDSL MoE (MUSE_MOE_BACKEND=flydsl), page size 16, fp8_e4m3 KV, mem-fraction-static 0.85, triton draft attention, muse reasoning and tool-call parsers."
     - "TP4/EP4 and TP8/EP8, both at conc 1, 4, 8, 12, 16 with GPU-resident KV (no offloading)."
     - "Synthetic acceptance follows the committed musespark_dflash golden curve (#4138, #4139): AL 4.05 at 7 draft tokens, thinking_on."
+    - "The server loads the checkpoint and draft from the pre-seeded shared HF cache with HF_HUB_OFFLINE=1, so concurrent points make no Hub API calls."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4127
