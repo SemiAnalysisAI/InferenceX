@@ -399,7 +399,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
         "configs/nvidia-master.yaml:second-family",
     ]
     contexts = [
-        {"id": candidate_id, "family": family, "base": base, "source": {}}
+        {"id": candidate_id, "family": family, "base": base, "source": {}, "clusters": ["cluster-a"]}
         for candidate_id, family in zip((first_id, second_id), families, strict=True)
     ]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -409,7 +409,6 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
                 "candidate-id": candidate_id,
                 "decision": "proceed",
                 "family": family,
-                "clusters": ["cluster-a"],
                 "pull-requests": [],
                 "baseline-model": "Model",
                 "reason": "No overlap",
@@ -456,6 +455,50 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     assert preflight.source_identity == identity({})
     selected = json.loads((tmp_path / second_id / "candidate.json").read_text())
     assert selected["baseline-model"] == "Model"
+
+
+@pytest.mark.parametrize(("eligible", "selected", "deferred"), [
+    ({"h100-dsxe"}, ["exact"], ["spanning"]),
+    ({"h100-cw", "h100-dsxe"}, ["spanning", "exact"], []),
+])  # fmt: skip
+def test_select_needs_every_planner_target_cluster_eligible(
+    tmp_path, monkeypatch, eligible, selected, deferred
+):
+    ids = {"spanning": "1" * 16 + "-" + "2" * 16, "exact": "3" * 16 + "-" + "4" * 16}
+    targets = {"spanning": ["h100-cw", "h100-dsxe"], "exact": ["h100-dsxe"]}
+    contexts = [
+        {"id": ids[name], "family": f"configs/nvidia-master.yaml:{name}", "base": "a" * 40,
+         "source": {}, "clusters": targets[name]}
+        for name in ("spanning", "exact")
+    ]  # fmt: skip
+    (tmp_path / "candidates.json").write_text(json.dumps(contexts))
+    (tmp_path / "producers.json").write_text("{}\n")
+    review = {"decisions": [
+        {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
+         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+        for context in contexts
+    ]}  # fmt: skip
+
+    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+        return reporting.Baseline(
+            family=candidate.family, date="2026-09-19", image="example/image:1",
+            goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
+            sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"], points=[],
+        )  # fmt: skip
+
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: eligible)
+    monkeypatch.setattr(reporting, "resolve_baseline", resolve)
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
+    monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
+
+    klaud.select(tmp_path, 5)
+
+    selection = json.loads((tmp_path / "selection.json").read_text())
+    assert selection["candidates"] == [ids[name] for name in selected]
+    assert selection["capacity-deferred-candidates"] == [ids[name] for name in deferred]
 
 
 def test_prepare_baseline_uses_bound_preflight_and_rejects_source_drift(
@@ -809,13 +852,13 @@ def review_candidate(directory, monkeypatch, source):
     """Write one FAMILY candidate observed at ``source`` and a review that proceeds with it."""
     directory.mkdir()
     (directory / "candidates.json").write_text(json.dumps(
-        [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source}]
+        [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source,
+          "clusters": ["cluster-a"]}]
     ))
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
-        "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY,
-        "clusters": ["cluster-a"], "pull-requests": [],
+        "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY, "pull-requests": [],
         "baseline-model": "DeepSeek-R1", "reason": "No overlap",
     }]}))
 
@@ -1346,7 +1389,7 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture"},
+         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
     }
 
 
@@ -1381,5 +1424,61 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture"},
+         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
     }
+
+
+def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runners(
+    tmp_path, family_configs, capsys
+):
+    master, runners = family_configs
+    fixture, record = master["fixture"], runners["clusters"]["fixture"]
+    master = {
+        "spanning": {**fixture, "runner": "h100"},
+        "exact": {**fixture, "runner": "cluster:h100-dsxe"},
+        "unmapped": {**fixture, "runner": "h100-retired"},
+    }
+    runners = {
+        "labels": {
+            "h100": ["h100-cw_00", "h100-dsxe_00"],
+            "cluster:h100-cw": ["h100-cw_00"],
+            "cluster:h100-dsxe": ["h100-dsxe_00"],
+        },
+        "clusters": {"h100-cw": record, "h100-dsxe": record},
+    }
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
+    (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(tmp_path)
+
+    families = klaud.live_families(tmp_path)
+
+    assert capsys.readouterr().out == (
+        "::warning::Klaud live-family-clusters-unresolved: configs/nvidia-master.yaml:unmapped\n"
+    )
+    assert families == {
+        ("dsr1", "h100", "sglang", "fp8", "none", False, "single_turn",
+         1024, 1024, "example/image:stable"): {
+            "configs/nvidia-master.yaml:spanning": {"h100-cw", "h100-dsxe"},
+            "configs/nvidia-master.yaml:exact": {"h100-dsxe"},
+        },
+    }  # fmt: skip
+    source = {
+        "model": "dsr1", "hardware": "h100", "framework": "sglang", "precision": "fp8",
+        "spec_method": "none", "disagg": False, "benchmark_type": "single_turn", "isl": 1024,
+        "osl": 1024, "image": "example/image:stable", "date": "2026-09-19",
+    }  # fmt: skip
+    items = [{"source-status": "baseline", "source-id": "1", "source": source}]
+
+    def chosen(available):
+        return sorted(
+            (candidate["family"].removeprefix("configs/nvidia-master.yaml:"), candidate["clusters"])
+            for candidate in klaud.choose(items, available, set(), families)
+        )
+
+    assert chosen({"h100-cw"}) == []
+    assert chosen({"h100-dsxe"}) == [("exact", ["h100-dsxe"])]
+    assert chosen({"h100-cw", "h100-dsxe"}) == [
+        ("exact", ["h100-dsxe"]), ("spanning", ["h100-cw", "h100-dsxe"]),
+    ]

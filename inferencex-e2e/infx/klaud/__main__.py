@@ -16,8 +16,9 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
-from .api import PUBLIC, ReadError, capacity_context, fetch_capacity, fetch_catalog
+from .api import PUBLIC, ReadError, fetch_capacity, fetch_catalog
 from .github import (
     VerificationError,
     download_json,
@@ -33,6 +34,9 @@ from .models import (
     identity,
     normalized_image,
 )
+
+if TYPE_CHECKING:
+    from infx.clusters import RunnerInventory
 
 PRODUCERS = "producers.json"
 RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started"})
@@ -59,15 +63,28 @@ def observation_key(row: dict) -> tuple:
     )
 
 
-def live_families(root: Path) -> dict[tuple, set[str]]:
-    """Resolve public identities from the canonical generator, excluding archives."""
+def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozenset[str]:
+    try:
+        return frozenset(
+            inventory.cluster_for(node).id
+            for runner in {entry["runner"] for entry in entries}
+            for node in inventory.labels.get(runner, [runner])
+        )
+    except ValueError:
+        return frozenset()
+
+
+def live_families(root: Path) -> dict[tuple, dict[str, frozenset[str]]]:
+    """Resolve public identities and target clusters from the canonical generator, excluding archives."""
+    from infx.clusters import load_inventory
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
     from infx.matrix.validation import load_config_files, load_runner_file
 
     root = project_root(root)
     runners = load_runner_file(str(root / "configs/runners.yaml"))
-    index: dict[tuple, set[str]] = {}
+    inventory = load_inventory(runners)
+    index: dict[tuple, dict[str, frozenset[str]]] = {}
     paths = sorted((root / "configs").glob("*-master.yaml"))
     if not paths:
         raise ReadError("live-configs-unavailable")
@@ -81,6 +98,10 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
                 )
             except ValueError:
                 print(f"::warning::Klaud live-family-unrenderable: {family}")
+                continue
+            clusters = target_clusters(entries, inventory)
+            if not clusters:
+                print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
                 continue
             for entry in entries:
                 agentic = entry.get("scenario-type") == "agentic-coding"
@@ -96,7 +117,7 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
                     "osl": None if agentic else entry["osl"],
                     "image": entry["image"],
                 }
-                index.setdefault(observation_key(row), set()).add(family)
+                index.setdefault(observation_key(row), {})[family] = clusters
     return index
 
 
@@ -104,7 +125,7 @@ def choose(
     items: list[dict],
     available: set[str],
     occupied: set[str],
-    families: dict[tuple, set[str]],
+    families: dict[tuple, dict[str, frozenset[str]]],
 ) -> list[dict]:
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
@@ -116,11 +137,6 @@ def choose(
         reverse=True,
     ):
         row = item["source"]
-        if not any(
-            cluster == row["hardware"] or cluster.startswith(row["hardware"] + "-")
-            for cluster in available
-        ):
-            continue
         legacy = identity(
             {
                 key: row[key]
@@ -135,7 +151,7 @@ def choose(
             }
         )[:16]
         image_key = identity(observation_key(row)[-1])[:16]
-        for family in sorted(families.get(observation_key(row), ())):
+        for family, clusters in sorted(families.get(observation_key(row), {}).items()):
             prefix = "klaud/auto-" + identity(family)[:16] + "-"
             branch = prefix + image_key
             claims = {
@@ -144,12 +160,13 @@ def choose(
                 f"klaud/auto-{legacy}-{image_key}",
                 f"klaud/auto-{legacy}-",
             }
-            if family in seen or claims & occupied:
+            if family in seen or claims & occupied or not clusters <= available:
                 continue
             selected.append(
                 {
                     "id": branch.removeprefix("klaud/auto-"),
                     "family": family,
+                    "clusters": sorted(clusters),
                     "source": row,
                     "branch": branch,
                 }
@@ -258,9 +275,7 @@ def plan(
         for pr in page
         if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
     )
-    capacity = capacity_context(policy)
-    available = set(capacity["eligible-clusters"])
-    candidates = choose(items, available, occupied, live_families(root))
+    candidates = choose(items, fetch_capacity(policy), occupied, live_families(root))
     blocked = {
         candidate.family
         for owner in claims.family_owners(repository)
@@ -328,7 +343,6 @@ def plan(
         json.dumps(contexts, indent=2, allow_nan=False) + "\n"
     )
     (directory / "open-prs.json").write_text(json.dumps(open_prs, indent=2) + "\n")
-    (directory / "capacity.json").write_text(json.dumps(capacity) + "\n")
     if filename := os.environ.get("GITHUB_OUTPUT"):
         schema = PRReview.model_json_schema(by_alias=True)
         schema["properties"]["decisions"].update(minItems=len(contexts), maxItems=len(contexts))
@@ -670,7 +684,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        if not set(decision.clusters) <= available:
+        if not set(candidate["clusters"]) <= available:
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(

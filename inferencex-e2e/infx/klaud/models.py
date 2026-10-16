@@ -57,7 +57,6 @@ class CandidateReview(Contract):
     candidate_id: str = Field(pattern=r"^[0-9a-f]{16}-[0-9a-f]{16}$")
     decision: Literal["proceed", "duplicate", "uncertain"]
     family: str | None = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
-    clusters: list[Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._+-]{0,63}$")]]
     pull_requests: list[Annotated[int, Field(gt=0)]]
     baseline_model: str | None = Field(default=None, min_length=1)
     reason: str = Field(min_length=1)
@@ -65,13 +64,11 @@ class CandidateReview(Contract):
     @model_validator(mode="after")
     def consistent_decision(self) -> CandidateReview:
         if self.decision == "proceed" and (
-            not self.family or not self.clusters or self.pull_requests or not self.baseline_model
+            not self.family or self.pull_requests or not self.baseline_model
         ):
             raise ValueError(
-                "proceed requires a resolved family, baseline model, exact clusters and no overlapping PRs"
+                "proceed requires a resolved family, baseline model and no overlapping PRs"
             )
-        if len(set(self.clusters)) != len(self.clusters):
-            raise ValueError("clusters must be distinct")
         if self.decision == "duplicate" and not self.pull_requests:
             raise ValueError("duplicate requires an overlapping PR number")
         return self
