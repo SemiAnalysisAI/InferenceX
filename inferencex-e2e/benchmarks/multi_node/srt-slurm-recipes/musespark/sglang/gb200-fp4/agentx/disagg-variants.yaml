@@ -1,0 +1,104 @@
+schema: 2
+
+base:
+  name: musespark-fp4-gb200-sglang-agentic-disagg
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      # Keep each conversation on the prefill worker that holds its prefix.
+      prefill-policy: cache_aware
+  observability:
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    # Decode follows the cookbook's PD decode cell: no layernorm SP or MegaMoE prefill.
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env: &env
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # The DFlash2 draft comes from the shared Hub cache the job mounts.
+        HF_HUB_CACHE: /hf_hub_cache
+        HF_HUB_OFFLINE: '1'
+        # Prefill hands KV to decode over MNNVL inside the rack.
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: NVLINK
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+      args: &decode-args
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        swa-full-tokens-ratio: 0.1
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        disaggregation-mode: decode
+        disaggregation-transfer-backend: mooncake
+        mem-fraction-static: 0.88
+        # 120 GB/rank of host KV: prefill's HiCache prefix store, and on decode the
+        # host pool that holds retracted requests' KV when HBM runs out.
+        hicache-size: 120
+        watchdog-timeout: 3600
+        enable-metrics: true
+    # Prefill keeps the aggregated recipe's prefill path and its 120 GB/rank HiCache prefix store.
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env: *env
+      args:
+        <<: *decode-args
+        disaggregation-mode: prefill
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        disable-prefill-cuda-graph: true
+        cuda-graph-max-bs-decode: 8
+        enable-hierarchical-cache: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable to the client; use the staged checkpoint.
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      # The SGLang router has no Dynamo session routing.
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    mem: '0'
+
+# Decode reserves KV for every request the router sends it, before prefill runs it.
+# Capping decode slots at what its KV pool holds (~24 x 108K-token contexts) keeps
+# excess requests waiting at prefill bootstrap instead of filling decode KV with
+# reservations, which otherwise collapses throughput. A smaller SWA pool (24 running
+# requests need ~55K window tokens) leaves more of decode HBM to full-attention KV.
+override_1p1d_p-tp4_d-tp4:
+  roles:
+    decode:
+      args:
+        swa-full-tokens-ratio: 0.05
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
