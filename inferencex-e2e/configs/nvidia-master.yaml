@@ -2537,7 +2537,7 @@ dsr1-fp8-gb300-dynamo-sglang:
           dp-attn: true
 
 dsr1-fp4-gb200-dynamo-sglang:
-  image: "lmsysorg/sglang:v0.5.8-cu130"
+  image: lmsysorg/sglang:v0.5.21-cu130@sha256:b1259f3ea3275f66237c498ea388919729018bc9f01c3d638391e06e2cf3f469
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
   runner: gb200

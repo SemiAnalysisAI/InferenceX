@@ -5,7 +5,7 @@ dynamo:
   request_plane: "nats"
 
   source:
-    pypi: 0.8.1
+    pypi: "1.6.0.dev20261007"
   # Use NATS for a recipe prior to Dynamo commit 39d2a68.
 frontend:
   type: dynamo
@@ -134,12 +134,11 @@ roles:
       ep-dispatch-algorithm: "static"
       ep-num-redundant-experts: 32
 
-      cuda-graph-max-bs: 512
+      cuda-graph-max-bs-decode: 512
       num-reserved-decode-tokens: 112
 
       moe-dense-tp-size: 1
       enable-dp-lm-head: true
-      prefill-round-robin-balance: true
       enable-dp-attention: true
       fp4-gemm-backend: "flashinfer_cutlass"
       disaggregation-transfer-backend: nixl
