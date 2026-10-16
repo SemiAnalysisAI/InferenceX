@@ -3,8 +3,7 @@
 
 The GB SKUs are an NVLink-only domain, and vLLM selects a different all-to-all there than it
 does on an RDMA fabric: `--all2all-backend deepep_v2` for RDMA, `flashinfer_nvlink_one_sided`
-for NVLink. Benchmarking the GB racks with DeepEP V2 and NCCL EP therefore measured transports
-no deployment would choose on that hardware. This adapter closes that gap.
+for NVLink.
 
 ONE-SIDED, not two-sided. The sibling `flashinfer_nvlink_two_sided` backend is deliberately not
 wired: it produces gibberish output on GB200/arm64 (vllm#39722). One-sided means the initiator

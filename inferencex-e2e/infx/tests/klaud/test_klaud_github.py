@@ -276,6 +276,36 @@ def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
     assert [pr["number"] for pr in klaud.active_pulls(pulls, now, 7)] == [1, 3, 4]
 
 
+def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
+    now = "2026-10-15T00:05:00Z"
+
+    def metric(name, allocated, queued, schedulable):
+        return {"clusterLabel": f"cluster:{name}", "allocatedNodes": allocated,
+                "queuedNodes": queued, "schedulableNodes": schedulable}
+
+    def feed(snapshot_at, metrics):
+        return Feed(
+            url="https://dash.inferencex.semianalysis.com/api/status/scheduler",
+            retrieved_at=now, sha256="0" * 64,
+            payload={"kind": "inferencex.status.scheduler", "generatedAt": now, "data": {
+                "available": True,
+                "snapshot": {"snapshotAt": snapshot_at, "stalled": False,
+                             "packingMetrics": metrics},
+            }},
+        )
+
+    metrics = [
+        metric("at-200", 8, 12, 10), metric("over-200", 8, 13, 10),
+        metric("idle", 0, 0, 4), metric("drained", 0, 0, 0), metric("corrupt", 1, -1, 10),
+    ]
+    policy = api.Policy()
+    fresh, stale = "2026-10-15T00:00:00Z", "2026-10-14T23:59:59Z"
+    assert api.available_clusters(feed(fresh, metrics), policy, api.utc(now)) == {"at-200", "idle"}
+    assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
+    pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
+    assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
+
+
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
     first_id = "1" * 16 + "-" + "2" * 16
     second_id = "3" * 16 + "-" + "4" * 16
@@ -295,7 +325,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
                 "candidate-id": candidate_id,
                 "decision": "proceed",
                 "family": family,
-                "telemetry-clusters": ["cluster-a"],
+                "clusters": ["cluster-a"],
                 "pull-requests": [],
                 "baseline-model": "Model",
                 "reason": "No overlap",
@@ -666,7 +696,7 @@ def review_candidate(directory, monkeypatch, source):
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
         "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY,
-        "telemetry-clusters": ["cluster-a"], "pull-requests": [],
+        "clusters": ["cluster-a"], "pull-requests": [],
         "baseline-model": "DeepSeek-R1", "reason": "No overlap",
     }]}))
 

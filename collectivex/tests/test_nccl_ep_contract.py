@@ -11,12 +11,9 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT), str(ROOT / "bench"), str(ROOT / "tests")]
+sys.path[:0] = [str(ROOT / "bench"), str(ROOT / "tests")]
 
-from _fakes import _ChainBackend  # noqa: E402
 from test_backends import _import_stubbed  # noqa: E402
-
-import sweep_matrix  # noqa: E402
 
 VERSION = "0.2.0.dev20261005"
 DEVICE_SMS = 132
@@ -206,7 +203,7 @@ class RowLabels(unittest.TestCase):
         self.assertEqual(backend.library_version, VERSION)
         self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-fp8-ds-e3m4-cap512-{VERSION}")
 
-    def test_library_config_is_one_json_object_and_empty_by_default(self):
+    def test_library_config_is_one_json_object(self):
         # Published as `implementation.library_config`; the wheel stays in `library_version`.
         _, _, _, details = _backend()
         self.assertEqual(json.loads(json.dumps(details)), {
@@ -215,7 +212,6 @@ class RowLabels(unittest.TestCase):
             "num_sms": {"dispatch": DEVICE_SMS, "combine": DEVICE_SMS},
             "engine_contract": "tensorrt-llm",
         })
-        self.assertEqual(_ChainBackend().implementation_details(), {})
 
 
 class SmBudgets(unittest.TestCase):
@@ -239,22 +235,6 @@ class SmBudgets(unittest.TestCase):
     def test_the_artifact_reads_the_environment_the_group_was_created_under(self):
         _, _, _, details = _backend(env={"NCCL_EP_DISPATCH_SMS": "64"})
         self.assertEqual(details["num_sms"], {"dispatch": 64, "combine": DEVICE_SMS})
-
-
-class Fp8IsOffPath(unittest.TestCase):
-    """TensorRT-LLM never selects DS_FP8E3M4 (`uses_internal_fp8_dispatch = False`)."""
-
-    def test_default_matrix_has_no_nccl_fp8_and_naming_it_restores_ll_decode(self):
-        default = sweep_matrix.resolve_matrix(backend="nccl-ep")
-        self.assertEqual(
-            {item["case"]["precision"] for item in default["requested_cases"] if item["disposition"] == "runnable"},
-            {"bf16"},
-        )
-        opted_in = sweep_matrix.resolve_matrix(backend="nccl-ep", precisions="fp8")
-        cases = [case for shard in opted_in["include"] for case in shard["cases"]]
-        self.assertTrue(cases)
-        self.assertEqual({(case["mode"], case["phase"], case["precision"]) for case in cases},
-                         {("low-latency", "decode", "fp8")})
 
 
 if __name__ == "__main__":

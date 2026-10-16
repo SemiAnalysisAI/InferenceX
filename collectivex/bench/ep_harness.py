@@ -140,7 +140,7 @@ def _pcts(xs):
              "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
 
 
-# Consumer contract, not labels: the frontend and durable store key the headline on
+# Consumer contract, not labels: the frontend keys the headline on
 # `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo fails silently.
 CHAIN_PERIOD_ORIGIN = "chained-median"
 CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
@@ -201,9 +201,6 @@ def _write_json_atomic(path: str, value) -> None:
 def kernel_generation(backend) -> str:
     """Identify the kernel family and the rank-alignment regime it was timed under."""
     family = backend.kernel_generation or "n-a"
-    # Historical -cudagraph rows used an external barrier and alignment spin, and -in-graph-ar rows
-    # an in-graph all-reduce without a spin; historical eager rows (bare family) had no per-sample
-    # alignment.
     if backend.cuda_graph_enabled:
         return f"{family}-cudagraph-spin-ar"
     return f"{family}-eager-spin-ar"
@@ -399,7 +396,7 @@ class Sweep:
         if self.rank == 0:
             _write_json_atomic(self.args.out, doc)
             self._print_summary(rows, doc)
-        # The return code is CI's only success signal (the doc uploads regardless), so a captured
+        # The return code is the only success signal (the doc is written regardless), so a captured
         # `invalid` outcome must fail the leg; agreed across ranks so the case fails as one.
         return 0 if self.reduce.all(all_ok) else 3
 

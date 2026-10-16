@@ -152,8 +152,6 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
     #   normal      -> get_dispatch_layout/dispatch/combine; unweighted rank-sum combine.
     #   low-latency -> low_latency_dispatch/combine decode kernels; source-side weighted combine.
     # "-vllm-ht" marks normal rows on vLLM's deepep_ht launch configs with row-major FP8 scales.
-    # Earlier "uccl-legacy-buffer" rows ran UCCL's intranode test-script Config(24 CUDA / 64 HIP, 8,
-    # 256) at EP8 and transposed the FP8 scales inside the timed dispatch.
     kernel_generation = "uccl-legacy-buffer-vllm-ht"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
