@@ -38,6 +38,10 @@ base:
       type: mooncake-master
       args:
         - --eviction_high_watermark_ratio=0.90
+      # The v0.5.22 container start on the infra node has exceeded srtctl's 120 s default.
+      readiness:
+        port: 8700
+        timeout_seconds: 600
     # Decode ranks use a chunk cache, so their host DRAM only joins the store
     # through standalone stores: four per decode node, so segments stay uniform
     # with prefill's per-rank ones instead of one oversized segment per node.
