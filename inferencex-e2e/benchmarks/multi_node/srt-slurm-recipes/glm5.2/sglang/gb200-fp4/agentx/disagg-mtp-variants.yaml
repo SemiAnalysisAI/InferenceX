@@ -78,7 +78,7 @@ base:
         max-prefill-tokens: 8192
         max-total-tokens: 1048576
         max-running-requests: 64
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
         disable-cuda-graph: true
         dsa-prefill-backend: trtllm
         dsa-decode-backend: trtllm
@@ -150,7 +150,7 @@ base:
         enable-dp-attention: false
         enable-dp-lm-head: false
         max-running-requests: 64
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
         chunked-prefill-size: 64
         context-length: 1048576
         dsa-prefill-backend: trtllm
