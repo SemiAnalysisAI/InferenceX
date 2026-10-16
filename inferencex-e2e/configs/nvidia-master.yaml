@@ -6650,6 +6650,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P1D STP: TP4 prefill + TP4 decode (pure tensor parallel). 2 nodes (1+1).
       - spec-decoding: "none"
@@ -6685,6 +6686,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
       - spec-decoding: "none"
         conc-list: [2048, 4096]
         srt-recipe: disagg-8p1d-dep4-dep16-stp.yaml
+        power: true
         prefill:
           num-worker: 8
           tp: 4
