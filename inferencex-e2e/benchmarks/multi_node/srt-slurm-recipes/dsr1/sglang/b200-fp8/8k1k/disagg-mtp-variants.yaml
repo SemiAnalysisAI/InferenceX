@@ -2,10 +2,8 @@ schema: 2
 
 base:
   dynamo:
-    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
-    request_plane: "nats"
     source:
-      pypi: 0.9.1
+      pypi: 1.6.0.dev20261010
 
   resources:
     gpu_type: b200
@@ -109,7 +107,7 @@ override_1p3d_p_tp8_dp8_d_tp8_b32_c128:
       workers: 3
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         data-parallel-size: 1
         expert-parallel-size: 1
 
@@ -123,7 +121,7 @@ override_1p4d_p_tp8_dp8_d_tp8_b32_c128:
       workers: 4
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         data-parallel-size: 1
         expert-parallel-size: 1
 
@@ -137,7 +135,7 @@ override_1p6d_p_tp8_dp8_d_tp8_b22_c8x16x32x64x128:
       workers: 6
       args:
         max-running-requests: 22
-        cuda-graph-max-bs: 22
+        cuda-graph-max-bs-decode: 22
         data-parallel-size: 1
         expert-parallel-size: 1
 
@@ -151,7 +149,7 @@ override_1p2d_p_tp8_dp8_d_tp8_ep8_dp8_b128_c288:
       workers: 2
       args:
         max-running-requests: 128
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         data-parallel-size: 8
         expert-parallel-size: 8
         enable-dp-attention: true
@@ -168,7 +166,7 @@ override_1p1d_p_tp8_dp8_d_tp8_ep8_dp8_b256_c160x288:
       workers: 1
       args:
         max-running-requests: 256
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         data-parallel-size: 8
         expert-parallel-size: 8
         enable-dp-attention: true
@@ -185,7 +183,7 @@ override_2p1d_p_tp8_dp8_d_tp8_ep8_dp8_b512_c512:
       workers: 1
       args:
         max-running-requests: 512
-        cuda-graph-max-bs: 64
+        cuda-graph-max-bs-decode: 64
         data-parallel-size: 8
         expert-parallel-size: 8
         enable-dp-attention: true
@@ -202,7 +200,7 @@ override_3p1d_p_tp8_dp8_d_tp8_ep8_dp8_b1024_c1024:
       workers: 1
       args:
         max-running-requests: 1024
-        cuda-graph-max-bs: 128
+        cuda-graph-max-bs-decode: 128
         data-parallel-size: 8
         expert-parallel-size: 8
         enable-dp-attention: true
