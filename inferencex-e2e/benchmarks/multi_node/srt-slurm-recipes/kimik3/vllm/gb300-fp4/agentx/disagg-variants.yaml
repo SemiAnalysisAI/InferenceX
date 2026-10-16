@@ -6,12 +6,12 @@ base:
     container: {}
     frameworks:
       vllm: "49cb2bbf71cfd36ee5aa33d1e184b1cddff55294"
-      dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+      dynamo: "ffbbaaa6c44370e798687881317535ac17d66a76"
 
   dynamo:
     install: true
     source:
-      rev: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+      rev: "ffbbaaa6c44370e798687881317535ac17d66a76"
 
   slurm:
     time_limit: "04:00:00"

@@ -10042,5 +10042,5 @@
     - agentic-coding
   description:
     - "Move the complete GB300 Kimi-K3 AgentX curve to vLLM nightly-49cb2bbf and add low-latency megakernel points with probabilistic DSpark sampling."
-    - "Configure Kimi-K3 tool-call and reasoning parsers for the Dynamo aggregate and disaggregated recipes."
+    - "Configure Kimi-K3 tool-call and reasoning parsers and pin Dynamo ffbbaaa6 (dynamo-parsers 8.1.0) for the aggregate and disaggregated recipes to fix parsing across output chunks."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4208
