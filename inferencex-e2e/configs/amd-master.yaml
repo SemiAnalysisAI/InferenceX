@@ -715,7 +715,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 #            wider in-flight window needs the deeper pool to keep the paged KV
 #            resident.
 kimik3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610131505
+  image: rocm/atom-dev:nightly_202610151507@sha256:aa6754256dd68009240e54206265e5250395374640f07757f2fdeac6170097cf
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
