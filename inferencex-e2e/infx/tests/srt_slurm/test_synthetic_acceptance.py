@@ -51,6 +51,7 @@ def golden_dir(tmp_path: Path) -> Path:
         ("minimaxm3_eagle3.yaml", "minimax-m3", 2.5),
         ("minimaxm3_eagle3_gqa.yaml", "minimax-m3", 2.6),
         ("glm5.3_mtp.yaml", "glm-5.3", 3.2),
+        ("musespark_dflash.yaml", "muse-spark-open", 3.4),
     ]:
         (directory / filename).write_text(
             yaml.safe_dump(
@@ -178,6 +179,20 @@ def test_kimi_curve_requires_an_explicit_supported_sampler(
             },
         ),
         (
+            "sglang",
+            {
+                "speculative-algorithm": "DFLASH",
+                "speculative-draft-model-path": "RadixArk/Muse-Spark-Open-DFlash2",
+                "speculative-num-draft-tokens": 4,
+            },
+            {"MODEL_PREFIX": "musespark"},
+            {
+                "SGLANG_SIMULATE_ACC_LEN": "3.4",
+                "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+                "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+            },
+        ),
+        (
             "dynamo-sglang",
             {"speculative-algorithm": "EAGLE", "speculative-num-steps": 3},
             {},
@@ -224,6 +239,24 @@ def test_engine_token_selection_and_environment(
     assert result["roles"]["prefill"]["env"] == {"KEEP": "prefill"}
     assert result["benchmark"] == {"env": {"KEEP": "client"}}
     assert result["environment"] == {"KEEP_GLOBAL": "yes"}
+
+
+@pytest.mark.parametrize("width", [None, True, 1, 4.0])
+def test_dflash_rejects_invalid_verification_block(golden_dir: Path, width: Any) -> None:
+    recipe = {
+        "roles": {
+            "agg": {
+                "args": {
+                    "speculative-algorithm": "DFLASH",
+                    "speculative-num-draft-tokens": width,
+                }
+            }
+        }
+    }
+    with pytest.raises(ValueError, match="positive integer draft length"):
+        build_overrides(
+            recipe, "sglang", {**ENV, "MODEL_PREFIX": "musespark"}, golden_dir=golden_dir
+        )
 
 
 @pytest.mark.parametrize(

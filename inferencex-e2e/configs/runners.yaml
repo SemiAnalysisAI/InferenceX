@@ -362,6 +362,7 @@ clusters:
       entries:
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
         MiniMax-M3-MXFP8: {root: data-models, dir: MiniMax-M3-MXFP8}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: data-models, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
     slurm:
