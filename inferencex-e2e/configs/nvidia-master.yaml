@@ -8909,9 +8909,9 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
           ep: 2
           dp-attn: false
 
-# Official 2026-10-04 CUDA 13 nightly, multiarch manifest pinned for B300.
+# Official 2026-10-14 CUDA 13 nightly, multiarch manifest pinned for B300.
 dsv41flash-fp4-b300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261004-295a53c9@sha256:7cfd4dd8e0e902d2a3c0560565963c4e172091e1586aaed15ff5a0a131394d34
+  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -8923,9 +8923,10 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4], srt-recipe: agentic.yaml }
-      - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 16, 24, 32, 48], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [192], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 20], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32, 48], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
