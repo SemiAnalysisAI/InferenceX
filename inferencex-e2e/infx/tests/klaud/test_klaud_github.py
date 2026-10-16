@@ -1255,6 +1255,97 @@ def test_finish_and_recovery_rederive_retirements_before_readiness(monkeypatch):
         session.validation({"id": 9, "head_sha": "c" * 40, "run_attempt": 1})
 
 
+def attempt_comment(number, en, zh, *, author="Klaud-Cold", parent=42, candidate=CANDIDATE_ID,
+                    run=9, chunked=False):
+    record = reporting.Attempt(
+        kind="initial", number=0, head="c" * 40, image="example/image:next", run_id=run,
+        run_attempt=1, status="cancelled", change=reporting.Prose(en="Pin the image.", zh="固定镜像。"),
+        next=reporting.Prose.model_construct(en=en, zh=zh), benchmarks_expected=1,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=[],
+    ).model_dump(by_alias=True)
+    data = {"record": record, "chunks": [f"run-{run}-1-part-1-{'0' * 16}"]} if chunked else record
+    return {"id": number, "user": {"login": author}, "body": (
+        f"<!-- klaud-report:{parent}:{candidate}:run-{run}-1\n{json.dumps(data)}\n-->\nRendered.")}
+
+
+def finish_report(monkeypatch, outcome, comments, recovering=False):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
+        recovering=recovering,
+    )
+    validated = outcome == "validated"
+    pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": not validated,
+            "state": "open" if validated else "closed",
+            "labels": [{"name": "full-sweep-enabled"}] if validated else []}
+    run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
+           "created_at": "2026-10-15T00:00:00Z", "status": "completed",
+           "conclusion": "success" if validated else "cancelled"}
+    posted = []
+    monkeypatch.setattr(session, "pulls", lambda: [pull])
+    monkeypatch.setattr(session, "runs", lambda: [run])
+    monkeypatch.setattr(session, "refresh", lambda _pull: pull)
+    monkeypatch.setattr(session, "validation", lambda _run: None)
+    monkeypatch.setattr(reporting, "publish_final", lambda *_: None)
+    monkeypatch.setattr(claims, "release_family", lambda *_: None)
+    monkeypatch.setattr(github, "items", lambda _repository, path, _key=None: (
+        comments if path == "issues/7/comments?per_page=100" else []))
+    monkeypatch.setattr(github, "write", lambda _repository, _path, _method, payload: (
+        posted.append(payload["body"])))
+
+    session.finish(CandidateOutcome(
+        outcome=outcome, phase="final-sweep" if validated else "targeted", pull_request=7,
+        run_ids=[9], repairs_used=0,
+    ))
+
+    [report] = [body for body in posted if body.startswith(session.marker)]
+    return report.split("\n-->\n", 1)[1]
+
+
+STOP = ("Stop as uncertain: the new image stalls every deployment.",
+        "以 uncertain 结束：新镜像使所有部署停滞。")
+
+
+@pytest.mark.parametrize(("outcome", "latest", "chunked", "recovering", "shown"), [
+    pytest.param("uncertain", None, False, False, False, id="no-own-attempt"),
+    pytest.param("uncertain", STOP, False, False, True, id="own-attempt"),
+    pytest.param("uncertain", STOP, True, False, True, id="chunked-own-attempt"),
+    pytest.param("uncertain", ("Traceback:\n<pre>CUDA error</pre>", "日志"), False, False, False,
+                 id="raw-log"),
+    pytest.param("validated", STOP, False, False, False, id="validated"),
+    pytest.param("uncertain", STOP, False, True, False, id="recovered-session"),
+])  # fmt: skip
+def test_closing_report_states_why_from_the_latest_own_attempt(
+    monkeypatch, outcome, latest, chunked, recovering, shown
+):
+    other = ("Retry with another image.", "换用其他镜像重试。")
+    own = [
+        attempt_comment(1, "Repair the launcher flags.", "修复启动参数。", run=8),
+        attempt_comment(2, *latest, chunked=chunked),
+    ] if latest else []
+    comments = [
+        *own,
+        attempt_comment(3, *other, author="maintainer"),
+        attempt_comment(4, *other, parent=41),
+        attempt_comment(5, *other, candidate="3" * 16 + "-" + "4" * 16),
+        {"id": 6, "user": {"login": "Klaud-Cold"}, "body": (
+            f"<!-- klaud-report:42:{CANDIDATE_ID}:run-9-1-part-1-{'0' * 16}\n"
+            '{"points": [], "evals": []}\n-->\nRendered.')},
+    ]
+    runs = "[9](https://github.com/example/project/actions/runs/9)"
+    done = {
+        "uncertain": ("PR closed; branch deleted for retry.", "PR 已关闭；分支已删除，可重新尝试。"),
+        "validated": ("Full sweep verified; ready for review.", "完整 sweep 已验证；已就绪，等待审查。"),
+    }[outcome]
+    why = (f"**Reason:** {latest[0]}  \n", f"**原因：**{latest[1]}  \n") if shown else ("", "")
+
+    assert finish_report(monkeypatch, outcome, comments, recovering) == (
+        f"**{outcome}** · Repairs: 0 · Runs: {runs}  \n{why[0]}All owned runs ended. {done[0]}"
+        "\n\n<details>\n<summary>中文</summary>\n\n"
+        f"**{outcome}** · 修复次数：0 · 运行：{runs}  \n{why[1]}所有自有运行均已结束。{done[1]}"
+        "\n\n</details>"
+    )
+
+
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):
     remote = tmp_path / "remote"
     remote.mkdir()

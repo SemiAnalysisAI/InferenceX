@@ -135,7 +135,8 @@ legends, boilerplate, limitations and redundant milestones. Briefly note failure
 reasons; preserve sources and uncertainty. Report observations on material changes or after
 30 minutes waiting. Improvement is best effort; there is no regression rejection gate.
 
-On terminal resolve/baseline evidence, stop investigating. Finalize attempts, write
+On terminal resolve/baseline evidence, stop investigating. Finalize attempts; the final
+attempt's Next states why you stopped, because finish shows it as the closing reason. Write
 CandidateOutcome to $KLAUD_EVIDENCE/requested-outcome.json and run `finish --outcome-file
 "$KLAUD_EVIDENCE/requested-outcome.json"`. Only finish may mark ready after verifying complete
 artifacts and publishing the final report BEFORE reviews begin.

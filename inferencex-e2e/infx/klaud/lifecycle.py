@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 from . import claims, github
 from .github import VerificationError
 from .models import CandidateOutcome, OwnedCandidate, Ownership, identity, utc
-from .reporting import translated
+from .reporting import latest_next, translated
 from .validation import verify_sweep
 
 BOT = "Klaud-Cold"
@@ -411,18 +411,21 @@ class Session:
                 repairs = outcome.repairs_used if outcome.repairs_used is not None else "unknown"
                 reason_en = f" · Reason: {outcome.reason_code}" if outcome.reason_code else ""
                 reason_zh = f" · 原因：{outcome.reason_code}" if outcome.reason_code else ""
+                why = None if proof or self.recovering else latest_next(self, pull)
+                why_en = f"**Reason:** {why.en}  \n" if why else ""
+                why_zh = f"**原因：**{why.zh}  \n" if why else ""
                 body = (
                     self.marker
                     + json.dumps(record)
                     + "\n-->\n"
                     + translated(
-                        f"**{outcome.outcome}**{reason_en} · Repairs: {repairs} · Runs: {links}  \nAll owned runs ended. "
+                        f"**{outcome.outcome}**{reason_en} · Repairs: {repairs} · Runs: {links}  \n{why_en}All owned runs ended. "
                         + (
                             "Full sweep verified; ready for review."
                             if proof
                             else "PR closed; branch deleted for retry."
                         ),
-                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs} · 运行：{links}  \n所有自有运行均已结束。"
+                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs} · 运行：{links}  \n{why_zh}所有自有运行均已结束。"
                         + (
                             "完整 sweep 已验证；已就绪，等待审查。"
                             if proof
