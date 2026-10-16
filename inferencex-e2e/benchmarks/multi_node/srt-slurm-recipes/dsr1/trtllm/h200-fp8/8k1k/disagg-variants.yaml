@@ -84,8 +84,6 @@ base:
 
   dynamo:
     install: false
-    # The container tag identifies a pre-39d2a68 Dynamo release; the image is not digest-pinned.
-    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
     request_plane: "nats"
 
 override_1p7d_tep8_b1_mtp3_c9:

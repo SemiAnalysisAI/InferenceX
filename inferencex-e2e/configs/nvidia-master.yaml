@@ -1761,13 +1761,13 @@ dsr1-fp8-h200-trt-mtp:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp8-h200-dynamo-trt:
-  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.5.1@sha256:9a563fc8a59b9cc7b7281a52427077d6542ecd752d70af20dbb0508c0486d3ef
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: cluster:h200-dgxc
   precision: fp8
   framework: dynamo-trt
-  router: { name: dynamo-router, version: "0.8.1.post1" }
+  router: { name: dynamo-router, version: "1.5.1" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
