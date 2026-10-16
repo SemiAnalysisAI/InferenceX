@@ -41,6 +41,8 @@ zip_override_tp4_ep1:
     agg:
       args:
         cuda-graph-max-bs-decode: [32, 64]
+        # aiter bpreshuffle CK-tile blockscale GEMM rejects the TP4 gate_up_proj (9216x7168) at 8k prefill on ROCm 7.2.
+        fp8-gemm-backend: [triton, triton]
   benchmark:
     env:
       CONC: ['32', '64']
