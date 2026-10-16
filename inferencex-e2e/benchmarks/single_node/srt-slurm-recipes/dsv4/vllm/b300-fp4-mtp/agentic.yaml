@@ -45,7 +45,6 @@ base:
         VLLM_USE_V2_MODEL_RUNNER: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '32768'
-        VLLM_DSV4_MEGA_FP8_COMBINE: '1'
         NCCL_NVLS_ENABLE: '1'
         VLLM_USE_RUST_FRONTEND: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'
@@ -108,7 +107,7 @@ zip_override_dep8:
         data-parallel-size: 8
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
         max-num-batched-tokens: [8304, 8360, 8416, 8528, 8640, 8696]

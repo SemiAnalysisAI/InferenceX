@@ -1642,7 +1642,7 @@ dsv4-fp8-h200-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
 dsv4-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-20ebb28
+  image: vllm/vllm-openai:nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294@sha256:a8d84c552462d1c60da4d7fc97f8f8f48a8fbfbf6820f73477fa0efe2571bf9d
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b300-dsxe
