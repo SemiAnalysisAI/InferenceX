@@ -10013,3 +10013,16 @@
     - "Add a HiCache host-DRAM KV offload arm at concurrency 2, 4 and 8 with 160 GB per rank, alongside the GPU-resident sweep; the few-GB GPU KV pool left by 67 GB of weights per H100 evicts agentic prefixes between turns."
     - "Keep the batch-8 cap on running requests and decode graphs from the GPU-resident sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4181
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the GB300 DeepSeek-V4.1-Flash Dynamo + SGLang points on lmsysorg/sglang:nightly-dev-cu13-20261015-a6a8c560 (digest sha256:0a1ba33aa4e032b8c5bcebdc69c45664074c032074add4f7db01629ec1fcc381) with the ai-dynamo 1.6.0.dev20261014 it ships (dynamo.install: false, TCP request plane). Tachometer exporters and the OTel collector are off."
+    - "Aggregated: replace TP4 c1 and TP2/EP2 c1 with TP4/EP1 c1, c4 and c16 and TP2/EP2 c16 on one node each. Engine args follow the matching standalone SGLang points of dsv41flash-fp4-gb300-sglang-agentic-dspark (#4033). The Dynamo frontend tokenizes with fastokens, so SGLang's tokenizer-backend and tokenizer-worker-num are dropped, as are env settings that restate this image's defaults or only configure SGLang's own HTTP server."
+    - "Disaggregated: add dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg with 4x DEP2 prefill (2 nodes) and one DEP16 decode (4 nodes) at c1228, and 6x DEP2 prefill (3 nodes) and one DEP16 decode at c2884. MegaMoE all-to-all, FlashMLA attention, DSpark block size 5, Mooncake KV transfer, prefill HiCache write-back DRAM KV offload (ratio 1.02 at c1228, 1.1 at c2884), 8 decode gateway workers and NCCL DP-batch sync. One CPU node hosts etcd, NATS, the frontend and the AgentX client."
+    - "Remove dsv41flash-fp4-gb300-dynamo-sglang-agentic-disagg (six TP2/EP2 1PxD points, c16 to c256, on the 20260928 image)."
+    - "The Dynamo frontend renders the chat template, so the AgentX client sends thinking=true, reasoning_effort=high and temperature 1 with every request."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4180
