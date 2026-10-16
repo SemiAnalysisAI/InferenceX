@@ -10054,29 +10054,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
 
 - config-keys:
-  - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang
   scenario-type:
-  - fixed-seq-len
+    - fixed-seq-len
   description:
-  - Preserve Qwen3.5 FP8 b200 coverage and require validated power; include the article
-    ladder where missing.
-  - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
-
-- config-keys:
-  - qwen3.5-fp8-b200-sglang
-  scenario-type:
-  - fixed-seq-len
-  description:
-  - Add an E2E-only TP4/EP1 article repeat selector using the existing Qwen3.5 FP8 B200 recipe.
-  - 新增文章复测专用的 TP4/EP1 E2E 选择配置，沿用现有 Qwen3.5 FP8 B200 配方。
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
-
-- config-keys:
-  - qwen3.5-fp8-b200-sglang
-  scenario-type:
-  - fixed-seq-len
-  description:
-  - Prepend TP4/EP1 concurrency 1 to the B200 FP8 8k1k single-node recipe zip_override so matrix cell c1 matches (cuda-graph-max-bs-decode 1, scheduler-recv-interval 10).
-  - 在 B200 FP8 8k1k 单节点配方的 zip_override 中为 TP4/EP1 补上并发 1，使矩阵 c1 与 cuda-graph-max-bs-decode 1、scheduler-recv-interval 10 对齐。
+    - "Add TP4/EP1 concurrency 1 to the Qwen3.5 FP8 B200 SGLang 8k1k recipe zip_override (cuda-graph-max-bs-decode 1, scheduler-recv-interval 10) so the c1 matrix point matches, and add the configs/powerx-article-b200.yaml selector for TP4/EP1 c1-c128 article repeats. The reused sweep measured and validated GPU power at every point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3378
