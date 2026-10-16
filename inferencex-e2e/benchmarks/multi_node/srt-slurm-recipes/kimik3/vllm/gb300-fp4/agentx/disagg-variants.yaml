@@ -1,16 +1,17 @@
 schema: 2
 
 base:
+  setup_script: kimik3-optimizations.sh
   identity:
     model: {}
     container: {}
     frameworks:
-      dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+      dynamo: "ffbbaaa6c44370e798687881317535ac17d66a76"
 
   dynamo:
     install: true
     source:
-      rev: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+      rev: "ffbbaaa6c44370e798687881317535ac17d66a76"
 
   slurm:
     time_limit: "04:00:00"
@@ -57,6 +58,7 @@ base:
       router-mode: "least-loaded"
       router-session-affinity-ttl-secs: 900
     env:
+      DYN_TCP_REQUEST_TIMEOUT: "120"
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
       DYN_TOKENIZER_CACHE_BYTES: "8589934592"
 
@@ -71,6 +73,9 @@ base:
       workers: 1
       gpus: 8
       env: &kimi_env
+        VLLM_ENABLE_GEMM_RS: "1"
+        DYN_TCP_REQUEST_TIMEOUT: "120"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_USE_DIRECT_DCP_A2A: "1"
         VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
         VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
@@ -104,6 +109,8 @@ base:
         UCX_TCP_AF_PRIO: "inet"
         VLLM_SSM_CONV_STATE_LAYOUT: "DS"
       args:
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3"
         prefix-match-unit: 128
@@ -113,7 +120,6 @@ base:
         gpu-memory-utilization: 0.92
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
-        cp-kv-cache-interleave-size: 1
         dcp-comm-backend: "a2a"
         enable-flashinfer-autotune: true
         enable-cumem-allocator: true
@@ -122,13 +128,14 @@ base:
         stream-interval: 10
         language-model-only: true
         attention-backend: "TOKENSPEED_MLA"
-        attention-config: '{"mla_prefill_backend": "TRTLLM_RAGGED", "use_prefill_query_quantization": true}'
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true,"trtllm_ragged_backend":"cute-dsl"}'
         enable-prefix-caching: true
       kv_events: true
     decode:
       gpus: 8
       env:
         <<: *kimi_env
+        VLLM_ENABLE_GEMM_RS: "0"
       args:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3"
@@ -139,7 +146,6 @@ base:
         gpu-memory-utilization: 0.92
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
-        cp-kv-cache-interleave-size: 1
         dcp-comm-backend: "a2a"
         enable-flashinfer-autotune: true
         enable-cumem-allocator: true
@@ -175,44 +181,135 @@ base:
 
 override_1p1d_dcp8_dcp8_dspark4:
   roles:
-    prefill:
-      args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
-    decode:
+    prefill: &1p1d_dcp8_dcp8_dspark4_prefill
+      args: &1p1d_dcp8_dcp8_dspark4_prefill_args
+        max-num-seqs: 64
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode: &1p1d_dcp8_dcp8_dspark4_decode
       nodes: 2
       workers: 1
-      args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
+      args: &1p1d_dcp8_dcp8_dspark4_decode_args
+        max-num-seqs: 128
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true,"tokenspeed_mla_min_split_kv":8}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
 override_1p2d_dcp8_dcp8_dspark4:
   roles:
-    prefill:
-      args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
-    decode:
+    prefill: &1p2d_dcp8_dcp8_dspark4_prefill
+      args: &1p2d_dcp8_dcp8_dspark4_prefill_args
+        max-num-seqs: 64
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode: &1p2d_dcp8_dcp8_dspark4_decode
       nodes: 4
       workers: 2
-      args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
+      args: &1p2d_dcp8_dcp8_dspark4_decode_args
+        max-num-seqs: 128
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true,"tokenspeed_mla_min_split_kv":8}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
 override_1p3d_dcp8_dcp8_dspark7:
   roles:
-    prefill:
-      args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
-    decode:
+    prefill: &1p3d_dcp8_dcp8_dspark7_prefill
+      env:
+        VLLM_ENABLE_GEMM_RS: "0"
+      args: &1p3d_dcp8_dcp8_dspark7_prefill_args
+        enable-expert-parallel: false
+        moe-backend: auto
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode: &1p3d_dcp8_dcp8_dspark7_decode
       nodes: 6
       workers: 3
-      args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
+      args: &1p3d_dcp8_dcp8_dspark7_decode_args
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
 override_1p3d_dcp8_dcp8_dspark4:
   roles:
-    prefill:
-      args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
-    decode:
+    prefill: &1p3d_dcp8_dcp8_dspark4_prefill
+      args: &1p3d_dcp8_dcp8_dspark4_prefill_args
+        max-num-seqs: 64
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+    decode: &1p3d_dcp8_dcp8_dspark4_decode
       nodes: 6
       workers: 3
+      args: &1p3d_dcp8_dcp8_dspark4_decode_args
+        max-num-seqs: 128
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true,"tokenspeed_mla_min_split_kv":8}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+override_1p1d_dcp8_dcp8_dspark4_eval:
+  roles:
+    prefill:
+      <<: *1p1d_dcp8_dcp8_dspark4_prefill
       args:
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"greedy","rejection_sample_method":"block"}'
+        <<: *1p1d_dcp8_dcp8_dspark4_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *1p1d_dcp8_dcp8_dspark4_decode
+      args:
+        <<: *1p1d_dcp8_dcp8_dspark4_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_1p2d_dcp8_dcp8_dspark4_eval:
+  roles:
+    prefill:
+      <<: *1p2d_dcp8_dcp8_dspark4_prefill
+      args:
+        <<: *1p2d_dcp8_dcp8_dspark4_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *1p2d_dcp8_dcp8_dspark4_decode
+      args:
+        <<: *1p2d_dcp8_dcp8_dspark4_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_1p3d_dcp8_dcp8_dspark7_eval:
+  roles:
+    prefill:
+      <<: *1p3d_dcp8_dcp8_dspark7_prefill
+      args:
+        <<: *1p3d_dcp8_dcp8_dspark7_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *1p3d_dcp8_dcp8_dspark7_decode
+      args:
+        <<: *1p3d_dcp8_dcp8_dspark7_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_1p3d_dcp8_dcp8_dspark4_eval:
+  roles:
+    prefill:
+      <<: *1p3d_dcp8_dcp8_dspark4_prefill
+      args:
+        <<: *1p3d_dcp8_dcp8_dspark4_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *1p3d_dcp8_dcp8_dspark4_decode
+      args:
+        <<: *1p3d_dcp8_dcp8_dspark4_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
