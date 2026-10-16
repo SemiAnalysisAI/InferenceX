@@ -49,8 +49,7 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. TP4/EP4 is the low-latency shape from AMD's model card;
-# TP8/EP8 adds KV headroom at higher concurrency. Both stay GPU-resident.
+# TP8/EP8 adds KV headroom at higher concurrency.
 
 override_tp4_c1:
   roles:
