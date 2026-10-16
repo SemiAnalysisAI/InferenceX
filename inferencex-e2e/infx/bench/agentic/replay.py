@@ -61,6 +61,9 @@ class ReplayConfig:
         warmup = None
         if values["AIPERF_EXPERIMENTAL_FAST"] == "1":
             duration, warmup = FAST_DURATION_S, FAST_WARMUP_REQUESTS_PER_LANE
+        profile_duration = inputs.optional("INFX_PROFILE_DURATION", env)
+        if profile_duration:
+            duration = inputs.parse_positive_int("INFX_PROFILE_DURATION", profile_duration)
         conv_aware = (
             values["FRAMEWORK"].startswith("dynamo-")
             and values["AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING"] != "0"
