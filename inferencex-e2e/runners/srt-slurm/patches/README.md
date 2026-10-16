@@ -8,5 +8,4 @@ Each patch backports an upstream fix that the shared submodule pin does not incl
 
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
-| `573-participating-gpus.patch` | [NVIDIA/srt-slurm#573](https://github.com/NVIDIA/srt-slurm/pull/573) | Record only the GPUs workers occupy on a worker node; an exporter such as AMD's reports every GPU, which the collector otherwise flags as `unexpected_device`. |
-| `602-vllm-sidecar-reasoning-parser.patch` | [NVIDIA/srt-slurm#602](https://github.com/NVIDIA/srt-slurm/pull/602) | Drop the `none` reasoning-parser sentinel for Python multi-node vLLM sidecar launches; keep it for `vllm-rs` and reject unsupported `auto`. Backports commit `fe957cc8baf1f3be4e0c792b1e1a66e489e85247`, including its command-generation regression tests. |
+| `573-participating-gpus.patch` | [NVIDIA/srt-slurm#573](https://github.com/NVIDIA/srt-slurm/pull/573) | Record only the GPUs workers occupy on a worker node; an exclusive node's exporter (DCGM or AMD) reports every GPU, which the collector otherwise flags as `unexpected_device`. The pin includes #573, but upstream merged a different design: it keeps every row and excuses idle worker-node GPUs only after a DCGM worker GPU UUID probe. [`infx/results/power/multinode.py`](../../../infx/results/power/multinode.py) does not apply that excusal yet, so keep this filter until it does. |

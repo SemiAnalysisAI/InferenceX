@@ -9902,3 +9902,84 @@
     - "Use Marlin W4A16 dense and MoE kernels, FA3 target attention, FA4 draft attention, FP8 KV, and an 8-token DFlash verification block with acceptance selected from the committed golden curve."
     - "Sweep concurrency 1, 2, 4, 8, 16, 24, 32, 48, and 64 with GPU-resident KV and no layernorm sequence parallelism or MegaMoE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4148
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open NVFP4 AgentX on B200 with upstream SGLang and DFlash2 speculative decoding at TP4/EP4."
+    - "Use modelopt_fp4, flashinfer_trtllm MoE, FP8 KV, layernorm sequence parallelism with MegaMoE, and an 8-token DFlash verification block with acceptance selected from the committed golden curve."
+    - "Disable prefill CUDA graphs and use mem-fraction-static 0.88 to preserve KV capacity. Sweep concurrency 1, 2, 4, 8, 12, 16, 24, and 32 with GPU-resident KV."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4147
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on one GB200 node via SGLang (lmsysorg/sglang:dev-muse-spark-open, multiarch digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) at TP4/EP4, concurrency 1, 2, 4, 6, 8, 10, 12, 16, 24 and 32, with HiCache host KV offload (120 GB per rank)."
+    - "Serve flags follow the SGLang cookbook's NVFP4 cell: modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE prefill, DFlash2 draft RadixArk/Muse-Spark-Open-DFlash2 with fa4 draft attention and 8 verify tokens (7 drafts), muse reasoning and tool-call parsers. Prefill CUDA graphs are off and mem-fraction-static is 0.88 to leave room for the KV pool; admission and the decode graph batch are 2x concurrency."
+    - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
+    - "The checkpoint is served from the staged Lustre copy; the AgentX client reads its tokenizer from it."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4140
+
+- config-keys: [musespark-fp4-b300-sglang-agentic-dflash]
+  description:
+    - "Add Muse Spark Open NVFP4 SGLang DFlash2 AgentX on B300 at TP4/EP4 with GPU-resident KV and concurrency 1 to 128."
+    - "Use the committed golden curve for DFlash acceptance and the staged checkpoint for serving and tokenization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4146
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Muse Spark Open B200 from TP4/EP4 to TP8/EP8 using the LMSYS AgentX recipe, with the same NVFP4 checkpoint, pinned SGLang image and DFlash2 draft."
+    - "Enable block verification and breakable prefill CUDA graphs; use mem-fraction-static 0.9, SWA/full ratio 0.4, admission 192 and decode graph batch 128."
+    - "Sweep concurrency 1, 2, 4, 8 and 12 with GPU-resident KV; enable layernorm SP, MegaMoE and HiCache at 16, 24, 32 and 48, with 120 GB per rank at 16 and 160 GB per rank at 24/32/48 so the DFlash2 draft host pool also fits in host DRAM."
+    - "Keep synthetic acceptance selected from the committed musespark_dflash golden curve for seven draft tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4155
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open (meta-models/Muse-Spark-Open-816B-A42B-NVFP4) agentic coding on GB300 via single-node SGLang (lmsysorg/sglang:dev-muse-spark-open, digest sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a) with DFlash2 speculative decoding (RadixArk/Muse-Spark-Open-DFlash2, 8-token verification block)."
+    - "Serve flags follow the verified GB300 NVFP4 cell of the SGLang Muse Spark cookbook: TP4/EP4, modelopt_fp4, flashinfer_trtllm MoE, fp8_e4m3 KV, layernorm SP with MegaMoE, fa4 draft attention, muse reasoning and tool-call parsers. KV stays GPU-resident (no HiCache)."
+    - "mem-fraction-static 0.85 and swa-full-tokens-ratio 0.1: 46 of 62 layers use a 2048-token sliding window, so shrinking the SWA pool raises the full-attention KV pool from 2.1M to 5.5M tokens."
+    - "Concurrency 1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24 and 32, with max-running-requests equal to concurrency."
+    - "Synthetic acceptance follows the committed musespark_dflash golden curve: AL 4.05 at 7 draft tokens, thinking_on."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4141
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0 to lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a, pinned by multiarch digest (sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8)."
+    - "Run TP4/EP1 at concurrency 1, 4, 8 and 32 and TP4/EP4 at concurrency 16; run TP4/EP4 with DP attention (DP4) behind sglang-router 0.3.2 at concurrency 64, 96, 128, 160 and 256 with the MegaMoE all-to-all backend and HiCache host-DRAM KV offload."
+    - "Use the shortest-prefill-first schedule policy from concurrency 4, TRT-LLM sparse attention from concurrency 32, SWA bounded replay with breakable prefill CUDA graphs at concurrency 8, and point-specific prefill-decode interval, prefill chunking, admission, memory and SWA prefix-tail settings from the single-node recipe."
+    - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4.1-Flash runs as shipped with block size 5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4112
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the DeepSeek-V4.1-Flash FP4 B200 SGLang AgentX image to nightly-dev-cu13-20261014-684fea8a, pinned by multiarch digest."
+    - "Refresh the aggregated curve with eleven points: TP4/EP1 at concurrency 1, 4 and 8, TP4/EP4 at 16 and 24, and TP4/EP4 with DP attention at 48, 64, 96, 128, 192 and 256 behind sglang-router."
+    - "DP-attention points use MegaMoE, the MXFP4 FlashInfer MoE runner, TRT-LLM sparse attention, HiCache host-DRAM KV offload and shortest-prefill-first scheduling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4111
+
+- config-keys:
+    - dsv41flash-fp4-b300-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Repin DeepSeek-V4.1-Flash FP4 B300 SGLang AgentX from nightly-dev-cu13-20261004-295a53c9 to nightly-dev-cu13-20261014-684fea8a, pinned by multiarch digest, enable the fastokens tokenizer backend, and publish eleven points: TP4/EP1 at concurrency 1, 4, 8, 16 and 20, TP2/EP1 at concurrency 16, 32 and 48, DEP2 (TP2/EP2/DP2 attention) at concurrency 64 and 256, and DEP4 (TP4/EP4/DP4 attention) at concurrency 256."
+    - "TP arms: point-specific prefill-decode interval and request caps; shortest-prefill-first on TP2; trtllm DSv4 attention at TP4 C8/C20 and TP2 C48; decoder SWA bounded replay with breakable prefill CUDA graphs at TP4 C16 and TP2 C16; lpm with one running request at TP4 C1."
+    - "DEP2 and DEP4 arms: MegaMoE all-to-all with flashinfer_mxfp4 runner, trtllm DSv4 attention, HiCache (ratio 4 on DEP2, 2 on DEP4), shortest-prefill-first, DP spec-prefill coordination, and sglang-router 0.3.2 consistent hashing with correlation-ID affinity."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4094
