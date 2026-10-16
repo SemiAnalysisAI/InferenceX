@@ -96,7 +96,6 @@ env:
   IS_AGENTIC: '0'
   SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-  MUSE_HF_TOKEN: ${{ secrets.MUSE_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}

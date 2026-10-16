@@ -48,9 +48,6 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 
-# The gated checkpoint needs MUSE_HF_TOKEN; SPEED-Bench's gated sources (cais/hle) need HF_TOKEN.
-MODEL_HF_TOKEN="${MUSE_HF_TOKEN:-$HF_TOKEN}"
-
 if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
     if [[ ! -w "$(dirname "$MODEL_PATH")" ]]; then
         echo "CRITICAL: $MODEL_PATH is empty and $(dirname "$MODEL_PATH") is not writable."
@@ -58,9 +55,9 @@ if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         exit 1
     fi
     echo "=== $MODEL_PATH is empty; downloading $MODEL (~484 GB, first run only) ==="
-    HF_TOKEN="$MODEL_HF_TOKEN" hf download "$MODEL" --local-dir "$MODEL_PATH"
+    hf download "$MODEL" --local-dir "$MODEL_PATH"
 fi
-HF_TOKEN="$MODEL_HF_TOKEN" hf download "$DRAFT_MODEL"
+hf download "$DRAFT_MODEL"
 
 echo "=== Downloading SPEED-Bench dataset ==="
 pip install -q datasets tiktoken
