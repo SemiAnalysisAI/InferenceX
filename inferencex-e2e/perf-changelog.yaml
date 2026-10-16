@@ -10054,20 +10054,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
 
 - config-keys:
-  - qwen3.5-fp8-gb300-dynamo-sglang
+    - qwen3.5-fp8-gb300-dynamo-sglang
   scenario-type:
-  - fixed-seq-len
+    - fixed-seq-len
   description:
-  - Preserve Qwen3.5 FP8 gb300 coverage and require validated power; include the article
-    ladder where missing.
-  - 保留现有覆盖并要求通过验证的功耗，补齐缺失的文章并发梯度。
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3382
-
-- config-keys:
-  - qwen3.5-fp8-gb300-dynamo-sglang
-  scenario-type:
-  - fixed-seq-len
-  description:
-  - Enable required DCGM power telemetry for Qwen3.5 FP8 GB300 8P1D STP; colocate etcd and nats on the head node
-    for the supported telemetry clock.
+    - "Require validated DCGM GPU power for every Qwen3.5 FP8 GB300 Dynamo SGLang 8k1k point, including 8P1D STP (power: true on the 8P1D row), and colocate etcd and nats on the head node for the supported telemetry clock."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3382
