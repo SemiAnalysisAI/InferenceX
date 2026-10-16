@@ -868,16 +868,6 @@ def main() -> int:
         type=Path,
         help="Claude execution log; retain numeric metrics and fixed denial categories",
     )
-    capacity = commands.add_parser(
-        "check-capacity",
-        help="Exit 0 when running plus queued nodes are at most 200%% of schedulable nodes; otherwise nonzero, without printing scheduler data",
-    )
-    capacity.add_argument(
-        "--cluster",
-        required=True,
-        action="append",
-        help="Exact cluster name from runners.yaml without the cluster: prefix; repeat for every possible recipe target",
-    )
     commands.add_parser(
         "check-stop",
         help="Claude Stop hook: require finished runs and validated, closed or handed-off PRs",
@@ -1047,12 +1037,10 @@ def main() -> int:
         if args.command == "regenerate-producers":
             regenerate_producers(args.directory)
             return 0
-        if args.command == "select":
-            if not 1 <= args.max_candidates_per_run <= 256:
-                parser.error("--max-candidates-per-run must be between 1 and 256")
-            select(args.directory, args.max_candidates_per_run, args.execution_file)
-            return 0
-        return 0 if set(args.cluster) <= fetch_capacity(Policy()) else 1
+        if not 1 <= args.max_candidates_per_run <= 256:
+            parser.error("--max-candidates-per-run must be between 1 and 256")
+        select(args.directory, args.max_candidates_per_run, args.execution_file)
+        return 0
     except ReadError as error:
         if args.command == "plan":
             message = f"Klaud Cold preparation failed: {error}"
