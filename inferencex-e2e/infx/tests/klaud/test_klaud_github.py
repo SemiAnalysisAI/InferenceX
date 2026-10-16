@@ -309,7 +309,10 @@ def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
     assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
 
 
-def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(monkeypatch):
+@pytest.mark.parametrize("other_recovery", ["in_progress", "completed"])
+def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
+    monkeypatch, other_recovery
+):
     names = ["dead", "session", "sweeping", "handoff", "human", "ready", "leftover",
              "closed-by-human", "stale-claim", "live-claim"]  # fmt: skip
     ids = {name: f"{digit * 16}-{digit * 16}" for name, digit in zip(names, "123456789a")}
@@ -338,7 +341,8 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(monke
         if path.startswith("actions/workflows/klaud-plan.yml/runs?status=in_progress"):
             return [{"id": 77}]
         if path.startswith("actions/runs/77/jobs"):
-            return [{"name": f"Run candidate {ids['session']} / Klaud Cold"}]
+            return [{"name": f"Run candidate {ids['session']} / Klaud Cold"},
+                    {"name": "Reconcile interrupted candidates", "status": other_recovery}]
         if path.startswith("actions/workflows/"):
             return []
         if path.startswith("pulls?state=open"):
@@ -353,6 +357,9 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(monke
         if path == "git/matching-refs/heads/klaud/auto-":
             return [{"ref": f"refs/heads/klaud/auto-{ids[name]}", "object": {"sha": name}}
                     for name in ("dead", "session", "leftover", "closed-by-human")]
+        if path == "git/matching-refs/heads/klaud/recovery-":
+            return [{"ref": f"refs/heads/klaud/recovery-{parent}-{ids[name]}"}
+                    for parent, name in ((1, "dead"), (1, "session"), (2, "leftover"))]
         raise AssertionError(path)
 
     def read(_repository, path):
@@ -364,6 +371,7 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(monke
         return {"closed_by": {"login": next(c for n, c in closed.values() if n == number)}}
 
     writes, released = [], []
+    monkeypatch.setenv("GITHUB_RUN_ID", "1000")
     monkeypatch.setattr(github, "items", items)
     monkeypatch.setattr(github, "read", read)
     monkeypatch.setattr(github, "write", lambda _r, path, method, _p=None: writes.append(
@@ -383,6 +391,8 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(monke
     assert released == [(ids["stale-claim"], 1)]
     assert writes == [
         ("POST", "actions/runs/501/cancel"),
+        *([("DELETE", f"git/refs/heads/klaud/recovery-1-{ids['dead']}")]
+          if other_recovery == "completed" else []),
         ("POST", "issues/1/comments"),
         ("PATCH", "pulls/1"),
         ("DELETE", f"git/refs/heads/klaud/auto-{ids['dead']}"),
