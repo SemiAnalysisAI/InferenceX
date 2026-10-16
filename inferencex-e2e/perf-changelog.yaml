@@ -9983,3 +9983,9 @@
     - "TP arms: point-specific prefill-decode interval and request caps; shortest-prefill-first on TP2; trtllm DSv4 attention at TP4 C8/C20 and TP2 C48; decoder SWA bounded replay with breakable prefill CUDA graphs at TP4 C16 and TP2 C16; lpm with one running request at TP4 C1."
     - "DEP2 and DEP4 arms: MegaMoE all-to-all with flashinfer_mxfp4 runner, trtllm DSv4 attention, HiCache (ratio 4 on DEP2, 2 on DEP4), shortest-prefill-first, DP spec-prefill coordination, and sglang-router 0.3.2 consistent hashing with correlation-ID affinity."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4094
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Update the SGLang image from nightly-dev-20260914-4358a161 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4172
