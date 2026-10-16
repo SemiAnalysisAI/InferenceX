@@ -59,10 +59,14 @@ class SglangBackend(ServerMetricsBackend):
         device_hits = cached_by_source.get("device")
         host_hits = cached_by_source.get("host")
         total_cached = sum(cached_by_source.values()) if cached_by_source else None
+        non_device = [v for k, v in cached_by_source.items() if k != "device"]
 
         flat["server_gpu_cache_hit_rate"] = rate(device_hits, prompt_total)
         flat["server_cpu_cache_hit_rate"] = rate(host_hits, prompt_total)
-        flat["server_external_cache_hit_rate"] = flat["server_cpu_cache_hit_rate"]
+        # Consumers price GPU + external, so external carries every non-device tier (host and storage).
+        flat["server_external_cache_hit_rate"] = (
+            rate(sum(non_device), prompt_total) if non_device else None
+        )
         flat["server_overall_cache_hit_rate"] = rate(total_cached, prompt_total)
 
         if flat["server_overall_cache_hit_rate"] is None:

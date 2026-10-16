@@ -41,15 +41,18 @@ class VllmBackend(ServerMetricsBackend):
         flat["total_prompt_tokens"] = counter_int(prompt_total)
         flat["total_generation_tokens"] = counter_int(generation_total)
 
+        role_scope, role_filter = _cache_role_filter(metrics)
         prefix_hits = sum_stat(
             metrics,
             "vllm:prefix_cache_hits",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         prefix_queries = sum_stat(
             metrics,
             "vllm:prefix_cache_queries",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         gpu_rate = rate(prefix_hits, prefix_queries)
         flat["server_gpu_cache_hit_rate"] = gpu_rate
@@ -58,11 +61,13 @@ class VllmBackend(ServerMetricsBackend):
             metrics,
             "vllm:external_prefix_cache_hits",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         external_queries = sum_stat(
             metrics,
             "vllm:external_prefix_cache_queries",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         external_rate = rate(external_hits, external_queries)
         flat["server_external_cache_hit_rate"] = external_rate
@@ -73,6 +78,7 @@ class VllmBackend(ServerMetricsBackend):
             "vllm:prompt_tokens_by_source",
             "source",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         if prompt_by_source:
             local_cache_hit = prompt_by_source.get("local_cache_hit")
@@ -143,6 +149,10 @@ class VllmBackend(ServerMetricsBackend):
                 "prefix_cache_queries": prefix_queries,
                 "external_prefix_cache_hits": external_hits,
                 "external_prefix_cache_queries": external_queries,
+                "overall_source": "worker_counters"
+                if flat["server_overall_cache_hit_rate"] is not None
+                else None,
+                "role_scope": role_scope,
             }
         )
         nested["kv_cache"].update(
@@ -296,17 +306,40 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     return sources
 
 
-def _source_id(series: dict[str, Any]) -> str:
+_CACHE_METRICS = (
+    "vllm:prompt_tokens_by_source",
+    "vllm:prefix_cache_hits",
+    "vllm:prefix_cache_queries",
+    "vllm:external_prefix_cache_hits",
+    "vllm:external_prefix_cache_queries",
+)
+
+
+def _series_role(series: dict[str, Any]) -> str:
     labels = series.get("labels") if isinstance(series.get("labels"), dict) else {}
     component = str(labels.get("dynamo_component") or labels.get("component") or "")
     if component == "prefill":
-        role = "prefill"
-    elif component in ("backend", "decode"):
-        role = "decode"
-    elif component in ("frontend", "router"):
-        role = "router"
-    else:
-        role = "combined"
+        return "prefill"
+    if component in ("backend", "decode"):
+        return "decode"
+    if component in ("frontend", "router"):
+        return "router"
+    return "combined"
+
+
+def _cache_role_filter(metrics: dict[str, dict[str, Any]]) -> tuple[str, Any]:
+    # A P/D decode worker counts every transferred prompt token as external_kv_transfer, so only
+    # prefill series measure reuse; unlabelled series next to prefill ones are kept, not dropped.
+    roles = {_series_role(s) for name in _CACHE_METRICS for s in metric_series(metrics, name)}
+    if "prefill" not in roles:
+        return "combined", None
+    if "combined" in roles:
+        return "mixed", None
+    return "prefill", lambda series: _series_role(series) == "prefill"
+
+
+def _source_id(series: dict[str, Any]) -> str:
+    role = _series_role(series)
 
     parts = [role]
     endpoint = series.get("endpoint_url")

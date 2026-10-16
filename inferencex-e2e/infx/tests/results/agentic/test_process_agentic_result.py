@@ -98,6 +98,8 @@ SERVER_CACHE_KEYS = {
     "router_shared_cache_hit_rate",
     "frontend_cached_tokens",
     "frontend_input_tokens",
+    "overall_source",
+    "role_scope",
 }
 SERVER_KV_CACHE_KEYS = {
     "gpu_usage_pct",

@@ -189,10 +189,13 @@ def sum_by_label(
     label_keys: str | list[str],
     *,
     preferred_keys: tuple[str, ...] = ("total", "sum", "max", "avg"),
+    series_filter: Callable[[dict[str, Any]], bool] | None = None,
 ) -> dict[str, float]:
     keys = [label_keys] if isinstance(label_keys, str) else label_keys
     out: dict[str, float] = {}
     for series in metric_series(metrics, metric_names):
+        if series_filter is not None and not series_filter(series):
+            continue
         labels = series.get("labels")
         if not isinstance(labels, dict):
             continue
