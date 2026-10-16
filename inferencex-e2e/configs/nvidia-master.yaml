@@ -6177,7 +6177,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
           dp-attn: false
 
 kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-75c2eef
+  image: vllm/vllm-openai:v0.31.0-aarch64@sha256:3f7dd5b777d34d1724456ce71f87385dca288c3bb23029ab27dee358f5d2b971
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb200-nv
