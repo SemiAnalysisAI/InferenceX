@@ -9744,3 +9744,62 @@ musespark-fp4-h100-sglang-agentic-dflash:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
+
+# Video-generation benchmarks (scenario video-generation): one frozen H3 workload
+# (experimental/video-generation/specs) served by a fixed deployment, every listed
+# concurrency against the same server. Rows run through the native srt-slurm launcher
+# (infx.launch path srt-video) with the cluster's GPU power exporter; the H3 client and
+# server come from experimental/video-generation, mounted into the job as /h3-package.
+# The image is the prepared H3 runtime squash staged in the cluster's squash cache
+# (sglang 71de97b with the H3 server-timing patch and the evaluator's media
+# dependencies); it is not pullable from a registry.
+h3-bf16-h200-sglang-video:
+  image: hongccc/sglang-omni:h3-runtime-71de97b
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-serving-2gpu.json
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1, 2, 4]
+
+h3-bf16-b200-sglang-video:
+  image: hongccc/sglang-omni:h3-runtime-71de97b
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:b200-nscale
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/b200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-serving-2gpu.json
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1, 2, 4]
+
+h3-bf16-h100-sglang-video:
+  image: hongccc/sglang-omni:h3-runtime-71de97b
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-serving-2gpu.json
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1, 2, 4]

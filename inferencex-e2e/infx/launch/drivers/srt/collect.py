@@ -18,6 +18,7 @@ from infx.bench.env import InputError
 from infx.bench.eval import meta as eval_meta
 from infx.launch.artifacts import (
     ArtifactError,
+    build_video_bundle,
     bundle_server_logs,
     collect_agentic_power_results,
     copy_agentic_results,
@@ -26,6 +27,7 @@ from infx.launch.artifacts import (
     copy_to_workspace,
     run_power_adapter,
     validate_agentic_power,
+    validate_video_results,
 )
 from infx.launch.backends.base import BackendError
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
@@ -39,7 +41,9 @@ if TYPE_CHECKING:
     from infx.launch.drivers.srt.submit import Submitted
 
 SINGLE_NODE_LOGS = "srt-single-node-logs.tar.gz"
+VIDEO_LOGS = "srt-video-logs.tar.gz"
 MULTINODE_LOGS = "multinode_server_logs.tar.gz"
+VIDEO_BUNDLE = "h3-results"
 
 
 def _copy_tree_into(source: Path, destination: Path) -> None:
@@ -133,6 +137,56 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
             event.fail("ResultMissing", f"benchmark result {result} is missing or empty")
             return 1
     return power_rc
+
+
+def finish_video(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
+    """Exit cleanup of a video job: cancel a live job, then retain its logs and power package."""
+    job = submitted.recover(run.backend)
+    if job is None:
+        return 0
+    run.backend.cancel(job)
+    with run.life.event.stage("collect"):
+        output = run.backend.fetch_outputs(job, fetched)
+        if not output.is_dir():
+            return 0
+        power_rc = _stage_power_package(run, output / "logs")
+        bundle_server_logs(output, run.workspace / VIDEO_LOGS)
+    return power_rc
+
+
+def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
+    """Validate every concurrency's H3 result against the native power package, then bundle.
+
+    Each concurrency gets its own aggregate and validation sidecar beside the result
+    summary; the bundle under ``h3-results`` is what the app ingests. An incomplete
+    concurrency fails the point; invalid power fails it only under REQUIRE_POWER.
+    """
+    request, event = run.request, run.life.event
+    require(request, "INFERENCEX_RESULTS_PYTHON", "CONC_LIST", "GPU_COUNT", "H3_SPEC")
+    if not (logs / "h3").is_dir():
+        event.fail("ResultMissing", f"H3 results are missing under {logs / 'h3'}")
+        return 1
+    rc = validate_video_results(
+        request.inferencex_results_python, run.workspace, logs, producer_sha,
+        result_filename=request.result_filename, concurrencies=request.conc_list,
+        gpu_count=int(request.env["GPU_COUNT"]), require_power=request.require_power,
+        identity={
+            "cluster": run.cluster.id, "model": request.env["MODEL"], "image": request.image,
+            "framework": request.framework, "precision": request.precision,
+            "spec": request.env["H3_SPEC"],
+        },
+    )  # fmt: skip
+    if rc:
+        event.fail("VideoValidationFailed", "H3 result validation failed", report=False)
+    bundle_rc = build_video_bundle(
+        request.inferencex_results_python, run.workspace, logs,
+        package=run.workspace.parent / "experimental/video-generation",
+        output=run.workspace / VIDEO_BUNDLE, result_filename=request.result_filename,
+        concurrencies=request.conc_list,
+    )  # fmt: skip
+    if bundle_rc:
+        event.fail("VideoBundleFailed", "H3 results bundle was not built", report=False)
+    return rc or bundle_rc
 
 
 def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:
