@@ -15,7 +15,7 @@ from infx.bench.eval.context import EvalContext, EvalOutcome
 
 REPOSITORY = "https://github.com/EleutherAI/lm-evaluation-harness"
 REF = "b315ef3b05176acc9732bb7fdec116abe1ecc476"
-DEFAULT_TASKS = "infx/evals/gsm8k.yaml"
+DEFAULT_TASKS = "infx/evals/mmlu_pro.yaml"
 PATCH = "infx/evals/patches/lm_eval_sitecustomize.py"
 FALLBACK_CONTEXT = 16384
 PROMPT_RESERVE = 4096

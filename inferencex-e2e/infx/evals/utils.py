@@ -32,3 +32,14 @@ def process_docs(
             rows.append(new_doc)
 
     return datasets.Dataset.from_list(rows)
+
+
+MMLU_PRO_LETTERS = "ABCDEFGHIJ"
+
+
+def mmlu_pro_doc_to_text(doc: dict) -> str:
+    options = "\n".join(f"({MMLU_PRO_LETTERS[i]}) {opt}" for i, opt in enumerate(doc["options"]))
+    return (
+        f"{doc['question']}\n\n{options}\n\n"
+        "Think step by step, then finish with \"The answer is (X)\" where X is the letter of the correct option."
+    )

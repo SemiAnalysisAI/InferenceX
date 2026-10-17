@@ -1,0 +1,35 @@
+# Throwaway: zero-shot chat MMLU-Pro, full test split (12,032 questions).
+task: mmlu_pro_full
+dataset_path: TIGER-Lab/MMLU-Pro
+output_type: generate_until
+test_split: test
+doc_to_text: !function utils.mmlu_pro_doc_to_text
+doc_to_target: answer
+generation_kwargs:
+  until:
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
+num_fewshot: 0
+filter_list:
+  - name: "answer-is"
+    filter:
+      - function: "regex"
+        group_select: -1
+        regex_pattern: "answer is:?\\s*\\**\\(?([A-J])\\)?"
+      - function: "take_first"
+  - name: "flexible-extract"
+    filter:
+      - function: "regex"
+        group_select: -1
+        regex_pattern: "(?:\\(([A-J])\\)|\\*\\*([A-J])\\*\\*|\\\\boxed\\{\\(?([A-J])\\)?\\})"
+      - function: "take_first"
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+    ignore_case: true
+    ignore_punctuation: true
+metadata:
+  version: 1.0

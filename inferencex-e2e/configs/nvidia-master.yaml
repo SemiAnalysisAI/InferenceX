@@ -9207,7 +9207,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         srt-recipe: disagg-variants.yaml:override_10p1d_dep2_dep16_c6656
-        conc-list: [6656]
+        conc-list: [6656, 5990]
         prefill:
           num-worker: 10
           tp: 2
