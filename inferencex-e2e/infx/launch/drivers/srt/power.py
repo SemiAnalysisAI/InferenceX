@@ -153,9 +153,11 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
     Raises ``PowerPolicyError`` for a combination the lane does not allow.
     """
     default = cluster_id in NVL72_POWER_CLUSTERS and path == LaunchPath.SRT_MULTI
-    if default and request.eval_only:
+    if request.eval_only:
         return NO_POWER
     if not request.power and not default:
+        if request.require_power:
+            raise PowerPolicyError("require-power needs an eligible power collector")
         return NO_POWER
     lane = POWER_LANES.get((cluster_id, path))
     if default:
@@ -164,7 +166,8 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
             dcgm=True,
             agentx=request.is_agentic,
             adapter=matched.adapter if matched else False,
-            require=matched.require if request.power and matched else False,
+            require=request.require_power
+            or (matched.require if request.power and matched else False),
             cpu=True,
         )
     if lane is None:
@@ -175,7 +178,7 @@ def decide_power(cluster_id: str, path: LaunchPath, request: MultiNodeRequest) -
                 dcgm=True,
                 agentx=rule.agentx,
                 adapter=rule.adapter,
-                require=rule.require,
+                require=request.require_power or rule.require,
                 cpu=request.cpu_power,
             )
     message = lane.agentic_error if request.is_agentic and lane.agentic_error else lane.error

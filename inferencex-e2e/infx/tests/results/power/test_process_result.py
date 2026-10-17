@@ -1148,7 +1148,7 @@ def test_agentic_collector_preserves_archive_when_result_python_is_missing(
         completed = JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0)
         rc = collect_agentic_power_results(
             completed, "12345", pkg.logs_root, source, workspace, "point", PRODUCER_SHA, [4],
-            results_python=result_python,
+            results_python=result_python, require_power=True,
         )  # fmt: skip
         archive_name = "server-logs.tar.gz"
     else:

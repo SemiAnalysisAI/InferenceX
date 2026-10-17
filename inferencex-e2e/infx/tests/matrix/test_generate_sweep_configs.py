@@ -2526,6 +2526,22 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
+    @pytest.mark.parametrize("required", [None, False, True])
+    def test_agentic_power_requirement_reaches_rows_and_not_evals(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep, required
+    ):
+        from infx.matrix.generate import select_matrix_evals
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [4]
+        scenario = next(iter(config.values()))["scenarios"]["agentic-coding"][0]
+        if required is not None:
+            scenario["require-power"] = required
+        rows = generate_agentic_sweep(config, sample_runner_config)
+        assert rows and all(row["require-power"] is (required is True) for row in rows)
+        evals = select_matrix_evals(copy.deepcopy(rows), mode="subset")
+        assert evals and all("require-power" not in row for row in evals)
+
     def test_point_order_and_input_preservation(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):

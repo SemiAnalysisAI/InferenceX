@@ -109,14 +109,19 @@ def test_power_collection_records_the_job_status_and_stages_results_either_way(t
     (source / "point_conc4.json").write_text("{}")
 
     assert collect_agentic_power_results(
-        status, "42", logs, source, workspace, "point", "sha", [4], results_python="true",
+        status, "42", logs, source, workspace, "point", "sha", [4],
+        results_python="true", require_power=False,
     ) == rc  # fmt: skip
 
     assert (logs / "power" / "native-job-status.txt").read_text() == f"42|{status.raw}\n"
     assert (workspace / "point_conc4.json").exists()
 
 
-def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path):
+@pytest.mark.parametrize(("require_power", "expected_rc"), [(False, 0), (True, 1)])
+@pytest.mark.parametrize("missing_gpu", [False, True])
+def test_agentic_collection_enforces_only_required_invalid_power(
+    tmp_path, require_power, expected_rc, missing_gpu
+):
     from infx.tests.results.power.test_aggregate_power_multinode import (
         PRODUCER_SHA,
         build_package,
@@ -139,6 +144,8 @@ def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path):
     for device in manifest["expected_devices"]:
         device["assignments"][0].update(worker_role="agg", het_group=0)
     manifest_path.write_text(json.dumps(manifest))
+    if missing_gpu:
+        (pkg.power_dir / "samples.csv").unlink()
     source, workspace = tmp_path / "source", tmp_path / "output"
     source.mkdir()
     workspace.mkdir()
@@ -156,11 +163,16 @@ def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path):
         PRODUCER_SHA,
         [4],
         results_python=sys.executable,
+        require_power=require_power,
         expected_cpu=True,
-    ) == 1
+    ) == expected_rc
     result = json.loads((workspace / "point_conc4.json").read_text())
-    assert result["power_valid"] == 1
+    assert result["power_valid"] == int(not missing_gpu)
     assert result["cpu_power_valid"] == 0
-    assert result["total_gpu_energy_j"] == 84000.0
+    if missing_gpu:
+        assert "total_gpu_energy_j" not in result
+        assert "package_recompute_invalid" in result["power_invalid_reasons"]
+    else:
+        assert result["total_gpu_energy_j"] == 84000.0
     assert result["power_audit"]["source"] == "LOGS/agentic/conc_4/power_validation.json"
     assert result["power_audit"]["cpu"]["reason_codes"] == ["cpu_artifacts_missing"]

@@ -9895,6 +9895,7 @@
     - dsv41flash-fp4-gb300-vllm-agentic-dspark
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
   description:
-    - "Enable noprof GPU and ACPI CPU collection by default for GB200/GB300 benchmarks, including native single-node and AgentX, with the pinned cpu-power-exporter v2.51.1. Preserve independent GPU/CPU validity and existing strict qualification; eval-only jobs omit collection."
+    - "Enable best-effort noprof GPU and ACPI Grace CPU collection by default for GB200/GB300 benchmarks, including native single-node and AgentX, with the pinned cpu-power-exporter v2.51.1. Explicit required-power AgentX points fail on invalid GPU or expected CPU evidence; ordinary points retain valid benchmark results and independent GPU/CPU validity. Eval-only jobs omit collection."
     - "Place benchmark clients and telemetry on the head clock without changing worker or allocation counts. Native single-node results retain their real topology and power audit. Placement changes require fresh performance results."
+    - "Require validated power on the 11 GLM-5.2 GB200 aggregate/disaggregated/MTP AgentX points and 24 DSV4 GB200 aggregate MTP TP8/DEP8 points, retaining their current images, selectors and topology."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3670

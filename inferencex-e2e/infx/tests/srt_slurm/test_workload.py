@@ -166,10 +166,15 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
     bound = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
 
     assert bound["telemetry"] == {
-        "collector_join_timeout_seconds": 12, "enabled": True, "required": True,
+        "collector_join_timeout_seconds": 12, "enabled": True, "required": False,
         "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 19401},
     }  # fmt: skip
     assert bound["benchmark"]["concurrencies"] == [8]
+    strict = bind_workload(
+        variant, {**AGENTX_ENV, "REQUIRE_POWER": "1"}, agentic=True, multinode=True
+    )
+    assert strict["telemetry"]["required"] is True
+    assert strict["benchmark"]["env"]["REQUIRE_POWER"] == "1"
     with_cpu = compose_recipe(
         path, agentic=True, multinode=True, root=project, power_port=19401, cpu_power_source="acpi"
     )
@@ -178,6 +183,21 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
     assert "concurrencies" not in bind_workload(unpowered, AGENTX_ENV, agentic=True, multinode=True)[
         "benchmark"
     ]
+
+
+def test_cpu_only_telemetry_keeps_its_source_without_gpu_exporter():
+    recipe = {
+        "benchmark": {},
+        "telemetry": {"enabled": True, "cpu_power_exporter": {"source": "acpi"}},
+    }
+    bound = bind_workload(recipe, AGENTX_ENV, agentic=True, multinode=True)
+    assert bound["telemetry"] == {
+        "enabled": True,
+        "required": False,
+        "cpu_power_exporter": {"source": "acpi"},
+    }
+    assert bound["benchmark"]["concurrencies"] == [8]
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == "0"
 
 
 @pytest.mark.parametrize(("environment", "message"), [

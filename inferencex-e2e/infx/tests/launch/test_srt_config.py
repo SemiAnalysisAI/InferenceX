@@ -278,7 +278,7 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
     ("1", PowerDecision(dcgm=True, agentx=True), (9401, "true", "1", "0")),
     ("1", PowerDecision(dcgm=True, agentx=True, require=True), (9401, "true", "1", "1")),
     ("1", PowerDecision(dcgm=True, agentx=False, adapter=True), (9401, "true", "1", "0")),
-    ("0", PowerDecision(dcgm=True, agentx=False), (9401, None, None, None)),
+    ("0", PowerDecision(dcgm=True, agentx=False), (9401, None, None, "0")),
 ])  # fmt: skip
 def test_the_agentx_client_measures_power_exactly_when_the_launcher_collects_it(
     tmp_path, agentic, decision, expected

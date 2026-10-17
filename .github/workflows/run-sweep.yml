@@ -392,6 +392,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
             scenario-type: ${{ matrix.config['scenario-type'] || 'fixed-seq-len' }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             duration: ${{ matrix.config.duration || '3600' }}
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
@@ -419,6 +420,7 @@ jobs:
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-multi-node-1k1k:
@@ -548,6 +550,7 @@ jobs:
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-multi-node-agentic:
@@ -582,6 +585,7 @@ jobs:
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:

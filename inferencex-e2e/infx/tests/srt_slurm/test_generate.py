@@ -188,7 +188,7 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
 
     [(record, recipe)] = written(output)
     assert record["cluster"] == "fixture"
-    assert recipe["telemetry"] == {"enabled": True, "dcgm_exporter": {
+    assert recipe["telemetry"] == {"enabled": True, "required": False, "dcgm_exporter": {
         "container_image": "dcgm-exporter", "command": "dcgm-exporter --address :{port}", "port": 9555,
     }}  # fmt: skip
     assert recipe["benchmark"]["env"] == {

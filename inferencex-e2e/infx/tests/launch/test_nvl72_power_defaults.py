@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from infx.launch.drivers.srt.power import decide_power
+from infx.launch.drivers.srt.power import PowerPolicyError, decide_power
 from infx.launch.policy import LaunchPath
 from infx.launch.request import MultiNodeRequest
 from infx.srt_slurm.workload import compose_recipe
@@ -54,6 +54,20 @@ def test_existing_strict_agentx_rule_stays_strict():
         request(POWER="1", MODEL_PREFIX="kimik3", FRAMEWORK="dynamo-vllm"),
     )
     assert decision.dcgm and decision.agentx and decision.cpu and decision.require
+
+
+def test_explicit_requirement_uses_default_nvl72_collector_and_skips_evals():
+    strict = request(REQUIRE_POWER="1", POWER="0")
+    decision = decide_power("gb200-nv", LaunchPath.SRT_MULTI, strict)
+    assert decision.dcgm and decision.agentx and decision.cpu and decision.require
+    evaluation = decide_power("gb200-nv", LaunchPath.SRT_MULTI,
+                              request(REQUIRE_POWER="1", EVAL_ONLY="true"))  # fmt: skip
+    assert not evaluation.dcgm and not evaluation.require
+
+
+def test_explicit_requirement_without_collector_fails():
+    with pytest.raises(PowerPolicyError, match="eligible power collector"):
+        decide_power("h200-dgxc", LaunchPath.SRT_MULTI, request(REQUIRE_POWER="1", POWER="0"))
 
 
 @pytest.mark.parametrize("hardware", ["gb200", "gb300"])

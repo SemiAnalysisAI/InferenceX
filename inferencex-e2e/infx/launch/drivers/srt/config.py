@@ -263,8 +263,9 @@ def binder_inputs(
                 f"cluster {cluster.id!r} declares no srt-slurm.cpu-power-exporter for cpu-power"
             )
         cpu_source = srt.cpu_power_exporter.source
+    required = "1" if decision.require else "0"
     if not request.is_agentic:
-        return port, cpu_source, {}
+        return port, cpu_source, {"REQUIRE_POWER": required}
     return (
         port,
         cpu_source,
@@ -272,7 +273,7 @@ def binder_inputs(
             **agentic_client_env(cluster, srt, lane, request),
             "IS_MULTINODE": str(request.is_multinode).lower(),
             "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
-            "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",
+            "REQUIRE_POWER": required,
         },
     )
 

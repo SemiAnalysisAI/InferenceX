@@ -189,6 +189,7 @@ def collect(
                 infmax,
                 *audit,
                 results_python=python,
+                require_power=power.require,
                 expected_cpu=power.cpu,
             )
         else:
@@ -196,7 +197,7 @@ def collect(
                 logs,
                 *audit,
                 results_python=python,
-                require_power=request.require_power,
+                require_power=power.require,
                 expected_cpu=power.cpu,
             )
         if power_rc:

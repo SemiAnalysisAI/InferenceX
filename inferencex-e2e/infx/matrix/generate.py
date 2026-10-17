@@ -1113,6 +1113,9 @@ def _agentic_entries(
     """
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
+    require_power = scenario.get(Fields.REQUIRE_POWER.value)
+    if require_power is None:
+        require_power = False
     model_code = config[Fields.MODEL_PREFIX.value]
     if is_multinode:
         prefill, decode = multinode_worker_pair(benchmark, disagg)
@@ -1197,6 +1200,7 @@ def _agentic_entries(
                 + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
             )
         entry.update(srt_recipe_fields(config, benchmark))
+        entry[Fields.REQUIRE_POWER.value] = require_power
         if benchmark.get(Fields.POWER.value):
             entry[Fields.POWER.value] = True
         if benchmark.get(Fields.CPU_POWER.value):

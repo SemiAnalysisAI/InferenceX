@@ -6003,11 +6003,13 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
   srt-recipe-dir: dsv4/vllm/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - search-space:
+    - require-power: true
+      search-space:
       # Match the B200 TP8 latency points for direct normalized-interactivity
       # comparison, then use the public vLLM GB200 DEP8 topology for throughput.
       - spec-decoding: mtp
         conc-list: [1, 2, 4, 6, 8]
+        power: true
         num-nodes: 2
         srt-recipe: agg-mtp-variants.yaml:override_tp8
         worker:
@@ -6017,6 +6019,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp-agg:
           dp-attn: false
       - spec-decoding: mtp
         conc-list: [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80]
+        power: true
         num-nodes: 2
         srt-recipe: agg-mtp-variants.yaml:override_dep8
         worker:
@@ -7428,7 +7431,8 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
   srt-recipe-dir: glm5.2/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - require-power: true
+      dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
         conc-list: [1, 2, 4, 8, 12, 16]
@@ -7457,10 +7461,12 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: glm5.2/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - require-power: true
+      dram-utilization: 0.80
       search-space:
       - spec-decoding: mtp
         conc-list: [10, 12]
+        power: true
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-mtp-variants.yaml:zip_override_mtp_agentx_frontier[0]
@@ -7493,11 +7499,13 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp:
   srt-recipe-dir: glm5.2/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.8
+    - require-power: true
+      dram-utilization: 0.8
       search-space:
       - spec-decoding: mtp
         conc-list:
         - 45
+        power: true
         kv-offloading: dram
         kv-offload-backend:
           name: hicache
@@ -7515,6 +7523,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp:
       - spec-decoding: mtp
         conc-list:
         - 48
+        power: true
         kv-offloading: dram
         kv-offload-backend:
           name: hicache
@@ -7532,6 +7541,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp:
       - spec-decoding: mtp
         conc-list:
         - 128
+        power: true
         kv-offloading: dram
         kv-offload-backend:
           name: hicache
