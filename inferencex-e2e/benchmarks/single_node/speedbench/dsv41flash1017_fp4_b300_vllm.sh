@@ -2,7 +2,7 @@
 set -eo pipefail
 repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
 source "$repo_root/benchmarks/check_env.sh"
-check_env_vars MODEL MODEL_PATH IMAGE TP PORT MTP_LIST THINKING_MODES CATEGORY \
+check_env_vars MODEL MODEL_PATH IMAGE TP MTP_LIST THINKING_MODES CATEGORY \
     SPEEDBENCH_OUTPUT_LEN CHAT_TEMPLATE_KWARGS_ON OUT_YAML
 export PYTHONPATH="$repo_root"
 export MODEL_REVISION=1bae0e1088993b9b82de08f59de5be5a34e42170

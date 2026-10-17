@@ -6,6 +6,7 @@ import math
 import os
 import re
 import signal
+import socket
 import subprocess
 import tempfile
 import urllib.request
@@ -44,6 +45,12 @@ def measure_al(before: str, after: str, benchmark: dict[str, object], draft_leng
     return 1 + accepted / drafts
 
 
+def available_port() -> str:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return str(listener.getsockname()[1])
+
+
 def metrics(port: str, destination: Path) -> str:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=30) as response:
         text = response.read().decode()
@@ -72,7 +79,7 @@ def collect(settings: dict[str, str], results: Path, dataset: Path) -> None:
         raise env.InputError("THINKING_MODES must contain on and/or off")
     if settings["CATEGORY"] != "coding":
         raise env.InputError("This collector requires the SPEED-Bench coding category")
-    model, model_path, port = (settings[key] for key in ("MODEL", "MODEL_PATH", "PORT"))
+    model, model_path = (settings[key] for key in ("MODEL", "MODEL_PATH"))
     subprocess.run(
         [
             "hf",
@@ -103,6 +110,8 @@ def collect(settings: dict[str, str], results: Path, dataset: Path) -> None:
     )
     if not (dataset / "qualitative.jsonl").is_file():
         raise env.BenchError("SPEED-Bench preparation produced no qualitative.jsonl")
+    port = available_port()
+    print(f"SPEED-Bench server port: {port}", flush=True)
     bench = [
         "vllm",
         "bench",
@@ -237,7 +246,6 @@ def main(argv: list[str]) -> int:
         "MODEL_REVISION",
         "IMAGE",
         "TP",
-        "PORT",
         "MTP_LIST",
         "THINKING_MODES",
         "CATEGORY",

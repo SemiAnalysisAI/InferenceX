@@ -1,7 +1,9 @@
+import socket
+
 import pytest
 
 from infx.bench.env import BenchError
-from infx.bench.speedbench import measure_al, read_counters
+from infx.bench.speedbench import available_port, measure_al, read_counters
 
 
 def test_acceptance_uses_counter_deltas_across_workers():
@@ -41,3 +43,18 @@ def test_invalid_deltas_rejected(accepted, drafts):
     after = f'vllm:spec_decode_num_accepted_tokens_total {accepted}\nvllm:spec_decode_num_drafts_total {drafts}\n'
     with pytest.raises(BenchError, match="Invalid acceptance deltas"):
         measure_al(before, after, {"completed": 80}, 5)
+
+
+def test_available_port_can_bind_while_another_listener_is_active():
+    with socket.socket() as occupied, socket.socket() as selected:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+        port = int(available_port())
+        selected.bind(("127.0.0.1", port))
+        selected.listen()
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+            connection, _ = selected.accept()
+            with connection:
+                connection.settimeout(2)
+                client.sendall(b"ready")
+                assert connection.recv(5) == b"ready"
