@@ -30,8 +30,9 @@ ROLE_METRIC_KEYS = (
     "decode_joules_per_output_token",
 )
 ALL_POWER_METRIC_KEYS = WHOLE_METRIC_KEYS + ROLE_METRIC_KEYS
-# Additive Grace CPU-side metrics from the multinode cpu/ sub-package. They
-# share schema version 2 and are governed by cpu_power_valid, not power_valid.
+# Additive metrics from the multinode cpu/ sub-package: the Grace socket, its
+# ACPI rails and the NVML module rail. They share power metric schema version 2
+# and are governed by cpu_power_valid, not power_valid.
 CPU_METRIC_KEYS = (
     "avg_cpu_socket_power_w",
     "avg_total_cpu_power_w",
@@ -40,6 +41,8 @@ CPU_METRIC_KEYS = (
     "total_cpu_rail_energy_j",
     "avg_total_cpu_sysio_power_w",
     "total_cpu_sysio_energy_j",
+    "avg_total_module_power_w",
+    "total_module_energy_j",
 )
 
 

@@ -48,8 +48,9 @@ maintainer ownership: leave PR/branch/labels/jobs intact, report handoff and sto
 Never add or remove it yourself.
 
 Check capacity before edits/branch/PR creation, every targeted dispatch, the final label
-transition and capacity-related recovery: `check-capacity --cluster ID` (repeat for ALL
-actual targets). Require fresh, available telemetry and utilization strictly below 80%.
+transition and capacity-related recovery: `check-capacity --cluster NAME` (the runners.yaml
+cluster:NAME label without its prefix; repeat for ALL actual targets). It passes while the
+fresh scheduler snapshot shows running plus queued nodes at or below 200% of schedulable nodes.
 Queue eligible work with normal scheduler controls; no priority overrides.
 If the check fails, report capacity-deferred and call finish. A utilization increase after
 dispatch never justifies cancelling healthy work. A benchmark capacity error alone is

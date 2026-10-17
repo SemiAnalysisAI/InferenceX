@@ -2,16 +2,18 @@
 
 srt-slurm's ``cpu_power_exporter`` leg writes ``power/cpu/samples.csv`` beside
 the GPU DCGM package (srt-slurm ``src/srtctl/core/power/cpu_session.py``); its
-``cpu_manifest.json`` is debugging metadata and is not read. The pinned producer
-writes the wide format: one row per (scrape, host, socket) whose ``sensor`` names the
+``cpu_manifest.json`` is debugging metadata and is not read. Both accepted
+schemas are the wide format: one row per (scrape, host, socket) whose ``sensor`` names the
 Grace socket meter and whose ``cpu_rail_w`` / ``soc_w`` columns carry the ACPI
-component rails of that socket.
+component rails of that socket. Schema v3 (srt-slurm v2.59.0+) adds ``module_w``,
+NVML superchip module power; the module contains both GPUs, so it is published
+as its own rail and never added to the CPU or GPU totals.
 
 Each socket's Grace socket series is integrated over the GPU leg's bound formal
 window with the shared trapezoid and boundary interpolation and published as
-additive metrics next to the GPU-board numbers. The CPU-only and SysIO rails
-are integrated the same way when every socket reports them; a rail with gaps
-drops only its own metrics. Any failure records ``cpu_power_valid=0`` with
+additive metrics next to the GPU-board numbers. The CPU-only, SysIO and module
+rails are integrated the same way when every socket reports them; a rail with
+gaps drops only its own metrics. Any failure records ``cpu_power_valid=0`` with
 reason codes and leaves every GPU field untouched. This module only judges the
 leg; the caller decides whether an invalid leg fails the job.
 """
@@ -37,8 +39,7 @@ from .common import (
 CPU_DIRNAME = "cpu"
 CPU_SAMPLES_FILENAME = "samples.csv"
 
-# srt-slurm contract.CPU_SAMPLES_HEADER: the wide format every pinned producer writes.
-CPU_SAMPLES_HEADER = (
+_CPU_SAMPLES_HEADER_V2 = (
     "schema_version",
     "timestamp_unix",
     "hostname",
@@ -51,7 +52,12 @@ CPU_SAMPLES_HEADER = (
     "dram_w",
     "total_power_w",
 )
-CPU_SAMPLES_SCHEMA_VERSION = 2
+# srt-slurm cpu_samples._SCHEMA_VERSION_BY_HEADER: every row carries its header's
+# version. v2.51.1 writes v2; v2.59.0+ writes v3, module_w before total_power_w.
+_SCHEMA_VERSION_BY_HEADER = {
+    _CPU_SAMPLES_HEADER_V2: 2,
+    (*_CPU_SAMPLES_HEADER_V2[:-1], "module_w", "total_power_w"): 3,
+}
 
 # One GB200/GB300 compute tray per worker host, two Grace sockets per tray.
 SOCKETS_PER_HOST = 2
@@ -62,8 +68,9 @@ SOCKETS_PER_HOST = 2
 SENSOR_GRACE = "grace_socket"
 _GRACE_SENSOR_SUFFIX = "cpuSidePowerUsageW"
 # Wide-format rail column -> published rail family: "CPU Power Socket N" (cores,
-# no SysIO) and "SysIO Power Socket N". dram_w stays blank on NVL72 firmware.
-RAIL_COLUMNS = {"cpu_rail_w": "cpu_rail", "soc_w": "cpu_sysio"}
+# no SysIO), "SysIO Power Socket N" and the v3 NVML superchip module. dram_w
+# stays blank on NVL72 firmware; module_w is blank when NVML is unavailable.
+RAIL_COLUMNS = {"cpu_rail_w": "cpu_rail", "soc_w": "cpu_sysio", "module_w": "module"}
 
 _INTEGRATION_METHOD = "per_socket_trapezoidal_with_linear_boundary_interpolation"
 
@@ -127,18 +134,19 @@ def is_grace_sensor(sensor: str) -> bool:
     return sensor.partition(":")[2] == _GRACE_SENSOR_SUFFIX
 
 
-def _parse_row(raw: list[str]) -> CpuSampleRow | None:
-    if len(raw) != len(CPU_SAMPLES_HEADER):
+def _parse_row(raw: list[str], header: tuple[str, ...], version: int) -> CpuSampleRow | None:
+    if len(raw) != len(header):
         return None
+    cell = dict(zip(header, raw, strict=True))
     try:
-        schema_version = int(raw[0])
-        timestamp_unix = float(raw[1])
-        socket_id = int(raw[5])
-        power_w = float(raw[6])
+        schema_version = int(cell["schema_version"])
+        timestamp_unix = float(cell["timestamp_unix"])
+        socket_id = int(cell["socket_id"])
+        power_w = float(cell["power_w"])
     except ValueError:
         return None
-    hostname, source, sensor = raw[2], raw[3], raw[4]
-    if schema_version != CPU_SAMPLES_SCHEMA_VERSION or not hostname or not source or not sensor:
+    hostname, source, sensor = cell["hostname"], cell["source"], cell["sensor"]
+    if schema_version != version or not hostname or not source or not sensor:
         return None
     if not math.isfinite(timestamp_unix) or not math.isfinite(power_w) or power_w < 0:
         return None
@@ -146,11 +154,11 @@ def _parse_row(raw: list[str]) -> CpuSampleRow | None:
         return None
     rails = []
     for column, family in RAIL_COLUMNS.items():
-        cell = raw[CPU_SAMPLES_HEADER.index(column)]
-        if not cell:
+        value = cell.get(column, "")
+        if not value:
             continue
         try:
-            watts = float(cell)
+            watts = float(value)
         except ValueError:
             return None
         if not math.isfinite(watts) or watts < 0:
@@ -168,7 +176,7 @@ def _parse_row(raw: list[str]) -> CpuSampleRow | None:
 
 
 def read_cpu_samples(path: Path) -> tuple[tuple[CpuSampleRow, ...], tuple[str, ...]]:
-    """Strictly parse the wide sample file; malformed rows invalidate the leg."""
+    """Strictly parse a v2 or v3 wide sample file; malformed rows invalidate the leg."""
     if not path.is_file():
         return (), ("cpu_samples_missing",)
     rows: list[CpuSampleRow] = []
@@ -176,10 +184,12 @@ def read_cpu_samples(path: Path) -> tuple[tuple[CpuSampleRow, ...], tuple[str, .
     try:
         with open(path, newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
-            if next(reader, None) != list(CPU_SAMPLES_HEADER):
+            header = tuple(next(reader, ()))
+            version = _SCHEMA_VERSION_BY_HEADER.get(header)
+            if version is None:
                 return (), ("cpu_samples_header_mismatch",)
             for raw in reader:
-                row = _parse_row(raw)
+                row = _parse_row(raw, header, version)
                 if row is None:
                     _append_reason(reasons, "cpu_samples_malformed")
                     continue

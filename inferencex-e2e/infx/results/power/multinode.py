@@ -29,7 +29,7 @@ failed sibling window, the sidecar retains the healthy measurement in
 and aggregate power metrics remain blocked.
 
 Grace CPU-side leg: when the package also carries ``power/cpu/`` (see
-:mod:`.cpu_side`), each socket's Grace socket power and its ACPI rails are
+:mod:`.cpu_side`), each socket's Grace socket power and its reference rails are
 integrated over the same bound formal window and published under
 ``cpu_power_valid``. That verdict is independent of ``power_valid``. A missing
 or invalid CPU leg fails the run only with ``require_power`` and

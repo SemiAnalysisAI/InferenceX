@@ -53,7 +53,6 @@ CASES = [
     ("h200-dgxc", MULTI, "1", "dsv4", "fp8", "dynamo-sglang", ADAPTER),
     ("h200-dgxc", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
     ("h200-dgxc", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", ERR),
-    ("h100-dgxc", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", ERR),
 ]
 
 

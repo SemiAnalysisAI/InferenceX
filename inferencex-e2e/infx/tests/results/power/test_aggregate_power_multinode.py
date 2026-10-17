@@ -771,11 +771,15 @@ CPU_HEADER = [
     "schema_version", "timestamp_unix", "hostname", "source", "sensor", "socket_id",
     "power_w", "cpu_rail_w", "soc_w", "dram_w", "total_power_w",
 ]
+CPU_HEADER_V3 = [*CPU_HEADER[:-1], "module_w", "total_power_w"]
 GRACE_W = {"node-d": 500.0, "node-p": 700.0}
 DCGM_W = 300.0
 # Component rails never feed a headline metric; the values are chosen so any
 # leak into a headline key is visible against the Grace constants.
 RAILS_W = {"cpu_rail": 200.0, "soc": 50.0}
+# NVML superchip module power per socket, distinct from the Grace and rail
+# constants so a leak into a CPU key is visible.
+MODULE_W = 1500.0
 # srt-slurm cpu_rails.SENSOR_SUFFIXES: the Grace socket meter and the DCGM CPU rail.
 GRACE_SENSOR = "CPU{s}:cpuSidePowerUsageW"
 DCGM_SENSOR = "CPU{s}:cpuPowerUsageW"
@@ -803,12 +807,18 @@ def _cpu_rows(kinds_by_host=None, *, hosts=CPU_HOSTS):
     return rows
 
 
-def add_cpu_package(pkg, rows):
+def _v3(rows, module_w=MODULE_W):
+    """The same scrapes in srt-slurm v2.59.0+'s schema 3; ``None`` leaves module_w blank."""
+    module = "" if module_w is None else repr(module_w)
+    return [[3, *row[1:-1], module, row[-1]] for row in rows]
+
+
+def add_cpu_package(pkg, rows, header=CPU_HEADER):
     cpu_dir = pkg.power_dir / "cpu"
     cpu_dir.mkdir()
     with open(cpu_dir / "samples.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(CPU_HEADER)
+        writer.writerow(header)
         writer.writerows(rows)
 
 
@@ -883,6 +893,37 @@ class TestCpuSidePower:
         assert "avg_total_cpu_rail_power_w" not in agg
         assert agg["avg_total_cpu_sysio_power_w"] == 200.0
 
+    def test_v3_module_rail_is_published_apart_from_cpu_keys(self, tmp_path):
+        pkg = build_package(tmp_path)
+        add_cpu_package(pkg, _v3(_cpu_rows()), CPU_HEADER_V3)
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert_grace_keys(agg)
+        assert agg["avg_total_module_power_w"] == 6000.0
+        assert agg["total_module_energy_j"] == 360000.0
+        assert _gpu_fields(agg) == _reference_agg(tmp_path)
+        module_series = {f"{host}/socket{socket}/module" for host in CPU_HOSTS for socket in (0, 1)}
+        assert module_series <= set(pkg.sidecar()["cpu"]["per_series_energy_j"])
+
+    @pytest.mark.parametrize("module", ["blank", "gap"])
+    def test_v3_incomplete_module_drops_only_module_keys(self, tmp_path, module):
+        pkg = build_package(tmp_path)
+        if module == "blank":
+            # The musl exporter build cannot load NVML and leaves module_w empty.
+            rows = _v3(_cpu_rows(), module_w=None)
+        else:
+            rows = _v3(_cpu_rows())
+            for row in rows:
+                if row[2] == "node-d" and row[5] == 0 and 1020.0 <= float(row[1]) <= 1030.0:
+                    row[10] = ""
+        add_cpu_package(pkg, rows, CPU_HEADER_V3)
+        assert pkg.run(require_power=True) == 0
+        agg = pkg.agg()
+        assert_grace_keys(agg)
+        assert agg["avg_total_cpu_rail_power_w"] == 800.0
+        assert agg["avg_total_cpu_sysio_power_w"] == 200.0
+        assert {"avg_total_module_power_w", "total_module_energy_j"}.isdisjoint(agg)
+
     @pytest.mark.parametrize(
         "cpu, require_power",
         [("missing", True), ("complete", True), ("missing", False), ("dcgm_only", True)],
@@ -947,6 +988,7 @@ class TestCpuSidePower:
         kind = request.param
         pkg = build_package(tmp_path)
         rows = _cpu_rows()
+        header = CPU_HEADER
         if kind == "socket":
             rows = self._drop(rows, "node-p", 1, lambda ts: True)
         elif kind == "gap":
@@ -955,7 +997,10 @@ class TestCpuSidePower:
             rows = _cpu_rows({"node-d": {"grace": None}, "node-p": {"dcgm": DCGM_W}})
         elif kind == "malformed":
             rows.append(_cpu_row(FIRST_TS, "node-d", 0, "grace", "n/a"))
-        add_cpu_package(pkg, rows)
+        elif kind == "version":
+            rows, header = _v3(rows), CPU_HEADER_V3
+            rows[0][0] = 2
+        add_cpu_package(pkg, rows, header)
         return pkg
 
     @pytest.mark.parametrize(
@@ -965,6 +1010,7 @@ class TestCpuSidePower:
             ("gap", "cpu_sample_gap_exceeded"),
             ("mixed", "cpu_socket_count_mismatch"),
             ("malformed", "cpu_samples_malformed"),
+            ("version", "cpu_samples_malformed"),
         ],
         indirect=["tampered"],
     )

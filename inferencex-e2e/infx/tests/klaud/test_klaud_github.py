@@ -203,33 +203,107 @@ def test_finish_requires_specific_baseline_reason_before_touching_session(
     )
 
 
-def test_recent_candidates_use_all_current_base_workflow_artifacts(monkeypatch):
-    candidate_id = "1" * 16 + "-" + "2" * 16
-    base = "a" * 40
-    calls = []
+def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferrals(
+    monkeypatch,
+):
+    blocked, deferred, unreadable, superseded, untried = (
+        f"{digit * 16}-{digit * 16}" for digit in "12345"
+    )
+    outcomes = {
+        1: ("readiness-blocked", "targeted"),
+        2: ("capacity-deferred", "targeted"),
+        4: ("capacity-deferred", "targeted"),
+        5: ("failed", "targeted"),
+    }
 
     def items(_repository, path, key):
-        calls.append((path, key))
         if path.startswith("actions/workflows/klaud-plan.yml/runs?"):
             return [
-                {"id": 42, "created_at": "9999-01-01T00:00:00Z", "head_sha": base},
-                {"id": 43, "created_at": "9999-01-01T00:00:00Z", "head_sha": "b" * 40},
+                {"id": 41, "created_at": "9999-01-01T00:00:00Z", "head_sha": "a" * 40},
+                {"id": 42, "created_at": "9999-01-02T00:00:00Z", "head_sha": "b" * 40},
+                {"id": 40, "created_at": "2000-01-01T00:00:00Z", "head_sha": "c" * 40},
             ]
-        if path == "actions/runs/42/artifacts?per_page=100":
-            return [
-                {
-                    "name": f"klaud-candidate-{candidate_id}",
-                    "expired": False,
-                    "workflow_run": None,
-                },
-                {"name": "other-artifact", "expired": False},
-            ]
-        raise AssertionError(path)
+        run_artifacts = {
+            41: [(1, blocked), (3, unreadable), (5, superseded)],
+            42: [(2, deferred), (4, superseded)],
+            40: [(6, untried)],
+        }
+        run_id = int(path.split("/")[2])
+        return [
+            {"id": artifact, "name": f"klaud-candidate-{candidate}", "expired": False}
+            for artifact, candidate in run_artifacts[run_id]
+        ]
+
+    def download(_repository, artifact, destination):
+        if artifact["id"] not in outcomes:
+            raise github.VerificationError("Invalid artifact archive")
+        outcome, phase = outcomes[artifact["id"]]
+        record = {"outcome": outcome, "phase": phase, "pull-request": None, "run-ids": [],
+                  "repairs-used": 0}
+        (destination / "candidate-diagnostics.json").write_text(
+            json.dumps({"candidate-outcome": record})
+        )
 
     monkeypatch.setattr(klaud, "github_items", items)
+    monkeypatch.setattr(klaud, "download_json", download)
 
-    assert klaud.recent_candidate_ids("example/project", base, 24) == {candidate_id}
-    assert calls[-1] == ("actions/runs/42/artifacts?per_page=100", "artifacts")
+    recent = klaud.recent_candidate_outcomes("example/project", 24)
+    assert recent == {
+        blocked: "readiness-blocked",
+        unreadable: None,
+        deferred: "capacity-deferred",
+        superseded: "capacity-deferred",
+    }
+    candidates = [{"id": candidate} for candidate in (deferred, blocked, untried, unreadable,
+                                                      superseded)]
+    assert [candidate["id"] for candidate in klaud.order_by_cooldown(candidates, recent)] == [
+        untried, deferred, superseded]
+
+
+def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
+    now = klaud.datetime(2026, 10, 14, tzinfo=klaud.UTC)
+
+    def pull(number, branch, updated):
+        return {"number": number, "head": {"ref": branch}, "updated_at": updated}
+
+    pulls = [
+        pull(1, "feature/active", "2026-10-07T00:00:00Z"),
+        pull(2, "klaud/qwen3.5-nightly", "2026-10-06T23:59:59Z"),
+        pull(3, "klaud/auto-0123456789abcdef-0123456789abcdef", "2026-09-01T00:00:00Z"),
+        pull(4, "klaude/auto-fedcba9876543210-fedcba9876543210", "2026-09-01T00:00:00Z"),
+    ]
+
+    assert [pr["number"] for pr in klaud.active_pulls(pulls, now, 7)] == [1, 3, 4]
+
+
+def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
+    now = "2026-10-15T00:05:00Z"
+
+    def metric(name, allocated, queued, schedulable):
+        return {"clusterLabel": f"cluster:{name}", "allocatedNodes": allocated,
+                "queuedNodes": queued, "schedulableNodes": schedulable}
+
+    def feed(snapshot_at, metrics):
+        return Feed(
+            url="https://dash.inferencex.semianalysis.com/api/status/scheduler",
+            retrieved_at=now, sha256="0" * 64,
+            payload={"kind": "inferencex.status.scheduler", "generatedAt": now, "data": {
+                "available": True,
+                "snapshot": {"snapshotAt": snapshot_at, "stalled": False,
+                             "packingMetrics": metrics},
+            }},
+        )
+
+    metrics = [
+        metric("at-200", 8, 12, 10), metric("over-200", 8, 13, 10),
+        metric("idle", 0, 0, 4), metric("drained", 0, 0, 0), metric("corrupt", 1, -1, 10),
+    ]
+    policy = api.Policy()
+    fresh, stale = "2026-10-15T00:00:00Z", "2026-10-14T23:59:59Z"
+    assert api.available_clusters(feed(fresh, metrics), policy, api.utc(now)) == {"at-200", "idle"}
+    assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
+    pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
+    assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
 
 
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
@@ -251,7 +325,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
                 "candidate-id": candidate_id,
                 "decision": "proceed",
                 "family": family,
-                "telemetry-clusters": ["cluster-a"],
+                "clusters": ["cluster-a"],
                 "pull-requests": [],
                 "baseline-model": "Model",
                 "reason": "No overlap",
@@ -622,7 +696,7 @@ def review_candidate(directory, monkeypatch, source):
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
         "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY,
-        "telemetry-clusters": ["cluster-a"], "pull-requests": [],
+        "clusters": ["cluster-a"], "pull-requests": [],
         "baseline-model": "DeepSeek-R1", "reason": "No overlap",
     }]}))
 
