@@ -9259,7 +9259,7 @@ musespark-fp4-gb300-sglang-agentic-dflash:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32], srt-recipe: agentic.yaml }
 
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
