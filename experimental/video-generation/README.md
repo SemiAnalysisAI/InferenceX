@@ -307,7 +307,8 @@ Regression mode additionally requires the existing calibrated acceptance gate.
 cd experimental/video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
+  --with 'pyyaml==6.0.3' --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
+  --with 'rfc3339-validator==0.1.4' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 
