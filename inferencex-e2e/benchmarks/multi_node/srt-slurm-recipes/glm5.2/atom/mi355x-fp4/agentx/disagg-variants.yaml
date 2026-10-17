@@ -112,7 +112,7 @@ override_1p1d_mcstore:
         done; fi
     teardown:
       - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
-  services:
+  services: &store_services
     - &master
       name: mc-master-rdma0
       type: generic
@@ -179,7 +179,7 @@ override_1p1d_mcstore:
       command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26055, --master_server_address=127.0.0.1:26351, --metadata_server=http://127.0.0.1:26380/metadata, --protocol=rdma, --device_names=rdma3, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
   roles:
     prefill:
-      env:
+      env: &store_prefill_env
         # More than one load worker hung the PP prefill pipeline at C96.
         OFFLOAD_LOAD_WORKERS: "1"
         MC_NUM_QP_PER_EP: "1"
@@ -188,7 +188,7 @@ override_1p1d_mcstore:
       args:
         num-speculative-tokens: 3
         # Each stage's Store client uses its GPU's NIC and that NIC's pool.
-        extra-kv-connectors:
+        extra-kv-connectors: &store_connector
           - kv_connector: mooncake_store
             kv_role: offload
             kv_connector_extra_config:
@@ -310,6 +310,72 @@ override_1p3d_lmcache_c24:
       workers: 3
       env:
         PYTHONNOUSERSITE: "1"
+      args:
+        num-speculative-tokens: 5
+        gpu-memory-utilization: 0.95
+        max-num-seqs: 48
+        max-num-batched-tokens: 16384
+        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32,36,40,44,48]'
+        disable-uvicorn-access-log: true
+
+override_1p2d_mcstore_c56:
+  resources: *spread
+  frontend:
+    args: *cache_aware
+  host_setup: &store_head_host_setup
+    nodes: all
+    timeout_seconds: 1800
+    commands:
+      - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
+      # Only the prefill node holds owners; srtctl starts the prefill on the head node, which launches this srun.
+      - >-
+        if hostname -I | tr ' ' '\n' | grep -qxF "${SLURM_LAUNCH_NODE_IPADDR:?srun did not set SLURM_LAUNCH_NODE_IPADDR}"; then
+        echo "[hugepage] $(hostname -s) is the head node; reserving the owners' pages";
+        held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
+        HUGEPAGES_TARGET=$(( held + 714752 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
+        bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
+        for node in 0 1; do
+        free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
+        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 357376";
+        [[ $free -ge 357376 ]] || exit 1;
+        done; fi
+    teardown:
+      - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
+  services: *store_services
+  roles:
+    prefill:
+      env: *store_prefill_env
+      args:
+        num-speculative-tokens: 4
+        extra-kv-connectors: *store_connector
+    decode:
+      nodes: 2
+      workers: 2
+      env:
+        AITER_REUSE_IDENTICAL_COMM_GROUPS: "1"
+        MC_NUM_QP_PER_EP: "1"
+      args:
+        <<: *dcp_decode
+        num-speculative-tokens: 4
+
+override_1p3d_mcstore_c24:
+  resources: *spread
+  frontend:
+    args: *cache_aware
+  host_setup: *store_head_host_setup
+  services: *store_services
+  roles:
+    prefill:
+      env: *store_prefill_env
+      args:
+        num-speculative-tokens: 5
+        extra-kv-connectors: *store_connector
+    decode:
+      nodes: 3
+      workers: 3
+      env:
+        PYTHONNOUSERSITE: "1"
+        MC_NUM_QP_PER_EP: "1"
       args:
         num-speculative-tokens: 5
         gpu-memory-utilization: 0.95
