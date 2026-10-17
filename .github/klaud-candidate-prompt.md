@@ -114,9 +114,8 @@ one essential compatibility adjustment. Do not include evidence, benchmark resul
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
-Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label.
-Only use full-sweep-enabled for a documented infrastructure exception where healthy jobs
-must survive sibling failures. Never switch labels while owned jobs are active.
+Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
+sweep label. Never switch labels while owned jobs are active.
 Fail-fast cancels siblings within a matrix, not every matrix; wait for all owned jobs.
 Classify the first failure, not the resulting cancellations. Retry cancelled points too;
 for an infrastructure retry of a cancelled run, rerun the whole attempt on the same head.

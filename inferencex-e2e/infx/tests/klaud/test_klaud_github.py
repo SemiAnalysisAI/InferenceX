@@ -1391,7 +1391,7 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
     validated = outcome == "validated"
     pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": not validated,
             "state": "open" if validated else "closed",
-            "labels": [{"name": "full-sweep-enabled"}] if validated else []}
+            "labels": [{"name": "full-sweep-fail-fast"}] if validated else []}
     run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
            "created_at": "2026-10-15T00:00:00Z", "status": "completed",
            "conclusion": "success" if validated else "cancelled"}
@@ -1414,6 +1414,39 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
 
     [report] = [body for body in posted if body.startswith(session.marker)]
     return report.split("\n-->\n", 1)[1]
+
+
+@pytest.mark.parametrize(("labels", "accepted"), [
+    (["full-sweep-fail-fast"], True),
+    (["full-sweep-enabled"], False),
+    (["non-canary-full-sweep-enabled"], False),
+    (["full-sweep-fail-fast", "full-sweep-enabled"], False),
+    (["full-sweep-fail-fast", "all-evals"], False),
+])  # fmt: skip
+def test_validated_outcome_requires_a_fail_fast_only_sweep(monkeypatch, labels, accepted):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+    )
+    pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": False,
+            "state": "open", "labels": [{"name": name} for name in labels]}
+    run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
+           "created_at": "2026-10-15T00:00:00Z", "status": "completed", "conclusion": "success"}
+    validated = []
+    monkeypatch.setattr(session, "pulls", lambda: [pull])
+    monkeypatch.setattr(session, "runs", lambda: [run])
+    monkeypatch.setattr(session, "validation", validated.append)
+    outcome = CandidateOutcome(
+        outcome="validated", phase="final-sweep", pull_request=7, run_ids=[9], repairs_used=0
+    )
+
+    if accepted:
+        session.verify(outcome, require_report=False)
+        assert validated == [run]
+    else:
+        with pytest.raises(github.VerificationError, match="incompatible sweep labels"):
+            session.verify(outcome, require_report=False)
+        assert validated == []
+
 
 
 STOP = ("Stop as uncertain: the new image stalls every deployment.",

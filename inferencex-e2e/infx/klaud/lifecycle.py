@@ -229,10 +229,9 @@ class Session:
         if outcome.outcome == "validated":
             if not pull or pull["state"] != "open" or (require_ready and pull["draft"]):
                 raise VerificationError("Validated PR must remain ready for review")
-            if {label["name"] for label in pull["labels"]} & SWEEP_LABELS not in (
-                {"full-sweep-fail-fast"},
-                {"full-sweep-enabled"},
-            ):
+            # Klaud runs every final sweep fail-fast; any other sweep label is invalid.
+            sweep_labels = {label["name"] for label in pull["labels"]} & SWEEP_LABELS
+            if sweep_labels != {"full-sweep-fail-fast"}:
                 raise VerificationError("Validated PR has incompatible sweep labels")
             finals = [
                 run

@@ -826,9 +826,8 @@ jobs:
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
-                      'full-sweep': sweep_labels in (
-                          {'full-sweep-fail-fast'}, {'full-sweep-enabled'},
-                      ),
+                      # Klaud validates only full sweeps that ran fail-fast.
+                      'full-sweep': sweep_labels == {'full-sweep-fail-fast'},
                       'matrix': matrix,
                   }))
                   PY
