@@ -81,6 +81,17 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                 return 1
             return 2
 
+        if arguments.command == "serving-smoke":
+            from .mvp_serving_smoke import run_matrix, validate_concurrencies, validate_spec
+
+            spec = validate_spec(_load_mvp_object(arguments.spec))
+            concurrencies = validate_concurrencies(arguments.concurrencies)
+            arguments.output.mkdir(parents=True, exist_ok=False)
+            result = run_matrix(spec, arguments.output, concurrencies=concurrencies)
+            print(json.dumps({"status": result["status"], "completion": result["completion"]},
+                             indent=2, sort_keys=True, allow_nan=False))
+            return 0 if result["status"] == "complete" else 1
+
         if arguments.command == "srt-gpu-job":
             from .mvp_srt import run_srt_gpu_job
 
@@ -229,6 +240,11 @@ def _parser() -> argparse.ArgumentParser:
     gpu_job.add_argument("--execute", action="store_true")
     gpu_job.add_argument("--output", type=Path, help="new evidence directory; no overwrites")
 
+    serving_smoke = subparsers.add_parser("serving-smoke", help="run a bounded H3 or Wan serving matrix on allocated GPUs")
+    serving_smoke.add_argument("--spec", required=True, type=Path)
+    serving_smoke.add_argument("--output", required=True, type=Path, help="new evidence directory; no overwrites")
+    serving_smoke.add_argument("--concurrencies", nargs="+", type=int, default=[1, 2, 4])
+
     gpu_report = subparsers.add_parser("gpu-report", help="render recorded GPU job evidence, including incomplete runs")
     gpu_report.add_argument("job", type=Path)
     gpu_report.add_argument("--output", required=True, type=Path, help="new report directory")
@@ -275,10 +291,10 @@ def _parser() -> argparse.ArgumentParser:
     srt_finalize.add_argument("--concurrencies", nargs="+", type=int, required=True)
     srt_finalize.add_argument("--output", required=True, type=Path)
 
-    run = subparsers.add_parser("run", help="preview an H3 plan; --execute explicitly submits it")
+    run = subparsers.add_parser("run", help="preview an H3 or Wan plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)
     run.add_argument("--runtime", choices=("sglang", "vllm-omni"), default="sglang")
-    run.add_argument("--execute", action="store_true", help="submit real requests to your H3 server")
+    run.add_argument("--execute", action="store_true", help="submit real requests to your H3 or Wan server")
     run.add_argument("--endpoint", help="self-hosted server base URL, without /v1/videos")
     run.add_argument("--runtime-revision", help="operator-declared exact server code/container revision")
     run.add_argument("--hardware-label", help="operator-declared hardware, precision, and topology label")

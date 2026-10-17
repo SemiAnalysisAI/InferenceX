@@ -1,0 +1,383 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SemiAnalysisAI/InferenceX/blob/main/experimental/video-generation/dashboard-observations.schema.json",
+  "title": "VideoGenX additive dashboard observations v1",
+  "description": "Optional sealed source-bound projection. Shape validation alone does not prove source hashes, hardware health or calibrated quality.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "sourceRunId": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "sourceSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "cells": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/cell"
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "sourceRunId",
+    "sourceSha",
+    "cells"
+  ],
+  "$defs": {
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "\\S"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableSha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "positiveInteger": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "specSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "deployment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/deployment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hardwareHealth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/hardwareHealth"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "quality": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/quality"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "runSha256",
+        "specSha256"
+      ]
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gpusPerReplica": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "ring": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "cfg": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "batchSize": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "maxBatchSize": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "batchDelayMs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "offload": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ditCpu": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "ditLayerwise": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "textEncoderCpu": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "imageEncoderCpu": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "vaeCpu": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "encoderParallel": {
+          "$ref": "#/$defs/text"
+        },
+        "scheduling": {
+          "$ref": "#/$defs/text"
+        },
+        "engine": {
+          "$ref": "#/$defs/text"
+        },
+        "precision": {
+          "$ref": "#/$defs/text"
+        },
+        "acceleration": {
+          "$ref": "#/$defs/text"
+        },
+        "generationKey": {
+          "$ref": "#/$defs/text"
+        },
+        "configEvidence": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "hardwareHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "evidence": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contractId": {
+          "$ref": "#/$defs/text"
+        },
+        "contractSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "rubricVersion": {
+          "$ref": "#/$defs/text"
+        },
+        "rubricSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt_adherence": {
+              "$ref": "#/$defs/qualityMetric"
+            },
+            "visual_fidelity": {
+              "$ref": "#/$defs/qualityMetric"
+            },
+            "temporal_consistency": {
+              "$ref": "#/$defs/qualityMetric"
+            },
+            "motion_plausibility": {
+              "$ref": "#/$defs/qualityMetric"
+            },
+            "audio_quality": {
+              "$ref": "#/$defs/qualityMetric"
+            },
+            "audio_content": {
+              "$ref": "#/$defs/qualityMetric"
+            },
+            "av_sync": {
+              "$ref": "#/$defs/qualityMetric"
+            }
+          }
+        },
+        "scale": {
+          "const": "ordinal_0_to_4"
+        }
+      },
+      "required": [
+        "scale",
+        "metrics"
+      ]
+    },
+    "qualityMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 4
+        },
+        "status": {
+          "enum": [
+            "unjudged",
+            "judged_unqualified",
+            "pass",
+            "fail",
+            "inconclusive",
+            "unassessable"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "higher",
+            "lower"
+          ]
+        },
+        "evaluatorId": {
+          "$ref": "#/$defs/text"
+        },
+        "evaluatorVersion": {
+          "$ref": "#/$defs/text"
+        },
+        "evaluatorSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "samples": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/calibration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "direction"
+      ]
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "uncalibrated",
+            "calibrated"
+          ]
+        },
+        "cohortId": {
+          "$ref": "#/$defs/text"
+        },
+        "threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 4
+        },
+        "provenance": {
+          "$ref": "#/$defs/text"
+        },
+        "frozenAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  }
+}

@@ -181,3 +181,70 @@ C1/C2/C4，每组恰好四个测量请求，预热单独记录。每组重启同
 `serving-smoke.json` 汇总状态、吞吐和延迟，`gpu/cN/` 保留原始请求、视频和
 遥测，`report/index.html` 可播放原始媒体。中断请求与未启动请求分别计数。
 该模式不会导出配对回归结果，四个样本也不能认定 P90/P95 或持续服务容量。
+
+## 离线复算部署前沿
+
+`evaluator.mvp_deployment_frontier` 从已保留、已规范化的仪表板观测中选取本地比较结果；
+它不采集新数据，也不认证产物。该工具对应
+[App #1193](https://github.com/SemiAnalysisAI/InferenceX-app/pull/1193) 的视频前沿计算，
+由现有 [Backend #2916](https://github.com/SemiAnalysisAI/InferenceX/pull/2916) 承载。
+共享的 LLM/calculator Pareto 实现保持不变。
+
+输入是包含 `points` 的 JSON 对象。每条观测需提供 `id`、有限数值坐标 `x` 和 `y`、
+`hardwareKey`、完整 `cohortKey`（工作负载及生成设置）、完整 `deploymentKey`
+（包含副本数、并行布局、offload、batching、engine/runtime），以及产物投影给出的
+`queueingStatus`（`unqueued`、`queueing` 或 `unknown`）。可选字段
+`hardwareHealth.status: "fail"` 会排除该点，关闭“仅最优”也不会重新纳入。
+缺少完整比较组身份的观测各自保留为独立点；请求容量未知或坐标缺失时不参与排名。
+坐标完全相同的不同实测配置均保留；同一部署的重复观测不会形成部署连线。
+工具不做插值或外推。
+
+启用 `--quality-required` 时，读取工具检查已绑定来源的 `quality` 评估；
+单独提供 `qualifiedQualityCohort` 字符串不能获得准入。评估必须声明
+`scale: "ordinal_0_to_4"`，并保留原始七维 rubric ID：`prompt_adherence`、
+`visual_fidelity`、`temporal_consistency`、`motion_plausibility`、`audio_quality`、
+`audio_content` 和 `av_sync`。零分是有效分数，不代表缺失。旧的 1–5 分或重命名
+维度不会被自动转换。注册表指标仍为 `human.absolute_dimension_rating`，
+版本为 `0.2.0-draft`。
+
+每个关键维度都必须具有通过判定、完整目标视频覆盖、评估器身份，以及带来源依据的
+已校准冻结规则。`--quality-metric` 选择显示维度（默认 `prompt_adherence`）；
+`--quality-threshold` 只能收紧该维度的冻结阈值，其他维度仍须满足各自的冻结规则。
+派生的质量比较组身份包含全部七维的评估器与校准身份，而非仅包含所选维度。
+工作负载、生成设置或质量比较组不同的观测互不支配，也不会共用一条连线。
+这些检查验证记录的契约字段，不能独立证明人工判断或校准的科学有效性，也不会
+把媒体完整性或数值保真度当作感知质量。
+
+```bash
+cd experimental/video-generation
+python -m evaluator.mvp_deployment_frontier normalized-observations.json \
+  --output frontier.json --x-better lower --y-better higher
+```
+
+输出 JSON 保留输入身份、选中的观测、各组前沿及排除原因。
+`--include-dominated` 对应关闭“仅最优”；`--quality-required` 会先过滤质量资格，
+再计算前沿。`tests/fixtures/deployment-frontier.json` 保存后端和 App 共用的合成测试用例，
+用于验证方向和并列点处理，不属于实测基准数据。
+
+## 可选的源数据绑定仪表板观测
+
+[`dashboard-observations.schema.json`](./dashboard-observations.schema.json)
+定义附加文件 `dashboard-observations.json`，不改变 `result.json` 的 1.0.0 版本。
+根对象包含 `schemaVersion: 1`、`sourceRunId`、`sourceSha` 和非空的 `cells` 映射。
+每个已知 cell 用 `runSha256` 和 `specSha256` 绑定原始实测 run 与 spec；可选的
+`deployment`、`hardwareHealth` 和 `quality` 对象将未知值保留为 null。
+该文件的 SHA256 必须同时出现在 `SHA256SUMS` 和
+`manifest.evidence["dashboard-observations.json"]` 中。摄入时先验证原始字节、
+源 run/commit、cell 是否存在及 run/spec 哈希，再暴露这些字段。
+仅通过 schema 校验并不能证明上述绑定关系。
+
+部署字段区分实测 `batchSize` 与配置上限 `maxBatchSize`，保留 Ring/CFG、各项
+offload 开关、precision 的适用范围、engine 与生成设置身份。
+`hardwareHealth` 保存状态、原因及证据；监控不完整时仍为 unknown。
+质量数据必须记录 `ordinal_0_to_4` 量表及原始各 rubric 维度，以及
+contract/rubric/evaluator 的身份与哈希、样本覆盖和冻结的校准规则。含 null 的未评数据是有效契约数据，但不能进入质量合格前沿。
+格式正确的 `pass` 也不足以证明资格，仍需通过 App 和后端前沿读取工具的七维校准协议检查。
+
+现有 exporter 不会自动生成该可选文件，原始压缩包及来源校验记录保持不变。
+明确标注的本地人工整理数据可以用于预览这些字段，但必须说明这是未封存的 replay 数据，
+不能将其视为符合上述封存摄入契约的源产物。
