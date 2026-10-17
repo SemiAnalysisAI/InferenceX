@@ -77,7 +77,7 @@ def test_get_jobs_runs_the_measured_revisions_own_tooling(tmp_path, inputs):
         key: [] for key in (
             "agentic-config", "agentic-eval-config", "multi-node-agentic-config",
             "multi-node-agentic-eval-config", "multi-node-config", "eval-config",
-            "multi-node-eval-config",
+            "multi-node-eval-config", "video-config",
         )
     }
 

@@ -28,7 +28,7 @@ from .validation import (
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -425,11 +425,12 @@ def build_plan(
         for result in all_benchmark_results:
             result["recipe-fingerprint"] = recipe_fingerprint(result, root)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
-            scenario = (
-                "agentic"
-                if result.get("scenario-type") == "agentic-coding"
-                else seq_len_to_str(result["isl"], result["osl"])
-            )
+            if result.get("scenario-type") == "agentic-coding":
+                scenario = "agentic"
+            elif result.get("scenario-type") == "video-generation":
+                scenario = "video"
+            else:
+                scenario = seq_len_to_str(result["isl"], result["osl"])
             final_results[node_type][scenario].append(result)
 
         all_eval_results = [

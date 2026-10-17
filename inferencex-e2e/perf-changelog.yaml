@@ -10072,3 +10072,15 @@
     - "Enable block verification and breakable prefill CUDA graphs; use mem-fraction-static 0.9, SWA/full ratio 0.4, admission 192 with decode graphs to batch 192 and the eager DFlash draft sampler, since c128 admits about 150 running requests and DFlash sampling fails above the largest decode graph."
     - "Keep the NVFP4 target, pinned SGLang image, published DFlash2 draft precision and acceptance selected from the committed golden curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4156
+
+- config-keys:
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-mi355x-sglang-video
+  scenario-type:
+    - video-generation
+  description:
+    - "Add the video-generation scenario: MiniMax-H3 served by SGLang (pinned H3 runtime image, 2 GPUs, TP1 x Ulysses 2) with the frozen 4 s 1344x768 serving workload at concurrency 1, 2 and 4, one job per SKU through the native srt-slurm launcher."
+    - "The H3 server runs as a recipe service and the H3 client as the custom benchmark; GPU power comes from srt-slurm's native telemetry re-validated per concurrency with energy normalized per valid clip."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
