@@ -13,7 +13,7 @@ from typing import Any
 
 from infx.bench_serving.benchmark_outcome import benchmark_outcome
 
-from .metadata import parse_component_metadata
+from .metadata import parse_component_metadata, run_attempt
 from .power import (
     ALL_POWER_METRIC_KEYS,
     POWER_METRIC_SCHEMA_VERSION,
@@ -302,6 +302,8 @@ def process_result(env: Mapping[str, str]) -> int:
     with open(bench_path) as f:
         benchmark = json.load(f)
     data = build_result(benchmark, env)
+    if (attempt := run_attempt(env)) is not None:
+        data["run_attempt"] = attempt
     agg_path = Path(f"agg_{result_filename}.json")
     with open(agg_path, "w") as f:
         json.dump(data, f, indent=2)

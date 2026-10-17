@@ -93,7 +93,6 @@ jobs:
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }}
-          KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }}
         with:
           path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

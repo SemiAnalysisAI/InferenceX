@@ -58,12 +58,18 @@ base:
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 
-zip_override_tp8:
+zip_override_tp8_hicache:
   roles:
     agg:
       args:
         max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128]
         cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 96, 128]
+        # The host pool keeps evicted agentic prefixes for reuse across turns.
+        # 160 GB per rank plus the ~30 GB DFlash draft pool exceeded the
+        # ~1.39 TiB cgroup across 8 ranks; 120 GB keeps the total near 1.2 TB.
+        enable-hierarchical-cache: true
+        hicache-size: 120
   benchmark:
     env:
       CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64']
+      KV_OFFLOADING: dram
