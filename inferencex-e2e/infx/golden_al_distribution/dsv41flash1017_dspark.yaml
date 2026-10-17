@@ -1,0 +1,26 @@
+# Source GitHub Actions run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/39037801564
+# revision: 1bae0e1088993b9b82de08f59de5be5a34e42170
+# model: deepseek-ai/DeepSeek-V4.1-Flash-1017 | image: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7 | TP: 8
+# coding | temperature: 1.0 | output_len: 4096
+# thinking_on: {"thinking":true,"reasoning_effort":"high"}
+# DSpark probabilistic drafting, block rejection, adaptive verification disabled.
+# AL includes the target verification token.
+deepseek-v4.1-flash-1017:
+  thinking_off:
+    1: 1.88
+    2: 2.62
+    3: 3.21
+    4: 3.63
+    5: 3.98
+    6: 4.27
+    7: 4.36
+    8: 4.13
+  thinking_on:
+    1: 1.80
+    2: 2.40
+    3: 2.82
+    4: 3.13
+    5: 3.37
+    6: 3.45
+    7: 3.48
+    8: 3.33

@@ -130,6 +130,7 @@ gh workflow run speedbench-al.yml \
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
 | DeepSeek V4 Pro 0813 | DSpark（概率采样草稿） | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
 | DeepSeek V4.1 Flash | DSpark（概率采样草稿 + 块验证） | [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
+| DeepSeek V4.1 Flash 1017 | DSpark（概率采样草稿 + 块验证） | [`dsv41flash1017_dspark.yaml`](dsv41flash1017_dspark.yaml) | [39037801564](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/39037801564) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
 | Kimi K3 | DSpark（概率采样草稿 + 块验证） | [`kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml`](kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
@@ -178,3 +179,5 @@ python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-meth
 - [InferenceX 多节点合成接受验证](https://github.com/SemiAnalysisAI/InferenceX/pull/1789)
 
 DeepSeek V4.1 Flash 包含草稿长度 1–5 在 thinking 开关两种模式下的实测值。同一镜像在[运行 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147) 中于服务启动前拒绝长度 6–8，因此未为这些长度填写 AL 数值。
+
+DeepSeek V4.1 Flash 1017 使用独立的 `dsv41flash1017_dspark.yaml` 曲线，覆盖 thinking 开关两种模式及草稿长度 1–8。测量在 B300 TP8 上进行，使用 checkpoint revision `1bae0e1088993b9b82de08f59de5be5a34e42170` 自带的草稿权重，1,280 个 coding 请求全部成功。草稿长度 7 的实测 AL 最高（thinking off 为 4.36，thinking on 为 3.48）；长度 8 分别降至 4.13 和 3.33。这是 AL 测量结果，不代表吞吐量排名。原版 Flash 曲线单独保留；原测量使用 B200 TP4 和较旧的 vLLM 镜像，因此对比不能单独归因于 checkpoint 更新。

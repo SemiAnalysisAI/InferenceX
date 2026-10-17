@@ -137,6 +137,7 @@ Before accepting an updated curve, reviewers should verify:
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
 | DeepSeek V4 Pro 0813 | DSpark (probabilistic draft) | [`dsv4-pro-0813-dspark.yaml`](dsv4-pro-0813-dspark.yaml) | [31742838308](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/31742838308) |
 | DeepSeek V4.1 Flash | DSpark (probabilistic draft, block verify) | [`dsv41flash_dspark.yaml`](dsv41flash_dspark.yaml) | [34493175056](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34493175056) |
+| DeepSeek V4.1 Flash 1017 | DSpark (probabilistic draft, block verify) | [`dsv41flash1017_dspark.yaml`](dsv41flash1017_dspark.yaml) | [39037801564](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/39037801564) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K3 | DSpark | [`kimik3_dspark.yaml`](kimik3_dspark.yaml) | [30304797750](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30304797750) |
 | Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml`](kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml) | [30316471205](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/30316471205) |
@@ -185,3 +186,5 @@ python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-meth
 - [InferenceX multi-node synthetic-acceptance bring-up](https://github.com/SemiAnalysisAI/InferenceX/pull/1789)
 
 DeepSeek V4.1 Flash includes measured draft lengths 1–5 for thinking off/on. The same image rejected lengths 6–8 before serving in [run 34494319147](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34494319147); no AL values are assigned to those lengths.
+
+DeepSeek V4.1 Flash 1017 has a separate `dsv41flash1017_dspark.yaml` curve for draft lengths 1–8 in both thinking modes, measured on B300 TP8 with the embedded draft weights from checkpoint revision `1bae0e1088993b9b82de08f59de5be5a34e42170`. All 1,280 coding requests completed successfully. Its highest measured AL is at draft length 7 (4.36 thinking off, 3.48 thinking on); length 8 declines to 4.13 and 3.33. This is an AL measurement, not a throughput ranking. The original Flash curve remains separate: its B200 TP4 hardware and older vLLM image differ, so the comparison does not isolate the checkpoint change.
