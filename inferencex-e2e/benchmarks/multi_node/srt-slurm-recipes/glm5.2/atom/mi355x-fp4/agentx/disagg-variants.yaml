@@ -99,22 +99,22 @@ override_1p1d_mcstore:
     commands:
       # A recipe host_setup replaces the cluster default, which also drops the page cache under DRAM KV offloading.
       - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
-      # Owners take 714752 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
+      # Owners take 786432 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
       - >-
         if [[ "$(hostname -s)" == "$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)" ]]; then
         held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
-        HUGEPAGES_TARGET=$(( held + 714752 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
+        HUGEPAGES_TARGET=$(( held + 786432 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
         bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
         for node in 0 1; do
         free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
-        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 357376";
-        [[ $free -ge 357376 ]] || exit 1;
+        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 393216";
+        [[ $free -ge 393216 ]] || exit 1;
         done; fi
     teardown:
       - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   services:
     - &master
-      name: mc-master-rdma0
+      name: mc-master
       type: generic
       placement:
         node: prefill
@@ -133,28 +133,10 @@ override_1p1d_mcstore:
       readiness:
         port: 26051
         timeout_seconds: 300
-    - <<: *master
-      name: mc-master-rdma1
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_master, --rpc_port=26151, --rpc_thread_num=32, --enable_http_metadata_server=true, --http_metadata_server_host=0.0.0.0, --http_metadata_server_port=26180, --metrics_port=26190, --default_kv_lease_ttl=10000, --eviction_high_watermark_ratio=0.90, --eviction_ratio=0.05, --allocation_strategy=random, --memory_allocator=offset, --client_ttl=10]
-      readiness:
-        port: 26151
-        timeout_seconds: 300
-    - <<: *master
-      name: mc-master-rdma2
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_master, --rpc_port=26251, --rpc_thread_num=32, --enable_http_metadata_server=true, --http_metadata_server_host=0.0.0.0, --http_metadata_server_port=26280, --metrics_port=26290, --default_kv_lease_ttl=10000, --eviction_high_watermark_ratio=0.90, --eviction_ratio=0.05, --allocation_strategy=random, --memory_allocator=offset, --client_ttl=10]
-      readiness:
-        port: 26251
-        timeout_seconds: 300
-    - <<: *master
-      name: mc-master-rdma3
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_master, --rpc_port=26351, --rpc_thread_num=32, --enable_http_metadata_server=true, --http_metadata_server_host=0.0.0.0, --http_metadata_server_port=26380, --metrics_port=26390, --default_kv_lease_ttl=10000, --eviction_high_watermark_ratio=0.90, --eviction_ratio=0.05, --allocation_strategy=random, --memory_allocator=offset, --client_ttl=10]
-      readiness:
-        port: 26351
-        timeout_seconds: 300
     - &owner
       <<: *master
-      name: mc-owner-rdma0
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, --device_names=rdma0, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      name: mc-owner-numa0
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma0,rdma1,rdma2,rdma3", --global_segment_size=824633720832, --local_buffer_size=0, --threads=4]
       env:
         <<: *store_env
         # Back the segment with the reserved 2 MiB pages; the NIC cannot register 64 GiB regions of 4 KiB pages.
@@ -169,14 +151,8 @@ override_1p1d_mcstore:
         timeout_seconds: 1800
         interval_seconds: 5
     - <<: *owner
-      name: mc-owner-rdma1
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26151, --metadata_server=http://127.0.0.1:26180/metadata, --protocol=rdma, --device_names=rdma1, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
-    - <<: *owner
-      name: mc-owner-rdma2
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26054, --master_server_address=127.0.0.1:26251, --metadata_server=http://127.0.0.1:26280/metadata, --protocol=rdma, --device_names=rdma2, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
-    - <<: *owner
-      name: mc-owner-rdma3
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26055, --master_server_address=127.0.0.1:26351, --metadata_server=http://127.0.0.1:26380/metadata, --protocol=rdma, --device_names=rdma3, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      name: mc-owner-numa1
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma0,rdma1,rdma2,rdma3", --global_segment_size=824633720832, --local_buffer_size=0, --threads=4]
   roles:
     prefill:
       env:
@@ -185,19 +161,18 @@ override_1p1d_mcstore:
         MC_NUM_QP_PER_EP: "1"
         # Registers the worker's HBM transfer pool in 1 GiB regions.
         MC_MAX_MR_SIZE: "1073741824"
+        # Every owner sits on rdma0-3; the fabric is rail-isolated, so each stage must reach the owner through the NIC of its own name.
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
       args:
         num-speculative-tokens: 3
-        # Each stage's Store client uses its GPU's NIC and that NIC's pool.
+        # One pool shared by all four stages, as in ATOM's CI; each client still uses its GPU's NIC.
         extra-kv-connectors:
           - kv_connector: mooncake_store
             kv_role: offload
             kv_connector_extra_config:
               mooncake_store.protocol: rdma
-              mooncake_store.pools:
-                rdma0: {master: "127.0.0.1:26051", metadata: "http://127.0.0.1:26080/metadata"}
-                rdma1: {master: "127.0.0.1:26151", metadata: "http://127.0.0.1:26180/metadata"}
-                rdma2: {master: "127.0.0.1:26251", metadata: "http://127.0.0.1:26280/metadata"}
-                rdma3: {master: "127.0.0.1:26351", metadata: "http://127.0.0.1:26380/metadata"}
+              mooncake_store.master: "127.0.0.1:26051"
+              mooncake_store.metadata: "http://127.0.0.1:26080/metadata"
     decode:
       nodes: colocate
       env:
