@@ -10081,4 +10081,4 @@
     - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261016."
     - "Enable --monokernel-backend amd on concurrency <= 16, with --disable-shared-experts-fusion and enforce-shared-experts-fusion false."
     - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 and SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 on all points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4328
