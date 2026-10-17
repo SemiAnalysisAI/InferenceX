@@ -69,7 +69,7 @@ roles:
       disaggregation-transfer-backend: mooncake
       disable-radix-cache: true
       mem-fraction-static: 0.8
-      context-length: 9236
+      context-length: 10240
       max-total-tokens: 128000
       max-running-requests: 128
       cuda-graph-max-bs-decode: 4
@@ -149,7 +149,7 @@ roles:
       disable-radix-cache: true
       cuda-graph-max-bs-decode: 256
       mem-fraction-static: 0.8
-      context-length: 9236
+      context-length: 10240
       max-total-tokens: 2200000
       max-mamba-cache-size: 3413
       max-running-requests: 3413
