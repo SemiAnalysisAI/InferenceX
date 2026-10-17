@@ -170,7 +170,9 @@ def test_standalone_srt_slurm_point_needs_no_kv_offload_declaration(tmp_path):
 
 
 WINDOW = {
-    "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "0",
+    "IS_MULTINODE": "true",
+    "ENABLE_AGENTX_POWER": "1",
+    "REQUIRE_POWER": "0",
     "SRT_MEASUREMENT_WINDOW_DIR": "/w",
 }
 MISSING = {"IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "1"}
@@ -439,3 +441,97 @@ def test_srt_shim_builds_the_runtime_waits_for_the_server_and_writes_the_point(
     assert "fake aiperf: profiled 1 request" in result.stdout
     aggregate = json.loads((tmp_path / "agentx.json").read_text())
     assert (aggregate["conc"], aggregate["num_requests_total"]) == (8, 1)
+
+
+FAKE_ATOM_AIPERF_SCRIPT = (
+    FAKE_AIPERF_SCRIPT
+    + r"""
+record["metrics"]["usage_prompt_tokens"] = {"value": 100, "unit": "tokens"}
+(out / "profile_export.jsonl").write_text(json.dumps(record) + "\n")
+urls = argv[argv.index("--server-metrics") + 1 :]
+urls = urls[: next((i for i, url in enumerate(urls) if url.startswith("--")), len(urls))]
+prefill = "http://" + os.environ["SRT_PREFILL_ENDPOINTS"] + "/metrics"
+edges = [(0, 1000), (1000, 2500), (2500, 4000)]
+counters = {
+    "prefix_cache_full_tokens": (0, 40, 60),
+    "prefix_cache_cached_tokens": (0, 20, 40),
+    "prefix_cache_offload_tokens": (0, 5, 5),
+    "prefix_cache_requests": (0, 1, 0),
+}
+def series(url, values):
+    slices = [{"start_ns": lo, "end_ns": hi, "total": v} for (lo, hi), v in zip(edges, values)]
+    return {"endpoint_url": url, "stats": {"total": sum(values)}, "timeslices": slices}
+metrics = {
+    f"atom:{name}": {
+        "type": "counter",
+        "series": [series(url, values if url == prefill else (0, 50, 50)) for url in urls],
+    }
+    for name, values in counters.items()
+}
+summary = {"phase_time_ranges": {"profiling": {"start_ns": 1000, "end_ns": 4000}}}
+(out / "server_metrics_export.json").write_text(json.dumps({"summary": summary, "metrics": metrics}))
+"""
+)
+
+
+def test_srt_shim_hands_launcher_endpoint_roles_to_the_atom_producer(tmp_path, http_server):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    executable(tools / "uv", FAKE_UV)
+    (tools / "python3").symlink_to(sys.executable)
+    script = tmp_path / "fake_aiperf.py"
+    script.write_text(FAKE_ATOM_AIPERF_SCRIPT)
+
+    def frontend(method: str, path: str) -> tuple[int, object]:
+        if path == "/v1/models":
+            return 200, {"data": [{"id": "served/model"}]}
+        return (405 if path == "/v1/chat/completions" else 200), {}
+
+    workers = {
+        f"{side}_{key}": value
+        for side in ("PREFILL", "DECODE")
+        for key, value in {
+            "NUM_WORKERS": "1",
+            "TP": "8",
+            "PP_SIZE": "1",
+            "DCP_SIZE": "1",
+            "PCP_SIZE": "1",
+            "EP": "1",
+            "DP_ATTN": "false",
+        }.items()
+    }
+    env = _point(
+        tmp_path,
+        PATH=f"{tools}:/usr/bin:/bin",
+        HOME=str(tmp_path),
+        FAKE_AIPERF_SCRIPT=str(script),
+        REPLAY_ARGV=str(tmp_path / "replay-argv"),
+        HF_HUB_CACHE=str(tmp_path / "hf"),
+        AIPERF_RUNTIME_DIR=str(tmp_path / "runtime"),
+        EVAL_ONLY="true",
+        AIPERF_SERVER_URL=http_server(frontend),
+        SERVED_MODEL_NAME="served/model",
+        EVAL_ENDPOINT_READY_TIMEOUT_SECONDS="30",
+        EVAL_MODEL_STABILIZATION_SECONDS="0",
+        FRAMEWORK="atom-disagg",
+        DISAGG="true",
+        SRT_PREFILL_ENDPOINTS="10.0.0.1:6100",
+        SRT_DECODE_ENDPOINTS="10.0.0.2:6100",
+        **workers,
+    )
+
+    result = subprocess.run(
+        ["bash", str(SHIM)], env=env, capture_output=True, text=True, timeout=120, check=False
+    )
+
+    assert result.returncode == 0, result.stderr
+    argv = shlex.split((tmp_path / "replay-argv").read_text())
+    scraped = argv[argv.index("--server-metrics") + 1 : argv.index("--server-metrics") + 3]
+    assert scraped == ["http://10.0.0.1:6100/metrics", "http://10.0.0.2:6100/metrics"]
+    server_metrics = json.loads((tmp_path / "agentx.json").read_text())["server_metrics"]
+    validity = server_metrics["cache_validity"]
+    assert validity["roles_source"] == "launcher_env"
+    assert validity["accounted_endpoints"] == ["http://10.0.0.1:6100/metrics"]
+    assert (validity["status"], validity["pricing_eligible"]) == ("VALID_COMPLETE", True)
+    cache = server_metrics["cache"]
+    assert (cache["gpu_cache_hit_rate"], cache["cpu_cache_hit_rate"]) == (0.6, 0.1)
