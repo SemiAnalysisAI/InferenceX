@@ -1,0 +1,12 @@
+{
+ "arm": "H0",
+ "builder_uv": "uv 0.12.5 (x86_64-unknown-linux-gnu)",
+ "built_with": "agentx-harness tools/build_agentx_release.py --tag agentx-v1.0.11",
+ "evidence": "lp_fxi_cpu_kvcache evidence/x1l/harness/build.json",
+ "harness_commit": "104c7c8086666385fbf3962911b55f68bf08a04a",
+ "harness_tree": "5f0ec9d1a9dcf52df7f9b1ad1bd4071e6fadeed9",
+ "patch_sha256": null,
+ "pypi_agentx_harness_1_0_11_wheel_sha256": "63d2454131afe78d98811b237a0bedad483177d7cba64096f65d435a2d951929",
+ "wheel_generator": "hatchling 1.32.4",
+ "wheel_sha256": "63d2454131afe78d98811b237a0bedad483177d7cba64096f65d435a2d951929"
+}

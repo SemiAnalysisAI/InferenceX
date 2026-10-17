@@ -16,6 +16,10 @@ from infx.bench.env import BenchError
 
 PYTHON_VERSION = "3.11"
 REQUIREMENTS = Path(__file__).with_name("requirements.txt")
+VENDOR = Path(__file__).with_name("vendor")
+HARNESS_WHEEL = VENDOR / "agentx_harness-1.0.11-py3-none-any.whl"
+EXCLUDE_NEWER = "2026-10-17T00:00:00Z"
+"""Both experiment arms resolve the harness dependencies against the same index snapshot."""
 
 
 @dataclass(frozen=True)
@@ -71,7 +75,7 @@ def bootstrap(runtime: Runtime) -> int:
     if rc:
         return rc
     install = [uv_exe, "pip", "install", "--python", str(runtime.python)]
-    install += ["--no-config", "-r", str(REQUIREMENTS)]
+    install += ["--no-config", "--exclude-newer", EXCLUDE_NEWER, "-r", str(REQUIREMENTS), str(HARNESS_WHEEL)]
     if proc.call(install, {**env, "UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}):
         raise BenchError(
             "benchmark client dependency bootstrap failed; inspect network/package "
@@ -79,7 +83,17 @@ def bootstrap(runtime: Runtime) -> int:
         )
     if not (_executable(runtime.agentx) and _executable(runtime.hf)):
         raise BenchError(f"isolated AgentX environment is incomplete at {runtime.venv}")
+    _record_harness(runtime, uv_exe)
     return 0
+
+
+def _record_harness(runtime: Runtime, uv_exe: str) -> None:
+    """Write the installed harness identity beside the results; refuse to replay with another arm."""
+    out = Path(os.environ["RESULT_DIR"]).absolute() / "x1l_harness_fingerprint.json"
+    script = Path(__file__).with_name("x1l_fingerprint.py")
+    argv = [str(runtime.python), "-P", str(script), str(out), str(VENDOR / "ARM.json"), str(HARNESS_WHEEL), uv_exe]
+    if proc.call(argv, dict(os.environ)):
+        raise BenchError(f"installed AgentX harness does not match {VENDOR / 'ARM.json'}; see {out}")
 
 
 def _executable(path: Path) -> bool:
