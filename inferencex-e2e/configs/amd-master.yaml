@@ -1182,7 +1182,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "draft_model"
-        conc-list: [1]  # Request-slot capacity is configured separately in the recipe.
+        conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: umbp-linker }
         srt-recipe: disagg-umbp-dspark.yaml:override_c1
