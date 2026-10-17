@@ -2054,7 +2054,9 @@ class TestCommandLine:
             assert "--all-evals cannot be combined with --no-evals" in result.stderr
         else:
             assert result.returncode == 0, result.stderr
-            assert result.stderr == ""
+            warnings = result.stderr.splitlines()
+            assert len(warnings) == 5
+            assert all(line.startswith("WARNING: no recipe fingerprint: ") for line in warnings)
             rows = json.loads(result.stdout)
             assert [(r["isl"], r["osl"], r["conc"]) for r in rows] == [
                 (1024, 1024, 4), (1024, 1024, 8), (1024, 1024, 16),
