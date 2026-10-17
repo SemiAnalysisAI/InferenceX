@@ -417,7 +417,6 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
-            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -584,7 +583,6 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
-            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -728,7 +726,6 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             conc: ${{ matrix.config['eval-conc'] }}
-            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
             eval-suite: ${{ matrix.config['eval-suite'] || '' }}

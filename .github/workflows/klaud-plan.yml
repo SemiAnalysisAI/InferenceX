@@ -168,7 +168,7 @@ jobs:
             --allowedTools "Read,Glob,Grep,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api --method GET:*),Bash(git status:*),Bash(git ls-tree:*)"
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
           prompt: |
-            Use Read on candidates.json, open-prs.json and capacity.json under ${{ runner.temp }}/klaud/.
+            Use Read on candidates.json and open-prs.json under ${{ runner.temp }}/klaud/.
             Review candidates in the supplied shuffled order against current recipes and the open-PR index,
             including drafts and arbitrary branches. The index omits PRs idle for ${{ env.STALE_PR_DAYS }} days
             (other than Klaud candidate PRs); those no longer own any family. Changed-file paths are already fetched;
@@ -186,19 +186,14 @@ jobs:
             Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
             a different family. For every proceed decision, resolve baseline-model to the exact display
             model accepted by the public benchmark API using the supplied OpenAPI schema.
-            Resolve ALL possible target clusters from its runner and inferencex-e2e/configs/runners.yaml
-            (cluster:NAME labels, written as NAME) to the exact IDs in capacity.json. Same-hardware sibling
-            clusters cannot stand in for the recipe's target. Proceed only if every target is in eligible-clusters;
-            unproven mappings or unavailable targets mean uncertain. Continue to later candidates
-            to fill the cap. Never copy private eligibility data into reasons or reports.
+            Target clusters and their capacity are resolved and checked in code, not by this review.
             Mark duplicate when an open PR owns that family's image refresh or overlapping
             compatibility work, even with another image tag; unrelated work on the same hardware
             is not a duplicate. A cross-cutting PR (launcher, telemetry, refactor or shared-schema
             work spanning many families) is a duplicate only if its diff changes this family's
             image or the exact engine flags/environment a refresh edits; touching the same recipe
             file for unrelated settings is not overlap. Return the supplied schema: candidate-id, decision
-            (proceed/duplicate/uncertain), family (null if unresolved), clusters (exact
-            target IDs, empty if unresolved), pull-requests (overlapping
+            (proceed/duplicate/uncertain), family (null if unresolved), pull-requests (overlapping
             PR numbers), baseline-model (required for proceed; otherwise null), reason (brief evidence).
             Missing evidence or ambiguity means uncertain.
             Review EVERY supplied candidate in shuffled order, returning exactly one decision per ID.
@@ -294,7 +289,7 @@ jobs:
         if: always()
         with:
           name: klaud-plan
-          # Deliberately exclude private capacity.json and arbitrary agent scratch files.
+          # Deliberately exclude arbitrary agent scratch files.
           path: |
             ${{ runner.temp }}/klaud/candidates.json
             ${{ runner.temp }}/klaud/open-prs.json

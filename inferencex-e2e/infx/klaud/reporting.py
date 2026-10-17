@@ -642,6 +642,24 @@ def decode[Record: Contract](
     return model.model_validate(value)
 
 
+def latest_next(session: Session, pull: dict) -> Prose | None:
+    attempts = [
+        c
+        for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
+        if c["user"]["login"] == "Klaud-Cold"
+        and re.fullmatch(r"run-\d+-\d+", name := c["body"].split("\n", 1)[0].rpartition(":")[2])
+        and c["body"].startswith(marker(session, name))
+    ]
+    if not attempts:
+        return None
+    body = max(attempts, key=lambda c: c["id"])["body"]
+    try:
+        value = json.loads(body.split("\n", 1)[1].split("\n-->", 1)[0])
+        return Prose.model_validate(value.get("record", value)["next"])
+    except (ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return None
+
+
 def baseline_for(session: Session, pull: dict) -> Baseline | None:
     current = session.refresh(pull)
     embedded = baseline_from_body(current.get("body") or "")
