@@ -37,6 +37,15 @@ def process_docs(
 MMLU_PRO_LETTERS = "ABCDEFGHIJ"
 
 
+def mmlu_pro_tenth(dataset: datasets.Dataset) -> datasets.Dataset:
+    """Every 10th question of each category, in question_id order: 10% of each subject."""
+    by_category: dict[str, list[int]] = {}
+    for doc in dataset:
+        by_category.setdefault(doc["category"], []).append(doc["question_id"])
+    keep = {qid for ids in by_category.values() for qid in sorted(ids)[::10]}
+    return dataset.filter(lambda doc: doc["question_id"] in keep)
+
+
 def mmlu_pro_third(dataset: datasets.Dataset) -> datasets.Dataset:
     """Throwaway: a fixed third of MMLU-Pro test (question_id % 3 == 0), all subjects."""
     return dataset.filter(lambda doc: doc["question_id"] % 3 == 0)
