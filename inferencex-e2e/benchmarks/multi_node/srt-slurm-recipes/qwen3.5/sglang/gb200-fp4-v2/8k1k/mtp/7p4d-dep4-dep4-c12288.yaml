@@ -1,9 +1,7 @@
 schema: 2
 name: qwen35-v2-gb200-c12288-7p4d-dep4-mtp1-cap1056
 dynamo:
-  install: true
-  source:
-    wheel: "1.2.1"
+  install: false
   request_plane: "nats"
 frontend:
   type: dynamo
