@@ -66,8 +66,8 @@ def stop_server(process: subprocess.Popen[bytes]) -> None:
 def collect(settings: dict[str, str], results: Path, dataset: Path) -> None:
     lengths = [env.parse_positive_int("MTP_LIST", item) for item in settings["MTP_LIST"].split()]
     modes = settings["THINKING_MODES"].split()
-    if not lengths or any(length > 5 for length in lengths):
-        raise env.InputError("DSv4.1 Flash draft lengths must be in 1..5")
+    if not lengths:
+        raise env.InputError("MTP_LIST must contain at least one positive draft length")
     if not modes or any(mode not in {"on", "off"} for mode in modes):
         raise env.InputError("THINKING_MODES must contain on and/or off")
     if settings["CATEGORY"] != "coding":
