@@ -99,16 +99,18 @@ override_1p1d_mcstore:
     commands:
       # A recipe host_setup replaces the cluster default, which also drops the page cache under DRAM KV offloading.
       - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
-      # Owners take 714752 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
+      # Owners take 917504 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
+      # Only the prefill node holds owners; srtctl starts the prefill on the head node, which launches this srun.
       - >-
-        if [[ "$(hostname -s)" == "$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)" ]]; then
+        if hostname -I | tr ' ' '\n' | grep -qxF "${SLURM_LAUNCH_NODE_IPADDR:?srun did not set SLURM_LAUNCH_NODE_IPADDR}"; then
+        echo "[hugepage] $(hostname -s) is the head node; reserving the owners' pages";
         held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
-        HUGEPAGES_TARGET=$(( held + 714752 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
+        HUGEPAGES_TARGET=$(( held + 917504 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
         bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
         for node in 0 1; do
         free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
-        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 357376";
-        [[ $free -ge 357376 ]] || exit 1;
+        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 458752";
+        [[ $free -ge 458752 ]] || exit 1;
         done; fi
     teardown:
       - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
@@ -133,19 +135,22 @@ override_1p1d_mcstore:
       readiness:
         port: 26051
         timeout_seconds: 300
-    - <<: *master
+    - &master_rdma1
+      <<: *master
       name: mc-master-rdma1
       command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_master, --rpc_port=26151, --rpc_thread_num=32, --enable_http_metadata_server=true, --http_metadata_server_host=0.0.0.0, --http_metadata_server_port=26180, --metrics_port=26190, --default_kv_lease_ttl=10000, --eviction_high_watermark_ratio=0.90, --eviction_ratio=0.05, --allocation_strategy=random, --memory_allocator=offset, --client_ttl=10]
       readiness:
         port: 26151
         timeout_seconds: 300
-    - <<: *master
+    - &master_rdma2
+      <<: *master
       name: mc-master-rdma2
       command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_master, --rpc_port=26251, --rpc_thread_num=32, --enable_http_metadata_server=true, --http_metadata_server_host=0.0.0.0, --http_metadata_server_port=26280, --metrics_port=26290, --default_kv_lease_ttl=10000, --eviction_high_watermark_ratio=0.90, --eviction_ratio=0.05, --allocation_strategy=random, --memory_allocator=offset, --client_ttl=10]
       readiness:
         port: 26251
         timeout_seconds: 300
-    - <<: *master
+    - &master_rdma3
+      <<: *master
       name: mc-master-rdma3
       command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_master, --rpc_port=26351, --rpc_thread_num=32, --enable_http_metadata_server=true, --http_metadata_server_host=0.0.0.0, --http_metadata_server_port=26380, --metrics_port=26390, --default_kv_lease_ttl=10000, --eviction_high_watermark_ratio=0.90, --eviction_ratio=0.05, --allocation_strategy=random, --memory_allocator=offset, --client_ttl=10]
       readiness:
@@ -154,7 +159,7 @@ override_1p1d_mcstore:
     - &owner
       <<: *master
       name: mc-owner-rdma0
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, --device_names=rdma0, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, --device_names=rdma0, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
       env:
         <<: *store_env
         # Back the segment with the reserved 2 MiB pages; the NIC cannot register 64 GiB regions of 4 KiB pages.
@@ -170,16 +175,16 @@ override_1p1d_mcstore:
         interval_seconds: 5
     - <<: *owner
       name: mc-owner-rdma1
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26151, --metadata_server=http://127.0.0.1:26180/metadata, --protocol=rdma, --device_names=rdma1, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26151, --metadata_server=http://127.0.0.1:26180/metadata, --protocol=rdma, --device_names=rdma1, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
     - <<: *owner
       name: mc-owner-rdma2
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26054, --master_server_address=127.0.0.1:26251, --metadata_server=http://127.0.0.1:26280/metadata, --protocol=rdma, --device_names=rdma2, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26054, --master_server_address=127.0.0.1:26251, --metadata_server=http://127.0.0.1:26280/metadata, --protocol=rdma, --device_names=rdma2, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
     - <<: *owner
       name: mc-owner-rdma3
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26055, --master_server_address=127.0.0.1:26351, --metadata_server=http://127.0.0.1:26380/metadata, --protocol=rdma, --device_names=rdma3, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26055, --master_server_address=127.0.0.1:26351, --metadata_server=http://127.0.0.1:26380/metadata, --protocol=rdma, --device_names=rdma3, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
   roles:
     prefill:
-      env:
+      env: &store_prefill_env
         # More than one load worker hung the PP prefill pipeline at C96.
         OFFLOAD_LOAD_WORKERS: "1"
         MC_NUM_QP_PER_EP: "1"
@@ -188,7 +193,7 @@ override_1p1d_mcstore:
       args:
         num-speculative-tokens: 3
         # Each stage's Store client uses its GPU's NIC and that NIC's pool.
-        extra-kv-connectors:
+        extra-kv-connectors: &store_connector
           - kv_connector: mooncake_store
             kv_role: offload
             kv_connector_extra_config:
@@ -213,7 +218,7 @@ override_1p1d_mcstore:
           cudagraph-capture-sizes: '[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256]'
         num-speculative-tokens: 3
 
-override_1p2d_lmcache_c56:
+override_1p2d_mcstore_c56:
   resources: &spread
     # A node per decode; srtctl otherwise packs two TP4 decodes onto one node.
     spread_workers: true
@@ -226,44 +231,78 @@ override_1p2d_lmcache_c56:
       balance-abs-threshold: 2
       balance-rel-threshold: 2.0
       eviction-interval: 300
+  host_setup: &prefill_budget_host_setup
+    nodes: all
+    timeout_seconds: 1800
+    commands:
+      # A recipe host_setup replaces the cluster default, which also drops the page cache under DRAM KV offloading.
+      - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
+      # Owners take 714752 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
+      # Only the prefill node holds owners; srtctl starts the prefill on the head node, which launches this srun.
+      - >-
+        if hostname -I | tr ' ' '\n' | grep -qxF "${SLURM_LAUNCH_NODE_IPADDR:?srun did not set SLURM_LAUNCH_NODE_IPADDR}"; then
+        echo "[hugepage] $(hostname -s) is the head node; reserving the owners' pages";
+        held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
+        HUGEPAGES_TARGET=$(( held + 714752 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
+        bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
+        for node in 0 1; do
+        free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
+        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 357376";
+        [[ $free -ge 357376 ]] || exit 1;
+        done; fi
+    teardown:
+      - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
+  services: &prefill_budget_services
+    - *master
+    - *master_rdma1
+    - *master_rdma2
+    - *master_rdma3
+    - <<: *owner
+      name: mc-owner-rdma0
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, --device_names=rdma0, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+    - <<: *owner
+      name: mc-owner-rdma1
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26151, --metadata_server=http://127.0.0.1:26180/metadata, --protocol=rdma, --device_names=rdma1, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+    - <<: *owner
+      name: mc-owner-rdma2
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26054, --master_server_address=127.0.0.1:26251, --metadata_server=http://127.0.0.1:26280/metadata, --protocol=rdma, --device_names=rdma2, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+    - <<: *owner
+      name: mc-owner-rdma3
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26055, --master_server_address=127.0.0.1:26351, --metadata_server=http://127.0.0.1:26380/metadata, --protocol=rdma, --device_names=rdma3, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
   roles:
     prefill:
-      env: &lmcache_env
-        LMCACHE_LOCAL_CPU: "True"
-        LMCACHE_NUMA_MODE: auto
-        LMCACHE_MAX_LOCAL_CPU_SIZE: "256"
-        LMCACHE_CHUNK_SIZE: "256"
-        # Every PP stage runs a lookup server, so each stage refreshes its own LRU.
-        LMCACHE_LOOKUP_SERVER_WORKER_IDS: "0,1,2,3"
+      env: *store_prefill_env
       args:
         num-speculative-tokens: 4
-        extra-kv-connectors: &lmcache_connector
-          - kv_connector: lmcache_offload
-            kv_role: offload
+        extra-kv-connectors: *store_connector
     decode:
       nodes: 2
       workers: 2
       env:
         AITER_REUSE_IDENTICAL_COMM_GROUPS: "1"
+        MC_NUM_QP_PER_EP: "1"
       args:
         <<: *dcp_decode
         num-speculative-tokens: 4
 
-override_1p3d_lmcache_c12:
+override_1p3d_mcstore_c12:
   resources: *spread
   frontend:
     args: *cache_aware
+  host_setup: *prefill_budget_host_setup
+  services: *prefill_budget_services
   roles:
     prefill:
-      env: *lmcache_env
+      env: *store_prefill_env
       args:
         num-speculative-tokens: 5
-        extra-kv-connectors: *lmcache_connector
+        extra-kv-connectors: *store_connector
     decode:
       nodes: 3
       workers: 3
-      env:
+      env: &tp4_decode_env
         PYTHONNOUSERSITE: "1"
+        MC_NUM_QP_PER_EP: "1"
       args:
         num-speculative-tokens: 5
         gpu-memory-utilization: 0.95
@@ -272,21 +311,22 @@ override_1p3d_lmcache_c12:
         cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24]'
         disable-uvicorn-access-log: true
 
-override_1p3d_lmcache_c16:
+override_1p3d_mcstore_c16:
   resources: *spread
   frontend:
     args: *cache_aware
+  host_setup: *prefill_budget_host_setup
+  services: *prefill_budget_services
   roles:
     prefill:
-      env: *lmcache_env
+      env: *store_prefill_env
       args:
         num-speculative-tokens: 5
-        extra-kv-connectors: *lmcache_connector
+        extra-kv-connectors: *store_connector
     decode:
       nodes: 3
       workers: 3
-      env:
-        PYTHONNOUSERSITE: "1"
+      env: *tp4_decode_env
       args:
         num-speculative-tokens: 5
         gpu-memory-utilization: 0.95
@@ -295,21 +335,22 @@ override_1p3d_lmcache_c16:
         cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32]'
         disable-uvicorn-access-log: true
 
-override_1p3d_lmcache_c24:
+override_1p3d_mcstore_c24:
   resources: *spread
   frontend:
     args: *cache_aware
+  host_setup: *prefill_budget_host_setup
+  services: *prefill_budget_services
   roles:
     prefill:
-      env: *lmcache_env
+      env: *store_prefill_env
       args:
         num-speculative-tokens: 5
-        extra-kv-connectors: *lmcache_connector
+        extra-kv-connectors: *store_connector
     decode:
       nodes: 3
       workers: 3
-      env:
-        PYTHONNOUSERSITE: "1"
+      env: *tp4_decode_env
       args:
         num-speculative-tokens: 5
         gpu-memory-utilization: 0.95

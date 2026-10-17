@@ -1500,45 +1500,42 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp:
   srt-recipe-dir: glm5.2/atom/mi355x-fp4/agentx
   scenarios:
     agentic-coding:
-    # The Store's 4 x 349 GiB owners: all 1499 GB of the 4-GPU prefill's share of the 3 TB cap.
+    # 1.0 gives each 4-GPU server 1499 GB: 1P1D's 4 x 448 GiB owners hold 962 GB per NUMA node of its prefill's and colocated decode's shares; 1P2D and 1P3D owners hold the prefill's 1499 GB.
     - dram-utilization: 1.0
       search-space:
       - spec-decoding: "mtp"
-        conc-list: [ 56, 72, 96, 112 ]
+        conc-list: [ 56, 72, 96, 112, 128 ]
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13" }
         srt-recipe: disagg-variants.yaml:override_1p1d_mcstore
         prefill: { num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false }
         decode: { num-worker: 1, tp: 4, dcp-size: 4, ep: 1, dp-attn: false }
-    # LMCache's 4 x 256 GiB stages: 1099 GB of that share.
-    - dram-utilization: 0.733
-      search-space:
       - spec-decoding: "mtp"
         conc-list: [ 56 ]
         kv-offloading: dram
-        kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }
-        srt-recipe: disagg-variants.yaml:override_1p2d_lmcache_c56
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
+        srt-recipe: disagg-variants.yaml:override_1p2d_mcstore_c56
         prefill: { num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false }
         decode: { num-worker: 2, tp: 4, dcp-size: 4, ep: 1, dp-attn: false }
       - spec-decoding: "mtp"
         conc-list: [ 12 ]
         kv-offloading: dram
-        kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }
-        srt-recipe: disagg-variants.yaml:override_1p3d_lmcache_c12
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
+        srt-recipe: disagg-variants.yaml:override_1p3d_mcstore_c12
         prefill: { num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false }
         decode: { num-worker: 3, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: "mtp"
         conc-list: [ 16 ]
         kv-offloading: dram
-        kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }
-        srt-recipe: disagg-variants.yaml:override_1p3d_lmcache_c16
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
+        srt-recipe: disagg-variants.yaml:override_1p3d_mcstore_c16
         prefill: { num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false }
         decode: { num-worker: 3, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: "mtp"
         conc-list: [ 24 ]
         kv-offloading: dram
-        kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }
-        srt-recipe: disagg-variants.yaml:override_1p3d_lmcache_c24
+        kv-offload-backend: { name: mooncake, version: "0.3.13" }
+        srt-recipe: disagg-variants.yaml:override_1p3d_mcstore_c24
         prefill: { num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false }
         decode: { num-worker: 3, tp: 4, ep: 1, dp-attn: false }
 
