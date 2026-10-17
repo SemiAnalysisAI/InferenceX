@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, repository_root
 from infx.matrix.generate import generate_config_matrix, trim_conc
+from infx.srt_slurm.video import load_spec
 from infx.workflows.benchmark_schema import validate_matrix
 from infx.matrix.validation import (
     SingleNodeMasterConfigEntry,
@@ -41,7 +42,7 @@ def test_the_h200_video_config_generates_one_job_for_every_concurrency(masters, 
     assert validate_video_matrix_entry(row) == row
 
 
-def test_every_video_config_targets_one_cluster_and_the_same_frozen_spec(masters, runners):
+def test_every_video_config_targets_one_cluster_and_the_same_frozen_workload(masters, runners):
     keys = sorted(key for key in masters if masters[key]["scenarios"].get("video-generation"))
     assert keys == [
         "h3-bf16-b200-sglang-video", "h3-bf16-h100-sglang-video",
@@ -49,8 +50,18 @@ def test_every_video_config_targets_one_cluster_and_the_same_frozen_spec(masters
     ]  # fmt: skip
     rows = generate_config_matrix(keys, masters, runners, root=ROOT)
     assert len(rows) == len(keys)
-    assert {row["spec"] for row in rows} == {"h3-serving-2gpu.json"}
     assert all(row["runner"].startswith("cluster:") for row in rows)
+    # A SKU may pin a different interpreter for its runtime image, but every point must
+    # serve the identical frozen workload: same plan, model, server settings and limits.
+    specs = {}
+    for row in rows:
+        spec = load_spec(row["spec"], root=ROOT)
+        for role in ("baseline", "candidate"):
+            spec[role].pop("python")
+        specs[row["spec"]] = spec
+    assert {"h3-serving-2gpu.json", "h3-serving-2gpu-b200.json"} <= set(specs)
+    reference = specs["h3-serving-2gpu.json"]
+    assert all(spec == reference for spec in specs.values())
 
 
 def test_scenario_type_filters_video_rows(masters, runners):
