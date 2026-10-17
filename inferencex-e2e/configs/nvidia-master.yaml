@@ -7975,7 +7975,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
 # speculation pays; 4 draft tokens (AL 3.36) at conc 24/32/48/56/72/80; and no speculation
 # at conc 96, where the batch already saturates the two nodes.
 kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-ac9126e58aa7bbab1856ba6593ba4d5003fea516
+  image: vllm/vllm-openai:nightly-77154ca6116ae34cbfe314beef1016bde9b63989@sha256:a7deff2c216def98c193352aca50fb03a2ee29231355b3033dc3789009f6d23e
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b200-nscale
