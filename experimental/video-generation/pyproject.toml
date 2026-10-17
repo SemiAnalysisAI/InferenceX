@@ -7,7 +7,7 @@ name = "inferencex-h3-video-ci"
 version = "0.1.0"
 description = "Controlled H3 runtime regression measurements for InferenceX CI"
 requires-python = ">=3.12"
-dependencies = ["av==16.1.0", "numpy==2.3.5"]
+dependencies = ["av==16.1.0", "numpy==2.3.5", "pyyaml==6.0.3"]
 
 [project.optional-dependencies]
 dev = ["pytest==8.4.2", "jsonschema>=4,<5", "rfc3339-validator==0.1.4"]
@@ -21,7 +21,7 @@ include = ["evaluator*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "tests"]
+pythonpath = [".", "tests", "specs"]
 
 [tool.ruff]
 # Owned by SemiAnalysisAI/InferenceX#4243 and linted by its own workflow with the infx config.
