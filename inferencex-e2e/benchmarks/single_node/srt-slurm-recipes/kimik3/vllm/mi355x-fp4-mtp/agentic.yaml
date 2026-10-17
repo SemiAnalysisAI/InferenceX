@@ -54,6 +54,7 @@ base:
         SAFETENSORS_FAST_GPU: '1'
         VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
         AITER_BF16_FP8_MOE_BOUND: '0'
+        AITER_FLYDSL_STAGE2_FP8: '1'
         VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
         VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB: '16'
         # The MI355X nodes report MEC firmware 38, below the 177 that fixes the

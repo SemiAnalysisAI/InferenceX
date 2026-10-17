@@ -10065,6 +10065,7 @@
     - "Every point except concurrency 1 sets quantization-config {\"targets\":{\"*in_proj_qkvgfab\":\"fp8_per_channel\"}}: only the KDA in_proj_qkvgfab projection is quantized online to FP8 per-channel."
     - "Concurrency 1 no longer ignores *in_proj_qkvgfab in its fp8_per_channel linear quantization-config, so that projection is FP8 per-channel at every concurrency."
     - "Set VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB=16 at every concurrency, so QuickReduce INT4 handles only all-reduces of 16 MB or more."
+    - "Set AITER_FLYDSL_STAGE2_FP8=1 at every concurrency, matching kimik3-fp4-mi355x-atom-agentic-mtp."
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#57392 (AITER Gluon KDA kernels for decode and spec decode), #61207 (stage fused KDA decode weights after loading), #61654 (MLA wrapper no longer reads W_UK_T before weight loading), #61895 (any-shape low-latency MoE router GEMM on MI355), #59406 (preshuffled FP4 GEMM config probed by logical K), #58381 (lighter MLA metadata build), #59070 (DCP prefill context kept in FP8 through AllGather), #59468 (DSpark draft slots no longer reserved in the scheduler token budget) and #61230 (AITER v1.25.0 base)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: K3DSparkModel and get_draft_quant_config() are unchanged between the two images, so the draft keeps BF16 weights and an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
