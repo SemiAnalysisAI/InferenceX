@@ -20,6 +20,13 @@ doc_to_text: |
 
   Express your final answer as the corresponding option 'A', 'B', 'C', or 'D'.
 doc_to_target: answer
+# Throwaway: without generation_kwargs lm-eval stops at the first blank line ("\n\n").
+generation_kwargs:
+  until:
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
 
 filter_list:
   - name: extract_abcd

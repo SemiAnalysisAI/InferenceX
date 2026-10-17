@@ -19,7 +19,7 @@ base:
     source:
       wheel: "1.5.0.dev20260910"
   slurm:
-    time_limit: "4:00:00"
+    time_limit: "12:00:00"
   health_check:
     max_attempts: 1440
     interval_seconds: 10

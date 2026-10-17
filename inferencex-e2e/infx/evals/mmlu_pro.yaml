@@ -1,9 +1,8 @@
-# Throwaway: zero-shot chat MMLU-Pro on a fixed third of the test split (see utils.mmlu_pro_third).
-task: mmlu_pro_third
+# Throwaway: zero-shot chat MMLU-Pro on the full test split (12032 questions).
+task: mmlu_pro_full
 dataset_path: TIGER-Lab/MMLU-Pro
 output_type: generate_until
 test_split: test
-process_docs: !function utils.mmlu_pro_third
 doc_to_text: !function utils.mmlu_pro_doc_to_text
 doc_to_target: answer
 generation_kwargs:

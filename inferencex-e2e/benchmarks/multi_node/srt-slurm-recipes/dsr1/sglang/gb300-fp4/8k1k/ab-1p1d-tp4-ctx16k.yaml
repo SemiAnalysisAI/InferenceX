@@ -1,6 +1,10 @@
 schema: 2
 name: "gb300-8k1k-fp4-low-latency-8k1k"
 
+# Throwaway: full MMLU-Pro + GPQA Diamond outlast the default allocation.
+slurm:
+  time_limit: "12:00:00"
+
 dynamo:
   request_plane: "nats"
 

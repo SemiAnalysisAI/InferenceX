@@ -26,7 +26,7 @@ base:
     ETCD_LEASE_TTL: "7200"
   setup_script: vllm-container-deps.sh
   slurm:
-    time_limit: "8:00:00"
+    time_limit: "12:00:00"
   health_check:
     max_attempts: 2160
     interval_seconds: 10
