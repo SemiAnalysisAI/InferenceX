@@ -357,6 +357,14 @@ def test_processor_emits_nested_request_and_server_metrics(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
 
 
+def test_processor_records_run_attempt(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    retried = _run_processor(result_dir, tmp_path / "a", {"GITHUB_RUN_ATTEMPT": "4"})
+    assert retried["run_attempt"] == 4
+    local = _run_processor(result_dir, tmp_path / "b", {"GITHUB_RUN_ATTEMPT": ""})
+    assert "run_attempt" not in local
+
+
 def test_processor_preserves_dataset_provenance(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
