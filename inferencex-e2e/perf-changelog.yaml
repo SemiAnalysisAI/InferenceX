@@ -10087,3 +10087,9 @@
     - "Set router-session-affinity-ttl-secs to 14400, drop the explicit active-decode-blocks, active-prefill-tokens and active-prefill-tokens-frac thresholds."
     - "Pin the benchmark to semianalysis_cc_traces_weka_062126_256k with AIPERF_REQUIRED_SERVER_METRIC_PREFIX=trtllm_kv_cache_utilization, and run the benchmark client on the last decode node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4195
+
+- config-keys:
+    - dsr1-fp8-h200-sglang-mtp
+  description:
+    - "Update SGLang image to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4256
