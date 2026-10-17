@@ -1364,7 +1364,7 @@ qwen3.5-fp4-b300-sglang-mtp:
 # cluster paths while srt-slurm owns allocation, direct vLLM startup,
 # readiness, and log capture. P/D disaggregation is intentionally deferred.
 kimik3-fp4-h200-vllm-agentic-latency:
-  image: vllm/vllm-openai:kimi-k3
+  image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:h200-dgxc
