@@ -98,6 +98,16 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      pr-number:
+        description: "Pull request whose sweep runs this job; empty for other triggers"
+        required: false
+        type: string
+        default: ""
+      test-name:
+        description: "Name of the dispatched test run; empty for other triggers"
+        required: false
+        type: string
+        default: ""
 
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
@@ -159,6 +169,10 @@ env:
   DECODE_CPU_DRAM_GB: ${{ fromJSON(inputs.config)['decode-cpu-dram-gb'] || '0' }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  NODE_COUNT: ${{ inputs.node-count }}
+  BENCHMARK_REF: ${{ inputs.ref || github.sha }}
+  PR_NUMBER: ${{ inputs.pr-number }}
+  TEST_NAME: ${{ inputs.test-name }}
 
   PREFILL_NUM_WORKERS: ${{ fromJSON(inputs.config).prefill.num-worker }}
   PREFILL_TP: ${{ fromJSON(inputs.config).prefill.tp }}
@@ -297,6 +311,7 @@ jobs:
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
+          JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_a${{ github.run_attempt }}_${{ runner.name }}
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
@@ -444,6 +459,16 @@ jobs:
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/multinode_server_logs.tar.gz
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-bind.log
+          if-no-files-found: ignore
+
+      - name: Upload job event
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: job_event_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/job_event.json
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result

@@ -9725,8 +9725,10 @@ musespark-fp4-b300-sglang-agentic-dflash:
   srt-recipe-dir: musespark/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    - search-space:
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64, 128], srt-recipe: agentic.yaml }
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 24, 32, 48, 64, 128], srt-recipe: agentic.yaml }
 
 musespark-fp4-h100-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
