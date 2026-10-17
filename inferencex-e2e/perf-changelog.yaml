@@ -10052,3 +10052,9 @@
     - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
     - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20260805-211ee642 to v0.5.22-cu130 and pin Dynamo to b4540b87."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4227
