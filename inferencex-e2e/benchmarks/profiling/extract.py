@@ -20,6 +20,7 @@ DEVICE_CATS = {"kernel", "gpu_memcpy", "gpu_memset"}
 LAUNCH_CATS = {"cuda_runtime", "cuda_driver"}
 CONTEXT_CATS = {"cpu_op", "user_annotation", "python_function"}
 NODE_ID_MASK = (1 << 32) - 1
+DRIVER_COPY = re.compile(r"^mem(cpy|set)\w*$")
 
 
 KEPT_ARGS = {
@@ -720,12 +721,33 @@ def kernel_family(name):
 
 
 def activity_kind(event):
-    """kernel / memcpy / memset, counting HIP's blit kernels as the copies they are."""
+    """kernel / memcpy / memset, counting HIP's blit kernels and CUDA's driver copy kernels as the copies they are."""
     if event["cat"] != "kernel":
         return event["cat"].removeprefix("gpu_")
-    if event["name"].startswith("__amd_rocclr_fill"):
+    name = event["name"]
+    if name.startswith("__amd_rocclr_fill") or DRIVER_COPY.match(name) and name.startswith("memset"):
         return "memset"
-    return "memcpy" if event["name"].startswith("__amd_rocclr_copy") else "kernel"
+    return "memcpy" if name.startswith("__amd_rocclr_copy") or DRIVER_COPY.match(name) else "kernel"
+
+
+def pair_unlaunched_copies(trace, items, launches):
+    """Pair a replay's nodes with its captured launches when the surplus nodes are peer copies captured without a CPU launch."""
+    if not all("graph node id" in trace.events[i]["args"] for i in items):
+        return None
+    nodes = sorted(items, key=lambda i: trace.events[i]["args"]["graph node id"] & NODE_ID_MASK)
+    paired, p = [], 0
+    for i in nodes:
+        e = trace.events[i]
+        peer = e["cat"] == "gpu_memcpy" and "PtoP" in e["name"]
+        if p < len(launches) and activity_kind(e) == launches[p]["kind"] and (
+                not peer or "Peer" in launches[p]["launch_api"]):
+            paired.append((i, launches[p]))
+            p += 1
+        elif peer:
+            paired.append((i, None))
+        else:
+            return None
+    return paired if p == len(launches) else None
 
 
 def join_by_stream_marks(trace, items, launches):
@@ -874,6 +896,20 @@ def extract_replay(trace, captured, rank, window, step_log, copies, clocks, rout
         replay_ctx = trace.context(launch)
         launches = captured.get(gid) if gid is not None else None
         join = "count_mismatch" if launches is None or len(launches) != len(items) else None
+        if join and launches and len(items) > len(launches):
+            paired = pair_unlaunched_copies(trace, items, launches)
+            if paired is not None:
+                graph_checks["joined_with_unlaunched_copies"] += 1
+                for pos, (i, cap) in enumerate(paired):
+                    if cap is None:
+                        graph_checks["unlaunched_copy_nodes"] += 1
+                        rows.append({"source": "graph", "graph": gid, "node_pos": pos, "device_index": i,
+                                     "marks": replay_ctx["marks"], "unlaunched": True})
+                        continue
+                    rows.append({"source": "graph", "graph": gid, "node_pos": pos, "device_index": i,
+                                 **cap, "marks": replay_ctx["marks"]})
+                    pairs["graph"][(cap["op"], trace.events[i]["name"])] += 1
+                continue
         if join is None and all("graph node id" in trace.events[i]["args"] for i in items):
             items.sort(key=lambda i: trace.events[i]["args"]["graph node id"] & NODE_ID_MASK)
         elif join is None:
