@@ -1592,7 +1592,7 @@ dsr1-fp8-h200-sglang:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.19-cu130
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: h200
