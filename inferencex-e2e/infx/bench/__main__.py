@@ -9,6 +9,7 @@ import sys
 from infx.bench.env import BenchError
 
 COMMANDS = {
+    "speedbench-dsv41": "infx.bench.speedbench",
     "wait": "infx.bench.server",
     "fixed-seq": "infx.bench.fixed_seq",
     "agentic": "infx.bench.agentic.run",
