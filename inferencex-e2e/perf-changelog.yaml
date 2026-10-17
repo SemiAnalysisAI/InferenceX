@@ -10052,3 +10052,25 @@
     - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
     - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-simple
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "DNM: 20-minute AgentX multi-node points through srt-slurm launcher: docker on h200-dgxc."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4043
+
+- config-keys:
+    - dsr1-fp8-h200-dynamo-sglang
+    - dsr1-fp8-h200-dynamo-trt
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "DNM: fixed-sequence multi-node disaggregated points through srt-slurm launcher: docker on h200-dgxc."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4043

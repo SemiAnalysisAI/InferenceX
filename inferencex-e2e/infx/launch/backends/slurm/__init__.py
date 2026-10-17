@@ -308,8 +308,8 @@ class SlurmBackend(Backend):
         extra = self.request.env.get("SALLOC_EXCLUDE")
         return [*self.settings.exclude, *([extra] if extra else [])]
 
-    def _resources(self, gpus: int, time_min: int) -> cli.Resources:
-        """One node named after the runner, so the workflow cleanup finds it."""
+    def _resources(self, gpus: int, time_min: int, nodes: int = 1) -> cli.Resources:
+        """Nodes named after the runner, so the workflow cleanup finds them."""
         settings = self.settings
         return cli.Resources(
             partition=settings.partition,
@@ -318,6 +318,7 @@ class SlurmBackend(Backend):
             job_name=self.request.runner_name,
             gres=settings.gres_for(gpus),
             exclude=self._exclude(),
+            nodes=nodes,
         )
 
     def _allocate(self, gpus: int, time_min: int) -> Job:
@@ -326,6 +327,13 @@ class SlurmBackend(Backend):
         extra = ["--exclusive"] if settings.exclusive else []
         extra += [f"--{name}={value}" for name, value in settings.cpu_directives().items()]
         job = cli.salloc(self._resources(gpus, time_min), extra=[*extra, *settings.salloc_args])
+        self.life.callback(cli.cancel, job)
+        return job
+
+    def allocate_nodes(self, time_min: int, nodes: int = 1) -> Job:
+        """``salloc`` whole nodes, exclusively, and cancel them when the launch ends."""
+        resources = self._resources(self.cluster.gpus_per_node, time_min, nodes)
+        job = cli.salloc(resources, extra=["--exclusive", *self.settings.salloc_args])
         self.life.callback(cli.cancel, job)
         return job
 

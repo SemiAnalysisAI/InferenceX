@@ -32,7 +32,7 @@ from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.drivers.srt.run import SrtRun, require
 
 if TYPE_CHECKING:
-    from infx.launch.backends.base import Job
+    from infx.launch.backends.base import Job, JobStatus
     from infx.launch.drivers.srt.checkout import Checkout
     from infx.launch.drivers.srt.lanes import SrtLane
     from infx.launch.drivers.srt.power import PowerDecision
@@ -153,7 +153,7 @@ def collect(
     run: SrtRun, lane: SrtLane, checkout: Checkout, job: Job, power: PowerDecision, infmax: Path
 ) -> int:
     """Stream the job, then stage power, logs, results and evals; return the first failure."""
-    backend, request = run.backend, run.request
+    backend = run.backend
     fetched = checkout.root / "fetched-outputs"
     logs_staged = False
 
@@ -168,10 +168,25 @@ def collect(
     except BackendError:
         rc = 1
     status = backend.state(job)
-    if not status.succeeded:
-        rc = 1
     print(f"Job {job.id} completed!\nCollecting results...", flush=True)
     logs = backend.fetch_outputs(job, fetched) / "logs"
+    logs_staged = True
+    return collect_logs(run, lane, checkout, job.id, status, logs, power, infmax) or rc
+
+
+def collect_logs(
+    run: SrtRun,
+    lane: SrtLane,
+    checkout: Checkout,
+    job_id: str,
+    status: JobStatus,
+    logs: Path,
+    power: PowerDecision,
+    infmax: Path,
+) -> int:
+    """Stage power, logs, results and evals of a finished job; return the first failure."""
+    request = run.request
+    rc = 0 if status.succeeded else 1
     if not logs.is_dir():
         print(f"ERROR: Logs directory not found at {logs}", file=sys.stderr)
         return 1
@@ -181,7 +196,7 @@ def collect(
         python = request.inferencex_results_python
         if power.agentx:
             power_rc = collect_agentic_power_results(
-                status, job.id, logs, infmax, *audit, results_python=python
+                status, job_id, logs, infmax, *audit, results_python=python
             )
         else:
             power_rc = validate_agentic_power(
@@ -193,7 +208,6 @@ def collect(
                 file=sys.stderr,
             )
         rc = rc or power_rc
-    logs_staged = True
     _stage_logs(run, logs, power)
     if request.eval_only:
         print("EVAL_ONLY=true: Skipping benchmark result collection", flush=True)

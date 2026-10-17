@@ -156,6 +156,35 @@ override_bs128_1p1d_dep_stp:
         max-running-requests: 256
         cuda-graph-max-bs: 256
 
+# DNM: exercise the SGLang Model Gateway frontend through the docker launcher.
+override_bs128_1p1d_dep_stp_sglang_router:
+  frontend:
+    type: sglang-router
+  # The router sends text, so the workers must tokenize, and it targets
+  # srtctl's allocated bootstrap port, so drop the fixed one.
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        mem-fraction-static: 0.75
+        max-prefill-tokens: 163840
+        chunked-prefill-size: 163840
+        skip-tokenizer-init: false
+        disaggregation-bootstrap-port: null
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        skip-tokenizer-init: false
+        disaggregation-bootstrap-port: null
+        dp-size: 8
+        ep-size: 8
+        enable-dp-attention: true
+        mem-fraction-static: 0.88
+        max-running-requests: 256
+        cuda-graph-max-bs: 256
+
 override_bs4_1p7d_mtp:
   roles:
     prefill:

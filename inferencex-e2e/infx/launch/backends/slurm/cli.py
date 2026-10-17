@@ -55,12 +55,13 @@ class Resources:
     job_name: str
     gres: str | None = None
     exclude: Sequence[str] = ()
+    nodes: int = 1
 
     def args(self) -> list[str]:
         args = [f"--partition={self.partition}"]
         if self.account:
             args.append(f"--account={self.account}")
-        args += ["--nodes=1", f"--time={self.time_min}", f"--job-name={self.job_name}"]
+        args += [f"--nodes={self.nodes}", f"--time={self.time_min}", f"--job-name={self.job_name}"]
         if self.gres:
             args.append(f"--gres={self.gres}")
         if self.exclude:
@@ -79,6 +80,12 @@ def salloc(resources: Resources, *, extra: Sequence[str] = ()) -> Job:
     if result.returncode != 0 or match is None:
         raise SlurmError(f"salloc failed to allocate a job (exit {result.returncode})")
     return Job(match.group(1))
+
+
+def hostnames(job: Job) -> list[str]:
+    """The node names of ``job``'s allocation, in order."""
+    nodelist = _query(["squeue", "-h", "-j", job.id, "-o", "%N"]).strip()
+    return _query(["scontrol", "show", "hostnames", nodelist]).split() if nodelist else []
 
 
 def srun_argv(

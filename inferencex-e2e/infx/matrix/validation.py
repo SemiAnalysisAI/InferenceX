@@ -17,7 +17,7 @@ from pydantic import (
 
 from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 
-DEFAULT_AGENTIC_DURATION_SECONDS = 3600
+DEFAULT_AGENTIC_DURATION_SECONDS = 1200
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
 MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
 LLMD_FRAMEWORK = "llmd-vllm"

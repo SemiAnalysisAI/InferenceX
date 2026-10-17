@@ -101,6 +101,15 @@ def _fabric(run: SrtRun) -> list[str]:
     return ["--fabric", json.dumps(run.srt.fabric.rendered())]
 
 
+def apply_argv(run: SrtRun, checkout: Checkout, config: str, arguments: list[str]) -> list[str]:
+    """``srtctl apply`` for ``config`` through the golden AgentX acceptance planner."""
+    return [
+        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
+        config, run.request.framework, "--",
+        "--set", 'srun_options.container-workdir="/infmax-workspace"', *arguments,
+    ]  # fmt: skip
+
+
 def apply(
     run: SrtRun,
     checkout: Checkout,
@@ -115,11 +124,7 @@ def apply(
     PyTorch's generated module imports fail from / with PYTHONPYCACHEPREFIX set.
     ``arguments`` still win. ``stdout`` receives srtctl's JSON manifest.
     """
-    argv = [
-        str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.synthetic_acceptance",
-        config, run.request.framework, "--",
-        "--set", 'srun_options.container-workdir="/infmax-workspace"', *arguments,
-    ]  # fmt: skip
+    argv = apply_argv(run, checkout, config, arguments)
     env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
     proc.echo(argv, env)
     with stdout.open("w") as handle:

@@ -432,10 +432,13 @@ clusters:
             container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
             port: 9401
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
+          # Pyxis containers see the node's RDMA devices; docker ones only these.
+          docker_args: [--device=/dev/infiniband, --cap-add=IPC_LOCK, --cap-add=SYS_NICE]
         network-interface: ""
         fabric:
           socket-ifname: [eth0]
         job-tag: h200
+        multi-node-launcher: docker
         gpus-per-node-directive: true
         segment-directive: false
         container-aliases: [dynamo-trtllm, dynamo-sglang, dynamo-vllm, latest]

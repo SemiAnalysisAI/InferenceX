@@ -9,19 +9,21 @@ from __future__ import annotations
 
 import os
 import shlex
+import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from infx.clusters.slurm import SlurmSettings
-from infx.launch import policy
-from infx.launch.backends.base import BackendError
-from infx.launch.backends.slurm import srtctl_job_name
+from infx.launch import policy, proc
+from infx.launch.backends.base import BackendError, JobState, JobStatus
+from infx.launch.backends.slurm import cli, srtctl_job_name
 from infx.launch.context import Launch, LaunchError
 from infx.launch.drivers.srt import collect, config, lanes, models, power, submit
 from infx.launch.drivers.srt.checkout import (
+    Checkout,
     checkout_dir,
     compute_workspace,
     install_srtctl,
@@ -46,6 +48,8 @@ from infx.srt_slurm.workload import BOUND_RECIPE
 if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.clusters.slurm import SrtSlurmSettings
+    from infx.launch.drivers.srt.lanes import SrtLane
+    from infx.launch.drivers.srt.power import PowerDecision
 
 
 def run_single_node(launch: Launch) -> int:
@@ -166,7 +170,8 @@ def run_multinode(launch: Launch) -> int:
         "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
     )
     install_srtctl(run, checkout, python=system_python)
-    config.write_lane_config(run, lane, checkout, decision, model_paths)
+    docker = run.srt.multi_node_launcher == "docker"
+    rendered = config.write_lane_config(run, lane, checkout, decision, model_paths, docker=docker)
     if rc := run_setup(run, checkout):
         return rc
     infmax = compute_workspace(run, checkout, shared=shared)
@@ -178,12 +183,87 @@ def run_multinode(launch: Launch) -> int:
         return rc
     prepare_recipe(Path(recipe), srtctl_job_name(request.runner_name), run.srt.dist_timeout_s)
     arguments = submit.multinode_arguments(run, lane, recipe, overrides, preflight=preflight)
+    if docker:
+        return _run_multinode_docker(
+            run, lane, checkout, rendered, recipe, arguments, decision, infmax
+        )
     manifest = run.workspace / submit.MULTINODE_SUBMISSION
     submitted = submit.Submitted(manifest=manifest)
     run.life.callback(submitted.cancel, run.backend)
     if rc := submit.submit_lane(run, submitted, checkout, recipe, arguments):
         return rc
     return collect.collect(run, lane, checkout, submitted.adopted(), decision, infmax)
+
+
+def _run_multinode_docker(
+    run: SrtRun,
+    lane: SrtLane,
+    checkout: Checkout,
+    rendered: dict[str, Any],
+    config_file: str,
+    arguments: list[str],
+    decision: PowerDecision,
+    infmax: Path,
+) -> int:
+    """Hold the recipe's nodes with ``salloc`` and run ``srtctl apply`` (launcher: docker) on the first.
+
+    srtctl reaches the other nodes over ssh and runs the job in the foreground, so the
+    step's exit code is the job's.
+    """
+    python = str(checkout.venv / "bin/python")
+    count = "import sys; from srtctl.core.config import load_config as l; print(l(sys.argv[1]).total_nodes)"
+    nodes = int(
+        proc.run([python, "-c", count, config_file], cwd=checkout.root, capture=True).stdout
+    )
+    hours, _, rest = rendered["default_time_limit"].partition(":")
+    minutes = int(hours) * 60 + int(rest.partition(":")[0]) if rest else int(hours)
+    allocation = run.backend.allocate_nodes(minutes, nodes)
+    hosts = cli.hostnames(allocation)
+    rendered["docker_hosts"] = hosts
+    config.write(checkout.root / "srtslurm.yaml", rendered)
+    image = run.request.image.replace("#", "/", 1)
+    # One task on every node: without --nodes, srun puts its single task on one.
+    every = [f"--nodes={len(hosts)}", "--ntasks-per-node=1"]
+    # srtctl removes its containers when it exits, but a killed srtctl leaves them running past
+    # the allocation, so clear them over ssh (as srtctl reaches the nodes), not through srun.
+    leftovers = "docker ps -aq --filter label=srtctl.job | xargs -r docker rm -f"
+
+    def clear() -> None:
+        for host in hosts:
+            subprocess.run(["ssh", "-n", "-o", "BatchMode=yes", host, leftovers], check=False)
+
+    clear()
+    if cli.srun(allocation, ["docker", "pull", "--quiet", image], extra=every):
+        return 1
+    # Containers run as root: hand their outputs back so the runner can clean its workspace.
+    owner = f"{os.getuid()}:{os.getgid()}"
+    chown = ["docker", "run", "--rm", "--user", "0:0", "--entrypoint", "chown"]
+    chown += ["-v", f"{run.workspace}:/w", image]
+    first = ["--nodes=1", "--ntasks=1", f"--nodelist={hosts[0]}"]
+    # DNM: h200 nodes have no timedatectl/chronyc/ntpq, so the NTP probe always fails.
+    no_clock = ["--set", "telemetry.clock_sync_check=false"]
+    argv = submit.apply_argv(run, checkout, config_file, [*arguments, *no_clock, "--json", "--yes"])
+    env = {**run.env, "RUNNER_NAME": srtctl_job_name(run.request.runner_name)}
+    step = cli.srun_argv(allocation, argv, extra=first)
+    proc.echo(step, env)
+    try:
+        with (run.workspace / submit.MULTINODE_SUBMISSION).open("w") as handle:
+            rc = subprocess.run(
+                step, env=env, cwd=checkout.root, stdout=handle, check=False
+            ).returncode
+    finally:
+        clear()
+        cli.srun(allocation, [*chown, "-R", owner, "/w"], extra=first)
+    outputs = Path(rendered.get("output_dir", checkout.root / "outputs"))
+    jobs = sorted(outputs.glob("docker-*"), key=lambda path: path.stat().st_mtime)
+    if not jobs:
+        print(f"ERROR: srtctl wrote no job under {outputs} (exit {rc})", file=sys.stderr)
+        return rc or 1
+    state = JobState.SUCCEEDED if rc == 0 else JobState.FAILED
+    status = JobStatus(state, f"docker|{rc}", rc)
+    return collect.collect_logs(
+        run, lane, checkout, jobs[-1].name, status, jobs[-1] / "logs", decision, infmax
+    )
 
 
 def _srt_settings(cluster: Cluster | None) -> SrtSlurmSettings | None:

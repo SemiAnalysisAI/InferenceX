@@ -6,14 +6,12 @@ base:
     model:
       revision: f33c6dc501ee5a2c7e35155653b1b1abbc320951
     container: {}
-    frameworks:
-      dynamo: 1.5.0.dev20260913
-      sglang: 4358a1617cad734fc37bf53d9e5c2092bd43d075
 
   dynamo:
-    # This nightly includes the matching Dynamo adapter. Reinstalling an older
-    # wheel removes compatibility with this SGLang commit.
-    install: false
+    # DNM: the pinned nightly was pruned from Docker Hub; use the 1P1D image and wheel.
+    install: true
+    source:
+      wheel: "1.3.0.dev1"
 
   resources:
     gpu_type: h200
@@ -40,7 +38,6 @@ base:
       PIP_BREAK_SYSTEM_PACKAGES: "1"
     args:
       router-mode: kv
-      router-session-affinity-ttl-secs: "3600"
       active-decode-blocks-threshold: None
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
