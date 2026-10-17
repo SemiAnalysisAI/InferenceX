@@ -9963,8 +9963,31 @@
     - dsv41flash-fp4-gb200-sglang-agentic-dspark
     - dsv41flash-fp4-gb300-vllm-agentic-dspark
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-midcurve
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-disagg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-disagg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-simple
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-1p1d-hicache
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-agg
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+    - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
   description:
     - "Enable best-effort noprof GPU and ACPI Grace CPU collection by default for GB200/GB300 benchmarks, including native single-node and AgentX, with the pinned cpu-power-exporter v2.51.1. Explicit required-power AgentX points fail on invalid GPU or expected CPU evidence; ordinary points retain valid benchmark results and independent GPU/CPU validity. Eval-only jobs omit collection."
     - "Place benchmark clients and telemetry on the head clock without changing worker or allocation counts. Native single-node results retain their real topology and power audit. Placement changes require fresh performance results."
-    - "Require validated power on the 11 GLM-5.2 GB200 aggregate/disaggregated/MTP AgentX points and 24 DSV4 GB200 aggregate MTP TP8/DEP8 points, retaining their current images, selectors and topology."
+    - "Require validated power on the 11 GLM-5.2 GB200 aggregate/disaggregated/MTP AgentX points and 24 DSV4 GB200 aggregate MTP TP8/DEP8 points. Declare the five existing Kimi-K3 GB200/GB300 measured-power arms strict in their matrix rows instead of a cluster-wide Kimi rule. Retain their current images, selectors and topology."
+    - "Forward the selected required-power flag through existing H200/B200 AgentX clients, telemetry, and result collection. Align the Qwen3.8-Next GB300 recipe's declared host DRAM with the current runner's 241 GB allowance while retaining its H224 cache setting."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3670

@@ -49,7 +49,6 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
-                require=True,
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang"), agentic=False), agentx=False),
         ),
@@ -61,7 +60,6 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
             PowerRule(
                 Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
                 agentx=True,
-                require=True,
             ),
             PowerRule(Match(frameworks=any_of("dynamo-sglang")), agentx=False),
         ),

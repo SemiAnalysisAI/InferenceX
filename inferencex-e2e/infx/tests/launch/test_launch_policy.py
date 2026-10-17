@@ -73,7 +73,7 @@ def test_power_eligibility_of_each_cluster_lane(
     assert (decision.dcgm, decision.agentx, decision.adapter) == (
         True, expected == AGENTX, expected == ADAPTER,
     )  # fmt: skip
-    assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv"))
+    assert not decision.require
     assert decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm is (
         cluster in power.NVL72_POWER_CLUSTERS
     )

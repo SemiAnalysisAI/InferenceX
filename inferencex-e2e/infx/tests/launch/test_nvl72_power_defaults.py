@@ -47,13 +47,19 @@ def test_other_cluster_keeps_explicit_power_policy():
     assert not decide_power("h200-dgxc", LaunchPath.SRT_MULTI, request(POWER="0")).dcgm
 
 
-def test_existing_strict_agentx_rule_stays_strict():
+def test_existing_kimi_agentx_row_requires_explicit_flag():
     decision = decide_power(
         "gb200-nv",
         LaunchPath.SRT_MULTI,
         request(POWER="1", MODEL_PREFIX="kimik3", FRAMEWORK="dynamo-vllm"),
     )
-    assert decision.dcgm and decision.agentx and decision.cpu and decision.require
+    assert decision.dcgm and decision.agentx and decision.cpu and not decision.require
+    strict = decide_power(
+        "gb200-nv",
+        LaunchPath.SRT_MULTI,
+        request(REQUIRE_POWER="1", MODEL_PREFIX="kimik3", FRAMEWORK="dynamo-vllm"),
+    )
+    assert strict.require
 
 
 def test_explicit_requirement_uses_default_nvl72_collector_and_skips_evals():

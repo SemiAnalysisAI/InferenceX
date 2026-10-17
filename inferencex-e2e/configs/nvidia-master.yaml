@@ -6198,6 +6198,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.1065
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -6227,6 +6228,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.1065
+      require-power: true
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
@@ -6363,6 +6365,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.8
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -7889,6 +7892,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
     # 0.1775 resolves to 160 GB of host DRAM per 4-GPU server node on
     # cluster:gb300-nv, matching the recipe's Mooncake segment size.
     - dram-utilization: 0.1775
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -7960,6 +7964,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.1775
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -9227,7 +9232,7 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     # Use the GB300 profile's proportional per-worker host DRAM allowance.
-    # Generated allowance: 225 GB. Recipe H224 reserves alignment headroom.
+    # Generated allowance: 241 GB. Recipe H224 retains its existing cache size.
     - dram-utilization: 1.0
       search-space:
       - tp: 1

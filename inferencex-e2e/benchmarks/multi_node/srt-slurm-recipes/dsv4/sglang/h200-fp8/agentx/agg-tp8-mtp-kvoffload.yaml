@@ -102,9 +102,6 @@ srun_options:
   # The custom benchmark installs its isolated AIPerf environment at runtime.
   container-remap-root: ""
 
-telemetry:
-  required: false
-
 benchmark:
   env:
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
