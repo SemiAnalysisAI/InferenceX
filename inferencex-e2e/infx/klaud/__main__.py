@@ -74,8 +74,11 @@ def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozense
         return frozenset()
 
 
-def live_families(root: Path) -> dict[tuple, dict[str, frozenset[str]]]:
-    """Resolve public identities and target clusters from the canonical generator, excluding archives."""
+def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int]]]:
+    """Resolve public identities, target clusters and node demand from the canonical generator.
+
+    Archives are excluded. A family's node demand is the node count of its largest generated job.
+    """
     from infx.clusters import load_inventory
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
@@ -84,7 +87,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, frozenset[str]]]:
     root = project_root(root)
     runners = load_runner_file(str(root / "configs/runners.yaml"))
     inventory = load_inventory(runners)
-    index: dict[tuple, dict[str, frozenset[str]]] = {}
+    index: dict[tuple, dict[str, tuple[frozenset[str], int]]] = {}
     paths = sorted((root / "configs").glob("*-master.yaml"))
     if not paths:
         raise ReadError("live-configs-unavailable")
@@ -103,6 +106,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, frozenset[str]]]:
             if not clusters:
                 print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
                 continue
+            demand = max(entry.get("node-count", 1) for entry in entries)
             for entry in entries:
                 agentic = entry.get("scenario-type") == "agentic-coding"
                 row = {
@@ -117,16 +121,20 @@ def live_families(root: Path) -> dict[tuple, dict[str, frozenset[str]]]:
                     "osl": None if agentic else entry["osl"],
                     "image": entry["image"],
                 }
-                index.setdefault(observation_key(row), {})[family] = clusters
+                index.setdefault(observation_key(row), {})[family] = (clusters, demand)
     return index
 
 
 def choose(
     items: list[dict],
-    available: set[str],
+    headroom: dict[str, int],
     occupied: set[str],
-    families: dict[tuple, dict[str, frozenset[str]]],
+    families: dict[tuple, dict[str, tuple[frozenset[str], int]]],
 ) -> list[dict]:
+    """Shuffle one candidate per unclaimed family that fits the headroom of every target cluster.
+
+    Headroom is checked but not consumed here, so the overlap review keeps alternatives.
+    """
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     seen = set()
@@ -151,7 +159,7 @@ def choose(
             }
         )[:16]
         image_key = identity(observation_key(row)[-1])[:16]
-        for family, clusters in sorted(families.get(observation_key(row), {}).items()):
+        for family, (clusters, demand) in sorted(families.get(observation_key(row), {}).items()):
             prefix = "klaud/auto-" + identity(family)[:16] + "-"
             branch = prefix + image_key
             claims = {
@@ -160,13 +168,18 @@ def choose(
                 f"klaud/auto-{legacy}-{image_key}",
                 f"klaud/auto-{legacy}-",
             }
-            if family in seen or claims & occupied or not clusters <= available:
+            if (
+                family in seen
+                or claims & occupied
+                or any(headroom.get(cluster, 0) < demand for cluster in clusters)
+            ):
                 continue
             selected.append(
                 {
                     "id": branch.removeprefix("klaud/auto-"),
                     "family": family,
                     "clusters": sorted(clusters),
+                    "node-demand": demand,
                     "source": row,
                     "branch": branch,
                 }
@@ -706,10 +719,10 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
     review, deferred = reviewed(contexts)
     decisions = {decision.candidate_id: decision for decision in review.decisions}
     selected = []
-    available = set()
+    headroom: dict[str, int] = {}
     if any(decision.decision == "proceed" for decision in review.decisions):
         try:
-            available = fetch_capacity(Policy())
+            headroom = fetch_capacity(Policy())
         except ReadError:
             deferred = "capacity-unavailable"
     capacity_deferred = []
@@ -722,7 +735,8 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        if not set(candidate["clusters"]) <= available:
+        clusters, demand = candidate["clusters"], candidate["node-demand"]
+        if any(headroom.get(cluster, 0) < demand for cluster in clusters):
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(
@@ -784,6 +798,8 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             os.environ["GITHUB_REPOSITORY"], owned, int(os.environ["GITHUB_RUN_ID"])
         ):
             continue
+        for cluster in clusters:
+            headroom[cluster] -= demand
         selected.append(
             {
                 **candidate,
@@ -838,7 +854,8 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         print(f"::warning::{summary}")
     if capacity_deferred:
         summary += (
-            f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
+            f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check"
+            " (a target cluster had queued human jobs or too few idle nodes)."
         )
     if baseline_deferred:
         summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (

@@ -309,34 +309,48 @@ def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
     assert [pr["number"] for pr in klaud.active_pulls(pulls, now, 7)] == [1, 3, 4]
 
 
-def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
+def test_capacity_is_idle_headroom_on_clusters_without_waiting_human_jobs():
     now = "2026-10-15T00:05:00Z"
 
-    def metric(name, allocated, queued, schedulable):
-        return {"clusterLabel": f"cluster:{name}", "allocatedNodes": allocated,
-                "queuedNodes": queued, "schedulableNodes": schedulable}
+    def metric(name, schedulable, allocated):
+        return {"clusterLabel": f"cluster:{name}", "schedulableNodes": schedulable,
+                "allocatedNodes": allocated}
 
-    def feed(snapshot_at, metrics):
-        return Feed(
-            url="https://dash.inferencex.semianalysis.com/api/status/scheduler",
-            retrieved_at=now, sha256="0" * 64,
-            payload={"kind": "inferencex.status.scheduler", "generatedAt": now, "data": {
-                "available": True,
-                "snapshot": {"snapshotAt": snapshot_at, "stalled": False,
-                             "packingMetrics": metrics},
-            }},
-        )
+    def job(name, clusters, nodes, runner=None):
+        return {"name": name, "clusterIds": [f"cluster:{cluster}" for cluster in clusters],
+                "nodeCount": nodes, "runnerName": runner}
 
     metrics = [
-        metric("at-200", 8, 12, 10), metric("over-200", 8, 13, 10),
-        metric("idle", 0, 0, 4), metric("drained", 0, 0, 0), metric("corrupt", 1, -1, 10),
+        metric("idle", 4, 0), metric("human", 10, 2), metric("shared", 10, 2), metric("full", 6, 4),
+        metric("over", 6, 5), metric("admitted", 8, 6), metric("unlabeled", 3, 1),
+        metric("drained", 0, 0), metric("corrupt", 10, -1),
     ]
-    policy = api.Policy()
-    fresh, stale = "2026-10-15T00:00:00Z", "2026-10-14T23:59:59Z"
-    assert api.available_clusters(feed(fresh, metrics), policy, api.utc(now)) == {"at-200", "idle"}
-    assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
-    pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
-    assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
+    queue = [
+        job("sweep / p1 | klaud | dsr1 fp8", ["human"], 1),
+        job("sweep / klaud | p3 | dsr1 fp8", ["shared"], 3),
+        job("Klaud | p3 | dsr1 fp4", ["shared", "full", "over"], 2),
+        job("sweep / p1 | dsr1 fp4", ["admitted"], 2, runner="admitted_00"),
+        job("sweep / klaud | p3 | dsr1 fp4", ["admitted"], 2, runner="admitted_02"),
+        job("e2e / klaud | p3 | dsr1 fp8", ["unlabeled"], None),
+    ]
+
+    def headroom(metrics=metrics, queue=queue, snapshot_at="2026-10-15T00:00:00Z",
+                 generated_at=now, stalled=False):
+        payload = {"kind": "inferencex.status.scheduler", "generatedAt": generated_at, "data": {
+            "available": True, "snapshot": {"snapshotAt": snapshot_at, "stalled": stalled,
+                                            "packingMetrics": metrics, "queue": queue},
+        }}
+        feed = Feed(url=api.ENDPOINTS["scheduler"], retrieved_at=now, sha256="0" * 64,
+                    payload=payload)
+        return api.cluster_headroom(feed, api.Policy(), api.utc(now))
+
+    assert headroom() == {"idle": 4, "shared": 3, "admitted": 2, "unlabeled": 1}
+    assert headroom(snapshot_at="2026-10-14T23:59:59Z") == {}
+    assert headroom(generated_at="2026-10-15T00:02:59Z") == {}
+    assert headroom(stalled=True) == {}
+    assert headroom(metrics=[*metrics, metric("idle", 4, 0)]) == {}
+    for malformed in ({"nodeCount": 0}, {"clusterIds": "cluster:idle"}, {"runnerName": 7}):
+        assert headroom(queue=[*queue, {**queue[1], **malformed}]) == {}
 
 
 @pytest.mark.parametrize(("run_status", "reconcile_status", "taken"), [
@@ -471,7 +485,8 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
         "configs/nvidia-master.yaml:second-family",
     ]
     contexts = [
-        {"id": candidate_id, "family": family, "base": base, "source": {}, "clusters": ["cluster-a"]}
+        {"id": candidate_id, "family": family, "base": base, "source": {},
+         "clusters": ["cluster-a"], "node-demand": 1}
         for candidate_id, family in zip((first_id, second_id), families, strict=True)
     ]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -507,7 +522,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(reporting, "resolve_baseline", resolve)
     monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
@@ -529,19 +544,22 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     assert selected["baseline-model"] == "Model"
 
 
-@pytest.mark.parametrize(("eligible", "selected", "deferred"), [
-    ({"h100-dsxe"}, ["exact"], ["spanning"]),
-    ({"h100-cw", "h100-dsxe"}, ["spanning", "exact"], []),
+@pytest.mark.parametrize(("headroom", "selected", "deferred"), [
+    ({"h100-dsxe": 2, "h200-dgxc": 1}, ["exact", "elsewhere"], ["spanning"]),
+    ({"h100-cw": 1, "h100-dsxe": 2, "h200-dgxc": 1}, ["spanning", "elsewhere"], ["exact"]),
+    ({"h100-cw": 1, "h100-dsxe": 3, "h200-dgxc": 1}, ["spanning", "exact", "elsewhere"], []),
 ])  # fmt: skip
-def test_select_needs_every_planner_target_cluster_eligible(
-    tmp_path, monkeypatch, eligible, selected, deferred
+def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wave(
+    tmp_path, monkeypatch, headroom, selected, deferred
 ):
-    ids = {"spanning": "1" * 16 + "-" + "2" * 16, "exact": "3" * 16 + "-" + "4" * 16}
-    targets = {"spanning": ["h100-cw", "h100-dsxe"], "exact": ["h100-dsxe"]}
+    ids = {"spanning": "1" * 16 + "-" + "2" * 16, "exact": "3" * 16 + "-" + "4" * 16,
+           "elsewhere": "5" * 16 + "-" + "6" * 16}
+    targets = {"spanning": (["h100-cw", "h100-dsxe"], 1), "exact": (["h100-dsxe"], 2),
+               "elsewhere": (["h200-dgxc"], 1)}
     contexts = [
         {"id": ids[name], "family": f"configs/nvidia-master.yaml:{name}", "base": "a" * 40,
-         "source": {}, "clusters": targets[name]}
-        for name in ("spanning", "exact")
+         "source": {}, "clusters": clusters, "node-demand": demand}
+        for name, (clusters, demand) in targets.items()
     ]  # fmt: skip
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
     (tmp_path / "producers.json").write_text("{}\n")
@@ -561,7 +579,7 @@ def test_select_needs_every_planner_target_cluster_eligible(
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: eligible)
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: dict(headroom))
     monkeypatch.setattr(reporting, "resolve_baseline", resolve)
     monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
@@ -925,7 +943,7 @@ def review_candidate(directory, monkeypatch, source):
     directory.mkdir()
     (directory / "candidates.json").write_text(json.dumps(
         [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source,
-          "clusters": ["cluster-a"]}]
+          "clusters": ["cluster-a"], "node-demand": 1}]
     ))
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
@@ -958,7 +976,7 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
         raise AssertionError(f"select started {args!r}")
 
     monkeypatch.setattr(subprocess, "Popen", no_process)
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
 
     klaud.select(directory, 5)
@@ -990,7 +1008,7 @@ def test_select_defers_a_baseline_the_current_family_no_longer_generates(tmp_pat
     def no_claim(*_args):
         raise AssertionError("a deferred candidate must not be claimed")
 
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(claims, "claim_family", no_claim)
 
     klaud.select(directory, 5)
@@ -1149,7 +1167,7 @@ def test_select_exempts_only_points_models_md_retired_after_the_baseline(
     directory = tmp_path / "klaud"
     review_candidate(directory, monkeypatch, source)
     (directory / "producers.json").write_text(json.dumps({FAMILY: producers}))
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
 
     klaud.select(directory, 5)
@@ -1552,7 +1570,9 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
+         1024, 1024, "example/image:stable"): {
+            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1),
+        },
     }
 
 
@@ -1587,18 +1607,27 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
+         1024, 1024, "example/image:stable"): {
+            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1),
+        },
     }
 
 
-def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runners(
+def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_runners(
     tmp_path, family_configs, capsys
 ):
     master, runners = family_configs
     fixture, record = master["fixture"], runners["clusters"]["fixture"]
+    worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
     master = {
         "spanning": {**fixture, "runner": "h100"},
         "exact": {**fixture, "runner": "cluster:h100-dsxe"},
+        "wide": {**fixture, "runner": "cluster:h100-dsxe", "multinode": True, "scenarios": {
+            "fixed-seq-len": [{"isl": 1024, "osl": 1024, "search-space": [
+                {"num-nodes": nodes, "worker": worker, "conc-list": [4], "srt-recipe": "wide.yaml"}
+                for nodes in (2, 4, 3)
+            ]}],
+        }},
         "unmapped": {**fixture, "runner": "h100-retired"},
     }
     runners = {
@@ -1614,6 +1643,9 @@ def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runn
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
     write_fixture_recipe(tmp_path)
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture/wide.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("{}\n")
 
     families = klaud.live_families(tmp_path)
 
@@ -1623,8 +1655,9 @@ def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runn
     assert families == {
         ("dsr1", "h100", "sglang", "fp8", "none", False, "single_turn",
          1024, 1024, "example/image:stable"): {
-            "configs/nvidia-master.yaml:spanning": {"h100-cw", "h100-dsxe"},
-            "configs/nvidia-master.yaml:exact": {"h100-dsxe"},
+            "configs/nvidia-master.yaml:spanning": ({"h100-cw", "h100-dsxe"}, 1),
+            "configs/nvidia-master.yaml:exact": ({"h100-dsxe"}, 1),
+            "configs/nvidia-master.yaml:wide": ({"h100-dsxe"}, 4),
         },
     }  # fmt: skip
     source = {
@@ -1634,14 +1667,16 @@ def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runn
     }  # fmt: skip
     items = [{"source-status": "baseline", "source-id": "1", "source": source}]
 
-    def chosen(available):
+    def chosen(headroom):
         return sorted(
-            (candidate["family"].removeprefix("configs/nvidia-master.yaml:"), candidate["clusters"])
-            for candidate in klaud.choose(items, available, set(), families)
+            (candidate["family"].removeprefix("configs/nvidia-master.yaml:"),
+             candidate["clusters"], candidate["node-demand"])
+            for candidate in klaud.choose(items, headroom, set(), families)
         )
 
-    assert chosen({"h100-cw"}) == []
-    assert chosen({"h100-dsxe"}) == [("exact", ["h100-dsxe"])]
-    assert chosen({"h100-cw", "h100-dsxe"}) == [
-        ("exact", ["h100-dsxe"]), ("spanning", ["h100-cw", "h100-dsxe"]),
+    assert chosen({"h100-cw": 1}) == []
+    assert chosen({"h100-dsxe": 3}) == [("exact", ["h100-dsxe"], 1)]
+    assert chosen({"h100-cw": 1, "h100-dsxe": 4}) == [
+        ("exact", ["h100-dsxe"], 1), ("spanning", ["h100-cw", "h100-dsxe"], 1),
+        ("wide", ["h100-dsxe"], 4),
     ]
