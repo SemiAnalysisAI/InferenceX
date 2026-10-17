@@ -134,7 +134,7 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, multinode_recipe,
     ("base", 3),
     ("override_wide", 5),
     ("override_colocated", 2),
-    ("zip_override_sweep[0]", None),
+    ("zip_override_sweep[0]", 2),
 ])
 def test_recipe_node_count_resolves_override_selectors(tmp_path, multinode_recipe, selector, expected):
     srt_recipe = multinode_recipe({
@@ -176,6 +176,7 @@ def test_recipe_node_count_includes_auxiliary_nodes(tmp_path, multinode_recipe, 
     })
 
     assert generate.recipe_node_count(tmp_path, f"{srt_recipe}:override_auxiliary") == expected
+    assert generate.recipe_node_count(tmp_path, f"{srt_recipe}:override_auxiliary", include_auxiliary=False) == 3
 
 
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
@@ -2528,6 +2529,43 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
+    @pytest.mark.parametrize("power_key", ["require-power", "require_power"])
+    def test_agentic_power_defaults_and_explicit_overrides(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep, power_key,
+    ):
+        from infx.matrix.generate import select_matrix_evals
+        from infx.matrix.validation import AgenticCodingConfig
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [8, 16]
+        entry = next(iter(config.values()))
+        scenario = entry["scenarios"]["agentic-coding"][0]
+        default_required = not entry.get("multinode", False)
+        for value, expected in (("omitted", default_required), (None, default_required),
+                                (False, False), (True, True)):
+            if value != "omitted":
+                scenario[power_key] = value
+            AgenticCodingConfig.model_validate(scenario)
+            rows = generate_agentic_sweep(config, sample_runner_config)
+            assert rows
+            assert all(row.get("require-power", False) is expected for row in rows)
+            for mode in ("subset", "all"):
+                evals = select_matrix_evals(copy.deepcopy(rows), mode=mode)
+                assert evals
+                assert all("require-power" not in row for row in evals)
+
+    @pytest.mark.parametrize("value", ["true", 1])
+    def test_required_power_rejects_non_boolean_config(self, agentic_config, value):
+        from pydantic import ValidationError
+        from infx.matrix.validation import AgenticCodingConfig
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [8]
+        scenario = next(iter(config.values()))["scenarios"]["agentic-coding"][0]
+        scenario["require-power"] = value
+        with pytest.raises(ValidationError, match="require-power"):
+            AgenticCodingConfig.model_validate(scenario)
+
     def test_point_order_and_input_preservation(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):

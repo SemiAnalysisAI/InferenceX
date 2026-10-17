@@ -87,6 +87,54 @@ jobs:
                   agentic=$(jq '((.single_node.agentic // []) + (.multi_node.agentic // [])) | length > 0' "$RUNNER_TEMP/plan.json")
                   echo "agentic=$agentic" >> "$GITHUB_OUTPUT"
 
+            - name: Read source publication intent
+              id: power
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
+              run: |
+                  gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                    --pattern changelog-metadata --pattern sweep-plan --dir source-plan
+                  python3 - <<'PYCODE'
+                  import json, os
+                  from pathlib import Path
+                  from infx.results.power.publication import required_points
+                  merged = json.loads(Path(os.environ['RUNNER_TEMP'], 'plan.json').read_text())
+                  metadata = json.loads(Path('source-plan/changelog-metadata/changelog_metadata.json').read_text())
+                  plan_path = Path('source-plan/sweep-plan/sweep_manifest.json')
+                  source = json.loads(plan_path.read_text()) if plan_path.exists() else None
+                  required = bool(required_points(merged)) or metadata.get('require-power') is True
+                  if source is not None:
+                      required = required or bool(required_points(source['matrix']))
+                  if required and source is None:
+                      raise ValueError('Required source has no retained sweep plan')
+                  current = Path('changelog_metadata.json')
+                  merged_metadata = json.loads(current.read_text())
+                  if required:
+                      merged_metadata.update({'require-power': True, 'power-manifest-schema-version': 2})
+                  current.write_text(json.dumps(merged_metadata))
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                      output.write(f'required={str(required).lower()}\n')
+                  PYCODE
+
+            - name: Verify reused required power evidence
+              if: steps.power.outputs.required == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
+                  SOURCE_RUN_ATTEMPT: ${{ steps.reuse.outputs.reuse-source-run-attempt }}
+                  SOURCE_HEAD: ${{ steps.reuse.outputs.reuse-source-head-sha }}
+              run: |
+                  gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                    --pattern required-power-sweep-manifest --pattern 'bmk_*' \
+                    --pattern 'power_audit_*' --pattern 'agentic_*' --dir power-evidence
+                  python3 -m infx.results.power.publication \
+                    --sweep power-evidence/required-power-sweep-manifest/sweep_manifest.json \
+                    --artifacts power-evidence --verify-existing --output verified-power-manifest.json \
+                    --expected-run-id "$SOURCE_RUN_ID" --expected-run-attempt "$SOURCE_RUN_ATTEMPT" \
+                    --expected-head "$SOURCE_HEAD" --expected-matrix "$RUNNER_TEMP/plan.json" \
+                    --source-plan source-plan/sweep-plan/sweep_manifest.json
+
             - name: Upload changelog artifact
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
@@ -98,6 +146,7 @@ jobs:
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
               env:
                   AGENTIC: ${{ steps.plan.outputs.agentic }}
+                  REQUIRE_POWER: ${{ steps.power.outputs.required }}
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   MERGE_RUN_ID: ${{ github.run_id }}
               with:
@@ -109,6 +158,10 @@ jobs:
                       "source-run-id": process.env.SOURCE_RUN_ID,
                       "merge-run-id": process.env.MERGE_RUN_ID,
                     };
+                    if (process.env.REQUIRE_POWER === 'true') {
+                      client_payload["require-power"] = true;
+                      client_payload["power-manifest-schema-version"] = 2;
+                    }
                     if (agentic) client_payload["database-target"] = "production";
                     await github.rest.repos.createDispatchEvent({
                       owner: "SemiAnalysisAI",

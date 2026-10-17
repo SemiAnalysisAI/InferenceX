@@ -629,8 +629,10 @@ dsr1-fp8-b300-dynamo-trt:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - spec-decoding: "mtp"
+        power: true
         conc-list: [40]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen2_tp8_batch16_eplb0_mtp3_40.yaml
         srt-recipe: disagg-variants.yaml:override_1p2d_tp8_b16_mtp3_c40
@@ -645,6 +647,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch1_eplb0_mtp3_8.yaml
         srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b1_mtp3_c8
@@ -659,6 +662,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [20]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen4_tp8_batch4_eplb0_mtp3_20.yaml
         srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b4_mtp3_c20
@@ -673,6 +677,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [72]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx1_gen1_dp8_batch8_eplb0_mtp3_72.yaml
         srt-recipe: disagg-variants.yaml:override_1p1d_dp8_b8_mtp3_c72
@@ -687,6 +692,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: true
       - spec-decoding: "mtp"
+        power: true
         conc-list: [144]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx2_gen1_dp8_batch16_eplb0_mtp3_144.yaml
         srt-recipe: disagg-variants.yaml:override_2p1d_dp8_b16_mtp3_c144
@@ -701,6 +707,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: true
       - spec-decoding: "mtp"
+        power: true
         conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/mtp/ctx4_gen1_dp8_batch64_eplb0_mtp2_512.yaml
         srt-recipe: disagg-variants.yaml:override_4p1d_dp8_b64_mtp2_c512
@@ -717,8 +724,10 @@ dsr1-fp8-b300-dynamo-trt:
     # 8k1k STP configs
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       - conc-list: [64]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen4_tp8_batch16_eplb0_mtp0_64.yaml
         srt-recipe: disagg-variants.yaml:override_1p4d_tp8_b16_mtp0_c64
         prefill:
@@ -732,6 +741,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: false
       - conc-list: [16]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx1_gen8_tp8_batch2_eplb0_mtp0_16.yaml
         srt-recipe: disagg-variants.yaml:override_1p8d_tp8_b1_mtp0_c16
         prefill:
@@ -745,6 +755,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: false
       - conc-list: [256]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx2_gen1_dp8_batch32_eplb0_mtp0_256.yaml
         srt-recipe: disagg-variants.yaml:override_2p1d_dp8_b32_mtp0_c256
         prefill:
@@ -758,6 +769,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: true
       - conc-list: [512]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen1_dp8_batch64_eplb0_mtp0_512.yaml
         srt-recipe: disagg-variants.yaml:override_3p1d_dp8_b64_mtp0_c512
         prefill:
@@ -771,6 +783,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: true
       - conc-list: [256]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx3_gen5_tp8_batch64_eplb0_mtp0_256.yaml
         srt-recipe: disagg-variants.yaml:override_3p5d_tp8_b64_mtp0_c256
         prefill:
@@ -784,6 +797,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: false
       - conc-list: [1075]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx5_gen1_dp8_batch128_eplb0_mtp0_1075.yaml
         srt-recipe: disagg-variants.yaml:override_5p1d_dp8_b128_mtp0_c1075
         prefill:
@@ -797,6 +811,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 1
           dp-attn: true
       - conc-list: [3072]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/b300-fp8/8k1k/stp/ctx7_gen1_dep8_batch384_eplb0_mtp0_3072.yaml
         srt-recipe: disagg-variants.yaml:override_7p1d_dep8_b384_mtp0_c3072
         prefill:
@@ -1513,6 +1528,7 @@ kimik3-fp4-b300-vllm-agentic-dspark:
       # Sizes the Mooncake segment: this resolves to total-cpu-dram-gb, which
       # the recipe divides across the 8 TP ranks.
     - dram-utilization: 0.75
+      require-power: true
       search-space:
       # TP8-only: a ~1.5 TB MXFP4 checkpoint does not fit below 8 GPUs.
       # One entry for every arm: the recipe drafts at DSpark 7 up to conc 8,
@@ -1776,9 +1792,11 @@ dsr1-fp8-h200-dynamo-trt:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # MTP configurations
       - spec-decoding: "mtp"
+        power: true
         conc-list: [1]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp3.yaml
         srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b1_mtp3_c9
@@ -1793,6 +1811,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [4]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp3.yaml
         srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b32_mtp3_c28
@@ -1807,6 +1826,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [8]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c8_ctx1_gen6_tep8_batch32_eplb0_mtp3.yaml
         srt-recipe: disagg-variants.yaml:override_1p6d_tep8_b32_mtp3_c48
@@ -1821,6 +1841,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [16]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp2.yaml
         srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b32_mtp2_c48
@@ -1835,6 +1856,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [32]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c32_ctx3_gen5_tep8_batch32_eplb0_mtp3.yaml
         srt-recipe: disagg-variants.yaml:override_3p5d_tep8_b32_mtp3_c160
@@ -1849,6 +1871,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - spec-decoding: "mtp"
+        power: true
         conc-list: [64]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c64_ctx1_gen1_dep8_batch32_eplb0_mtp2.yaml
         srt-recipe: disagg-variants.yaml:override_1p1d_dep8_b32_mtp2_c64
@@ -1863,6 +1886,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
       - spec-decoding: "mtp"
+        power: true
         conc-list: [128]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c128_ctx2_gen1_dep8_batch32_eplb0_mtp2.yaml
         srt-recipe: disagg-variants.yaml:override_2p1d_dep8_b32_mtp2_c128
@@ -1877,6 +1901,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
       - spec-decoding: "mtp"
+        power: true
         conc-list: [256]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c256_ctx3_gen1_dep8_batch32_eplb0_mtp2.yaml
         srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b32_mtp2_c256
@@ -1891,6 +1916,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
       - spec-decoding: "mtp"
+        power: true
         conc-list: [512]
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/mtp/c512_ctx3_gen1_dep8_batch64_eplb0_mtp1.yaml
         srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b64_mtp1_c512
@@ -1906,6 +1932,7 @@ dsr1-fp8-h200-dynamo-trt:
           dp-attn: true
       # Non-MTP configurations (STP)
       - conc-list: [1]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c1_ctx1_gen7_tep8_batch1_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b1_mtp0_c9
         prefill:
@@ -1919,6 +1946,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - conc-list: [4]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c4_ctx1_gen7_tep8_batch32_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_1p7d_tep8_b32_mtp0_c28
         prefill:
@@ -1932,6 +1960,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - conc-list: [8]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c8_ctx1_gen6_tep8_batch16_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_1p6d_tep8_b16_mtp0_c48
         prefill:
@@ -1945,6 +1974,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - conc-list: [16]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c16_ctx1_gen3_tep8_batch32_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_1p3d_tep8_b32_mtp0_c48
         prefill:
@@ -1958,6 +1988,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - conc-list: [32]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c32_ctx2_gen5_tep8_batch128_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_2p5d_tep8_b128_mtp0_c160
         prefill:
@@ -1971,6 +2002,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: false
       - conc-list: [64]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c64_ctx2_gen3_dep8_batch128_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_2p3d_dep8_b128_mtp0_c192
         prefill:
@@ -1984,6 +2016,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
       - conc-list: [128]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c128_ctx1_gen1_dep8_batch256_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_1p1d_dep8_b256_mtp0_c128
         prefill:
@@ -1997,6 +2030,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
       - conc-list: [256]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c256_ctx5_gen3_dep8_batch256_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_5p3d_dep8_b256_mtp0_c768
         prefill:
@@ -2010,6 +2044,7 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
       - conc-list: [512]
+        power: true
         # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/trtllm/h200/8k1k/stp/c512_ctx3_gen1_dep8_batch512_eplb0_mtp0.yaml
         srt-recipe: disagg-variants.yaml:override_3p1d_dep8_b512_mtp0_c512
         prefill:
@@ -3262,9 +3297,11 @@ dsr1-fp4-b200-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # Non-MTP configurations
       - conc-list: [64, 128]
+        power: true
         srt-recipe: disagg-stp-mtp-variants.yaml:zip_override_stp_lowlat[0]
         prefill:
           num-worker: 1
@@ -3277,6 +3314,7 @@ dsr1-fp4-b200-dynamo-sglang:
           ep: 8
           dp-attn: false
       - conc-list: [8]
+        power: true
         srt-recipe: disagg-stp-mtp-variants.yaml:zip_override_stp_lowlat[1]
         prefill:
           num-worker: 1
@@ -3289,6 +3327,7 @@ dsr1-fp4-b200-dynamo-sglang:
           ep: 8
           dp-attn: false
       - conc-list: [4, 128]
+        power: true
         srt-recipe: disagg-stp-mtp-variants.yaml:zip_override_stp_lowlat[2]
         prefill:
           num-worker: 2
@@ -3301,6 +3340,7 @@ dsr1-fp4-b200-dynamo-sglang:
           ep: 8
           dp-attn: false
       - conc-list: [4, 8, 16, 64]
+        power: true
         srt-recipe: disagg-stp-mtp-variants.yaml:override_stp_tp4
         prefill:
           num-worker: 1
@@ -3313,6 +3353,7 @@ dsr1-fp4-b200-dynamo-sglang:
           ep: 1
           dp-attn: false
       - conc-list: [1024, 2048]
+        power: true
         srt-recipe: disagg-stp-mtp-variants.yaml:override_stp_maxtpt_7p2d
         prefill:
           num-worker: 7
@@ -3726,6 +3767,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P1D STP: TP4 prefill + TP4 decode (pure tensor parallel). 2 nodes (1+1).
       - spec-decoding: "none"
@@ -3759,6 +3801,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
           dp-attn: true
       # 8P1D wide-EP: 8 prefill DEP4 + decode DEP16. 12 nodes (8+4).
       - spec-decoding: "none"
+        power: true
         conc-list: [2048, 4096]
         srt-recipe: disagg-8p1d-dep4-dep16-stp.yaml
         prefill:
@@ -4070,9 +4113,11 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P2D: 1 prefill (TP1/EP1/dp-attn), 2 decode (TP8/EP8/no-dp-attn), conc=20
       - spec-decoding: "mtp"
+        power: true
         conc-list: [20]
         srt-recipe: disagg-mtp-variants.yaml:override_1p2d_tep8_b8_mtp3_c20
         prefill:
@@ -4087,6 +4132,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: false
       # 1P4D: 1 prefill (TP1/EP1/dp-attn), 4 decode (TP8/EP8/no-dp-attn), conc=12
       - spec-decoding: "mtp"
+        power: true
         conc-list: [12]
         srt-recipe: disagg-mtp-variants.yaml:override_1p4d_tep8_b1_mtp3_c12
         prefill:
@@ -4101,6 +4147,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: false
       # 1P4D: 1 prefill (TP1/EP1/dp-attn), 4 decode (TP8/EP8/no-dp-attn), conc=8
       - spec-decoding: "mtp"
+        power: true
         conc-list: [8]
         srt-recipe: disagg-mtp-variants.yaml:override_1p4d_tep8_b2_mtp3_c8
         prefill:
@@ -4115,6 +4162,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: false
       # 4P3D: 4 prefill (TP1/EP1/dp-attn), 3 decode (TP8/EP8/no-dp-attn), conc=126
       - spec-decoding: "mtp"
+        power: true
         conc-list: [126]
         srt-recipe: disagg-mtp-variants.yaml:override_4p3d_tep8_b32_mtp3_c126
         prefill:
@@ -4129,6 +4177,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: false
       # 5P1D: 5 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=154
       - spec-decoding: "mtp"
+        power: true
         conc-list: [154]
         srt-recipe: disagg-mtp-variants.yaml:override_5p1d_dep16_b8_mtp3_c154
         prefill:
@@ -4143,6 +4192,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: true
       # 7P1D: 7 prefill (TP2/EP2/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=666
       - spec-decoding: "mtp"
+        power: true
         conc-list: [666]
         srt-recipe: disagg-mtp-variants.yaml:override_7p1d_dep16_b32_mtp3_c666
         prefill:
@@ -4157,6 +4207,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: true
       # 11P1D: 11 prefill (TP1/EP1/dp-attn), 1 decode (TP8/EP8/dp-attn), conc=1229
       - spec-decoding: "mtp"
+        power: true
         conc-list: [1229]
         srt-recipe: disagg-mtp-variants.yaml:override_11p1d_dep8_b128_mtp3_c1229
         prefill:
@@ -4171,6 +4222,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: true
       # 17P2D: 17 prefill (TP1/EP1/dp-attn), 2 decode (TP8/EP8/dp-attn), conc=1126
       - spec-decoding: "mtp"
+        power: true
         conc-list: [1126]
         srt-recipe: disagg-mtp-variants.yaml:override_17p2d_dep8_b64_mtp3_c1126
         prefill:
@@ -4185,6 +4237,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: true
       # 26P1D: 26 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=4301, MTP draft-len 2
       - spec-decoding: "mtp"
+        power: true
         conc-list: [4301]
         srt-recipe: disagg-mtp-variants.yaml:override_26p1d_dep16_b256_mtp2_c4301
         prefill:
@@ -4199,6 +4252,7 @@ qwen3.5-fp4-gb300-dynamo-trt-mtp:
           dp-attn: true
       # 24P1D: 24 prefill (TP1/EP1/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=8192, MTP curve tail (spec decoding disabled)
       - spec-decoding: "none"
+        power: true
         conc-list: [8192]
         srt-recipe: disagg-mtp-variants.yaml:override_24p1d_dep16_b512_mtp0_c8192_mtp_sweep
         prefill:
@@ -5493,10 +5547,12 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.683
+      require-power: true
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20], srt-recipe: agentic.yaml }
     - dram-utilization: 1.0
+      require-power: true
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32, 34, 36, 38, 40], srt-recipe: agentic.yaml }
 minimaxm3-fp4-b200-trtllm-agentic-mtp:
@@ -5513,9 +5569,11 @@ minimaxm3-fp4-b200-trtllm-agentic-mtp:
     # host_cache_size is pinned per rank: TP4 ranks split this budget and TP8
     # ranks hold 200 GiB each.
     - dram-utilization: 1.0
+      require-power: true
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [5, 10, 15, 20, 25, 30, 35, 40, 45], srt-recipe: agentic.yaml }
     - dram-utilization: 0.8
+      require-power: true
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5], srt-recipe: agentic.yaml }
 # Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
@@ -6161,6 +6219,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.1065
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -6189,6 +6248,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.1065
+      require-power: true
       search-space:
       - kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
@@ -6324,6 +6384,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.8
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -6406,6 +6467,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-agg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80
+      require-power: true
       search-space:
       - spec-decoding: draft_model
         conc-list: [1]
@@ -6444,6 +6506,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80
+      require-power: true
       search-space:
       - spec-decoding: draft_model
         conc-list: [64]
@@ -6573,6 +6636,7 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80
+      require-power: true
       search-space:
       - spec-decoding: draft_model
         conc-list: [120, 480]
@@ -6650,6 +6714,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
+      require-power: true
       search-space:
       # 1P1D STP: TP4 prefill + TP4 decode (pure tensor parallel). 2 nodes (1+1).
       - spec-decoding: "none"
@@ -7833,6 +7898,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
     # 0.1775 resolves to 160 GB of host DRAM per 4-GPU server node on
     # cluster:gb300-nv, matching the recipe's Mooncake segment size.
     - dram-utilization: 0.1775
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -7900,6 +7966,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.1775
+      require-power: true
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
@@ -9232,7 +9299,7 @@ qwen3.8next-fp4-gb300-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     # Use the GB300 profile's proportional per-worker host DRAM allowance.
-    # Generated allowance: 225 GB. Recipe H224 reserves alignment headroom.
+    # Generated allowance: 241 GB; the recipe keeps its existing H224 host cache.
     - dram-utilization: 1.0
       search-space:
       - tp: 1

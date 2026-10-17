@@ -188,11 +188,17 @@ def collect(
             python = request.inferencex_results_python
             if power.agentx:
                 power_rc = collect_agentic_power_results(
-                    status, job.id, logs, infmax, *audit, results_python=python
+                    status,
+                    job.id,
+                    logs,
+                    infmax,
+                    *audit,
+                    results_python=python,
+                    require_power=power.require,
                 )
             else:
                 power_rc = validate_agentic_power(
-                    logs, *audit, results_python=python, require_power=request.require_power
+                    logs, *audit, results_python=python, require_power=power.require
                 )
             if power_rc:
                 event.fail(

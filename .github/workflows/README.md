@@ -396,3 +396,28 @@ inferencex-e2e/configs/*.yaml
   benchmark-tmpl.yml or
   benchmark-multinode-tmpl.yml
 ```
+
+
+### Required power publication
+
+The source sweep uploads its selected `sweep-plan` and writes `require-power` in
+`changelog-metadata`. When throughput rows require power, the metadata job builds
+`required-power-sweep-manifest/sweep_manifest.json` with schema version 2. Each
+point binds its result, power audit, physical GPU identities, completed measurement
+window, native telemetry package, and `power_source.json` by SHA-256.
+
+The source receipt records the run, attempt, PR head, actual checkout commit, its
+parents, and its tree. Partial reruns can retain a successful point from an earlier
+attempt of the same run and head. The manifest selects the latest receipt for each
+point and rejects conflicting copies in that attempt. The manifest itself must
+match the selected source run's current attempt.
+
+`merge-ingest.yml` compares the required source scope with the merged plan and
+verifies retained evidence before dispatching ingestion. Missing required evidence
+fails the gate. Incremental publication does not authorize dropping older curve
+points. Replacement policy names the prior snapshot and exact removed identities.
+The source gate does not establish deployment or atomic database publication.
+
+The source plan records `compute-node-count` for native worker roles separately
+from the total scheduling `node-count`. Auxiliary service nodes do not require
+GPU telemetry; every GPU worker node and device does.

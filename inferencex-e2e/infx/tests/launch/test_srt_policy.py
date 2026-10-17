@@ -178,3 +178,24 @@ def test_srt_time_limits(monkeypatch, profile, lane, env, limit):
     srt = SrtSlurmSettings.model_validate({"network-interface": "", **profile})
     point = request(SALLOC_TIME_LIMIT="480", EVAL_ONLY="false", **env)
     assert srt_time_limit("c", point, lane, srt) == limit
+
+
+@pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("collection", [False, True])
+@pytest.mark.parametrize("eval_only", [False, True])
+def test_power_requirement_is_selected_once_at_launch(monkeypatch, required, collection, eval_only):
+    from types import SimpleNamespace
+    from infx.launch.drivers.srt.power import (
+        NO_POWER, POWER_LANES, PowerDecision, PowerLane, PowerPolicyError, PowerRule, decide_power,
+    )
+
+    monkeypatch.setitem(POWER_LANES, ("test", LaunchPath.SRT_MULTI),
+                        PowerLane((PowerRule(Match(), agentx=True),), "unsupported"))
+    point = SimpleNamespace(require_power=required, power=collection, eval_only=eval_only)
+    if required and not collection and not eval_only:
+        with pytest.raises(PowerPolicyError, match="eligible producer"):
+            decide_power("test", LaunchPath.SRT_MULTI, point)
+    else:
+        result = decide_power("test", LaunchPath.SRT_MULTI, point)
+        expected = PowerDecision(True, True, require=required) if collection and not eval_only else NO_POWER
+        assert result == expected

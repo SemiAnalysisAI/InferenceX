@@ -64,7 +64,7 @@ on:
         type: string
         default: ""
       require-power:
-        description: "Fail fixed-sequence result processing when GPU power is invalid"
+        description: "Fail benchmark result processing when GPU power is invalid"
         type: boolean
         required: false
         default: false
@@ -433,21 +433,45 @@ jobs:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
 
+      - name: Record power artifact source
+        if: ${{ always() && !inputs.eval-only && env.INFERENCEX_E2E_ROOT != '' }}
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 - <<'PYCODE'
+          import json, os, subprocess
+          from pathlib import Path
+          root = Path(os.environ['INFERENCEX_E2E_ROOT'])
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+          commit = subprocess.check_output(['git', 'cat-file', '-p', 'HEAD'], cwd=root, text=True).split('\n\n', 1)[0].splitlines()
+          parents = [line.split()[1] for line in commit if line.startswith('parent ')]
+          tree = next(line.split()[1] for line in commit if line.startswith('tree '))
+          (root / 'power_source.json').write_text(json.dumps({
+              'run-id': int(os.environ['GITHUB_RUN_ID']),
+              'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+              'head': os.environ['SOURCE_HEAD'],
+              'checkout-sha': head, 'checkout-parents': parents, 'checkout-tree': tree,
+          }))
+          PYCODE
+
       - name: Upload power audit bundle
         if: ${{ always() && !inputs.eval-only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
           path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_source.json
             ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/**/power_validation.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/**/agentic_power_concurrency_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/result_processing_${{ env.RESULT_FILENAME }}.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/*/results_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_timezone_offset.txt
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/power_validation.json
           if-no-files-found: ignore
 
       - name: Upload server logs

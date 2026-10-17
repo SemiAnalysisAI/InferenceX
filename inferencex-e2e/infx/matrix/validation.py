@@ -252,6 +252,9 @@ class MultiNodeMatrixEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
     )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
+    compute_node_count: int | None = Field(
+        default=None, alias="compute-node-count", gt=0, strict=True
+    )
     isl: int
     osl: int
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
@@ -291,6 +294,8 @@ class MultiNodeMatrixEntry(BaseModel):
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
 
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
@@ -340,6 +345,8 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 class MultiNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
+
     image: str
     model: str
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
@@ -352,6 +359,9 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
     )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
+    compute_node_count: int | None = Field(
+        default=None, alias="compute-node-count", gt=0, strict=True
+    )
     power: bool = Field(default=False, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
@@ -711,6 +721,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
 class AgenticCodingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    require_power: bool | None = Field(default=None, alias=Fields.REQUIRE_POWER.value, strict=True)
 
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
     dram_utilization: float | None = Field(

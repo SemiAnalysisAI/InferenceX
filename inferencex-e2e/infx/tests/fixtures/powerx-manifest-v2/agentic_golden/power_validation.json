@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "power_valid": true,
+  "reasons": [],
+  "benchmark_window": {
+    "start_time_unix": 1700000000,
+    "end_time_unix": 1700000002
+  },
+  "expected_gpu_count": 1,
+  "observed_gpu_count": 1,
+  "observed_gpu_ids": ["0"],
+  "per_gpu_energy_j": {
+    "0": 1000
+  },
+  "metrics": {
+    "avg_power_w": 500,
+    "avg_total_gpu_power_w": 500,
+    "total_gpu_energy_j": 1000,
+    "joules_per_output_token": 2
+  }
+}

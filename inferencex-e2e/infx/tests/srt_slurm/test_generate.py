@@ -175,7 +175,7 @@ def test_a_single_node_agentx_point_gets_the_agentic_client_and_no_sequence_leng
     assert (record["variant"], record["cluster"]) == (None, "fixture")
     assert recipe["model"] == {"path": "hf:org/model", "container": "org/image:1", "precision": "fp8"}
     assert recipe["benchmark"] == {
-        "type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "org/model", "CONC": "2", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1"},
+        "type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "org/model", "CONC": "2", "REQUIRE_POWER": "1", "ENABLE_AGENTX_POWER": "1"},
         "concurrencies": [2],
     }  # fmt: skip
 
@@ -188,7 +188,7 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
 
     [(record, recipe)] = written(output)
     assert record["cluster"] == "fixture"
-    assert recipe["telemetry"] == {"enabled": True, "dcgm_exporter": {
+    assert recipe["telemetry"] == {"enabled": True, "required": False, "dcgm_exporter": {
         "container_image": "dcgm-exporter", "command": "dcgm-exporter --address :{port}", "port": 9555,
     }}  # fmt: skip
     assert recipe["benchmark"]["env"] == {

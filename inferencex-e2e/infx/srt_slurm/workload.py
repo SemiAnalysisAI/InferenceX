@@ -136,7 +136,7 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
     keys = (
         *_POINT_KEYS,
         *(("benchmark", "env", name) for name in BOUND_ENV[agentic, multinode]),
-        *(() if multinode else (("telemetry", "required"),)),
+        ("telemetry", "required"),
     )
     if "base" in raw:
         blocks = [(name, block) for name, block in raw.items() if name != "schema"]
@@ -332,10 +332,15 @@ def bind_workload(
     )
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = concurrencies
-        if not multinode:
-            required = environment.get("REQUIRE_POWER", "0") in {"1", "true", "TRUE", "yes", "YES"}
-            bound["telemetry"]["required"] = required
-            workload["REQUIRE_POWER"] = "1" if required else "0"
+        required = workload.get("REQUIRE_POWER", environment.get("REQUIRE_POWER", "0")) in {
+            "1",
+            "true",
+            "TRUE",
+            "yes",
+            "YES",
+        }
+        bound["telemetry"]["required"] = required
+        workload["REQUIRE_POWER"] = "1" if required else "0"
     if agentic and not multinode:
         workload["ENABLE_AGENTX_POWER"] = (
             "1" if (bound.get("telemetry") or {}).get("enabled") is True else "0"

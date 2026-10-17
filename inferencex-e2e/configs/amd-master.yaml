@@ -269,6 +269,7 @@ qwen3.5-fp8-mi325x-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80
+      require-power: true
       search-space:
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 6], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8, 16, 32, 40, 48], srt-recipe: agentic.yaml }
@@ -726,10 +727,12 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.343
+      require-power: true
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [14, 16, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
     - dram-utilization: 0.513
+      require-power: true
       search-space:
       - { tp: 8, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.4.5" }, conc-list: [56, 72], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
@@ -754,6 +757,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   scenarios:
     agentic-coding:
     - dram-utilization: 0.6
+      require-power: true
       search-space:
       - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agentic.yaml }

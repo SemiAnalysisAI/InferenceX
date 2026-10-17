@@ -550,6 +550,7 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             run-eval: false
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
@@ -584,6 +585,7 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
             duration: ${{ matrix.config.duration }}
+            require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             run-eval: false
             scenario-type: agentic-coding
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
@@ -805,9 +807,19 @@ jobs:
         needs: [setup, collect-results]
         if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
+        permissions:
+            actions: read # Read the source run measurement artifacts.
+            contents: read
         steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  persist-credentials: false
+
             - name: Extract and save changelog metadata
+              id: metadata
               env:
+                  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
                   SWEEP_MATRIX: ${{ needs.setup.outputs.search-space-config }}
                   SWEEP_HEAD: ${{ github.event.pull_request.head.sha }}
                   SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
@@ -822,7 +834,14 @@ jobs:
                       'full-sweep-fail-fast',
                       'all-evals', 'evals-only', 'agentx-fast',
                   }
-                  Path('changelog_metadata.json').write_text(json.dumps(matrix['changelog_metadata']))
+                  from infx.results.power.publication import required_points
+                  required = bool(required_points(matrix))
+                  metadata = {**matrix['changelog_metadata'], 'require-power': required}
+                  if required:
+                      metadata['power-manifest-schema-version'] = 2
+                  Path('changelog_metadata.json').write_text(json.dumps(metadata))
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                      output.write(f'require-power={str(required).lower()}\n')
                   Path('sweep_manifest.json').write_text(json.dumps({
                       'head': os.environ['SWEEP_HEAD'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
@@ -845,6 +864,42 @@ jobs:
               with:
                   name: klaud-sweep-manifest
                   path: sweep_manifest.json
+                  if-no-files-found: error
+
+            - name: Upload selected sweep plan
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: sweep-plan
+                  path: sweep_manifest.json
+                  if-no-files-found: error
+
+            - name: Download required measurement evidence
+              if: steps.metadata.outputs.require-power == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                    --pattern 'bmk_*' --pattern 'power_audit_*' --pattern 'agentic_*' --dir power-evidence
+
+            - name: Bind required power evidence
+              if: steps.metadata.outputs.require-power == 'true'
+              env:
+                  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+                  SOURCE_HEAD: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  python3 -m infx.results.power.publication \
+                    --sweep sweep_manifest.json --artifacts power-evidence --output required-power-manifest.json \
+                    --expected-run-id "$GITHUB_RUN_ID" --expected-run-attempt "$GITHUB_RUN_ATTEMPT" \
+                    --expected-head "$SOURCE_HEAD"
+                  mkdir required-power-sweep-manifest
+                  mv required-power-manifest.json required-power-sweep-manifest/sweep_manifest.json
+
+            - name: Upload required power manifest
+              if: steps.metadata.outputs.require-power == 'true'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: required-power-sweep-manifest
+                  path: required-power-sweep-manifest/sweep_manifest.json
                   if-no-files-found: error
 
     calc-success-rate:

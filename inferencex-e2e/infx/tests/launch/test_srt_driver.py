@@ -490,7 +490,8 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
     assert all(f"--expected-producer-sha {commit}" in run for run in runs)
-    required = lane == "agentx" or require_power == "1"
+    required = require_power == "1"
+    assert bound["telemetry"]["required"] is required
     assert all(run.endswith("--require-power") is required for run in runs)
     if lane == "agentx":
         status = (workspace / "LOGS/power/native-job-status.txt").read_text()

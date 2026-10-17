@@ -107,8 +107,27 @@ def test_power_collection_records_the_job_status_and_stages_results_either_way(t
     (source / "point_conc4.json").write_text("{}")
 
     assert collect_agentic_power_results(
-        status, "42", logs, source, workspace, "point", "sha", [4], results_python="true",
+        status, "42", logs, source, workspace, "point", "sha", [4], results_python="true", require_power=True,
     ) == rc  # fmt: skip
 
     assert (logs / "power" / "native-job-status.txt").read_text() == f"42|{status.raw}\n"
     assert (workspace / "point_conc4.json").exists()
+
+
+@pytest.mark.parametrize("required", [False, True])
+def test_agentx_collection_retains_invalid_power_and_obeys_requirement(tmp_path, required):
+    import json
+    import sys
+
+    logs, source, workspace = tmp_path / "logs", tmp_path / "src", tmp_path / "ws"
+    source.mkdir()
+    workspace.mkdir()
+    (source / "point_conc4.json").write_text(json.dumps({"conc": 4, "users": 4, "num_gpus": 1,
+                                                        "is_multinode": False, "disagg": False, "tp": 1}))
+    rc = collect_agentic_power_results(
+        JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0), "42", logs, source, workspace,
+        "point", "a" * 40, [4], results_python=sys.executable, require_power=required,
+    )
+    assert rc == int(required)
+    assert json.loads((workspace / "point_conc4.json").read_text())["power_valid"] == 0
+    assert (logs / "agentic/conc_4/power_validation.json").is_file()

@@ -117,6 +117,13 @@ The below list describes what each field is:
   - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry must have:
     - `trace-source`: Identifier for the trace dataset to use.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries.
+    - (Optional) `require-power`: Boolean. Omitted or null requires power for single-node AgentX and leaves multi-node AgentX best effort. Explicit `false` opts out. Eval-only rows never require power.
+
+Multi-node telemetry collection uses `power: true` on each supported search-space entry.
+Set `require-power: true` on its scenario arm to reject invalid telemetry. The same
+selected value controls the producer and result collector. Required multi-node
+points without an eligible producer fail before submission. Fixed-sequence strict
+power applies to 8192/1024 arms.
 
 `router` and `kv-p2p-transfer` may be omitted independently. Router metadata
 requires non-empty `name` and `version` strings. Its `version` must be the

@@ -14,7 +14,7 @@ import yaml
 
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
-from infx.srt_slurm.variants import deep_merge, expand_variants
+from infx.srt_slurm.variants import expand_variants
 from infx.srt_slurm.workload import resolve_fabric
 
 from .validation import (
@@ -233,16 +233,15 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
     return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
+def recipe_node_count(root: Path, srt_recipe: str, *, include_auxiliary: bool = True) -> int | None:
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
     recipe = yaml.safe_load(recipe_path.read_text())
     if "base" in recipe:
-        if not (selector == "base" or selector.startswith("override_")):
+        variants = expand_variants(recipe, selector or None)
+        if len(variants) != 1:
             return None
-        schema = recipe.get("schema")
-        recipe = deep_merge(recipe["base"], recipe[selector] or {})
-        recipe.setdefault("schema", schema)
+        _, recipe = variants[0]
         if recipe.get("schema") != 2:
             return None
     if recipe.get("schema") != 2:
@@ -255,7 +254,7 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
         worker_nodes = sum(
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
         )
-        return worker_nodes + recipe_auxiliary_node_count(recipe)
+        return worker_nodes + (recipe_auxiliary_node_count(recipe) if include_auxiliary else 0)
     raise ValueError(f"Recipe has no worker roles: {recipe_path}")
 
 
@@ -347,6 +346,11 @@ def add_multinode_node_count(
             entry.get(Fields.SRT_RECIPE.value),
             root,
         )
+    recipe = entry.get(Fields.SRT_RECIPE.value)
+    if recipe is not None and root is not None:
+        compute_nodes = recipe_node_count(root, recipe, include_auxiliary=False)
+        if compute_nodes is not None:
+            entry["compute-node-count"] = compute_nodes
     return entry
 
 
@@ -1080,6 +1084,10 @@ def _agentic_entries(
                 entry[Fields.DECODE_CPU_DRAM_GB.value] = decode_cpu_dram_gb
             entry[Fields.DISAGG.value] = disagg
         entry[Fields.SCENARIO_TYPE.value] = "agentic-coding"
+        require_power = scenario.get(Fields.REQUIRE_POWER.value, scenario.get("require_power"))
+        if require_power is None:
+            require_power = not is_multinode
+        entry[Fields.REQUIRE_POWER.value] = require_power
         if kv_offload_backend is not None:
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))

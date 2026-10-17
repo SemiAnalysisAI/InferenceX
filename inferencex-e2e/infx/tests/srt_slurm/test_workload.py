@@ -94,6 +94,7 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
     ({"base": {}, "override_c": {"benchmark": {"concurrencies": [4]}}}, False, False,
      "override_c.benchmark.concurrencies (= [4])"),
     ({"telemetry": {"enabled": True}}, False, True, "telemetry.enabled (= True)"),
+    ({"telemetry": {"required": True}}, False, True, "telemetry.required (= True)"),
     ({"benchmark": {"env": {"HF_HUB_CACHE": "/elsewhere"}}}, True, True,
      "benchmark.env.HF_HUB_CACHE (= '/elsewhere')"),
     ({"base": {"benchmark": {"env": {"RESULT_DIR": "/logs"}}}}, True, False,
@@ -164,7 +165,7 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
     bound = bind_workload(variant, AGENTX_ENV, agentic=True, multinode=True)
 
     assert bound["telemetry"] == {
-        "collector_join_timeout_seconds": 12, "enabled": True, "required": True,
+        "collector_join_timeout_seconds": 12, "enabled": True, "required": False,
         "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 19401},
     }  # fmt: skip
     assert bound["benchmark"]["concurrencies"] == [8]
@@ -327,3 +328,16 @@ def test_a_fabric_field_the_cluster_does_not_set_fails():
     recipe = {"roles": {"agg": {"env": {"MC_GID_INDEX": "@fabric.rdma-gid-index", "MORI_RDMA_TC": "@fabric.rdma-tc"}}}}
     with pytest.raises(ValueError, match=r"^roles\.agg\.env\.MORI_RDMA_TC: this cluster sets no srt-slurm"):
         resolve_fabric(recipe, fabric)
+
+
+@pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("agentic", [False, True])
+def test_multinode_binder_uses_effective_client_requirement(required, agentic):
+    bound = bind_workload(
+        {"telemetry": {"enabled": True, "required": not required}},
+        {**MULTI_ENV, "REQUIRE_POWER": "0" if required else "1"},
+        agentic=agentic, multinode=True,
+        client_env={"REQUIRE_POWER": "1" if required else "0"},
+    )
+    assert bound["telemetry"]["required"] is required
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == ("1" if required else "0")
