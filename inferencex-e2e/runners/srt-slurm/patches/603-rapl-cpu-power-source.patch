@@ -1,0 +1,1036 @@
+diff --git a/docs/cpu-power-telemetry.md b/docs/cpu-power-telemetry.md
+index 7db38ac9..0caea836 100644
+--- a/docs/cpu-power-telemetry.md
++++ b/docs/cpu-power-telemetry.md
+@@ -1,7 +1,8 @@
+ # CPU Power Telemetry
+ 
+-Host-side CPU power collection for NVIDIA Grace nodes, run alongside GPU DCGM
+-power telemetry as an independent, best-effort leg.
++Host-side CPU power collection for NVIDIA Grace nodes and, through RAPL, x86
++hosts such as AMD EPYC, run alongside GPU DCGM power telemetry as an
++independent, best-effort leg.
+ 
+ ## Table of Contents
+ 
+@@ -43,7 +44,7 @@ telemetry:
+   enabled: true                # master switch; also gates GPU DCGM power telemetry
+   cpu_power_exporter:
+     port: 9405                 # default; exporter listen port / collector scrape port
+-    source: auto                # "auto" | "acpi" | "dcgm", passed to the exporter binary
++    source: auto                # "auto" | "acpi" | "dcgm" | "rapl", passed to the exporter binary
+ ```
+ 
+ `telemetry.enabled: true` no longer requires `dcgm_exporter` — a recipe may
+@@ -94,7 +95,7 @@ the source of truth).
+ 
+ ## Collection Sources
+ 
+-The exporter binary itself decides ACPI vs. DCGM per its own `--source` flag:
++The exporter binary itself picks its source from its own `--source` flag:
+ 
+ - **`acpi`** — reads Linux ACPI `power_meter` hwmon sysfs channels. The driver
+   name can be on the hwmon node or under `device/`: `acpi_power_meter` used
+@@ -131,6 +132,34 @@ The exporter binary itself decides ACPI vs. DCGM per its own `--source` flag:
+   label; the collector treats those samples as 1130.
+   Source: NVIDIA/DCGM `modules/sysmon/DcgmSystemMonitor.cpp` (label → file
+   map) and `modules/sysmon/DcgmModuleSysmon.cpp` (field id → getter).
++- **`rapl`** — reads the x86 RAPL package energy counters through Linux
++  powercap, for hosts with no ACPI power meter and no DCGM CPU entity, such as
++  the AMD EPYC hosts of MI300X, MI325X and MI355X nodes. AMD reuses the
++  `intel-rapl` names. The exporter takes every top-level zone
++  `/sys/class/powercap/intel-rapl:<n>` whose `name` is `package-<id>`, one per
++  socket, with `socket` set to `<id>`; subzones (`intel-rapl:<n>:<m>`, such as
++  `core`) are skipped. Every second it reads each `energy_uj` counter and
++  publishes the energy since the previous read divided by the elapsed
++  monotonic time, so each value is the average power over that interval. The
++  counter wraps to zero after `max_energy_range_uj`; the exporter adds the
++  range left before the wrap to the delta. Before it starts listening it
++  reads every counter twice, 200 ms apart, so the first scrape already has a
++  value. A failed read on any socket skips that whole poll, since a scrape
++  missing a socket would read as a lower node total; the next values average
++  over the gap.
++
++  `energy_uj` is readable only by root by default (Linux restricted it after
++  CVE-2020-8694), and the exporter runs as the job's user. A cluster admin
++  must grant that user read access to these files. Without it,
++  `--source rapl` fails at startup with an error that names the file; it
++  also fails at startup when no package zone exists.
++
++  A package domain is the socket's package power. On AMD EPYC it excludes
++  DIMM (DRAM) power, while Grace's `total` envelope includes its LPDDR5X
++  memory. RAPL readings therefore carry their own rail kind, `package`
++  (sensor `CPU<n>:packagePowerUsageW`), so consumers can tell the two
++  boundaries apart. `power_w` is the socket's package power and
++  `total_power_w` sums the sockets.
+ - **`auto`** (default) — walks a fixed ladder at startup, most informative
+   source first, and each source must prove itself before it is used. Every
+   step down is logged at WARN in the exporter's `.out` file with the reason:
+@@ -163,15 +192,16 @@ The exporter binary itself decides ACPI vs. DCGM per its own `--source` flag:
+   `--source acpi` and `--source dcgm` run only their own rungs (ACPI still
+   requires the liveness probe to pass; DCGM still tries 1130+1132 then 1130)
+   and exit non-zero instead of stepping down. The Python host collector
+-  (`srtctl.core.cpu_power`) implements the same ladder.
++  (`srtctl.core.cpu_power`) implements the same ladder. `auto` never
++  selects `rapl`; it runs only when named.
+ 
+ The exporter resolves this once at process startup and serves only one base
+-metric family (`cpu_power_dcgm_watts` or `cpu_power_acpi_watts`) for its
+-lifetime. Client-side parsing (`src/srtctl/core/power/cpu_parser.py`) prefers
+-ACPI readings if a scrape body ever contained both, since ACPI carries more
+-detail.
++metric family (`cpu_power_dcgm_watts`, `cpu_power_acpi_watts` or
++`cpu_power_rapl_watts`) for its lifetime. If a scrape body ever contained
++more than one, client-side parsing (`src/srtctl/core/power/cpu_parser.py`)
++prefers ACPI, since it carries more detail, then DCGM, then RAPL.
+ 
+-In both modes the exporter also serves superchip module power from NVML:
++In every mode the exporter also serves superchip module power from NVML:
+ 
+ ```
+ cpu_power_nvml_watts{type="module",socket="0",gpus="0,1",source="nvml"} 498.720000
+diff --git a/docs/observability.md b/docs/observability.md
+index 25b40075..d528b33c 100644
+--- a/docs/observability.md
++++ b/docs/observability.md
+@@ -136,7 +136,7 @@ Fields: [TelemetryConfig](schema-reference.md#telemetryconfig). `collect_interva
+ 
+ `telemetry.cpu_power_exporter` is an independent, best-effort leg: its presence (not a separate `enabled` flag) turns CPU power collection on, and it can run with or without `dcgm_exporter` alongside it. On each worker node, srtctl launches a `cpu-power-exporter` process directly on the bare host (outside the model container, so it can read host power interfaces) and exposes it on `cpu_power_exporter.port`. It resolves the bundled Rust binary installed by `make setup` first, falling back to the ACPI-only Python stdlib exporter (`srtctl.core.cpu_power_exporter`) when that binary is absent. A head-node collector scrapes every worker's exporter on the shared `collect_interval_ms`/`request_timeout_seconds` cadence and writes per-sample rows plus a manifest under `<log_dir>/<storage_subdir>/cpu/` (`samples.csv`, `cpu_manifest.json`).
+ 
+-Fields: [CpuPowerExporterConfig](schema-reference.md#cpupowerexporterconfig). `source: auto` uses ACPI when at least one discovered socket-total sensor reads a positive value (the envelope that becomes `power_w`; a 0 W reading from any channel is filed as missing, never as a sample), else DCGM fields 1130+1132 (CPU rail + SysIO), else 1130 alone if this libdcgm refuses 1132 — each step down logged at WARN. DCGM has no envelope field, so its `power_w` is ~half of ACPI's. The setting has no effect on the Python fallback exporter, which is ACPI-only. See [CPU power telemetry](cpu-power-telemetry.md) for the full ladder.
++Fields: [CpuPowerExporterConfig](schema-reference.md#cpupowerexporterconfig). `source: auto` uses ACPI when at least one discovered socket-total sensor reads a positive value (the envelope that becomes `power_w`; a 0 W reading from any channel is filed as missing, never as a sample), else DCGM fields 1130+1132 (CPU rail + SysIO), else 1130 alone if this libdcgm refuses 1132 — each step down logged at WARN. DCGM has no envelope field, so its `power_w` is ~half of ACPI's. The setting has no effect on the Python fallback exporter, which is ACPI-only. `source: rapl` reads the x86 RAPL package energy counters instead, for hosts such as AMD EPYC that have neither, and needs admin-granted read access to them. See [CPU power telemetry](cpu-power-telemetry.md) for the full ladder and the RAPL source.
+ 
+ `samples.csv` carries one row per socket per scrape (schema v3), with columns `schema_version, timestamp_unix, hostname, source, sensor, socket_id, power_w, cpu_rail_w, soc_w, dram_w, module_w, total_power_w`. ACPI `power_w` is the socket envelope; DCGM `power_w` is field 1130, the CPU rail. ACPI fills available component rails; DCGM fills `cpu_rail_w` (1130) and `soc_w` (1132). NVML supplies `module_w`, a superchip reference rail that includes the GPUs. `total_power_w` sums only `power_w` over sockets. See [CPU power telemetry](cpu-power-telemetry.md#output-format) for details.
+ 
+diff --git a/docs/power-telemetry.md b/docs/power-telemetry.md
+index b124bf46..08fb89e0 100644
+--- a/docs/power-telemetry.md
++++ b/docs/power-telemetry.md
+@@ -79,9 +79,10 @@ telemetry:
+ ```
+ 
+ `dcgm-power` needs **only** `dcgm_exporter`. A recipe that sets
+-`telemetry.enabled: true` with no `dcgm_exporter` and no CPU leg inherits the
+-cluster's `default_gpu_exporter` block from `srtslurm.yaml`, so one recipe can
+-measure power on clusters with different GPUs. An inherited `command` replaces the
++`telemetry.enabled: true` with no `dcgm_exporter` inherits the cluster's
++`default_gpu_exporter` block from `srtslurm.yaml`, so one recipe can measure
++power on clusters with different GPUs. A CPU power leg (`cpu_power_exporter` or
++`cpu_power`) runs alongside it and does not opt out. An inherited `command` replaces the
+ built-in 100 ms DCGM command, so the exporter samples at whatever rate it sets. There is no `provider` key, and it does
+ not require the top-level `container_image` or a `node_exporter`, because the
+ collector runs inside srtctl. Config loading validates the block and rejects
+diff --git a/docs/schema-reference.md b/docs/schema-reference.md
+index a8ea047f..c7bd4655 100644
+--- a/docs/schema-reference.md
++++ b/docs/schema-reference.md
+@@ -487,7 +487,7 @@ Best-effort CPU power collection via the cpu-power-exporter binary.
+ | Key | Type | Default | Description |
+ |---|---|---|---|
+ | `port` | int | `9405` | TCP port the per-node exporter listens on for ``/metrics``. |
+-| `source` | one of `'auto'`, `'acpi'`, `'dcgm'` | `'auto'` | Power reading back-end passed through to the bundled Rust binary's own ``--source`` flag (``auto`` \| ``acpi`` \| ``dcgm``). ``auto`` tries ACPI first (the only source with the socket envelope) and falls back to DCGM when no ACPI power_meter hwmon sensors exist or no socket-total sensor reads positive on two probes; DCGM watches fields 1130+1132 and falls back to 1130 alone if this libdcgm refuses the pair, and is accepted only if some socket reads a positive 1130. DCGM mode reports field 1130 = the CPU rail (plus 1132 = SysIO), about half the ACPI envelope, and the energy report flags such runs as "CPU rail only". Has no effect when the Python stdlib fallback exporter is used instead of the binary -- that fallback is ACPI-only. |
++| `source` | one of `'auto'`, `'acpi'`, `'dcgm'`, `'rapl'` | `'auto'` | Power reading back-end passed through to the bundled Rust binary's own ``--source`` flag (``auto`` \| ``acpi`` \| ``dcgm`` \| ``rapl``). ``auto`` tries ACPI first (the only source with the socket envelope) and falls back to DCGM when no ACPI power_meter hwmon sensors exist or no socket-total sensor reads positive on two probes; DCGM watches fields 1130+1132 and falls back to 1130 alone if this libdcgm refuses the pair, and is accepted only if some socket reads a positive 1130. DCGM mode reports field 1130 = the CPU rail (plus 1132 = SysIO), about half the ACPI envelope, and the energy report flags such runs as "CPU rail only". ``rapl`` reads the x86 RAPL package energy counters (AMD EPYC, Intel Xeon), whose ``energy_uj`` files are root-only unless a cluster admin grants read access; ``auto`` never selects it. Has no effect when the Python stdlib fallback exporter is used instead of the binary -- that fallback is ACPI-only. |
+ 
+ ### CpuPowerConfig
+ 
+diff --git a/docs/schema/recipe.schema.json b/docs/schema/recipe.schema.json
+index c538e344..9c932fa5 100644
+--- a/docs/schema/recipe.schema.json
++++ b/docs/schema/recipe.schema.json
+@@ -696,9 +696,10 @@
+           "enum": [
+             "auto",
+             "acpi",
+-            "dcgm"
++            "dcgm",
++            "rapl"
+           ],
+-          "description": "Power reading back-end passed through to the bundled Rust binary's own ``--source`` flag (``auto`` | ``acpi`` | ``dcgm``). ``auto`` tries ACPI first (the only source with the socket envelope) and falls back to DCGM when no ACPI power_meter hwmon sensors exist or no socket-total sensor reads positive on two probes; DCGM watches fields 1130+1132 and falls back to 1130 alone if this libdcgm refuses the pair, and is accepted only if some socket reads a positive 1130. DCGM mode reports field 1130 = the CPU rail (plus 1132 = SysIO), about half the ACPI envelope, and the energy report flags such runs as \"CPU rail only\". Has no effect when the Python stdlib fallback exporter is used instead of the binary -- that fallback is ACPI-only.",
++          "description": "Power reading back-end passed through to the bundled Rust binary's own ``--source`` flag (``auto`` | ``acpi`` | ``dcgm`` | ``rapl``). ``auto`` tries ACPI first (the only source with the socket envelope) and falls back to DCGM when no ACPI power_meter hwmon sensors exist or no socket-total sensor reads positive on two probes; DCGM watches fields 1130+1132 and falls back to 1130 alone if this libdcgm refuses the pair, and is accepted only if some socket reads a positive 1130. DCGM mode reports field 1130 = the CPU rail (plus 1132 = SysIO), about half the ACPI envelope, and the energy report flags such runs as \"CPU rail only\". ``rapl`` reads the x86 RAPL package energy counters (AMD EPYC, Intel Xeon), whose ``energy_uj`` files are root-only unless a cluster admin grants read access; ``auto`` never selects it. Has no effect when the Python stdlib fallback exporter is used instead of the binary -- that fallback is ACPI-only.",
+           "default": "auto"
+         }
+       },
+diff --git a/src/cpu-power-exporter/src/main.rs b/src/cpu-power-exporter/src/main.rs
+index 6f15db14..b11e1974 100644
+--- a/src/cpu-power-exporter/src/main.rs
++++ b/src/cpu-power-exporter/src/main.rs
+@@ -1,9 +1,9 @@
+ // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ // SPDX-License-Identifier: Apache-2.0
+ 
+-//! Grace CPU power exporter for Prometheus / AIPerf server-metrics.
++//! CPU power exporter for Prometheus / AIPerf server-metrics.
+ //!
+-//! Two back-ends are supported and selected via `--source`:
++//! Back-ends are selected via `--source`:
+ //!
+ //! - `acpi` (default fallback): reads `/sys/class/hwmon/hwmon*/power*_average` and
+ //!   exposes `cpu_power_acpi_watts{sensor,type,socket,oem_info,source="acpi"}`.
+@@ -16,12 +16,18 @@
+ //!   field for the `Grace Power Socket N` envelope, so DCGM mode reports about
+ //!   half the socket power ACPI mode does. Requires `libdcgm.so` (see `dcgm.rs`).
+ //!
++//! - `rapl`: reads the x86 RAPL package energy counters
++//!   (`/sys/class/powercap/intel-rapl:N/energy_uj`, also used by AMD EPYC) and
++//!   exposes `cpu_power_rapl_watts{sensor,type="package",socket,source="rapl"}`,
++//!   the average power between two counter reads. `energy_uj` is root-only by
++//!   default, so this needs admin-granted read access.
++//!
+ //! - `auto` (default): tries ACPI first — it carries the socket envelope plus
+ //!   every rail — and falls back to DCGM only when no ACPI `power_meter` hwmon
+ //!   sensors are present or no socket-total channel reads positive. (DCGM reads
+ //!   the same hwmon files, so if ACPI is absent DCGM usually is too; the
+ //!   fallback covers hosts where sysfs is hidden from this process but a
+-//!   privileged nv-hostengine is reachable.)
++//!   privileged nv-hostengine is reachable.) It never selects `rapl`.
+ //!
+ //! Alongside either back-end, optional `cpu_power_nvml_watts` reports one
+ //! superchip module reading per Grace socket. Its background poller prevents
+@@ -124,11 +130,14 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
+ /// Withhold stalled NVML readings so energy integration sees a gap instead
+ /// of counting the last value indefinitely.
+ const MODULE_STALE_AFTER: Duration = Duration::from_secs(3);
++/// RAPL watts need two counter reads, so startup waits this long for the first.
++const RAPL_PRIME_INTERVAL: Duration = Duration::from_millis(200);
+ 
+ #[derive(clap::ValueEnum, Clone, Debug, Default)]
+ enum SourceMode {
+     Acpi,
+     Dcgm,
++    Rapl,
+     #[default]
+     Auto,
+ }
+@@ -142,7 +151,7 @@ const VERSION: &str = match option_env!("SRTCTL_RELEASE_VERSION") {
+ #[derive(Parser)]
+ #[command(
+     version = VERSION,
+-    about = "Grace CPU power exporter for Prometheus / AIPerf server-metrics"
++    about = "CPU power exporter for Prometheus / AIPerf server-metrics"
+ )]
+ struct Args {
+     /// TCP port to listen on.
+@@ -157,11 +166,16 @@ struct Args {
+     #[arg(long, default_value = "/sys/class/hwmon")]
+     hwmon_root: PathBuf,
+ 
++    /// Root of powercap sysfs (override for testing).
++    #[arg(long, default_value = "/sys/class/powercap")]
++    powercap_root: PathBuf,
++
+     /// Power reading back-end.
+     ///
+     /// `auto` tries ACPI first (socket envelope + every rail) and falls back
+     /// to DCGM (CPU rail + SysIO only) when no ACPI power_meter sensors exist
+-    /// or no socket-total channel reads positive.
++    /// or no socket-total channel reads positive. `rapl` reads the RAPL
++    /// package energy counters under --powercap-root and is only used when named.
+     #[arg(long, default_value = "auto")]
+     source: SourceMode,
+ }
+@@ -187,10 +201,20 @@ struct Candidate {
+     oem_info: Option<String>,
+ }
+ 
++struct RaplZone {
++    energy_path: PathBuf,
++    /// The counter wraps to zero once it passes this value.
++    max_energy_range_uj: u64,
++    socket: String,
++    labels: String,
++    last_uj: u64,
++    last_at: Instant,
++}
++
+ #[derive(Clone)]
+ enum MetricsState {
+-    /// Cached exposition keeps blocking ACPI reads out of scrapes.
+-    Acpi(Arc<RwLock<String>>),
++    /// Cached exposition keeps blocking sysfs reads (ACPI, RAPL) out of scrapes.
++    Cached(Arc<RwLock<String>>),
+     Dcgm(Arc<Mutex<dcgm::DcgmReader>>),
+ }
+ 
+@@ -263,7 +287,7 @@ impl Metrics {
+     /// in reset) must not stall a scrape and lose that interval's CPU power with it.
+     fn render(&self) -> String {
+         let mut body = match &self.base {
+-            MetricsState::Acpi(cache) => cache.read().unwrap().clone(),
++            MetricsState::Cached(cache) => cache.read().unwrap().clone(),
+             MetricsState::Dcgm(reader) => build_metrics_dcgm(reader),
+         };
+         let module = self.module.read().unwrap();
+@@ -513,6 +537,94 @@ fn render_dcgm_metrics(readings: &[dcgm::PowerReading]) -> String {
+     out
+ }
+ 
++fn read_u64(path: &Path) -> Result<u64> {
++    let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
++    raw.trim()
++        .parse()
++        .with_context(|| format!("parse {} as an integer", path.display()))
++}
++
++fn is_top_level_rapl_zone(dir_name: &str) -> bool {
++    dir_name
++        .strip_prefix("intel-rapl:")
++        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
++}
++
++fn open_rapl_zones(powercap_root: &Path, now: Instant) -> Result<Vec<RaplZone>> {
++    let entries =
++        fs::read_dir(powercap_root).with_context(|| format!("list {}", powercap_root.display()))?;
++    let mut dirs = Vec::new();
++    for entry in entries {
++        let entry = entry.with_context(|| format!("list {}", powercap_root.display()))?;
++        dirs.push(entry.path());
++    }
++    dirs.sort();
++
++    let mut zones = Vec::new();
++    for dir in dirs {
++        let Some(id) = dir.file_name().and_then(|n| n.to_str()) else {
++            continue;
++        };
++        if !is_top_level_rapl_zone(id) {
++            continue;
++        }
++        // Top-level zones also include non-socket domains such as Intel's `psys`.
++        let Some(socket) = read_text(&dir.join("name"))
++            .and_then(|name| name.strip_prefix("package-").map(str::to_owned))
++            .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
++        else {
++            continue;
++        };
++        let energy_path = dir.join("energy_uj");
++        let last_uj = read_u64(&energy_path).context(
++            "cannot read the RAPL energy counter: energy_uj is root-only by default \
++             (CVE-2020-8694), so a cluster admin must grant this user read access",
++        )?;
++        zones.push(RaplZone {
++            max_energy_range_uj: read_u64(&dir.join("max_energy_range_uj"))?,
++            labels: format!("sensor=\"{id}\",type=\"package\",socket=\"{socket}\""),
++            socket,
++            energy_path,
++            last_uj,
++            last_at: now,
++        });
++    }
++    Ok(zones)
++}
++
++fn build_metrics_rapl(zones: &mut [RaplZone], now: Instant) -> String {
++    let mut out = String::from(
++        "# HELP cpu_power_rapl_watts CPU package power from the RAPL energy counter, averaged since the previous read (W).\n\
++         # TYPE cpu_power_rapl_watts gauge\n",
++    );
++    let readings: Result<Vec<u64>> = zones.iter().map(|z| read_u64(&z.energy_path)).collect();
++    let readings = match readings {
++        Ok(readings) => readings,
++        // A scrape missing one socket would pass for a lower node total, so the
++        // whole poll is a gap. Baselines stay; the next value spans the gap.
++        Err(e) => {
++            tracing::debug!(error = %e, "unreadable RAPL counter; skipping this poll");
++            return out;
++        }
++    };
++    for (zone, energy_uj) in zones.iter_mut().zip(readings) {
++        let delta_uj = if energy_uj >= zone.last_uj {
++            energy_uj - zone.last_uj
++        } else {
++            zone.max_energy_range_uj.saturating_sub(zone.last_uj) + energy_uj
++        };
++        let watts = delta_uj as f64 / 1_000_000.0 / (now - zone.last_at).as_secs_f64();
++        zone.last_uj = energy_uj;
++        zone.last_at = now;
++        let _ = writeln!(
++            out,
++            "cpu_power_rapl_watts{{{},source=\"rapl\"}} {watts:.6}",
++            zone.labels
++        );
++    }
++    out
++}
++
+ /// Reads until the end of the request headers, so a request split across
+ /// segments is not mistaken for a request for `/`.
+ ///
+@@ -616,7 +728,7 @@ enum AcpiDecision {
+     /// down to DCGM. Only produced in `Auto` -- in `Acpi` the same condition
+     /// is an `Err`.
+     FallBack(String),
+-    /// `--source dcgm`: ACPI was not consulted at all.
++    /// `--source dcgm` or `rapl`: ACPI was not consulted at all.
+     Skip,
+ }
+ 
+@@ -637,7 +749,7 @@ fn decide_acpi(
+     probe: impl Fn(&[Sensor]) -> Option<usize>,
+ ) -> Result<AcpiDecision> {
+     let acpi_only = match mode {
+-        SourceMode::Dcgm => return Ok(AcpiDecision::Skip),
++        SourceMode::Dcgm | SourceMode::Rapl => return Ok(AcpiDecision::Skip),
+         SourceMode::Acpi => true,
+         SourceMode::Auto => false,
+     };
+@@ -688,6 +800,9 @@ fn decide_acpi(
+ }
+ 
+ fn init_metrics_state(args: &Args) -> Result<(MetricsState, BTreeSet<String>)> {
++    if matches!(args.source, SourceMode::Rapl) {
++        return init_rapl(&args.powercap_root);
++    }
+     let probe =
+         |sensors: &[Sensor]| probe_acpi_live(sensors, ACPI_PROBE_RETRIES, ACPI_PROBE_RETRY_DELAY);
+     match decide_acpi(&args.source, &args.hwmon_root, probe)? {
+@@ -782,27 +897,56 @@ fn init_acpi_state(sensors: Vec<Sensor>) -> Result<(MetricsState, BTreeSet<Strin
+         }
+ 
+         // Seed the cache synchronously so the first scrape after startup is not empty.
+-        let initial = build_metrics(sensors);
+-        let cache = Arc::new(RwLock::new(initial));
+-        let cache_bg = Arc::clone(&cache);
+-
+-        // Keep blocking firmware reads off the HTTP request path.
+-        std::thread::Builder::new()
+-            .name("acpi-poller".to_owned())
+-            .spawn(move || loop {
+-                std::thread::sleep(POLL_INTERVAL);
+-                let snapshot = build_metrics(sensors);
+-                *cache_bg.write().unwrap() = snapshot;
+-            })
+-            .context("spawn acpi-poller thread")?;
++        let state = spawn_poller("acpi-poller", build_metrics(sensors), move || {
++            build_metrics(sensors)
++        })?;
+ 
+         let cpu_sockets = sensors
+             .iter()
+             .filter(|s| s.kind != "other")
+             .map(|s| s.socket.clone())
+             .collect();
+-        Ok((MetricsState::Acpi(cache), cpu_sockets))
++        Ok((state, cpu_sockets))
++    }
++}
++
++/// Keeps blocking sysfs reads off the HTTP request path: a background OS
++/// thread re-renders every `POLL_INTERVAL` and scrapes serve the cache.
++fn spawn_poller(
++    name: &str,
++    initial: String,
++    mut render: impl FnMut() -> String + Send + 'static,
++) -> Result<MetricsState> {
++    let cache = Arc::new(RwLock::new(initial));
++    let cache_bg = Arc::clone(&cache);
++    std::thread::Builder::new()
++        .name(name.to_owned())
++        .spawn(move || loop {
++            std::thread::sleep(POLL_INTERVAL);
++            let snapshot = render();
++            *cache_bg.write().unwrap() = snapshot;
++        })
++        .with_context(|| format!("spawn {name} thread"))?;
++    Ok(MetricsState::Cached(cache))
++}
++
++fn init_rapl(powercap_root: &Path) -> Result<(MetricsState, BTreeSet<String>)> {
++    let mut zones = open_rapl_zones(powercap_root, Instant::now())?;
++    if zones.is_empty() {
++        anyhow::bail!(
++            "no RAPL package zones (intel-rapl:<n> named package-<id>) found under {}",
++            powercap_root.display()
++        );
+     }
++    tracing::info!(count = zones.len(), "discovered RAPL package zones");
++    let cpu_sockets = zones.iter().map(|z| z.socket.clone()).collect();
++    // The first scrape after `listening` must carry watts, which take two reads.
++    std::thread::sleep(RAPL_PRIME_INTERVAL);
++    let initial = build_metrics_rapl(&mut zones, Instant::now());
++    let state = spawn_poller("rapl-poller", initial, move || {
++        build_metrics_rapl(&mut zones, Instant::now())
++    })?;
++    Ok((state, cpu_sockets))
+ }
+ 
+ fn start_module_poller(cpu_sockets: BTreeSet<String>) -> Result<Arc<RwLock<ModuleState>>> {
+@@ -933,7 +1077,7 @@ mod tests {
+         let cpu = "cpu_power_acpi_watts{socket=\"0\",type=\"total\"} 88.000000\n";
+         let module = Arc::new(RwLock::new(ModuleState::Pending(Instant::now())));
+         let metrics = Metrics {
+-            base: MetricsState::Acpi(Arc::new(RwLock::new(cpu.to_owned()))),
++            base: MetricsState::Cached(Arc::new(RwLock::new(cpu.to_owned()))),
+             module: Arc::clone(&module),
+         };
+         let sample = || {
+@@ -1541,6 +1685,161 @@ mod tests {
+         assert!(discover_sensors(&dir.path().join("absent")).is_err());
+     }
+ 
++    fn write_rapl_zone(
++        root: &Path,
++        zone: &str,
++        name: &str,
++        energy_uj: u64,
++        max_uj: u64,
++    ) -> PathBuf {
++        let dir = root.join(zone);
++        fs::create_dir_all(&dir).unwrap();
++        fs::write(dir.join("name"), format!("{name}\n")).unwrap();
++        fs::write(dir.join("energy_uj"), format!("{energy_uj}\n")).unwrap();
++        fs::write(dir.join("max_energy_range_uj"), format!("{max_uj}\n")).unwrap();
++        dir.join("energy_uj")
++    }
++
++    const RAPL_MAX_UJ: u64 = 262_143_328_850;
++
++    fn rapl_line(sensor: &str, socket: &str, watts: &str) -> String {
++        format!("cpu_power_rapl_watts{{sensor=\"{sensor}\",type=\"package\",socket=\"{socket}\",source=\"rapl\"}} {watts}\n")
++    }
++
++    #[test]
++    fn rapl_discovery_takes_package_zones_and_maps_socket_from_name() {
++        let dir = TempDir::new().unwrap();
++        write_rapl_zone(dir.path(), "intel-rapl:0", "package-1", 0, RAPL_MAX_UJ);
++        write_rapl_zone(dir.path(), "intel-rapl:1", "package-0", 0, RAPL_MAX_UJ);
++        write_rapl_zone(dir.path(), "intel-rapl:0:0", "core", 0, RAPL_MAX_UJ);
++        write_rapl_zone(dir.path(), "intel-rapl:2", "psys", 0, RAPL_MAX_UJ);
++        // Intel's MMIO interface repeats a package domain; counting it would double the socket.
++        write_rapl_zone(dir.path(), "intel-rapl-mmio:0", "package-0", 0, RAPL_MAX_UJ);
++
++        let zones = open_rapl_zones(dir.path(), Instant::now()).unwrap();
++        let labels: Vec<&str> = zones.iter().map(|z| z.labels.as_str()).collect();
++        assert_eq!(
++            labels,
++            [
++                r#"sensor="intel-rapl:0",type="package",socket="1""#,
++                r#"sensor="intel-rapl:1",type="package",socket="0""#,
++            ]
++        );
++    }
++
++    #[test]
++    fn rapl_watts_are_the_energy_delta_over_elapsed_time() {
++        let dir = TempDir::new().unwrap();
++        let energy = write_rapl_zone(
++            dir.path(),
++            "intel-rapl:0",
++            "package-0",
++            5_000_000,
++            RAPL_MAX_UJ,
++        );
++        let t0 = Instant::now();
++        let mut zones = open_rapl_zones(dir.path(), t0).unwrap();
++
++        fs::write(&energy, "455000000\n").unwrap();
++        let first = build_metrics_rapl(&mut zones, t0 + Duration::from_secs(2));
++        assert!(
++            first.contains("# TYPE cpu_power_rapl_watts gauge\n"),
++            "{first}"
++        );
++        assert!(
++            first.contains(&rapl_line("intel-rapl:0", "0", "225.000000")),
++            "{first}"
++        );
++
++        fs::write(&energy, "555000000\n").unwrap();
++        let second = build_metrics_rapl(&mut zones, t0 + Duration::from_secs(3));
++        assert!(
++            second.contains(&rapl_line("intel-rapl:0", "0", "100.000000")),
++            "{second}"
++        );
++    }
++
++    #[test]
++    fn rapl_poll_with_an_unreadable_counter_is_a_gap_for_every_socket() {
++        let dir = TempDir::new().unwrap();
++        let socket0 = write_rapl_zone(dir.path(), "intel-rapl:0", "package-0", 0, RAPL_MAX_UJ);
++        let socket1 = write_rapl_zone(dir.path(), "intel-rapl:1", "package-1", 0, RAPL_MAX_UJ);
++        let t0 = Instant::now();
++        let mut zones = open_rapl_zones(dir.path(), t0).unwrap();
++
++        fs::write(&socket0, "100000000\n").unwrap();
++        fs::write(&socket1, "garbage\n").unwrap();
++        let gap = build_metrics_rapl(&mut zones, t0 + Duration::from_secs(1));
++        assert!(!gap.contains("cpu_power_rapl_watts{"), "{gap}");
++
++        fs::write(&socket1, "300000000\n").unwrap();
++        let after = build_metrics_rapl(&mut zones, t0 + Duration::from_secs(2));
++        assert!(
++            after.contains(&rapl_line("intel-rapl:0", "0", "50.000000")),
++            "{after}"
++        );
++        assert!(
++            after.contains(&rapl_line("intel-rapl:1", "1", "150.000000")),
++            "{after}"
++        );
++    }
++
++    #[test]
++    fn rapl_watts_span_a_counter_wrap() {
++        let dir = TempDir::new().unwrap();
++        let energy = write_rapl_zone(
++            dir.path(),
++            "intel-rapl:0",
++            "package-0",
++            RAPL_MAX_UJ - 100_000_000,
++            RAPL_MAX_UJ,
++        );
++        let t0 = Instant::now();
++        let mut zones = open_rapl_zones(dir.path(), t0).unwrap();
++
++        fs::write(&energy, "50000000\n").unwrap();
++        let output = build_metrics_rapl(&mut zones, t0 + Duration::from_secs(1));
++        assert!(
++            output.contains(&rapl_line("intel-rapl:0", "0", "150.000000")),
++            "{output}"
++        );
++    }
++
++    #[test]
++    fn rapl_mode_fails_at_startup_without_a_readable_package_counter() {
++        use std::os::unix::fs::PermissionsExt;
++
++        let startup_error = |root: &Path| {
++            let args = Args::parse_from([
++                "cpu-power-exporter",
++                "--source",
++                "rapl",
++                "--powercap-root",
++                root.to_str().unwrap(),
++            ]);
++            format!(
++                "{:#}",
++                init_metrics_state(&args).err().expect("startup must fail")
++            )
++        };
++
++        let dir = TempDir::new().unwrap();
++        let no_zones = startup_error(dir.path());
++        assert!(no_zones.contains("no RAPL package zones"), "{no_zones}");
++
++        let energy = write_rapl_zone(dir.path(), "intel-rapl:0", "package-0", 0, RAPL_MAX_UJ);
++        fs::set_permissions(&energy, fs::Permissions::from_mode(0o000)).unwrap();
++        if fs::read(&energy).is_ok() {
++            eprintln!("skipped the unreadable case: root reads energy_uj whatever its mode");
++            return;
++        }
++        let unreadable = startup_error(dir.path());
++        assert!(
++            unreadable.contains("energy_uj") && unreadable.contains("root-only"),
++            "{unreadable}"
++        );
++    }
++
+     async fn request(addr: SocketAddr, head: &str) -> String {
+         let mut client = TcpStream::connect(addr).await.unwrap();
+         // Split across writes: a correct reader waits for the header terminator.
+@@ -1561,7 +1860,7 @@ mod tests {
+         );
+         let sensors: &'static [Sensor] = Vec::leak(discover_sensors(dir.path()).unwrap());
+         let metrics = Metrics {
+-            base: MetricsState::Acpi(Arc::new(RwLock::new(build_metrics(sensors)))),
++            base: MetricsState::Cached(Arc::new(RwLock::new(build_metrics(sensors)))),
+             module: Arc::new(RwLock::new(ModuleState::Unavailable)),
+         };
+ 
+diff --git a/src/srtctl/core/config.py b/src/srtctl/core/config.py
+index 235f2a4f..42041499 100755
+--- a/src/srtctl/core/config.py
++++ b/src/srtctl/core/config.py
+@@ -289,10 +289,10 @@ def resolve_config_with_defaults(user_config: dict[str, Any], cluster_config: di
+         tachometer.setdefault("default_gpu_exporter", copy.deepcopy(cluster_config["default_gpu_exporter"]))
+ 
+     # The same cluster exporter serves GPU power telemetry: a recipe that enables
+-    # telemetry without naming any collector inherits it (image, port, command and
++    # telemetry without naming a GPU exporter inherits it (image, port, command and
+     # power metrics), so one recipe measures power on NVIDIA and AMD clusters alike.
+-    # Recipes that name a GPU exporter, or that enable a CPU leg, are untouched;
+-    # without this the inherited case was the "nothing to collect" validation error.
++    # Recipes that name a GPU exporter are untouched; the CPU power legs are
++    # independent of the GPU exporter, so adding one keeps the inheritance.
+     telemetry = config.get("telemetry")
+     cluster_gpu_exporter = cluster_config.get("default_gpu_exporter")
+     if (
+@@ -300,8 +300,6 @@ def resolve_config_with_defaults(user_config: dict[str, Any], cluster_config: di
+         and telemetry.get("enabled")
+         and isinstance(cluster_gpu_exporter, dict)
+         and "dcgm_exporter" not in telemetry
+-        and telemetry.get("cpu_power_exporter") is None
+-        and not (telemetry.get("cpu_power") or {}).get("enabled")
+     ):
+         telemetry["dcgm_exporter"] = copy.deepcopy(cluster_gpu_exporter)
+         logger.debug("Applied cluster default_gpu_exporter to telemetry.dcgm_exporter")
+diff --git a/src/srtctl/core/power/cpu_parser.py b/src/srtctl/core/power/cpu_parser.py
+index 5efd899f..fe49f28e 100644
+--- a/src/srtctl/core/power/cpu_parser.py
++++ b/src/srtctl/core/power/cpu_parser.py
+@@ -3,12 +3,14 @@
+ 
+ """Parses ``cpu-power-exporter`` ``/metrics`` bodies into CPU power readings.
+ 
+-The exporter resolves DCGM-vs-ACPI once at startup and only ever serves one
+-metric family for its process lifetime, so a scrape body should never
+-contain both. If it ever did, ACPI wins here: it reports the socket envelope
++The exporter resolves its source (ACPI, DCGM or RAPL) once at startup and
++only ever serves one base metric family for its process lifetime, so a
++scrape body should never contain more than one. If it ever did, ACPI wins
++here: it reports the socket envelope
+ plus every component rail, while DCGM can only report the rails it has
+ fields for (1130 = ``cpu_rail``, 1132 = ``soc``; no envelope), so ACPI is
+-the more informative source when both exist.
++the more informative source when both exist. DCGM is tried before RAPL,
++which reports one ``package`` value per socket and no rails.
+ 
+ DCGM bodies come in two shapes. Newer exporters label each sample with the
+ DCGM ``field_id`` it read; older ones publish only field 1130 with no label.
+@@ -36,6 +38,7 @@ from srtctl.core.power.cpu_rails import (
+     DCGM_FIELD_RAIL_KINDS,
+     DCGM_PRIMARY_FIELD_ID,
+     MODULE_KIND,
++    PACKAGE_KIND,
+     classify_acpi_label,
+     normalize_kind,
+     sensor_name,
+@@ -52,6 +55,7 @@ DCGM_METRIC = "cpu_power_dcgm_watts"
+ DCGM_FIELD_LABEL = "field_id"
+ ACPI_METRIC = "cpu_power_acpi_watts"
+ NVML_METRIC = "cpu_power_nvml_watts"
++RAPL_METRIC = "cpu_power_rapl_watts"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -62,7 +66,7 @@ class CpuReading:
+     sensor: str
+     socket_id: int
+     power_w: float
+-    kind: str  # cpu_rails.DCGM_KIND for dcgm; an ACPI_RAIL_KINDS member for acpi; MODULE_KIND for nvml
++    kind: str  # cpu_rails.DCGM_KIND for dcgm; an ACPI_RAIL_KINDS member for acpi; PACKAGE_KIND for rapl; MODULE_KIND for nvml
+ 
+ 
+ @dataclass(frozen=True)
+@@ -75,7 +79,7 @@ class ParsedCpuScrape:
+     ``total_power_w`` is ``node_total_watts`` over those sockets.
+     """
+ 
+-    mode: str = "unknown"  # "dcgm" | "acpi" | "unknown"
++    mode: str = "unknown"  # "dcgm" | "acpi" | "rapl" | "unknown"
+     readings: tuple[CpuReading, ...] = ()
+     sockets: tuple[CpuSample, ...] = ()
+     total_power_w: float | None = None
+@@ -104,6 +108,10 @@ def parse_cpu_scrape(text: str) -> ParsedCpuScrape:
+     if dcgm_readings:
+         return _scrape("dcgm", dcgm_readings + module_readings)
+ 
++    rapl_readings = _parse_rapl(families)
++    if rapl_readings:
++        return _scrape("rapl", rapl_readings + module_readings)
++
+     return ParsedCpuScrape()
+ 
+ 
+@@ -183,6 +191,31 @@ def _parse_acpi(families) -> list[CpuReading]:
+     return readings
+ 
+ 
++def _parse_rapl(families) -> list[CpuReading]:
++    readings: list[CpuReading] = []
++    for family in families:
++        for sample in family.samples:
++            if sample.name != RAPL_METRIC:
++                continue
++            socket_id = _parse_socket(sample.labels.get("socket"))
++            if socket_id is None:
++                continue
++            value = sample.value
++            # A zero delta means the counter did not advance: missing, not idle.
++            if not math.isfinite(value) or value <= 0:
++                continue
++            readings.append(
++                CpuReading(
++                    source="rapl",
++                    sensor=sensor_name(PACKAGE_KIND, socket_id),
++                    socket_id=socket_id,
++                    power_w=value,
++                    kind=PACKAGE_KIND,
++                )
++            )
++    return readings
++
++
+ def _parse_nvml(families) -> list[CpuReading]:
+     readings: list[CpuReading] = []
+     for family in families:
+diff --git a/src/srtctl/core/power/cpu_rails.py b/src/srtctl/core/power/cpu_rails.py
+index b57631fa..2c7263a2 100644
+--- a/src/srtctl/core/power/cpu_rails.py
++++ b/src/srtctl/core/power/cpu_rails.py
+@@ -35,6 +35,11 @@ Rail kinds
+     ``Grace Power Socket N`` envelope (1131 is only its cap). DCGM-mode
+     ``power_w`` is therefore the CPU rail, roughly half the ACPI envelope,
+     and is not comparable with ACPI-mode ``power_w``.
++``package``
++    Not an ACPI rail: one x86 RAPL package domain per socket, from its energy
++    counter. Treated like ``total`` for ``power_w`` purposes, but it is a
++    smaller boundary: on AMD EPYC it excludes DIMM power, which Grace's
++    ``total`` includes (LPDDR5X).
+ ``module``
+     NVML superchip power for one socket, including Grace and its GPUs. It
+     is a reference rail and never adds to ``total_power_w``. An ACPI
+@@ -48,6 +53,7 @@ from typing import NamedTuple
+ 
+ TOTAL_KIND = "total"
+ DCGM_KIND = "dcgm"
++PACKAGE_KIND = "package"
+ MODULE_KIND = "module"
+ OTHER_KIND = "other"
+ 
+@@ -99,6 +105,7 @@ SENSOR_SUFFIXES: dict[str, str] = {
+     "dram": "dramPowerUsageW",
+     MODULE_KIND: "modulePowerUsageW",
+     DCGM_KIND: "cpuPowerUsageW",
++    PACKAGE_KIND: "packagePowerUsageW",
+ }
+ _KIND_BY_SUFFIX = {suffix: kind for kind, suffix in SENSOR_SUFFIXES.items()}
+ 
+@@ -157,7 +164,7 @@ def classify_sensor(sensor: str) -> str:
+ 
+ # Preference when a legacy long-format CSV holds several rails for one socket
+ # and exactly one must feed the per-socket power series.
+-LEGACY_RAIL_PREFERENCE: tuple[str, ...] = (TOTAL_KIND, DCGM_KIND, *REFERENCE_RAIL_KINDS, OTHER_KIND)
++LEGACY_RAIL_PREFERENCE: tuple[str, ...] = (TOTAL_KIND, DCGM_KIND, PACKAGE_KIND, *REFERENCE_RAIL_KINDS, OTHER_KIND)
+ 
+ 
+ def legacy_rail_rank(sensor: str) -> int:
+diff --git a/src/srtctl/core/power/cpu_sample.py b/src/srtctl/core/power/cpu_sample.py
+index 5a09aa97..2408c041 100644
+--- a/src/srtctl/core/power/cpu_sample.py
++++ b/src/srtctl/core/power/cpu_sample.py
+@@ -18,6 +18,8 @@ Origin (``source``) decides which rail is *primary*:
+   through DCGM (``cpu_rails.DCGM_FIELD_RAIL_KINDS``), so the same value is
+   also filed as the ``cpu_rail`` component, and field 1132 as ``soc``; see
+   :func:`dcgm_rail_readings`. DCGM exposes no socket envelope.
++* ``rapl`` -- the ``package`` RAPL domain per socket, averaged from its
++  energy counter; no rails.
+ 
+ The ``module`` rail (superchip module power, GPUs included) is a reference
+ rail too and rides on the socket row under either origin.
+@@ -35,12 +37,13 @@ from srtctl.core.power.cpu_rails import (
+     DCGM_FIELD_RAIL_KINDS,
+     DCGM_KIND,
+     DCGM_PRIMARY_FIELD_ID,
++    PACKAGE_KIND,
+     REFERENCE_RAIL_KINDS,
+     TOTAL_KIND,
+     sensor_name,
+ )
+ 
+-PRIMARY_KIND_BY_SOURCE: dict[str, str] = {"acpi": TOTAL_KIND, "dcgm": DCGM_KIND}
++PRIMARY_KIND_BY_SOURCE: dict[str, str] = {"acpi": TOTAL_KIND, "dcgm": DCGM_KIND, "rapl": PACKAGE_KIND}
+ 
+ 
+ def primary_kind(source: str) -> str:
+@@ -58,7 +61,7 @@ class RailReading:
+     """One classified sensor value: which socket, which rail, from which sensor."""
+ 
+     socket_id: int
+-    kind: str  # cpu_rails.TOTAL_KIND / DCGM_KIND / a REFERENCE_RAIL_KINDS member
++    kind: str  # cpu_rails.TOTAL_KIND / DCGM_KIND / PACKAGE_KIND / a REFERENCE_RAIL_KINDS member
+     sensor: str
+     watts: float
+ 
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 7e0d228c..db41875b 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -1976,6 +1976,9 @@ class CpuPowerConfig:
+     Schema: ClassVar[type[Schema]] = Schema
+ 
+ 
++CpuPowerExporterSource = Literal["auto", "acpi", "dcgm", "rapl"]
++
++
+ @dataclass(frozen=True)
+ class CpuPowerExporterConfig:
+     """Best-effort CPU power collection via the cpu-power-exporter binary.
+@@ -1989,7 +1992,8 @@ class CpuPowerExporterConfig:
+     Attributes:
+         port: TCP port the per-node exporter listens on for ``/metrics``.
+         source: Power reading back-end passed through to the bundled Rust
+-            binary's own ``--source`` flag (``auto`` | ``acpi`` | ``dcgm``).
++            binary's own ``--source`` flag (``auto`` | ``acpi`` | ``dcgm`` |
++            ``rapl``).
+             ``auto`` tries ACPI first (the only source with the socket
+             envelope) and falls back to DCGM when no ACPI power_meter hwmon
+             sensors exist or no socket-total sensor reads positive on two
+@@ -1997,14 +2001,16 @@ class CpuPowerExporterConfig:
+             if this libdcgm refuses the pair, and is accepted only if some
+             socket reads a positive 1130. DCGM mode reports field 1130 = the
+             CPU rail (plus 1132 = SysIO), about half the ACPI envelope, and
+-            the energy report flags such runs as "CPU rail only". Has no
+-            effect when the Python stdlib fallback exporter is used instead of
++            the energy report flags such runs as "CPU rail only". ``rapl``
++            reads the x86 RAPL package energy counters (AMD EPYC, Intel Xeon),
++            whose ``energy_uj`` files are root-only unless a cluster admin
++            grants read access; ``auto`` never selects it. Has no effect when the Python stdlib fallback exporter is used instead of
+             the binary -- that fallback is ACPI-only.
+     """
+ 
+     # Port the exporter listens on and the head-node collector scrapes.
+     port: int = 9405
+-    source: Literal["auto", "acpi", "dcgm"] = "auto"
++    source: CpuPowerExporterSource = "auto"
+ 
+     Schema: ClassVar[type[Schema]] = Schema
+ 
+@@ -3816,8 +3822,9 @@ class SrtConfig:
+             return
+         if not 1 <= exporter.port <= 65535:
+             raise ValidationError("telemetry.cpu_power_exporter.port must be in 1..65535")
+-        if exporter.source not in ("auto", "acpi", "dcgm"):
+-            raise ValidationError('telemetry.cpu_power_exporter.source must be one of: "auto", "acpi", "dcgm"')
++        sources = get_args(CpuPowerExporterSource)
++        if exporter.source not in sources:
++            raise ValidationError(f"telemetry.cpu_power_exporter.source must be one of: {', '.join(sources)}")
+ 
+         neighbours = [("telemetry.dcgm_exporter", self.telemetry.dcgm_exporter)]
+         if self.observability.tachometer_enabled:
+diff --git a/tests/test_cpu_power_parser.py b/tests/test_cpu_power_parser.py
+index 54ce27bc..3ef8158e 100644
+--- a/tests/test_cpu_power_parser.py
++++ b/tests/test_cpu_power_parser.py
+@@ -51,6 +51,27 @@ MODULE_SOCKET_0 = '{type="module",socket="0",gpus="0,1",source="nvml"} 498.72000
+ MODULE_SOCKET_1 = '{type="module",socket="1",gpus="2,3",source="nvml"} 470.500000'
+ 
+ 
++def _rapl_body():
++    return (
++        "# HELP cpu_power_rapl_watts x\n"
++        "# TYPE cpu_power_rapl_watts gauge\n"
++        'cpu_power_rapl_watts{sensor="intel-rapl:0",type="package",socket="0",source="rapl"} 182.5\n'
++        'cpu_power_rapl_watts{sensor="intel-rapl:1",type="package",socket="1",source="rapl"} 171.25\n'
++    )
++
++
++def test_rapl_mode_reports_one_package_reading_per_socket():
++    scrape = parse_cpu_scrape(_rapl_body())
++
++    assert scrape.mode == "rapl"
++    assert [(r.source, r.kind, r.sensor, r.socket_id, r.power_w) for r in scrape.readings] == [
++        ("rapl", "package", "CPU0:packagePowerUsageW", 0, 182.5),
++        ("rapl", "package", "CPU1:packagePowerUsageW", 1, 171.25),
++    ]
++    assert [(s.socket_id, s.power_w, s.rails) for s in scrape.sockets] == [(0, 182.5, {}), (1, 171.25, {})]
++    assert scrape.total_power_w == 182.5 + 171.25
++
++
+ def test_dcgm_mode_sums_all_sockets_into_the_total():
+     scrape = parse_cpu_scrape(_dcgm_body())
+ 
+diff --git a/tests/test_cpu_power_samples.py b/tests/test_cpu_power_samples.py
+index b1570142..63d7ed39 100644
+--- a/tests/test_cpu_power_samples.py
++++ b/tests/test_cpu_power_samples.py
+@@ -102,6 +102,21 @@ def test_reader_still_accepts_v2_files_without_module_w(tmp_path):
+     assert [(r.schema_version, r.power_w, r.rails) for r in rows] == [(2, 94.29, {"cpu_rail": 49.023, "soc": 5.1})]
+ 
+ 
++def test_writer_round_trips_rapl_package_rows(tmp_path):
++    path = tmp_path / "cpu" / "samples.csv"
++    writer = CpuSampleWriter(path)
++    writer.append([_row(source="rapl", sensor="CPU1:packagePowerUsageW", socket_id=1, power_w=171.25)])
++    writer.close()
++
++    rows, reasons = read_cpu_samples(path)
++
++    assert reasons == ()
++    assert [(r.source, r.sensor, r.socket_id, r.power_w, r.rails) for r in rows] == [
++        ("rapl", "CPU1:packagePowerUsageW", 1, 171.25, {})
++    ]
++    assert rows[0].sample.primary.kind == "package"
++
++
+ def test_reader_accepts_the_legacy_v1_long_layout(tmp_path):
+     """Runs collected before v2 still load; each rail is its own row with empty rails."""
+     path = tmp_path / "cpu" / "samples.csv"
+diff --git a/tests/test_cpu_rails.py b/tests/test_cpu_rails.py
+index 1ec6f143..6350cef5 100644
+--- a/tests/test_cpu_rails.py
++++ b/tests/test_cpu_rails.py
+@@ -113,7 +113,7 @@ def test_rail_columns_follow_component_kind_order():
+ 
+ 
+ def test_every_acpi_kind_has_a_sensor_suffix():
+-    assert set(SENSOR_SUFFIXES) == ACPI_RAIL_KINDS | {cpu_rails.DCGM_KIND, cpu_rails.MODULE_KIND}
++    assert set(SENSOR_SUFFIXES) == ACPI_RAIL_KINDS | {cpu_rails.DCGM_KIND, cpu_rails.MODULE_KIND, cpu_rails.PACKAGE_KIND}
+ 
+ 
+ def test_dcgm_fields_map_onto_acpi_component_rails():
+diff --git a/tests/test_power_mapping.py b/tests/test_power_mapping.py
+index c6b40315..ef1a7dd8 100644
+--- a/tests/test_power_mapping.py
++++ b/tests/test_power_mapping.py
+@@ -399,25 +399,26 @@ class TestClusterDefaultFlowsIntoPowerTelemetry:
+         )
+         assert resolved["telemetry"]["dcgm_exporter"] == recipe_exporter
+ 
++    def test_disabled_telemetry_is_untouched(self):
++        resolved = resolve_config_with_defaults(
++            _recipe({"enabled": False}), {"default_gpu_exporter": AMD_CLUSTER_EXPORTER}
++        )
++        assert "dcgm_exporter" not in resolved["telemetry"]
++
+     @pytest.mark.parametrize(
+         "telemetry",
+         [
+-            {"enabled": True, "cpu_power_exporter": {"port": 9405}},
++            {"enabled": True, "cpu_power_exporter": {"port": 9405, "source": "rapl"}},
+             {"enabled": True, "cpu_power": {"enabled": True}},
+-            {"enabled": False},
++            {"enabled": True, "cpu_power": {"enabled": False}},
+         ],
+-        ids=["cpu-exporter-leg", "cpu-host-leg", "disabled"],
++        ids=["cpu-exporter-leg", "cpu-host-leg", "cpu-host-leg-off"],
+     )
+-    def test_cpu_only_and_disabled_telemetry_are_untouched(self, telemetry):
++    def test_a_cpu_leg_still_inherits_the_gpu_exporter(self, telemetry):
+         resolved = resolve_config_with_defaults(_recipe(telemetry), {"default_gpu_exporter": AMD_CLUSTER_EXPORTER})
+-        assert "dcgm_exporter" not in resolved["telemetry"]
+-
+-    def test_a_disabled_cpu_leg_still_inherits_the_gpu_exporter(self):
+-        resolved = resolve_config_with_defaults(
+-            _recipe({"enabled": True, "cpu_power": {"enabled": False}}),
+-            {"default_gpu_exporter": AMD_CLUSTER_EXPORTER},
+-        )
+         assert resolved["telemetry"]["dcgm_exporter"]["kind"] == "custom"
++        config = SrtConfig.Schema().load(resolved)
++        assert config.telemetry.dcgm_exporter is not None
+ 
+     def test_a_cluster_without_a_gpu_exporter_leaves_the_original_validation_error(self):
+         resolved = resolve_config_with_defaults(_recipe({"enabled": True}), {"default_gpu_exporter": None})
+diff --git a/tests/test_schema_docs.py b/tests/test_schema_docs.py
+index 10dceb55..bb2b29e5 100644
+--- a/tests/test_schema_docs.py
++++ b/tests/test_schema_docs.py
+@@ -343,7 +343,7 @@ def test_allowed_values_come_from_literals_and_validators() -> None:
+ 
+     assert values(SweepConfig, "mode") == ("zip", "grid")
+     assert values(ProfilingPhaseConfig, "capture_scope") == ("selected", "all")
+-    assert values(CpuPowerExporterConfig, "source") == ("auto", "acpi", "dcgm")
++    assert values(CpuPowerExporterConfig, "source") == ("auto", "acpi", "dcgm", "rapl")
+     assert values(AtomBackend, "mooncake_protocol") == ("rdma", "tcp")
+     assert values(DynamoConfig, "request_plane") == DynamoConfig._VALID_REQUEST_PLANES
+     assert values(SrtConfig, "schema") == (2,)
+diff --git a/tests/test_telemetry.py b/tests/test_telemetry.py
+index 2dac12ab..517445ba 100644
+--- a/tests/test_telemetry.py
++++ b/tests/test_telemetry.py
+@@ -610,7 +610,7 @@ class TestCpuPowerExporterConfig:
+             )
+ 
+     def test_accepts_each_valid_source(self):
+-        for source in ("auto", "acpi", "dcgm"):
++        for source in ("auto", "acpi", "dcgm", "rapl"):
+             config = _make_config(
+                 telemetry=_dcgm_power(cpu_power_exporter=CpuPowerExporterConfig(port=9405, source=source)),
+                 benchmark=_sa_bench(),
