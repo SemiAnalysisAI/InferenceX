@@ -38,6 +38,8 @@ base:
       # render chat templates with SGLang as the single-node server does.
       dyn-chat-processor: sglang
       router-mode: kv
+      # AIPerf sends one session id per conversation; keep each session on the prefill
+      # worker that holds its prefix (a 1 s TTL cut the prefill hit rate to about 0.1).
       router-session-affinity-ttl-secs: "3600"
       active-decode-blocks-threshold: "None"
       active-prefill-tokens-threshold: "None"
@@ -153,9 +155,6 @@ override_1p1d_c64:
 
 override_1p2d_c64:
   name: disagg-gb300-1p2d-tp4ep4-c64
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     decode:
       nodes: 2
@@ -166,9 +165,6 @@ override_1p2d_c64:
 
 override_1p2d_c128:
   name: disagg-gb300-1p2d-tp4ep4-c128
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     decode:
       nodes: 2
@@ -179,9 +175,6 @@ override_1p2d_c128:
 
 override_2p1d_c64:
   name: disagg-gb300-2p1d-tp4ep4-c64
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 2
@@ -193,9 +186,6 @@ override_2p1d_c64:
 
 override_2p1d_c96:
   name: disagg-gb300-2p1d-tp4ep4-c96
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 2
@@ -207,9 +197,6 @@ override_2p1d_c96:
 
 override_2p2d_c128:
   name: disagg-gb300-2p2d-tp4ep4-c128
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 2
@@ -223,9 +210,6 @@ override_2p2d_c128:
 
 override_2p2d_c192:
   name: disagg-gb300-2p2d-tp4ep4-c192
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 2
@@ -239,9 +223,6 @@ override_2p2d_c192:
 
 override_3p1d_c128:
   name: disagg-gb300-3p1d-tp4ep4-c128
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 3
@@ -253,9 +234,6 @@ override_3p1d_c128:
 
 override_3p1d_c192:
   name: disagg-gb300-3p1d-tp4ep4-c192
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 3
@@ -267,9 +245,6 @@ override_3p1d_c192:
 
 override_4p1d_c192:
   name: disagg-gb300-4p1d-tp4ep4-c192
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 4
@@ -281,9 +256,6 @@ override_4p1d_c192:
 
 override_4p1d_c256:
   name: disagg-gb300-4p1d-tp4ep4-c256
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 4
@@ -295,13 +267,36 @@ override_4p1d_c256:
 
 override_3p2d_c256:
   name: disagg-gb300-3p2d-tp4ep4-c256
-  frontend:
-    args:
-      router-session-affinity-ttl-secs: "1"
   roles:
     prefill:
       nodes: 3
       workers: 3
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 192
+
+override_3p2d_c192:
+  name: disagg-gb300-3p2d-tp4ep4-c192
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 144
+        cuda-graph-max-bs-decode: 144
+
+override_4p2d_c256:
+  name: disagg-gb300-4p2d-tp4ep4-c256
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
     decode:
       nodes: 2
       workers: 2
