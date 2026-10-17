@@ -10072,3 +10072,15 @@
     - "Enable block verification and breakable prefill CUDA graphs; use mem-fraction-static 0.9, SWA/full ratio 0.4, admission 192 with decode graphs to batch 192 and the eager DFlash draft sampler, since c128 admits about 150 running requests and DFlash sampling fails above the largest decode graph."
     - "Keep the NVFP4 target, pinned SGLang image, published DFlash2 draft precision and acceptance selected from the committed golden curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4156
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 MXFP4 on MI355X with ATOM prefill/decode disaggregation behind AToMesh, Mooncake RDMA from prefill to decode and MTP, on rocm/atom-dev:nightly_202610131249 (digest-pinned). The prefill is one CPP4 worker (PP4 x TP1 on four GPUs)."
+    - "Every point keeps its prefill's prefix tier in a Mooncake Store (0.3.13) on the prefill node, with owners on 2 MiB HugeTLB pages. 1P1D, as in ATOM's CI, has one pool shared by all four PP stages: one master and two 768 GiB owners, one per NUMA node (1649 GB, within the prefill's and the colocated decode's 1499 GB DRAM shares), each registered on rdma0-3, with MC_ENABLE_DEST_DEVICE_AFFINITY so each stage reaches them through the NIC of its own name on this rail-isolated fabric. 1P2D and 1P3D keep a pool per prefill NIC, each one master and a 349 GiB owner, the prefill's 1499 GB. After the cluster host setup drops the page cache, host_setup on the head node, where srtctl starts the prefill, reserves the owners' pages plus 2% above the hugepages host services hold and fails unless each NUMA node has its owners' pages free; teardown releases them."
+    - "1P1D on one node at concurrency 56, 72, 96, 112 and 128 with a DCP4 decode on GPUs 4-7 and three draft tokens; 1P2D with two DCP4 decodes at concurrency 56 (four draft tokens); and 1P3D with three TP4 decodes at concurrency 12, 16 and 24 (five draft tokens). In 1P2D and 1P3D each decode has a node of its own."
+    - "Workers read the checkpoint from each node's local Hugging Face hub cache, as the single-node GLM-5.2 points do; srtctl fills the first node's cache before they start."
+    - "Patch srt-slurm so its ATOM backend passes -tp as the worker's GPUs over its pipeline and prefill-context stages (NVIDIA/srt-slurm#604); unpatched, the PP4 prefill launches with -tp 4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4045
