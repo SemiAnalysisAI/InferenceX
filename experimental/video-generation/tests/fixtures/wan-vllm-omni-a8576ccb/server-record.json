@@ -1,0 +1,29 @@
+{
+ "action": null,
+ "completed_at": 1792220495,
+ "created_at": 1792220458,
+ "duration_s": 5.0625,
+ "error": null,
+ "expires_at": null,
+ "file_name": "video_gen_aa9dfad96e1e4fd9acf8f7ef1d3669ed.mp4",
+ "fps": 16.0,
+ "id": "video_gen_aa9dfad96e1e4fd9acf8f7ef1d3669ed",
+ "inference_time_s": 37.43411935213953,
+ "media_type": "video/mp4",
+ "metrics": null,
+ "model": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+ "num_frames": 81,
+ "object": "video",
+ "peak_memory_mb": 25566.0,
+ "progress": 100,
+ "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a rehearsal room. The drumsticks visibly contact the drumhead on each tap. The camera remains still. No subtitles or scene cuts.",
+ "quality": "default",
+ "remixed_from_video_id": null,
+ "seconds": "4",
+ "size": null,
+ "stage_durations": {
+  "queue_wait_ms": 0.5811508744955063,
+  "stage_0_gen_ms": 37187.02578544617
+ },
+ "status": "completed"
+}
