@@ -1,0 +1,44 @@
+# MiniMax-H3 video serving on one b200 node through srt-slurm's services-only shape.
+#
+# The GPU-owning diffusion server is a generic service with an HTTP readiness
+# probe; benchmark.type custom runs the H3 client against it. The video binder
+# (infx.srt_slurm.video) writes model.*, resources.gpus_per_node, the native
+# telemetry block, benchmark.concurrencies and every H3_* input the launcher
+# owns (spec, package, model and result paths), so this fragment holds only the
+# recipe-owned service and client shape.
+schema: 2
+name: h3-videogen-serving-client
+
+resources:
+  gpu_type: b200
+
+frontend:
+  type: none
+
+services:
+  - name: h3-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command:
+      - bash
+      - /infmax-workspace/benchmarks/h3/run_server.sh
+    env:
+      PYTHONUNBUFFERED: "1"
+      H3_SERVER_ROLE: baseline
+      H3_SERVER_PORT: "30283"
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      timeout_seconds: 900
+      interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/h3/run_client.sh
+  env:
+    PYTHONUNBUFFERED: "1"
+    H3_SERVER_SERVICE: h3-server
+    H3_SERVER_PORT: "30283"

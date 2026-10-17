@@ -1,0 +1,8 @@
+{
+  "policy_id": "h3-demo-policy-uncalibrated-v1",
+  "calibration_status": "uncalibrated",
+  "max_latency_increase_fraction": 0.1,
+  "min_video_psnr_db": 30.0,
+  "min_audio_spectral_cosine": 0.95,
+  "max_audio_rms_ratio_error": 0.1
+}
