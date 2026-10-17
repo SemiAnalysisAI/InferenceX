@@ -716,6 +716,7 @@ clusters:
         single-node-time-limit: 180
         gpus-per-node-directive: true
         segment-directive: false
+        cpu-power-exporter: &rapl-cpu-exporter {port: 9405, source: rapl}
         host-setup:
           script: runners/srt-slurm/hooks/mi300x-amd/setup.sh
         mounts:
@@ -765,6 +766,9 @@ clusters:
         single-node-time-limit: 480
         gpus-per-node-directive: true
         segment-directive: false
+        cpu-power-exporter: *rapl-cpu-exporter
+        host-setup:
+          script: runners/srt-slurm/hooks/mi325x-amd/setup.sh
         mounts:
           /dev/kfd: /dev/kfd
           /dev/dri: /dev/dri
@@ -816,6 +820,7 @@ clusters:
         gpus-per-node-directive: true
         segment-directive: false
         outputs: /it-share/gharunners2/srt-slurm/outputs
+        cpu-power-exporter: *rapl-cpu-exporter
         host-setup:
           script: runners/srt-slurm/hooks/mi355x-amds/setup.sh
           env:
