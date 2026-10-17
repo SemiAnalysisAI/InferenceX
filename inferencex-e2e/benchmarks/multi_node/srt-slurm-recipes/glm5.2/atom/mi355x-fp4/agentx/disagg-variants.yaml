@@ -99,16 +99,16 @@ override_1p1d_mcstore:
     commands:
       # A recipe host_setup replaces the cluster default, which also drops the page cache under DRAM KV offloading.
       - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
-      # Owners take 714752 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
+      # Owners take 917504 2 MiB pages, half per NUMA node; reserve 2% more above the pages host services hold.
       - >-
         if [[ "$(hostname -s)" == "$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)" ]]; then
         held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
-        HUGEPAGES_TARGET=$(( held + 714752 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
+        HUGEPAGES_TARGET=$(( held + 917504 * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
         bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
         for node in 0 1; do
         free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
-        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 357376";
-        [[ $free -ge 357376 ]] || exit 1;
+        echo "[hugepage] NUMA$node: $free free 2 MiB pages, owners need 458752";
+        [[ $free -ge 458752 ]] || exit 1;
         done; fi
     teardown:
       - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
@@ -154,7 +154,7 @@ override_1p1d_mcstore:
     - &owner
       <<: *master
       name: mc-owner-rdma0
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, --device_names=rdma0, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, --device_names=rdma0, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
       env:
         <<: *store_env
         # Back the segment with the reserved 2 MiB pages; the NIC cannot register 64 GiB regions of 4 KiB pages.
@@ -170,13 +170,13 @@ override_1p1d_mcstore:
         interval_seconds: 5
     - <<: *owner
       name: mc-owner-rdma1
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26151, --metadata_server=http://127.0.0.1:26180/metadata, --protocol=rdma, --device_names=rdma1, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26151, --metadata_server=http://127.0.0.1:26180/metadata, --protocol=rdma, --device_names=rdma1, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
     - <<: *owner
       name: mc-owner-rdma2
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26054, --master_server_address=127.0.0.1:26251, --metadata_server=http://127.0.0.1:26280/metadata, --protocol=rdma, --device_names=rdma2, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26054, --master_server_address=127.0.0.1:26251, --metadata_server=http://127.0.0.1:26280/metadata, --protocol=rdma, --device_names=rdma2, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
     - <<: *owner
       name: mc-owner-rdma3
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26055, --master_server_address=127.0.0.1:26351, --metadata_server=http://127.0.0.1:26380/metadata, --protocol=rdma, --device_names=rdma3, --global_segment_size=374735896576, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26055, --master_server_address=127.0.0.1:26351, --metadata_server=http://127.0.0.1:26380/metadata, --protocol=rdma, --device_names=rdma3, --global_segment_size=481036337152, --local_buffer_size=0, --threads=4]
   roles:
     prefill:
       env:
