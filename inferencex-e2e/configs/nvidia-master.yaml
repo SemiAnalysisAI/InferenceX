@@ -1380,7 +1380,7 @@ kimik3-fp4-h200-vllm-agentic-latency:
       # Latency-oriented: TP16 x DP2 with EP32 across four H200 nodes.
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [4]
+        conc-list: [8]
         num-nodes: 4
         srt-recipe: agg-tp16dp2ep32-latency.yaml
         power: true
