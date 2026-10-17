@@ -10081,4 +10081,4 @@
   description:
     - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
     - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4231
