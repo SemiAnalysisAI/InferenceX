@@ -631,6 +631,8 @@ def app_eval_identity(entry: dict, conc: int) -> tuple:
         entry.get(Fields.ISL.value),
         entry.get(Fields.OSL.value),
         conc,
+        # Throwaway: A/B arms differ only by recipe; keep one eval per arm.
+        entry.get("srt-recipe"),
     )
 
 
