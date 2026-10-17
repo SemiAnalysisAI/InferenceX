@@ -10061,3 +10061,9 @@
     - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
     - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-rocm700-mi35x to v0.5.22-rocm720-mi35x and rename cuda-graph-max-bs to its decode flag."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4229
