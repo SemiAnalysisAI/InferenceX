@@ -16,8 +16,9 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
-from .api import PUBLIC, ReadError, capacity_context, fetch_capacity, fetch_catalog
+from .api import PUBLIC, ReadError, fetch_capacity, fetch_catalog
 from .github import (
     VerificationError,
     download_json,
@@ -34,8 +35,11 @@ from .models import (
     normalized_image,
 )
 
+if TYPE_CHECKING:
+    from infx.clusters import RunnerInventory
+
 PRODUCERS = "producers.json"
-RETRY_NEXT_WAVE = frozenset({"capacity-deferred"})
+RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started"})
 
 
 def observation_key(row: dict) -> tuple:
@@ -59,15 +63,28 @@ def observation_key(row: dict) -> tuple:
     )
 
 
-def live_families(root: Path) -> dict[tuple, set[str]]:
-    """Resolve public identities from the canonical generator, excluding archives."""
+def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozenset[str]:
+    try:
+        return frozenset(
+            inventory.cluster_for(node).id
+            for runner in {entry["runner"] for entry in entries}
+            for node in inventory.labels.get(runner, [runner])
+        )
+    except ValueError:
+        return frozenset()
+
+
+def live_families(root: Path) -> dict[tuple, dict[str, frozenset[str]]]:
+    """Resolve public identities and target clusters from the canonical generator, excluding archives."""
+    from infx.clusters import load_inventory
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
     from infx.matrix.validation import load_config_files, load_runner_file
 
     root = project_root(root)
     runners = load_runner_file(str(root / "configs/runners.yaml"))
-    index: dict[tuple, set[str]] = {}
+    inventory = load_inventory(runners)
+    index: dict[tuple, dict[str, frozenset[str]]] = {}
     paths = sorted((root / "configs").glob("*-master.yaml"))
     if not paths:
         raise ReadError("live-configs-unavailable")
@@ -81,6 +98,10 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
                 )
             except ValueError:
                 print(f"::warning::Klaud live-family-unrenderable: {family}")
+                continue
+            clusters = target_clusters(entries, inventory)
+            if not clusters:
+                print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
                 continue
             for entry in entries:
                 agentic = entry.get("scenario-type") == "agentic-coding"
@@ -96,7 +117,7 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
                     "osl": None if agentic else entry["osl"],
                     "image": entry["image"],
                 }
-                index.setdefault(observation_key(row), set()).add(family)
+                index.setdefault(observation_key(row), {})[family] = clusters
     return index
 
 
@@ -104,7 +125,7 @@ def choose(
     items: list[dict],
     available: set[str],
     occupied: set[str],
-    families: dict[tuple, set[str]],
+    families: dict[tuple, dict[str, frozenset[str]]],
 ) -> list[dict]:
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
@@ -116,11 +137,6 @@ def choose(
         reverse=True,
     ):
         row = item["source"]
-        if not any(
-            cluster == row["hardware"] or cluster.startswith(row["hardware"] + "-")
-            for cluster in available
-        ):
-            continue
         legacy = identity(
             {
                 key: row[key]
@@ -135,7 +151,7 @@ def choose(
             }
         )[:16]
         image_key = identity(observation_key(row)[-1])[:16]
-        for family in sorted(families.get(observation_key(row), ())):
+        for family, clusters in sorted(families.get(observation_key(row), {}).items()):
             prefix = "klaud/auto-" + identity(family)[:16] + "-"
             branch = prefix + image_key
             claims = {
@@ -144,12 +160,13 @@ def choose(
                 f"klaud/auto-{legacy}-{image_key}",
                 f"klaud/auto-{legacy}-",
             }
-            if family in seen or claims & occupied:
+            if family in seen or claims & occupied or not clusters <= available:
                 continue
             selected.append(
                 {
                     "id": branch.removeprefix("klaud/auto-"),
                     "family": family,
+                    "clusters": sorted(clusters),
                     "source": row,
                     "branch": branch,
                 }
@@ -159,7 +176,13 @@ def choose(
     return selected
 
 
-def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str, str | None]:
+def weights_key(source: dict) -> tuple:
+    return (source.get("model"), source.get("precision"), source.get("hardware"))
+
+
+def recent_candidate_outcomes(
+    repository: str, cooldown_hours: int
+) -> tuple[dict[str, str | None], set[tuple]]:
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     try:
         runs = github_items(
@@ -169,7 +192,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
         )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return {}
+        return {}, set()
     dated = []
     for run in runs:
         try:
@@ -179,6 +202,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
         except (AttributeError, KeyError, TypeError, ValueError):
             continue
     result: dict[str, str | None] = {}
+    missing_weights: set[tuple] = set()
     for _, run_id in sorted(dated, reverse=True):
         try:
             artifacts = github_items(
@@ -186,6 +210,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
             )
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
             continue
+        blocked = set()
         for artifact in artifacts:
             try:
                 match = re.fullmatch(
@@ -196,17 +221,43 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> dict[str,
             except (AttributeError, KeyError, TypeError):
                 continue
             result[match[1]] = recorded_outcome(repository, artifact)
-    return result
+            if result[match[1]] == "weights-missing":
+                blocked.add(match[1])
+        if blocked:
+            missing_weights |= {
+                weights_key(candidate["source"])
+                for candidate in planned_candidates(repository, artifacts)
+                if candidate.get("id") in blocked
+            }
+    return result, missing_weights
+
+
+def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
+    plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
+    if not plan:
+        return []
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, plan, Path(scratch))
+            candidates = json.loads((Path(scratch) / "candidates.json").read_text())
+            return [
+                c for c in candidates if isinstance(c, dict) and isinstance(c.get("source"), dict)
+            ]
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            return []
 
 
 def recorded_outcome(repository: str, artifact: dict) -> str | None:
     with tempfile.TemporaryDirectory() as scratch:
         try:
             download_json(repository, artifact, Path(scratch))
-            outcome = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())[
-                "candidate-outcome"
-            ]
-            return CandidateOutcome.model_validate(outcome).outcome
+            diagnostics = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())
+            if diagnostics.get("action-outcome") == "skipped":
+                return "agent-not-started"
+            outcome = CandidateOutcome.model_validate(diagnostics["candidate-outcome"])
+            return (
+                outcome.reason_code if outcome.reason_code == "weights-missing" else outcome.outcome
+            )
         except (
             OSError,
             ValueError,
@@ -258,9 +309,7 @@ def plan(
         for pr in page
         if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
     )
-    capacity = capacity_context(policy)
-    available = set(capacity["eligible-clusters"])
-    candidates = choose(items, available, occupied, live_families(root))
+    candidates = choose(items, fetch_capacity(policy), occupied, live_families(root))
     blocked = {
         candidate.family
         for owner in claims.family_owners(repository)
@@ -270,9 +319,13 @@ def plan(
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    candidates = order_by_cooldown(
-        candidates, recent_candidate_outcomes(repository, cooldown_hours)
-    )
+    recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
+    candidates = [
+        candidate
+        for candidate in candidates
+        if weights_key(candidate["source"]) not in missing_weights
+    ]
+    candidates = order_by_cooldown(candidates, recent)
     candidates = candidates[:review_batch_size]
     contexts = [
         {
@@ -328,7 +381,6 @@ def plan(
         json.dumps(contexts, indent=2, allow_nan=False) + "\n"
     )
     (directory / "open-prs.json").write_text(json.dumps(open_prs, indent=2) + "\n")
-    (directory / "capacity.json").write_text(json.dumps(capacity) + "\n")
     if filename := os.environ.get("GITHUB_OUTPUT"):
         schema = PRReview.model_json_schema(by_alias=True)
         schema["properties"]["decisions"].update(minItems=len(contexts), maxItems=len(contexts))
@@ -662,6 +714,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             deferred = "capacity-unavailable"
     capacity_deferred = []
     baseline_deferred = []
+    baseline_reasons: dict[str, str] = {}
     baseline_mismatches = []
     preflights = {}
     families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
@@ -669,7 +722,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        if not set(decision.clusters) <= available:
+        if not set(candidate["clusters"]) <= available:
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(
@@ -700,16 +753,24 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 ),
                 baseline,
             )
-        except VerificationError:
+        except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = str(error)
             families.add(decision.family)
             continue
-        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, ReadError):
+        except subprocess.SubprocessError as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = type(error).__name__
+            families.add(decision.family)
+            continue
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = f"{type(error).__name__}: {str(error)[:300]}"
             families.add(decision.family)
             continue
         if missing:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = "baseline-point-mismatch"
             baseline_mismatches.append(
                 {
                     "id": candidate["id"],
@@ -759,6 +820,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 "deferred-reason": deferred,
                 "capacity-deferred-candidates": capacity_deferred,
                 "baseline-deferred-candidates": baseline_deferred,
+                "baseline-deferral-reasons": baseline_reasons,
                 "baseline-mismatch-candidates": baseline_mismatches,
                 **review.model_dump(by_alias=True),
             },
@@ -779,7 +841,13 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
         )
     if baseline_deferred:
-        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline."
+        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (
+            "; ".join(
+                f"{count}× {reason[:120]}"
+                for reason, count in Counter(baseline_reasons.values()).most_common()
+            )
+            + "."
+        )
     if baseline_mismatches:
         summary += (
             f" {len(baseline_mismatches)} of them have frozen baseline points"
@@ -851,16 +919,6 @@ def main() -> int:
         "--execution-file",
         type=Path,
         help="Claude execution log; retain numeric metrics and fixed denial categories",
-    )
-    capacity = commands.add_parser(
-        "check-capacity",
-        help="Exit 0 when running plus queued nodes are at most 200%% of schedulable nodes; otherwise nonzero, without printing scheduler data",
-    )
-    capacity.add_argument(
-        "--cluster",
-        required=True,
-        action="append",
-        help="Exact cluster name from runners.yaml without the cluster: prefix; repeat for every possible recipe target",
     )
     commands.add_parser(
         "check-stop",
@@ -1031,12 +1089,10 @@ def main() -> int:
         if args.command == "regenerate-producers":
             regenerate_producers(args.directory)
             return 0
-        if args.command == "select":
-            if not 1 <= args.max_candidates_per_run <= 256:
-                parser.error("--max-candidates-per-run must be between 1 and 256")
-            select(args.directory, args.max_candidates_per_run, args.execution_file)
-            return 0
-        return 0 if set(args.cluster) <= fetch_capacity(Policy()) else 1
+        if not 1 <= args.max_candidates_per_run <= 256:
+            parser.error("--max-candidates-per-run must be between 1 and 256")
+        select(args.directory, args.max_candidates_per_run, args.execution_file)
+        return 0
     except ReadError as error:
         if args.command == "plan":
             message = f"Klaud Cold preparation failed: {error}"
