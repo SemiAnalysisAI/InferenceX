@@ -2,6 +2,7 @@
 
 `h3.yaml` defines the MiniMax-H3 text-to-video-and-audio workload that SGLang and vLLM-Omni both run.
 `h3_spec.py` loads and validates it, then builds the plan object that the runner from PR #2916 executes and hashes.
+`h3-vllm-omni-serving.md` records the pinned vLLM-Omni image, server command, parallelism and attention backend that served this workload on 2x H100.
 
 ## What the YAML records
 
