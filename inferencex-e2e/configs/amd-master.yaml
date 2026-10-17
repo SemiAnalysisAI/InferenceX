@@ -519,7 +519,7 @@ qwen3.5-fp8-mi300x-sglang:
 # AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks
 # at c24; c32 records the post-knee throughput and latency cliff.
 qwen3.5-fp8-mi300x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.20-rocm720-mi30x@sha256:4abecde156b531809c7f597e501930ea2023deb2c822b69f92efb66f3fdada86
+  image: lmsysorg/sglang:v0.5.18-rocm720-mi30x@sha256:2a4b6896f2d69e5562545b5abaaf00e8d8dbb14da736fa2f5f5bd47ce00bfb0f
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi300x-amd
