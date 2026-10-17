@@ -1,0 +1,13 @@
+{
+ "arm": "H1",
+ "base_commit": "104c7c8086666385fbf3962911b55f68bf08a04a",
+ "builder_uv": "uv 0.12.5 (x86_64-unknown-linux-gnu)",
+ "built_with": "agentx-harness tools/build_agentx_release.py --tag agentx-v1.0.11",
+ "evidence": "lp_fxi_cpu_kvcache evidence/x1l/harness/build.json",
+ "harness_commit": "7f5f243ad974b7d2dfbef2fffcc3991af6354af0",
+ "harness_tree": "f44ab386d20aa7aafe29dd7e81ba9bec012f921e",
+ "patch": "agentx-harness PR #49 (head 5899651b) diff",
+ "patch_sha256": "29f02594f538a193573e091e975a4d794f70ee0770ed73864f223f9c3f3806e9",
+ "wheel_generator": "hatchling 1.32.4",
+ "wheel_sha256": "ed8e5fe8dca7035ca4fc1ff034f904ec9167beeb6deeee12b6c93daddf6376c6"
+}
