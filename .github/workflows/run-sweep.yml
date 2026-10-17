@@ -386,7 +386,7 @@ jobs:
             config: ${{ toJSON(matrix.config) }}
             pr-number: &pr-number ${{ github.event.pull_request.number }}
             # Only same-repository PRs owned by Klaud receive background priority.
-            klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
+            klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) && !contains(github.event.pull_request.labels.*.name, 'klaud-handoff') }}
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
@@ -802,7 +802,8 @@ jobs:
 
     upload-changelog-metadata:
         name: upload-changelog-metadata
-        needs: [setup, collect-results]
+        # collect-evals makes an eval-only rerun upload a manifest for the current run attempt.
+        needs: [setup, collect-results, collect-evals]
         if: ${{ always() && needs.setup.result == 'success' }}
         runs-on: ubuntu-latest
         steps:

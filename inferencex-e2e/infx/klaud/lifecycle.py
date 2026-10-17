@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import tempfile
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -28,10 +29,21 @@ SWEEP_LABELS = {
     "evals-only",
     "agentx-fast",
 }
+# Leaves the scheduler time to rerun what it preempted before recovery reruns it.
+RERUN_GRACE_SECONDS = 30 * 60
+# Recovery stops waiting for a preempted final sweep that stayed cancelled this long.
+RERUN_GIVE_UP_SECONDS = 24 * 60 * 60
+MAX_SWEEP_ATTEMPTS = 10
+# GitHub concludes a job stopped at its timeout-minutes as cancelled, with this annotation.
+TIMEOUT_ANNOTATION = "exceeded the maximum execution time"
 
 
 class PendingCleanup(VerificationError):  # noqa: N818
     """GitHub has accepted a transition but its child jobs are not terminal yet."""
+
+
+class AwaitingRerun(PendingCleanup):
+    """A preempted final sweep will run again; keep its PR, branch, claim and lease."""
 
 
 def terminal(run: dict) -> bool:
@@ -462,7 +474,48 @@ def current_session() -> Session:
     return Session(repository, parent, candidate)
 
 
-def reconcile(session: Session) -> bool:
+def hit_timeout(repository: str, job: dict) -> bool:
+    return bool(job.get("runner_name")) and any(
+        TIMEOUT_ANNOTATION in (annotation.get("message") or "")
+        for annotation in github.items(
+            repository, f"check-runs/{job['id']}/annotations?per_page=100"
+        )
+    )
+
+
+def preempted(repository: str, run: dict) -> bool:
+    """Cancelled by someone else: no job of its current attempt failed or hit its timeout."""
+    return run["conclusion"] == "cancelled" and not any(
+        job["conclusion"] in ("failure", "timed_out")
+        or (job["conclusion"] == "cancelled" and hit_timeout(repository, job))
+        for job in github.items(
+            repository,
+            f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
+            "jobs",
+        )
+    )
+
+
+def await_rerun(session: Session, pull: dict, run: dict, now: datetime) -> None:
+    """Keep a preempted final sweep's candidate alive until the sweep runs again."""
+    try:
+        if not preempted(session.repository, run):
+            return
+    except (OSError, subprocess.SubprocessError, VerificationError) as error:
+        raise AwaitingRerun("Preemption check unavailable; retrying next pass") from error
+    if now - utc(run["updated_at"]) < timedelta(seconds=RERUN_GRACE_SECONDS):
+        raise AwaitingRerun("Preempted final sweep is waiting for its rerun")
+    if run["run_attempt"] >= MAX_SWEEP_ATTEMPTS:
+        return
+    session.refresh(pull)
+    try:
+        github.write(session.repository, f"actions/runs/{run['id']}/rerun-failed-jobs", "POST")
+    except (OSError, subprocess.SubprocessError) as error:
+        raise AwaitingRerun("Rerun request failed; retrying next pass") from error
+    raise AwaitingRerun("Reran preempted final sweep")
+
+
+def reconcile(session: Session, now: datetime) -> bool:
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
     if pull and (pull["merged_at"] or session.handed_off(pull)):
@@ -491,15 +544,24 @@ def reconcile(session: Session) -> bool:
     ]
     if not pending and any(not terminal(run) for run in runs):
         raise PendingCleanup("Owned work is still running; retained for the next recovery pass")
-    validated = bool(
-        final
-        and terminal(max(final, key=lambda r: r["created_at"]))
-        and max(final, key=lambda r: r["created_at"])["conclusion"] == "success"
-    )
+    latest = max(final, key=lambda r: r["created_at"]) if final else None
+    if (
+        not pending
+        and latest
+        and pull["state"] == "open"
+        and latest["conclusion"] == "cancelled"
+        and now - utc(latest["updated_at"]) < timedelta(seconds=RERUN_GIVE_UP_SECONDS)
+    ):
+        await_rerun(session, pull, latest, now)
+    validated = bool(latest and terminal(latest) and latest["conclusion"] == "success")
     if validated and not pending:
         try:
-            session.validation(max(final, key=lambda r: r["created_at"]))
-        except VerificationError:
+            session.validation(latest)
+        except VerificationError as error:
+            print(
+                f"::warning::Klaud: final sweep of candidate {session.candidate.id} "
+                f"failed validation: {error}."
+            )
             validated = False
     outcome = pending or CandidateOutcome(
         outcome="validated" if validated else "unexpected-error",
@@ -564,7 +626,7 @@ def recover() -> None:
                     blocked.add(candidate.family)
                     live.add(candidate.id)
                     continue
-                changed = reconcile(session)
+                changed = reconcile(session, datetime.now(UTC))
                 claims.release_family(repository, candidate, parent["id"])
             except (
                 OSError,
@@ -574,6 +636,8 @@ def recover() -> None:
                 subprocess.SubprocessError,
             ) as error:
                 blocked.add(candidate.family)
+                if isinstance(error, AwaitingRerun):
+                    live.add(candidate.id)
                 reason = (
                     str(error)
                     if isinstance(error, VerificationError)

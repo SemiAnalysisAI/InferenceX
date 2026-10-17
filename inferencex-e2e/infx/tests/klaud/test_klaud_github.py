@@ -462,6 +462,181 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
     ]
 
 
+UNEXPECTED_ERROR = CandidateOutcome(
+    outcome="unexpected-error", phase="cleanup", pull_request=7, run_ids=[9], repairs_used=None,
+)
+
+
+def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelled", state="open",
+                        artifacts=()):
+    """Serve finished planner run 42 whose draft PR 7 has one final sweep, run 9, that ended
+    ``conclusion`` at attempt ``attempt`` on 2026-10-15 00:00 UTC with ``jobs`` (a
+    ``-timeout`` suffix marks a job GitHub stopped at its timeout); record GitHub writes,
+    finished outcomes and released family claims."""
+    candidate = OwnedCandidate(id=f"{identity(FAMILY)[:16]}-{'2' * 16}", family=FAMILY,
+                               base="a" * 40)
+    branch = f"klaud/auto-{candidate.id}"
+    parent = {"id": 42, "head_branch": "main", "path": ".github/workflows/klaud-plan.yml",
+              "event": "schedule", "status": "completed", "conclusion": "success",
+              "run_attempt": 1, "created_at": "2026-10-14T00:00:00Z",
+              "updated_at": "2026-10-14T06:00:00Z"}
+    pull = {"number": 7, "state": state, "draft": True, "merged_at": None,
+            "user": {"login": "Klaud-Cold"}, "created_at": "2026-10-14T01:00:00Z",
+            "labels": [{"name": "full-sweep-fail-fast"}],
+            "head": {"ref": branch, "sha": "c" * 40, "repo": {"full_name": "example/project"}}}
+    sweep = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": attempt,
+             "status": "completed", "conclusion": conclusion, "actor": {"login": "Klaud-Cold"},
+             "created_at": "2026-10-14T02:00:00Z", "updated_at": "2026-10-15T00:00:00Z",
+             "head_repository": {"full_name": "example/project"}, "pull_requests": [{"number": 7}]}
+    attempt_jobs = [
+        {"id": 100 + index, "conclusion": job.removesuffix("-timeout"), "runner_name": "gpu-0"}
+        for index, job in enumerate(jobs)
+    ]
+    listings = {
+        f"actions/runs/9/attempts/{attempt}/jobs?per_page=100": attempt_jobs,
+        **{
+            f"check-runs/{100 + index}/annotations?per_page=100": [{"message": (
+                "The job has exceeded the maximum execution time of 8h20m0s"
+                if job.endswith("-timeout") else "The operation was canceled."
+            )}]
+            for index, job in enumerate(jobs)
+        },
+        "actions/runs/9/artifacts?per_page=100": list(artifacts),
+        "pulls?state=open&per_page=100": [pull],
+        "pulls/7/commits?per_page=100": [{"committer": {"login": "github-actions[bot]"}}],
+        "git/matching-refs/heads/klaud/recovery-": [
+            {"ref": f"refs/heads/klaud/recovery-42-{candidate.id}"}],
+        "git/matching-refs/heads/klaud/auto-": [
+            {"ref": f"refs/heads/{branch}", "object": {"sha": "c" * 40}}],
+    }
+
+    def items(_repository, path, _key=None):
+        if path in listings:
+            return listings[path]
+        if path.startswith("pulls?state=all&"):
+            return [pull]
+        if path.startswith("actions/workflows/run-sweep.yml/runs?per_page=100&created="):
+            return [sweep]
+        if path.startswith(("issues/7/comments?", "actions/workflows/", "actions/artifacts?")):
+            return []
+        raise AssertionError(path)
+
+    reads = {"actions/runs/42": parent, "pulls/7": pull,
+             f"actions/runs/9/attempts/{attempt}": {"run_started_at": "2026-10-14T20:00:00Z"}}
+    world = SimpleNamespace(
+        session=lifecycle.Session("example/project", parent, candidate, recovering=True),
+        writes=[], finished=[], released=[],
+    )
+    monkeypatch.setattr(github, "items", items)
+    monkeypatch.setattr(github, "read", lambda _r, path: (
+        reads[path] if path in reads else pytest.fail(path)))
+    monkeypatch.setattr(github, "write", lambda _r, path, method, _payload=None: (
+        world.writes.append((method, path))))
+    monkeypatch.setattr(lifecycle.Session, "finish", lambda _session, outcome: (
+        world.finished.append(outcome)))
+    monkeypatch.setattr(claims, "family_owners", lambda _r: [
+        Ownership(run_id=42, candidates=[candidate])])
+    monkeypatch.setattr(claims, "recovery_lease", lambda *_: True)
+    monkeypatch.setattr(claims, "release_family", lambda _r, owned, run: (
+        world.released.append((owned.id, run))))
+    return world
+
+
+@pytest.mark.parametrize(("now", "attempt", "jobs", "state", "waiting", "rerun"), [
+    pytest.param("2026-10-15T00:29:59Z", 1, ["success", "cancelled"], "open",
+                 "Preempted final sweep is waiting for its rerun", False, id="within-grace"),
+    pytest.param("2026-10-15T00:30:00Z", 9, ["success", "cancelled"], "open",
+                 "Reran preempted final sweep", True, id="after-grace"),
+    pytest.param("2026-10-15T23:59:59Z", 1, ["success", "cancelled"], "open",
+                 "Reran preempted final sweep", True, id="before-give-up"),
+    pytest.param("2026-10-16T00:00:00Z", 1, ["success", "cancelled"], "open", None, False,
+                 id="give-up"),
+    pytest.param("2026-10-15T00:30:00Z", 10, ["success", "cancelled"], "open", None, False,
+                 id="attempt-cap"),
+    pytest.param("2026-10-15T00:29:59Z", 1, ["failure", "cancelled"], "open", None, False,
+                 id="failed-job"),
+    pytest.param("2026-10-15T00:30:00Z", 1, ["timed_out", "cancelled"], "open", None, False,
+                 id="timed-out-job"),
+    pytest.param("2026-10-15T00:30:00Z", 1, ["success", "cancelled-timeout"], "open", None,
+                 False, id="job-hit-its-timeout"),
+    pytest.param("2026-10-15T00:30:00Z", 1, ["success", "cancelled"], "closed", None, False,
+                 id="closed-pr"),
+])  # fmt: skip
+def test_recovery_holds_a_preempted_final_sweep_and_reruns_it_after_the_grace_period(
+    monkeypatch, now, attempt, jobs, state, waiting, rerun
+):
+    world = ended_session_sweep(monkeypatch, attempt=attempt, jobs=jobs, state=state)
+    at = lifecycle.utc(now)
+
+    if waiting:
+        with pytest.raises(lifecycle.AwaitingRerun, match=waiting):
+            lifecycle.reconcile(world.session, at)
+    else:
+        assert lifecycle.reconcile(world.session, at) is True
+    assert world.writes == ([("POST", "actions/runs/9/rerun-failed-jobs")] if rerun else [])
+    assert world.finished == ([] if waiting else [UNEXPECTED_ERROR])
+
+
+@pytest.mark.parametrize(("broken", "waiting"), [
+    ("items", "Preemption check unavailable; retrying next pass"),
+    ("write", "Rerun request failed; retrying next pass"),
+])  # fmt: skip
+def test_recovery_retries_a_preempted_final_sweep_after_github_errors(
+    monkeypatch, broken, waiting
+):
+    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
+    working = getattr(github, broken)
+
+    def flaky(repository, path, *args):
+        if path.startswith(("actions/runs/9/attempts/", "actions/runs/9/rerun-failed-jobs")):
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return working(repository, path, *args)
+
+    monkeypatch.setattr(github, broken, flaky)
+
+    with pytest.raises(lifecycle.AwaitingRerun, match=waiting):
+        lifecycle.reconcile(world.session, lifecycle.utc("2026-10-15T01:00:00Z"))
+    assert world.finished == []
+
+
+def test_recovery_keeps_the_pr_claim_and_lease_of_a_rerun_final_sweep(monkeypatch, tmp_path):
+    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
+    summary = tmp_path / "summary.md"
+    for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", "1000"),
+                        ("RUNNER_TEMP", str(tmp_path)), ("GITHUB_STEP_SUMMARY", str(summary))):
+        monkeypatch.setenv(name, value)
+
+    class Clock(lifecycle.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return lifecycle.utc("2026-10-15T01:00:00Z")
+
+    monkeypatch.setattr(lifecycle, "datetime", Clock)
+
+    lifecycle.recover()
+
+    assert world.writes == [("POST", "actions/runs/9/rerun-failed-jobs")]
+    assert world.finished == world.released == []
+    assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+    assert summary.read_text() == (
+        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted final "
+        "sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
+
+
+def test_recovery_warns_why_a_passed_final_sweep_failed_validation(monkeypatch, capsys):
+    world = ended_session_sweep(monkeypatch, attempt=2, conclusion="success", artifacts=[{
+        "id": 1, "name": "klaud-sweep-manifest", "expired": False,
+        "created_at": "2026-10-14T03:00:00Z", "workflow_run": {"id": 9, "head_sha": "c" * 40},
+    }])
+
+    assert lifecycle.reconcile(world.session, lifecycle.utc("2026-10-15T01:00:00Z")) is True
+    assert capsys.readouterr().out == (
+        f"::warning::Klaud: final sweep of candidate {world.session.candidate.id} failed "
+        "validation: Manifest belongs to an earlier run attempt.\n")
+    assert world.finished == [UNEXPECTED_ERROR]
+    assert world.writes == []
+
+
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
     first_id = "1" * 16 + "-" + "2" * 16
     second_id = "3" * 16 + "-" + "4" * 16

@@ -1024,7 +1024,7 @@ def main() -> int:
 
             session = current_session()
             try:
-                reconcile(session)
+                reconcile(session, datetime.now(UTC))
             except PendingCleanup:
                 pass
             else:
