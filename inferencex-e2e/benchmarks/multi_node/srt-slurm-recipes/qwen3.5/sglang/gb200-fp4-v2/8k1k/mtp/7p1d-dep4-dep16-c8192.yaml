@@ -57,6 +57,7 @@ roles:
       data-parallel-size: 4
       expert-parallel-size: 4
       enable-dp-attention: true
+      disable-prefill-cuda-graph: true
       enable-dp-lm-head: true
       mamba-radix-cache-strategy: no_buffer
       mamba-ssm-dtype: bfloat16
