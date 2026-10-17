@@ -9110,5 +9110,5 @@
 - config-keys: []
   workflow-dispatch: h3-video.yml
   description:
-    - "Add controlled video-only Wan serving and sealed failure artifacts, plus matching deployment frontier and quality sidecar projection. Preserve manual dispatch and H3 execution; select no ordinary LLM or eval jobs. GPU execution and quality qualification remain unverified."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+    - "Add controlled video-only Wan serving on SGLang and vLLM-Omni, a shared cited workload spec, and sealed failure artifacts, plus deployment frontier and quality sidecar projection. Preserve manual dispatch and H3 execution; select no ordinary LLM or eval jobs. One pinned H100 request completed; full workload and quality qualification remain unverified."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3733

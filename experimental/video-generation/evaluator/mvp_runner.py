@@ -5,10 +5,10 @@ or contact MiniMax's paid API. ``preview_plan`` is network-free; ``run_plan``
 submits real requests to the explicitly supplied endpoint. Local HTTP fixtures
 can exercise that transport, but are not evidence of H3 inference.
 
-Protocol implementations were inspected at SGLang 253020450290328e9deb307eece1e402fa17f35e
-and vLLM-Omni eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c. They are deliberately
-separate: SGLang accepts the H3 JSON contract, while vLLM-Omni expects multipart
-form fields. Those source pins do not attest to a supplied server's revision.
+``_TRANSPORTS`` lists the audited (model, runtime) pairs with the protocol
+sources inspected for each; every other pair is rejected. SGLang accepts a JSON
+body, vLLM-Omni expects multipart form fields. Those source pins do not attest
+to a supplied server's revision.
 """
 
 from __future__ import annotations
@@ -46,8 +46,8 @@ SOCKET_TIMEOUT_SECONDS = 30.0
 POLL_INTERVAL_SECONDS = 0.5
 _CHUNK_BYTES = 64 * 1024
 _EVENT_LOCK = threading.Lock()
-_PROTOCOL_SOURCES = {
-    "sglang": {
+_TRANSPORTS: dict[tuple[str, str], dict[str, Any]] = {
+    (MODEL_ID, "sglang"): {
         "repository": "https://github.com/sgl-project/sglang",
         "revision": "253020450290328e9deb307eece1e402fa17f35e",
         "files": [
@@ -55,13 +55,32 @@ _PROTOCOL_SOURCES = {
             "python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/minimax_h3/video_adapter.py",
         ],
     },
-    "vllm-omni": {
+    (MODEL_ID, "vllm-omni"): {
         "repository": "https://github.com/vllm-project/vllm-omni",
         "revision": "eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c",
         "files": [
             "vllm_omni/entrypoints/openai/api_server.py",
             "vllm_omni/entrypoints/openai/serving_video.py",
         ],
+    },
+    (WAN_MODEL_ID, "sglang"): {
+        "repository": "https://github.com/sgl-project/sglang",
+        "revision": "71de97b264b04dcd514cf904003028aefe9775c8",
+        "files": ["python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py",
+                  "python/sglang/multimodal_gen/configs/sample/wan.py"],
+    },
+    # vLLM-Omni v0.30.0: POST /v1/videos multipart fields (_parse_video_form, helpers.py:852-895) feed
+    # VideoGenerationRequest (protocol/videos.py:153-242), which accepts every Wan payload key; FastAPI drops
+    # the empty negative_prompt field and pipeline_wan2_2.py encodes "" for it. api_server.py serves the
+    # GET /v1/videos/{id} poll and /content download.
+    (WAN_MODEL_ID, "vllm-omni"): {
+        "repository": "https://github.com/vllm-project/vllm-omni",
+        "revision": "a8576ccb725c4e21cd13c3eb5f9a546b21149d2b",
+        "files": ["vllm_omni/entrypoints/openai/api_server.py",
+                  "vllm_omni/entrypoints/openai/protocol/videos.py",
+                  "vllm_omni/entrypoints/openai/video/generation/helpers.py",
+                  "vllm_omni/entrypoints/openai/serving_video.py",
+                  "vllm_omni/diffusion/models/wan2_2/pipeline_wan2_2.py"],
     },
 }
 
@@ -149,11 +168,13 @@ def _validate_wan_generation(generation: dict[str, Any]) -> None:
         raise ValueError("generation.negative_prompt must be an explicit string of at most 32000 characters")
 
 
-def _validate_runtime(plan: dict[str, Any], runtime: str) -> None:
+def _transport(plan: dict[str, Any], runtime: str) -> dict[str, Any]:
     if runtime not in RUNTIMES:
         raise ValueError("runtime must be sglang or vllm-omni")
-    if plan["model_id"] == WAN_MODEL_ID and runtime != "sglang":
-        raise ValueError("Wan currently supports only the audited SGLang transport")
+    transport = _TRANSPORTS.get((plan["model_id"], runtime))
+    if transport is None:
+        raise ValueError(f"{plan['model_id']} on {runtime} is not an audited transport")
+    return transport
 
 
 def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
@@ -225,7 +246,7 @@ def _slots(plan: dict[str, Any]) -> list[dict[str, Any]]:
 def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
     generation = plan["generation"]
     if plan["model_id"] == WAN_MODEL_ID:
-        _validate_runtime(plan, runtime)
+        _transport(plan, runtime)
         return {"model": plan["model_id"], "prompt": slot["prompt"], "seed": slot["seed"],
                 **{key: value for key, value in generation.items() if key != "frame_count"},
                 "num_frames": generation["frame_count"]}
@@ -258,7 +279,7 @@ def preview_plan(plan: dict[str, Any], *, runtime: str = "sglang") -> dict[str, 
     if runtime not in RUNTIMES:
         raise ValueError("runtime must be sglang or vllm-omni")
     frozen = validate_plan(plan)
-    _validate_runtime(frozen, runtime)
+    _transport(frozen, runtime)
     return {
         "evidence_kind": "request_preview_no_generation", "plan_id": frozen["plan_id"],
         "plan_sha256": _digest(frozen), "runtime": runtime,
@@ -545,7 +566,7 @@ def run_plan(
     """
     frozen = validate_plan(plan)
     serving = serving_settings(serving_concurrency, delivery_deadline_seconds)
-    _validate_runtime(frozen, runtime)
+    transport = _transport(frozen, runtime)
     for field, value in (("runtime_revision", runtime_revision), ("hardware_label", hardware_label), ("model_revision", model_revision)):
         _text(value, field)
     if not re.fullmatch(r"[a-fA-F0-9]{40}", runtime_revision):
@@ -590,7 +611,7 @@ def run_plan(
         "hardware_label": hardware_label, "model_id": frozen["model_id"],
         "model_revision": model_revision, "endpoint": safe_endpoint,
         "identity_verification": "operator_declared", "plan_sha256": plan_sha256,
-        "protocol_source": _PROTOCOL_SOURCES[runtime],
+        "protocol_source": transport,
         "client_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "media_evaluator": media_evaluator,
         "server_identity_caveat": "Model weights, runtime revision, hardware and server launch flags are not remotely verified.",
@@ -613,12 +634,6 @@ def run_plan(
         },
     }
     if frozen["model_id"] == WAN_MODEL_ID:
-        configuration["protocol_source"] = {
-            "repository": "https://github.com/sgl-project/sglang",
-            "revision": "71de97b264b04dcd514cf904003028aefe9775c8",
-            "files": ["python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py",
-                      "python/sglang/multimodal_gen/configs/sample/wan.py"],
-        }
         configuration["capabilities"] = {"audio_generation": "unsupported", "quality_qualification": "unsupported"}
     if serving:
         from . import mvp_serving

@@ -41,7 +41,6 @@ concurrency:
 jobs:
   test:
     name: H3 CPU harness and workflow checks
-    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -58,6 +57,7 @@ jobs:
           check_env_vars PYTHONPATH
           uv run --no-project --python 3.12 \
           --with 'av==16.1.0' --with 'numpy==2.3.5' \
+          --with 'pyyaml==6.0.3' \
           --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
           --with 'rfc3339-validator==0.1.4' python -m pytest -q
       - name: Check entry shell syntax
@@ -77,7 +77,6 @@ jobs:
 
   staged-power-python310:
     name: H3 staged power on Python 3.10
-    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

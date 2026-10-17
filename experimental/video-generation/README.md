@@ -4,9 +4,10 @@
 
 ## Wan2.2 local runner integration
 
-The client and supervised `serving-smoke` path also accept
-`Wan-AI/Wan2.2-T2V-A14B-Diffusers`. This increment has CPU acceptance only;
-model execution, hardware fit, performance and quality remain unmeasured.
+The client and supervised `serving-smoke` path accept
+`Wan-AI/Wan2.2-T2V-A14B-Diffusers` on SGLang and vLLM-Omni. A pinned eight-H100
+vLLM-Omni server completed one Wan request. The full workload, matched performance,
+quality, and production delivery remain unverified.
 
 The [Wan plan](mvp/wan22-serving.plan.json) freezes checkpoint
 `5be7df9619b54f4e2667b2755bc6a756675b5cd7`, four video-only prompts, one warmup,
@@ -16,6 +17,10 @@ not a matched H3 comparison or the upstream default negative prompt. The protoco
 was inspected at SGLang `71de97b264b04dcd514cf904003028aefe9775c8`. That runtime
 ignores per-request Wan flow-shift overrides, so only 12 is admitted; high-stage
 guidance must exceed 1 for the runtime to apply both expert guidance values.
+The [shared Wan spec](specs/wan.yaml) retains that four-case plan as `frozen-3733`
+and defines `shared-v1` with two seeds per prompt. The [serving note](specs/wan-vllm-omni-serving.md)
+records the pinned vLLM-Omni setup and single-request evidence. The spec loader
+is shared with H3 and keeps the plan hash separate from source citations.
 
 Preview requests without a server or GPU, from `experimental/video-generation`:
 
@@ -35,7 +40,8 @@ DiT/text-encoder/VAE offload booleans and layerwise offload disabled. The launch
 disables runtime warmup, CFG parallelism and Ring, and uses a job-owned persistent
 output directory so the polled `/v1/videos/{id}/content` route can deliver the MP4.
 The harness records its own warmup. H3-only launch flags/timing patches, AMD,
-vLLM-Omni transport and paired quality qualification are rejected for Wan here.
+and paired quality qualification are rejected for this Wan launcher. The runner
+also accepts an operator-managed vLLM-Omni endpoint using the audited multipart transport.
 The policy records only an uncalibrated identity; it contains no audio thresholds.
 
 Media validation requires exact geometry, cadence, frame count and no audio stream.
@@ -53,9 +59,10 @@ GPU identity; invalid plans cannot establish those counts. The paired H3
 `result.json` exporter is not used for Wan. The app accepts the canonical Diffusers
 ID and the earlier short display ID, and rejects conflicting model declarations.
 
-CPU checks cover HTTP transport with encoded fixtures, full video-only decoding,
-launch previews, failure seals and dashboard parsing. Real Wan execution and hosted
-CI remain separate acceptance steps. Fixtures are never included as measured results.
+CPU checks cover both HTTP transports with encoded fixtures, full video-only
+decoding, launch previews, failure seals and dashboard parsing. The retained H100
+record proves one request completed; it does not qualify the shared workload or a
+production path. Fixtures are never included as measured results.
 
 ## Existing H3 lane
 

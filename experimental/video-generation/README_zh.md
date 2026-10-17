@@ -4,9 +4,9 @@
 
 ## Wan2.2 本地 runner 接入
 
-现有 client 和受控 `serving-smoke` 路径新增支持
-`Wan-AI/Wan2.2-T2V-A14B-Diffusers`。本阶段仅完成 CPU 验证；尚无实际模型运行、
-显存适配、性能或质量测量。
+现有 client 和受控 `serving-smoke` 路径支持在 SGLang 和 vLLM-Omni 上运行
+`Wan-AI/Wan2.2-T2V-A14B-Diffusers`。一台固定版本的八卡 H100 vLLM-Omni
+服务完成了一次 Wan 请求。完整工作负载、匹配的性能对比、质量及生产交付仍未验证。
 
 [Wan plan](mvp/wan22-serving.plan.json) 固定 checkpoint
 `5be7df9619b54f4e2667b2755bc6a756675b5cd7`，四条纯视频提示词、一次独立 warmup，
@@ -15,6 +15,10 @@
 默认 negative prompt。协议按 SGLang `71de97b264b04dcd514cf904003028aefe9775c8`
 核对。该版本忽略请求级 Wan flow-shift 覆盖，因此仅接受 12；第一阶段 guidance 必须
 大于 1，运行时才会应用两个 expert 的 guidance 值。
+[共享 Wan spec](specs/wan.yaml) 用 `frozen-3733` 保留原来的四个 case，并在
+`shared-v1` 中为每条提示词加入第二个 seed。[服务记录](specs/wan-vllm-omni-serving.md)
+保留固定版本的 vLLM-Omni 配置和单次请求证据。spec loader 与 H3 共用，plan hash
+不包含来源引用。
 
 在 `experimental/video-generation` 下无 GPU、无服务地预览请求：
 
@@ -31,8 +35,9 @@ python -m evaluator.cli run mvp/wan22-serving.plan.json --runtime sglang
 初始支持 NVIDIA、TP1、1/2/4/8 卡纯 Ulysses，显式设置 DiT/text-encoder/VAE
 offload，禁用 layerwise offload。launcher 关闭运行时 warmup、CFG 并行和 Ring，
 使用本次任务拥有的持久输出目录，确保轮询后的 `/v1/videos/{id}/content` 能下载 MP4。
-harness 单独记录 warmup。本阶段 Wan 拒绝 H3 专用启动参数/计时补丁、AMD、
-vLLM-Omni transport 和配对质量准入。policy 仅记录未校准身份，不含音频阈值。
+harness 单独记录 warmup。该 Wan launcher 拒绝 H3 专用启动参数/计时补丁、AMD
+及配对质量准入。runner 也可通过已核对的 multipart 协议连接由操作员管理的
+vLLM-Omni 服务。policy 仅记录未校准身份，不含音频阈值。
 
 媒体验证要求分辨率、时间间隔、帧数符合计划，且无音频流。音频生成和质量准入为
 unsupported，不生成音频或 A/V 分数。Dashboard 缺失质量及质量/SLO goodput 仍为 null。
@@ -45,8 +50,9 @@ unsupported，不生成音频或 A/V 分数。Dashboard 缺失质量及质量/SL
 不填造 GPU 身份；无效 plan 无法确定这些数量。Wan 不使用 H3 配对 `result.json` exporter。
 App 接受规范 Diffusers ID 与此前短显示 ID，并拒绝冲突的模型声明。
 
-CPU 检查覆盖编码 fixture 的 HTTP transport、纯视频完整解码、启动预览、失败封存及
-Dashboard 解析。真实 Wan 运行和 hosted CI 仍是独立验收步骤，fixture 不进入实测结果。
+CPU 检查覆盖两种使用编码 fixture 的 HTTP transport、纯视频完整解码、启动预览、
+失败封存及 Dashboard 解析。保留的 H100 记录只证明一次请求已完成，不能代表共享
+工作负载或生产路径通过验收。fixture 不进入实测结果。
 
 ## 既有 H3 路径
 
