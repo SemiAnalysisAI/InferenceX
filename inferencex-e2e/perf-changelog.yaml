@@ -10283,4 +10283,5 @@
   - musespark-fp4-h100-sglang-agentic-dflash
   description:
   - Reject loopback control-plane addresses in the shared srt-slurm resolver; recover the local network interface when Slurm lookup fails and fail when no routable address remains.
+  - Align four inherited AgentX recipe DRAM declarations with current runner budgets, resizing the H100 STP HiCache pools and MiniMax Mooncake segments while retaining the MTP serving cache.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4250
