@@ -18,12 +18,12 @@ if ldd "$plugin" | grep -qE "lib(fabric|hwloc)[^ ]* => not found"; then
     echo "fa6dff8593d866866c13cb4640d9059835cd4efa427971f100ab40c97bef2841  $tmp/efa.tar.gz" | sha256sum -c - >/dev/null
     tar -xzf "$tmp/efa.tar.gz" -C "$tmp" aws-efa-installer/DEBS/UBUNTU2404/x86_64
     debs=$tmp/aws-efa-installer/DEBS/UBUNTU2404/x86_64
-    dpkg -i --force-overwrite \
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends udev libhwloc15
+    dpkg --auto-deconfigure -i --force-overwrite \
         "$debs"/rdma-core/libibverbs1_*.deb "$debs"/rdma-core/ibverbs-providers_*.deb \
         "$debs"/rdma-core/libibumad3_*.deb "$debs"/rdma-core/librdmacm1_*.deb \
         "$debs"/rdma-core/rdma-core_*.deb "$debs"/libfabric1-aws_*.deb "$debs"/libfabric-aws-bin_*.deb
-    apt-get update -qq
-    apt-get install -y -qq --no-install-recommends libhwloc15
     for lib in /opt/amazon/efa/lib/libfabric.so.1*; do
         ln -sf "$lib" "/usr/lib/x86_64-linux-gnu/$(basename "$lib")"
     done
