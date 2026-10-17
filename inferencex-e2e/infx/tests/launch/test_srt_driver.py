@@ -97,6 +97,16 @@ def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str
     return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner, **overrides}
 
 
+def set_cpu_power_exporter(config: Path, cluster_id: str, exporter: dict | None) -> None:
+    """Give ``cluster_id``'s srt-slurm record the CPU power exporter ``exporter``, or none."""
+    records = yaml.safe_load(config.read_text())
+    srt = records["clusters"][cluster_id]["slurm"]["srt-slurm"]
+    srt.pop("cpu-power-exporter", None)
+    if exporter is not None:
+        srt["cpu-power-exporter"] = exporter
+    config.write_text(yaml.safe_dump(records))
+
+
 def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides: str) -> dict[str, str]:
     """Environment of a multi-node point whose recipe lives in the workspace mirror.
 
@@ -193,10 +203,13 @@ def test_single_node_point_stages_workflow_artifacts(harness):
 
 
 @pytest.mark.parametrize("require_power", ["0", "1"])
-@pytest.mark.parametrize(("cluster_id", "kind", "port"), [
-    ("mi355x-amds", "custom", 19500), ("h100-cw", "dcgm", 9401),
+@pytest.mark.parametrize(("cluster_id", "kind", "port", "cpu_exporter"), [
+    ("mi355x-amds", "custom", 19500, {"port": 9411, "source": "rapl"}), ("h100-cw", "dcgm", 9401, None),
 ])  # fmt: skip
-def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
+def test_single_node_native_power_is_bound_and_retained(
+    harness, require_power, cluster_id, kind, port, cpu_exporter
+):
+    set_cpu_power_exporter(harness.config, cluster_id, cpu_exporter)
     env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power)
     assert_ok(launch(env, harness.config, harness.workspace))
 
@@ -208,6 +221,9 @@ def test_single_node_native_power_is_bound_and_retained(harness, require_power, 
     rendered = srtslurm(workspace)
     ClusterConfig.Schema().load(rendered)
     variant = yaml.safe_load(selected.read_text())
+    # The checked-in srtctl rejects source rapl and inherits no GPU exporter beside a CPU
+    # exporter; the launch applies patches/603-rapl-cpu-power-source.patch, which fixes both.
+    assert variant["telemetry"].pop("cpu_power_exporter", None) == cpu_exporter
     sets = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"]
     apply_overrides_to_recipe(variant, parse_overrides(sets, []))
     resolved = resolve_config_with_defaults(variant, rendered)
@@ -463,6 +479,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
         "#!/bin/bash\nprintf '%s\\n' \"$*\" >> \"$FAKE_LOG_DIR/adapter.log\"\n"
     )
     adapter.chmod(0o755)
+    set_cpu_power_exporter(harness.config, "h200-dgxc", {"source": "acpi"})
     env = lane_env(
         harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
         MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
@@ -486,6 +503,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
     assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
     assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
+    assert bound["telemetry"]["cpu_power_exporter"] == {"port": 9405, "source": "acpi"}
 
     runs = lines(harness.logs, "adapter")
     assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]

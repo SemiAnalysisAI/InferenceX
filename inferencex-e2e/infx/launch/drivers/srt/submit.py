@@ -71,6 +71,7 @@ def bind_point(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
         f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
+        *_cpu_power_exporter(run),
     ]  # fmt: skip
     return _bind(run, prepare, checkout.root)
 
@@ -98,7 +99,7 @@ def bind_recipe(
         bind += ["--power-port", str(power_port)]
     for name, value in client_env.items():
         bind += ["--client-env", f"{name}={value}"]
-    bind += _fabric(run)
+    bind += _fabric(run) + _cpu_power_exporter(run)
     return _bind(run, bind, checkout.root)
 
 
@@ -130,6 +131,12 @@ def _bind(run: SrtRun, argv: list[str], cwd: Path) -> int:
 def _fabric(run: SrtRun) -> list[str]:
     """The binder argument that resolves recipe ``'@fabric.<name>'`` values on this cluster."""
     return ["--fabric", json.dumps(run.srt.fabric.rendered())]
+
+
+def _cpu_power_exporter(run: SrtRun) -> list[str]:
+    """The cluster's CPU power exporter; the binder adds it only where the point has telemetry."""
+    exporter = run.srt.cpu_power_exporter
+    return [] if exporter is None else ["--cpu-power-exporter", exporter.model_dump_json()]
 
 
 def apply(

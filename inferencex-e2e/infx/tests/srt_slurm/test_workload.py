@@ -94,6 +94,8 @@ def test_bundles_take_the_shared_block_under_base_and_keep_their_variants(projec
     ({"base": {}, "override_c": {"benchmark": {"concurrencies": [4]}}}, False, False,
      "override_c.benchmark.concurrencies (= [4])"),
     ({"telemetry": {"enabled": True}}, False, True, "telemetry.enabled (= True)"),
+    ({"telemetry": {"cpu_power_exporter": {"port": 1}}}, False, False,
+     "telemetry.cpu_power_exporter (= {'port': 1})"),
     ({"benchmark": {"env": {"HF_HUB_CACHE": "/elsewhere"}}}, True, True,
      "benchmark.env.HF_HUB_CACHE (= '/elsewhere')"),
     ({"base": {"benchmark": {"env": {"RESULT_DIR": "/logs"}}}}, True, False,
@@ -172,6 +174,32 @@ def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(
     assert "concurrencies" not in bind_workload(unpowered, AGENTX_ENV, agentic=True, multinode=True)[
         "benchmark"
     ]
+
+
+CPU_EXPORTER = {"port": 9405, "source": "rapl"}
+
+
+@pytest.mark.parametrize(("multinode", "power", "telemetry"), [
+    (False, {"native_power": True}, {"enabled": True, "cpu_power_exporter": CPU_EXPORTER}),
+    (True, {"power_port": 19401}, {
+        "enabled": True, "required": True, "cpu_power_exporter": CPU_EXPORTER,
+        "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 19401},
+    }),
+    (False, {}, None),
+])  # fmt: skip
+def test_the_cpu_exporter_joins_a_points_telemetry_and_adds_none_itself(
+    project, multinode, power, telemetry
+):
+    native = project / "configs/srt-recipes/telemetry-native.yaml"
+    native.write_text(yaml.safe_dump({"telemetry": {"enabled": True}}))
+    path = fragment(project, {"name": "plain"})
+
+    composed = compose_recipe(
+        path, agentic=False, multinode=multinode, root=project, cpu_power_exporter=CPU_EXPORTER,
+        **power,
+    )  # fmt: skip
+
+    assert composed.get("telemetry") == telemetry
 
 
 @pytest.mark.parametrize(("environment", "message"), [
