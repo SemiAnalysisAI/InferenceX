@@ -1,5 +1,3 @@
-"""Local failure artifacts and CI routing; no scheduler or model calls."""
-
 import sys
 
 import pytest
