@@ -1,0 +1,350 @@
+base:
+  schema: 2
+  name: dsv41flash-fp4-b300-sglang-agentic
+  identity:
+    model:
+      revision: dba1be0a40aa45a94ad051997016db3960a90277
+    container: {}
+    frameworks:
+      sglang: 0.0.0.dev1+g684fea8af
+      sglang-router: 0.3.2
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        # Overlap checkpoint reads with weight loading from local NVMe.
+        weight-loader-prefetch-checkpoints: true
+        chunked-prefill-size: 16384
+        # Keep active decode requests progressing while long prefixes are queued.
+        prefill-decode-interval: 16
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        # Capture decode graphs up to batch 64.
+        cuda-graph-max-bs-decode: 64
+        reasoning-parser: auto
+        tool-call-parser: auto
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+        tokenizer-backend: fastokens
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        # Row-sharded host Engram tables free HBM for the 1M-context working set.
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        cuda-graph-max-bs-decode: 1
+        expert-parallel-size: 1
+        max-running-requests: 1
+        mem-fraction-static: 0.7
+        schedule-policy: lpm
+        swa-prefix-tails: 128
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        expert-parallel-size: 1
+        max-running-requests: 8
+        mem-fraction-static: 0.7
+        prefill-decode-interval: 192
+        swa-prefix-tails: 256
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        cuda-graph-backend-prefill: disabled
+        dsv4-attn-backend: trtllm
+        expert-parallel-size: 1
+        max-running-requests: 16
+        mem-fraction-static: 0.7
+        prefill-decode-interval: 192
+        swa-prefix-tails: 512
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '8'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        cuda-graph-backend-prefill: breakable
+        enable-decoder-swa-bounded-replay: true
+        expert-parallel-size: 1
+        max-running-requests: 32
+        mem-fraction-static: 0.7
+        prefill-decode-interval: 128
+        swa-prefix-tails: 512
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c20:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        cuda-graph-backend-prefill: disabled
+        dsv4-attn-backend: trtllm
+        expert-parallel-size: 1
+        max-running-requests: 40
+        mem-fraction-static: 0.7
+        prefill-decode-interval: 96
+        swa-prefix-tails: 512
+        tensor-parallel-size: 4
+  benchmark:
+    env:
+      CONC: '20'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        expert-parallel-size: 1
+        mem-fraction-static: 0.7
+        tensor-parallel-size: 2
+        max-running-requests: 32
+        prefill-decode-interval: 96
+        swa-prefix-tails: 1024
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: breakable
+        schedule-policy: shortest-prefill-first
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        expert-parallel-size: 1
+        max-running-requests: 64
+        mem-fraction-static: 0.85
+        prefill-decode-interval: 96
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 2048
+        tensor-parallel-size: 2
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c48:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        cuda-graph-backend-prefill: disabled
+        dsv4-attn-backend: trtllm
+        expert-parallel-size: 1
+        max-running-requests: 64
+        mem-fraction-static: 0.8
+        prefill-decode-interval: 64
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 3072
+        tensor-parallel-size: 2
+  benchmark:
+    env:
+      CONC: '48'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_dep2_c64:
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 2
+      args:
+        chunked-prefill-size: 32768
+        cuda-graph-max-bs-decode: 96
+        data-parallel-size: 2
+        disable-prefill-cuda-graph: true
+        dsv4-attn-backend: trtllm
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        enable-hierarchical-cache: true
+        expert-parallel-size: 2
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 4
+        hicache-write-policy: write_back
+        load-balance-method: total_requests
+        max-running-requests: 192
+        mem-fraction-static: 0.82
+        moe-a2a-backend: megamoe
+        moe-runner-backend: flashinfer_mxfp4
+        prefill-decode-interval: 48
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 3072
+        tensor-parallel-size: 2
+        tokenizer-worker-num: 8
+      env:
+        SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '16384'
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dep2_c256:
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 2
+      args:
+        chunked-prefill-size: 32768
+        cuda-graph-max-bs-decode: 128
+        data-parallel-size: 2
+        disable-prefill-cuda-graph: true
+        dsv4-attn-backend: trtllm
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        enable-hierarchical-cache: true
+        expert-parallel-size: 2
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 4
+        hicache-write-policy: write_back
+        load-balance-method: total_requests
+        max-running-requests: 256
+        mem-fraction-static: 0.82
+        moe-a2a-backend: megamoe
+        moe-runner-backend: flashinfer_mxfp4
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 3072
+        tensor-parallel-size: 2
+        tokenizer-worker-num: 8
+      env:
+        SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '16384'
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: '256'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+
+override_dep4_c256:
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    args:
+      policy: consistent_hashing
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        chunked-prefill-size: 65536
+        data-parallel-size: 4
+        disable-prefill-cuda-graph: true
+        dsv4-attn-backend: trtllm
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        enable-hierarchical-cache: true
+        expert-parallel-size: 4
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 2
+        hicache-write-policy: write_back
+        load-balance-method: total_requests
+        max-running-requests: 256
+        mem-fraction-static: 0.8
+        moe-a2a-backend: megamoe
+        moe-runner-backend: flashinfer_mxfp4
+        prefill-decode-interval: 32
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 3072
+        tensor-parallel-size: 4
+        tokenizer-worker-num: 8
+      env:
+        SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: '1'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '16384'
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: '256'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'

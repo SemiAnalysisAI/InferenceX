@@ -1,0 +1,255 @@
+base:
+  schema: 2
+  name: dsv41flash-fp4-mi355x-vllm-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # The engine may take the full VLLM_ENGINE_READY_TIMEOUT_S to become ready.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        language-model-only: true
+        tokenizer-mode: deepseek_v41
+        tool-call-parser: deepseek_v41
+        enable-auto-tool-choice: true
+        reasoning-parser: deepseek_v41
+        # The plain name lets the CK a8w4 MoE kernel win vLLM's priority list;
+        # aiter_triton_mxfp4_bf16 would force the W4A16 Triton kernel.
+        moe-backend: aiter
+        gpu-memory-utilization: 0.9
+        # Enables vllm-project/vllm#58671's ROCm paged MXFP4 sparse-logits
+        # indexer kernel instead of the dense fp8 indexer path.
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        # Auto-resolution picks 64 (min across backends); force 128, which
+        # the indexer and SparseMLA actually prefer.
+        block-size: 128
+        # Five-token DSpark with probabilistic drafting. Throughput runs replace
+        # block rejection with the golden acceptance length. Adaptive
+        # verification trims requests on device, which the ROCm DeepSeek-V4
+        # indexer does not support.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        max-model-len: 1048576
+        # Mono decode kernels (vllm-project/vllm#60397, #61082): two persistent
+        # launches a layer on all 40 backbone layers for decode steps of up to
+        # 48 rows (c8 with five drafts); larger steps take the regular path.
+        monokernel: true
+        disable-uvicorn-access-log: true
+      env:
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        # INT4 quick all-reduce above its size threshold
+        # (vllm-project/recipes#1061).
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        AITER_TRITON_LOG_LEVEL: ERROR
+        VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
+        # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
+        # graphs keep FULL_AND_PIECEWISE capture working.
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+        OMP_NUM_THREADS: '1'
+        VLLM_USE_RUST_FRONTEND: '1'
+        PYTHONUNBUFFERED: '1'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One variant per point, concurrency 1 through 64 on both TP arms (c128 and
+# c192 excluded). Engram tables move to pinned host memory at TP2, where
+# resident tables leave too little KV. Graph capture covers 2x CONC x
+# (1 + 5 drafts). The prefill chunk is the upstream 16384 everywhere.
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":false}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp2_c2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '32'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+  benchmark:
+    env:
+      CONC: '64'

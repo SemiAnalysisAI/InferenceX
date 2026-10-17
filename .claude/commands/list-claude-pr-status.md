@@ -2,16 +2,16 @@
 description: List Claude-authored PRs that haven't failed (ready or still running) with their actual check state
 ---
 
-List open PRs authored by Claude (branches starting with `claude/`) that have **not** had any check fail. Show each PR's actual state (READY when all checks finished green, RUNNING when sweeps are still queued/in-progress) along with a per-status check breakdown, rendered as a markdown table.
+List open PRs authored by Claude (branches starting with `klaud/`, `klaud-cold/`, or the legacy `klaude/`) that have **not** had any check fail. Show each PR's actual state (READY when all checks finished green, RUNNING when sweeps are still queued/in-progress) along with a per-status check breakdown, rendered as a markdown table.
 
-## Step 1 — list candidate `claude/*` PRs
+## Step 1 — list candidate Klaud PRs
 
 `gh pr list --json statusCheckRollup` truncates each PR's rollup, so it can't be trusted for the per-check filter. Use it only to get the candidate numbers, then re-query each PR individually.
 
 ```bash
 gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
   --json number,title,headRefName \
-  --jq '.[] | select(.headRefName | startswith("claude/")) | "\(.number)\t\(.title)"' \
+  --jq '.[] | select(.headRefName | test("^(klaud|klaud-cold|klaude)/")) | "\(.number)\t\(.title)"' \
   > /tmp/claude_pr_candidates.tsv
 ```
 
@@ -64,6 +64,6 @@ Print the result directly as a markdown table. READY rows first, then RUNNING. E
                 {printf "| [#%s](https://github.com/SemiAnalysisAI/InferenceX/pull/%s) | %s | `%s` | %s |\n", $1, $1, $2, $3, $4}'
 ```
 
-If `/tmp/claude_pr_status.tsv` is empty, print: `_No claude/* PRs are currently READY or RUNNING — all open Claude PRs have failures or no sweep results._`
+If `/tmp/claude_pr_status.tsv` is empty, print: `_No Klaud PRs are currently READY or RUNNING — all open Claude PRs have failures or no sweep results._`
 
 Output the resulting markdown table to the user verbatim. This command is informational only. Do **not** auto-merge.

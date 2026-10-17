@@ -1,0 +1,57 @@
+base:
+  schema: 2
+  name: dsr1-fp4-mi355x-sglang-8k1k
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        chunked-prefill-size: 196608
+        mem-fraction-static: 0.8
+        disable-radix-cache: true
+        num-continuous-decode-steps: 4
+        max-prefill-tokens: 196608
+        cuda-graph-max-bs: 128
+        attention-backend: aiter
+        kv-cache-dtype: fp8_e4m3
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        served-model-name: amd/DeepSeek-R1-0528-MXFP4-Preview
+        enable-metrics: false
+      env:
+        SGLANG_USE_AITER: '1'
+        ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+zip_override_tp4_ep1:
+  roles:
+    agg:
+      args:
+        chunked-prefill-size: [196608, 196608, 196608, 196608, 32768]
+        max-prefill-tokens: [196608, 196608, 196608, 196608, 32768]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64']
+zip_override_tp8_ep1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        chunked-prefill-size: [196608, 196608, 196608, 196608, 32768]
+        max-prefill-tokens: [196608, 196608, 196608, 196608, 32768]
+        tensor-parallel-size: 8
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64']

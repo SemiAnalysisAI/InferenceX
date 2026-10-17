@@ -2,16 +2,16 @@
 description: Find Claude-authored PRs with all-green full-sweep validation and confirm before merging
 ---
 
-Find open PRs authored by Claude (branches starting with `claude/`) whose full-sweep validation has completed all-green, then prompt the user before merging.
+Find open PRs authored by Claude (branches starting with `klaud/`, `klaud-cold/`, or the legacy `klaude/`) whose full-sweep validation has completed all-green, then prompt the user before merging.
 
-## Step 1 — list candidate `claude/*` PRs
+## Step 1 — list candidate Klaud PRs
 
 `gh pr list --json statusCheckRollup` truncates each PR's rollup, so it can't be trusted for the per-check filter. Use it only to get the candidate numbers, then re-query each PR individually.
 
 ```bash
 gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
   --json number,title,headRefName \
-  --jq '.[] | select(.headRefName | startswith("claude/")) | .number' \
+  --jq '.[] | select(.headRefName | test("^(klaud|klaud-cold|klaude)/")) | .number' \
   > /tmp/claude_pr_candidates.txt
 ```
 

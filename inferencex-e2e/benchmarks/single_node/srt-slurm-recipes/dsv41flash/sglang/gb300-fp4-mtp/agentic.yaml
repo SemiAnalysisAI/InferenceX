@@ -1,0 +1,246 @@
+base:
+  schema: 2
+  name: dsv41flash-fp4-gb300-sglang-agentic
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        # Keep active decode requests progressing while long prefixes are queued.
+        prefill-decode-interval: 16
+        mem-fraction-static: 0.8
+        # DSpark is the checkpoint's bundled draft; the block size is its only knob.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        # Admission never exceeds the captured decode graph batch.
+        cuda-graph-max-bs-decode: 64
+        reasoning-parser: auto
+        tool-call-parser: auto
+        tokenizer-backend: fastokens
+        # Draft passes under long-context load outlast the 1800 s default watchdog.
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # AgentX measures thinking on, the regime of the golden acceptance curve.
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_DSPARK_OPT_MARKOV_W2_BF16: 'True'
+        # Fold DSpark draft sampling into the draft CUDA graph. AUTO leaves it eager
+        # for V4.1 TP shards, which left c1 decode launch-bound (~6 ms GPU idle per
+        # step in nsys at TP4 c1).
+        SGLANG_DSPARK_FOLDED_SAMPLING: '2'
+  # Cold weight loads from the shared HF cache plus graph capture outlast
+  # srt-slurm's 1800 s default, as they did the legacy one-hour deadline.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        <<: &tp2_bounded_replay
+          chunked-prefill-size: 16384
+          enable-decoder-swa-bounded-replay: true
+          cuda-graph-backend-prefill: disabled
+        prefill-decode-interval: 96
+        tokenizer-worker-num: 4
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+      env:
+        <<: &tp2_env
+          SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+          SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+          PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_NUMA_BIND_V2: '0'
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        <<: *tp2_bounded_replay
+        prefill-decode-interval: 48
+        tokenizer-worker-num: 4
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+      env: *tp2_env
+  benchmark:
+    env:
+      CONC: '32'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_dep2_c64:
+  frontend: &dep2_frontend
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 2
+      args:
+        <<: &dep2_args
+          tensor-parallel-size: 2
+          data-parallel-size: 2
+          expert-parallel-size: 2
+          enable-dp-attention: true
+          enable-dp-lm-head: true
+          enable-dp-attention-local-control-broadcast: true
+          load-balance-method: total_requests
+          moe-a2a-backend: megamoe
+          schedule-policy: shortest-prefill-first
+          tokenizer-worker-num: 4
+          chunked-prefill-size: 16384
+          swa-prefix-tails: 4096
+          enable-decoder-swa-bounded-replay: true
+        prefill-decode-interval: 24
+        max-running-requests: 128
+      env: &dep2_env
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_NUMA_BIND_V2: '0'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      <<: &dep2_client
+        AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+        AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+      CONC: '64'
+
+override_dep2_c128:
+  frontend: *dep2_frontend
+  roles:
+    agg:
+      gpus: 2
+      args:
+        <<: *dep2_args
+        prefill-decode-interval: 16
+        mem-fraction-static: 0.85
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+      env: *dep2_env
+  benchmark:
+    env:
+      <<: *dep2_client
+      CONC: '128'
+
+override_dep2_c160:
+  frontend: *dep2_frontend
+  roles:
+    agg:
+      gpus: 2
+      args:
+        <<: *dep2_args
+        prefill-decode-interval: 8
+        mem-fraction-static: 0.85
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        tokenizer-backend: huggingface
+      env: *dep2_env
+  benchmark:
+    env:
+      <<: *dep2_client
+      CONC: '160'
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
+        max-running-requests: 1
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 0
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: '4'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        chunked-prefill-size: 16384
+        prefill-decode-interval: 192
+        tokenizer-worker-num: 4
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NUMA_BIND_V2: '0'
+        SGLANG_RAGGED_VERIFY_MODE: static
+  benchmark:
+    env:
+      CONC: '16'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+

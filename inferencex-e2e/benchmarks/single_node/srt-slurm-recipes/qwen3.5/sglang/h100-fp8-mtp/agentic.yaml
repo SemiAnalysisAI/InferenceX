@@ -1,0 +1,62 @@
+base:
+  schema: 2
+  name: qwen3.5-fp8-h100-sglang-agentic-mtp
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 8
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: flashinfer
+        enable-flashinfer-allreduce-fusion: true
+        # 80 GB HBM3 keeps the static fraction at 0.75.
+        mem-fraction-static: 0.75
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        enable-metrics: true
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_ENABLE_SPEC_V2: '1'
+
+override_gpu_kv:
+  benchmark:
+    env:
+      KV_OFFLOADING: none
+override_hicache:
+  roles:
+    agg:
+      args:
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 108
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1607'

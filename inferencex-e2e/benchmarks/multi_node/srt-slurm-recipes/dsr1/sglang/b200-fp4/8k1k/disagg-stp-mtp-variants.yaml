@@ -1,0 +1,184 @@
+
+schema: 2
+base:
+  name: "b200-fp4-stp-8k1k"
+
+  dynamo:
+    # Use NATS for a recipe prior to Dynamo commit 39d2a68.
+    request_plane: "nats"
+    source:
+      pypi: 0.8.1
+
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: true
+    num_additional_frontends: 4
+
+  resources:
+    gpu_type: "b200"
+    gpus_per_node: 8
+
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+        PYTHONUNBUFFERED: "1"
+        DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+        SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+        MC_FORCE_MNNVL: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+      args:
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        trust-remote-code: true
+        quantization: "modelopt_fp4"
+
+        disaggregation-mode: "prefill"
+        disaggregation-transfer-backend: nixl
+
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        context-length: 9600
+        max-running-requests: 512
+        disable-cuda-graph: true
+
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+
+        attention-backend: "trtllm_mla"
+        kv-cache-dtype: "fp8_e4m3"
+
+        moe-runner-backend: "flashinfer_trtllm"
+        moe-dense-tp-size: 1
+        fp4-gemm-backend: "flashinfer_trtllm"
+
+        stream-interval: 30
+        watchdog-timeout: 1000000
+        enable-flashinfer-allreduce-fusion: true
+        disable-radix-cache: true
+
+    decode:
+      nodes: 1
+      workers: 1
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+        PYTHONUNBUFFERED: "1"
+        DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+        SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+        SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+        MC_FORCE_MNNVL: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: "1"
+      args:
+        served-model-name: "deepseek-ai/DeepSeek-R1"
+        trust-remote-code: true
+        quantization: "modelopt_fp4"
+
+        disaggregation-mode: "decode"
+        disaggregation-transfer-backend: nixl
+
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        context-length: 9600
+        max-running-requests: 512
+        cuda-graph-max-bs: 512
+
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 8
+
+        attention-backend: "trtllm_mla"
+        kv-cache-dtype: "fp8_e4m3"
+
+        moe-runner-backend: "flashinfer_trtllm"
+        fp4-gemm-backend: "flashinfer_trtllm"
+
+        stream-interval: 30
+        watchdog-timeout: 1000000
+        enable-flashinfer-allreduce-fusion: true
+        disable-radix-cache: true
+
+  health_check:
+    max_attempts: 360
+    interval_seconds: 10
+
+
+override_stp_tp4:
+  name: "b200-fp4-stp-low-latency-tp4-1p-tp8-1d"
+  frontend:
+    num_additional_frontends: 2
+  roles:
+    prefill:
+      args:
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        enable-dp-attention:
+        enable-dp-lm-head:
+    decode:
+      args:
+        expert-parallel-size: 1
+
+
+zip_override_stp_lowlat:
+  name:
+    - "b200-fp4-stp-low-latency-dep4-1p-tep8-1d"
+    - "b200-fp4-stp-low-latency-dep4-1p-tep8-5d"
+    - "b200-fp4-stp-low-latency-dep4-2p-tep8-5d"
+  resources: {}
+  roles:
+    prefill:
+      nodes: [1, 1, 2]
+      workers: [1, 1, 2]
+    decode:
+      nodes: [1, 5, 5]
+      workers: [1, 5, 5]
+
+
+override_stp_maxtpt_7p2d:
+  name: "b200-fp4-stp-max-tpt-dep4-7p-dep8-2d"
+  resources: {}
+  roles:
+    prefill:
+      nodes: 7
+      workers: 7
+      args:
+        max-prefill-tokens: 65536
+        chunked-prefill-size: 65536
+        max-running-requests: 1024
+        fp4-gemm-backend: "flashinfer_cutlass"
+    decode:
+      nodes: 2
+      workers: 2
+      env:
+        SGLANG_MOE_NVFP4_DISPATCH: "1"
+      args:
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        max-running-requests: 2048
+        cuda-graph-max-bs: 1024
+        fp4-gemm-backend: "flashinfer_cutlass"

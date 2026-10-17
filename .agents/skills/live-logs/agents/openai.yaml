@@ -1,0 +1,4 @@
+interface:
+  display_name: "Live Logs"
+  short_description: "Stream a sweep job's per-node logs to the browser"
+  default_prompt: "Use $live-logs to open the live per-node logs for this PR or workflow run."

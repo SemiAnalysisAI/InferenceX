@@ -1,0 +1,345 @@
+base:
+  schema: 2
+  name: dsv4-fp4-mi355x-atom-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: atomesh
+    container_image: rocm/atom-dev@sha256:ef65fed021823c29d37c636101e6242b7b97b970f5e3f5e8badd672f73935d61
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: atom
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        timeout-keep-alive: 900
+        data-parallel-size: 1
+        index-cache-dtype: fp4
+        enable-prefix-caching: true
+        gpu-memory-utilization: 0.9
+        max-num-batched-tokens: 16384
+        attn-prefill-chunk-size: 16384
+        # State checkpoints at prompt ends only: a prefix hit past the nearest
+        # one recomputes the window's receptive field below it (7,875 tokens
+        # with DSpark) and rebuilds the state exactly (ATOM_DSV4_STATE_REPLAY).
+        state-checkpoint-interval-tokens: -1
+        level: 3
+        cudagraph-mode: FULL
+        method: dspark
+        num-speculative-tokens: 6
+      env:
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        AITER_LOG_LEVEL: WARNING
+        ATOM_MOE_GU_ITLV: '1'
+        ATOM_DISABLE_MMAP: 'true'
+        ATOM_DEBUG_PREFIX_HITS: '1'
+        ATOM_PROFILER_MORE: '0'
+        ATOM_PROFILER_TIMEOUT: '1200'
+        ATOM_DSV4_STATE_REPLAY: '1'
+        ATOM_STATE_CHECKPOINT_DEMAND: '0'
+  benchmark:
+    env:
+      # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
+
+# One variant per point. KV is FP8 at every point. DEP pins sessions to one
+# DP-attention rank so later turns reach their prefix KV, and captures every
+# small per-rank decode batch.
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        kv-cache-dtype: fp8
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 4
+        kv-cache-dtype: fp8
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        kv-cache-dtype: fp8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        kv-cache-dtype: fp8
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        kv-cache-dtype: fp8
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp8_c48_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: high-throughput
+        dp-load-balance: least_tokens
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '256'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '511'
+        ATOM_EPLB_MAX_REBALANCES: '1'
+  benchmark:
+    env:
+      CONC: '48'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c64_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: high-throughput
+        dp-load-balance: least_tokens
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '256'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '511'
+  benchmark:
+    env:
+      CONC: '64'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c96_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 192
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: high-throughput
+        dp-load-balance: least_tokens
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128,256,512]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '10'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
+        ATOM_EPLB_MAX_REBALANCES: '1'
+  benchmark:
+    env:
+      CONC: '96'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c128_dep:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: high-throughput
+        dp-load-balance: least_tokens
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '20'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
+        ATOM_EPLB_MAX_REBALANCES: '2'
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+# DRAM variants: ATOM's lmcache_mp tier backed by srtctl's lmcache-server
+# service (one LMCache server per node on port 8750, run from the LMCache build in
+# the ATOM image) within the 1019 GB budget (dram-utilization 0.34).
+override_tp8_c256_dep_lmcache:
+  services:
+    - name: lmcache
+      type: lmcache-server
+      args:
+        - --chunk-size
+        - '256'
+        - --null-block-id
+        - '-1'
+        - --separate-object-groups
+        - --supported-transfer-mode
+        - lmcache_driven
+        - --l1-size-gb
+        - '1000'
+        - --l1-use-lazy
+        - --l1-read-ttl-seconds
+        - '900'
+        - --eviction-policy
+        - LRU
+        - --eviction-trigger-watermark
+        - '0.98'
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: high-throughput
+        dp-load-balance: least_tokens
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '40'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
+        ATOM_EPLB_MAX_REBALANCES: '4'
+        ATOM_KV_OFFLOAD: lmcache_mp
+        # Braces doubled: srtctl expands {node}/{node_id} in env values with str.format_map.
+        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 8750, "lmcache.mp.tp_rank_collapse": true}}'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_MAX_PENDING_SAVES: '8'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+        OFFLOAD_MIN_SAVE_TOKENS: '8192'
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1019'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp8_c384_dep_lmcache:
+  services:
+    - name: lmcache
+      type: lmcache-server
+      args:
+        - --chunk-size
+        - '256'
+        - --null-block-id
+        - '-1'
+        - --separate-object-groups
+        - --supported-transfer-mode
+        - lmcache_driven
+        - --l1-size-gb
+        - '1000'
+        - --l1-use-lazy
+        - --l1-read-ttl-seconds
+        - '900'
+        - --eviction-policy
+        - LRU
+        - --eviction-trigger-watermark
+        - '0.98'
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        kv-cache-dtype: fp8
+        enable-expert-parallel: true
+        enable-dp-attention: true
+        all2all-backend: high-throughput
+        dp-load-balance: least_tokens
+        moe-backend: mega
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,32,48,64,72,80,88,96,104,112,120,128]'
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
+      env:
+        ATOM_DP_SESSION_AFFINITY: '1'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '20'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '1024'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '2047'
+        ATOM_EPLB_MAX_REBALANCES: '5'
+        ATOM_KV_OFFLOAD: lmcache_mp
+        # Braces doubled: srtctl expands {node}/{node_id} in env values with str.format_map.
+        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{{"lmcache.mp.host": "tcp://127.0.0.1", "lmcache.mp.port": 8750, "lmcache.mp.tp_rank_collapse": true}}'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_MAX_PENDING_SAVES: '8'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+        OFFLOAD_MIN_SAVE_TOKENS: '8192'
+  benchmark:
+    env:
+      CONC: '384'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1019'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

@@ -1,0 +1,153 @@
+base:
+  schema: 2
+  name: glm5.2-fp8-b300-sglang-agentic
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.2-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        kv-cache-dtype: fp8_e4m3
+        bf16-gemm-backend: cutedsl
+        max-prefill-tokens: 8192
+        quantization: fp8
+        # GLM-5.2 emits the GLM-4.7 tool-call format.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        chunked-prefill-size: 8192
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        # MLA-family: every TP rank holds complete per-token KV, so the host
+        # pool is an absolute 270 GB/rank; the DSA indexer pool rides on top.
+        enable-hierarchical-cache: true
+        hicache-size: 270
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Keep FlashInfer, Triton and JIT caches allocation-local.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2399'
+
+# Tune admission and MTP depth per point; graph maxima follow admission.
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+        speculative-num-steps: 6
+        speculative-num-draft-tokens: 7
+  benchmark:
+    env:
+      CONC: '1'
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 3
+        cuda-graph-max-bs: 8
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+  benchmark:
+    env:
+      CONC: '4'
+
+override_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_c12:
+  roles:
+    agg:
+      args:
+        max-running-requests: 5
+        cuda-graph-max-bs: 24
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+  benchmark:
+    env:
+      CONC: '12'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 7
+        cuda-graph-max-bs: 32
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+        prefill-decode-interval: 8
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '16'
+
+# High-throughput end: uncapped admission (2x CONC); caps trade TTFT for
+# decode speed and lose end-to-end latency at these points.
+override_c20:
+  roles:
+    agg:
+      args:
+        max-running-requests: 40
+        cuda-graph-max-bs: 40
+  benchmark:
+    env:
+      CONC: '20'
+
+override_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_c28:
+  roles:
+    agg:
+      args:
+        max-running-requests: 56
+        cuda-graph-max-bs: 56
+  benchmark:
+    env:
+      CONC: '28'

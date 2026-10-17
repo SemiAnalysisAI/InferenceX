@@ -11,20 +11,20 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
 - `target-tag`. For example, use `v0.22.0` for NVIDIA/CUDA. For SGLang, the NVIDIA and AMD tag
   strings usually differ (CUDA `…-cu130` vs ROCm `…-rocm720-mi35x-…`), so confirm
   the exact tag per image repo with the user before editing.
-- `filter` (optional). Restrict the scope to a model and/or SKU substring (e.g. `kimik2.5`,
-  `b300`, `minimaxm2.5 mi355x`). If omitted, all matching recipes are in scope.
+- `filter` (optional). Restrict the scope to a model and/or SKU substring (e.g. `qwen3.5`,
+  `b300`, `dsr1 mi355x`). If omitted, all matching recipes are in scope.
 
 ## Image repos by engine + vendor
 
 | engine | NVIDIA image | AMD/ROCm image | master config |
 |--------|--------------|----------------|---------------|
-| vllm   | `vllm/vllm-openai` | `vllm/vllm-openai-rocm` | `configs/nvidia-master.yaml` / `amd-master.yaml` |
+| vllm   | `vllm/vllm-openai` | `vllm/vllm-openai-rocm` | `inferencex-e2e/configs/nvidia-master.yaml` / `amd-master.yaml` |
 | sglang | `lmsysorg/sglang`  | `lmsysorg/sglang` (rocm-suffixed tag) | same two files |
 
 ## Grouping rules (NON-NEGOTIABLE)
 
 1. **One PR per `model + precision + SKU` recipe family.** The config-key shape is
-   `<model>-<precision>-<sku>-<engine>` (e.g. `kimik2.5-int4-b300-vllm`).
+   `<model>-<precision>-<sku>-<engine>` (e.g. `dsr1-fp8-b300-vllm`).
 2. **Fold the `-mtp` (and non-mtp) sibling into the SAME PR** as its base recipe.
    This is the *only* thing you may combine.
 3. **Never** put two different models, two different precisions, or two different
@@ -36,7 +36,7 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
 
 Parse both master YAMLs for top-level keys whose `framework:` matches `engine`, and
 record each key's current `image:`. Keep only single-node keys (they carry a SKU like
-`b200/b300/h100/h200/mi300x/mi325x/mi355x` and map to `benchmarks/single_node/*`). Drop
+`b200/b300/h100/h200/mi300x/mi325x/mi355x` and map to `inferencex-e2e/benchmarks/single_node/*`). Drop
 multi-node/disagg keys. Apply the `filter` if given. Then collapse `-mtp` siblings into
 their base family.
 
@@ -68,7 +68,8 @@ Each PR triggers a full GPU sweep, so surface the total PR count explicitly.
 ## Step 4 — create one PR per family
 
 Use these helpers (write them to /tmp) for precise, per-config-key edits. A blind
-`sed` is unsafe because the same old tag appears under many keys.
+`sed` is unsafe because the same old tag appears under many keys. Only the master `image:`
+changes: the srt-slurm binder writes it into the recipe.
 
 `/tmp/edit_image.py`:
 ```python
@@ -111,7 +112,7 @@ git checkout main -q && git reset --hard origin/main -q
 branch="klaud/<basekey>-<TAG>"
 git checkout -b "$branch" -q
 python3 /tmp/edit_image.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
-python3 /tmp/append_changelog.py perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
+python3 /tmp/append_changelog.py inferencex-e2e/perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
 git add -A
 git commit -q -m "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>"
 git push -u origin "$branch" -q --force-with-lease
@@ -119,17 +120,21 @@ url=$(gh pr create --repo SemiAnalysisAI/InferenceX --base main --head "$branch"
       --title "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>" \
       --body "<BODY>" --label full-sweep-fail-fast | grep -o 'https://github.com/[^ ]*')
 # patch the changelog pr-link with the real URL, then amend + force-push
-python3 - perf-changelog.yaml "$url" <<'PY'
+# (read first, then write: open(f,'w') truncates before a same-line read runs)
+before=$(wc -l < inferencex-e2e/perf-changelog.yaml)
+python3 - inferencex-e2e/perf-changelog.yaml "$url" <<'PY'
 import sys; f,u=sys.argv[1],sys.argv[2]
-open(f,'w').write(open(f).read().replace("PRLINK_PLACEHOLDER",u,1))
+content = open(f).read()
+open(f,'w').write(content.replace("PRLINK_PLACEHOLDER",u,1))
 PY
-git add perf-changelog.yaml && git commit -q --amend --no-edit && git push -q --force-with-lease
+[ "$(wc -l < inferencex-e2e/perf-changelog.yaml)" -eq "$before" ] || { echo "perf-changelog.yaml line count changed"; exit 1; }
+git add inferencex-e2e/perf-changelog.yaml && git commit -q --amend --no-edit && git push -q --force-with-lease
 ```
 
 Conventions:
 - `<PHRASE>` = `vLLM image` / `vLLM ROCm image` / `SGLang image` / `SGLang ROCm image`.
 - Title gets `(+mtp)` only when the family has an mtp sibling.
-- Every PR carries the **`full-sweep-fail-fast`** label (strongly recommended over `full-sweep-enabled` - a broken image bump burns one job per matrix, not the full fan-out) so CI kicks off.
+- Every PR carries the **`full-sweep-fail-fast`** label so CI kicks off. It is strongly recommended over `full-sweep-enabled`: both labels are gated by the same canary, so an image bump that fails the canary skips every other matrix either way. Fail-fast matters once the canary passes: a later failure then cancels the rest of its matrix instead of letting the whole fan-out run.
 - `<DESC>` = `Update <PHRASE> from <old-tag> to <TAG>` (note both tags when the
   base/mtp differ, e.g. base already on target).
 - PR body:
@@ -139,11 +144,9 @@ Conventions:
 
   Recipes touched: `key1`, `key2`
 
-  ## Test plan
-  - [ ] full-sweep-fail-fast sweep passes.
-
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
+
+  Follow [PR descriptions](../../CONTRIBUTING.md#pr-descriptions): keep administrative sections collapsed by default, omit pending-validation boilerplate, and add validation evidence only after an actual integration or end-to-end run.
 
 ## Step 5 — finish
 

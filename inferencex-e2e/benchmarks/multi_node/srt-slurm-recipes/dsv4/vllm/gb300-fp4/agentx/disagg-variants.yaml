@@ -1,0 +1,161 @@
+
+schema: 2
+
+base:
+  dynamo:
+    install: true
+    source:
+      wheel: "1.2.0.dev20260426"
+  setup_script: vllm-container-deps.sh
+  slurm:
+    time_limit: "8:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: dedicated
+    - name: nats
+      type: nats
+      placement:
+        node: dedicated
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+  engine:
+    type: vllm
+    connector:
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        TILELANG_CLEANUP_TEMP_FILES: "1"
+        VLLM_USE_NCCL_SYMM_MEM: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        TORCH_SYMMMEM: "NVSHMEM"
+      args:
+        kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+        served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+        kv-cache-dtype: "fp8"
+        tensor-parallel-size: 1
+        pipeline-parallel-size: 1
+        data-parallel-size: 4
+        data-parallel-rpc-port: 13345
+        enable-expert-parallel: true
+        moe-backend: "deep_gemm_mega_moe"
+        max-num-batched-tokens: 16384
+        trust-remote-code: true
+        no-enable-flashinfer-autotune: true
+        block-size: 256
+        gpu-memory-utilization: 0.9
+        enable-ep-weight-filter: true
+        no-disable-hybrid-kv-cache-manager: true
+        enable-sleep-mode: true
+        tokenizer-mode: deepseek_v4
+    decode:
+      env:
+        TILELANG_CLEANUP_TEMP_FILES: "1"
+        VLLM_USE_NCCL_SYMM_MEM: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        TORCH_SYMMMEM: "NVSHMEM"
+      args:
+        kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+        served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+        kv-cache-dtype: "fp8"
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        block-size: 256
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+        gpu-memory-utilization: 0.9
+        stream-interval: 10
+        no-disable-hybrid-kv-cache-manager: true
+        enable-ep-weight-filter: true
+        enable-sleep-mode: true
+        tokenizer-mode: deepseek_v4
+  # sbatch + srun resource grants for clusters without per-GPU defaults.
+  #
+  # mem=0: allocate all available node memory (~868 GB on CW gb300). Without
+  # this, sbatch only requests ntasks × DefMemPerCPU = 8 × 4 GB = 32 GB for
+  # the whole job and worker cgroups OOM-kill mid model load (R7-R11 hit
+  # this; sacct showed AllocTRES mem=4G per step).
+  #
+  # cpus-per-task=72: give each task one CW gb300 NUMA socket (144 cores
+  # split 2 × 72). Critical for the *infra step* (etcd + nats) which
+  # srtctl spawns without --gres=gpu — on CW that means DefMemPerCPU
+  # applies and the step gets 1 CPU by default. With 24 dynamo DP ranks
+  # all hammering etcd for lease keep-alives, single-CPU etcd can't keep
+  # up and dies (R12 hit this; etcd reported max-cpu-set=1, leases
+  # deadline-exceeded, infra SIGKILL'd at 16:35:49). 72 CPUs is plenty
+  # for both etcd + nats AND for vLLM worker auxiliary threads.
+  #
+  # nv gb300 doesn't need this because cluster default DefCpuPerGPU=35
+  # auto-allocates 4*35=140 CPUs per GPU-bearing task; cw has no per-GPU
+  # default. Setting it here is safe on both because the value is ≤ node
+  # CPU count.
+  #
+  # srun_options.mem=0 forces each srun step to use the full node memory
+  # (without it, srun steps default back to cpus_per_task × DefMemPerCPU).
+  # Docs: docs/config-reference.md#sbatch_directives + #srun_options.
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "72"
+  srun_options:
+    mem: "0"
+    # gb300-nv: pyxis maps the calling user (sa-shared) into the container as
+    # uid 345200007. dpkg refuses to run without EUID 0 even though
+    # ENROOT_ROOTFS_WRITABLE=1 makes the rootfs writable, so the srt_agentic
+    # apt-get install git step fails. --container-remap-root asks pyxis to
+    # remap us to uid 0 inside the container. srt-slurm renders empty-string
+    # values as flag-only srun args (see core/slurm.py:250).
+    container-remap-root: ""
+
+override_1p6d_dep4_tp4:
+  name: "svf-vllm-disagg-gb300-1p6d-dep4-tp4-agentic"
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        attention-config: '{"use_fp4_indexer_cache": true}'
+    decode:
+      nodes: 6
+      workers: 6
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        all2all-backend: "flashinfer_nvlink_one_sided"
+        no-enable-flashinfer-autotune: true
+
+override_4p1d_dep4_dep8_24_c4096:
+  name: "svf-vllm-disagg-gb300-4p1d-dep4-dep8-24-c4096-agentic"
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+      env:
+        VLLM_LOG_STATS_INTERVAL: "1"
+      args:
+        safetensors-load-strategy: "prefetch"
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        VLLM_LOG_STATS_INTERVAL: "1"
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        data-parallel-rpc-port: 13345
+        enable-expert-parallel: true
+        moe-backend: "deep_gemm_mega_moe"
