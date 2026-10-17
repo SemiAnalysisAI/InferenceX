@@ -10015,6 +10015,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4181
 
 - config-keys:
+    - musespark-fp4-h100-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run every point with HiCache host-DRAM KV offload at 160 GB per rank, sweeping concurrency 1, 2, 4 and 8; drop the GPU-resident arm and the concurrency 16 queueing point."
+    - "Keep the batch-8 cap on running requests and decode graphs, and lower mem-fraction-static from 0.97 to 0.965: with HiCache attached, 0.97 ran out of GPU memory in the MoE at concurrency 4, while 0.95 shrank the GPU KV pool to 98k tokens and rejected the trace's ~196k-token inputs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4182
+
+- config-keys:
     - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
   scenario-type:
     - agentic-coding
@@ -10034,6 +10043,35 @@
     - "TP4 c1 admits one request at a time, enables decoder SWA bounded replay and disables the prefill CUDA graph."
     - "Add DEP2 c160 with the c128 settings, a prefill-decode interval of 8, mem-fraction-static 0.85, 256 max running requests and a 128 decode graph batch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4033
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable SGLang HiCache CPU DRAM KV offloading above conc 8: the TP4/EP4 and TP8/EP8 conc 12 and 16 points add enable-hierarchical-cache with hicache-size 180 GB per rank and write_through (720 GB at TP4, 1.44 TB at TP8; dram-utilization 0.85), matching the GLM-5.2 MXFP4 MI355X SGLang sibling."
+    - "Conc 1, 4 and 8 stay GPU-resident with no KV offloading. Image, serve flags, DFlash2 draft and golden AL are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4201
+
+- config-keys:
+    - musespark-fp4-h200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Offload every Muse Spark Open H200 point to host DRAM with SGLang HiCache (120 GB per rank so the target and DFlash draft host pools fit the node cgroup, dram-utilization 0.80), keeping the concurrency 1-64 sweep."
+    - "Keep the GPU-resident settings unchanged: mem-fraction-static 0.85, matching running-request and decode-graph caps."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4199
+
+- config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Muse Spark Open B300 from TP4/EP4 to TP8/EP8 using the LMSYS AgentX settings, retaining all ten concurrency points from 1 to 128."
+    - "Use GPU-resident KV at concurrency 1, 2, 4 and 8; enable layernorm SP, MegaMoE and HiCache at 16, 24, 32, 48, 64 and 128, with 120 GB per rank at 16 and 216 GB per rank above 16."
+    - "Enable block verification and breakable prefill CUDA graphs; use mem-fraction-static 0.9, SWA/full ratio 0.4, admission 192 with decode graphs to batch 192 and the eager DFlash draft sampler, since c128 admits about 150 running requests and DFlash sampling fails above the largest decode graph."
+    - "Keep the NVFP4 target, pinned SGLang image, published DFlash2 draft precision and acceptance selected from the committed golden curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4156
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark

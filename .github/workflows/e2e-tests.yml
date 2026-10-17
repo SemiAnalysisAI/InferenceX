@@ -355,6 +355,7 @@ jobs:
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-evals:
         needs: get-jobs
@@ -382,6 +383,7 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-agentic:
         needs: get-jobs
@@ -407,6 +409,7 @@ jobs:
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-agentic-evals:
         needs: get-jobs
@@ -435,6 +438,7 @@ jobs:
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-agentic:
         needs: get-jobs
@@ -463,6 +467,7 @@ jobs:
             power-producer-sha: ${{ inputs.power-producer-sha }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
@@ -493,6 +498,7 @@ jobs:
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-single-node:
         needs: get-jobs
@@ -515,6 +521,7 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-evals:
         needs: get-jobs
@@ -540,6 +547,7 @@ jobs:
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     collect-results:
         name: collect-results
@@ -555,6 +563,17 @@ jobs:
         needs: [get-jobs, test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
         if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-multi-node-agentic-evals.result != 'skipped') }}
         uses: $/.github/workflows/collect-evals.yml
+        with:
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
+
+    collect-job-events:
+        name: collect-job-events
+        needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals]
+        if: ${{ !cancelled() && needs.get-jobs.result == 'success' }}
+        permissions:
+            actions: read # List the run's jobs to record the jobs that wrote no event.
+            contents: read
+        uses: $/.github/workflows/collect-job-events.yml
         with:
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
