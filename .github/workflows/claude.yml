@@ -42,7 +42,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
       - name: Install Claude Code 2.1.282
         id: claude_cli
@@ -53,7 +53,7 @@ jobs:
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         env:
           # Repository agent credential; the pinned action authorizes the triggering actor.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -311,7 +311,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
       - name: Install Claude Code 2.1.282
         id: claude_cli
@@ -321,7 +321,7 @@ jobs:
           test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: PR Review with Claude
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         with:
           path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           # Repository review credential; the job gates eligible review requests.

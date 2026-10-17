@@ -54,7 +54,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: '3.12'
           cache-dependency-glob: |
@@ -102,7 +102,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # Never save a cache the agent's job could have poisoned for credentialed jobs to restore.
           enable-cache: false
@@ -124,7 +124,7 @@ jobs:
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
           --stale-pr-days "$STALE_PR_DAYS"
       # Uploaded before the agent runs, so selection reads the planner's files, not agent-touched ones.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: klaud-review-input
           path: |
@@ -149,7 +149,7 @@ jobs:
         id: review
         if: steps.prepare.outputs.has_candidates == 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
@@ -248,7 +248,7 @@ jobs:
           fi
           test -f "$python_project/pyproject.toml"
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: '3.12'
           cache-dependency-glob: |
@@ -256,7 +256,7 @@ jobs:
             uv.lock
             inferencex-e2e/pyproject.toml
             inferencex-e2e/uv.lock
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: klaud-review-input
           path: ${{ runner.temp }}/klaud
@@ -279,13 +279,13 @@ jobs:
           KLAUD_PR_REVIEW: ${{ needs.review.outputs.review }}
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
         run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: klaud-ownership
           path: ${{ runner.temp }}/klaud/ownership.json
           if-no-files-found: error
           retention-days: 90
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: klaud-plan
