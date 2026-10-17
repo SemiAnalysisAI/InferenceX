@@ -7035,7 +7035,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
   runner: cluster:b200-nscale
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0.dev20261015" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260909" }
   multinode: true
   disagg: false
   srt-recipe-dir: glm5.2/sglang/b200-fp4/agentx
