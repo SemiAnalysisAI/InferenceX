@@ -22,3 +22,30 @@ include = ["evaluator*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "tests"]
+
+[tool.ruff]
+# Owned by SemiAnalysisAI/InferenceX#4243 and linted by its own workflow with the infx config.
+extend-exclude = ["specs/h3_spec.py", "tests/test_h3_spec.py"]
+
+[tool.ruff.lint]
+# ValueError is the validation contract of validate_plan and the spec loader, whatever the offending type.
+ignore = ["TRY004"]
+
+# The modules below come from SemiAnalysisAI/InferenceX#3733 (mvp_runner.py carries only the transport-table
+# change) and keep that PR's lint and format state so B1 can merge them back with minimal conflicts.
+[tool.ruff.lint.per-file-ignores]
+"evaluator/mvp_media.py" = ["BLE001", "I001"]
+"evaluator/mvp_runner.py" = ["BLE001", "I001", "UP017"]
+"evaluator/mvp_runtime_timing.py" = ["I001"]
+"tests/test_mvp_media.py" = ["I001"]
+"tests/test_mvp_runner.py" = ["I001"]
+
+[tool.ruff.format]
+exclude = [
+    "evaluator/mvp_media.py",
+    "evaluator/mvp_runner.py",
+    "evaluator/mvp_runtime_timing.py",
+    "evaluator/mvp_serving.py",
+    "tests/test_mvp_media.py",
+    "tests/test_mvp_runner.py",
+]
