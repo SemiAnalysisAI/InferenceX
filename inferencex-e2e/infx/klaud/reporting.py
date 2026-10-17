@@ -642,6 +642,24 @@ def decode[Record: Contract](
     return model.model_validate(value)
 
 
+def latest_next(session: Session, pull: dict) -> Prose | None:
+    attempts = [
+        c
+        for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
+        if c["user"]["login"] == "Klaud-Cold"
+        and re.fullmatch(r"run-\d+-\d+", name := c["body"].split("\n", 1)[0].rpartition(":")[2])
+        and c["body"].startswith(marker(session, name))
+    ]
+    if not attempts:
+        return None
+    body = max(attempts, key=lambda c: c["id"])["body"]
+    try:
+        value = json.loads(body.split("\n", 1)[1].split("\n-->", 1)[0])
+        return Prose.model_validate(value.get("record", value)["next"])
+    except (ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return None
+
+
 def baseline_for(session: Session, pull: dict) -> Baseline | None:
     current = session.refresh(pull)
     embedded = baseline_from_body(current.get("body") or "")
@@ -869,8 +887,9 @@ def public_point(entry: dict) -> dict:
         "conc": int(entry["conc"]),
         "image": normalized_image(entry["image"]),
     }
+    aggregate = multi and not point["disagg"] and not entry["decode"].get("num-worker")
     for role in ("prefill", "decode"):
-        topology = entry[role] if multi else entry
+        topology = entry["prefill" if aggregate else role] if multi else entry
         point.update(
             {
                 f"{role}_tp": topology["tp"],
@@ -886,14 +905,20 @@ def _matches_public_point(row: dict, point: dict) -> bool:
     """Compare a public row with a generated identity using canonical image spelling."""
     from .models import normalized_image
 
-    for key, value in point.items():
-        observed = row.get(key)
-        if key == "image":
-            if not isinstance(observed, str) or normalized_image(observed) != value:
-                return False
-        elif observed != value:
-            return False
-    return True
+    encodings = [point]
+    if point["is_multinode"] and not point["disagg"] and point["prefill_num_workers"] == 1:
+        encodings.append(
+            {**point, "is_multinode": False, "prefill_num_workers": 0, "decode_num_workers": 0}
+        )
+    return any(
+        all(
+            isinstance(row.get(key), str) and normalized_image(row[key]) == value
+            if key == "image"
+            else row.get(key) == value
+            for key, value in encoding.items()
+        )
+        for encoding in encodings
+    )
 
 
 def matrix_points(matrix: dict) -> list[dict]:
