@@ -81,6 +81,9 @@ base:
         enable-hierarchical-cache: true
         hicache-size: 120
         disaggregation-transfer-backend: mooncake
+        # Long agentic first turns keep prefill busy; 32k chunks raise prefill throughput.
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
         watchdog-timeout: 3600
         enable-metrics: true
       kv_events: true
@@ -247,3 +250,61 @@ override_3p1d_c128:
       args:
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
+
+override_3p1d_c192:
+  name: disagg-gb300-3p1d-tp4ep4-c192
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+    decode:
+      args:
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 192
+
+override_4p1d_c192:
+  name: disagg-gb300-4p1d-tp4ep4-c192
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      args:
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 192
+
+override_4p1d_c256:
+  name: disagg-gb300-4p1d-tp4ep4-c256
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 256
+
+override_3p2d_c256:
+  name: disagg-gb300-3p2d-tp4ep4-c256
+  frontend:
+    args:
+      router-session-affinity-ttl-secs: "1"
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-running-requests: 192
+        cuda-graph-max-bs-decode: 192
