@@ -64,20 +64,20 @@ zip_override_tp4:
   roles:
     agg:
       args:
-        max-running-requests: [1, 2, 3, 4, 6, 8, 10, 12, 16, 20]
+        max-running-requests: [1, 2, 3, 4, 6, 8, 10, 12]
   benchmark:
     env:
-      CONC: ['1', '2', '3', '4', '6', '8', '10', '12', '16', '20']
+      CONC: ['1', '2', '3', '4', '6', '8', '10', '12']
       KV_OFFLOADING: none
 
 zip_override_tp4_hicache:
   roles:
     agg:
       args:
-        max-running-requests: [24, 32, 40, 48]
+        max-running-requests: [16, 20, 24, 32, 40, 48]
         enable-hierarchical-cache: true
         hicache-size: 120
   benchmark:
     env:
-      CONC: ['24', '32', '40', '48']
+      CONC: ['16', '20', '24', '32', '40', '48']
       KV_OFFLOADING: dram
