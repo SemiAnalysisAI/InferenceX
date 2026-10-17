@@ -1,0 +1,56 @@
+# CRUXEval-O (output prediction), https://arxiv.org/abs/2401.03065.
+# Prompt follows the reference direct-output prompt from facebookresearch/cruxeval
+# with its two worked examples inlined, so the chat request is one user turn.
+# Scoring lives in cruxeval.py: upstream lm-eval's cruxeval utils strip quotes
+# from string answers and score them as failures. The lm-eval runner requests greedy
+# decoding, so this reports greedy pass@1 over all 800 functions.
+task: cruxeval_output
+dataset_path: cruxeval-org/cruxeval
+unsafe_code: true
+output_type: generate_until
+test_split: test
+doc_to_text: |
+  You are given a Python function and an assertion containing an input to the function. Complete the assertion with a literal (no unsimplified expressions, no function calls) containing the output when executing the provided code on the given input, even if the function is incorrect or incomplete. Provide the full assertion with the correct output in [ANSWER] and [/ANSWER] tags, following the examples.
+
+  [PYTHON]
+  def f(n):
+      return n
+  assert f(17) == ??
+  [/PYTHON]
+  [ANSWER]
+  assert f(17) == 17
+  [/ANSWER]
+
+  [PYTHON]
+  def f(s):
+      return s + "a"
+  assert f("x9j") == ??
+  [/PYTHON]
+  [ANSWER]
+  assert f("x9j") == "x9ja"
+  [/ANSWER]
+
+  [PYTHON]
+  {{code}}
+  assert f({{input}}) == ??
+  [/PYTHON]
+doc_to_target: "assert f({{input}}) == {{output}}"
+process_results: !function cruxeval.process_results_output
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+filter_list:
+  - name: "strict-match"
+    filter:
+      - function: "take_first"
+generation_kwargs:
+  until:
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
+repeats: 1
+num_fewshot: 0
+metadata:
+  version: 1.0

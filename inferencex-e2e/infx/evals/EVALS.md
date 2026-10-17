@@ -644,7 +644,14 @@ attempt cannot replace a newer failed retry.
 
 1. Create a task YAML in `infx/evals/` following the lm-eval task format.
 2. Set `EVAL_TASKS_DIR=infx/evals/<your_task>.yaml` when running benchmarks.
-3. Update `infx/results/collect_eval_results.py` if new metrics need extraction.
+   The pinned lm-eval resolves tasks by name, so the runner passes the YAML's
+   directory as `--include_path`; keep `task:` unique within that directory.
+3. A task that executes model output must set `unsafe_code: true`; only then
+   does the runner pass `--confirm_run_unsafe_code`.
+4. Name a filter with `strict`, `flex`, or `extract` so collection finds the
+   score, and add a threshold to `thresholds.yaml` (unlisted tasks fall back to
+   0.85).
+5. Update `infx/results/collect_eval_results.py` if new metrics need extraction.
 
 ### Adding a provider verifier
 
@@ -674,3 +681,11 @@ attempt cannot replace a newer failed retry.
 The following files are task definitions from lm-eval. More information on changes lives within the files:
 - `infx/evals/gsm8k.yaml`
 - `infx/evals/gpqa_diamond.yaml`
+- `infx/evals/lm_eval_tasks/cruxeval_output.yaml`, `infx/evals/lm_eval_tasks/cruxeval_input.yaml`
+  ([CRUXEval](https://arxiv.org/abs/2401.03065) output and input prediction,
+  800 Python functions each). Not run by default; select one with
+  `EVAL_TASKS_DIR`. Scored by `lm_eval_tasks/cruxeval.py`, which executes the
+  dataset function with the model's completed assertion in an isolated, time-
+  and memory-limited interpreter. Upstream lm-eval's cruxeval utils strip quotes
+  from string answers, so they are not used. Requests are greedy, so the score
+  is greedy pass@1. Thresholds are `0.0` (diagnostic) until a baseline exists.
