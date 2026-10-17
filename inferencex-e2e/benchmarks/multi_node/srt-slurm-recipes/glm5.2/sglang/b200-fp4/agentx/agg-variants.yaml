@@ -7,8 +7,8 @@ base:
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
     container: {}
     frameworks:
-      dynamo: 1.5.0.dev20260909
-      sglang: 0.0.0.dev1+g008403017
+      dynamo: 1.6.0.dev20261015
+      sglang: 0.5.22
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -29,7 +29,7 @@ base:
         SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
         SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
         SGLANG_DEFAULT_THINKING: '1'
-        SGLANG_REASONING_EFFORT: max
+        SGLANG_DSV4_REASONING_EFFORT: max
         SGLANG_HICACHE_DEBUG_LOG: '1'
         SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
         SGLANG_MOE_NVFP4_DISPATCH: '1'
