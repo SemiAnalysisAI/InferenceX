@@ -93,7 +93,7 @@ base:
             - cuda_core
         pipeline_parallel_size: 1
         print_iter_log: true
-        return_perf_metrics: false
+        return_perf_metrics: true
         scheduler_config:
           capacity_scheduler_policy: MAX_UTILIZATION
         torch_compile_config:
@@ -167,7 +167,7 @@ base:
             - cuda_core
         pipeline_parallel_size: 1
         print_iter_log: true
-        return_perf_metrics: false
+        return_perf_metrics: true
         scheduler_config:
           capacity_scheduler_policy: GUARANTEED_NO_EVICT
         speculative_config:
@@ -197,15 +197,17 @@ base:
       node: last_decode
 
 # Decode shares the prefill node; one decode worker on the remaining GPUs.
-override_1p1d_dep1_tep2_c44_b8:
-  name: disagg-gb300-1p1d-dep1-tep2-c44-b8-mtp-kvoffload
+override_1p1d_dep1_tep2_b8:
+  name: disagg-gb300-1p1d-dep1-tep2-b8-mtp-kvoffload-bb2048
   roles:
-    prefill:
+    prefill: &dep1_prefill
       workers: 1
       gpus: 1
       env:
         TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: '1'
       args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 2048
         moe_expert_parallel_size: 1
         tensor_parallel_size: 1
     decode:
@@ -215,6 +217,8 @@ override_1p1d_dep1_tep2_c44_b8:
       env:
         TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: '1'
       args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 2048
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -228,8 +232,33 @@ override_1p1d_dep1_tep2_c44_b8:
         moe_expert_parallel_size: 2
         tensor_parallel_size: 2
 
-override_1p2d_tep4_tep4_c48_b4:
-  name: disagg-gb300-1p2d-tep4-tep4-c48-b4-mtp-kvoffload
+override_1p1d_dep1_tep2_c45_b4:
+  name: disagg-gb300-1p1d-dep1-tep2-c45-b4-mtp-kvoffload-bb2048
+  roles:
+    prefill: *dep1_prefill
+    decode:
+      nodes: colocate
+      workers: 1
+      gpus: 2
+      env:
+        TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL: '1'
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 2048
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 4
+        max_batch_size: 4
+        max_num_tokens: 28
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 2
+        tensor_parallel_size: 2
+
+override_1p2d_tep4_tep8_c48_b4:
+  name: disagg-gb300-1p2d-tep4-tep8-c48-b4-mtp-kvoffload
   roles:
     # TP4/EP4 prefill without attention DP takes 32K-token chunks.
     prefill: &tep4_prefill
@@ -259,41 +288,22 @@ override_1p2d_tep4_tep4_c48_b4:
             - 16384
             - 32768
     decode:
-      nodes: 2
-      workers: 2
-      gpus: 4
-      args:
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 4
-        max_batch_size: 4
-        max_num_tokens: 28
-        moe_expert_parallel_size: 4
-        tensor_parallel_size: 4
-
-override_1p2d_tep4_tep8_c32_b2:
-  name: disagg-gb300-1p2d-tep4-tep8-c32-b2-mtp-kvoffload
-  roles:
-    prefill: *tep4_prefill
-    decode:
       nodes: 4
       workers: 2
       gpus: 8
       args:
         cuda_graph_config:
-          batch_sizes:
+          batch_sizes: &b4_batch_sizes
             - 1
             - 2
             - 4
-        max_batch_size: 2
-        max_num_tokens: 14
+        max_batch_size: 4
+        max_num_tokens: 28
         moe_expert_parallel_size: 8
         tensor_parallel_size: 8
 
-override_1p4d_tep4_tep8_c32_b1:
-  name: disagg-gb300-1p4d-tep4-tep8-c32-b1-mtp-kvoffload
+override_1p4d_tep4_tep8_c38_b1:
+  name: disagg-gb300-1p4d-tep4-tep8-c38-b1-mtp-kvoffload
   roles:
     prefill: *tep4_prefill
     decode:
@@ -302,17 +312,30 @@ override_1p4d_tep4_tep8_c32_b1:
       gpus: 8
       args:
         cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 4
+          batch_sizes: *b4_batch_sizes
         max_batch_size: 1
         max_num_tokens: 7
         moe_expert_parallel_size: 8
         tensor_parallel_size: 8
 
-override_2p3d_tep4_tep8_b4:
-  name: disagg-gb300-2p3d-tep4-tep8-b4-mtp-kvoffload
+override_1p4d_tep4_tep8_c38_b4:
+  name: disagg-gb300-1p4d-tep4-tep8-c38-b4-mtp-kvoffload
+  roles:
+    prefill: *tep4_prefill
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda_graph_config:
+          batch_sizes: *b4_batch_sizes
+        max_batch_size: 4
+        max_num_tokens: 28
+        moe_expert_parallel_size: 8
+        tensor_parallel_size: 8
+
+override_2p3d_tep4_tep8_c136_b4:
+  name: disagg-gb300-2p3d-tep4-tep8-c136-b4-mtp-kvoffload
   roles:
     prefill:
       <<: *tep4_prefill
@@ -324,10 +347,7 @@ override_2p3d_tep4_tep8_b4:
       gpus: 8
       args:
         cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 4
+          batch_sizes: *b4_batch_sizes
         max_batch_size: 4
         max_num_tokens: 28
         moe_expert_parallel_size: 8
@@ -371,7 +391,7 @@ override_3p2d_dep4_dep4_c704_b32:
       gpus: 4
       args:
         cuda_graph_config:
-          batch_sizes: &b32_batch_sizes
+          batch_sizes:
             - 1
             - 2
             - 4
@@ -385,24 +405,3 @@ override_3p2d_dep4_dep4_c704_b32:
         max_num_tokens: 224
         moe_expert_parallel_size: 4
         tensor_parallel_size: 4
-
-override_6p1d_dep4_dep16_c1046_b32:
-  name: disagg-gb300-6p1d-dep4-dep16-c1046-b32-mtp-kvoffload
-  roles:
-    prefill:
-      <<: *dep4_prefill
-      nodes: 6
-      workers: 6
-    decode:
-      nodes: 4
-      workers: 1
-      gpus: 16
-      args:
-        cuda_graph_config:
-          batch_sizes: *b32_batch_sizes
-        enable_attention_dp: true
-        enable_lm_head_tp_in_adp: true
-        max_batch_size: 32
-        max_num_tokens: 224
-        moe_expert_parallel_size: 16
-        tensor_parallel_size: 16
