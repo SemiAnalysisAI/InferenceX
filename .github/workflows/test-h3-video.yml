@@ -11,7 +11,7 @@ on:
       - 'inferencex-e2e/infx/workflows/__init__.py'
       - 'inferencex-e2e/infx/workflows/ci_priority.py'
       - 'inferencex-e2e/configs/ci-priority.yaml'
-      - 'inferencex-e2e/benchmarks/benchmark_lib.sh'
+      - 'inferencex-e2e/benchmarks/check_env.sh'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/h3-fidelity.yml'
       - '.github/workflows/test-h3-video.yml'
@@ -25,7 +25,7 @@ on:
       - 'inferencex-e2e/infx/workflows/__init__.py'
       - 'inferencex-e2e/infx/workflows/ci_priority.py'
       - 'inferencex-e2e/configs/ci-priority.yaml'
-      - 'inferencex-e2e/benchmarks/benchmark_lib.sh'
+      - 'inferencex-e2e/benchmarks/check_env.sh'
       - '.github/workflows/h3-video.yml'
       - '.github/workflows/h3-fidelity.yml'
       - '.github/workflows/test-h3-video.yml'
@@ -53,7 +53,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
         run: |
-          source ../../inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source ../../inferencex-e2e/benchmarks/check_env.sh
           check_env_vars PYTHONPATH
           uv run --no-project --python 3.12 \
           --with 'av==16.1.0' --with 'numpy==2.3.5' \
@@ -88,7 +88,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
         run: |
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars PYTHONPATH
           uv run --no-project --python 3.10 --with 'pytest==8.4.2' \
           python -m pytest -q \

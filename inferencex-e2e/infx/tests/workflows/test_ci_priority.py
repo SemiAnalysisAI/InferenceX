@@ -22,23 +22,13 @@ def policy():
             "multi-node": 1,
             "agentic": 2,
             "eval-only": 0.375,
+            "checklist-complete": 1.5,
             "precision": {"fp4": 3},
             "spec-decoding": {"mtp": 4},
             "framework-prefix": {"vllm": 5, "sglang": 6},
             "model-prefix": {"dsv4": 8, "dsr1": 9, "qwen3.5": 11},
         },
-        "labels": {
-            "patchwork": {
-                "names": ["ci-patchwork"],
-                "waived-by": ["ci-patchwork-waived"],
-                "score": -5,
-            },
-            "checklist-complete": {
-                "names": ["ci-checklist-complete"],
-                "adjustment": 1.5,
-            },
-            "skip-queue": {"name": "skip_queue"},
-        },
+        "patchwork-score": -5,
     }
 
 
@@ -104,63 +94,24 @@ def test_node_count_must_be_a_positive_integer(node_count, policy):
 
 
 def test_patchwork_score_uses_half_up_rounding(policy):
-    policy["labels"]["patchwork"]["score"] = 0.7225
+    policy["patchwork-score"] = 0.7225
     entry = {"runner": "h100", "framework": "trt"}
 
     assert calculate_priority(
         entry,
         policy,
-        PriorityContext(labels=frozenset({"ci-patchwork"})),
+        PriorityContext(criteria=frozenset({"patchwork"})),
     ) == Decimal("0.723")
 
 
-def test_skip_queue_request_keeps_numeric_priority(policy):
-    entry = {"runner": "h100", "framework": "sglang", "precision": "fp4"}
-
-    annotated = annotate_jobs(
-        [entry],
-        policy,
-        PriorityContext(
-            labels=frozenset({"skip_queue"}),
-            pr_number=2124,
-        ),
-    )
-
-    assert calculate_priority(
-        entry,
-        policy,
-        PriorityContext(labels=frozenset({"skip_queue"})),
-    ) == Decimal("19.000")
-    assert annotated[0]["priority"] == "19.000"
-    assert annotated[0]["skip-queue-pr"] == 2124
-
-
-def test_patchwork_override_precedes_other_adjustments_unless_waived(policy):
+def test_patchwork_override_precedes_other_adjustments(policy):
     entry = {"runner": "b200", "framework": "sglang", "precision": "fp4"}
 
     assert calculate_priority(
         entry,
         policy,
-        PriorityContext(labels=frozenset({"ci-patchwork"})),
+        PriorityContext(criteria=frozenset({"patchwork", "sglang", "fp4"})),
     ) == Decimal("-5.000")
-    assert calculate_priority(
-        entry,
-        policy,
-        PriorityContext(labels=frozenset({"ci-patchwork", "ci-patchwork-waived"})),
-    ) == Decimal("19.000")
-    assert calculate_priority(
-        entry,
-        policy,
-        PriorityContext(criteria=frozenset({"patchwork"})),
-    ) == Decimal("-5.000")
-    assert calculate_priority(
-        entry,
-        policy,
-        PriorityContext(
-            labels=frozenset({"ci-patchwork-waived"}),
-            criteria=frozenset({"patchwork"}),
-        ),
-    ) == Decimal("10.000")
 
 
 def test_priority_criteria_require_matching_job_fields(policy):
@@ -188,17 +139,14 @@ def test_priority_criteria_require_matching_job_fields(policy):
     ) == Decimal("10.000")
 
 
-def test_checklist_label_applies_alongside_classifier_criteria(policy):
-    entry = {"runner": "h100", "framework": "trt"}
+def test_checklist_criterion_applies_alongside_other_criteria(policy):
+    entry = {"runner": "h100", "framework": "vllm"}
 
     assert calculate_priority(
         entry,
         policy,
-        PriorityContext(
-            labels=frozenset({"ci-checklist-complete"}),
-            criteria=frozenset(),
-        ),
-    ) == Decimal("11.500")
+        PriorityContext(criteria=frozenset({"checklist-complete", "vllm"})),
+    ) == Decimal("16.500")
 
 
 def test_priority_criteria_reject_unknown_values_and_allow_mixed_jobs(policy):
@@ -215,19 +163,6 @@ def test_priority_criteria_reject_unknown_values_and_allow_mixed_jobs(policy):
         policy,
         PriorityContext(criteria=frozenset({"vllm", "sglang"})),
     ) == Decimal("15.000")
-
-
-def test_priority_labels_do_not_override_automatic_score(policy):
-    entry = {"runner": "h100", "framework": "trt"}
-    labels = frozenset(
-        {"ci-priority:p0", "ci-priority:p4.5", "ci-priority:p1000000"}
-    )
-
-    assert calculate_priority(
-        entry,
-        policy,
-        PriorityContext(labels=labels),
-    ) == Decimal("10.000")
 
 
 def test_annotation_only_touches_runnable_matrix_entries(policy):

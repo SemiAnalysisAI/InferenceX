@@ -55,28 +55,23 @@ def test_installed_tools_use_callers_repository(tmp_path, run_installed, layout)
     project.mkdir(exist_ok=True)
     configs = project / "configs"
     configs.mkdir()
-    (configs / "runners.yaml").write_text("labels:\n  cluster:fixture-gpu: [self-hosted]\n")
-    recipes = project / "benchmarks/multi_node/srt-slurm-recipes"
-    recipes.mkdir(parents=True)
-    (recipes / "fixture.yaml").write_text(
-        "schema: 2\nroles:\n  prefill: {nodes: 2}\n  decode: {nodes: 4}\n"
+    (configs / "runners.yaml").write_text(
+        "labels:\n  cluster:fixture-gpu: [self-hosted]\n"
+        "clusters:\n  fixture-gpu:\n    gpus-per-node: 8\n    arch: x86_64\n"
+        "    scheduler: slurm\n    slurm: {partition: batch, exclusive: true}\n"
     )
 
     result = run_installed(
         "-c",
         """
 import json
-from infx.matrix.generate import recipe_node_count
 from infx.workflows.calc_success_rate import load_hardware_labels
-print(json.dumps({
-    "nodes": recipe_node_count({"additional-settings": ["CONFIG_FILE=recipes/fixture.yaml"]}, {}),
-    "hardware": load_hardware_labels(),
-}))
+print(json.dumps({"hardware": load_hardware_labels()}))
 """,
     )
 
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"nodes": 6, "hardware": ["fixture-gpu"]}
+    assert json.loads(result.stdout) == {"hardware": ["fixture-gpu"]}
 
 
 def test_installed_matrix_validation_rejects_zero_concurrency(run_installed):
@@ -108,30 +103,6 @@ def test_installed_matrix_validation_rejects_zero_concurrency(run_installed):
     assert "matrix[0]: 1 validation error" in result.stderr
     assert "conc\n  Input should be greater than 0" in result.stderr
     assert result.stdout == ""
-
-
-def test_installed_manual_plan_reads_the_callers_workflow(tmp_path, run_installed):
-    workflows = tmp_path / ".github/workflows"
-    workflows.mkdir(parents=True)
-    (workflows / "manual.yml").write_text("on: {workflow_dispatch: {}}\n")
-    result = run_installed(
-        "-c",
-        """
-from infx.matrix.plan import build_plan
-plan = build_plan([{
-    "config-keys": [], "workflow-dispatch": "manual.yml",
-    "description": ["Record manual workload"],
-    "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
-}], base_ref="base", head_ref="head", config_files=[])
-print(plan.model_dump_json(by_alias=True, exclude_none=True))
-""",
-    )
-    assert result.returncode == 0, result.stderr
-    plan = json.loads(result.stdout)
-    assert plan["single_node"] == plan["multi_node"] == {}
-    for key in ("evals", "agentic_evals", "multinode_evals", "multinode_agentic_evals"):
-        assert plan[key] == []
-    assert plan["changelog_metadata"]["entries"][0]["workflow-dispatch"] == "manual.yml"
 
 
 def test_installed_hardware_matching_works_without_repository_files(run_installed):

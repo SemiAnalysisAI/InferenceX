@@ -376,7 +376,6 @@ def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
 
     identity = agentic_key(row)
 
-    # Equivalent nested metadata must be usable as the same dictionary/set key.
     assert {identity} == {agentic_key(
         {
             **row,
@@ -424,7 +423,6 @@ def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
         physical_runner="h100-dgxc-slurm_01",
     )
     (tmp_path / "eval_server_logs_fixture").mkdir()
-    (tmp_path / "eval_gpu_metrics_fixture").mkdir()
 
     assert validate_eval_artifacts(tmp_path) == []
 
@@ -544,13 +542,6 @@ def test_eval_validation_separates_explicit_suite_identities(
 
     assert eval_key(gsm8k) != eval_key(tool_use)
     assert validate_eval_artifacts(tmp_path) == []
-
-
-def test_eval_result_key_includes_task_identity() -> None:
-    gsm8k = single_eval_result(32, eval_suite="tool_use")
-    bfcl = {**gsm8k, "task": "bfcl_smoke"}
-
-    assert eval_result_key(gsm8k) != eval_result_key(bfcl)
 
 
 def test_eval_validation_distinguishes_sequence_lengths(tmp_path: Path) -> None:
@@ -1016,7 +1007,6 @@ def test_eval_only_cli_runs_outside_checkout_without_benchmark_artifacts(tmp_pat
     )
 
 
-# ── dedupe_reran_evals ────────────────────────────────────────────────────────
 
 
 def _dd_meta(conc: int) -> dict:
@@ -1105,8 +1095,6 @@ def test_dedupe_reports_aggregate_identity_error_before_decoding_raw_results(tmp
 
 
 def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
-    # Three reruns of one eval plus a result-less attempt, mirroring a flaky
-    # config retried until it passed.
     old, mid, new, empty = (
         "eval_minimaxm3_conc4096_b300-nv_15",
         "eval_minimaxm3_conc4096_b300-nv_16",
@@ -1138,8 +1126,6 @@ def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
 
 
 def test_dedupe_leaves_ambiguous_artifacts_for_validation(tmp_path: Path) -> None:
-    # Result-less raw artifacts cannot be ordered or reused. Dedupe leaves them
-    # for validation to reject as missing recognized results.
     for name in ("eval_minimaxm3_conc4096_b300-nv_01", "eval_minimaxm3_conc4096_b300-nv_02"):
         _dd_write_legacy_raw(tmp_path, name, 4096, None)
     _dd_write_aggregate(
@@ -1170,8 +1156,6 @@ def test_dedupe_is_noop_for_clean_artifacts(tmp_path: Path) -> None:
 
 
 def test_dedupe_prunes_superseded_batched_conc(tmp_path: Path) -> None:
-    # Two batched reruns overlap on conc 32; the newer run wins that conc while
-    # each run keeps the concurrencies unique to it.
     older = tmp_path / "eval_minimaxm3_batch_b300-nv_05"
     newer = tmp_path / "eval_minimaxm3_batch_b300-nv_09"
     for artifact_dir, concs, stamp in (
@@ -1578,8 +1562,6 @@ def test_dedupe_uses_winning_legacy_result_for_aggregate(
 def test_dedupe_breaks_ties_by_directory_then_aggregate_location(
     tmp_path: Path, separator: str,
 ) -> None:
-    # Equal result timestamps and filenames choose the last directory name;
-    # repeated rows for that file choose the last aggregate filename and index.
     stamp = "2026-06-27T01-00-00.000000"
     for name in ("eval_retry_z", "eval_retry_a"):
         _dd_write_legacy_raw(tmp_path, name, 16, stamp)

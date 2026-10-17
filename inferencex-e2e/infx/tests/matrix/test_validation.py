@@ -121,6 +121,7 @@ def valid_single_node_master_config():
         "framework": "sglang",
         "runner": "mi300x",
         "multinode": False,
+        "srt-recipe-dir": "fixture",
         "scenarios": {
             "fixed-seq-len": [
 
@@ -128,7 +129,7 @@ def valid_single_node_master_config():
                     "isl": 1024,
                     "osl": 1024,
                     "search-space": [
-                        {"tp": 8, "conc-start": 4, "conc-end": 64}
+                        {"tp": 8, "conc-start": 4, "conc-end": 64, "srt-recipe": "recipe.yaml"}
                     ]
                 }
             ]
@@ -149,6 +150,7 @@ def valid_multinode_master_config():
         "multinode": True,
         "disagg": True,
         "kv-p2p-transfer": "nixl",
+        "srt-recipe-dir": "fixture",
         "scenarios": {
             "fixed-seq-len": [
 
@@ -157,6 +159,7 @@ def valid_multinode_master_config():
                     "osl": 1024,
                     "search-space": [
                         {
+                            "srt-recipe": "recipe.yaml",
                             "prefill": {
                                 "hardware": "gb200",
                                 "num-worker": 5,
@@ -189,29 +192,27 @@ def valid_multinode_master_config():
 
 
 @pytest.fixture
-def valid_runner_config():
-    """Valid runner config based on configs/runners.yaml."""
-    return {
-        "labels": {
-            "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-            "h200": ["h200-cw_0", "h200-cw_1"],
-            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-nscale_1"],
-            "cluster:b200-nscale": ["b200-nscale_1"],
-            "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
-            "gb200": ["gb200-nv_0"],
-        },
-        "hardware": {
-            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
-            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "cluster:b200-nscale": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "cluster:mi300x-amd": {"available-cpu-dram-mib": 1547820, "gpus-per-node": 8},
-            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
-        },
-    }
+def recipe_root(tmp_path):
+    """Project root holding the fixture configs' recipes."""
+    for node in ("single_node", "multi_node"):
+        recipes = tmp_path / f"benchmarks/{node}/srt-slurm-recipes/fixture"
+        recipes.mkdir(parents=True)
+        (recipes / "recipe.yaml").write_text("schema: 2\n")
+        (recipes / "bundle.yaml").write_text(yaml.safe_dump({
+            "base": {}, "override_a": {}, "zip_override_z": {"benchmark": {"c": [1, 2], "d": [3]}},
+        }))
+        (recipes / "broken.yaml").write_text("base: [\n")
+    return tmp_path
 
 
 
 class TestWorkerConfig:
+    def test_rejects_decode_dwdp(self, valid_multinode_matrix_entry):
+        row = copy.deepcopy(valid_multinode_matrix_entry)
+        row["decode"].update({"tp": 1, "ep": 1, "dp-attn": False, "dwdp-size": 8})
+        with pytest.raises(ValidationError, match="only on prefill"):
+            MultiNodeMatrixEntry.model_validate(row)
+
 
     @pytest.mark.parametrize("field", ["pp", "dcp-size", "pcp-size"])
     def test_worker_parallelism_fields_must_be_positive(self, field):
@@ -239,7 +240,6 @@ class TestWorkerConfig:
             WorkerConfig(**{
                 "num-worker": 2,
                 "tp": 4,
-                # Missing ep and dp-attn
             })
 
     def test_worker_config_extra_field_forbidden(self):
@@ -428,6 +428,19 @@ class TestAgenticMatrixEntries:
                 }],
             })
 
+    def test_dram_kv_offload_rejects_per_worker_hardware(self):
+        with pytest.raises(ValidationError, match="per-worker 'hardware'"):
+            AgenticCodingConfig(**{
+                "dram-utilization": 0.80,
+                "search-space": [{
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": {"name": "mooncake"},
+                    "prefill": {"hardware": "gb200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                    "decode": {"hardware": "b200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                    "conc-list": [16],
+                }],
+            })
+
     def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
         with pytest.raises(ValidationError, match="total-cpu-dram-gb"):
             AgenticCodingSearchSpaceEntry(**{
@@ -510,7 +523,7 @@ class TestMultiNodeMatrixEntry:
 
 
     def test_conc_must_be_list(self, valid_multinode_matrix_entry):
-        valid_multinode_matrix_entry["conc"] = 2150  # Single int, not list
+        valid_multinode_matrix_entry["conc"] = 2150
         with pytest.raises(ValidationError):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
@@ -654,7 +667,6 @@ class TestMultiNodeSearchSpaceEntry:
                     "ep": 4,
                     "dp-attn": False,
                 },
-                # Missing conc specification
             })
 
 
@@ -939,11 +951,13 @@ class TestMasterConfigEntries:
             "framework": "vllm",
             "runner": "b200",
             "multinode": False,
+            "srt-recipe-dir": "fixture",
             "scenarios": {
                 "agentic-coding": [
                     {
                         "search-space": [
-                            {"tp": 8, "conc-list": [1], "kv-offloading": "none"}
+                            {"tp": 8, "conc-list": [1], "kv-offloading": "none",
+                             "srt-recipe": "recipe.yaml"}
                         ],
                     }
                 ]
@@ -968,6 +982,7 @@ class TestMasterConfigEntries:
             "multinode": True,
             "disagg": True,
             "kv-p2p-transfer": "nixl",
+            "srt-recipe-dir": "fixture",
             "scenarios": {
                 "agentic-coding": [
                     {
@@ -975,6 +990,7 @@ class TestMasterConfigEntries:
                             {
                                 "spec-decoding": "none",
                                 "conc-list": [1],
+                                "srt-recipe": "recipe.yaml",
                                 "prefill": {
                                     "hardware": "b200",
                                     "num-worker": 1,
@@ -1011,9 +1027,92 @@ class TestValidateMasterConfig:
         del valid_single_node_master_config["model"]
         configs = {"broken-config": valid_single_node_master_config}
         with pytest.raises(ValueError) as exc_info:
-            validate_master_config(configs)
+            validate_master_config(configs, Path())
         assert "broken-config" in str(exc_info.value)
         assert "failed validation" in str(exc_info.value)
+
+    @pytest.mark.parametrize("multinode", [False, True])
+    @pytest.mark.parametrize(("missing", "error"), [
+        ("srt-recipe-dir", "srt-recipe-dir"),
+        ("srt-recipe", "requires srt-recipe"),
+    ])
+    def test_srt_configs_name_a_recipe_on_every_row(
+        self, valid_single_node_master_config, valid_multinode_master_config,
+        multinode, missing, error,
+    ):
+        config = valid_multinode_master_config if multinode else valid_single_node_master_config
+        if missing == "srt-recipe-dir":
+            del config[missing]
+        else:
+            del config["scenarios"]["fixed-seq-len"][0]["search-space"][0][missing]
+        with pytest.raises(ValueError, match=error):
+            validate_master_config({"fixture": config}, Path())
+
+    @pytest.mark.parametrize(("setting", "replacement"), [
+        ("CONFIG_FILE=recipes/fixture/recipe.yaml", "use srt-recipe"),
+        ("EVAL_CONFIG_FILE=recipes/fixture/recipe.yaml", "use eval-srt-recipe"),
+    ])
+    def test_recipe_settings_are_not_additional_settings(
+        self, valid_multinode_master_config, setting, replacement,
+    ):
+        row = valid_multinode_master_config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        row["prefill"]["additional-settings"].append(setting)
+        with pytest.raises(ValidationError, match=replacement):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+    def test_llmd_configs_keep_config_file(self, valid_multinode_master_config):
+        config = valid_multinode_master_config
+        config["framework"] = "llmd-vllm"
+        del config["srt-recipe-dir"]
+        row = config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        del row["srt-recipe"]
+        row["prefill"]["additional-settings"].append("CONFIG_FILE=llmd.yaml")
+        assert validate_master_config({"llmd": config}, Path()) == {"llmd": config}
+        row["srt-recipe"] = "recipe.yaml"
+        with pytest.raises(ValidationError, match="llmd-vllm selects recipes with CONFIG_FILE"):
+            MultiNodeMasterConfigEntry(**config)
+
+    def test_eval_srt_recipe_is_multinode_only(self, valid_single_node_master_config):
+        config = valid_single_node_master_config
+        config["runner"] = "cluster:b200-nscale"
+        config["scenarios"] = {"agentic-coding": [{"search-space": [{
+            "tp": 8, "conc-list": [1], "kv-offloading": "none",
+            "srt-recipe": "recipe.yaml", "eval-srt-recipe": "recipe.yaml",
+        }]}]}
+        with pytest.raises(ValidationError, match="eval-srt-recipe is only valid for multinode"):
+            SingleNodeMasterConfigEntry(**config)
+
+    @pytest.mark.parametrize("reference", [
+        "/fixture/recipe.yaml", "../recipe.yaml", "sub//recipe.yaml", "./recipe.yaml", "",
+        "recipe.yaml:", "recipe.yaml:override_*", "recipe.yaml:zip_override_z", "recipe.yaml:z",
+    ])
+    def test_recipe_references_are_relative_paths_with_one_variant(self, reference):
+        with pytest.raises(ValidationError, match="srt-recipe"):
+            SingleNodeSearchSpaceEntry(**{"tp": 8, "conc-list": [1], "srt-recipe": reference})
+
+    @pytest.mark.parametrize(("field", "reference", "error"), [
+        ("srt-recipe", "bundle.yaml", None),
+        ("srt-recipe", "bundle.yaml:base", None),
+        ("srt-recipe", "bundle.yaml:override_a", None),
+        ("eval-srt-recipe", "bundle.yaml:zip_override_z[1]", None),
+        ("srt-recipe", "missing.yaml", "does not exist"),
+        ("eval-srt-recipe", "missing.yaml:base", "does not exist"),
+        ("srt-recipe", "bundle.yaml:override_b", "has no variant override_b"),
+        ("srt-recipe", "bundle.yaml:zip_override_z[2]", r"has no variant zip_override_z\[2\]"),
+        ("srt-recipe", "recipe.yaml:base", "only an override bundle"),
+        ("srt-recipe", "broken.yaml", "fixture/broken.yaml is not valid YAML"),
+    ])
+    def test_load_time_validation_resolves_the_selected_variant(
+        self, recipe_root, valid_multinode_master_config, field, reference, error,
+    ):
+        row = valid_multinode_master_config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        row[field] = reference
+        configs = {"fixture": valid_multinode_master_config}
+        if error is None:
+            assert validate_master_config(configs, recipe_root) is configs
+            return
+        with pytest.raises(ValueError, match=error):
+            validate_master_config(configs, recipe_root)
 
 
 
@@ -1022,7 +1121,7 @@ class TestValidateRunnerConfig:
     def test_value_must_be_list(self):
         config = {
             "labels": {
-                "h100": "h100-cr_0",  # Not a list
+                "h100": "h100-cr_0",
             },
         }
         with pytest.raises(ValueError) as exc_info:
@@ -1032,7 +1131,7 @@ class TestValidateRunnerConfig:
     def test_list_must_contain_strings(self):
         config = {
             "labels": {
-                "h100": ["h100-cr_0", 123],  # Contains non-string
+                "h100": ["h100-cr_0", 123],
             },
         }
         with pytest.raises(ValueError) as exc_info:
@@ -1056,47 +1155,6 @@ class TestValidateRunnerConfig:
         with pytest.raises(ValueError, match="labels mapping"):
             validate_runner_config(config)
 
-    def test_hardware_available_dram_must_be_positive(self):
-        config = {
-            "labels": {"h100": ["h100-cr_0"]},
-            "hardware": {"h100": {"available-cpu-dram-mib": 0, "gpus-per-node": 8}},
-        }
-        with pytest.raises(ValueError) as exc_info:
-            validate_runner_config(config)
-        assert "available-cpu-dram-mib" in str(exc_info.value)
-
-    def test_hardware_gpus_per_node_must_be_positive(self):
-        config = {
-            "labels": {"h100": ["h100-cr_0"]},
-            "hardware": {"h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 0}},
-        }
-        with pytest.raises(ValueError) as exc_info:
-            validate_runner_config(config)
-        assert "gpus-per-node" in str(exc_info.value)
-
-
-
-@pytest.mark.parametrize("updates", [
-    {},
-    {"workflow-dispatch": "../manual.yml"},
-    {"workflow-dispatch": "/tmp/manual.yml"},
-    {"workflow-dispatch": "https://example.com/manual.yml"},
-    {"workflow-dispatch": "manual.yml", "config-keys": ["test-config"]},
-    {"workflow-dispatch": "manual.yml", "evals-only": True},
-    {"workflow-dispatch": "manual.yml", "all-evals": True},
-    {"workflow-dispatch": "manual.yml", "no-evals": True},
-    {"workflow-dispatch": "manual.yml", "append-only": True},
-    {"workflow-dispatch": "manual.yml", "eval-min-prefill-ep": 1},
-    {"workflow-dispatch": "manual.yml", "scenario-type": ["fixed-seq-len"]},
-])
-def test_manual_changelog_rejects_invalid_selection(updates):
-    with pytest.raises(ValueError):
-        ChangelogEntry.model_validate({
-            "config-keys": [],
-            "description": ["Record a separate manual workload"],
-            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
-            **updates,
-        })
 
 
 class TestChangelogEntry:
@@ -1288,18 +1346,26 @@ class TestMultiNodeAgenticMatrixEntry:
             if k not in ("prefill", "decode")
         }
         with pytest.raises(ValueError):
-            # Missing single-node-required fields (tp, pp, ...) and conc is a
-            # list rather than a scalar, so this must fail as a single-node
-            # agentic entry rather than silently validating.
             validate_agentic_matrix_entry(without_prefill)
 
+    def test_smoke_rows_satisfy_the_dispatch_schema(self):
+        from infx.matrix.generate import smoke_entries
+
+        row = {**MULTINODE_AGENTIC_EVAL_ROW, "conc": [8, 32]}
+        del row["eval-only"]
+        rows = smoke_entries([row])
+
+        assert [(entry["conc"], entry.get("eval-only", False)) for entry in rows] == [
+            ([8], False), ([32], True)]
+        for entry in rows:
+            validate_agentic_matrix_entry(entry)
 
 
 class TestLoadConfigFiles:
 
-    def test_load_single_file_with_validation(self, tmp_path, valid_single_node_master_config):
-        config_file = tmp_path / "config.yaml"
-        import yaml
+    def test_load_single_file_with_validation(self, recipe_root, valid_single_node_master_config):
+        config_file = recipe_root / "configs/config.yaml"
+        config_file.parent.mkdir()
         config_file.write_text(yaml.dump({"test-config": valid_single_node_master_config}))
         result = load_config_files([str(config_file)])
         assert "test-config" in result
@@ -1384,17 +1450,19 @@ class TestLoadRunnerFile:
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
 labels:
-  h100:
+  cluster:h100-cr:
   - h100-node-0
   - h100-node-1
-hardware:
-  h100:
-    available-cpu-dram-mib: 2063837
+clusters:
+  h100-cr:
     gpus-per-node: 8
+    available-cpu-dram-mib: 2063837
+    arch: x86_64
+    scheduler: slurm
+    slurm: {partition: batch, exclusive: true}
 """)
         result = load_runner_file(str(runner_file))
-        assert "h100" in result["labels"]
-        assert len(result["labels"]["h100"]) == 2
+        assert result["labels"]["cluster:h100-cr"] == ["h100-node-0", "h100-node-1"]
 
     def test_load_runner_file_without_validation(self, tmp_path):
         """validate=False preserves parsed input that normal validation rejects."""
@@ -1421,3 +1489,16 @@ labels:
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(("topology", "accepted"), [
+    ({"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}, True),
+    ({"tp": 8, "kv-offloading": "none"}, False),
+])  # fmt: skip
+def test_only_multinode_agentic_rows_measure_power(topology, accepted):
+    row = {"srt-recipe": "r.yaml", "conc-list": [4], "power": True, **topology}
+    if accepted:
+        assert AgenticCodingSearchSpaceEntry(**row).power is True
+    else:
+        with pytest.raises(ValidationError, match="Only multinode entries measure DCGM power"):
+            AgenticCodingSearchSpaceEntry(**row)

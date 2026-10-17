@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Copy beside the PREPARED runtime with inferencex-e2e/benchmarks/benchmark_lib.sh, fill the
+# Copy beside the PREPARED runtime with inferencex-e2e/benchmarks/check_env.sh, fill the
 # three paths and helper SHA256, then pin this entry's SHA256 in the site config.
 # This entry never allocates, imports, installs, or downloads.
 set -eo pipefail
-h3_helper="$(dirname -- "${BASH_SOURCE[0]}")/benchmark_lib.sh"
-h3_helper_hash=$(sha256sum "$h3_helper") && [[ "${h3_helper_hash%% *}" == 'REPLACE_WITH_BENCHMARK_LIB_SHA256' ]] || {
+h3_helper="$(dirname -- "${BASH_SOURCE[0]}")/check_env.sh"
+h3_helper_hash=$(sha256sum "$h3_helper") && [[ "${h3_helper_hash%% *}" == 'REPLACE_WITH_CHECK_ENV_SHA256' ]] || {
     echo 'Prepared validation helper missing or changed' >&2
     exit 2
 }
-source "$h3_helper" --validation-only
+source "$h3_helper"
 check_env_vars SLURM_JOB_ID SLURM_STEP_ID SLURM_STEP_GPUS H3_EXPECTED_GPU_MODEL
 runtime_root=/REPLACE_WITH_EXISTING_RUNTIME_PARENT
 workspace=/REPLACE_WITH_PERSISTENT_WORKSPACE

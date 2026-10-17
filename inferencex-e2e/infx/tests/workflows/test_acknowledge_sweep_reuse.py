@@ -38,7 +38,7 @@ def make_request_case(monkeypatch) -> dict:
         if case.get("fail_path") == path:
             raise RuntimeError("GitHub unavailable")
         if method == "POST":
-            assert path == "/issues/comments/41/reactions"  # No separate comments.
+            assert path == "/issues/comments/41/reactions"
             case["writes"].append(data["content"])
             case["reactions"].append({"id": len(case["writes"]) + 100,
                                       "content": data["content"],
@@ -94,7 +94,7 @@ def bot_status(case):
 
 
 @pytest.mark.parametrize("body", ["/reuse-sweep-run", "/reuse-sweep-run 123", "/use 123"])
-@pytest.mark.parametrize("labels", [[], [{"name": "sweep-enabled"}]])
+@pytest.mark.parametrize("labels", [[], [{"name": "full-sweep-enabled"}]])
 def test_accepts_valid_reuse_without_full_sweep_label(request_case, body, labels):
     case = request_case
     case["comment"]["body"] = body

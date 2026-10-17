@@ -1,5 +1,5 @@
-name: H3 Video Smoke
-run-name: H3 video smoke - ${{ github.ref_name }}
+name: H3 Video Preparation
+run-name: H3 video preparation - ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -56,59 +56,7 @@ on:
         type: string
         default: ""
       source-run-ids:
-        description: "One or two accepted H3 run IDs to reprocess; empty runs new generation"
-        required: false
-        type: string
-        default: ""
-  workflow_call:
-    inputs:
-      cluster:
-        required: false
-        type: string
-        default: h200-dgxc
-      preflight-only:
-        required: false
-        type: boolean
-        default: false
-      stage-amd-model:
-        description: "Stage frozen model files on AMD without allocating GPUs"
-        required: false
-        type: boolean
-        default: false
-      stage-amd-site:
-        description: "Seal inspected AMD runtime and benchmark inputs without GPUs"
-        required: false
-        type: boolean
-        default: false
-      inspect-amd-node:
-        description: "Inspect AMD node telemetry and cached images; at most 8 GPUs for 15 minutes"
-        required: false
-        type: boolean
-        default: false
-      recover-amd-rootfs:
-        description: "Recover the interrupted task-owned AMD rootfs without GPUs"
-        required: false
-        type: boolean
-        default: false
-      run-amd-serving:
-        description: "Reuse retained AMD runtime for one warmup and twenty C1 requests in one 120-minute lease"
-        required: false
-        type: boolean
-        default: false
-      prepare-amd-runtime:
-        description: "Inspect a task-owned cached AMD runtime; at most 8 GPUs for 60 minutes"
-        required: false
-        type: boolean
-        default: false
-      site-config:
-        required: false
-        type: string
-        default: ""
-      inventory-run-id:
-        required: false
-        type: string
-        default: ""
-      source-run-ids:
+        description: "One or two accepted H3 run IDs to reprocess; new serving runs are e2e-tests.yml video-generation matrix rows"
         required: false
         type: string
         default: ""
@@ -173,7 +121,7 @@ jobs:
           H3_INVENTORY_RUN_ID: ${{ inputs.inventory-run-id }}
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars H3_CLUSTER H3_PREFLIGHT_ONLY H3_STAGE_AMD_MODEL H3_STAGE_AMD_SITE \
             H3_INSPECT_AMD_NODE H3_PREPARE_AMD_RUNTIME H3_RECOVER_AMD_ROOTFS H3_RUN_AMD_SERVING \
             PRIORITY_ENABLED NODE_SLOTS_ENABLED GITHUB_OUTPUT GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
@@ -182,6 +130,10 @@ jobs:
             if [[ "$selected" == true ]]; then preparations=$((preparations + 1)); fi
           done
           [[ "$preparations" -le 1 ]] || { echo 'Select one H3 preparation operation.' >&2; exit 1; }
+          if [[ "$preparations" -eq 0 && -z "$H3_SOURCE_RUN_IDS" ]]; then
+            echo 'Select a preparation operation or accepted source runs; new H3 serving runs are the h3-bf16-<sku>-sglang-video rows of e2e-tests.yml.' >&2
+            exit 1
+          fi
           case "$H3_CLUSTER" in
             h200-dgxc) echo 'gpu-model=H200' >> "$GITHUB_OUTPUT" ;;
             h100-dgxc) echo 'gpu-model=H100' >> "$GITHUB_OUTPUT" ;;
@@ -240,10 +192,10 @@ jobs:
   smoke:
     needs: prepare
     outputs:
-      mode: ${{ steps.execute.outputs.mode || steps.amd-serving.outputs.mode }}
+      mode: ${{ steps.amd-serving.outputs.mode }}
     if: ${{ inputs.inventory-run-id == '' }}
-    name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.preflight-only && format('H3 {0} site preflight', needs.prepare.outputs.gpu-model) || inputs.recover-amd-rootfs && 'H3 AMD rootfs recovery (no GPU)' || inputs.stage-amd-site && 'H3 AMD site preparation (no GPU)' || inputs.stage-amd-model && 'H3 AMD model preparation (no GPU)' || inputs.prepare-amd-runtime && 'H3 AMD runtime preparation' || inputs.inspect-amd-node && 'H3 AMD node inventory' || inputs.source-run-ids != '' && !inputs.run-amd-serving && 'H3 H200 hardware inventory' || format('H3 video {0} smoke', needs.prepare.outputs.gpu-model) }}
-    runs-on: >-
+    name: p${{ needs.prepare.outputs.priority }} | ${{ inputs.preflight-only && format('H3 {0} site preflight', needs.prepare.outputs.gpu-model) || inputs.recover-amd-rootfs && 'H3 AMD rootfs recovery (no GPU)' || inputs.stage-amd-site && 'H3 AMD site preparation (no GPU)' || inputs.stage-amd-model && 'H3 AMD model preparation (no GPU)' || inputs.prepare-amd-runtime && 'H3 AMD runtime preparation' || inputs.inspect-amd-node && 'H3 AMD node inventory' || format('H3 {0} hardware inventory', needs.prepare.outputs.gpu-model) }}
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; workflow_dispatch only, so only repository writers can start it
       ${{ fromJSON(
         (inputs.preflight-only || inputs.stage-amd-model || inputs.stage-amd-site || inputs.recover-amd-rootfs) && format('["self-hosted","cluster:{0}"]', inputs.cluster) ||
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
@@ -252,7 +204,7 @@ jobs:
           toJSON(format('ci-attempt-{0}', github.run_attempt)), inputs.cluster) ||
         format('["cluster:{0}"]', inputs.cluster)
       ) }}
-    timeout-minutes: ${{ inputs.preflight-only && 5 || inputs.recover-amd-rootfs && 12 || inputs.stage-amd-site && 10 || inputs.stage-amd-model && 45 || inputs.run-amd-serving && 145 || inputs.prepare-amd-runtime && 70 || inputs.inspect-amd-node && 20 || 255 }}
+    timeout-minutes: ${{ inputs.preflight-only && 5 || inputs.recover-amd-rootfs && 12 || inputs.stage-amd-site && 10 || inputs.stage-amd-model && 45 || inputs.run-amd-serving && 145 || inputs.prepare-amd-runtime && 70 || inputs.inspect-amd-node && 20 || 60 }}
     env:
       H3_SITE_CONFIG: ${{ inputs.site-config || vars.H3_SITE_CONFIG }}
       H3_CLUSTER: ${{ inputs.cluster }}
@@ -277,14 +229,14 @@ jobs:
       - name: Inspect trusted runner identity without GPU allocation
         if: ${{ inputs.preflight-only }}
         run: |
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT H3_CLUSTER H3_REPOSITORY H3_SOURCE_SHA
           python3 experimental/video-generation/site_preflight.py \
           --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Recover the interrupted AMD rootfs without GPUs
         if: ${{ inputs.recover-amd-rootfs }}
         run: |
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
           python3 experimental/video-generation/prepare_amd_runtime.py \
           --workspace /it-share/data/wenyao-minimax-h3/work \
@@ -295,7 +247,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars GH_TOKEN H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
           export PYTHONPATH="$PWD/inferencex-e2e"
           python3 experimental/video-generation/stage_model_ci.py \
@@ -308,7 +260,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars GH_TOKEN H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
           export PYTHONPATH="$PWD/inferencex-e2e"
           python3 experimental/video-generation/stage_amd_site.py \
@@ -319,7 +271,7 @@ jobs:
         env:
           H3_PREPARE_AMD_RUNTIME: ${{ inputs.prepare-amd-runtime }}
         run: |
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT H3_PREPARE_AMD_RUNTIME
           runtime_args=()
           if [[ "$H3_PREPARE_AMD_RUNTIME" == true ]]; then runtime_args=(--prepare-runtime); fi
@@ -335,35 +287,12 @@ jobs:
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars GH_TOKEN H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT GITHUB_OUTPUT
           export PYTHONPATH="$PWD/inferencex-e2e"
           echo 'mode=serving-smoke' >> "$GITHUB_OUTPUT"
           python3 experimental/video-generation/run_amd_serving_ci.py \
             --source-run-id "$H3_SOURCE_RUN_IDS" \
-            --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
-      - name: Execute configured H3 smoke
-        id: execute
-        if: ${{ inputs.source-run-ids == '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.stage-amd-site && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime && !inputs.recover-amd-rootfs && !inputs.run-amd-serving }}
-        run: |
-          set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
-          check_env_vars H3_SITE_CONFIG H3_CLUSTER RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT \
-            H3_REPOSITORY H3_SOURCE_SHA H3_WORKFLOW_REF H3_WORKFLOW_SHA H3_ACTOR H3_TRIGGERING_ACTOR GITHUB_OUTPUT
-          python3 - <<'PY'
-          import json, os, sys
-          sys.path.insert(0, 'experimental/video-generation')
-          from ci import DEFAULT_SITE, prepared_artifact_prefix, validate_config
-          with open(os.environ['H3_SITE_CONFIG']) as stream:
-              config = validate_config(json.load(stream))
-          if config.get('site', DEFAULT_SITE)['cluster'] != os.environ['H3_CLUSTER']:
-              raise ValueError('Prepared site does not match the selected CI hardware cluster')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
-              stream.write('mode=' + config['mode'] + '\n')
-              stream.write('artifact-prefix=' + prepared_artifact_prefix(config) + '\n')
-          PY
-          python3 experimental/video-generation/ci.py \
-            --config "$H3_SITE_CONFIG" \
             --output "$RUNNER_TEMP/h3-video-$H3_RUN_ID-$H3_RUN_ATTEMPT"
       - name: Inspect current H200 hardware and power configuration
         if: ${{ inputs.source-run-ids != '' && !inputs.preflight-only && !inputs.stage-amd-model && !inputs.stage-amd-site && !inputs.inspect-amd-node && !inputs.prepare-amd-runtime && !inputs.recover-amd-rootfs && !inputs.run-amd-serving }}
@@ -372,7 +301,7 @@ jobs:
           H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars GH_TOKEN H3_SITE_CONFIG H3_SOURCE_RUN_IDS RUNNER_TEMP H3_RUN_ID H3_RUN_ATTEMPT
           export PYTHONPATH="$PWD/inferencex-e2e"
           python3 experimental/video-generation/inventory_ci.py \
@@ -383,7 +312,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.recover-amd-rootfs && 'h3-amd-rootfs-recovery' || inputs.preflight-only && 'h3-site-preflight' || inputs.stage-amd-site && 'h3-amd-site-preparation' || inputs.stage-amd-model && 'h3-model-preparation' || inputs.prepare-amd-runtime && 'h3-amd-runtime-preparation' || inputs.inspect-amd-node && 'h3-amd-node-inventory' || inputs.source-run-ids != '' && !inputs.run-amd-serving && 'h3-hardware' || steps.execute.outputs.artifact-prefix || 'h3-video' }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ inputs.recover-amd-rootfs && 'h3-amd-rootfs-recovery' || inputs.preflight-only && 'h3-site-preflight' || inputs.stage-amd-site && 'h3-amd-site-preparation' || inputs.stage-amd-model && 'h3-model-preparation' || inputs.prepare-amd-runtime && 'h3-amd-runtime-preparation' || inputs.inspect-amd-node && 'h3-amd-node-inventory' || 'h3-hardware' }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/h3-video-${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: error
           compression-level: 0
@@ -398,8 +327,8 @@ jobs:
     env:
       PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
       GH_TOKEN: ${{ github.token }}
-      H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids || github.run_id }}
-      H3_REUSE: ${{ inputs.source-run-ids != '' }}
+      H3_SOURCE_RUN_IDS: ${{ inputs.source-run-ids }}
+      H3_REUSE: "true"
       H3_INVENTORY_RUN_ID: ${{ inputs.inventory-run-id || github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -410,7 +339,7 @@ jobs:
       - name: Verify original execution and publish versioned measurements
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars GH_TOKEN PYTHONPATH H3_SOURCE_RUN_IDS H3_REUSE H3_INVENTORY_RUN_ID RUNNER_TEMP
           hardware_args=()
           if [[ "$H3_REUSE" == true ]]; then hardware_args=(--hardware-run-id "$H3_INVENTORY_RUN_ID"); fi

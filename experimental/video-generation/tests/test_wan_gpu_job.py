@@ -6,6 +6,7 @@ import pytest
 
 from evaluator import mvp_gpu_evidence as evidence
 from evaluator import mvp_gpu_job as gpu
+from evaluator import cli
 from test_mvp_gpu_job import spec  # noqa: F401
 from test_mvp_serving_smoke import saved_single
 
@@ -116,6 +117,22 @@ def test_wan_execution_retains_authorization_barrier(wan_spec, tmp_path):
     with pytest.raises(ValueError, match="approval"):
         gpu.run_gpu_job(wan_spec, output, serving_smoke=True)
     assert not output.exists()
+
+
+def test_wan_serving_cli_retains_failed_receipt_without_gpu_work(wan_spec, tmp_path):
+    wan_spec["authorization"]["compute_approved"] = False
+    source = tmp_path / "spec.json"
+    gpu._write(source, wan_spec)
+    output = tmp_path / "serving"
+
+    assert cli.main(["serving-smoke", "--spec", str(source), "--output", str(output),
+                     "--concurrencies", "1"]) == 1
+    result = gpu._read(output / "serving-smoke.json")
+    assert result["bundle_type"] == "video_serving_smoke_matrix"
+    assert result["status"] == "failed"
+    assert result["completion"]["scheduled"] == 4
+    assert result["completion"]["attempted"] == 0
+    assert not (output / "gpu").exists()
 
 
 def test_wan_evidence_is_model_bound_and_cannot_qualify_paired_jobs(wan_spec, tmp_path):

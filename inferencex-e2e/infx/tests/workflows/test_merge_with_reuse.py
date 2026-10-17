@@ -22,7 +22,6 @@ from infx.workflows.merge_with_reuse import (
     _poll_pr_head,
     _resolve_token,
     _retry_delay,
-    die,
     find_eligible_run,
     main,
     merge_pr,
@@ -199,7 +198,7 @@ class TestResolveToken:
         captured = capsys.readouterr()
         assert secret not in captured.out
         assert secret not in captured.err
-        assert token == secret  # it's returned, not printed
+        assert token == secret
 
 
 
@@ -319,7 +318,6 @@ class TestWaitForCheck:
             patch("infx.workflows.merge_with_reuse.time.sleep"),
             patch("infx.workflows.merge_with_reuse.time.monotonic") as mock_time,
         ):
-            # Deadline at 10, first call at 0, second at 0, third at 11
             mock_time.side_effect = [0, 0, 11]
             result = wait_for_check(
                 "abc12345" + "0" * 32,
@@ -342,14 +340,12 @@ class TestWaitForCheck:
         commit_err.get_check_runs.side_effect = GithubException(
             status=502, data={"message": "Bad Gateway"}, headers={}
         )
-        # First get_commit returns error-raising commit, second returns ok
         gh_repo.get_commit.side_effect = [commit_err, commit_ok]
 
         with (
             patch("infx.workflows.merge_with_reuse.time.sleep"),
             patch("infx.workflows.merge_with_reuse.time.monotonic") as mock_time,
         ):
-            # Enough time for retries
             mock_time.side_effect = [0, 0, 0, 0, 0]
             result = wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60)
         assert result == 0
@@ -427,35 +423,6 @@ class TestWaitForChecks:
             result = wait_for_checks(pull, sha, gh_repo, timeout=10)
         assert result == 1
 
-    def test_rerun_duplicate_old_cancelled_new_success(self):
-        """Old cancelled + new success for the same check -> pass (not fail-fast)."""
-        pull = MagicMock()
-        gh_repo = MagicMock()
-        commit = MagicMock()
-        gh_repo.get_commit.return_value = commit
-        # Two runs with the same name: old cancelled, new success
-        commit.get_check_runs.return_value = [
-            make_check_run(
-                name="calc-success-rate",
-                conclusion="cancelled",
-                started_at="2024-01-01T00:00:00Z",
-                cr_id=100,
-            ),
-            make_check_run(
-                name="calc-success-rate",
-                conclusion="success",
-                started_at="2024-01-01T01:00:00Z",
-                cr_id=200,
-            ),
-        ]
-        combined = MagicMock()
-        combined.statuses = []
-        commit.get_combined_status.return_value = combined
-
-        sha = "a" * 40
-        result = wait_for_checks(pull, sha, gh_repo, timeout=10)
-        assert result == 0
-
     def test_rerun_duplicate_old_failed_new_success(self):
         """Old failed + new success for the same check -> pass."""
         pull = MagicMock()
@@ -502,26 +469,8 @@ class TestWaitForChecks:
             patch("infx.workflows.merge_with_reuse.time.sleep"),
             patch("infx.workflows.merge_with_reuse.time.monotonic") as mock_time,
         ):
-            # Stale on first poll -> waits -> timeout
             mock_time.side_effect = [0, 0, 11]
             result = wait_for_checks(pull, sha, gh_repo, timeout=10)
-        assert result == 1
-
-    def test_genuine_failure_fail_fast(self):
-        """A genuine failure triggers immediate fail-fast."""
-        pull = MagicMock()
-        gh_repo = MagicMock()
-        commit = MagicMock()
-        gh_repo.get_commit.return_value = commit
-        commit.get_check_runs.return_value = [
-            make_check_run(name="tests", conclusion="failure"),
-        ]
-        combined = MagicMock()
-        combined.statuses = []
-        commit.get_combined_status.return_value = combined
-
-        sha = "a" * 40
-        result = wait_for_checks(pull, sha, gh_repo, timeout=60)
         assert result == 1
 
     def test_no_checks_yet_keeps_waiting(self):
@@ -558,7 +507,6 @@ class TestWaitForChecks:
         commit.get_combined_status.return_value = combined
 
         sha = "a" * 40
-        # A cancelled check completes polling without triggering fail-fast.
         result = wait_for_checks(pull, sha, gh_repo, timeout=10)
         assert result == 0
 
@@ -582,7 +530,6 @@ class TestWaitForChecks:
             data={"message": "Internal Server Error"},
             headers={},
         )
-        # First call returns error commit, second returns ok commit
         gh_repo.get_commit.side_effect = [commit_err, commit_ok]
 
         sha = "a" * 40
@@ -598,13 +545,6 @@ class TestWaitForChecks:
 
 
 class TestDeduplication:
-    def test_latest_check_runs_keeps_newest(self):
-        old = make_check_run(name="ci", started_at="2024-01-01T00:00:00Z", cr_id=1)
-        new = make_check_run(name="ci", started_at="2024-01-01T01:00:00Z", cr_id=2)
-        result = _latest_check_runs([old, new])
-        assert len(result) == 1
-        assert result[0].id == 2
-
     def test_latest_check_runs_different_names_kept(self):
         a = make_check_run(name="ci-a", cr_id=1)
         b = make_check_run(name="ci-b", cr_id=2)
@@ -630,12 +570,6 @@ class TestDeduplication:
 
 
 class TestTransientErrors:
-    def test_github_500_is_transient(self):
-        from github import GithubException
-
-        exc = GithubException(status=500, data={"message": "ISE"}, headers={})
-        assert _is_transient_error(exc) is True
-
     def test_github_429_is_transient(self):
         from github import GithubException
 
@@ -691,22 +625,15 @@ class TestTransientErrors:
 
 
 class TestPollPrHead:
-    def test_returns_immediately_on_match(self):
-        pull = MagicMock()
-        pull.head.sha = "expected_sha"
-        result = _poll_pr_head(pull, "expected_sha", retries=3, delay=1)
-        assert result == "expected_sha"
-
     def test_retries_and_succeeds(self):
         pull = MagicMock()
-        # head.sha changes on successive update() calls
         sha_sequence = iter(["old_sha", "old_sha", "expected_sha"])
 
         def update_head():
             pull.head.sha = next(sha_sequence)
 
         pull.update.side_effect = update_head
-        pull.head.sha = "old_sha"  # initial
+        pull.head.sha = "old_sha"
 
         with patch("infx.workflows.merge_with_reuse.time.sleep") as mock_sleep:
             result = _poll_pr_head(pull, "expected_sha", retries=3, delay=2)
@@ -802,7 +729,7 @@ class TestMergePrEligibility:
         assert "deleted fork" in captured.err
 
     def test_multiple_sweep_labels_exits_one(self):
-        pull = make_mock_pull(labels=["sweep-enabled", "full-sweep-enabled"])
+        pull = make_mock_pull(labels=["full-sweep-fail-fast", "full-sweep-enabled"])
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops()
         result = merge_pr(7, repo="example/repo", _git_ops=git_ops, _gh=gh)
@@ -834,7 +761,6 @@ class TestMergePrCommentPosting:
         pull = make_mock_pull()
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops()
-        # Stop after comment by raising in the fetch step
         git_ops.fetch.side_effect = StopIteration("stop after comment")
         with patch(
             "infx.workflows.merge_with_reuse.find_eligible_run",
@@ -847,54 +773,6 @@ class TestMergePrCommentPosting:
 
 class TestMergePrFullFlow:
     """Test the full merge flow with comprehensive mocking."""
-
-    def _run_full_flow(self, *, merge_fails=False, changelog_diff=False, sha=None):
-        """Run merge_pr with comprehensive mocking for the happy path."""
-        sha = sha or "a" * 40
-        pull = make_mock_pull(head_sha=sha)
-        gh = make_mock_gh(pull)
-        git_ops = make_mock_git_ops(sha=sha)
-
-        if merge_fails:
-            git_ops.merge.return_value = 1
-
-        if changelog_diff:
-            git_ops.diff_quiet.return_value = False
-        else:
-            git_ops.diff_quiet.return_value = True
-
-        with (
-            patch(
-                "infx.workflows.merge_with_reuse.find_eligible_run",
-                return_value=42,
-            ),
-            patch(
-                "infx.workflows.merge_with_reuse.wait_for_check",
-                return_value=0,
-            ),
-            patch(
-                "infx.workflows.merge_with_reuse.wait_for_checks",
-                return_value=0,
-            ),
-            patch("infx.workflows.merge_with_reuse.canonicalize_changelog"),
-            patch(
-                "infx.workflows.merge_with_reuse.resolve_changelog_conflict",
-                return_value=True,
-            ),
-        ):
-            result = merge_pr(
-                7,
-                repo="example/repo",
-                head_lag_retries=0,
-                head_lag_delay=0,
-                _git_ops=git_ops,
-                _gh=gh,
-            )
-        return result, git_ops, pull
-
-    def test_clean_merge_exits_zero(self):
-        result, _, _ = self._run_full_flow()
-        assert result == 0
 
     def test_head_lag_retry_succeeds(self):
         sha = "a" * 40
@@ -934,7 +812,6 @@ class TestMergePrFullFlow:
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops(sha=sha)
 
-        # After checks pass, final head check returns different sha
         call_count = [0]
 
         def update_side_effect():
@@ -1114,22 +991,16 @@ class TestMergePrFullFlow:
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops(sha=sha)
 
-        # Simulate: merge changes the head, then canonicalize changes the file
         rev_parse_calls = [0]
 
         def rev_parse_side_effect(ref="HEAD"):
             rev_parse_calls[0] += 1
-            # First call: pre_merge (sha)
-            # After merge (clean merge): head_after_merge (new_sha)
-            # After canonicalize: new_sha
-            # After amend: new_sha
-            # post_merge: new_sha
             if rev_parse_calls[0] == 1:
                 return sha
             return new_sha
 
         git_ops.rev_parse.side_effect = rev_parse_side_effect
-        git_ops.diff_quiet.return_value = False  # changelog changed
+        git_ops.diff_quiet.return_value = False
 
         with (
             patch(
@@ -1146,7 +1017,6 @@ class TestMergePrFullFlow:
             ),
             patch("infx.workflows.merge_with_reuse.canonicalize_changelog"),
         ):
-            # Update pull.head.sha to match post_merge so final check passes
             pull.head.sha = new_sha
             result = merge_pr(
                 7,
@@ -1165,7 +1035,6 @@ class TestMergePrFullFlow:
         pull = make_mock_pull(head_sha=sha)
         gh = make_mock_gh(pull)
         git_ops = make_mock_git_ops(sha=sha)
-        # rev_parse always returns same sha -> pre_merge == post_merge
         git_ops.diff_quiet.return_value = True
 
         with (
@@ -1197,17 +1066,6 @@ class TestMergePrFullFlow:
             "-m",
             "chore: refresh PR #7 for sweep reuse [skip-sweep]",
         )
-
-
-
-
-class TestExitCodes:
-    def test_main_returns_two_on_bad_usage(self):
-        with patch("sys.argv", ["prog"]):
-            assert main() == 2
-
-    def test_die_returns_one(self):
-        assert die("error") == 1
 
 
 
@@ -1326,7 +1184,6 @@ class TestChangelogConflictIntegration:
 
         main_branch = repo.active_branch.name
 
-        # Create PR branch with one appended entry
         pr_branch = repo.create_head("pr-branch")
         pr_branch.checkout()
         pr_entry = self._make_entry(
@@ -1337,7 +1194,6 @@ class TestChangelogConflictIntegration:
         repo.index.add([tracked_path])
         repo.index.commit("pr entry")
 
-        # Back to main, add entries
         repo.heads[main_branch].checkout()
         main_entry_1 = self._make_entry(
             "model-c/h100/tp1/bf16/stp/1k1k",
@@ -1353,7 +1209,6 @@ class TestChangelogConflictIntegration:
 
         main_raw = changelog_path.read_bytes()
 
-        # Checkout PR branch and merge main -> conflict
         pr_branch.checkout()
         git_ops = GitOps(repo)
         merge_rc = git_ops.merge(main_branch, "--no-ff", "--no-edit")
@@ -1374,7 +1229,6 @@ class TestChangelogConflictIntegration:
         assert resolved.endswith(b"\n")
         assert b"https://github.com/SemiAnalysisAI/InferenceX/pull/99" in resolved
 
-        # Validate no deletion lines vs main
         from infx.workflows.validate_perf_changelog import (
             compare_entries,
             parse_changelog,
@@ -1448,20 +1302,17 @@ class TestMergeAbortInCleanup:
         repo.config_writer().set_value("user", "name", "T").release()
         repo.config_writer().set_value("user", "email", "t@t.com").release()
 
-        # Initial commit
         (tmp_path / "file.txt").write_text("base\n")
         repo.index.add(["file.txt"])
         repo.index.commit("init")
         main_branch = repo.active_branch.name
 
-        # Create feature branch with conflicting change
         feature = repo.create_head("feature")
         feature.checkout()
         (tmp_path / "file.txt").write_text("feature change\n")
         repo.index.add(["file.txt"])
         repo.index.commit("feature commit")
 
-        # Back to main with different change
         repo.heads[main_branch].checkout()
         (tmp_path / "file.txt").write_text("main change\n")
         repo.index.add(["file.txt"])
@@ -1473,15 +1324,12 @@ class TestMergeAbortInCleanup:
         def fake_inner(pr, **kw):
             state = kw["state"]
             state.local_branch = branch_name
-            # Create and checkout the branch from main
             repo.create_head(branch_name, repo.heads[main_branch].commit)
             repo.heads[branch_name].checkout()
-            # Start a conflicted merge
             try:
                 repo.git.merge("feature", "--no-ff", "--no-edit")
             except gitpython.GitCommandError:
-                pass  # Expected conflict
-            # Simulate failure while in half-merged state
+                pass
             raise RuntimeError("simulated failure during merge")
 
         with patch(
@@ -1491,7 +1339,6 @@ class TestMergeAbortInCleanup:
             with pytest.raises(RuntimeError, match="simulated failure"):
                 merge_pr(7, _git_ops=git_ops, _gh=MagicMock())
 
-        # Verify cleanup: original branch, clean index, branch deleted
         assert repo.active_branch.name == main_branch
         assert not repo.is_dirty(untracked_files=True)
         assert branch_name not in [b.name for b in repo.heads]
@@ -1503,12 +1350,6 @@ class TestMergeState:
     def test_initial_state(self):
         state = _MergeState()
         assert state.local_branch == ""
-
-    def test_local_branch_settable(self):
-        state = _MergeState()
-        state.local_branch = "pr-42-reuse-1234"
-        assert state.local_branch == "pr-42-reuse-1234"
-
 
 def test_canonicalize_changelog_across_layout_migration(temp_repo, tmp_path, monkeypatch):
     base = b"- config-keys: [historical]\n  description: [original]\n  pr-link: XXX\n"

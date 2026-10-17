@@ -154,7 +154,7 @@ Use AgentX phase markers, not total Slurm runtime:
 
 ```bash
 grep -E \
-  "Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|replay_rc=" \
+  "Phase warmup progress|WARMUP cache pressure|Phase warmup complete|Phase profiling started|Phase profiling complete|process_agentic_result" \
   "<LOG_DIR>/benchmark.out"
 date -u
 ```
@@ -199,8 +199,11 @@ Use `scancel` or direct process termination only with explicit approval and a co
 reason. Doing so can bypass cleanup or strand shared-cluster state. Never kill only the
 backend and leave the workflow silently occupying a runner.
 
-After a recipe/config fix, use a targeted e2e dispatch for fast feedback. Reserve another
-official full sweep for the candidate that has passed direct cluster inspection.
+After a recipe/config fix, use a targeted e2e dispatch for fast feedback. Add
+`-f agentx-fast=true` to it for one warmup request per lane and a 20-minute profile. Reserve
+another official full sweep for the candidate that has passed direct cluster inspection.
+The `agentx-fast` PR modifier gives a PR sweep the same short profile, but it needs a primary
+sweep label and blocks artifact reuse while applied, so remove it before that official sweep.
 
 ## 7. Report the live diagnosis
 

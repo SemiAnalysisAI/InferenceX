@@ -8,15 +8,23 @@ import math
 import os
 import random
 import re
+import secrets
 import shlex
 import subprocess
+import tempfile
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
-from .api import PUBLIC, ReadError, capacity_context, fetch_capacity, fetch_catalog
-from .github import VerificationError, items as github_items, read as github_read
+from .api import PUBLIC, ReadError, fetch_capacity, fetch_catalog
+from .github import (
+    VerificationError,
+    download_json,
+    items as github_items,
+    read as github_read,
+)
 from .models import (
     CandidateOutcome,
     OwnedCandidate,
@@ -26,6 +34,12 @@ from .models import (
     identity,
     normalized_image,
 )
+
+if TYPE_CHECKING:
+    from infx.clusters import RunnerInventory
+
+PRODUCERS = "producers.json"
+RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started"})
 
 
 def observation_key(row: dict) -> tuple:
@@ -49,15 +63,28 @@ def observation_key(row: dict) -> tuple:
     )
 
 
-def live_families(root: Path) -> dict[tuple, set[str]]:
-    """Resolve public identities from the canonical generator, excluding archives."""
+def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozenset[str]:
+    try:
+        return frozenset(
+            inventory.cluster_for(node).id
+            for runner in {entry["runner"] for entry in entries}
+            for node in inventory.labels.get(runner, [runner])
+        )
+    except ValueError:
+        return frozenset()
+
+
+def live_families(root: Path) -> dict[tuple, dict[str, frozenset[str]]]:
+    """Resolve public identities and target clusters from the canonical generator, excluding archives."""
+    from infx.clusters import load_inventory
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
     from infx.matrix.validation import load_config_files, load_runner_file
 
     root = project_root(root)
     runners = load_runner_file(str(root / "configs/runners.yaml"))
-    index: dict[tuple, set[str]] = {}
+    inventory = load_inventory(runners)
+    index: dict[tuple, dict[str, frozenset[str]]] = {}
     paths = sorted((root / "configs").glob("*-master.yaml"))
     if not paths:
         raise ReadError("live-configs-unavailable")
@@ -67,11 +94,14 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
             family = f"{path.relative_to(root).as_posix()}:{key}"
             try:
                 entries = generate_test_config_sweep(
-                    SimpleNamespace(config_keys=[key]), configs, runners
+                    SimpleNamespace(config_keys=[key]), configs, runners, root
                 )
             except ValueError:
-                # One unrenderable family must not hide unrelated working recipes.
                 print(f"::warning::Klaud live-family-unrenderable: {family}")
+                continue
+            clusters = target_clusters(entries, inventory)
+            if not clusters:
+                print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
                 continue
             for entry in entries:
                 agentic = entry.get("scenario-type") == "agentic-coding"
@@ -87,7 +117,7 @@ def live_families(root: Path) -> dict[tuple, set[str]]:
                     "osl": None if agentic else entry["osl"],
                     "image": entry["image"],
                 }
-                index.setdefault(observation_key(row), set()).add(family)
+                index.setdefault(observation_key(row), {})[family] = clusters
     return index
 
 
@@ -95,28 +125,18 @@ def choose(
     items: list[dict],
     available: set[str],
     occupied: set[str],
-    families: dict[tuple, set[str]],
+    families: dict[tuple, dict[str, frozenset[str]]],
 ) -> list[dict]:
-    # Preserve claims made before the agent's spelling was corrected.
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     seen = set()
-    # The public feed is benchmark history, not an image-release authority.
-    # Every current family with an exact published baseline is eligible for
-    # independent upstream inspection by Klaud.
     valid = [item for item in items if item["source-status"] == "baseline"]
-    # Prefer the latest matching baseline within each live family before shuffling.
     for item in sorted(
         valid,
         key=lambda item: (item["source"]["date"], item["source-id"]),
         reverse=True,
     ):
         row = item["source"]
-        if not any(
-            cluster == row["hardware"] or cluster.startswith(row["hardware"] + "-")
-            for cluster in available
-        ):
-            continue
         legacy = identity(
             {
                 key: row[key]
@@ -131,7 +151,7 @@ def choose(
             }
         )[:16]
         image_key = identity(observation_key(row)[-1])[:16]
-        for family in sorted(families.get(observation_key(row), ())):
+        for family, clusters in sorted(families.get(observation_key(row), {}).items()):
             prefix = "klaud/auto-" + identity(family)[:16] + "-"
             branch = prefix + image_key
             claims = {
@@ -140,12 +160,13 @@ def choose(
                 f"klaud/auto-{legacy}-{image_key}",
                 f"klaud/auto-{legacy}-",
             }
-            if family in seen or claims & occupied:
+            if family in seen or claims & occupied or not clusters <= available:
                 continue
             selected.append(
                 {
                     "id": branch.removeprefix("klaud/auto-"),
                     "family": family,
+                    "clusters": sorted(clusters),
                     "source": row,
                     "branch": branch,
                 }
@@ -155,8 +176,13 @@ def choose(
     return selected
 
 
-def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set[str]:
-    """Return same-base candidates recently given an agent, as a soft ordering hint."""
+def weights_key(source: dict) -> tuple:
+    return (source.get("model"), source.get("precision"), source.get("hardware"))
+
+
+def recent_candidate_outcomes(
+    repository: str, cooldown_hours: int
+) -> tuple[dict[str, str | None], set[tuple]]:
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     try:
         runs = github_items(
@@ -166,38 +192,103 @@ def recent_candidate_ids(repository: str, base: str, cooldown_hours: int) -> set
         )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return set()
-    result = set()
+        return {}, set()
+    dated = []
     for run in runs:
         try:
             created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
-            if created < cutoff or run.get("head_sha") != base:
-                continue
-            artifacts = github_items(
-                repository, f"actions/runs/{int(run['id'])}/artifacts?per_page=100", "artifacts"
-            )
-        except (
-            AttributeError,
-            KeyError,
-            OSError,
-            TypeError,
-            ValueError,
-            subprocess.SubprocessError,
-        ):
+            if created >= cutoff:
+                dated.append((created, int(run["id"])))
+        except (AttributeError, KeyError, TypeError, ValueError):
             continue
+    result: dict[str, str | None] = {}
+    missing_weights: set[tuple] = set()
+    for _, run_id in sorted(dated, reverse=True):
+        try:
+            artifacts = github_items(
+                repository, f"actions/runs/{run_id}/artifacts?per_page=100", "artifacts"
+            )
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            continue
+        blocked = set()
         for artifact in artifacts:
             try:
                 match = re.fullmatch(
                     r"klaud-candidate-([0-9a-f]{16}-[0-9a-f]{16})", artifact["name"]
                 )
-                if match and not artifact.get("expired", True):
-                    result.add(match[1])
+                if not match or artifact.get("expired", True) or match[1] in result:
+                    continue
             except (AttributeError, KeyError, TypeError):
                 continue
-    return result
+            result[match[1]] = recorded_outcome(repository, artifact)
+            if result[match[1]] == "weights-missing":
+                blocked.add(match[1])
+        if blocked:
+            missing_weights |= {
+                weights_key(candidate["source"])
+                for candidate in planned_candidates(repository, artifacts)
+                if candidate.get("id") in blocked
+            }
+    return result, missing_weights
 
 
-def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: int) -> None:
+def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
+    plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
+    if not plan:
+        return []
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, plan, Path(scratch))
+            candidates = json.loads((Path(scratch) / "candidates.json").read_text())
+            return [
+                c for c in candidates if isinstance(c, dict) and isinstance(c.get("source"), dict)
+            ]
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            return []
+
+
+def recorded_outcome(repository: str, artifact: dict) -> str | None:
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, artifact, Path(scratch))
+            diagnostics = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())
+            if diagnostics.get("action-outcome") == "skipped":
+                return "agent-not-started"
+            outcome = CandidateOutcome.model_validate(diagnostics["candidate-outcome"])
+            return (
+                outcome.reason_code if outcome.reason_code == "weights-missing" else outcome.outcome
+            )
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            subprocess.SubprocessError,
+        ):
+            return None
+
+
+def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
+    fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
+    deferred = [
+        candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
+    ]
+    return fresh + deferred
+
+
+def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
+    cutoff = now - timedelta(days=stale_days)
+    return [
+        pr
+        for pr in pulls
+        if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
+        or datetime.fromisoformat(pr["updated_at"].replace("Z", "+00:00")) >= cutoff
+    ]
+
+
+def plan(
+    root: Path, directory: Path, review_batch_size: int, cooldown_hours: int, stale_pr_days: int
+) -> None:
     from . import claims
 
     policy = Policy()
@@ -218,9 +309,7 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
         for pr in page
         if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
     )
-    capacity = capacity_context(policy)
-    available = set(capacity["eligible-telemetry-clusters"])
-    candidates = choose(items, available, occupied, live_families(root))
+    candidates = choose(items, fetch_capacity(policy), occupied, live_families(root))
     blocked = {
         candidate.family
         for owner in claims.family_owners(repository)
@@ -230,10 +319,13 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    recent = recent_candidate_ids(repository, base, cooldown_hours)
-    candidates = [candidate for candidate in candidates if candidate["id"] not in recent] + [
-        candidate for candidate in candidates if candidate["id"] in recent
+    recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
+    candidates = [
+        candidate
+        for candidate in candidates
+        if weights_key(candidate["source"]) not in missing_weights
     ]
+    candidates = order_by_cooldown(candidates, recent)
     candidates = candidates[:review_batch_size]
     contexts = [
         {
@@ -259,8 +351,9 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
             "branch": pr["head"]["ref"],
             "head": pr["head"]["sha"],
         }
-        for page in pulls
-        for pr in page
+        for pr in active_pulls(
+            [pr for page in pulls for pr in page], datetime.now(UTC), stale_pr_days
+        )
     ]
     if candidates:
         for pr in open_prs:
@@ -288,8 +381,6 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
         json.dumps(contexts, indent=2, allow_nan=False) + "\n"
     )
     (directory / "open-prs.json").write_text(json.dumps(open_prs, indent=2) + "\n")
-    # Private selection hints for the read-only reviewer; excluded from artifacts.
-    (directory / "capacity.json").write_text(json.dumps(capacity) + "\n")
     if filename := os.environ.get("GITHUB_OUTPUT"):
         schema = PRReview.model_json_schema(by_alias=True)
         schema["properties"]["decisions"].update(minItems=len(contexts), maxItems=len(contexts))
@@ -499,7 +590,6 @@ def save_diagnostics(
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 failure = "lifecycle-unverified"
     if failure is not None:
-        # Never echo invalid structured output, which could contain private data.
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
             outcome="unexpected-error",
@@ -537,34 +627,83 @@ def save_diagnostics(
     return outcome.outcome != "unexpected-error"
 
 
-def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
-    from . import claims
-    from .reporting import BaselinePreflight, Prose, resolve_baseline
+def reviewed(contexts: list[dict]) -> tuple[PRReview, str | None]:
+    """The overlap review of ``contexts`` (``KLAUD_PR_REVIEW``), or none and why selection defers."""
+    if not contexts:
+        return PRReview(decisions=[]), None
+    if os.environ.get("KLAUD_REVIEW_OUTCOME", "success") != "success":
+        return PRReview(decisions=[]), "review-action-failed"
+    try:
+        review = PRReview.model_validate_json(os.environ.get("KLAUD_PR_REVIEW", ""))
+        ids = [decision.candidate_id for decision in review.decisions]
+        if len(set(ids)) != len(ids) or set(ids) != {candidate["id"] for candidate in contexts}:
+            raise ValueError("Review must cover every candidate exactly once")
+        expected = {candidate["id"]: candidate["family"] for candidate in contexts}
+        if any(
+            decision.family != expected[decision.candidate_id]
+            for decision in review.decisions
+            if decision.decision == "proceed"
+        ):
+            raise ValueError("Review changed the resolved live family")
+    except ValueError:
+        return PRReview(decisions=[]), "invalid-review-output"
+    return review, None
+
+
+def print_untrusted(title: str, text: str) -> None:
+    """Print another revision's output in a log group where it cannot issue workflow commands."""
+    token = secrets.token_hex(16)
+    print(f"::group::{title}\n::stop-commands::{token}\n{text.rstrip()}\n::{token}::\n::endgroup::")
+
+
+def regenerate_producers(directory: Path) -> None:
+    """Write ``producers.json``: each proceed candidate's producer families, by family and head.
+
+    Producer revisions regenerate their own families, so this step runs without credentials.
+    A producer that fails is logged and left out; ``select`` defers the candidates needing it.
+    """
+    from .reporting import publication
+    from .validation import ProducerRegenerationError, producer_matrix
 
     contexts = json.loads((directory / "candidates.json").read_text())
-    review = PRReview(decisions=[])
-    deferred = None
-    if contexts:
-        if os.environ.get("KLAUD_REVIEW_OUTCOME", "success") != "success":
-            deferred = "review-action-failed"
-        else:
+    review, _ = reviewed(contexts)
+    models = {
+        decision.candidate_id: decision.baseline_model
+        for decision in review.decisions
+        if decision.decision == "proceed"
+    }
+    repository = os.environ["GITHUB_REPOSITORY"]
+    families: dict[str, dict[str, dict]] = {}
+    for candidate in contexts:
+        if (model := models.get(candidate["id"])) is None:
+            continue
+        try:
+            heads = publication(repository, candidate, model).heads
+        except (OSError, ValueError, KeyError, TypeError):
+            print(
+                f"::warning::Klaud: public producers of candidate {candidate['id']} are unavailable."
+            )
+            continue
+        regenerated = families.setdefault(candidate["family"], {})
+        for head in heads:
+            if head in regenerated:
+                continue
             try:
-                review = PRReview.model_validate_json(os.environ.get("KLAUD_PR_REVIEW", ""))
-                ids = [decision.candidate_id for decision in review.decisions]
-                if len(set(ids)) != len(ids) or set(ids) != {
-                    candidate["id"] for candidate in contexts
-                }:
-                    raise ValueError("Review must cover every candidate exactly once")
-                expected = {candidate["id"]: candidate["family"] for candidate in contexts}
-                if any(
-                    decision.family != expected[decision.candidate_id]
-                    for decision in review.decisions
-                    if decision.decision == "proceed"
-                ):
-                    raise ValueError("Review changed the resolved live family")
-            except ValueError:
-                deferred = "invalid-review-output"
-                review = PRReview(decisions=[])
+                regenerated[head] = producer_matrix(repository, head, candidate["family"])
+            except ProducerRegenerationError as error:
+                print_untrusted(
+                    f"Producer {head} of {candidate['family']} cannot be regenerated", error.stderr
+                )
+    (directory / PRODUCERS).write_text(json.dumps(families, allow_nan=False) + "\n")
+
+
+def select(directory: Path, max_candidates: int, execution_file: Path | None = None) -> None:
+    from . import claims, validation
+    from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
+
+    contexts = json.loads((directory / "candidates.json").read_text())
+    producers = json.loads((directory / PRODUCERS).read_text())
+    review, deferred = reviewed(contexts)
     decisions = {decision.candidate_id: decision for decision in review.decisions}
     selected = []
     available = set()
@@ -575,13 +714,15 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             deferred = "capacity-unavailable"
     capacity_deferred = []
     baseline_deferred = []
+    baseline_reasons: dict[str, str] = {}
+    baseline_mismatches = []
     preflights = {}
     families = {decision.family for decision in review.decisions if decision.decision != "proceed"}
     for candidate in contexts:
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        if not set(decision.telemetry_clusters) <= available:
+        if not set(candidate["clusters"]) <= available:
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(
@@ -597,6 +738,7 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                     en="Verify the complete published baseline before candidate dispatch.",
                     zh="在调度候选任务前验证完整的已发布基线。",
                 ),
+                producers.get(candidate["family"], {}),
             )
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
@@ -605,12 +747,37 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-        except VerificationError:
+            missing = missing_baseline_points(
+                validation.canonical_matrix(
+                    os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
+                ),
+                baseline,
+            )
+        except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = str(error)
             families.add(decision.family)
             continue
-        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, ReadError):
+        except subprocess.SubprocessError as error:
             baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = type(error).__name__
+            families.add(decision.family)
+            continue
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = f"{type(error).__name__}: {str(error)[:300]}"
+            families.add(decision.family)
+            continue
+        if missing:
+            baseline_deferred.append(candidate["id"])
+            baseline_reasons[candidate["id"]] = "baseline-point-mismatch"
+            baseline_mismatches.append(
+                {
+                    "id": candidate["id"],
+                    "reason": "baseline-point-mismatch",
+                    "missing-points": len(missing),
+                }
+            )
             families.add(decision.family)
             continue
         if not claims.claim_family(
@@ -621,7 +788,6 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             {
                 **candidate,
                 "baseline-model": decision.baseline_model,
-                "baseline-preflight-required": True,
                 "pr-review": decision.model_dump(by_alias=True),
             }
         )
@@ -654,6 +820,8 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
                 "deferred-reason": deferred,
                 "capacity-deferred-candidates": capacity_deferred,
                 "baseline-deferred-candidates": baseline_deferred,
+                "baseline-deferral-reasons": baseline_reasons,
+                "baseline-mismatch-candidates": baseline_mismatches,
                 **review.model_dump(by_alias=True),
             },
             indent=2,
@@ -673,7 +841,18 @@ def select(directory: Path, max_candidates: int, execution_file: Path | None = N
             f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check."
         )
     if baseline_deferred:
-        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline."
+        summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (
+            "; ".join(
+                f"{count}× {reason[:120]}"
+                for reason, count in Counter(baseline_reasons.values()).most_common()
+            )
+            + "."
+        )
+    if baseline_mismatches:
+        summary += (
+            f" {len(baseline_mismatches)} of them have frozen baseline points"
+            " the current family no longer generates."
+        )
     if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(filename, "a") as output:
             output.write(
@@ -713,8 +892,19 @@ def main() -> int:
         "--cooldown-hours",
         type=int,
         required=True,
-        help="Soft same-base candidate cooldown before review (1-168)",
+        help="Hours a recently attempted candidate waits before another agent (1-168)",
     )
+    prepare.add_argument(
+        "--stale-pr-days",
+        type=int,
+        required=True,
+        help="Days without activity after which another open PR stops owning a family (1-90)",
+    )
+    regeneration = commands.add_parser(
+        "regenerate-producers",
+        help="Regenerate reviewed candidates' baseline producer families; run without credentials",
+    )
+    regeneration.add_argument("--directory", type=Path, required=True)
     selection = commands.add_parser(
         "select", help="Validate KLAUD_PR_REVIEW and select nonoverlapping candidates"
     )
@@ -729,16 +919,6 @@ def main() -> int:
         "--execution-file",
         type=Path,
         help="Claude execution log; retain numeric metrics and fixed denial categories",
-    )
-    capacity = commands.add_parser(
-        "check-capacity",
-        help="Exit 0 with available nodes below 80%% utilization; otherwise nonzero, without printing telemetry",
-    )
-    capacity.add_argument(
-        "--cluster",
-        required=True,
-        action="append",
-        help="Exact telemetry cluster; repeat for every possible recipe target",
     )
     commands.add_parser(
         "check-stop",
@@ -756,7 +936,7 @@ def main() -> int:
     preflight.add_argument("--matrix-file", type=Path, required=True)
     baseline = commands.add_parser(
         "prepare-baseline",
-        help="Fetch and freeze matched published data locally before attempts",
+        help="Freeze the planner's verified baseline preflight locally before attempts",
     )
     baseline.add_argument(
         "--model", required=True, help="Display model name from the public OpenAPI enum"
@@ -802,7 +982,7 @@ def main() -> int:
             if args.command == "prepare-baseline":
                 if args.output.exists():
                     Baseline.model_validate_json(args.output.read_text())
-                    return 0  # A retry never silently refreshes the baseline.
+                    return 0
                 session = current_session()
                 context = json.loads(
                     (Path(os.environ["KLAUD_EVIDENCE"]) / "candidate.json").read_text()
@@ -834,7 +1014,9 @@ def main() -> int:
                 head,
                 session.candidate.family,
             )
-            check_baseline_coverage(canonical, baseline_for(session, pull))
+            check_baseline_coverage(
+                session.repository, session.candidate, canonical, baseline_for(session, pull)
+            )
             return 0
         if args.command == "recover-current":
             from . import claims
@@ -844,11 +1026,8 @@ def main() -> int:
             try:
                 reconcile(session)
             except PendingCleanup:
-                # Healthy child work keeps its claim for the next recovery pass.
                 pass
             else:
-                # This trusted step also releases no-PR/no-run sessions whose SDK
-                # response was missing or unverifiable.
                 claims.release_family(
                     session.repository,
                     session.candidate,
@@ -897,17 +1076,25 @@ def main() -> int:
                 parser.error("--review-batch-size must be between 1 and 256")
             if not 1 <= args.cooldown_hours <= 168:
                 parser.error("--cooldown-hours must be between 1 and 168")
-            plan(args.root, args.directory, args.review_batch_size, args.cooldown_hours)
+            if not 1 <= args.stale_pr_days <= 90:
+                parser.error("--stale-pr-days must be between 1 and 90")
+            plan(
+                args.root,
+                args.directory,
+                args.review_batch_size,
+                args.cooldown_hours,
+                args.stale_pr_days,
+            )
             return 0
-        if args.command == "select":
-            if not 1 <= args.max_candidates_per_run <= 256:
-                parser.error("--max-candidates-per-run must be between 1 and 256")
-            select(args.directory, args.max_candidates_per_run, args.execution_file)
+        if args.command == "regenerate-producers":
+            regenerate_producers(args.directory)
             return 0
-        return 0 if set(args.cluster) <= fetch_capacity(Policy()) else 1
+        if not 1 <= args.max_candidates_per_run <= 256:
+            parser.error("--max-candidates-per-run must be between 1 and 256")
+        select(args.directory, args.max_candidates_per_run, args.execution_file)
+        return 0
     except ReadError as error:
         if args.command == "plan":
-            # ReadError contains fixed codes only, never response bodies or credentials.
             message = f"Klaud Cold preparation failed: {error}"
             print(f"::error::{message}")
             if filename := os.environ.get("GITHUB_STEP_SUMMARY"):

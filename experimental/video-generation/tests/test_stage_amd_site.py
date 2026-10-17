@@ -67,15 +67,16 @@ def test_seals_matched_workload_and_full_billed_allocation_without_gpu_calls(spe
     assert result["generation_executed"] is False
     assert config["resources"]["gpus"] == 4
     assert config["resources"]["allocated_gpus"] == 8
+    assert config["runtime"]["container"] == str(stage.IMAGE)
     assert config["concurrencies"] == [1]
     assert len(frozen["plan"]["cases"]) == 20
     assert frozen["plan"]["generation"]["duration_seconds"] == 8
     assert frozen["server"]["attention_backend"] == "aiter"
     assert frozen["limits"]["job_seconds"] + 600 == config["resources"]["minutes"] * 60
     subprocess.run(["bash", "-n", str(output / "entry-only.sh")], check=True)
-    helper = output / "benchmark_lib.sh"
+    helper = output / "check_env.sh"
     assert helper.read_bytes() == (
-        Path(ci.__file__).parents[2] / "inferencex-e2e" / "benchmarks" / "benchmark_lib.sh"
+        Path(ci.__file__).parents[2] / "inferencex-e2e" / "benchmarks" / "check_env.sh"
     ).read_bytes()
     missing_env = subprocess.run(["bash", str(output / "entry-only.sh")], env={"PATH": os.environ["PATH"]},
                                  capture_output=True, text=True)

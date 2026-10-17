@@ -30,7 +30,7 @@ State buckets:
 - **RUNNING.** No checks have failed. At least one is `QUEUED` / `IN_PROGRESS` / `PENDING`.
 - **READY.** No checks have failed or remain pending, and at least one `Run Sweep` check is `SUCCESS`.
 - **NO_SUCCESS.** The sweep ran but never produced a `SUCCESS` (e.g. all matrix jobs got SKIPPED).
-- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. This usually means the sweep never triggered because the PR is missing a label such as `full-sweep-enabled` or `non-canary-full-sweep-enabled`.
+- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. `run-sweep.yml` triggers on pushes and label changes (not on PR open), only for PRs whose diff touches `inferencex-e2e/perf-changelog.yaml`, and GitHub skips it while the PR has merge conflicts. So this usually means the PR was opened without a primary sweep label (`full-sweep-fail-fast`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled`) and has had no push or label change since, its diff does not touch the changelog, or it has merge conflicts.
 
 ```bash
 : > /tmp/klaud_pr_status.tsv
@@ -295,4 +295,20 @@ cat > /tmp/klaud_pr_diag.json <<'EOF'
 EOF
 ```
 
-See `inferencex-e2e/docs/KLAUD_DEBUG.md` for the canonical catalog of recurring failure modes to draw diagnoses from.
+Match the first causal error against the exact image, recipe, and hardware before
+proposing a fix. Examples are hypotheses, not permission to change serving semantics:
+
+| Signature | Check or safe next step |
+| --- | --- |
+| Changelog history deleted | Use `.github/workflows/README.md#changelog-conflict-recovery`; never hand-merge history. |
+| vLLM load/KV OOM or DEP CUDA-graph OOM | Distinguish profiling from real allocation; graph limits depend on per-DP-rank load, not global concurrency. |
+| Custom DSV4 image works but generic SGLang OOMs | Verify bundled source and compatibility; do not assume the generic release is interchangeable. |
+| B300 DeepGemm, EAGLE trtllm GEMM, or flash-attn assertion | Distinguish the backend and architecture; verify an upstream-supported image or setting. |
+| Drained node, Pyxis, Docker, full disk, occupied port | Verify current node state; use the existing cluster repair command with approval, not a recipe workaround. |
+| NATS/etcd archive integrity failure | Preserve the first error; only a verified invalid download is retryable. Do not hide other setup errors. |
+| Image tag returns 404 | Verify the exact registry tag; do not guess naming patterns. |
+| Failed-only rerun refused | Confirm completion and conclusion; cancelled runs require a full rerun. Failed ingest targets instead use `recover-failed-ingest.md`. |
+| MiniMax M3 B300 non-contiguous `q2k_indices` | Check TP1/data-parallel-attention exposure and prefer an upstream-fixed image; no unapproved engine patch. |
+
+Follow `../../.github/klaud-candidate-prompt.md` for Klaud-owned work and
+`../../.agents/skills/debug-runs/SKILL.md` for operator-led diagnosis.

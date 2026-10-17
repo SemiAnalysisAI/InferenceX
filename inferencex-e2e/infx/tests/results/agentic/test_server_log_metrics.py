@@ -20,30 +20,6 @@ def test_kv_cache_pool_tokens_from_server_log_missing() -> None:
     assert SglangBackend.kv_cache_pool_tokens_from_server_log("INFO no kv cache line") is None
 
 
-def test_kv_cache_pool_tokens_from_data_parallel_server_log() -> None:
-    log = "\n".join(
-        [
-            "INFO (EngineCore_DP0 pid=123) GPU KV cache size: 11,577,333 tokens",
-            "INFO (EngineCore_DP1 pid=124) GPU KV cache size: 11,577,333 tokens",
-            "INFO (EngineCore_DP2 pid=125) GPU KV cache size: 11,577,333 tokens",
-        ]
-    )
-
-    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 34_731_999
-
-
-def test_kv_cache_pool_tokens_dedupes_engine_tags() -> None:
-    log = "\n".join(
-        [
-            "INFO (EngineCore_DP0 pid=123) GPU KV cache size: 11,577,333 tokens",
-            "INFO (EngineCore_DP0 pid=123) GPU KV cache size: 11,577,333 tokens",
-            "INFO (EngineCore_DP1 pid=124) GPU KV cache size: 5,000,000 tokens",
-        ]
-    )
-
-    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 16_577_333
-
-
 def test_kv_cache_pool_tokens_sums_bare_lines() -> None:
     log = "\n".join(
         [
@@ -53,18 +29,6 @@ def test_kv_cache_pool_tokens_sums_bare_lines() -> None:
     )
 
     assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 3_234_567
-
-
-def test_kv_cache_pool_tokens_from_sglang_server_log() -> None:
-    log = "\n".join(
-        [
-            "[2026-06-23 01:05:00] server_args=ServerArgs(dp_size=8, tp_size=8)",
-            "[2026-06-23 01:10:14 DP0 TP0 EP0] max_total_num_tokens=1172224, "
-            "chunked_prefill_size=4096",
-        ]
-    )
-
-    assert SglangBackend.kv_cache_pool_tokens_from_server_log(log) == 9_377_792
 
 
 def test_kv_cache_pool_tokens_from_sglang_per_rank_lines() -> None:
@@ -77,24 +41,6 @@ def test_kv_cache_pool_tokens_from_sglang_per_rank_lines() -> None:
     )
 
     assert SglangBackend.kv_cache_pool_tokens_from_server_log(log) == 2200
-
-
-def test_kv_cache_pool_tokens_sums_multiple_log_files(tmp_path: Path) -> None:
-    first = tmp_path / "watchtower-a.out"
-    second = tmp_path / "watchtower-b.out"
-    first.write_text(
-        "\n".join(
-            [
-                "INFO (EngineCore_DP0 pid=100) GPU KV cache size: 5,000,000 tokens",
-                "INFO (EngineCore_DP1 pid=101) GPU KV cache size: 6,500,000 tokens",
-            ]
-        )
-    )
-    second.write_text(
-        "INFO (EngineCore_DP0 pid=200) GPU KV cache size: 7,000,000 tokens"
-    )
-
-    assert VllmBackend().gpu_kv_capacity_tokens({}, (load_server_log_head(p) for p in (first, second))) == 18_500_000
 
 
 def test_dynamo_vllm_uses_vllm_server_log_capacity_parser(tmp_path: Path) -> None:

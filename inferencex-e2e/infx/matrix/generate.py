@@ -3,22 +3,30 @@ import fnmatch
 import json
 import math
 import re
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 
-from infx.config import repository_root
+from infx.clusters import CLUSTER_LABEL_PREFIX
+from infx.clusters.slurm import Fabric
+from infx.srt_slurm.variants import deep_merge, expand_variants
+from infx.srt_slurm.workload import resolve_fabric
 
 from .validation import (
     DEFAULT_AGENTIC_DURATION_SECONDS,
     Fields,
+    config_root,
     load_config_files,
     load_runner_file,
+    srt_recipe_path,
     validate_agentic_matrix_entry,
     validate_matrix_entry,
+    validate_video_matrix_entry,
 )
 
 seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
@@ -29,28 +37,18 @@ AUTOMATIC_AGENTIC_VENDOR_EVALS = {
     "kimik3": ("kimi-vendor", "kimi_tool_call_schema_full"),
     "minimaxm3": ("minimax-vendor", "minimax_m3_full"),
 }
-# Bound how many multinode agentic conc points share one server allocation.
-# 1 = one task/SLURM allocation per concurrency (matches single-node agentic).
-MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 1
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
-# 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
 MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
 
 def seq_len_to_str(isl: int, osl: int) -> str:
-    """Convert sequence lengths to short string representation.
-
-    Returns the short name (e.g., '1k1k') if it exists in the mapping,
-    otherwise returns 'isl_osl' format.
-    """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 
 def freeze_config_value(value: Any) -> Any:
-    """Convert JSON-shaped config values into deterministic hashable values."""
     if isinstance(value, dict):
         return tuple(sorted((key, freeze_config_value(item)) for key, item in value.items()))
     if isinstance(value, list):
@@ -59,13 +57,6 @@ def freeze_config_value(value: Any) -> Any:
 
 
 def trim_conc(entries: list[dict]) -> list[dict]:
-    """Retain the lowest concurrency for each generated deployment shape.
-
-    Entries are grouped by every non-eval field except ``conc`` and the
-    generated ``exp-name``. Multi-node rows may encode concurrency either as a
-    list within one row or as one-row list chunks; both representations collapse
-    to one row whose ``conc`` and dispatch-facing ``eval-conc`` use the minimum.
-    """
     ignored_fields = {
         "conc",
         "exp-name",
@@ -85,6 +76,10 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
     for source_entry in entries:
         entry = source_entry
+        if entry.get(Fields.SCENARIO_TYPE.value) == "video-generation":
+            # One job serves every listed concurrency; a smoke keeps the lowest.
+            out.append({**entry, Fields.CONC_LIST.value: [min(entry[Fields.CONC_LIST.value])]})
+            continue
         conc = entry.get("conc")
         if entry.get("prefill") is not None and isinstance(conc, list) and conc:
             minimum_conc = min(conc)
@@ -100,6 +95,14 @@ def trim_conc(entries: list[dict]) -> list[dict]:
                 if key not in ignored_fields
             )
         )
+        if entry.get("eval-only"):
+            key += (
+                (
+                    "eval-only",
+                    entry.get(Fields.EVAL_FRAMEWORK.value),
+                    entry.get(Fields.EVAL_SUITE.value),
+                ),
+            )
         groups.setdefault(key, []).append(len(out))
         out.append(entry)
 
@@ -119,11 +122,6 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
 
 def smoke_entries(entries: list[dict]) -> list[dict]:
-    """Minimum-concurrency throughput plus one canonical eval per deployment shape.
-
-    Eval concurrency comes from the existing default selection, never from the
-    throughput minimum. Keep separate eval-only rows so neither client is run twice.
-    """
     benchmarks = trim_conc([{**row, "run-eval": False} for row in entries])
     evals = []
     for row in entries:
@@ -133,28 +131,30 @@ def smoke_entries(entries: list[dict]) -> list[dict]:
         row.pop(Fields.REQUIRE_POWER.value, None)
         if row.get("prefill") is not None:
             row["conc"] = [row["eval-conc"]]
-            row["eval-all-concs"] = False
+            row.pop("eval-all-concs", None)
         evals.append(row)
     return benchmarks + trim_conc(evals)
 
 
 def runner_labels(runner_data: dict) -> dict:
-    """Return runner scheduling labels."""
     return runner_data["labels"]
 
 
 def runner_hardware(runner_data: dict) -> dict:
-    """Return runner hardware metadata, if present."""
-    return runner_data.get("hardware", {})
+    node_fields = (Fields.GPUS_PER_NODE.value, Fields.AVAILABLE_CPU_DRAM_MIB.value)
+    return {
+        f"{CLUSTER_LABEL_PREFIX}{cluster_id}": {
+            field: cluster[field] for field in node_fields if field in cluster
+        }
+        for cluster_id, cluster in runner_data.get("clusters", {}).items()
+    }
 
 
 def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:
-    """Return concrete runner names for a scheduling label."""
     return runner_labels(runner_data).get(runner, [])
 
 
 def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
-    """Return an integer hardware field for a runner label."""
     hardware = runner_hardware(runner_data).get(runner, {})
     value = hardware.get(field)
     if value is None:
@@ -167,28 +167,18 @@ def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
 
 
 def runner_available_cpu_dram_mib(runner: str, runner_data: dict) -> int:
-    """Return available CPU DRAM for a runner label."""
     return runner_hardware_int(runner, runner_data, Fields.AVAILABLE_CPU_DRAM_MIB.value)
 
 
 def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
-    """Return GPUs per node for a runner label."""
     return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
 
 
 def _hardware_family(label: str) -> str:
-    """Return the GPU family encoded in a runner or cluster label."""
     return label.removeprefix("cluster:").split("-", 1)[0]
 
 
 def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
-    """Resolve GPUs per node for an abstract runner or worker hardware label.
-
-    Legacy scheduling labels may not duplicate the hardware facts stored under
-    their canonical ``cluster:`` label. Fall back to the
-    GPU family when the exact label has no hardware record, while rejecting
-    ambiguous families that disagree about node shape.
-    """
     hardware = runner_hardware(runner_data)
     exact = hardware.get(label)
     if exact is not None:
@@ -208,7 +198,6 @@ def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
 
 
 def _worker_node_override(worker: dict, setting_name: str) -> int | None:
-    """Read an explicit role node count from additional settings."""
     pattern = re.compile(rf"^{re.escape(setting_name)}=(\d+)$")
     values = []
     for setting in worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []:
@@ -222,54 +211,42 @@ def _worker_node_override(worker: dict, setting_name: str) -> int | None:
     return values[0]
 
 
-def _merge_recipe(base: dict, override: dict) -> dict:
-    """Deep-merge an srt-slurm override variant over its base, as srtctl does."""
-    merged = dict(base)
-    for key, value in override.items():
-        if value is None:
-            merged.pop(key, None)
-        elif isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _merge_recipe(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
+def recipe_auxiliary_node_count(recipe: dict) -> int:
+    services = [service for service in recipe.get("services", []) if service.get("enabled", True)]
+    pool_nodes = sum(service.get("nodes") or 0 for service in services)
+    infra_dedicated = recipe.get("infra", {}).get("etcd_nats_dedicated_node", False)
+    discovery = [service for service in services if service.get("type") in ("etcd", "nats")]
+    if discovery:
+        placements = {
+            service.get("placement", {}).get("node") == "dedicated" for service in discovery
+        }
+        if len(placements) != 1:
+            raise ValueError("Recipe etcd and nats must agree on dedicated placement")
+        infra_dedicated = placements.pop()
+    dedicated_roles = int(infra_dedicated)
+    for section, legacy_key in (
+        ("frontend", "dedicated_node"),
+        ("benchmark", "client_dedicated_node"),
+    ):
+        settings = recipe.get(section, {})
+        dedicated_roles += int(
+            settings.get("placement", {}).get("node") == "dedicated"
+            or settings.get(legacy_key, False)
+        )
+    if dedicated_roles and recipe.get("benchmark", {}).get("colocate_with_frontend", True):
+        dedicated_roles = 1
+    return pool_nodes + dedicated_roles
 
 
-def recipe_node_count(prefill: dict, decode: dict) -> int | None:
-    """Read the authoritative node count from a checked-in srt-slurm recipe."""
-    config_files = {
-        setting.split("=", 1)[1]
-        for worker in (prefill, decode)
-        for setting in (worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or [])
-        if setting.startswith("CONFIG_FILE=")
-    }
-    if not config_files:
-        return None
-    if len(config_files) != 1:
-        raise ValueError(f"Conflicting CONFIG_FILE settings: {sorted(config_files)}")
-
-    config_file, _, selector = config_files.pop().partition(":")
-    repo_root = repository_root()
-    recipe_root = repo_root / "benchmarks" / "multi_node" / "srt-slurm-recipes"
-    if config_file.startswith("benchmarks/multi_node/srt-slurm-recipes/"):
-        recipe_path = repo_root / config_file
-    else:
-        recipe_path = recipe_root / config_file.removeprefix("recipes/")
-    if not recipe_path.exists():
-        # Some srt-slurm recipes live only in the runtime image. Their master
-        # config topology remains the best available scheduling estimate.
-        return None
-
+def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
+    path, _, selector = srt_recipe.partition(":")
+    recipe_path = root / path
     recipe = yaml.safe_load(recipe_path.read_text())
     if "base" in recipe:
-        # srtctl merges a named variant over base (null deletes a key) and
-        # carries a top-level schema into it. Zip groups and non-schema-2
-        # variant files have no authoritative count here; the selected master
-        # topology supplies the estimate.
-        if not (selector == "base" or (selector.startswith("override_") and selector in recipe)):
+        if not (selector == "base" or selector.startswith("override_")):
             return None
         schema = recipe.get("schema")
-        recipe = _merge_recipe(recipe["base"], recipe.get(selector) or {})
+        recipe = deep_merge(recipe["base"], recipe[selector] or {})
         recipe.setdefault("schema", schema)
         if recipe.get("schema") != 2:
             return None
@@ -277,15 +254,47 @@ def recipe_node_count(prefill: dict, decode: dict) -> int | None:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
     roles = recipe.get("roles")
     if roles:
-        # Schema 2 groups node allocations by role. A colocated decode role
-        # shares prefill nodes and does not reserve another allocation.
         for name, role in roles.items():
             if "nodes" not in role:
                 raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
-        return sum(
+        worker_nodes = sum(
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
         )
-    raise ValueError(f"Recipe has no worker roles: {recipe_path}")
+        return worker_nodes + recipe_auxiliary_node_count(recipe)
+    # Services-only recipes (frontend.type: none, services[].nodes) have no engine roles.
+    auxiliary = recipe_auxiliary_node_count(recipe)
+    if auxiliary:
+        return auxiliary
+    raise ValueError(f"Recipe has no worker roles or service pools: {recipe_path}")
+
+
+def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
+    labels = runner_labels(runner_data)
+    runners = set(labels.get(label, [label]))
+    fabrics = {}
+    for cluster_label, members in labels.items():
+        if cluster_label.startswith(CLUSTER_LABEL_PREFIX) and runners & set(members):
+            cluster_id = cluster_label.removeprefix(CLUSTER_LABEL_PREFIX)
+            record = runner_data["clusters"][cluster_id]
+            srt = (record.get("slurm") or {}).get("srt-slurm") or {}
+            fabrics[cluster_id] = Fabric.model_validate(srt.get("fabric") or {})
+    return fabrics
+
+
+def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data: dict) -> None:
+    path, _, selector = srt_recipe.partition(":")
+    variants = expand_variants(yaml.safe_load((root / path).read_text()), selector or None)
+    fabrics = {
+        f"cluster {cluster_id!r}": fabric.rendered()
+        for cluster_id, fabric in _label_fabrics(label, runner_data).items()
+    }
+    fabrics = fabrics or {f"runner {label!r}": dict.fromkeys(Fabric().rendered(), "")}
+    for reach, fabric in fabrics.items():
+        for _, recipe in variants:
+            try:
+                resolve_fabric(recipe, fabric)
+            except ValueError as error:
+                raise ValueError(f"{srt_recipe}: {error} ({reach})") from None
 
 
 def worker_node_count(
@@ -294,7 +303,6 @@ def worker_node_count(
     runner: str,
     runner_data: dict,
 ) -> int:
-    """Return physical nodes consumed by one prefill or decode role."""
     override = _worker_node_override(worker, f"{role.upper()}_NODES")
     if override is not None:
         return override
@@ -306,6 +314,7 @@ def worker_node_count(
         * worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
         * worker.get(Fields.PCP_SIZE.value, 1)
+        * worker.get(Fields.DWDP_SIZE.value, 1)
     )
     return math.ceil(total_gpus / gpus_per_node)
 
@@ -315,9 +324,12 @@ def multinode_node_count(
     decode: dict,
     runner: str,
     runner_data: dict,
+    srt_recipe: str | None,
+    root: Path | None,
 ) -> int:
-    """Return the total Slurm node request represented by a matrix row."""
-    recipe_count = recipe_node_count(prefill, decode)
+    if srt_recipe is not None and root is None:
+        raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
+    recipe_count = recipe_node_count(root, srt_recipe) if srt_recipe is not None else None
     if recipe_count is not None:
         return recipe_count
     return worker_node_count(prefill, "prefill", runner, runner_data) + worker_node_count(
@@ -329,8 +341,8 @@ def add_multinode_node_count(
     entry: dict,
     runner_data: dict,
     num_nodes: int | None,
+    root: Path | None,
 ) -> dict:
-    """Annotate a multi-node row with its scheduling node count."""
     if not entry[Fields.DISAGG.value] and num_nodes is not None:
         entry[Fields.NODE_COUNT.value] = num_nodes
     elif num_nodes is not None:
@@ -341,12 +353,13 @@ def add_multinode_node_count(
             entry[Fields.DECODE.value],
             entry[Fields.RUNNER.value],
             runner_data,
+            entry.get(Fields.SRT_RECIPE.value),
+            root,
         )
     return entry
 
 
 def effective_gpu_count(benchmark: dict) -> int:
-    """Return GPUs used by a single-node TP/PP/PCP topology."""
     return (
         benchmark[Fields.TP.value]
         * benchmark.get(Fields.PP.value, 1)
@@ -355,7 +368,6 @@ def effective_gpu_count(benchmark: dict) -> int:
 
 
 def with_worker_parallelism_defaults(worker: dict) -> dict:
-    """Return a worker config with explicit parallelism defaults."""
     return {
         **worker,
         Fields.PP.value: worker.get(Fields.PP.value, 1),
@@ -365,7 +377,6 @@ def with_worker_parallelism_defaults(worker: dict) -> dict:
 
 
 def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
-    """Return the legacy prefill/decode matrix pair for a master entry."""
     if disagg:
         return (
             with_worker_parallelism_defaults(benchmark[Fields.PREFILL.value]),
@@ -389,37 +400,27 @@ def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
     return prefill, decode
 
 
-def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
-    """Return GPUs a single worker replica occupies on one node.
-
-    The DRAM offload budget is sized per server process (per replica), matching
-    the single-node path: a replica claims the node-DRAM fraction that mirrors
-    its GPU footprint on the node. Topologies that do not tile a node cleanly
-    are rejected rather than silently truncated, keeping parity with the
-    single-node "must fit the node" rule:
-
-    * A replica larger than one node (tp*pp*pcp > gpus-per-node) must fill whole
-      nodes, i.e. be an exact multiple of gpus-per-node; each of its nodes is
-      then fully occupied (fraction 1).
-    * A replica within one node must divide it evenly so co-located replicas of
-      the same role tile the node without overlap.
-    """
+def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker") -> int:
     gpus_per_replica = (
         worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
         * worker.get(Fields.PCP_SIZE.value, 1)
+        * worker.get(Fields.DWDP_SIZE.value, 1)
     )
+    factors = f"{Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+    if worker.get(Fields.DWDP_SIZE.value, 1) > 1:
+        factors += f"*{Fields.DWDP_SIZE.value}"
     if gpus_per_replica > gpus_per_node:
         if gpus_per_replica % gpus_per_node != 0:
             raise ValueError(
-                f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+                f"{role} {factors}"
                 f"={gpus_per_replica} spans multiple nodes but is not a multiple "
                 f"of {Fields.GPUS_PER_NODE.value}={gpus_per_node}"
             )
         return gpus_per_node
     if gpus_per_node % gpus_per_replica != 0:
         raise ValueError(
-            f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+            f"{role} {factors}"
             f"={gpus_per_replica} does not divide "
             f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} evenly"
         )
@@ -428,20 +429,10 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
 
 def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
-) -> int:
-    """Return the DRAM offload budget (GB) for one agentic server node.
-
-    The budget scales the node's (MAX-capped) available CPU DRAM by the
-    utilization and by the fraction of the node's GPUs in use:
-
-    * Single-node entries use the TP/PP/PCP topology, which must fit one node.
-    * Disaggregated multinode entries use the prefill worker's per-node GPU
-      footprint, since only prefill offloads KV to CPU DRAM today (decode can be
-      budgeted separately if it ever gains its own pool).
-    """
+) -> tuple[int, int]:
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
     if kv_offloading != "dram":
-        return 0
+        return 0, 0
 
     available_mib = min(
         runner_available_cpu_dram_mib(runner, runner_data),
@@ -450,31 +441,37 @@ def agentic_dram_offload_gb(
     utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
 
+    def share_gb(gpu_count: int) -> int:
+        proportional_bytes = (
+            Decimal(available_mib) * BYTES_PER_MIB * utilization * gpu_count / gpus_per_node
+        )
+        return int(proportional_bytes / BYTES_PER_GB)
+
     if Fields.WORKER.value in benchmark:
-        gpu_count = worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)
-    elif Fields.PREFILL.value in benchmark:
-        gpu_count = worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node)
-    else:
-        gpu_count = effective_gpu_count(benchmark)
-        if gpu_count > gpus_per_node:
-            raise ValueError(
-                f"tp={benchmark[Fields.TP.value]} with "
-                f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
-                f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
-                f"requires {gpu_count} GPUs and exceeds "
-                f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
-            )
-    proportional_bytes = (
-        Decimal(available_mib) * BYTES_PER_MIB * utilization * gpu_count / gpus_per_node
-    )
-    return int(proportional_bytes / BYTES_PER_GB)
+        return share_gb(worker_gpus_per_node(benchmark[Fields.WORKER.value], gpus_per_node)), 0
+    if Fields.PREFILL.value in benchmark:
+        return (
+            share_gb(
+                worker_gpus_per_node(benchmark[Fields.PREFILL.value], gpus_per_node, "prefill")
+            ),
+            share_gb(worker_gpus_per_node(benchmark[Fields.DECODE.value], gpus_per_node, "decode")),
+        )
+    gpu_count = effective_gpu_count(benchmark)
+    if gpu_count > gpus_per_node:
+        raise ValueError(
+            f"tp={benchmark[Fields.TP.value]} with "
+            f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
+            f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
+            f"requires {gpu_count} GPUs and exceeds "
+            f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
+        )
+    return share_gb(gpu_count), 0
 
 
 def agentic_kv_offload_suffix(
     kv_offloading: str,
     kv_offload_backend: dict | None,
 ) -> str:
-    """Return a compact exp-name suffix for agentic KV offload settings."""
     if kv_offloading == "none":
         return "kvnone"
     return f"kv{kv_offloading}-{kv_offload_backend['name']}"
@@ -487,8 +484,6 @@ def multinode_agentic_exp_name(
     conc_batch: list[int],
     offload_suffix: str,
 ) -> str:
-    """Build a multinode agentic exp-name that encodes topology, not just TP."""
-
     def _worker_tag(worker: dict, role_prefix: str) -> str:
         ep = worker.get(Fields.EP.value, 1)
         dpa = worker.get(Fields.DP_ATTN.value, False)
@@ -497,6 +492,9 @@ def multinode_agentic_exp_name(
             tag += f"ep{ep}"
         if dpa:
             tag += "dpa"
+        dwdp = worker.get(Fields.DWDP_SIZE.value, 1)
+        if dwdp > 1:
+            tag += f"dwdp{dwdp}"
         return tag
 
     return (
@@ -507,7 +505,6 @@ def multinode_agentic_exp_name(
 
 
 def component_metadata(benchmark: dict, config: dict) -> dict:
-    """Resolve optional component metadata from its validated scope."""
     metadata = {}
     for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
         value = benchmark.get(field.value, config.get(field.value))
@@ -516,22 +513,19 @@ def component_metadata(benchmark: dict, config: dict) -> dict:
     return metadata
 
 
-def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
-    """Bound sequential agentic profiles sharing one server allocation."""
-    size = MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION
-    return [conc_values[index : index + size] for index in range(0, len(conc_values), size)]
+def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
+    return {
+        field.value: srt_recipe_path(
+            config.get(Fields.MULTINODE.value, False),
+            config[Fields.SRT_RECIPE_DIR.value],
+            benchmark[field.value],
+        )
+        for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE)
+        if benchmark.get(field.value) is not None
+    }
 
 
 def _multinode_parallelism_key(entry: dict) -> tuple:
-    """Identify a multi-node config independently of eval/concurrency fields.
-
-    exp-name is derived from (and ignored alongside) conc: fixed-seq-len
-    exp-names never embed conc, but agentic exp-names do (each concurrency
-    gets its own single-conc allocation, per
-    MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION), so entries for the
-    same topology at different concurrencies would otherwise falsely land in
-    different groups.
-    """
     ignored_fields = {
         Fields.CONC.value,
         Fields.RUN_EVAL.value,
@@ -552,28 +546,84 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
 
 
 def automatic_agentic_vendor_eval(entry: dict) -> tuple[str, str] | None:
-    """Return the default vendor evaluator for supported agentic models."""
     if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
         return None
     return AUTOMATIC_AGENTIC_VENDOR_EVALS.get(entry.get(Fields.MODEL_PREFIX.value))
 
 
-def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
-    """Apply the default eval selection policy.
+def app_eval_identity(entry: dict, conc: int) -> tuple:
+    if Fields.PREFILL.value in entry:
+        topology = tuple(
+            tuple(
+                entry[role].get(field.value)
+                for field in (Fields.TP, Fields.EP, Fields.DP_ATTN, Fields.NUM_WORKER)
+            )
+            for role in (Fields.PREFILL.value, Fields.DECODE.value)
+        )
+    else:
+        topology = tuple(entry.get(field.value) for field in (Fields.TP, Fields.EP, Fields.DP_ATTN))
+    return (
+        *(
+            entry.get(field.value)
+            for field in (
+                Fields.MODEL,
+                Fields.MODEL_PREFIX,
+                Fields.RUNNER,
+                Fields.FRAMEWORK,
+                Fields.PRECISION,
+            )
+        ),
+        entry.get(Fields.SPEC_DECODING.value, "none"),
+        entry.get(Fields.DISAGG.value, False),
+        topology,
+        entry.get(Fields.EVAL_FRAMEWORK.value),
+        entry.get(Fields.EVAL_SUITE.value),
+        entry.get(Fields.ISL.value),
+        entry.get(Fields.OSL.value),
+        conc,
+    )
 
-    Kimi K3 and MiniMax M3 agentic rows use their full vendor suites at every
-    generated concurrency. Other agentic rows remain opt-in and use GSM8K at
-    the highest concurrency in each deployment group.
 
-    Fixed-sequence selection is unchanged: single-node 8k1k rows use the
-    highest and median concurrency per model/runtime group, while multi-node
-    8k1k rows use the highest eligible concurrency per parallelism topology.
-    """
+def _eval_concs(entry: dict) -> list[int]:
+    conc = entry[Fields.CONC.value]
+    conc_values = conc if isinstance(conc, list) else [conc]
+    if Fields.PREFILL.value in entry and not entry.get(Fields.EVAL_ALL_CONCS.value):
+        return [entry[Fields.EVAL_CONC.value]]
+    return sorted(set(conc_values))
+
+
+def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
+    claimed: set[tuple] = set()
+    candidates = sorted(
+        (row for row in rows if row.get(Fields.RUN_EVAL.value)),
+        key=lambda row: row.get(Fields.KV_OFFLOADING.value, "none") != "none",
+    )
+    for row in candidates:
+        concs = _eval_concs(row)
+        free = [conc for conc in concs if app_eval_identity(row, conc) not in claimed]
+        claimed.update(app_eval_identity(row, conc) for conc in free)
+        if free == concs:
+            continue
+        if free:
+            row[Fields.CONC.value] = free
+            continue
+        row[Fields.RUN_EVAL.value] = False
+        for field in (
+            Fields.EVAL_FRAMEWORK,
+            Fields.EVAL_SUITE,
+            Fields.EVAL_CONC,
+            Fields.EVAL_ALL_CONCS,
+        ):
+            row.pop(field.value, None)
+    return rows
+
+
+def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     from collections import defaultdict
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
     eval_indices = set()
-    mn_eval_conc = {}  # index -> chosen eval concurrency for multinode entries
+    mn_eval_conc = {}
 
     def _eligible_eval_concs(entry: dict) -> list[int]:
         conc = entry[Fields.CONC.value]
@@ -592,8 +642,6 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
             conc_values = conc if isinstance(conc, list) else [conc]
             mn_eval_conc[i] = max(conc_values)
 
-    # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
-    # Only 8k1k entries with a top-level TP (single-node schema).
     sn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value not in entry:
@@ -622,8 +670,6 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
             if e[Fields.CONC.value] in target_concs:
                 eval_indices.add(i)
 
-    # Multi-node: group rows that differ only in concurrency, then evaluate each
-    # distinct parallelism configuration at its highest configured concurrency.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -642,39 +688,66 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Default sweeps preserve every agentic throughput result.
-    if include_agentic:
-        ag_sn_groups = defaultdict(list)
-        # Multi-node agentic: same "highest eligible conc per distinct
-        # parallelism config" policy as the fixed-seq-len mn_groups above.
-        # The selected eval subset uses exactly one conc per group.
-        ag_mn_groups = defaultdict(list)
-        for i, entry in enumerate(matrix_values):
-            if i in automatic_eval_specs:
-                continue
-            if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
-                continue
-            if Fields.PREFILL.value in entry:
-                eval_concs = _eligible_eval_concs(entry)
-                if not eval_concs:
-                    continue
-                ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
-                continue
+    ag_sn_groups = defaultdict(list)
+    ag_mn_groups = defaultdict(list)
+    ag_mn_fallback: dict[tuple, tuple[int, int]] = {}
+    for i, entry in enumerate(matrix_values):
+        if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
+            continue
+        if Fields.PREFILL.value in entry:
             conc = entry[Fields.CONC.value]
-            conc_val = max(conc) if isinstance(conc, list) else conc
-            key = (
+            top_conc = max(conc) if isinstance(conc, list) else conc
+            deployment = (
                 entry[Fields.MODEL.value],
                 entry[Fields.RUNNER.value],
                 entry[Fields.FRAMEWORK.value],
                 entry[Fields.PRECISION.value],
             )
-            ag_sn_groups[key].append((i, conc_val))
-        for entries in ag_sn_groups.values():
-            eval_indices.add(max(entries, key=lambda item: item[1])[0])
-        for entries in ag_mn_groups.values():
-            best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
-            eval_indices.add(best_idx)
-            mn_eval_conc[best_idx] = best_eval_conc
+            if top_conc > ag_mn_fallback.get(deployment, (-1, -1))[1]:
+                ag_mn_fallback[deployment] = (i, top_conc)
+            eval_concs = _eligible_eval_concs(entry)
+            if eval_concs:
+                ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
+            continue
+        conc = entry[Fields.CONC.value]
+        conc_val = max(conc) if isinstance(conc, list) else conc
+        key = (
+            entry[Fields.MODEL.value],
+            entry[Fields.RUNNER.value],
+            entry[Fields.FRAMEWORK.value],
+            entry[Fields.PRECISION.value],
+            entry[Fields.SPEC_DECODING.value],
+            entry[Fields.DP_ATTN.value],
+            entry[Fields.IMAGE.value],
+        )
+        ag_sn_groups[key].append((i, conc_val))
+    gsm8k_picks: dict[int, int | None] = {}
+    for entries in ag_sn_groups.values():
+        gsm8k_picks[max(entries, key=lambda item: item[1])[0]] = None
+    for entries in ag_mn_groups.values():
+        best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
+        gsm8k_picks[best_idx] = best_eval_conc
+    covered = {
+        (
+            matrix_values[i][Fields.MODEL.value],
+            matrix_values[i][Fields.RUNNER.value],
+            matrix_values[i][Fields.FRAMEWORK.value],
+            matrix_values[i][Fields.PRECISION.value],
+        )
+        for i, eval_conc in gsm8k_picks.items()
+        if eval_conc is not None
+    }
+    for deployment, (i, top_conc) in ag_mn_fallback.items():
+        if deployment not in covered:
+            gsm8k_picks[i] = top_conc
+    extra_gsm8k: dict[int, int | None] = {}
+    for i, eval_conc in gsm8k_picks.items():
+        if i in automatic_eval_specs:
+            extra_gsm8k[i] = eval_conc
+            continue
+        eval_indices.add(i)
+        if eval_conc is not None:
+            mn_eval_conc[i] = eval_conc
 
     for i, entry in enumerate(matrix_values):
         run_eval = i in eval_indices
@@ -686,21 +759,31 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
 
-    return matrix_values
+    for i, eval_conc in extra_gsm8k.items():
+        matrix_values.append(_gsm8k_eval_only_row(matrix_values[i], eval_conc))
+
+    return [
+        row
+        for row in drop_app_colliding_evals(matrix_values)
+        if row.get(Fields.RUN_EVAL.value) or not row.get(Fields.EVAL_ONLY.value)
+    ]
+
+
+def _gsm8k_eval_only_row(entry: dict, eval_conc: int | None = None) -> dict:
+    row = {
+        **entry,
+        Fields.RUN_EVAL.value: True,
+        Fields.EVAL_ONLY.value: True,
+        Fields.EVAL_FRAMEWORK.value: DEFAULT_EVAL_FRAMEWORK,
+        Fields.EVAL_SUITE.value: "",
+    }
+    row.pop(Fields.REQUIRE_POWER.value, None)
+    if eval_conc is not None:
+        row[Fields.EVAL_CONC.value] = eval_conc
+    return row
 
 
 def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
-    """Expand eval selection across all eligible entries.
-
-    Kimi K3 and MiniMax M3 agentic rows remain one eval job per generated
-    concurrency, using the model's vendor validator. Other agentic entries use
-    GSM8K through lm-eval. Their multi-node rows are merged by topology and
-    select the highest resulting concurrency.
-
-    Fixed-sequence evals only run at 8k1k. Multi-node rows with the same engine
-    topology are merged into one eval row that runs every concurrency
-    sequentially against the live engine.
-    """
     expanded_entries: list[dict] = []
     multinode_indices: dict[tuple, int] = {}
     multinode_agentic_indices: dict[tuple, int] = {}
@@ -708,6 +791,8 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     target_isl, target_osl = seq_len_stoi["8k1k"]
 
     for entry in matrix_values:
+        if entry.get(Fields.EVAL_ONLY.value):
+            continue
         automatic_eval = automatic_agentic_vendor_eval(entry)
         if automatic_eval is not None:
             eval_framework, eval_suite = automatic_eval
@@ -723,7 +808,16 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
                 eval_entry[Fields.CONC.value] = sorted(set(conc_values))
                 eval_entry[Fields.EVAL_CONC.value] = max(conc_values)
             expanded_entries.append(eval_entry)
-            continue
+            entry = {
+                key: value
+                for key, value in entry.items()
+                if key
+                not in (
+                    Fields.EVAL_FRAMEWORK.value,
+                    Fields.EVAL_SUITE.value,
+                    Fields.EVAL_CONC.value,
+                )
+            }
 
         if entry.get(Fields.SCENARIO_TYPE.value) == "agentic-coding":
             if Fields.PREFILL.value not in entry:
@@ -751,8 +845,6 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             expanded_entries.append(eval_entry)
             continue
 
-        # Only 8k1k is eligible for evals; leave other sequence lengths as-is
-        # (their RUN_EVAL stays False, so the evals-only filter drops them).
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             expanded_entries.append(entry)
             continue
@@ -788,11 +880,10 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if entry.get(Fields.EVAL_SUITE.value) is None:
             entry[Fields.EVAL_SUITE.value] = ""
 
-    return expanded_entries
+    return drop_app_colliding_evals(expanded_entries)
 
 
 def _concurrency_range(start: int, end: int, step: int) -> list[int]:
-    """Expand a validated positive range, including its end even after overshoot."""
     values = []
     while start <= end:
         values.append(start)
@@ -809,12 +900,8 @@ def _fixed_sequence_entries(
     conc_values: list[int],
     runners: list[str],
     runner_data: dict,
+    root: Path | None,
 ) -> list[dict]:
-    """Build fixed-sequence rows after the command has selected runners and points.
-
-    Callers retain filtering and overrides; this owns row defaults, derived
-    identity, topology and validation for both full-sweep and test-config.
-    """
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
@@ -830,8 +917,6 @@ def _fixed_sequence_entries(
         dp_attn = benchmark.get(Fields.DP_ATTN.value)
 
     entries = []
-    # Multi-node rows carry the whole concurrency list; single-node rows carry
-    # one point. Keep point-major, runner-minor order for existing consumers.
     for conc in [conc_values] if is_multinode else conc_values:
         for runner in runners:
             entry = {
@@ -870,8 +955,9 @@ def _fixed_sequence_entries(
                         Fields.SPEC_DECODING.value: spec_decoding,
                     }
                 )
-                if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                    entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
+            entry.update(srt_recipe_fields(config, benchmark))
+            if benchmark.get(Fields.POWER.value):
+                entry[Fields.POWER.value] = True
             entry.update(
                 {
                     Fields.EXP_NAME.value: f"{model_code}_{seq_len_to_str(isl, osl)}",
@@ -881,7 +967,9 @@ def _fixed_sequence_entries(
             )
             entry.update(component_metadata(benchmark, config))
             if is_multinode:
-                add_multinode_node_count(entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+                add_multinode_node_count(
+                    entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
+                )
             entries.append(validate_matrix_entry(entry, is_multinode))
     return entries
 
@@ -897,13 +985,8 @@ def _agentic_entries(
     min_conc: int | None = None,
     max_conc: int | None = None,
     conc_filter: list[int] | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
-    """Expand one AgentX deployment for either generator command.
-
-    Resolve topology and the offload budget before filtering concurrency so an
-    invalid deployment still fails when its points are filtered out. Agentic
-    bounds filter existing points; they never introduce a capped point.
-    """
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     model_code = config[Fields.MODEL_PREFIX.value]
@@ -920,7 +1003,7 @@ def _agentic_entries(
         kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
     spec_decoding = benchmark.get(Fields.SPEC_DECODING.value, "none")
     kv_offload_backend = benchmark.get(Fields.KV_OFFLOAD_BACKEND.value)
-    total_cpu_dram_gb = agentic_dram_offload_gb(
+    total_cpu_dram_gb, decode_cpu_dram_gb = agentic_dram_offload_gb(
         scenario, benchmark, config[Fields.RUNNER.value], runner_data
     )
 
@@ -940,18 +1023,13 @@ def _agentic_entries(
     if not conc_values:
         return []
 
-    # Multi-node batches are runner-major; single-node points are conc-major.
     if is_multinode:
         offload_suffix = (
             f"_{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
             if kv_offloading != "none"
             else ""
         )
-        points = (
-            (runner, batch)
-            for runner in runners
-            for batch in chunk_multinode_agentic_concurrencies(conc_values)
-        )
+        points = ((runner, [conc]) for runner in runners for conc in conc_values)
     else:
         points = ((runner, conc) for conc in conc_values for runner in runners)
 
@@ -974,6 +1052,7 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
+
             exp_name = multinode_agentic_exp_name(model_code, prefill, decode, conc, offload_suffix)
         else:
             entry.update(
@@ -988,13 +1067,14 @@ def _agentic_entries(
                     Fields.CONC.value: conc,
                 }
             )
-            if benchmark.get(Fields.SRT_RECIPE.value) is not None:
-                entry[Fields.SRT_RECIPE.value] = benchmark[Fields.SRT_RECIPE.value]
             exp_name = (
                 f"{model_code}_tp{tp}_conc{conc}_"
                 f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
                 + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
             )
+        entry.update(srt_recipe_fields(config, benchmark))
+        if benchmark.get(Fields.POWER.value):
+            entry[Fields.POWER.value] = True
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,
@@ -1004,21 +1084,67 @@ def _agentic_entries(
             }
         )
         if is_multinode:
+            if decode_cpu_dram_gb:
+                entry[Fields.DECODE_CPU_DRAM_GB.value] = decode_cpu_dram_gb
             entry[Fields.DISAGG.value] = disagg
         entry[Fields.SCENARIO_TYPE.value] = "agentic-coding"
         if kv_offload_backend is not None:
             entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
         entry.update(component_metadata(benchmark, config))
         if is_multinode:
-            add_multinode_node_count(entry, runner_data, benchmark.get(Fields.NUM_NODES.value))
+            add_multinode_node_count(
+                entry, runner_data, benchmark.get(Fields.NUM_NODES.value), root
+            )
         entries.append(validate_agentic_matrix_entry(entry))
+    return entries
+
+
+def _video_entries(
+    config: dict,
+    scenario: dict,
+    benchmark: dict,
+    runners: list[str],
+    conc_filter: list[int] | None = None,
+) -> list[dict]:
+    """One job per deployment: every listed concurrency runs against the same video server."""
+    if config.get(Fields.MULTINODE.value, False):
+        raise ValueError("video-generation scenarios run on one node; multinode is not supported")
+    concurrencies = [
+        conc
+        for conc in benchmark[Fields.CONC_LIST.value]
+        if conc_filter is None or conc in conc_filter
+    ]
+    if not concurrencies:
+        return []
+    model_code = config[Fields.MODEL_PREFIX.value]
+    spec = scenario[Fields.SPEC.value]
+    gpus = benchmark[Fields.GPUS.value]
+    entries = []
+    for runner in runners:
+        entry = {
+            Fields.IMAGE.value: config[Fields.IMAGE.value],
+            Fields.MODEL.value: config[Fields.MODEL.value],
+            Fields.MODEL_PREFIX.value: model_code,
+            Fields.PRECISION.value: config[Fields.PRECISION.value],
+            Fields.FRAMEWORK.value: config[Fields.FRAMEWORK.value],
+            Fields.RUNNER.value: runner,
+            Fields.SPEC.value: spec,
+            Fields.GPUS.value: gpus,
+            Fields.CONC_LIST.value: list(concurrencies),
+            **srt_recipe_fields(config, benchmark),
+            Fields.EXP_NAME.value: f"{model_code}_video_{Path(spec).stem}_g{gpus}",
+            Fields.SCENARIO_TYPE.value: "video-generation",
+            Fields.SPEC_DECODING.value: "none",
+            Fields.DISAGG.value: False,
+            Fields.DP_ATTN.value: False,
+            Fields.RUN_EVAL.value: False,
+        }
+        entries.append(validate_video_matrix_entry(entry))
     return entries
 
 
 @dataclass(frozen=True)
 class FullSweepOptions:
-    """Full-sweep selection and overrides, independent of the CLI parser."""
-
     model_prefix: list[str] | None = None
     precision: list[str] | None = None
     framework: list[str] | None = None
@@ -1039,8 +1165,8 @@ def generate_full_sweep(
     args: argparse.Namespace,
     all_config_data: dict,
     runner_data: dict,
+    root: Path | None = None,
 ) -> list[dict]:
-    """Compatibility adapter for callers passing the full-sweep CLI namespace."""
     return expand_full_sweep(
         all_config_data,
         runner_data,
@@ -1060,6 +1186,7 @@ def generate_full_sweep(
             max_tp=args.max_tp,
             max_ep=args.max_ep,
         ),
+        root=root,
     )
 
 
@@ -1068,8 +1195,8 @@ def expand_full_sweep(
     runner_data: dict,
     *,
     options: FullSweepOptions = FullSweepOptions(),
+    root: Path | None = None,
 ) -> list[dict]:
-    """Expand validated configs in declaration order, before eval selection."""
     if options.step_size <= 1:
         raise ValueError("step_size must be greater than 1")
     if (
@@ -1087,7 +1214,6 @@ def expand_full_sweep(
                 f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
             )
 
-    # Full-sweep validates sequence names even when no config matches.
     seq_filter = {seq_len_stoi[sl] for sl in options.seq_lens} if options.seq_lens else None
     configs = (
         config
@@ -1104,6 +1230,7 @@ def expand_full_sweep(
         scenario_types=options.scenario_types,
         runner_node_filter=options.runner_node_filter,
         full_sweep=options,
+        root=root,
     )
 
 
@@ -1114,12 +1241,6 @@ def _fixed_sequence_concurrencies(
     full_sweep: FullSweepOptions | None,
     concurrencies: list[int] | None,
 ) -> list[int] | None:
-    """Keep full-sweep capping separate from selected-key intersection.
-
-    Single-node ranges are clipped before expansion; multi-node ranges and
-    explicit lists are expanded first. AgentX only filters its existing points.
-    None skips a deployment; an empty list retains the legacy empty batch.
-    """
     if full_sweep is None:
         values = (
             benchmark[Fields.CONC_LIST.value]
@@ -1173,7 +1294,6 @@ def _runner_values_for_filter(
         return [runner]
     candidates = runner_nodes_for_label(runner, runner_data)
     if not include_label:
-        # Full-sweep expands concrete nodes in inventory order, including repeats.
         return [node for node in candidates if runner_node_filter in node]
     if runner_node_filter in runner:
         candidates = [runner, *candidates]
@@ -1184,8 +1304,8 @@ def generate_test_config_sweep(
     args: argparse.Namespace,
     all_config_data: dict,
     runner_data: dict | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
-    """Compatibility API for selected-key expansion without eval selection."""
     return _expand_selected_configs(
         args.config_keys,
         all_config_data,
@@ -1194,6 +1314,7 @@ def generate_test_config_sweep(
         seq_lens=getattr(args, "seq_lens", None),
         scenario_types=getattr(args, "scenario_type", None),
         concurrencies=getattr(args, "conc", None),
+        root=root,
     )
 
 
@@ -1206,6 +1327,7 @@ def _expand_selected_configs(
     seq_lens: list[str] | None = None,
     scenario_types: tuple[str, ...] | list[str] | None = None,
     concurrencies: list[int] | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
     resolved_keys = expand_config_keys(config_keys, all_config_data.keys())
     return _expand_configs(
@@ -1215,6 +1337,7 @@ def _expand_selected_configs(
         seq_lens=seq_lens,
         scenario_types=scenario_types,
         concurrencies=concurrencies,
+        root=root,
     )
 
 
@@ -1228,16 +1351,11 @@ def _expand_configs(
     scenario_types: tuple[str, ...] | list[str] | None = None,
     concurrencies: list[int] | None = None,
     full_sweep: FullSweepOptions | None = None,
+    root: Path | None = None,
 ) -> list[dict]:
-    """Traverse configs and scenarios once for both generation commands.
-
-    Selection retains each command's ordering and overrides. Row builders own
-    identity, topology and validation; eval policy is applied by the caller.
-    """
     rows = []
     for config in configs:
         multinode = config.get(Fields.MULTINODE.value, False)
-        # Full-sweep reads scenarios before runner filtering; selected keys defer it.
         if full_sweep is not None:
             scenarios = config[Fields.SCENARIOS.value]
             fixed = (
@@ -1294,7 +1412,7 @@ def _expand_configs(
                     continue
                 rows.extend(
                     _fixed_sequence_entries(
-                        config, benchmark, sequence, values, runners, runner_data
+                        config, benchmark, sequence, values, runners, runner_data, root
                     )
                 )
 
@@ -1318,22 +1436,34 @@ def _expand_configs(
                         min_conc=full_sweep.min_conc if full_sweep is not None else None,
                         max_conc=full_sweep.max_conc if full_sweep is not None else None,
                         conc_filter=concurrencies,
+                        root=root,
                     )
                 )
+        video = (
+            config[Fields.SCENARIOS.value].get(Fields.VIDEO_GENERATION.value, [])
+            if not scenario_types or "video-generation" in scenario_types
+            else []
+        )
+        for scenario in video:
+            for benchmark in scenario[Fields.SEARCH_SPACE.value]:
+                rows.extend(
+                    _video_entries(config, scenario, benchmark, runners, conc_filter=concurrencies)
+                )
+    if root is not None:
+        selected = {
+            (row[field.value], row[Fields.RUNNER.value])
+            for row in rows
+            for field in (Fields.SRT_RECIPE, Fields.EVAL_SRT_RECIPE)
+            if row.get(field.value)
+        }
+        for srt_recipe, label in sorted(selected):
+            check_fabric_references(root, srt_recipe, label, runner_data)
     return rows
 
 
 def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]) -> list[str]:
-    """Expand config key patterns (glob wildcards) against available keys.
-
-    Keys containing '*' or '?' are treated as glob patterns and expanded via
-    fnmatch.filter(). Plain keys are validated for existence. Results are
-    deduplicated while preserving order.
-
-    Raises ValueError if a pattern matches nothing or an exact key is missing.
-    """
     available = list(available_keys)
-    seen = {}  # use dict to preserve insertion order
+    seen = {}
     for key in config_keys:
         if "*" in key or "?" in key:
             matches = fnmatch.filter(available, key)
@@ -1355,7 +1485,6 @@ def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]
 
 
 def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
-    """Select exact generated experiment identities and reject ambiguity."""
     requested = set(exp_names)
     if len(requested) != len(exp_names):
         raise ValueError("--exp-names contains duplicate values")
@@ -1376,7 +1505,6 @@ def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
 
 
 def apply_node_type_defaults(args: argparse.Namespace) -> argparse.Namespace:
-    """Default both single_node and multi_node to True when neither is specified."""
     if (
         hasattr(args, "single_node")
         and hasattr(args, "multi_node")
@@ -1397,13 +1525,12 @@ def select_matrix_evals(
     mode: EvalMode = "default",
     trim: bool = False,
 ) -> list[dict]:
-    """Apply eval policy and optional trimming to freshly generated rows."""
     if mode not in ("default", "none", "subset", "all", "smoke"):
         raise ValueError(f"Unknown eval mode: {mode!r}")
     if mode == "smoke" and trim:
         raise ValueError("smoke cannot be combined with trimming")
     if mode != "none":
-        rows = mark_eval_entries(rows, include_agentic=mode in ("subset", "all", "smoke"))
+        rows = mark_eval_entries(rows)
         if mode == "all":
             rows = mark_all_eval_entries(rows)
     if mode == "smoke":
@@ -1425,23 +1552,37 @@ def generate_config_matrix(
     *,
     scenario_types: tuple[str, ...] | list[str] | None = None,
     eval_mode: EvalMode = "default",
+    root: Path | None = None,
 ) -> list[dict]:
-    """Build selected configs and evals without a generator subprocess.
-
-    Every call builds independent rows. The caller loads master/runner inputs;
-    node-count resolution still reads checked-in recipes. Default,
-    throughput-only, subset-only, all-eval, and smoke modes use the same policy as the CLI.
-    """
     rows = _expand_selected_configs(
         config_keys,
         master_config,
         runner_data,
         scenario_types=scenario_types,
+        root=root,
     )
     rows = select_matrix_evals(rows, mode=eval_mode)
-    # Retain the former JSON boundary: values and nested objects cannot leak
-    # between generation passes, and unsupported values still reject.
     return json.loads(json.dumps(rows))
+
+
+def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
+    """``rows`` with the ``recipe-fingerprint`` changelog plans give the same throughput rows.
+
+    Eval selection copies it to the rows it derives. A row whose recipe cannot be bound gets
+    none and a warning; its job fails when it binds the recipe.
+    """
+    from infx.matrix.fingerprint import recipe_fingerprint  # imports this module via srt_slurm
+
+    fingerprinted = []
+    for row in rows:
+        try:
+            fingerprint = recipe_fingerprint(row, root)
+        except ValueError as error:
+            print(f"WARNING: no recipe fingerprint: {error}", file=sys.stderr)
+            fingerprinted.append(row)
+        else:
+            fingerprinted.append({**row, Fields.RECIPE_FINGERPRINT.value: fingerprint})
+    return fingerprinted
 
 
 def main() -> list[dict]:
@@ -1497,7 +1638,7 @@ def main() -> list[dict]:
     parent_parser.add_argument(
         "--scenario-type",
         nargs="+",
-        choices=["fixed-seq-len", "agentic-coding"],
+        choices=["fixed-seq-len", "agentic-coding", "video-generation"],
         required=False,
         help="Scenario type(s) to include. If not specified, all scenario types are generated.",
     )
@@ -1644,13 +1785,15 @@ def main() -> list[dict]:
 
     all_config_data = load_config_files(args.config_files)
     runner_data = load_runner_file(args.runner_config)
+    root = config_root(args.config_files)
 
     if args.command == "full-sweep":
-        matrix_values = generate_full_sweep(args, all_config_data, runner_data)
+        matrix_values = generate_full_sweep(args, all_config_data, runner_data, root)
     elif args.command == "test-config":
-        matrix_values = generate_test_config_sweep(args, all_config_data, runner_data)
+        matrix_values = generate_test_config_sweep(args, all_config_data, runner_data, root)
     else:
         parser.error(f"Unknown command: {args.command}")
+    matrix_values = with_fingerprints(matrix_values, root)
 
     if args.command == "test-config" and args.exp_names:
         try:

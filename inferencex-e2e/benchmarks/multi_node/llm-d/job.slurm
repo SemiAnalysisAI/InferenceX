@@ -63,32 +63,33 @@ export DOCKER_CONT_NAME
 : "${BENCHMARK_LOGS_DIR:?BENCHMARK_LOGS_DIR not set}"
 DOCKER_MOUNT_PATH="/workspace"
 
-cleanup() {
-    echo "[${SLURM_JOB_ID}] cleanup on $(hostname)"
-    [[ -n "${WATCHER_PID:-}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
-}
-trap cleanup INT TERM HUP EXIT
-
-# Coordinator-done watcher. server.sh on the decode coordinator writes
-# this marker after the bench finishes; we then scancel the allocation
-# from outside the container (the image has no SLURM client tools).
-# Without this, workers `wait` on local vLLM forever and the job runs
-# to TIME_LIMIT.
+# Stop the step and exit 0 once the coordinator is done, so the job ends COMPLETED, not CANCELLED.
 BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 rm -f "$BENCH_DONE_MARKER"
-(
-    while [[ ! -f "$BENCH_DONE_MARKER" ]]; do sleep 5; done
-    echo "[${SLURM_JOB_ID}] coordinator finished; scancel'ing job"
-    scancel "$SLURM_JOB_ID" 2>/dev/null || true
-) &
-WATCHER_PID=$!
+
+run_until_bench_done() {
+    "$@" &
+    local step=$! rc=0
+    while kill -0 "$step" 2>/dev/null; do
+        if [[ -f "$BENCH_DONE_MARKER" ]]; then
+            echo "[${SLURM_JOB_ID}] coordinator finished; stopping the srun step"
+            kill -TERM "$step" 2>/dev/null || true
+            break
+        fi
+        sleep 5
+    done
+    wait "$step" || rc=$?
+    [[ -f "$BENCH_DONE_MARKER" ]] && return 0
+    echo "[${SLURM_JOB_ID}] srun step exited rc=$rc before the coordinator finished" >&2
+    return "$rc"
+}
 
 # Container engine: 'docker' (default) for clusters where the SLURM
 # user can talk to /var/run/docker.sock (e.g. h200-dgxc-slurm); 'pyxis'
 # for clusters that require enroot+pyxis srun (e.g. gb200-nv, where the
 # SLURM user is not in the docker group). Same env contract on both
 # paths; only the per-node container launch differs.
-source "$DI_REPO_DIR/benchmarks/benchmark_lib.sh" --validation-only
+source "$DI_REPO_DIR/benchmarks/check_env.sh"
 check_env_vars \
     LLMD_CONTAINER_ENGINE VLLM_RANDOMIZE_DP_DUMMY_INPUTS VLLM_ENGINE_READY_TIMEOUT_S VLLM_LOGGING_LEVEL UCX_TLS \
     NVSHMEM_REMOTE_TRANSPORT NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_SYMMETRIC_SIZE LLMD_API_SERVER_COUNT
@@ -102,7 +103,7 @@ done
 
 if [[ "$LLMD_CONTAINER_ENGINE" == "docker" ]]; then
     # One docker run per node, one task per node. server.sh dispatches by NODE_RANK.
-    srun \
+    run_until_bench_done srun \
         --kill-on-bad-exit=1 \
         --signal=TERM@30 \
         --unbuffered \
@@ -162,10 +163,6 @@ exec docker run --rm \
     -e EVAL_FRAMEWORK=$EVAL_FRAMEWORK \
     -e EVAL_LIMIT=$EVAL_LIMIT \
     -e EVAL_SUITE=$EVAL_SUITE \
-    -e SWEBENCH_GEN_MODE=$SWEBENCH_GEN_MODE \
-    -e SWEBENCH_USE_MODAL=$SWEBENCH_USE_MODAL \
-    -e MODAL_TOKEN_ID \
-    -e MODAL_TOKEN_SECRET \
     -e IS_AGENTIC=$IS_AGENTIC \
     -e SCENARIO_TYPE=$SCENARIO_TYPE \
     -e FRAMEWORK=$FRAMEWORK \
@@ -213,7 +210,6 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     export BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_MAX_CONCURRENCY
     export BENCH_REQUEST_RATE BENCH_RANDOM_RANGE_RATIO BENCH_NUM_PROMPTS_MULTIPLIER
     export RUN_EVAL EVAL_ONLY EVAL_CONC EVAL_FRAMEWORK EVAL_LIMIT EVAL_SUITE
-    export SWEBENCH_GEN_MODE SWEBENCH_USE_MODAL MODAL_TOKEN_ID MODAL_TOKEN_SECRET
     export IS_AGENTIC SCENARIO_TYPE FRAMEWORK PRECISION MODEL_PREFIX
     export RUNNER_TYPE RESULT_FILENAME SPEC_DECODING IS_MULTINODE CONFIG_FILE
 
@@ -225,7 +221,6 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     PYXIS_ENV_LIST+=",BENCH_INPUT_LEN,BENCH_OUTPUT_LEN,BENCH_MAX_CONCURRENCY"
     PYXIS_ENV_LIST+=",BENCH_REQUEST_RATE,BENCH_RANDOM_RANGE_RATIO,BENCH_NUM_PROMPTS_MULTIPLIER"
     PYXIS_ENV_LIST+=",RUN_EVAL,EVAL_ONLY,EVAL_CONC,EVAL_FRAMEWORK,EVAL_LIMIT,EVAL_SUITE"
-    PYXIS_ENV_LIST+=",SWEBENCH_GEN_MODE,SWEBENCH_USE_MODAL,MODAL_TOKEN_ID,MODAL_TOKEN_SECRET"
     PYXIS_ENV_LIST+=",IS_AGENTIC,SCENARIO_TYPE,FRAMEWORK,PRECISION,MODEL_PREFIX"
     PYXIS_ENV_LIST+=",RUNNER_TYPE,RESULT_FILENAME,SPEC_DECODING,IS_MULTINODE,CONFIG_FILE"
 
@@ -261,7 +256,7 @@ elif [[ "$LLMD_CONTAINER_ENGINE" == "pyxis" ]]; then
     # MODEL_DIR / BENCHMARK_LOGS_DIR / NODE_RANK are translated to their
     # in-container values inside bash -lc (host MODEL_DIR is the source
     # path of the bind mount, but server.sh expects /models inside).
-    srun \
+    run_until_bench_done srun \
         --kill-on-bad-exit=1 \
         --signal=TERM@30 \
         --unbuffered \

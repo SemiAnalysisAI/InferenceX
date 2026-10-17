@@ -1,72 +1,34 @@
-"""Changelog selection, historical comparisons, and complete sweep planning."""
-
 import argparse
 import copy
-import hashlib
-import io
-import json
-import os
 import re
 import subprocess
-import tempfile
 import traceback
 from collections import defaultdict
-from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
-from pathlib import Path
+from contextlib import ExitStack
 
 import yaml
 
-from infx.config import (
-    GENERATOR_MODULE,
-    GENERATOR_MODULE_PATH,
-    LEGACY_GENERATOR_SCRIPT,
-    MASTER_CONFIGS,
-    RUNNER_CONFIG,
-    git_path_at_ref,
-    git_repository_root,
-)
+from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
+from .fingerprint import recipe_fingerprint
 from .generate import (
     EvalMode,
+    drop_app_colliding_evals,
     freeze_config_value,
     generate_config_matrix,
     seq_len_to_str,
     trim_conc,
 )
+from .revision import GENERATOR, snapshot
 from .validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
+    config_root,
     load_config_files,
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
-
-
-def validate_manual_workflow(name: str) -> None:
-    """Read dispatch metadata from the target checkout, like the other current inputs."""
-    path = Path.cwd() / ".github" / "workflows" / name
-    if not path.is_file():
-        raise ValueError(f"workflow-dispatch workflow does not exist: {name}")
-    # BaseLoader builds only strings/containers and preserves GitHub's literal "on" key.
-    workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)  # noqa: S506
-    triggers = workflow.get("on") if isinstance(workflow, dict) else None
-    if isinstance(triggers, str):
-        triggers = [triggers]
-    if not isinstance(triggers, (dict, list)) or "workflow_dispatch" not in triggers:
-        raise ValueError(f"workflow-dispatch workflow has no workflow_dispatch trigger: {name}")
-
-
-@dataclass(frozen=True)
-class GenerationInputs:
-    config_files: list[str]
-    # argv after python3: ("-m", module) or (legacy script path,)
-    generator: tuple[str, ...]
-    runner_config: str
-    # Child working directory and explicit import root for snapshot isolation.
-    root: str | None = None
+SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -87,7 +49,6 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
         if line.startswith("-") and not line.startswith("---"):
             deleted_content = line[1:]
             if deleted_content.strip():
-                # The changelog is append-only, except for blank lines.
                 raise ValueError(
                     f"Deletions are not allowed in {filepath}. "
                     f"Only additions to the changelog are permitted. "
@@ -100,7 +61,6 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
 
 
 def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
-    """Drop multinode eval rows below a prefill EP threshold."""
     if min_prefill_ep is None:
         return eval_rows
     kept: list[dict] = []
@@ -136,87 +96,7 @@ def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> 
     return list(resolved_keys)
 
 
-@contextmanager
-def generation_inputs_at_ref(ref: str) -> Iterator[GenerationInputs]:
-    """Materialize config and generator inputs from one repository revision."""
-    with tempfile.TemporaryDirectory(prefix="inferencex-append-only-") as temp_dir:
-        files_result = subprocess.run(
-            [
-                "git",
-                "ls-tree",
-                "--full-tree",
-                "-r",
-                "-z",
-                ref,
-                "--",
-                "utils/matrix_logic",
-                "infx",
-                *MASTER_CONFIGS,
-                "configs/runners.yaml",
-                "benchmarks/multi_node/srt-slurm-recipes",
-                "inferencex-e2e/infx",
-                "inferencex-e2e/configs",
-                "inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes",
-                "inferencex-e2e/utils/matrix_logic",
-            ],
-            cwd=git_repository_root(),
-            capture_output=True,
-            check=True,
-        )
-        repo_files = {}
-        for entry in files_result.stdout.split(b"\0")[:-1]:
-            metadata, path = entry.split(b"\t", 1)
-            repo_files[os.fsdecode(path)] = metadata.split()[2]
-        # Never combine a historical root layout with the nested project snapshot.
-        prefix = "inferencex-e2e/"
-        if any(path.startswith(prefix) for path in repo_files):
-            repo_files = {
-                path.removeprefix(prefix): oid
-                for path, oid in repo_files.items()
-                if path.startswith(prefix)
-            }
-        required_paths = {*MASTER_CONFIGS, "configs/runners.yaml"}
-        if GENERATOR_MODULE_PATH in repo_files:
-            generator: tuple[str, ...] = ("-m", GENERATOR_MODULE)
-        elif LEGACY_GENERATOR_SCRIPT in repo_files:
-            generator = (str(Path(temp_dir) / LEGACY_GENERATOR_SCRIPT),)
-        else:
-            generator = ()
-            required_paths.add(GENERATOR_MODULE_PATH)
-        missing_paths = required_paths - repo_files.keys()
-        if missing_paths:
-            raise ValueError(
-                f"append-only base revision is missing generation inputs: {sorted(missing_paths)}"
-            )
-
-        result = subprocess.run(
-            ["git", "cat-file", "--batch"],
-            input=b"\n".join(repo_files.values()) + b"\n",
-            capture_output=True,
-            check=True,
-        )
-        blobs = io.BytesIO(result.stdout)
-        for repo_path in repo_files:
-            header = blobs.readline().split()
-            if len(header) != 3 or header[1] != b"blob":
-                raise ValueError(f"Could not read {repo_path!r} at {ref!r}: {header!r}")
-            content = blobs.read(int(header[2]))
-            if blobs.read(1) != b"\n":
-                raise ValueError(f"Incomplete Git blob for {repo_path!r} at {ref!r}")
-            destination = Path(temp_dir) / repo_path
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(content)
-
-        yield GenerationInputs(
-            config_files=[str(Path(temp_dir) / path) for path in MASTER_CONFIGS],
-            generator=generator,
-            runner_config=str(Path(temp_dir) / "configs/runners.yaml"),
-            root=temp_dir,
-        )
-
-
 def _matrix_curve_key(entry: dict) -> tuple:
-    """Identify one curve while deliberately excluding point-level fields."""
     return tuple(
         sorted(
             (key, freeze_config_value(value))
@@ -226,24 +106,7 @@ def _matrix_curve_key(entry: dict) -> tuple:
     )
 
 
-def recipe_fingerprint(entry: dict) -> str:
-    """Hash the generated recipe independently of point-level concurrency/name."""
-    recipe = {
-        key: value
-        for key, value in entry.items()
-        if key not in {"conc", "exp-name", "recipe-fingerprint"}
-    }
-    canonical = json.dumps(
-        recipe,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
 def _matrix_visual_series_key(entry: dict) -> tuple:
-    """Identify the App curve that an appended recipe must already belong to."""
     is_agentic = entry.get("scenario-type") == "agentic-coding"
     kv_offloading = entry.get("kv-offloading", "none")
     offload_mode = "off" if kv_offloading in (None, "", "none") else "on"
@@ -276,13 +139,6 @@ def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
 
 
 def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> list[dict]:
-    """Return only newly added points, rejecting any existing-point mutation.
-
-    Generated matrix rows are the runtime contract. Grouping them without ``conc``
-    and ``exp-name`` lets an existing recipe gain concurrency while also permitting
-    entirely new recipe variants. Every base recipe and concurrency must remain in
-    the head unchanged; the returned delta is therefore strictly additive.
-    """
     base_groups: dict[tuple, set[int]] = defaultdict(set)
     head_groups: dict[tuple, set[int]] = defaultdict(set)
     for entry in base_entries:
@@ -348,13 +204,6 @@ def validate_append_only_scope(
     head_master: dict,
     selected_config_scenarios: dict[str, set[str]],
 ) -> None:
-    """Reject edits outside selected existing configs and scenarios.
-
-    Changes inside an explicitly selected scenario are checked semantically by
-    ``append_only_delta`` after generating the complete base and head matrices.
-    This permits arbitrary additive recipe variants while ensuring every existing
-    generated point remains unchanged and present.
-    """
     selected_configs = selected_config_scenarios.keys()
     all_keys = base_master.keys() | head_master.keys()
     unrelated_changes = [
@@ -400,11 +249,6 @@ def group_unseen_scenarios(
     scenarios: tuple[str, ...],
     seen: dict[str, set[str]],
 ) -> dict[tuple[str, ...], list[str]]:
-    """Claim unseen config/scenario pairs in canonical scenario and input-key order.
-
-    Benchmark and eval callers pass separate coverage maps; grouping one must
-    never suppress work in the other.
-    """
     groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for config in config_keys:
         unseen = tuple(
@@ -418,50 +262,10 @@ def group_unseen_scenarios(
     return groups
 
 
-def generate_matrix(
-    config_keys: list[str],
-    flags: list[str],
-    inputs: GenerationInputs | None = None,
-) -> list[dict]:
-    """Run the selected generator in its own process and decode its matrix.
-
-    The planner uses this only for historical revisions. Retain the callable's
-    legacy flags, optional input override, and child diagnostics for script users.
-    """
-    command = _matrix_command(config_keys, flags, inputs)
-    root = Path(inputs.root).resolve() if inputs and inputs.root else Path.cwd()
-    import_paths = [str(root)]
-    if inputs and inputs.generator[0] != "-m":
-        # Pre-package generators import validation and other sibling modules.
-        import_paths.insert(0, str(Path(inputs.generator[0]).resolve().parent))
-    env = os.environ.copy()
-    if env.get("PYTHONPATH"):
-        import_paths.append(env["PYTHONPATH"])
-    env["PYTHONPATH"] = os.pathsep.join(import_paths)
-    if inputs and inputs.root:
-        env["INFERENCEX_REPOSITORY_ROOT"] = str(root)
-    try:
-        result = subprocess.run(
-            command, capture_output=True, text=True, check=True, cwd=root, env=env
-        )
-    except subprocess.CalledProcessError as exc:
-        print(exc.stderr)
-        raise
-    return json.loads(result.stdout)
-
-
 class MatrixGenerationError(ValueError):
-    """A current-revision generation failure, with its CLI diagnostic context."""
-
-    def __init__(
-        self,
-        keys: list[str],
-        flags: list[str],
-        inputs: GenerationInputs | None,
-        cause: Exception,
-    ) -> None:
+    def __init__(self, command: list[str], cause: Exception) -> None:
         super().__init__(str(cause))
-        self.keys, self.flags, self.inputs, self.cause = keys, flags, inputs, cause
+        self.command, self.cause = command, cause
 
 
 def build_plan(
@@ -475,23 +279,11 @@ def build_plan(
     all_evals: bool = False,
     evals_only: bool = False,
 ) -> ChangelogMatrixEntry:
-    """Build the complete sweep from changelog entries and configuration paths.
-
-    Load each current input once; load runners only when generation is needed.
-    Current workflows and default config paths belong to the caller's working directory,
-    including when this module is installed or loaded from a separate tooling checkout.
-    Append-only base generation uses that revision's own isolated code and inputs.
-    Nothing is published until generation and final schema validation succeed.
-    """
     if not changelog_data:
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
     with ExitStack() as stack:
         parsed_entries = [ChangelogEntry.model_validate(entry) for entry in changelog_data]
-        for entry in parsed_entries:
-            if entry.workflow_dispatch is not None:
-                validate_manual_workflow(entry.workflow_dispatch)
-        parsed_entries = [entry for entry in parsed_entries if entry.workflow_dispatch is None]
         if any(entry.no_evals for entry in parsed_entries) and (all_evals or evals_only):
             raise ValueError("no-evals entries cannot use all-evals or evals-only modifiers")
         has_append_only = any(entry.append_only for entry in parsed_entries)
@@ -518,14 +310,12 @@ def build_plan(
 
         all_benchmark_results = []
         all_eval_results = []
-        # Track benchmark coverage per scenario so overlapping changelog entries
-        # with disjoint scenario filters do not suppress each other.
         benchmark_scenarios_seen = defaultdict(set)
         eval_scenarios_seen = defaultdict(set)
 
         config_files = MASTER_CONFIGS if config_files is None else config_files
-        head_inputs = GenerationInputs(config_files, ("-m", GENERATOR_MODULE), runner_config)
         master_config = load_config_files(config_files)
+        root = config_root(config_files)
         runner_data = None
 
         def generate_current(
@@ -543,24 +333,33 @@ def build_plan(
                     runner_data,
                     scenario_types=scenarios,
                     eval_mode=mode,
+                    root=root,
                 )
             except Exception as error:
-                raise MatrixGenerationError(
-                    keys,
-                    _generation_flags(mode, scenarios),
-                    head_inputs if mode == "none" else None,
-                    error,
-                ) from error
+                command = [
+                    "python3",
+                    "-m",
+                    GENERATOR.module,
+                    "test-config",
+                    "--config-keys",
+                    *keys,
+                    "--config-files",
+                    *config_files,
+                    "--runner-config",
+                    runner_config,
+                    *_generation_flags(mode, scenarios),
+                ]
+                raise MatrixGenerationError(command, error) from error
 
         resolved_entries = []
         for entry in parsed_entries:
             all_configs = get_config_keys_from_master(entry.config_keys, master_config)
             resolved_entries.append((entry, all_configs))
 
-        base_inputs = None
+        base = None
         if has_append_only:
-            base_inputs = stack.enter_context(generation_inputs_at_ref(base_ref))
-            base_master = load_config_files(base_inputs.config_files)
+            base = stack.enter_context(snapshot(base_ref))
+            base_master = load_config_files(base.master_configs, validate=False)
             selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
             for entry, configs in resolved_entries:
                 for config in configs:
@@ -578,8 +377,6 @@ def build_plan(
                 selected_config_scenarios,
             )
 
-        # Process all-evals entries first so their broader eval matrix wins when
-        # the same config appears in multiple changelog entries.
         resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
         for entry, all_configs in resolved_entries:
@@ -595,12 +392,15 @@ def build_plan(
                     selection = scenarios if scenarios != SCENARIO_TYPES else None
                     head_results = generate_current(benchmark_configs, "none", selection)
                     if entry.append_only:
-                        assert base_inputs is not None  # noqa: S101
-                        base_results = generate_matrix(
-                            benchmark_configs,
-                            _generation_flags("none", selection),
-                            base_inputs,
-                        )
+                        if base is None:
+                            raise AssertionError
+                        try:
+                            base_results = base.generate(
+                                benchmark_configs, _generation_flags("none", selection)
+                            )
+                        except subprocess.CalledProcessError as error:
+                            print(error.stderr)
+                            raise
                         head_results = append_only_delta(base_results, head_results)
                     all_benchmark_results.extend(head_results)
 
@@ -623,16 +423,21 @@ def build_plan(
             all_benchmark_results = trim_conc(all_benchmark_results)
 
         for result in all_benchmark_results:
-            result["recipe-fingerprint"] = recipe_fingerprint(result)
+            result["recipe-fingerprint"] = recipe_fingerprint(result, root)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
-            scenario = (
-                "agentic"
-                if result.get("scenario-type") == "agentic-coding"
-                else seq_len_to_str(result["isl"], result["osl"])
-            )
+            if result.get("scenario-type") == "agentic-coding":
+                scenario = "agentic"
+            elif result.get("scenario-type") == "video-generation":
+                scenario = "video"
+            else:
+                scenario = seq_len_to_str(result["isl"], result["osl"])
             final_results[node_type][scenario].append(result)
 
-        # Fixed-sequence and AgentX eval jobs have different workflow inputs.
+        all_eval_results = [
+            result
+            for result in drop_app_colliding_evals(all_eval_results)
+            if result.get("run-eval")
+        ]
         for result in all_eval_results:
             prefix = "multinode_" if result.get("prefill") is not None else ""
             suffix = "agentic_evals" if result.get("scenario-type") == "agentic-coding" else "evals"
@@ -676,43 +481,19 @@ def main() -> None:
             evals_only=args.evals_only,
         )
     except MatrixGenerationError as error:
-        # Preserve the legacy child diagnostics and failure status at the CLI.
         stderr = "".join(traceback.format_exception(error.cause))
         print(stderr)
-        raise subprocess.CalledProcessError(
-            1,
-            _matrix_command(error.keys, error.flags, error.inputs),
-            stderr=stderr,
-        ) from None
+        raise subprocess.CalledProcessError(1, error.command, stderr=stderr) from None
     print(result.model_dump_json(by_alias=True, exclude_none=True))
 
 
 def _generation_flags(mode: EvalMode, scenarios: tuple[str, ...] | None) -> list[str]:
-    """Serialize only at the historical process / legacy diagnostic boundary."""
     flags = ["--no-evals"] if mode == "none" else ["--evals-only"]
     if mode == "all":
         flags.append("--all-evals")
     if scenarios is not None:
         flags.extend(["--scenario-type", *scenarios])
     return flags
-
-
-def _matrix_command(
-    config_keys: list[str], flags: list[str], inputs: GenerationInputs | None
-) -> list[str]:
-    command = [
-        "python3",
-        *(inputs.generator if inputs else ("-m", GENERATOR_MODULE)),
-        "test-config",
-        "--config-keys",
-        *config_keys,
-        "--config-files",
-        *(inputs.config_files if inputs else MASTER_CONFIGS),
-    ]
-    if inputs is not None:
-        command.extend(["--runner-config", inputs.runner_config])
-    command.extend(flags)
-    return command
 
 
 if __name__ == "__main__":

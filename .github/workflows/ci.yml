@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: &python-paths
       - '**/*.py'
+      - 'collectivex/**'
       - '.github/scripts/**'
       - '.github/workflows/ci.yml'
       - 'inferencex-e2e/pyproject.toml'
@@ -12,6 +13,7 @@ on:
       - 'inferencex-e2e/.python-version'
       - 'inferencex-e2e/infx/ruff.toml'
       - '**/pytest.ini'
+      - 'inferencex-e2e/configs/**'
       - 'inferencex-e2e/utils/srt-slurm'
   push:
     branches: [main]

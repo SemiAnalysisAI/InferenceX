@@ -1,13 +1,6 @@
-# DeepSeek-V4.1-Flash AgentX on MI355X with vLLM native DSpark
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). The KV cache is
-# GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai-rocm:nightly-rocm100-7f1a5398e9610d96c473931a26c0e12bbe0d0423
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -40,41 +33,45 @@ base:
         # aiter_triton_mxfp4_bf16 would force the W4A16 Triton kernel.
         moe-backend: aiter
         gpu-memory-utilization: 0.9
+        # Enables vllm-project/vllm#58671's ROCm paged MXFP4 sparse-logits
+        # indexer kernel instead of the dense fp8 indexer path.
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        # Auto-resolution picks 64 (min across backends); force 128, which
+        # the indexer and SparseMLA actually prefer.
+        block-size: 128
         # Five-token DSpark with probabilistic drafting. Throughput runs replace
         # block rejection with the golden acceptance length. Adaptive
         # verification trims requests on device, which the ROCm DeepSeek-V4
         # indexer does not support.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
-        # The ROCm sparse SWA path lacks the replay window clamp; bounded replay
-        # memory-faulted at the first prefix hit with a replay start.
-        no-swa-bounded-replay: true
+        # Mono decode kernels (vllm-project/vllm#60397, #61082): two persistent
+        # launches a layer on all 40 backbone layers for decode steps of up to
+        # 48 rows (c8 with five drafts); larger steps take the regular path.
+        monokernel: true
         disable-uvicorn-access-log: true
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
+        # INT4 quick all-reduce above its size threshold
+        # (vllm-project/recipes#1061).
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_TRITON_LOG_LEVEL: ERROR
+        VLLM_ROCM_USE_AITER_TRITON_SPARSE_MLA: 'True'
         # DeepseekV41ForCausalLM is not torch-compiled upstream; breakable
         # graphs keep FULL_AND_PIECEWISE capture working.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
         OMP_NUM_THREADS: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_USE_RUST_FRONTEND: '1'
         PYTHONUNBUFFERED: '1'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
-      # Full-context corpus for this 1M-context recipe.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point. Engram tables move to pinned host memory at TP2 and
-# at c128, where resident tables leave too little KV. Graph capture covers
-# 2x CONC (at least 128 sequences) x (1 + 5 drafts), up to 2048 tokens. The
-# prefill chunk shrinks at TP2 from c64 and at c128 to buy KV room, and where
-# it drops below 1024 x 6 slots the scheduler is capped at the captured shape.
+# One variant per point, concurrency 1 through 64 on both TP arms (c128 and
+# c192 excluded). Engram tables move to pinned host memory at TP2, where
+# resident tables leave too little KV. Graph capture covers 2x CONC x
+# (1 + 5 drafts). The prefill chunk is the upstream 16384 everywhere.
 override_tp4_c1:
   roles:
     agg:
@@ -166,19 +163,6 @@ override_tp4_c64:
     env:
       CONC: '64'
 
-override_tp4_c128:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 2048
-        max-num-batched-tokens: 8192
-  benchmark:
-    env:
-      CONC: '128'
-
 override_tp2_c1:
   roles:
     agg:
@@ -265,21 +249,7 @@ override_tp2_c64:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 16384
   benchmark:
     env:
       CONC: '64'
-
-override_tp2_c128:
-  roles:
-    agg:
-      gpus: 2
-      args:
-        tensor-parallel-size: 2
-        engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 2048
-        max-num-batched-tokens: 4096
-        max-num-seqs: 256
-  benchmark:
-    env:
-      CONC: '128'

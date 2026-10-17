@@ -24,10 +24,20 @@ class BenchmarkData:
     completed: int
     total_input_tokens: int
     total_output_tokens: int
+    # "tokens": per-token energy needs positive token counts (the default).
+    # "clips": the result counts generated clips; it carries no tokens to normalize by.
+    energy_normalization: str = "tokens"
 
     @property
     def integration_duration_s(self) -> float:
         return self.end_unix - self.start_unix
+
+    @property
+    def per_token(self) -> bool:
+        return self.energy_normalization == "tokens"
+
+
+ENERGY_NORMALIZATIONS = ("tokens", "clips")
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:
@@ -101,7 +111,6 @@ def _percentile_total_power(
             slope_changes[left_t] = slope_changes.get(left_t, 0.0) + slope
             slope_changes[right_t] = slope_changes.get(right_t, 0.0) - slope
 
-    # The union of all device timestamps gives the exact knots of their sum.
     segments: list[tuple[float, float, float]] = []
     slope = 0.0
     times = sorted(slope_changes)
@@ -119,7 +128,6 @@ def _percentile_total_power(
     lower = min(low for low, _, _ in segments)
     upper = max(high for _, high, _ in segments)
     target_time = (end_unix - start_unix) * quantile
-    # Bisection includes point masses without averaging device percentiles.
     for _ in range(60):
         value = lower + (upper - lower) / 2
         time_below = sum(
@@ -175,12 +183,18 @@ def _load_benchmark_data(
     if abs(duration - integration_duration) > duration_tolerance:
         _append_reason(reasons, "benchmark_duration_mismatch")
 
+    normalization = bench.get("energy_normalization", "tokens")
+    if normalization not in ENERGY_NORMALIZATIONS:
+        return None, ["invalid_energy_normalization"]
     counts: dict[str, int] = {}
     for key, reason in (
         ("completed", "invalid_successful_query_count"),
         ("total_input_tokens", "invalid_input_token_count"),
         ("total_output_tokens", "invalid_output_token_count"),
     ):
+        if normalization == "clips" and key != "completed":
+            counts[key] = 0
+            continue
         value = bench.get(key)
         if (
             not isinstance(value, int)
@@ -196,6 +210,7 @@ def _load_benchmark_data(
             start_unix=start,
             end_unix=end,
             reported_duration_s=duration,
+            energy_normalization=normalization,
             **counts,
         ),
         reasons,
@@ -212,11 +227,15 @@ def _write_json_atomic(path: Path, data: dict) -> None:
 
 def benchmark_window_payload(
     benchmark: BenchmarkData | None,
-) -> dict[str, float | int] | None:
-    """Serialize the common benchmark-window contract for validation sidecars."""
+) -> dict[str, float | int | str] | None:
+    """Serialize the common benchmark-window contract for validation sidecars.
+
+    Token-normalized windows keep the published shape; a window normalized per
+    clip names its normalization so the audit does not read token metrics into it.
+    """
     if benchmark is None:
         return None
-    return {
+    payload: dict[str, float | int | str] = {
         "start_time_unix": benchmark.start_unix,
         "end_time_unix": benchmark.end_unix,
         "reported_duration_s": benchmark.reported_duration_s,
@@ -224,6 +243,30 @@ def benchmark_window_payload(
         "completed": benchmark.completed,
         "total_input_tokens": benchmark.total_input_tokens,
         "total_output_tokens": benchmark.total_output_tokens,
+    }
+    if not benchmark.per_token:
+        payload["energy_normalization"] = benchmark.energy_normalization
+    return payload
+
+
+def invalid_validation_payload(
+    *,
+    telemetry_source: Path,
+    bench_result: Path,
+    expected_gpu_count: int,
+    reasons: list[str],
+) -> dict:
+    """Build an auditable invalid sidecar when no validator could produce one."""
+    return {
+        "schema_version": 1,
+        "power_valid": False,
+        "reasons": reasons,
+        "telemetry_source": str(telemetry_source),
+        "benchmark_result": str(bench_result),
+        "benchmark_window": None,
+        "expected_gpu_count": expected_gpu_count,
+        "observed_gpu_count": 0,
+        "metrics": {},
     }
 
 

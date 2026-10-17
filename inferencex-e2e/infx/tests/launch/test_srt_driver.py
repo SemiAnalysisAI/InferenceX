@@ -1,0 +1,892 @@
+"""The srt-slurm driver end to end: ``python -m infx.launch run`` on the fakes.
+
+Most points run on the sandboxed cluster records; the lane test runs synthetic lanes
+in-process, so the lane table it patches applies.
+"""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import tarfile
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import yaml
+
+from infx.launch.__main__ import main
+from infx.launch.drivers.srt import lanes, models
+from infx.launch.drivers.srt.lanes import LaneMount, SrtLane
+from infx.launch.drivers.srt.models import Override
+from infx.launch.policy import LaunchPath, Match
+from infx.tests.launch.fake_slurm import (
+    ROOT,
+    base_env,
+    install_fakes,
+    launch,
+    lines,
+    make_workspace,
+    runner_for,
+    sandbox_runner_config,
+    srtctl_calls,
+)
+
+sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
+from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
+from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides  # noqa: E402
+from srtctl.core.schema import ClusterConfig  # noqa: E402
+
+POINT_RECIPE = {
+    "schema": 2,
+    "engine": "sglang",
+    "resources": {"gpus_per_node": 8},
+    "roles": {"agg": {
+        "nodes": 1, "workers": 1, "gpus": 4,
+        "args": {"tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32},
+    }},
+}  # fmt: skip
+
+POINT_ENV = {
+    "FRAMEWORK": "sglang", "MODEL": "test/model", "IMAGE": "test:tag", "PRECISION": "fp8",
+    "TP": "4", "GPU_COUNT": "4", "PP_SIZE": "1", "DCP_SIZE": "1", "PCP_SIZE": "1",
+    "EP_SIZE": "1", "DP_ATTENTION": "false", "SPEC_DECODING": "none", "IS_AGENTIC": "0",
+    "ISL": "256", "OSL": "64", "RANDOM_RANGE_RATIO": "0.5", "CONC": "2", "MODEL_PREFIX": "dsr1",
+    "IS_MULTINODE": "false", "SRT_RECIPE": "recipe.yaml", "FAKE_RESULTS": "single",
+}  # fmt: skip
+
+LANE_FRAGMENT = """name: "fixture"
+roles:
+  prefill:
+    args:
+      tensor-parallel-size: 8
+      watchdog-timeout: 600
+  decode:
+    args:
+      tensor-parallel-size: 8
+      watchdog-timeout: 600
+health_check:
+  max_attempts: 100
+  interval_seconds: 5
+"""
+POWER_TELEMETRY = "telemetry:\n  collector_join_timeout_seconds: 12\n"
+MIRROR = "benchmarks/multi_node/srt-slurm-recipes"
+
+
+@pytest.fixture
+def harness(tmp_path):
+    """Sandbox, fake binaries, workspace and sandboxed cluster records for one launch."""
+    sandbox = tmp_path / "sandbox"
+    sandbox.mkdir()
+    config = sandbox_runner_config(sandbox)
+    workspace = make_workspace(tmp_path / "ws")
+    logs = tmp_path / "logs"
+    env = base_env(
+        fakes=install_fakes(tmp_path / "bin"), logs=logs, workspace=workspace, sandbox=sandbox
+    )
+    return SimpleNamespace(tmp=tmp_path, config=config, workspace=workspace, logs=logs, env=env)
+
+
+def single_node_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
+    """Environment of a fixed-sequence single-node point with its recipe in the workspace."""
+    recipe = {"base": POINT_RECIPE, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump(recipe))
+    runner = overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id)
+    return {**harness.env, **POINT_ENV, "RUNNER_NAME": runner, **overrides}
+
+
+def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides: str) -> dict[str, str]:
+    """Environment of a multi-node point whose recipe lives in the workspace mirror.
+
+    RUNNER_NAME defaults to the cluster's first runner.
+    """
+    mirror = harness.workspace / "benchmarks/multi_node/srt-slurm-recipes/test/lane.yaml"
+    mirror.parent.mkdir(parents=True, exist_ok=True)
+    mirror.write_text(recipe)
+    env = {
+        **harness.env, "RUNNER_NAME": overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id),
+        "IS_MULTINODE": "true", "SRT_RECIPE": f"{MIRROR}/test/lane.yaml", "IMAGE": "test:tag",
+        "CONC_LIST": "4", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
+        "FAKE_RESULTS": "fixed",
+    }  # fmt: skip
+    return {**env, **overrides}
+
+
+def srtslurm(root: Path) -> dict:
+    """The srtslurm.yaml the launch rendered under ``root``."""
+    [path] = root.glob("**/srtslurm.yaml")
+    return yaml.safe_load(path.read_text())
+
+
+WORKDIR = 'srun_options.container-workdir="/infmax-workspace"'
+
+
+def assert_ok(result: subprocess.CompletedProcess[str]) -> None:
+    """Fail with the launcher's output when it did not exit 0."""
+    assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-8000:]
+
+
+def job_event(workspace: Path) -> dict:
+    """The job record the launch left in ``workspace``."""
+    return json.loads((workspace / "job_event.json").read_text())
+
+
+def test_single_node_point_stages_workflow_artifacts(harness):
+    workspace = harness.workspace
+    env = single_node_env(
+        harness, "h100-cw", FAKE_STATE="COMPLETED|0:0|gpu-01|1791547200|1791548100|1791551700",
+        GITHUB_SERVER_URL="https://github.com", GITHUB_REPOSITORY="o/r", JOB_CHECK_RUN_ID="117051802632",
+        GITHUB_EVENT_NAME="workflow_dispatch", TEST_NAME="wide event", BENCHMARK_REF="feat/x",
+    )  # fmt: skip
+    records = yaml.safe_load(harness.config.read_text())
+    records["clusters"]["h100-cw"]["slurm"]["srt-slurm"]["fabric"] = {"socket-ifname": ["eth9"]}
+    harness.config.write_text(yaml.safe_dump(records))
+    fragment = yaml.safe_load((workspace / "recipe.yaml").read_text())
+    fragment["base"]["roles"]["agg"]["env"] = {"NCCL_SOCKET_IFNAME": "@fabric.socket-ifname"}
+    (workspace / "recipe.yaml").write_text(yaml.safe_dump(fragment))
+    assert_ok(launch(env, harness.config, workspace))
+
+    assert json.loads((workspace / "point-identity.json").read_text()) == {"completed": 2}
+    assert (workspace / "srt-single-node-logs.tar.gz").stat().st_size > 0
+    assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    bound = Path(argv[argv.index("--file") + 1])
+    recipe = yaml.safe_load(bound.read_text())
+    assert recipe["model"] == {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"}
+    assert {k: recipe["benchmark"]["env"][k] for k in ("MODEL", "CONC", "USE_CHAT_TEMPLATE")} == {
+        "MODEL": "test/model", "CONC": "2", "USE_CHAT_TEMPLATE": "false",
+    }
+    assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth9"}
+    assert {"--json", "--yes", "--output", WORKDIR} <= set(argv)
+    assert (call["env"]["INFMAX_WORKSPACE"], call["env"]["VIRTUAL_ENV"]) == (str(workspace), None)
+    assert call["env"]["RUNNER_NAME"] == f"inferencex-{env['RUNNER_NAME']}"
+    assert "/hf" in srtslurm(workspace)["default_mounts"].values()
+    applied = [line.split()[-1] for line in lines(harness.logs, "git") if line.split()[2:3] == ["apply"]]
+    assert applied == [str(workspace / "runners/srt-slurm/patches/001-fixture.patch")]
+    assert lines(harness.logs, "scancel") == []
+
+    event = job_event(workspace)
+    expected = {
+        "cluster": "h100-cw", "launch_path": "srt-single", "recipe": "recipe.yaml:zip_override_conc[0]",
+        "slurm_job_id": "42", "outcome": "success", "error": None,
+    }  # fmt: skip
+    assert {key: event[key] for key in expected} == expected
+    assert list(event["stages"]) == ["prepare", "submit", "run", "collect"]
+    assert (event["slurm_submitted_at"], event["slurm_started_at"], event["slurm_ended_at"]) == (
+        "2026-10-09T12:00:00Z", "2026-10-09T12:15:00Z", "2026-10-09T13:15:00Z",
+    )
+    assert (event["queue_s"], event["nodes"]) == (900.0, "gpu-01")
+    assert event["versions"]["srt_slurm_sha"] == harness.env["FAKE_SRT_COMMIT"]
+    assert {key: event["topology"][key] for key in ("tp", "ep", "pp", "dp_attn", "gpu_count")} == {
+        "tp": 4, "ep": 1, "pp": 1, "dp_attn": False, "gpu_count": 4,
+    }
+    github = {key: event["github"][key] for key in ("job_url", "event_name", "test_name", "ref")}
+    assert github == {
+        "job_url": "https://github.com/o/r/actions/runs/9001/job/117051802632",
+        "event_name": "workflow_dispatch", "test_name": "wide event", "ref": "feat/x",
+    }
+    assert {"point-identity.json", "srt-single-node-logs.tar.gz", "srt-setup.log"} <= set(event["artifacts"])
+    assert "recipe.yaml" not in event["artifacts"]
+
+
+VIDEO_ENV = {
+    "FRAMEWORK": "sglang", "MODEL": "MiniMaxAI/MiniMax-H3", "IMAGE": "test:tag", "PRECISION": "bf16",
+    "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
+    "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
+    "CONC_LIST": "1 2", "H3_SPEC": "h3-serving-2gpu.json", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/h200-bf16/serving-client.yaml",
+    "FAKE_RESULTS": "video",
+}  # fmt: skip
+
+
+def video_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
+    """Environment of a video point: the checked-in H3 fragment and harness beside the workspace."""
+    recipe = ROOT / VIDEO_ENV["SRT_RECIPE"]
+    mirror = harness.workspace / VIDEO_ENV["SRT_RECIPE"]
+    mirror.parent.mkdir(parents=True, exist_ok=True)
+    mirror.write_text(recipe.read_text())
+    package = harness.workspace.parent / "experimental/video-generation"
+    package.parent.mkdir(parents=True, exist_ok=True)
+    if not package.exists():
+        package.symlink_to(ROOT.parent / "experimental/video-generation", target_is_directory=True)
+    runner = overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id)
+    return {**harness.env, **VIDEO_ENV, "RUNNER_NAME": runner, **overrides}
+
+
+def test_video_point_serves_the_h3_service_and_stages_every_concurrency(harness):
+    workspace = harness.workspace
+    env = video_env(harness, "h100-cw")
+    assert_ok(launch(env, harness.config, workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    bound = yaml.safe_load(Path(argv[argv.index("--file") + 1]).read_text())
+    assert bound["model"] == {"path": "hf:MiniMaxAI/MiniMax-H3", "container": "test:tag", "precision": "bf16"}
+    assert "roles" not in bound and bound["frontend"] == {"type": "none"}
+    [service] = bound["services"]
+    assert service["readiness"]["http"] == {"port": 30283, "path": "/health"}
+    assert bound["benchmark"]["type"] == "custom" and bound["benchmark"]["concurrencies"] == [1, 2]
+    assert bound["telemetry"]["enabled"] is True
+    assert {"--json", "--yes", "--output", WORKDIR, 'srun_options.gpus-per-node="2"'} <= set(argv)
+    rendered = srtslurm(workspace)
+    ClusterConfig.Schema().load(rendered)
+    mounts = rendered["default_mounts"]
+    assert mounts[str(workspace.parent / "experimental/video-generation")] == "/h3-package"
+    assert "/mnt/hf_hub_cache/" in mounts.values()
+    assert rendered["containers"][rendered["default_gpu_exporter"]["container_image"]]
+    # Every concurrency's aggregate and validation sidecar, the point summary, and the app bundle.
+    for conc in (1, 2):
+        aggregate = json.loads((workspace / f"point-identity_conc{conc}.json").read_text())
+        assert (aggregate["max_concurrency"], aggregate["num_gpus"], aggregate["valid"]) == (conc, 2, 4)
+        assert aggregate["power_valid"] == 0  # the fake retains no manifest: never measured
+        assert (workspace / f"power_validation_point-identity_conc{conc}.json").is_file()
+    summary = json.loads((workspace / "point-identity.json").read_text())
+    assert summary["scenario_type"] == "video-generation" and summary["status"] == "complete"
+    bundle = workspace / "h3-results"
+    matrix = json.loads((bundle / "serving-smoke.json").read_text())
+    assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
+    assert all(cell["status"] == "complete" and not cell["verified"] for cell in matrix["cells"])
+    assert (bundle / "SHA256SUMS").is_file() and (bundle / "gpu/c1/power.json").is_file()
+    assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
+    assert (workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
+    assert (workspace / "srt-video-logs.tar.gz").stat().st_size > 0
+    assert lines(harness.logs, "scancel") == []
+
+
+def test_video_point_requiring_power_fails_without_a_native_package(harness):
+    env = video_env(harness, "h100-cw", REQUIRE_POWER="1")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    aggregate = json.loads((harness.workspace / "point-identity_conc1.json").read_text())
+    assert aggregate["power_valid"] == 0
+    assert "manifest_missing" in json.loads(
+        (harness.workspace / "power_validation_point-identity_conc1.json").read_text()
+    )["reasons"]
+
+
+@pytest.mark.parametrize(("overrides", "message"), [
+    ({"IS_MULTINODE": "true"}, "single-node and not agentic"),
+    ({"IS_AGENTIC": "1"}, "single-node and not agentic"),
+])  # fmt: skip
+def test_video_points_are_single_node_and_not_agentic(harness, overrides, message):
+    env = video_env(harness, "h100-cw", **overrides)
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode != 0 and message in result.stderr
+    assert srtctl_calls(harness.logs) == []
+
+
+@pytest.mark.parametrize("require_power", ["0", "1"])
+@pytest.mark.parametrize(("cluster_id", "kind", "port"), [
+    ("mi355x-amds", "custom", 19500), ("h100-cw", "dcgm", 9401),
+])  # fmt: skip
+def test_single_node_native_power_is_bound_and_retained(harness, require_power, cluster_id, kind, port):
+    env = single_node_env(harness, cluster_id, REQUIRE_POWER=require_power)
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    workspace = harness.workspace
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    selected = Path(argv[argv.index("--file") + 1])
+    assert selected.name == "recipe.yaml"
+    rendered = srtslurm(workspace)
+    ClusterConfig.Schema().load(rendered)
+    variant = yaml.safe_load(selected.read_text())
+    sets = [argv[i + 1] for i, arg in enumerate(argv) if arg == "--set"]
+    apply_overrides_to_recipe(variant, parse_overrides(sets, []))
+    resolved = resolve_config_with_defaults(variant, rendered)
+    telemetry = resolved["telemetry"]
+    assert telemetry["enabled"] is True
+    assert telemetry["required"] is (require_power == "1")
+    assert telemetry["storage_subdir"] == "power"
+    assert telemetry["startup_timeout_seconds"] == 300.0
+    assert resolved["benchmark"]["concurrencies"] == [2]
+    cluster_exporter = rendered["default_gpu_exporter"]
+    staged = rendered["containers"][cluster_exporter["container_image"]]
+    assert telemetry["dcgm_exporter"] == {**cluster_exporter, "container_image": staged}
+    assert (cluster_exporter.get("kind", "dcgm"), cluster_exporter["port"]) == (kind, port)
+    exporter_config = rendered["default_mounts"].get(str(workspace / "runners/srt-slurm/exporters/amd-power.json"))
+    assert (exporter_config == "/etc/metrics/config.json") is (kind == "custom")
+    assert "AMD_DME" not in yaml.safe_dump(rendered) + " ".join(argv)
+    assert (workspace / "exporter-image.sha256").read_text().rstrip("\n").endswith(staged)
+    assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
+    assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
+    assert (workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
+    assert (workspace / "LOGS/point-identity.json").is_file()
+    assert (workspace / "power-producer-sha.txt").read_text() == env["FAKE_SRT_COMMIT"] + "\n"
+
+
+def test_single_node_eval_requires_a_successful_eval(harness):
+    env = single_node_env(harness, "h100-cw", RUN_EVAL="true", MAX_MODEL_LEN="1024")
+    assert_ok(launch(env, harness.config, harness.workspace))
+    exit_file = next(harness.workspace.glob("srt-single.*/outputs/42/logs/infx-eval-exit-code"))
+    harness.logs.joinpath("srtctl.jsonl").unlink()
+    srtctl = Path(harness.env["PATH"].split(os.pathsep)[0]) / "srtctl"
+    srtctl.write_text(srtctl.read_text().replace('write_text("0\\n")', 'write_text("3\\n")'))
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert "eval did not succeed" in result.stderr
+    assert exit_file.read_text() == "0\n"
+
+
+PIP_FAILURE = (
+    "ERROR: Could not install packages due to an OSError: ('Connection broken: IncompleteRead(0 bytes "
+    "read, 1 more expected)', IncompleteRead(0 bytes read, 1 more expected))"
+)
+SWEEP_LOG = (
+    "[srtctl] INFO Starting sweep job 42\nCollecting sglang-router==0.2.1\n"
+    "WARNING: Retrying (Retry(total=4)) after connection broken by 'ProtocolError('Connection broken')'\n"
+    f"\x1b[31m{PIP_FAILURE}\x1b[0m\n[srtctl] ERROR Worker agg_0 exited with code 1\n"
+    "Traceback (most recent call last):\n  File \"do_sweep.py\", line 412, in run\n"
+    "RuntimeError: worker setup failed\nsrun: error: gpu-01: task 0: Exited with exit code 1\n"
+)
+
+
+def test_single_node_failed_allocation_fails_the_launch(harness):
+    env = single_node_env(harness, "h100-cw", FAKE_STATE="FAILED|1:0|gpu-[01-02]", GITHUB_ACTIONS="true",
+                          FAKE_SWEEP_LOG=SWEEP_LOG)  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert (harness.workspace / "point-identity.json").is_file()
+
+    event = job_event(harness.workspace)
+    assert (event["outcome"], event["nodes"]) == ("failure", "gpu-[01-02]")
+    error = event["error"]
+    assert {key: error[key] for key in ("stage", "type", "message", "exit_code", "retriable")} == {
+        "stage": "run", "type": "JobFailed", "message": "Slurm job 42 ended with state=FAILED exit_code=1:0",
+        "exit_code": 1, "retriable": False,
+    }  # fmt: skip
+    assert error["evidence"].startswith("srt-single.")
+    assert error["evidence"].endswith("/outputs/42/logs/sweep_42.log")
+    cause, heading, *tail = error["detail"].split("\n")
+    assert (cause, heading) == (PIP_FAILURE, "--- last 9 lines ---")
+    assert tail[-1] == "srun: error: gpu-01: task 0: Exited with exit code 1"
+    annotation = (
+        "::error title=run::JobFailed: Slurm job 42 ended with state=FAILED exit_code=1:0%0A"
+        + PIP_FAILURE.replace("%", "%25") + "\n"
+    )
+    assert annotation in result.stderr
+
+
+@pytest.mark.parametrize("shape", ["single", "multi"])
+def test_a_recipe_the_binder_rejects_fails_the_point_with_the_binders_error(harness, shape):
+    if shape == "single":
+        env = single_node_env(harness, "h100-cw", CONC="3")
+        line = "single_node.py: error: Expected exactly one matching single-node SRT recipe; "
+    else:
+        env = lane_env(harness, "h200-dgxc", "roles: [prefill]\n", MODEL_PREFIX="dsr1", PRECISION="fp8",
+                       FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
+        line = "AttributeError: 'list' object has no attribute 'values'"
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode != 0
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "RecipeBindFailed", "srt-bind.log")
+    assert error["message"].startswith(line) and error["message"] in result.stderr
+    assert error["detail"].split("\n")[0] == error["message"]
+    assert srtctl_calls(harness.logs) == []
+
+
+@pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
+    (8000, True, {}, {"mem": "0"}),
+    (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
+    (None, True, {}, {}),
+])  # fmt: skip
+def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive, step, job):
+    slurm = {
+        "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
+        "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
+        "srt-slurm": {
+            "network-interface": "", "single-node-exclusive": exclusive,
+            "extra": {"default_gpu_exporter": {"container_image": "exporter:tag", "port": 9400}},
+        },
+    }  # fmt: skip
+    cluster = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": slurm}
+    if dram is not None:
+        cluster["available-cpu-dram-mib"] = dram
+    config = harness.tmp / "dram-runners.yaml"
+    config.write_text(yaml.safe_dump({"labels": {"cluster:lab": ["lab_00"]}, "clusters": {"lab": cluster}}))
+    env = single_node_env(harness, "lab", RUNNER_NAME="lab_00", GPU_COUNT="4")
+    assert_ok(launch(env, config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    assert json.loads(call["env"]["SRT_SRUN_OPTIONS"]) == {"container-remap-root": "", **step}
+    assert srtslurm(harness.workspace).get("default_sbatch_directives", {}) == job
+
+
+LABS = {
+    "lab-a": dict(
+        lane=SrtLane(
+            setup_scripts={"dynamo-sglang": "setup.sh"},
+            mounts=(LaneMount(Match(), "cache", "/cache"),), time_limit="2:00:00",
+        ),
+        env=dict(FRAMEWORK="dynamo-sglang"),
+        paths={"hf:org/Model": "nvme/model"}, preflight=False, tag="lab,dsr1,fp8,1024x1024,", setup_script="setup.sh",
+        served="served-model", dist_timeout=True, time="2:00:00", mounts=("/cache",), staging="import",
+    ),
+    "lab-b": dict(
+        lane=SrtLane(shared_run_root=(Match(),)),
+        env=dict(FRAMEWORK="dynamo-vllm", IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", FAKE_RESULTS="agentic"),
+        paths={"hf:org/Model": "models/model"}, preflight=True, tag=None, setup_script=None, served=None,
+        dist_timeout=False, time="10", mounts=(), staging="registry", shared_checkout=True,
+    ),
+}  # fmt: skip
+
+
+def lab_config(tmp: Path) -> Path:
+    """runners.yaml of the synthetic clusters, their storage under ``tmp``."""
+    common = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm"}
+    clusters = {
+        "lab-a": {**common, "models": {"entries": {"Model": {"root": "nvme", "dir": "model"}}}, "slurm": {
+            "partition": "p", "exclusive": True,
+            "volumes": {"nvme": {"path": str(tmp / "nvme"), "visibility": "node-local"},
+                        "cache": {"path": str(tmp / "cache")}},
+            "squash": {"dir": str(tmp / "squash"), "import": "submit-host"},
+            "srt-slurm": {"network-interface": "", "job-tag": "lab", "dist-timeout-s": 1800},
+        }},
+        "lab-b": {**common, "models": {"entries": {"Model": {"root": "models", "dir": "model"}}}, "slurm": {
+            "partition": "p", "exclusive": False,
+            "volumes": {"models": {"path": str(tmp / "models")}},
+            "srt-slurm": {"network-interface": "", "outputs": str(tmp / "outputs"),
+                          "shared-run-root": str(tmp / "runs")},
+        }},
+    }  # fmt: skip
+    path = tmp / "lab-runners.yaml"
+    labels = {f"cluster:{cluster_id}": [f"{cluster_id}_00"] for cluster_id in clusters}
+    path.write_text(yaml.safe_dump({"labels": labels, "clusters": clusters}))
+    return path
+
+
+def launch_here(monkeypatch, env: dict[str, str], config: Path, cwd: Path) -> int:
+    """``python -m infx.launch run`` in this process, with exactly ``env`` as its environment."""
+    for name in os.environ.keys() - env.keys():
+        monkeypatch.delenv(name)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.chdir(cwd)
+    return main(["--runner-config", str(config), "run"])
+
+
+@pytest.mark.parametrize("cluster_id", LABS)
+def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_id):
+    lab = LABS[cluster_id]
+    for other, spec in LABS.items():
+        monkeypatch.setitem(lanes.SRT_LANES, (other, LaunchPath.SRT_MULTI), spec["lane"])
+    monkeypatch.setitem(models.OVERRIDES, "lab-a", (Override(Match(), served_name="served-model"),))
+    env = lane_env(harness, cluster_id, lab.get("recipe", LANE_FRAGMENT), RUNNER_NAME=f"{cluster_id}_00",
+                   MODEL_PREFIX="dsr1", PRECISION="fp8", MODEL="org/Model", **lab["env"])  # fmt: skip
+    runner, tmp, workspace = env["RUNNER_NAME"], harness.tmp, harness.workspace
+    assert launch_here(monkeypatch, env, lab_config(tmp), workspace) == 0
+
+    if env["FAKE_RESULTS"] == "agentic":
+        assert json.loads((workspace / "point-identity_conc4.json").read_text()) == {"conc": 4}
+    else:
+        [point] = workspace.glob("point-identity_*.json")
+        assert point.name == "point-identity_sweep_isl_1024_osl_1024_conc4_gpus_16_ctx_8_gen_8.json"
+    with tarfile.open(workspace / "multinode_server_logs.tar.gz") as bundle:
+        assert "./sweep_42.log" in bundle.getnames()
+    assert (workspace / "srt-slurm-sha.txt").read_text() == harness.env["FAKE_SRT_COMMIT"] + "\n"
+    assert (workspace / "LOGS/sweep_42.log").is_file()
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    checkout = Path(call["cwd"]).resolve()
+    if lab.get("shared_checkout"):
+        assert checkout.name.startswith(f"srt-slurm-9001-1-{runner}-")
+        assert checkout.parent == (tmp / "runs").resolve()
+    else:
+        assert checkout.parent == workspace.resolve()
+        assert checkout.name.startswith("srt-slurm-9001-1-") and len(checkout.name) == len("srt-slurm-9001-1-") + 12
+    assert ("--no-preflight" in argv) is not lab["preflight"]
+    submitted = argv[argv.index("--file") + 1]
+    assert {"--json", "--yes", "benchmark.stream_output=true", WORKDIR} <= set(argv)
+    if lab["tag"] is None:
+        assert "--tags" not in argv
+    else:
+        assert argv[argv.index("--tags") + 1].startswith(lab["tag"] + "infmax-")
+    if lab["setup_script"] is None:
+        assert "--setup-script" not in argv
+    else:
+        assert argv[argv.index("--setup-script") + 1] == lab["setup_script"]
+    assert call["env"]["SERVED_MODEL_NAME"] == lab["served"]
+
+    bound = yaml.safe_load(Path(submitted).read_text())
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == f"inferencex-{runner}"
+    dist = {"dist-timeout": 1800} if lab["dist_timeout"] else {}
+    assert bound["roles"]["prefill"]["args"] == {"tensor-parallel-size": 8, "watchdog-timeout": 600, **dist}
+    assert bound["model"] == {"path": "hf:org/Model", "container": "test:tag", "precision": "fp8"}
+    if env["IS_AGENTIC"] == "1":
+        assert bound["benchmark"]["env"] == {
+            "RESULT_DIR": "/logs/agentic", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache",
+            "HF_HUB_CACHE": "/hf_hub_cache", "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "0",
+            "REQUIRE_POWER": "0",
+        }
+
+    config = srtslurm(checkout)
+    assert config["model_paths"] == {name: str(tmp / path) for name, path in lab["paths"].items()}
+    assert config["default_time_limit"] == lab["time"]
+    assert set(lab["mounts"]) <= set(config.get("default_mounts", {}).values())
+    imported = [line.split()[-1] for line in lines(harness.logs, "enroot")]
+    if lab["staging"] == "import":
+        assert config["containers"][env["IMAGE"]].endswith(".sqsh") and imported == ["docker://test:tag"]
+    else:
+        assert config["containers"][env["IMAGE"]] == env["IMAGE"] and imported == []
+    outputs = Path(json.loads((workspace / "srt-submission.json").read_text())["output_dir"])
+    assert outputs.exists() is not outputs.is_relative_to(checkout)
+
+
+@pytest.mark.parametrize(("model_prefix", "precision", "framework", "model", "require_power", "lane"), [
+    ("kimik3", "fp4", "vllm", "moonshotai/Kimi-K3", "0", "agentx"),
+    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "1", "adapter"),
+    ("glm5.2", "fp8", "dynamo-sglang", "zai-org/GLM-5.2-FP8", "0", "adapter"),
+])  # fmt: skip
+def test_power_lane_stages_provenance_and_validates_each_concurrency(
+    harness, model_prefix, precision, framework, model, require_power, lane
+):
+    adapter = harness.tmp / "results-python"
+    adapter.write_text(
+        "#!/bin/bash\nprintf '%s\\n' \"$*\" >> \"$FAKE_LOG_DIR/adapter.log\"\n"
+    )
+    adapter.chmod(0o755)
+    env = lane_env(
+        harness, "h200-dgxc", LANE_FRAGMENT + POWER_TELEMETRY,
+        MODEL_PREFIX=model_prefix, PRECISION=precision, FRAMEWORK=framework, MODEL=model,
+        IS_AGENTIC="1", ISL="0", OSL="0", CONC="4", CONC_LIST="4", FAKE_RESULTS="agentic",
+        REQUIRE_POWER=require_power, INFERENCEX_RESULTS_PYTHON=str(adapter), POWER="1",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    workspace = harness.workspace
+    commit = harness.env["FAKE_SRT_COMMIT"]
+    assert (workspace / "power-producer-sha.txt").read_text() == commit + "\n"
+    [checkout] = workspace.glob("srt-slurm-9001-*")
+    exporter = srtslurm(checkout)["containers"]["dcgm-exporter"]
+    provenance = (workspace / "exporter-image.sha256").read_text()
+    assert provenance.endswith(f"  {exporter}\n")
+    assert (workspace / "LOGS/power/exporter-image.sha256").read_text() == provenance
+    assert (workspace / "LOGS/power/power-producer-sha.txt").read_text() == commit + "\n"
+    bound = yaml.safe_load((checkout / "recipe.yaml").read_text())
+    assert bound["benchmark"]["concurrencies"] == [4]
+    assert bound["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert bound["benchmark"]["env"]["REQUIRE_POWER"] == require_power
+    assert bound["telemetry"]["collector_join_timeout_seconds"] == 12
+    assert (bound["telemetry"]["enabled"], bound["telemetry"]["dcgm_exporter"]["port"]) == (True, 9401)
+
+    runs = lines(harness.logs, "adapter")
+    assert [run.split("--result-dir ")[1].split()[0].rsplit("/", 1)[1] for run in runs] == ["conc_4"]
+    assert all(f"--expected-producer-sha {commit}" in run for run in runs)
+    required = lane == "agentx" or require_power == "1"
+    assert all(run.endswith("--require-power") is required for run in runs)
+    if lane == "agentx":
+        status = (workspace / "LOGS/power/native-job-status.txt").read_text()
+        assert status == "42|COMPLETED|0:0\n"
+
+
+@pytest.mark.parametrize("shape", ["single", "multi"])
+def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
+    active = harness.tmp / "active"
+    if shape == "single":
+        env = single_node_env(harness, "mi355x-amds", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))
+    else:
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+                       MODEL="deepseek-r1-fp4", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 7, result.stderr[-4000:]
+    assert lines(harness.logs, "scancel") == ["42"]
+    if shape == "single":
+        assert (harness.workspace / "point-identity.json").is_file()
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["exit_code"]) == ("submit", "SubmitFailed", 7)
+
+
+@pytest.mark.parametrize("shape", ["single", "multi"])
+def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
+    active, tailing = harness.tmp / "active", harness.tmp / "tailing"
+    extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing)}
+    if shape == "single":
+        env = single_node_env(harness, "h100-cw", **extra)
+    else:
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+                       MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
+    command = [sys.executable, "-m", "infx.launch", "--runner-config", str(harness.config), "run"]
+    output = harness.tmp / "launcher.log"
+    with output.open("w") as stream:
+        process = subprocess.Popen(
+            command,
+            cwd=harness.workspace,
+            env=env,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        deadline = time.monotonic() + 120
+        while not tailing.exists():
+            assert process.poll() is None, output.read_text()[-4000:]
+            assert time.monotonic() < deadline, "the launcher never started streaming"
+            time.sleep(0.1)
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=60)
+    assert process.returncode == 143, output.read_text()[-4000:]
+    assert lines(harness.logs, "scancel") == ["42"]
+    staged = "srt-single-node-logs.tar.gz" if shape == "single" else "multinode_server_logs.tar.gz"
+    assert (harness.workspace / staged).stat().st_size > 0
+    error = job_event(harness.workspace)["error"]
+    assert {key: error[key] for key in ("stage", "type", "exit_code", "retriable")} == {
+        "stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True,
+    }
+
+
+def batch_env(harness, **overrides: str) -> dict[str, str]:
+    """Environment of a B300 DSV4.1-Flash AgentX point, which runs inside a batch allocation."""
+    runner_temp = harness.tmp / "runner-temp"
+    runner_temp.mkdir()
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
+    return {
+        **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for("b300-dsxe"), "MODEL_PREFIX": "dsv41flash",
+        "PRECISION": "fp8", "IS_AGENTIC": "1", "DURATION": "600", "RUNNER_TEMP": str(runner_temp),
+        "SRT_RECIPE": "recipe.yaml:base", **overrides,
+    }  # fmt: skip
+
+
+def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):
+    env = batch_env(harness)
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [submit] = lines(harness.logs, "sbatch")
+    assert {"--nodes=1", "--ntasks=1", f"--chdir={harness.workspace}", "--time=10"} <= set(submit.split())
+    assert (harness.logs / "batch-rc").read_text() == "0"
+    aggregate = json.loads((harness.workspace / "point-identity.json").read_text())
+    assert aggregate["completed"] == 2
+    assert aggregate["power_valid"] == 0
+    assert "agentic_gpu_topology_invalid" in aggregate["power_invalid_reasons"]
+    assert aggregate["power_audit"]["source"] == "power_validation_point-identity.json"
+    sidecar = json.loads((harness.workspace / "power_validation_point-identity.json").read_text())
+    assert sidecar["power_valid"] is False
+    assert "agentic_gpu_topology_invalid" in sidecar["reasons"]
+    assert len(srtctl_calls(harness.logs)) == 1
+    assert "4242" in lines(harness.logs, "scancel")
+    assert list((harness.tmp / "runner-temp").glob("srt-batch.*.sh")) == []
+    event = job_event(harness.workspace)
+    assert (event["launch_path"], event["slurm_job_id"], event["batch_job_id"]) == ("srt-batch", "42", "4242")
+    assert set(event["stages"]) == {"batch_submit", "batch_run", "prepare", "submit", "run", "collect"}
+
+
+def test_a_failed_batch_wrapped_point_reports_the_wrapped_failure_once(harness):
+    env = batch_env(harness, FAKE_STATE="FAILED|1:0", GITHUB_ACTIONS="true")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["message"]) == ("run", "Slurm job 42 ended with state=FAILED exit_code=1:0")
+    assert (result.stdout + result.stderr).count("::error") == 1
+
+
+def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
+    env = lane_env(
+        harness, "mi355x-amds", MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert",
+        MODEL="zai-org/GLM-5.3", SPEC_DECODING="mtp", PREFILL_IMAGE="prefill:tag",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    assert any(" apply " in f" {line} " for line in lines(harness.logs, "git"))
+    [call] = srtctl_calls(harness.logs)
+    assert {"--json", "benchmark.stream_output=true"} <= set(call["argv"])
+    assert "--no-preflight" not in call["argv"]
+    config = srtslurm(Path(call["cwd"]))
+    assert config["default_health_check"]["max_attempts"] > 0
+    assert {"test:tag", "prefill:tag"} <= set(config["containers"])
+    assert config["default_mounts"][str(harness.workspace)] == "/infmax-workspace"
+    assert "/models" in config["default_mounts"].values()
+    [point] = harness.workspace.glob("point-identity_sweep_*.json")
+    assert json.loads(point.read_text()) == {"conc": 4}
+
+
+def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
+    mirror = harness.workspace / "benchmarks/multi_node/srt-slurm-recipes/test"
+    (mirror / "trtllm").mkdir(parents=True)
+    (mirror / "trtllm/forced.yaml").write_text(
+        "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
+    )
+    (mirror / "eval.yaml").write_text(LANE_FRAGMENT)
+    staged = {
+        "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
+        "eval_concs": [4, 8], "completed_eval_concs": [8], "failed_eval_concs": [4],
+        "infmax_model_prefix": "unknown",
+    }  # fmt: skip
+    env = lane_env(
+        harness, "gb300-nv", MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+        MODEL="deepseek-ai/DeepSeek-V4-Pro", IS_AGENTIC="1", SPEC_DECODING="mtp", ISL="0", OSL="0",
+        EVAL_ONLY="true", EVAL_SRT_RECIPE=f"{MIRROR}/test/eval.yaml", FAKE_RESULTS="eval",
+        EVAL_CONC="4 8", RECIPE_FINGERPRINT="recipe-fixture", FAKE_EVAL_META=json.dumps(staged),
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    assert Path(argv[argv.index("--file") + 1]).name == "recipe.yaml"
+    assert "frontend.placement.node=head" in argv
+    checkout = Path(call["cwd"])
+    assert (checkout / "recipes/test/trtllm/forced.yaml").read_text() == (
+        "roles:\n  decode:\n    env:\n      KEEP: 1\n"
+    )
+    assert srtslurm(checkout)["default_time_limit"] == "8:00:00"
+    workspace = harness.workspace
+    assert (workspace / "results_gsm8k.json").read_text() == "{}"
+    meta = json.loads((workspace / "meta_env.json").read_text())
+    kept = ("eval_suite", "conc", "eval_concs", "completed_eval_concs", "failed_eval_concs")
+    assert {key: meta[key] for key in kept} == {
+        "eval_suite": "kimi_tool_call_schema", "conc": 4, "eval_concs": [4, 8],
+        "completed_eval_concs": [8], "failed_eval_concs": [4],
+    }  # fmt: skip
+    assert (meta["infmax_model_prefix"], meta["recipe_fingerprint"], meta["framework"]) == (
+        "dsv4", "recipe-fixture", "dynamo-trt",
+    )
+    assert list(workspace.glob("point-identity_*.json")) == []
+
+
+def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
+    monkeypatch.setitem(lanes.SRT_LANES, ("lab-a", LaunchPath.SRT_MULTI), LABS["lab-a"]["lane"])
+    bundle = "base:\n" + "".join(f"  {line}\n" for line in LANE_FRAGMENT.splitlines())
+    env = lane_env(
+        harness, "lab-a", bundle + "override_x:\n  roles:\n    decode:\n      nodes: 3\n",
+        RUNNER_NAME="lab-a_00", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="org/Model", SRT_RECIPE=f"{MIRROR}/test/lane.yaml:override_x",
+    )  # fmt: skip
+    assert launch_here(monkeypatch, env, lab_config(harness.tmp), harness.workspace) == 0
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    bound = yaml.safe_load((Path(call["cwd"]) / argv[argv.index("--file") + 1]).read_text())
+    args = {"tensor-parallel-size": 8, "watchdog-timeout": 600, "dist-timeout": 1800}
+    assert bound["name"] == call["env"]["RUNNER_NAME"] == "inferencex-lab-a_00"
+    assert bound["roles"] == {"prefill": {"args": args}, "decode": {"nodes": 3, "args": args}}
+
+
+def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):
+    env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
+                   FRAMEWORK="dynamo-sglang", MODEL="m", SRT_RECIPE="recipes/test/lane.yaml")  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert "recipes/test/lane.yaml is not under benchmarks/multi_node/srt-slurm-recipes" in result.stderr
+    assert lines(harness.logs, "git") == []
+
+def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
+    env = lane_env(
+        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528", FAKE_TRUNCATED_NATS="1",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+    assert len(lines(harness.logs, "make")) == 2
+    assert not list(harness.workspace.glob("srt-slurm-9001-*/configs/nats-server-*.deb"))
+
+
+def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
+    env = lane_env(
+        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528", FAKE_MAKE_RC="2",
+    )  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 2
+    assert "make setup broke" in result.stderr
+    assert len(lines(harness.logs, "make")) == 1
+    assert srtctl_calls(harness.logs) == [] and lines(harness.logs, "scancel") == []
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "SetupFailed", "srt-setup.log")
+
+
+@pytest.mark.parametrize(("cluster_id", "env", "message"), [
+    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
+    ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),
+    ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+                       SRT_RECIPE=f"{MIRROR}/test/missing.yaml"), "is not in the recipe mirror"),
+])  # fmt: skip
+def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_id, env, message):
+    result = launch(lane_env(harness, cluster_id, MODEL="m", **env), harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert message in result.stderr
+    assert lines(harness.logs, "git") == []
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["retriable"]) == ("prepare", "LaunchError", False)
+    assert message in error["message"]
+
+
+@pytest.mark.parametrize(("shape", "overrides", "missing"), [
+    ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
+    ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
+    ("multi", dict(SRT_RECIPE=None), "SRT_RECIPE"),
+    ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),
+])  # fmt: skip
+def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, missing):
+    if shape == "multi":
+        env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
+                       FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
+    else:
+        env = single_node_env(harness, "b300-dsxe" if shape == "batch" else "h100-cw")
+    if shape == "batch":
+        env.update(MODEL_PREFIX="dsv41flash", PRECISION="fp8", IS_AGENTIC="1", DURATION="600")
+    for name, value in overrides.items():
+        env.pop(name) if value is None else env.update({name: value})
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert missing in result.stderr
+    assert lines(harness.logs, "git") == [] and lines(harness.logs, "sbatch") == []
+
+
+def test_post_eval_is_handed_the_workload_contract_and_no_other_secret(harness):
+    handed = {"EVAL_NEW_KNOB": "7", "AIPERF_NEW": "1", "OPENAI_API_KEY": "sk-fixture"}
+    withheld = {
+        "HF_TOKEN": "hf_fixture", "GITHUB_TOKEN": "ghs_fixture", "PORT": "8888",
+        "EVAL_EMPTY": "", "EVAL_NOT-A-NAME": "x", "SLURM_JOB_ID": "99",
+    }  # fmt: skip
+    env = single_node_env(harness, "h100-cw", **handed, **withheld)
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [call] = srtctl_calls(harness.logs)
+    [names] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
+               if arg.startswith("post_eval.passthrough_env=")]  # fmt: skip
+    assert handed.keys() <= set(names)
+    assert not {*withheld, "PATH", "HF_HUB_CACHE"} & set(names)
+
+
+def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness):
+    env = lane_env(
+        harness,
+        "h200-dgxc",
+        MODEL_PREFIX="dsr1",
+        PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )
+    assert_ok(launch(env, harness.config, harness.workspace))
+    [call] = srtctl_calls(harness.logs)
+    [command] = [json.loads(arg.split("=", 1)[1]) for arg in call["argv"]
+                 if arg.startswith("post_eval.command=")]  # fmt: skip
+    script = harness.workspace / "benchmarks/multi_node/srt_eval.sh"
+    script.write_text(
+        'printf "%s\\n" "$HF_HUB_OFFLINE" "$HF_DATASETS_OFFLINE" '
+        '"$TRANSFORMERS_OFFLINE" "$MODEL_PATH" "$EVAL_MAX_MODEL_LEN" "$1" "$2"\n'
+    )
+    result = subprocess.run(
+        [
+            arg.format(infmax_workspace=harness.workspace, endpoint="http://worker:8000")
+            for arg in command
+        ],
+        env={
+            **os.environ,
+            "HF_HUB_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "MODEL_PATH": "/host-only/checkpoint",
+            "EVAL_MAX_MODEL_LEN": "9472",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.splitlines() == [
+        "0",
+        "0",
+        "0",
+        "/model",
+        "9472",
+        "http://worker:8000",
+        str(harness.workspace),
+    ]

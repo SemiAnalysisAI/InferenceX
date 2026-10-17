@@ -75,7 +75,8 @@ This research directly feeds Step 2 (recipe args/env) and Step 3 (search space).
 1. `inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model-prefix>/<engine>/<sku>-<precision>[-mtp]/8k1k.yaml`
    (an `agentic.yaml` beside it for AgentX)
 2. an entry in either master config, **`inferencex-e2e/configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
-   **`inferencex-e2e/configs/amd-master.yaml`** (mi* SKUs), with `srt-recipe:` on every search-space row
+   **`inferencex-e2e/configs/amd-master.yaml`** (mi* SKUs), with `srt-recipe-dir:` (the directory above,
+   relative to `srt-slurm-recipes/`) on the entry and `srt-recipe:` (the file name) on every search-space row
 3. a `inferencex-e2e/perf-changelog.yaml` entry (this diff vs main is what selects the sweep)
 
 ## Step 1 — branch + find the sibling to copy
@@ -97,7 +98,10 @@ adjusted for this hardware's quirks."
 Copy the sibling recipe (`base:` plus one `override_*` variant per matrix point) and adjust.
 Engine flags are `roles.agg.args` keys without the leading `--`; env vars go in
 `roles.agg.env`; each variant names its `CONC` (and `KV_OFFLOADING` for AgentX) in
-`benchmark.env`, and `model.container` must equal the master-config `image`. Things that vary and must be checked against the sibling /
+`benchmark.env`. Recipes, fixed-sequence and AgentX, are fragments. Omit
+`model.path`/`container`/`precision`, `benchmark.type`/`command` and the client env, which the
+shared block and binder supply (see `RECIPES.md`). Things that vary and must be checked against
+the sibling /
 the model's `recipes.vllm.ai` page:
 - **Mandatory model flags** (carry from the sibling): block size, parser flags
   (`--tool-call-parser` / `--reasoning-parser`), `--language-model-only` for text-only sweeps,
@@ -120,7 +124,7 @@ Validate as you go: `python3 -c "import yaml; yaml.safe_load(open('<recipe>'))"`
 
 Append `<model>-<precision>-<sku>[-<engine>][-mtp]` after the sibling, with the correct
 `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`. The **search space** is
-`{tp, ep, dp-attn} × concurrency` per supported scenario from `inferencex-e2e/docs/MODELS.md` (8k1k or AgentX as applicable; 1k1k is only retained for GLM-5.1 B200 TileRT):
+`{tp, ep, dp-attn} × concurrency` per supported scenario from `inferencex-e2e/docs/MODELS.md` (8k1k or AgentX as applicable; 1k1k is retired for all models):
 - Mirror a sibling's parallelism layouts. Trim concurrency ranges to what the SKU's memory
   supports (small-mem SKUs → TP8-only, drop tp2/tp4 and DEP).
 - Latency (TP-only) rows should start at conc 1. TEP/DEP rows start higher (they only pay off
@@ -130,7 +134,7 @@ Confirm which master file by SKU: `mi*` → `amd-master.yaml`, everything else �
 
 ## Step 4 — no launcher routing
 
-Single-node points with an `srt-recipe:` go through `launch_srt_single_node`, which picks the
+Single-node points with an `srt-recipe:` go through the srt driver of `python -m infx.launch`, which picks the
 one recipe variant whose TP/GPU count, `CONC`, `KV_OFFLOADING` and image match the matrix
 point (`inferencex-e2e/infx/srt_slurm/single_node.py::select_recipe`). No per-script launcher routing is
 needed; if a point matches zero or several variants, fix the recipe, not the launcher.
@@ -187,8 +191,8 @@ external **`Inferact/MiniMax-M3-EAGLE3`** draft, `method: eagle3`, **3 speculati
 - **ROCm (mi*)**: no backend pin (server runs `TRITON_ATTN`). Use an image that already carries
   the upstream `SupportsEagle3` fix (`vllm-project/vllm#45546`); the old in-place model patch was
   retired with the legacy bash scripts. Copy the sibling `minimaxm3/vllm/mi*-mtp` recipe.
-- **All**: set `USE_CHAT_TEMPLATE: 'true'` in the recipe's `benchmark.env` (the single-node
-  adapter requires it whenever speculation is on). Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
+- **All**: speculative fixed-sequence recipes get `USE_CHAT_TEMPLATE: 'true'` from the binder; AgentX
+  recipes set it themselves. Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
   entry trimmed at the extreme-conc end, latency rows starting at conc 1, `tp2-ep2` dropped.
 - Other models may instead use **native MTP** (`method: mtp`, no external draft) when the
   checkpoint ships MTP modules (`num_mtp_modules > 0`), e.g. the DeepSeek-V4 recipes.

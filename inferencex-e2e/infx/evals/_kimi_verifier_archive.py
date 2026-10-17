@@ -1,4 +1,4 @@
-"""Internal pinned Kimi verifier archive preparation for benchmark_lib.sh."""
+"""Fetch the pinned Kimi Vendor Verifier archive subset (run by ``infx.bench.eval.vendor``)."""
 
 import re
 import sys

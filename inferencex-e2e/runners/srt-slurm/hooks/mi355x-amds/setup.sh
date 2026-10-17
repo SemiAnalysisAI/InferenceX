@@ -30,16 +30,26 @@ used=$((total - free))
 target=$((used + reserved))
 
 echo "MI355X host memory before preparation:"
-grep -E '^(MemAvailable|HugePages_Total|HugePages_Free|HugePages_Rsvd|HugePages_Surp|Hugetlb):' "$meminfo"
+grep -E '^(MemFree|MemAvailable|HugePages_Total|HugePages_Free|HugePages_Rsvd|HugePages_Surp|Hugetlb):' "$meminfo"
 
 if (( target < total )); then
     printf '%s\n' "$target" | sudo -n tee "$nr_hugepages" >/dev/null
 fi
 
+# hipHostMalloc pins host memory on the calling GPU's NUMA node, and srtctl gives a
+# partial-node worker GPUs 0..TP-1, all on node 0, so a DRAM KV tier and the weight
+# staging buffers must fit in node 0's free pages. Pinning while reclaiming page
+# cache stalls ranks minutes apart and past the engine's startup barrier.
+if [[ "${KV_OFFLOADING:-}" == dram ]]; then
+    sync
+    echo 1 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null
+fi
+
 after_total=$(read_hugepage_value HugePages_Total)
 after_free=$(read_hugepage_value HugePages_Free)
-echo "MI355X host memory after preparation:"
-grep -E '^(MemAvailable|HugePages_Total|HugePages_Free|HugePages_Rsvd|HugePages_Surp|Hugetlb):' "$meminfo"
+echo "MI355X host memory after preparation (KV_OFFLOADING=${KV_OFFLOADING:-unset}):"
+grep -E '^(MemFree|MemAvailable|HugePages_Total|HugePages_Free|HugePages_Rsvd|HugePages_Surp|Hugetlb):' "$meminfo"
+grep -h ' MemFree:' /sys/devices/system/node/node*/meminfo
 
 if (( after_total - after_free < used )); then
     echo "Host preparation released hugepages that were in use" >&2

@@ -4,8 +4,8 @@
 
 ## Wan2.2 local runner integration
 
-The client and supervised `serving-smoke` path accept
-`Wan-AI/Wan2.2-T2V-A14B-Diffusers` on SGLang and vLLM-Omni. A pinned eight-H100
+The client accepts `Wan-AI/Wan2.2-T2V-A14B-Diffusers` on SGLang and vLLM-Omni;
+the supervised `serving-smoke` path starts SGLang. A pinned eight-H100
 vLLM-Omni server completed one Wan request. The full workload, matched performance,
 quality, and production delivery remain unverified.
 
@@ -31,9 +31,10 @@ python -m evaluator.cli run mvp/wan22-serving.plan.json --runtime sglang
 The [GPU template](mvp/wan22-gpu-job.template.json) retains unapproved authorization,
 unresolved paths and an empty file manifest. Before separately authorized execution,
 bind it to task-owned SemiAnalysis resources and the compatible prepared runtime,
-verify all checkpoint files, and set the actual budget. Reuse the site configuration
-with `mode: "serving-smoke"` and `concurrencies: [1]`. The first cell is four measured
-requests plus one warmup; the template does not establish one-GPU memory fit.
+verify all checkpoint files, and set the actual budget. The local supervised entry is
+`python -m evaluator.cli serving-smoke --spec <prepared-spec.json> --output <new-evidence-dir> --concurrencies 1`.
+Its first cell has four measured requests plus one warmup. The template does not
+establish one-GPU memory fit.
 
 Initial support is NVIDIA, TP1 and pure Ulysses over 1/2/4/8 GPUs, with explicit
 DiT/text-encoder/VAE offload booleans and layerwise offload disabled. The launcher
@@ -50,14 +51,14 @@ invented. Missing quality and quality/SLO goodput stay null in the dashboard.
 Timeouts retain unknown remote completion and stop further submissions; deleting a
 job in this pinned server does not prove cancellation.
 
-The existing manual workflow uploads Wan as `video-serving-<run-id>-<attempt>`
-with a `video_serving_smoke_matrix`; existing H3 names remain compatible. Workflow
-and input names retain `h3` for compatibility. Model identity comes from sealed
-`manifest.workload_plan.model_id`, including pre-generation failures. A readable,
-hash-matched valid plan can retain scheduled/zero-attempt/not-started counts without
-GPU identity; invalid plans cannot establish those counts. The paired H3
-`result.json` exporter is not used for Wan. The app accepts the canonical Diffusers
-ID and the earlier short display ID, and rejects conflicting model declarations.
+The local supervised entry writes a `video_serving_smoke_matrix` and retains failed
+and unstarted request counts. The operator-managed `run --execute` entry writes a
+separate run receipt. The parent H3 CI now launches fresh jobs through native
+srt-slurm video matrix rows. Wan has no native recipe or config row, so these local
+entries do not submit or qualify a Wan CI job. A native Wan row needs its own
+reviewed recipe and artifact wiring. The paired H3 `result.json` exporter is not
+used for Wan. The app accepts the canonical Diffusers ID and the earlier short
+display ID, and rejects conflicting model declarations.
 
 CPU checks cover both HTTP transports with encoded fixtures, full video-only
 decoding, launch previews, failure seals and dashboard parsing. The retained H100
@@ -94,8 +95,8 @@ and SHA256, resource limits, task identity, and optional prior allocation receip
 The spec must record actual compute/model-use approval. Selecting the manual H3
 route requests only that configured, reviewed workload; dispatch accepts no shell
 command, model path, arbitrary config contents, or alternate provider. The
-optional `h3-site-config` dispatch input selects an existing reviewed JSON file;
-`h3-cluster` must match its declared site before any allocation.
+optional `site-config` input of `h3-video.yml` selects an existing reviewed JSON
+file; `cluster` must match its declared site before any allocation.
 
 The runner requires Python 3.11+, Git, `sha256sum`, the Slurm tools, and access to the declared
 shared paths. PyAV/NumPy and the pinned H3 runtime/model must already be prepared
@@ -120,8 +121,8 @@ unverified; local CPU checks and retained telemetry replay do not qualify
 generation with this revision.
 
 Adapt [runtime-entry.example.sh](runtime-entry.example.sh) from the saved working
-entry command. Copy this checkout's `inferencex-e2e/benchmarks/benchmark_lib.sh` beside the entry,
-replace `REPLACE_WITH_BENCHMARK_LIB_SHA256` with that helper's SHA256, and then pin
+entry command. Copy this checkout's `inferencex-e2e/benchmarks/check_env.sh` beside the entry,
+replace `REPLACE_WITH_CHECK_ENV_SHA256` with that helper's SHA256, and then pin
 the entry's digest. The entry verifies the sibling helper before sourcing it;
 the pinned entry digest also seals the expected helper digest. AMD site staging
 copies and seals both files automatically. Existing externally pinned entries
@@ -139,44 +140,63 @@ selected devices' observed NVML indices, then verifies their ordered CUDA driver
 UUIDs before importing SGLang. An enumeration mismatch fails startup; ownership
 locks and telemetry continue to use the assigned UUIDs.
 
-The adapter recovers task-owned allocation receipts before allocating. Imported
-receipts must match task identity, Unix ownership, and the scheduler's exact
-allocation identity; ambiguous intent blocks another submission. The default H200 site
-is `main` / `sa-shared`. An explicit `site` records the cluster, partition, account,
-and expected GPU model. Currently admitted clusters are `h200-dgxc`, `h100-dgxc`,
-and `b200-nscale`; admission is implementation support, not a completed hardware run.
-`resources.allocated_gpus` records the full allocation separately from participating
-`resources.gpus`; set it to eight on whole-node H100. A paired allocation reserves eight GPUs;
-the example step selects four GPUs, 32 CPUs, and 1 TiB of host memory. The pinned
-four-rank loader exceeded 256 GiB during CPU weight staging; 1 TiB is a tested
-working allowance, not a measured minimum. Charge reserved capacity.
-`resources.minutes` is the total allocation cap, at most 240 minutes. The step
-reserves five minutes for outer cleanup, and the supervisor plus ten minutes
-must fit the allocation. For example: 90-minute allocation, 85-minute step,
-75-minute supervisor. Reused allocations need enough remaining time. Preserve
-the prepared rootfs; clean only owned processes/steps and release only allocations
-this execution owns.
+Fresh GPU execution runs through InferenceX's native srt-slurm launcher as the
+`video-generation` scenario of the vendor master configs
+(`inferencex-e2e/configs/{nvidia,amd}-master.yaml`, keys `h3-bf16-<sku>-sglang-video`):
+`e2e-tests.yml` buckets those rows into `test-sweep-video`, and `python -m infx.launch run`
+takes the `srt-video` path. The SKU recipe
+`benchmarks/single_node/srt-slurm-recipes/h3/sglang/<sku>-bf16/serving-client.yaml`
+starts the diffusion server as a generic service (`benchmarks/h3/run_server.sh`) and runs
+`benchmarks/h3/run_client.sh` as `benchmark.type: custom`, every `CONC_LIST` concurrency
+against the same server. This package is mounted as `/h3-package`; `specs/<name>.json` is the
+frozen workload (`H3_SPEC`), served from the cluster's HF hub cache. GPU power comes from
+srt-slurm's native telemetry: each cell publishes its measured window, InferenceX
+re-validates it per concurrency (`infx.results.video`), and `evaluator.cli srt-finalize`
+assembles the `h3-results-<run>-<attempt>` bundle the dashboard ingests. `ci.py` no longer
+submits fresh jobs; it only continues an owned allocation.
+
+AMD one-lease inspect→serving continuation (`run_amd_serving_ci.py`) still
+attaches a nested `srun` step to the lease opened by inventory/inspect helpers.
+srt-slurm owns fresh jobs end-to-end and cannot reuse that outer allocation, so
+the nested path stays for that campaign only.
+
+The default H200 site is `main` / `sa-shared`. An explicit `site` records the
+cluster, partition, account, and expected GPU model. Currently admitted clusters
+are `h200-dgxc`, `h100-dgxc`, `b200-nscale`, and `mi355x-amds`; admission is
+implementation support, not a completed hardware run. `resources.allocated_gpus`
+records the full allocation separately from participating `resources.gpus`; set
+it to eight on whole-node H100. `resources.minutes` is the srt-slurm time-limit
+budget (at most 240 minutes). Media validation, A/B compare, telemetry, CPU
+reprocess, and AMD preparation remain H3-specific outside the LLM result
+collectors.
 
 ## Dispatch through InferenceX
 
-The first run belongs in CI. For a feature branch, use the already registered
-End-to-End Tests workflow, which calls the branch's reusable H3 workflow:
+A new serving run is an ordinary matrix row. Dispatch `e2e-tests.yml` from a
+branch whose workflow carries the video bucket and select the SKU's key:
 
 ```bash
 gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
-  --ref feat/h3-video-ci -f h3-video=true -f test-name=h3-first-smoke
+  --ref feat/h3-cross-hardware -f ref=feat/h3-cross-hardware \
+  -f 'generate-cli-command=test-config --config-files configs/nvidia-master.yaml --config-keys h3-bf16-h200-sglang-video' \
+  -f test-name=h3-h200-video
 ```
 
-Review the branch before dispatch. The original actor and rerun actor must have
-write, maintain, or admin permission. The H3 route checks out `github.sha`:
-`--ref` selects its workflow and source; the ordinary LLM `ref` input is not
-used. It skips LLM matrix generation, all dependent LLM sweeps/collectors, and
-their success-rate calculation. External PR events cannot launch this route.
-After the standalone workflow is registered on the default branch,
-`h3-video.yml` can also be manually dispatched.
+`--ref` selects the workflow definition, which must contain `test-sweep-video`;
+`ref` selects the benchmarked source. The row runs on the SKU's cluster runner
+through `python -m infx.launch run` on the `srt-video` path, with the same
+admission, priority labels and job record as every other benchmark job. The
+job uploads `h3-results-<run-id>-<attempt>` (the dashboard bundle) and the
+`LOGS/power` native telemetry package.
+
+Preparation and reprocessing of accepted runs stay on the standalone
+`h3-video.yml` (site preflight, AMD staging, H200 hardware inventory, CPU export)
+and `h3-fidelity.yml` (retained media comparison). Both are dispatched directly
+from a repository branch; the original actor and rerun actor must have write,
+maintain, or admin permission, and external PR events cannot launch them.
 
 When priority scheduling is enabled, node-slot scheduling must also be enabled.
-The queued job requests exactly `nodes:1` plus its native
+The standalone workflow's queued job requests exactly `nodes:1` plus its native
 `ci-job-<priority>-<token>` and `ci-attempt-<attempt>` labels on
 `cluster:h200-dgxc`. If priority scheduling is disabled, it follows the
 repository's native cluster-label route. GitHub admission and Slurm resource
@@ -188,10 +208,9 @@ To export accepted H3 evidence using a retained hardware inventory, supply one
 or two H3 source run IDs and the inventory run ID:
 
 ```bash
-gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
-  --ref feat/h3-video-ci -f h3-video=true \
-  -f h3-reuse-run-ids=34291306687,34293342829 \
-  -f h3-inventory-run-id=34297499754 -f test-name=h3-power-export
+gh workflow run h3-video.yml --repo SemiAnalysisAI/InferenceX \
+  --ref feat/h3-cross-hardware -f source-run-ids=34291306687,34293342829 \
+  -f inventory-run-id=34297499754
 ```
 
 This path uses hosted CPU export and skips the native H200 job. The original
@@ -201,7 +220,7 @@ job, including artifact seals, Git/CI/Slurm identities, and the same physical GP
 UUIDs. It makes no new GPU queries or model requests. Keep the source artifacts
 within GitHub's retention period.
 
-Omitting `h3-inventory-run-id` records a new inventory through the native Slurm
+Omitting `inventory-run-id` records a new inventory through the native Slurm
 route. CI verifies the source commits, original artifacts and persistent Slurm
 receipts, then inventories the same node and GPU UUIDs using the existing runtime.
 The allocation has a fixed ten-minute cap (at most 1.3333 reserved GPU-hours);
@@ -255,9 +274,11 @@ skips the paired frontend export and cannot claim regression acceptance.
 
 ## Results and local checks
 
-Every attempt uploads `h3-video-<run-id>-<attempt>` for 14 days, with compression
-disabled for media. The upload runs even after failure and includes the complete
-adapter evidence: receipts, original MP4s, telemetry, checksums, and the portable
+A serving run uploads `h3-results-<run-id>-<attempt>` from its benchmark job; a
+preparation attempt uploads its operation's artifact (`h3-hardware-…`,
+`h3-site-preflight-…`, `h3-amd-…`) for 14 days, with compression disabled for
+media. The upload runs even after failure and includes the complete adapter
+evidence: receipts, original MP4s, telemetry, checksums, and the portable
 report when available. Compiler cache subtrees stay on persistent storage and
 are excluded from the upload. Missing reports or media remain missing; fixtures never
 replace them. Persistent source evidence remains at the configured workspace.
@@ -286,8 +307,7 @@ Regression mode additionally requires the existing calibrated acceptance gate.
 cd experimental/video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
-  --with 'rfc3339-validator==0.1.4' python -m pytest -q
+  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 
@@ -297,7 +317,7 @@ calls. Real CI execution and artifact inspection are separate acceptance evidenc
 
 ## Cross-hardware serving matrices
 
-`h3-preparation=site-preflight` records the selected CI runner's identity, public SSH
+`preflight-only=true` records the selected CI runner's identity, public SSH
 host keys, scheduler account, shared runtime cache candidates, and command
 availability without reserving or querying GPUs. Its
 separate `h3-site-preflight` artifact is not benchmark or runtime qualification
@@ -305,14 +325,14 @@ evidence. It also accepts `mi355x-amds`; actual AMD generation remains unsupport
 Preflight cannot be combined with historical result reuse. Hardware sites have
 independent workflow concurrency groups; each retains its existing Slurm checks.
 
-For AMD model preparation without local SSH, set `h3-preparation=amd-model`,
-`h3-cluster=mi355x-amds`, and one successful H200 source in `h3-reuse-run-ids`.
+For AMD model preparation without local SSH, set `stage-amd-model=true`,
+`cluster=mi355x-amds`, and one successful H200 source in `source-run-ids`.
 This CPU-only job reuses verified shared weights or stages the exact source
 manifest under `/it-share/data/wenyao-minimax-h3/work`, checking every size and SHA256.
 Its `h3-model-preparation` artifact and persistent `model-ready.json` are preparation
 receipts; they do not admit an AMD runtime or allocate GPUs.
 
-`h3-preparation=amd-node` separately inspects the actual AMD node and cached image
+`inspect-amd-node=true` separately inspects the actual AMD node and cached image
 metadata through the existing queue and Slurm receipts. Its cap is eight allocated
 GPUs for 15 minutes, with a 10-minute read-only step. It retains device/telemetry
 output and cleanup evidence; it neither imports an image nor runs H3 generation.

@@ -1,7 +1,5 @@
 # OperatorX GitHub Actions
 
-**English** | [中文](CI_zh.md)
-
 [OperatorX Sweep](../.github/workflows/operatorx-sweep.yml) runs manually on
 `h100-dgxc` (default), `h200-dgxc`, `b200-nscale`, `b300`, `gb200`, `gb300`,
 `mi300x`, `mi325x`, or `mi355x`.
@@ -63,7 +61,7 @@ Do not infer that Blackwell-specific FP4 kernels work on Hopper.
   checked out at the workflow SHA and copied into a private, compute-visible
   directory below the configured shared squash parent or a writable configured
   `storage_roots` entry (GB200). B300 uses the compute-visible account home from
-  the password database, matching CollectiveX; an explicit `stage_dir` takes
+  the password database; an explicit `stage_dir` takes
   precedence. Results never depend on
   a submit-host `/tmp` mount being visible to compute nodes.
 - The planner resolves each image digest. Imports are locked and cached by image
@@ -190,7 +188,3 @@ The local top-k routes all target the local expert table, matching the generic
 benchmark's EP emulation. Do not divide the measured work by EP again or multiply
 by the number of GPUs in the allocation. These kernel measurements exclude
 activation and routing FLOPs and are not full-model throughput.
-
-### GPU validation status
-
-The complete eight-case BF16 profile passed on H200, MI300X and MI325X. H100 currently fails before kernel execution: its Enroot importer rejects OCI whiteout conversion for the vLLM image on both `/tmp` and `/var/tmp`. The same host limitation is recorded by CollectiveX swap-blocks. H100 requires a working image-import environment before performance can be reported; this change does not modify node configuration. B200, B300, GB200, GB300 and MI355X dispatches are awaiting shared GPU capacity. A registered pool is not runtime validation.

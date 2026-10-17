@@ -81,6 +81,67 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                 return 1
             return 2
 
+        if arguments.command == "serving-smoke":
+            from .mvp_serving_smoke import run_matrix, validate_concurrencies, validate_spec
+
+            spec = validate_spec(_load_mvp_object(arguments.spec))
+            concurrencies = validate_concurrencies(arguments.concurrencies)
+            arguments.output.mkdir(parents=True, exist_ok=False)
+            result = run_matrix(spec, arguments.output, concurrencies=concurrencies)
+            print(json.dumps({"status": result["status"], "completion": result["completion"]},
+                             indent=2, sort_keys=True, allow_nan=False))
+            return 0 if result["status"] == "complete" else 1
+
+        if arguments.command == "srt-gpu-job":
+            from .mvp_srt import run_srt_gpu_job
+
+            result = run_srt_gpu_job(_load_mvp_object(arguments.spec), arguments.output)
+            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+            if result.get("status") == "complete" and result.get("measurement_status") == "complete":
+                return 0
+            if result.get("status") in {"failed", "aborted"} or result.get("cleanup_status") == "failed":
+                return 1
+            return 2
+
+        if arguments.command == "srt-serve":
+            from .mvp_srt import serve_role
+
+            return serve_role(
+                _load_mvp_object(arguments.spec), arguments.role, arguments.port,
+                host=arguments.host, record=arguments.record,
+            )
+
+        if arguments.command == "srt-client":
+            from .mvp_srt import run_srt_client, run_srt_matrix
+
+            spec = _load_mvp_object(arguments.spec)
+            if arguments.concurrencies is None:
+                runs = {None: run_srt_client(spec, arguments.endpoint, arguments.output)}
+            else:
+                runs = run_srt_matrix(
+                    spec, arguments.endpoint, arguments.output, arguments.concurrencies,
+                    window_dir=arguments.window_dir,
+                )
+            complete = True
+            for concurrency, result in runs.items():
+                print(json.dumps({"concurrency": concurrency, "summary": result.get("summary"),
+                                  "status": result.get("status")}, indent=2, sort_keys=True))
+                summary = result.get("summary") or {}
+                complete = complete and bool(summary.get("scheduled")) and (
+                    summary.get("valid") == summary.get("scheduled"))
+            return 0 if complete else 1
+
+        if arguments.command == "srt-finalize":
+            from .mvp_srt_bundle import build_bundle
+
+            result = build_bundle(
+                h3_dir=arguments.h3_dir, power_dir=arguments.power_dir,
+                workspace=arguments.workspace, result_filename=arguments.result_filename,
+                concurrencies=arguments.concurrencies, output=arguments.output,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
+            return 0 if result["status"] == "complete" else 1
+
         if arguments.command == "gpu-report":
             from .mvp_gpu_report import write_gpu_report
 
@@ -179,14 +240,61 @@ def _parser() -> argparse.ArgumentParser:
     gpu_job.add_argument("--execute", action="store_true")
     gpu_job.add_argument("--output", type=Path, help="new evidence directory; no overwrites")
 
+    serving_smoke = subparsers.add_parser("serving-smoke", help="run a bounded H3 or Wan serving matrix on allocated GPUs")
+    serving_smoke.add_argument("--spec", required=True, type=Path)
+    serving_smoke.add_argument("--output", required=True, type=Path, help="new evidence directory; no overwrites")
+    serving_smoke.add_argument("--concurrencies", nargs="+", type=int, default=[1, 2, 4])
+
     gpu_report = subparsers.add_parser("gpu-report", help="render recorded GPU job evidence, including incomplete runs")
     gpu_report.add_argument("job", type=Path)
     gpu_report.add_argument("--output", required=True, type=Path, help="new report directory")
 
+    srt_gpu = subparsers.add_parser(
+        "srt-gpu-job",
+        help="run the H3 supervisor inside an srt-slurm terminal service",
+    )
+    srt_gpu.add_argument("--spec", required=True, type=Path)
+    srt_gpu.add_argument("--output", required=True, type=Path)
+
+    srt_serve = subparsers.add_parser(
+        "srt-serve",
+        help="start one H3 diffusion server for an srt-slurm generic service",
+    )
+    srt_serve.add_argument("--spec", required=True, type=Path)
+    srt_serve.add_argument("--role", required=True, choices=("baseline", "candidate"))
+    srt_serve.add_argument("--port", required=True, type=int)
+    srt_serve.add_argument("--host", default="127.0.0.1",
+                           help="bind address; a recipe service probed and addressed by node IP binds 0.0.0.0")
+    srt_serve.add_argument("--record", type=Path,
+                           help="directory receiving the bound spec and launch record")
+
+    srt_client = subparsers.add_parser(
+        "srt-client",
+        help="run the H3 client as an srt-slurm custom benchmark",
+    )
+    srt_client.add_argument("--spec", required=True, type=Path)
+    srt_client.add_argument("--endpoint", required=True)
+    srt_client.add_argument("--output", required=True, type=Path)
+    srt_client.add_argument("--concurrencies", nargs="+", type=int,
+                            help="run every concurrency in turn under <output>/gpu/c<N>")
+    srt_client.add_argument("--window-dir", type=Path,
+                            help="srt-slurm measurement-window directory (SRT_MEASUREMENT_WINDOW_DIR)")
+
+    srt_finalize = subparsers.add_parser(
+        "srt-finalize",
+        help="assemble the app bundle from an srt-slurm H3 job and its power validation",
+    )
+    srt_finalize.add_argument("--h3-dir", required=True, type=Path)
+    srt_finalize.add_argument("--power-dir", required=True, type=Path)
+    srt_finalize.add_argument("--workspace", required=True, type=Path)
+    srt_finalize.add_argument("--result-filename", required=True)
+    srt_finalize.add_argument("--concurrencies", nargs="+", type=int, required=True)
+    srt_finalize.add_argument("--output", required=True, type=Path)
+
     run = subparsers.add_parser("run", help="preview an H3 or Wan plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)
     run.add_argument("--runtime", choices=("sglang", "vllm-omni"), default="sglang")
-    run.add_argument("--execute", action="store_true", help="submit real requests to your H3 server")
+    run.add_argument("--execute", action="store_true", help="submit real requests to your H3 or Wan server")
     run.add_argument("--endpoint", help="self-hosted server base URL, without /v1/videos")
     run.add_argument("--runtime-revision", help="operator-declared exact server code/container revision")
     run.add_argument("--hardware-label", help="operator-declared hardware, precision, and topology label")

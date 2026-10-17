@@ -1,0 +1,163 @@
+base:
+  schema: 2
+  name: musespark-fp4-gb200-sglang-agentic
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        # 133 GB of weights per GPU leave the KV pool what prefill graphs would take.
+        mem-fraction-static: 0.88
+        disable-prefill-cuda-graph: true
+        swa-full-tokens-ratio: 0.1
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  # 533 GB of weights load from Lustre before graph capture.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable to the client; use the staged checkpoint.
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+
+override_tp4_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c2:
+  roles:
+    agg:
+      args:
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp4_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+
+override_tp4_c6:
+  roles:
+    agg:
+      args:
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+  benchmark:
+    env:
+      CONC: '6'
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '8'
+
+override_tp4_c10:
+  roles:
+    agg:
+      args:
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+  benchmark:
+    env:
+      CONC: '10'
+
+override_tp4_c12:
+  roles:
+    agg:
+      args:
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+  benchmark:
+    env:
+      CONC: '12'
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '16'
+
+override_tp4_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+  benchmark:
+    env:
+      CONC: '24'
+
+override_tp4_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '32'

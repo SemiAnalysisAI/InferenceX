@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Enter only the existing task-owned runtime. This never allocates or installs.
 set -eo pipefail
-h3_helper="$(dirname -- "${BASH_SOURCE[0]}")/benchmark_lib.sh"
-h3_helper_hash=$(sha256sum "$h3_helper") && [[ "${h3_helper_hash%% *}" == '@BENCHMARK_LIB_SHA256@' ]] || {
+h3_helper="$(dirname -- "${BASH_SOURCE[0]}")/check_env.sh"
+h3_helper_hash=$(sha256sum "$h3_helper") && [[ "${h3_helper_hash%% *}" == '@CHECK_ENV_SHA256@' ]] || {
     echo 'Prepared validation helper missing or changed' >&2
     exit 2
 }
-source "$h3_helper" --validation-only
+source "$h3_helper"
 check_env_vars SLURM_JOB_ID SLURM_STEP_ID SLURM_STEP_GPUS H3_AMD_ALLOCATION_UUIDS ROCR_VISIBLE_DEVICES
 runtime_root=/it-share/data/wenyao-minimax-h3
 workspace=$runtime_root/work

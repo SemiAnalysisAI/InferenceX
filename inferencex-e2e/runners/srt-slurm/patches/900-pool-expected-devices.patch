@@ -1,0 +1,563 @@
+diff --git a/docs/pools.md b/docs/pools.md
+index 5848de2..d4a81be 100644
+--- a/docs/pools.md
++++ b/docs/pools.md
+@@ -141,7 +141,7 @@ See the `custom` section of [Benchmarks](benchmarks.md#custom) for the full vari
+ 
+ ## Telemetry and teardown
+ 
+-The implied dcgm and node exporters run on `compute`, so tachometer scrapes pool nodes like worker nodes and the parquet output covers the whole job. Pool services are `ManagedProcess`es with a step name like every other service: SIGTERM reaches the process inside the step on teardown, `critical: true` fails the job when an instance exits (the generic default is `false`, so a pool that may finish early needs nothing), and `shutdown_tier` orders them with the rest.
++The implied dcgm and node exporters run on `compute`, so tachometer scrapes pool nodes like worker nodes and the parquet output covers the whole job. `dcgm-power` plans every pool node's `gpus_per_node` GPUs as expected devices under the service's name (see [GPU Power Telemetry](power-telemetry.md#artifacts)), so a services-only job publishes power like an engine job. Pool services are `ManagedProcess`es with a step name like every other service: SIGTERM reaches the process inside the step on teardown, `critical: true` fails the job when an instance exits (the generic default is `false`, so a pool that may finish early needs nothing), and `shutdown_tier` orders them with the rest.
+ 
+ ## Limits
+ 
+diff --git a/docs/power-telemetry.md b/docs/power-telemetry.md
+index b124bf4..cfff104 100644
+--- a/docs/power-telemetry.md
++++ b/docs/power-telemetry.md
+@@ -1,8 +1,9 @@
+ # GPU Power Telemetry (`dcgm-power`)
+ 
+ The `dcgm-power` telemetry provider records raw per-GPU watts for every
+-allocated worker node, the topology needed to map each GPU to a `prefill`,
+-`decode`, or `agg` role, and the exact formal benchmark window for every
++allocated compute node (engine workers and service pools), the topology needed
++to map each GPU to a `prefill`, `decode`, or `agg` role or to the service that
++owns its pool node, and the exact formal benchmark window for every
+ measured concurrency. It never integrates power into energy and never branches
+ on model, precision, or recipe; consumers integrate watts over the recorded
+ window themselves. The provider name is historical: the exporter that supplies
+@@ -217,8 +218,13 @@ one row per observation, `(scrape_seq, hostname, gpu_index)` unique. Rows are
+ never interpolated, averaged, or role-attributed — role and heterogeneous
+ group live once in the manifest topology. The collector retains all GPU samples,
+ including idle GPUs on an exclusive worker node. GPU energy totals include only
+-worker GPUs; CPU energy remains whole socket. A GPU on a node that hosts no
+-worker is still `unexpected_device`.
++worker GPUs; CPU energy remains whole socket. A service pool node
++(`services[].nodes`) is planned whole: each of the job's `gpus_per_node` GPUs on
++it is expected under the service's name (`worker_role`), with the node's ordinal
++in its pool as `worker_index`. A pool node that reports more GPUs than planned
++is `unexpected_device` with no excuse, since no probe records which GPUs a pool
++service holds; a GPU on a node that hosts neither a worker nor a pool is
++`unexpected_device` too.
+ 
+ Idle GPUs on a worker node are excused only by `worker_identity_proof`: once the
+ server is healthy, one bare-host step per worker node (DCGM exporters only) joins
+diff --git a/src/srtctl/cli/mixins/telemetry_stage.py b/src/srtctl/cli/mixins/telemetry_stage.py
+index b588e1c..5d30e4a 100644
+--- a/src/srtctl/cli/mixins/telemetry_stage.py
++++ b/src/srtctl/cli/mixins/telemetry_stage.py
+@@ -24,7 +24,7 @@ from srtctl.core.power.identity import WORKER_PROBE_SCRIPTS, WorkerGpuIdentity,
+ from srtctl.core.power.manifest import ExpectedWindow
+ from srtctl.core.power.mapping import DCGM_EXPORTER_COMMAND_TEMPLATE, TACHOMETER_SCRAPE
+ from srtctl.core.power.session import PowerSessionSettings, PowerTelemetrySession
+-from srtctl.core.power.topology import DeviceAssignment, build_expected_devices
++from srtctl.core.power.topology import DeviceAssignment, build_expected_devices, build_pool_expected_devices
+ from srtctl.core.processes import ManagedProcess, ProcessRegistry, list_step_ids
+ from srtctl.core.schema import TelemetryExporterConfig
+ from srtctl.core.slurm import start_srun_process
+@@ -211,7 +211,11 @@ class TelemetryStageMixin:
+                 producer_git_commit=read_producer_commit(),
+                 mapping=mapping,
+             ),
+-            expected_devices=build_expected_devices(self.backend_processes),
++            # Engine workers claim the GPUs their processes pin; a service pool node is planned whole.
++            expected_devices=[
++                *build_expected_devices(self.backend_processes),
++                *build_pool_expected_devices(self.runtime.nodes.pools, self.runtime.gpus_per_node),
++            ],
+             expected_windows=[
+                 ExpectedWindow(benchmark_type=self.config.benchmark.type, concurrency=concurrency)
+                 for concurrency in self.config.benchmark.get_concurrency_list()
+@@ -262,6 +266,12 @@ class TelemetryStageMixin:
+         if session is None:
+             return
+         captured_at = time.time()
++        if not self.backend_processes:
++            # A services-only job has no worker step to probe; its pool GPUs are planned whole-node.
++            session.record_worker_identity(
++                WorkerIdentityProof(captured_at_unix=captured_at, error="no engine workers to probe")
++            )
++            return
+         exporter = self.config.telemetry.dcgm_exporter
+         kind = None if exporter is None else exporter.kind
+         script = None if kind is None else WORKER_PROBE_SCRIPTS.get(kind)
+diff --git a/src/srtctl/core/power/topology.py b/src/srtctl/core/power/topology.py
+index 39ec19c..2a0f96d 100644
+--- a/src/srtctl/core/power/topology.py
++++ b/src/srtctl/core/power/topology.py
+@@ -1,11 +1,11 @@
+ # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ # SPDX-License-Identifier: Apache-2.0
+ 
+-"""Expected GPU topology derived from srt-slurm backend-process placement."""
++"""Expected GPU topology derived from srt-slurm backend-process placement and service pools."""
+ 
+ from __future__ import annotations
+ 
+-from collections.abc import Sequence
++from collections.abc import Mapping, Sequence
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any
+ 
+@@ -39,6 +39,11 @@ class DeviceAssignment:
+             het_group=process.het_group,
+         )
+ 
++    @property
++    def is_engine_worker(self) -> bool:
++        """An engine role's process, the only kind the worker GPU identity probe can attribute."""
++        return self.worker_role in WORKER_ROLES
++
+     def to_dict(self) -> dict[str, Any]:
+         return {
+             "worker_role": self.worker_role,
+@@ -86,6 +91,28 @@ def build_expected_devices(processes: Sequence[Process]) -> list[ExpectedDevice]
+     ]
+ 
+ 
++def build_pool_expected_devices(pools: Mapping[str, Sequence[str]], gpus_per_node: int) -> list[ExpectedDevice]:
++    """Map every service pool node onto the GPUs the job allocates there.
++
++    A pool (``services[].nodes``) owns whole nodes, so each carries every one of
++    the job's ``gpus_per_node`` GPUs, the count the sbatch ``--gpus-per-node``
++    directive requests. ``pools`` is the allocation's carve (``runtime.nodes.pools``):
++    ``config.pool_services`` in declaration order. The service name is the role
++    and the node's ordinal within its pool the worker index; a pool never rides a
++    heterogeneous job, so the het group is None.
++    """
++    return [
++        ExpectedDevice(
++            hostname=node,
++            gpu_index=gpu_index,
++            assignments=(DeviceAssignment(worker_role=name, worker_index=ordinal, worker_process=0, het_group=None),),
++        )
++        for name, nodes in pools.items()
++        for ordinal, node in enumerate(nodes)
++        for gpu_index in range(gpus_per_node)
++    ]
++
++
+ def resolve_roles(devices: Sequence[ExpectedDevice]) -> tuple[dict[DeviceKey, str], tuple[str, ...]]:
+     """Resolve one semantic role per device, or report the conflict."""
+     roles: dict[DeviceKey, str] = {}
+@@ -126,17 +153,20 @@ def validate_devices(
+ ) -> DeviceValidation:
+     """Require every expected device with a stable identity.
+ 
+-    A pool node's GPUs are never planned, so any of them is ``unexpected_device``.
+-    An exclusive worker node's exporter also reports the GPUs no worker uses;
+-    those are excused only when ``worker_identity`` shows every worker holding
+-    exactly the UUIDs the exporter reported at its planned indices, because the
+-    plan's CUDA numbering and the exporter's numbering are joined on index alone.
++    A pool node's GPUs are planned whole-node (``build_pool_expected_devices``);
++    nothing records which of them a pool service holds, so a pool node that
++    reports more GPUs than planned is ``unexpected_device`` with no excuse.
++    An exclusive engine worker node's exporter also reports the GPUs no worker
++    uses; those are excused only when ``worker_identity`` shows every worker
++    holding exactly the UUIDs the exporter reported at its planned indices,
++    because the plan's CUDA numbering and the exporter's numbering are joined
++    on index alone.
+     """
+     reasons: list[str] = []
+ 
+     expected_keys = {device.key for device in expected}
+     observed_keys = {device.key for device in observed}
+-    worker_hosts = {hostname for hostname, _ in expected_keys}
++    worker_hosts = {device.hostname for device in expected if any(a.is_engine_worker for a in device.assignments)}
+     extra_keys = observed_keys - expected_keys
+     idle_worker_gpus = {key for key in extra_keys if key[0] in worker_hosts}
+     identity_reasons = () if worker_identity is None else _worker_identity_reasons(worker_identity, expected, observed)
+@@ -171,13 +201,14 @@ def _worker_identity_reasons(
+     expected: Sequence[ExpectedDevice],
+     observed: Sequence[ObservedDevice],
+ ) -> tuple[str, ...]:
+-    """Empty when every planned worker was probed and holds the UUIDs sampled at its planned devices."""
++    """Empty when every planned engine worker was probed and holds the UUIDs sampled at its planned devices."""
+     if proof.error is not None or not proof.workers:
+         return (Reason.WORKER_IDENTITY_INVALID,)
+     planned: dict[tuple[str, DeviceAssignment], set[DeviceKey]] = {}
+     for device in expected:
+         for assignment in device.assignments:
+-            planned.setdefault((device.hostname, assignment), set()).add(device.key)
++            if assignment.is_engine_worker:
++                planned.setdefault((device.hostname, assignment), set()).add(device.key)
+     if {(worker.hostname, worker.assignment) for worker in proof.workers} != set(planned):
+         return (Reason.WORKER_IDENTITY_INVALID,)
+     sampled_uuid = {device.key: device.gpu_uuids[0] for device in observed if len(device.gpu_uuids) == 1}
+diff --git a/src/srtctl/core/power/validate_artifacts.py b/src/srtctl/core/power/validate_artifacts.py
+index 9587324..f908cf8 100644
+--- a/src/srtctl/core/power/validate_artifacts.py
++++ b/src/srtctl/core/power/validate_artifacts.py
+@@ -608,7 +608,8 @@ def _expected_devices(manifest: dict[str, Any]) -> list[ExpectedDevice]:
+             raise ValueError(f"assignments is not a non-empty list: {raw_assignments!r}")
+         assignments = tuple(
+             DeviceAssignment(
+-                worker_role=_role(assignment["worker_role"]),
++                # An engine role, or the owning service's name on a pool node.
++                worker_role=_text(assignment["worker_role"], "worker_role"),
+                 worker_index=_whole(assignment["worker_index"], "worker_index", minimum=0),
+                 worker_process=_whole(assignment["worker_process"], "worker_process", minimum=0),
+                 het_group=(
+@@ -653,7 +654,9 @@ def _check_topology(
+ 
+     counts: dict[str, int] = {}
+     for role in roles.values():
+-        counts[role] = counts.get(role, 0) + 1
++        # A pool device carries its service's name; ``--expect-role`` names engine roles only.
++        if role in WORKER_ROLES:
++            counts[role] = counts.get(role, 0) + 1
+ 
+     if expected_roles is not None:
+         unknown = sorted(set(expected_roles) - set(WORKER_ROLES))
+diff --git a/tests/test_power_artifacts.py b/tests/test_power_artifacts.py
+index 7e63339..f6d3b6c 100644
+--- a/tests/test_power_artifacts.py
++++ b/tests/test_power_artifacts.py
+@@ -29,6 +29,7 @@ from srtctl.core.power.contract import (
+     atomic_write_json,
+     is_safe_relative_subpath,
+ )
++from srtctl.core.power.identity import WorkerGpuIdentity, WorkerIdentityProof
+ from srtctl.core.power.manifest import (
+     DcgmExporterIdentity,
+     ExpectedWindow,
+@@ -43,8 +44,10 @@ from srtctl.core.power.samples import (
+     read_samples,
+ )
+ from srtctl.core.power.topology import (
++    DeviceAssignment,
+     ExpectedDevice,
+     build_expected_devices,
++    build_pool_expected_devices,
+     resolve_het_groups,
+     resolve_roles,
+     validate_devices,
+@@ -403,6 +406,26 @@ class TestExpectedTopology:
+         assert groups == {}
+         assert Reason.CONFLICTING_HET_GROUPS in conflicts
+ 
++    def test_pool_nodes_are_planned_whole_under_their_service_name(self):
++        devices = build_pool_expected_devices({"sim": ("node-c", "node-d")}, gpus_per_node=2)
++
++        assert [d.key for d in devices] == [("node-c", 0), ("node-c", 1), ("node-d", 0), ("node-d", 1)]
++        assert [d.assignments for d in devices] == [
++            (DeviceAssignment("sim", 0, 0, None),),
++            (DeviceAssignment("sim", 0, 0, None),),
++            (DeviceAssignment("sim", 1, 0, None),),
++            (DeviceAssignment("sim", 1, 0, None),),
++        ]
++        assert not any(a.is_engine_worker for d in devices for a in d.assignments)
++        assert resolve_roles(devices) == ({d.key: "sim" for d in devices}, ())
++        assert resolve_het_groups(devices) == ({"node-c": None, "node-d": None}, ())
++
++    def test_pools_follow_declaration_order_and_an_engine_only_job_plans_none(self):
++        devices = build_pool_expected_devices({"b": ("node-b",), "a": ("node-a",)}, gpus_per_node=1)
++
++        assert [(d.hostname, d.assignments[0].worker_role) for d in devices] == [("node-b", "b"), ("node-a", "a")]
++        assert build_pool_expected_devices({}, gpus_per_node=8) == []
++
+ 
+ class TestSampleArtifact:
+     """samples.csv round trip."""
+@@ -710,6 +733,55 @@ class TestDeviceValidation:
+         assert result.valid is False
+         assert Reason.EXPECTED_DEVICE_MISSING in result.reason_codes
+ 
++    @staticmethod
++    def _pool():
++        return build_pool_expected_devices({"sim": ("node-p",)}, gpus_per_node=2)
++
++    @staticmethod
++    def _pool_rows(count=2):
++        return [SampleRow(1000.0, 0, "node-p", index, f"GPU-p{index}", 400.0) for index in range(count)]
++
++    def test_a_services_only_job_whose_exporter_reports_the_planned_gpus_is_valid(self):
++        unprobed = WorkerIdentityProof(100.0, error="no engine workers to probe")
++
++        result = validate_devices(self._pool(), derive_observed_devices(self._pool_rows()), unprobed)
++
++        assert result.valid is True
++        assert result.reason_codes == ()
++
++    def test_a_pool_node_reporting_more_gpus_than_planned_is_unexpected_with_no_excuse(self):
++        """No probe records which GPUs a pool service holds, so the identity gate cannot excuse them."""
++        unprobed = WorkerIdentityProof(100.0, error="no engine workers to probe")
++
++        result = validate_devices(self._pool(), derive_observed_devices(self._pool_rows(count=3)), unprobed)
++
++        assert result.valid is False
++        assert result.reason_codes == (Reason.UNEXPECTED_DEVICE,)
++
++    def test_engine_worker_proof_excuses_idle_engine_gpus_but_never_a_pool_node_extra(self):
++        process = _process("node-a", [0], "prefill")
++        expected = [*build_expected_devices([process]), *self._pool()]
++        proof = WorkerIdentityProof(
++            100.0,
++            workers=(
++                WorkerGpuIdentity("node-a", DeviceAssignment.from_process(process), "prefill_0", "1.0", ("GPU-a0",)),
++            ),
++        )
++        engine_rows = [
++            SampleRow(1000.0, 0, "node-a", 0, "GPU-a0", 400.0),
++            SampleRow(1000.0, 0, "node-a", 1, "GPU-a1", 400.0),
++        ]
++
++        excused = validate_devices(expected, derive_observed_devices([*engine_rows, *self._pool_rows()]), proof)
++        pool_extra = validate_devices(
++            expected, derive_observed_devices([*engine_rows, *self._pool_rows(count=3)]), proof
++        )
++
++        assert excused.valid is True
++        assert excused.reason_codes == ()
++        assert pool_extra.valid is False
++        assert pool_extra.reason_codes == (Reason.UNEXPECTED_DEVICE,)
++
+ 
+ class TestManifest:
+     """manifest.json shape."""
+diff --git a/tests/test_power_validator.py b/tests/test_power_validator.py
+index ba00809..b8c78c8 100644
+--- a/tests/test_power_validator.py
++++ b/tests/test_power_validator.py
+@@ -27,7 +27,7 @@ from srtctl.core.power.manifest import (
+     PowerManifest,
+ )
+ from srtctl.core.power.samples import SampleRow, SampleWriter, derive_observed_devices
+-from srtctl.core.power.topology import build_expected_devices
++from srtctl.core.power.topology import build_expected_devices, build_pool_expected_devices
+ from srtctl.core.power.validate_artifacts import validate_power_artifacts
+ from srtctl.core.power.windows import validate_expected_windows
+ from srtctl.core.topology import Process
+@@ -65,13 +65,13 @@ def _processes(*, decode_het_group=1):
+ def package(tmp_path):
+     """A retained, publishable 1P1D artifact package."""
+ 
+-    def build(*, processes=None, rows=None, publication_valid=True):
++    def build(*, processes=None, expected=None, rows=None, publication_valid=True):
+         log_dir = tmp_path / "logs"
+         power_dir = log_dir / "power"
+         (power_dir / WINDOWS_DIRNAME).mkdir(parents=True)
+         (log_dir / RESULT_SUBDIR).mkdir(parents=True)
+ 
+-        expected = build_expected_devices(processes or _processes())
++        expected = expected if expected is not None else build_expected_devices(processes or _processes())
+ 
+         written = rows if rows is not None else _rows(expected)
+         writer = SampleWriter(power_dir / SAMPLES_FILENAME)
+@@ -188,6 +188,16 @@ class TestRetainedPackage:
+         assert report.summary["producer_git_commit"] == "a" * 40
+         assert report.summary["max_sample_gap_seconds"] == pytest.approx(1.0)
+ 
++    def test_a_services_only_package_validates_under_its_pool_role(self, package):
++        """Pool devices carry the service's name; the engine-role canary ignores them."""
++        pool = build_pool_expected_devices({"sim": ("node-a", "node-b")}, gpus_per_node=4)
++        log_dir, power_dir = package(expected=pool)
++
++        report = _validate(power_dir, log_dir, expected_roles={"prefill": 0, "decode": 0})
++
++        assert report.ok is True, report.failures
++        assert report.summary["expected_devices"] == 8
++
+     def test_cli_exits_zero_on_a_valid_package(self, package, capsys):
+         log_dir, power_dir = package()
+ 
+@@ -873,7 +883,7 @@ class TestDamagedManifest:
+                 lambda m: m["expected_devices"][0]["assignments"][0].update(worker_index="first"),
+                 id="non-numeric-worker-index",
+             ),
+-            pytest.param(lambda m: m["expected_devices"][0]["assignments"][0].update(worker_role="bogus"), id="role"),
++            pytest.param(lambda m: m["expected_devices"][0]["assignments"][0].update(worker_role=""), id="empty-role"),
+             pytest.param(lambda m: m["expected_windows"][0].update(concurrency=True), id="bool-concurrency"),
+             pytest.param(lambda m: m["expected_windows"][0].update(concurrency=0), id="zero-concurrency"),
+             pytest.param(lambda m: m["expected_devices"][0].update(gpu_index=-1), id="negative-index"),
+@@ -895,6 +905,30 @@ class TestDamagedManifest:
+         assert report.ok is False
+         assert any("manifest malformed" in failure for failure in report.failures)
+ 
++    def test_an_identity_proof_worker_outside_the_engine_roles_is_malformed(self, package):
++        """Only engine workers are probed, so a pool name can never be a probed worker's role."""
++        log_dir, power_dir = package()
++        manifest = json.loads((power_dir / MANIFEST_FILENAME).read_text())
++        manifest["worker_identity_proof"] = {
++            "captured_at_unix": START,
++            "error": None,
++            "workers": [
++                {
++                    "hostname": "node-a",
++                    "assignment": {"worker_role": "sim", "worker_index": 0, "worker_process": 0, "het_group": None},
++                    "step_name": "sim_0",
++                    "step_id": "1.0",
++                    "gpu_uuids": ["GPU-node-a0"],
++                }
++            ],
++        }
++        atomic_write_json(power_dir / MANIFEST_FILENAME, manifest)
++
++        report = _validate(power_dir, log_dir)
++
++        assert report.ok is False
++        assert any("manifest malformed" in failure for failure in report.failures)
++
+     def test_malformed_topology_preserves_wire_contract_failures(self, package):
+         log_dir, power_dir = package()
+         manifest_path = power_dir / MANIFEST_FILENAME
+diff --git a/tests/test_services_only.py b/tests/test_services_only.py
+index e4f7c16..712f317 100644
+--- a/tests/test_services_only.py
++++ b/tests/test_services_only.py
+@@ -258,6 +258,61 @@ def test_start_tachometer_scrapes_every_service_that_serves_metrics(tmp_path: Pa
+     assert gen.call_args.kwargs["processes"] == []
+ 
+ 
++def test_power_telemetry_plans_every_pool_gpu_of_a_services_only_job(tmp_path: Path) -> None:
++    """``dcgm-power`` without engine roles: the pool is sampled and each of its GPUs is an expected device."""
++    import json
++    from unittest.mock import MagicMock, patch
++
++    from srtctl.cli.do_sweep import SweepOrchestrator
++    from srtctl.core.processes import ProcessRegistry
++    from srtctl.core.runtime import Nodes, RuntimeContext
++
++    config = _load(
++        benchmark={"concurrencies": [1]},  # power telemetry insists on these
++        telemetry={
++            "enabled": True,
++            "dcgm_exporter": {"container_image": "dcgm-exporter", "port": 9401},
++            "startup_timeout_seconds": 0.2,
++            "request_timeout_seconds": 0.1,
++            "collector_join_timeout_seconds": 3.0,
++        },
++    )
++    runtime = RuntimeContext(
++        job_id="1",
++        run_name="run_1",
++        nodes=Nodes(head="node1", bench="node1", infra="node1", worker=(), pools={"files": ("node1", "node2")}),
++        head_node_ip="10.0.0.1",
++        infra_node_ip="10.0.0.1",
++        log_dir=tmp_path,
++        model_path=Path("fake/model"),
++        container_image=Path("/img.sqsh"),
++        gpus_per_node=8,
++        network_interface="eth0",
++        container_mounts={},
++        environment={},
++        is_hf_model=True,
++    )
++    orchestrator = SweepOrchestrator(config=config, runtime=runtime)
++    registry = ProcessRegistry(job_id="1")
++    exporter = MagicMock()
++    exporter.poll.return_value = None
++    with patch("srtctl.cli.mixins.telemetry_stage.start_srun_process", return_value=exporter) as srun:
++        session = orchestrator.start_power_telemetry(registry)
++        orchestrator.capture_power_worker_identity(registry)
++    session.stop_and_finalize()
++
++    assert srun.call_args.kwargs["nodelist"] == ["node1", "node2"], "the exporter rides the pool"
++    manifest = json.loads((tmp_path / "power" / "manifest.json").read_text())
++    planned = {(d["hostname"], d["gpu_index"]): d["assignments"] for d in manifest["expected_devices"]}
++    assert set(planned) == {(node, gpu) for node in ("node1", "node2") for gpu in range(8)}
++    for ordinal, node in enumerate(("node1", "node2")):
++        for gpu in range(8):
++            assert planned[(node, gpu)] == [
++                {"worker_role": "files", "worker_index": ordinal, "worker_process": 0, "het_group": None}
++            ]
++    assert manifest["worker_identity_proof"]["error"] == "no engine workers to probe"
++
++
+ # --- custom benchmark environment ---------------------------------------------------
+ 
+ 
+diff --git a/tests/test_telemetry.py b/tests/test_telemetry.py
+index 2dac12a..914bf4b 100644
+--- a/tests/test_telemetry.py
++++ b/tests/test_telemetry.py
+@@ -17,6 +17,7 @@ from srtctl.backends import SGLangBackend, TRTLLMBackend, VLLMBackend
+ from srtctl.cli.mixins.frontend_stage import FrontendTopology
+ from srtctl.cli.mixins.telemetry_stage import TelemetryStageMixin
+ from srtctl.core.power.contract import Reason
++from srtctl.core.power.topology import build_expected_devices
+ from srtctl.core.processes import ProcessRegistry
+ from srtctl.core.schema import (
+     BenchmarkConfig,
+@@ -1665,7 +1666,7 @@ def _running_exporter():
+     return proc
+ 
+ 
+-def _power_harness(tmp_path, processes, *, het=False, het_groups=None):
++def _power_harness(tmp_path, processes, *, het=False, het_groups=None, pools=None, gpus_per_node=8):
+     class Harness(TelemetryStageMixin):
+         def __init__(self):
+             # NOTE: srun is mocked so no exporter answers; a short deadline avoids a 30s stall per test.
+@@ -1685,6 +1686,11 @@ def _power_harness(tmp_path, processes, *, het=False, het_groups=None):
+             self.runtime.nodes.head = "node-a"
+             self.runtime.nodes.het = het
+             self.runtime.nodes.het_group_for.side_effect = lambda node: (het_groups or {}).get(node)
++            self.runtime.nodes.pools = pools or {}
++            self.runtime.nodes.compute = tuple(
++                dict.fromkeys([*(p.node for p in processes), *(n for nodes in (pools or {}).values() for n in nodes)])
++            )
++            self.runtime.gpus_per_node = gpus_per_node
+             self.runtime.srun_options = {}
+             self.runtime.container_mounts = {Path(tmp_path): Path("/logs")}
+             self._backend_processes = processes
+@@ -1845,6 +1851,59 @@ class TestDcgmPowerExporterLaunch:
+         assert outcome.exit_nonzero is True
+ 
+ 
++class TestPoolExpectedDevices:
++    """A service pool node is planned whole under its service's name; engine-only manifests do not change."""
++
++    @patch("srtctl.cli.mixins.telemetry_stage.start_srun_process")
++    def test_a_services_only_job_plans_its_pool_gpus_and_samples_the_pool(self, mock_srun, tmp_path):
++        mock_srun.return_value = _running_exporter()
++        harness = _power_harness(tmp_path, [], pools={"sim": ("node-a", "node-b")}, gpus_per_node=2)
++
++        session = harness.start_power_telemetry(ProcessRegistry(job_id="12345"))
++        session.stop_and_finalize()
++
++        assert mock_srun.call_args.kwargs["nodelist"] == ["node-a", "node-b"]
++        manifest = json.loads((tmp_path / "power" / "manifest.json").read_text())
++        assert manifest["expected_devices"] == [
++            {
++                "hostname": node,
++                "gpu_index": gpu,
++                "assignments": [
++                    {"worker_role": "sim", "worker_index": ordinal, "worker_process": 0, "het_group": None}
++                ],
++            }
++            for ordinal, node in enumerate(("node-a", "node-b"))
++            for gpu in range(2)
++        ]
++
++    @patch("srtctl.cli.mixins.telemetry_stage.start_srun_process")
++    def test_an_engine_only_job_plans_exactly_its_worker_gpus(self, mock_srun, tmp_path):
++        mock_srun.return_value = _running_exporter()
++        processes = [_worker("node-a", range(4)), _worker("node-b", range(4), index=1)]
++        harness = _power_harness(tmp_path, processes, pools={})
++
++        session = harness.start_power_telemetry(ProcessRegistry(job_id="12345"))
++        session.stop_and_finalize()
++
++        manifest = json.loads((tmp_path / "power" / "manifest.json").read_text())
++        assert manifest["expected_devices"] == [device.to_dict() for device in build_expected_devices(processes)]
++
++    @patch("srtctl.cli.mixins.telemetry_stage.start_srun_process")
++    def test_a_services_only_job_records_that_no_worker_was_probed(self, mock_srun, tmp_path):
++        mock_srun.return_value = _running_exporter()
++        harness = _power_harness(tmp_path, [], pools={"sim": ("node-a",)}, gpus_per_node=2)
++        registry = ProcessRegistry(job_id="12345")
++        session = harness.start_power_telemetry(registry)
++
++        with patch.object(TelemetryStageMixin, "probe_worker_gpus", side_effect=AssertionError("nothing to probe")):
++            harness.capture_power_worker_identity(registry)
++        session.stop_and_finalize()
++
++        proof = json.loads((tmp_path / "power" / "manifest.json").read_text())["worker_identity_proof"]
++        assert proof["error"] == "no engine workers to probe"
++        assert proof["workers"] == []
++
++
+ class TestCpuPowerExporterLaunch:
+     """Independent, best-effort CPU power exporter: bundled binary with a Python fallback."""
+ 

@@ -4,8 +4,9 @@
 
 ## Wan2.2 本地 runner 接入
 
-现有 client 和受控 `serving-smoke` 路径支持在 SGLang 和 vLLM-Omni 上运行
-`Wan-AI/Wan2.2-T2V-A14B-Diffusers`。一台固定版本的八卡 H100 vLLM-Omni
+现有 client 可通过 SGLang 或 vLLM-Omni 运行
+`Wan-AI/Wan2.2-T2V-A14B-Diffusers`；受控 `serving-smoke` 路径启动 SGLang。
+一台固定版本的八卡 H100 vLLM-Omni
 服务完成了一次 Wan 请求。完整工作负载、匹配的性能对比、质量及生产交付仍未验证。
 
 [Wan plan](mvp/wan22-serving.plan.json) 固定 checkpoint
@@ -28,9 +29,9 @@ python -m evaluator.cli run mvp/wan22-serving.plan.json --runtime sglang
 
 [GPU 模板](mvp/wan22-gpu-job.template.json) 保持未批准授权、未填写路径和空文件清单。
 另行授权实际运行前，需要绑定任务拥有的 SemiAnalysis 资源及兼容的已有 runtime，
-核实全部 checkpoint 文件，并设置实际预算。复用 site 配置，设置
-`mode: "serving-smoke"` 和 `concurrencies: [1]`。第一格为四条测量请求加一次 warmup；
-模板不能证明单卡显存足够。
+核实全部 checkpoint 文件，并设置实际预算。本地受控入口是
+`python -m evaluator.cli serving-smoke --spec <prepared-spec.json> --output <new-evidence-dir> --concurrencies 1`。
+第一格为四条测量请求加一次 warmup；模板不能证明单卡显存足够。
 
 初始支持 NVIDIA、TP1、1/2/4/8 卡纯 Ulysses，显式设置 DiT/text-encoder/VAE
 offload，禁用 layerwise offload。launcher 关闭运行时 warmup、CFG 并行和 Ring，
@@ -43,12 +44,12 @@ vLLM-Omni 服务。policy 仅记录未校准身份，不含音频阈值。
 unsupported，不生成音频或 A/V 分数。Dashboard 缺失质量及质量/SLO goodput 仍为 null。
 超时后保留远端是否完成的未知状态并停止后续提交；该版本删除 job 不代表真正取消。
 
-现有手动 workflow 将 Wan 上传为 `video-serving-<run-id>-<attempt>`，内部使用
-`video_serving_smoke_matrix`，保留原 H3 名称兼容性。workflow 和输入名称中的 `h3`
-只是兼容入口；模型以已封存的 `manifest.workload_plan.model_id` 为准，包括生成前失败。
-可读取、哈希匹配且有效的 plan 可以保留 scheduled/零 attempted/not-started 数量，而
-不填造 GPU 身份；无效 plan 无法确定这些数量。Wan 不使用 H3 配对 `result.json` exporter。
-App 接受规范 Diffusers ID 与此前短显示 ID，并拒绝冲突的模型声明。
+本地受控入口写入 `video_serving_smoke_matrix`，保留失败及未启动的请求数。
+由操作员管理的 `run --execute` 入口另写一份运行收据。父分支的 H3 CI 现在通过原生
+srt-slurm video matrix 行启动新作业。Wan 尚无对应的原生 recipe 或 config 行，
+因此这些本地入口不会提交或验收 Wan CI 作业。原生 Wan 行仍需经审核的 recipe
+及产物接线。Wan 不使用 H3 配对 `result.json` exporter。App 接受规范 Diffusers ID
+与此前短显示 ID，并拒绝冲突的模型声明。
 
 CPU 检查覆盖两种使用编码 fixture 的 HTTP transport、纯视频完整解码、启动预览、
 失败封存及 Dashboard 解析。保留的 H100 记录只证明一次请求已完成，不能代表共享
@@ -100,8 +101,8 @@ AMD SMI adapter 接受监控检查返回的 bytes，校验 `gpu_data` 外层记�
 
 根据保存的可用进入命令调整
 [runtime-entry.example.sh](runtime-entry.example.sh)。将当前 checkout 的
-`inferencex-e2e/benchmarks/benchmark_lib.sh` 复制到进入脚本旁边，把
-`REPLACE_WITH_BENCHMARK_LIB_SHA256` 替换为该 helper 的 SHA256，再固定进入脚本的摘要。
+`inferencex-e2e/benchmarks/check_env.sh` 复制到进入脚本旁边，把
+`REPLACE_WITH_CHECK_ENV_SHA256` 替换为该 helper 的 SHA256，再固定进入脚本的摘要。
 进入脚本在 source 前验证旁边的 helper；固定脚本摘要也就固定了预期的 helper 摘要。
 AMD 站点暂存会自动复制并封装这两个文件。现有外部固定的进入脚本保持不变。脚本必须
 进入现有 Enroot rootfs，将 `workspace.host` 挂载到 `/work`，保留 Slurm
@@ -115,35 +116,53 @@ launcher 当作进入脚本。
 实际 NVML 编号，并在导入 SGLang 前核对 CUDA 驱动返回的有序 UUID。
 设备枚举不一致时启动失败；归属锁和遥测仍使用分配的 UUID。
 
-adapter 在申请资源前恢复本任务的分配收据。导入的收据必须匹配任务标识、Unix
-所有者和调度器中的精确分配身份；提交结果不明确时禁止重复申请。默认 H200 站点是
-`main` / `sa-shared`，其他站点通过 `site` 明确记录，见下文。新建独占分配预留八张 GPU；示例 step 使用四张
-GPU、32 个 CPU 和 1 TiB 主机内存。固定版本的四 rank 加载器在 CPU 暂存权重时
-超过了 256 GiB；1 TiB 是实际运行验证过的额度，并非测得的最低需求。预算按预留容量计算。
+新的 GPU 任务通过 InferenceX 原生的 srt-slurm launcher 运行，即厂商 master 配置
+（`inferencex-e2e/configs/{nvidia,amd}-master.yaml`，键 `h3-bf16-<sku>-sglang-video`）中的
+`video-generation` scenario：`e2e-tests.yml` 将这些行归入 `test-sweep-video`，
+`python -m infx.launch run` 走 `srt-video` 路径。SKU 配方
+`benchmarks/single_node/srt-slurm-recipes/h3/sglang/<sku>-bf16/serving-client.yaml`
+以 generic service 启动 diffusion server（`benchmarks/h3/run_server.sh`），并以
+`benchmark.type: custom` 运行 `benchmarks/h3/run_client.sh`，`CONC_LIST` 中的每个并发度
+都针对同一个 server 依次执行。本目录以 `/h3-package` 挂载进作业；`specs/<name>.json`
+是冻结的 workload（`H3_SPEC`），模型从集群的 HF hub cache 提供。GPU 功耗来自 srt-slurm
+的原生遥测：每个 cell 发布自己的测量窗口，InferenceX 按并发度重新校验
+（`infx.results.video`），再由 `evaluator.cli srt-finalize` 组装仪表板摄取的
+`h3-results-<run>-<attempt>` 产物。`ci.py` 不再提交新作业，只续用已持有的分配。
 
-`resources.minutes` 是整个分配的时间上限，最多 240 分钟。step 为外层清理
-预留五分钟，supervisor 的上限加十分钟必须不超过分配上限。例如：分配
-90 分钟、step 85 分钟、supervisor 75 分钟。复用分配必须有足够剩余时间。
-保留准备好的 rootfs，仅清理属于本次任务的进程和 step，仅释放本次执行拥有的
-分配。
+AMD 的“同一租约内 inspect→serving 续跑”（`run_amd_serving_ci.py`）仍把嵌套
+`srun` step 挂到 inventory/inspect 打开的租约上。srt-slurm 端到端拥有新作业，
+无法复用该外层分配，因此该路径仅保留给这一 campaign。
+
+默认 H200 站点是 `main` / `sa-shared`，其他站点通过 `site` 明确记录，见下文。
+当前准入集群为 `h200-dgxc`、`h100-dgxc`、`b200-nscale` 与 `mi355x-amds`；
+准入表示实现支持，并不等于已完成硬件跑通。`resources.allocated_gpus` 记录完整
+分配规模，与参与测量的 `resources.gpus` 分开；整节点 H100 设为八张。
+`resources.minutes` 是 srt-slurm 时间上限预算（最多 240 分钟）。媒体校验、A/B
+比较、遥测、CPU 再处理与 AMD 准备仍属于 H3 专用逻辑，不走 LLM 结果收集器。
 
 ## 通过 InferenceX 调度
 
-第一次运行必须在 CI 中进行。对于功能分支，使用已注册的 End-to-End Tests
-工作流调用该分支的可复用 H3 工作流：
+新的 serving 运行就是普通的矩阵行。从工作流已包含 video bucket 的分支调度
+`e2e-tests.yml`，并选择对应 SKU 的键：
 
 ```bash
 gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
-  --ref feat/h3-video-ci -f h3-video=true -f test-name=h3-first-smoke
+  --ref feat/h3-cross-hardware -f ref=feat/h3-cross-hardware \
+  -f 'generate-cli-command=test-config --config-files configs/nvidia-master.yaml --config-keys h3-bf16-h200-sglang-video' \
+  -f test-name=h3-h200-video
 ```
 
-调度前审核分支。首次调度者和重新运行者都必须具有 write、maintain 或 admin
-权限。H3 路径检出 `github.sha`：`--ref` 同时选择工作流定义和源码；
-普通 LLM 路径的 `ref` 输入不用于 H3。此模式跳过 LLM 矩阵生成、所有依赖它的
-LLM 扫描和收集任务，以及对应的成功率计算。外部 PR 事件不能启动此路径。
-独立工作流在默认分支注册后，也可手动调度 `h3-video.yml`。
+`--ref` 选择工作流定义（必须包含 `test-sweep-video`），`ref` 选择被测源码。
+该行在对应 SKU 的集群 runner 上通过 `python -m infx.launch run` 的 `srt-video`
+路径执行，准入、优先级标签和 job record 与其他基准测试作业完全一致。作业上传
+`h3-results-<run-id>-<attempt>`（仪表板产物）和 `LOGS/power` 原生遥测包。
 
-开启优先级调度时，必须同时开启节点配额调度。排队任务在
+准备工作和已验收运行的再处理仍由独立的 `h3-video.yml`（站点预检、AMD 暂存、
+H200 硬件盘点、CPU 导出）与 `h3-fidelity.yml`（保留媒体比较）承担，二者都从
+仓库分支直接调度；首次调度者和重新运行者都必须具有 write、maintain 或 admin
+权限，外部 PR 事件不能启动它们。
+
+开启优先级调度时，必须同时开启节点配额调度。独立工作流的排队任务在
 `cluster:h200-dgxc` 上请求唯一的 `nodes:1`，以及原生
 `ci-job-<priority>-<token>` 和 `ci-attempt-<attempt>` 标签。关闭优先级
 调度时，沿用仓库的集群标签路径。GitHub 准入和 Slurm 资源验证是两个不同环节。
@@ -181,10 +200,9 @@ LLM 扫描和收集任务，以及对应的成功率计算。外部 PR 事件不
 运行编号（一至两个）以及盘点运行编号：
 
 ```bash
-gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
-  --ref feat/h3-video-ci -f h3-video=true \
-  -f h3-reuse-run-ids=34291306687,34293342829 \
-  -f h3-inventory-run-id=34297499754 -f test-name=h3-power-export
+gh workflow run h3-video.yml --repo SemiAnalysisAI/InferenceX \
+  --ref feat/h3-cross-hardware -f source-run-ids=34291306687,34293342829 \
+  -f inventory-run-id=34297499754
 ```
 
 此路径使用托管 CPU 导出，跳过原生 H200 作业。首次调度者和重新运行者仍须通过
@@ -192,7 +210,7 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
 产物校验清单、Git/CI/Slurm 身份及相同物理 GPU UUID。不执行新的 GPU 查询或
 模型请求。源产物必须仍在 GitHub 保留期内。
 
-省略 `h3-inventory-run-id` 时，会通过原生 Slurm 路径执行新的盘点。CI 核对源提交、
+省略 `inventory-run-id` 时，会通过原生 Slurm 路径执行新的盘点。CI 核对源提交、
 原始产物和持久化 Slurm 收据，在相同节点和 GPU UUID 上复用现有容器做只读检查。
 分配上限为十分钟，即最多 1.3333 个预留 GPU 小时；先检查本任务已有分配是否可
 复用。盘点不加载 H3 模型，清理后释放自有分配。后来的功率上限不能补写为历史
@@ -211,9 +229,10 @@ XML，同时支持带或不带 `0x` 的 PCI 编号，不重新查询硬件。
 
 原始工作负载失败时仍上传失败证据，但不会启动成功结果导出。
 
-每次尝试都会上传 `h3-video-<run-id>-<attempt>`，保留 14 天，并关闭媒体压缩。
-失败后也执行上传，内容包括 adapter 的完整输出：收据、原始 MP4、遥测、
-校验和，以及可用时的便携报告。缺失的报告或媒体保持缺失，不以测试素材替代。
+serving 运行由其基准测试作业上传 `h3-results-<run-id>-<attempt>`；准备操作上传
+各自操作的产物（`h3-hardware-…`、`h3-site-preflight-…`、`h3-amd-…`），保留 14 天，
+并关闭媒体压缩。失败后也执行上传，内容包括 adapter 的完整输出：收据、原始 MP4、
+遥测、校验和，以及可用时的便携报告。缺失的报告或媒体保持缺失，不以测试素材替代。
 原始持久证据保存在配置的工作目录。请在 GitHub 保留期结束前保存完整 artifact。
 
 冒烟模式中，返回 0 表示两个角色的全部预热和测量均完成，耗时证据、重新解码后的
@@ -225,8 +244,7 @@ XML，同时支持带或不带 `0x` 的 PCI 编号，不重新查询硬件。
 cd experimental/video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
-  --with 'rfc3339-validator==0.1.4' python -m pytest -q
+  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 
@@ -238,18 +256,18 @@ artifact 检查是独立的验收证据。
 
 ## 跨硬件服务测量
 
-`h3-preparation=site-preflight` 仅记录所选 CI runner 的身份、SSH 主机公钥、调度账户、共享运行时缓存候选和命令路径，
+`preflight-only=true` 仅记录所选 CI runner 的身份、SSH 主机公钥、调度账户、共享运行时缓存候选和命令路径，
 不分配或查询 GPU。独立的 `h3-site-preflight` 产物不代表性能结果或运行时验收。
 该模式支持 `mi355x-amds`；AMD 视频生成仍未接入。预检不可同时重放历史结果。
 各硬件站点使用独立的工作流并发组，并保留原有 Slurm 校验。
 
-本地无法 SSH 到 AMD 时，可设置 `h3-preparation=amd-model`、
-`h3-cluster=mi355x-amds`，并通过 `h3-reuse-run-ids` 指定一个成功的 H200 来源。
+本地无法 SSH 到 AMD 时，可设置 `stage-amd-model=true`、
+`cluster=mi355x-amds`，并通过 `source-run-ids` 指定一个成功的 H200 来源。
 该 CPU 任务优先复用已校验的共享权重，否则在 `/it-share/data/wenyao-minimax-h3/work`
 准备来源清单中的模型，逐文件校验大小和 SHA256。`h3-model-preparation` 产物与
 持久化的 `model-ready.json` 仅记录准备结果，不代表 AMD 运行时通过验收，也不分配 GPU。
 
-`h3-preparation=amd-node` 通过原有队列和 Slurm 所有权回执单独检查实际 AMD 节点、
+`inspect-amd-node=true` 通过原有队列和 Slurm 所有权回执单独检查实际 AMD 节点、
 设备遥测格式与缓存镜像元数据。上限为分配 8 张 GPU、15 分钟，读取步骤最多 10 分钟。
 保留查询与资源清理证据，不导入镜像，也不执行 H3 视频生成。
 
@@ -265,8 +283,8 @@ artifact 检查是独立的验收证据。
 
 默认配置保持 H200 的 `main` / `sa-shared`。可选 `site` 明确记录 `cluster`、
 `partition`、`account` 和 `gpu_model`；当前允许 `h200-dgxc`、`h100-dgxc`、
-`b200-nscale`。允许配置不等于实测通过。通过 `h3-cluster` 选择站点，
-`h3-site-config` 指向 runner 上已准备并审核的 JSON 文件；二者必须匹配。
+`b200-nscale`。允许配置不等于实测通过。通过 `h3-video.yml` 的 `cluster` 选择站点，
+`site-config` 指向 runner 上已准备并审核的 JSON 文件；二者必须匹配。
 `resources.allocated_gpus` 单独记录全部分配卡数，`resources.gpus` 记录实际参与卡数；
 H100 整节点分配需记录 8 张卡。总分配上限提高至 240 分钟，保留原有清理余量。
 AMD 的运行时与设备接入尚未实现，不可用的硬件或指标不能用 fixture 数据代替。

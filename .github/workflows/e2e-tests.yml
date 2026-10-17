@@ -8,37 +8,6 @@ permissions:
 on: # zizmor: ignore[concurrency-limits]
     workflow_dispatch:
         inputs:
-            h3-video:
-                description: "Run H3 from the dispatched branch; ref only selects LLM configs; no LLM sweep"
-                required: false
-                type: boolean
-                default: false
-            h3-cluster:
-                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds retained-runtime C1"
-                required: false
-                type: string
-                default: h200-dgxc
-            h3-preparation:
-                description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model/amd-serving need a source run; amd-serving uses one 120m lease"
-                required: false
-                type: choice
-                options: [none, site-preflight, amd-model, amd-node, amd-runtime, amd-site, amd-rootfs, amd-serving, fidelity]
-                default: none
-            h3-site-config:
-                description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
-                required: false
-                type: string
-                default: ""
-            h3-reuse-run-ids:
-                description: "Reprocess one or two accepted H3 CI runs (comma-separated); no new H3 generation"
-                required: false
-                type: string
-                default: ""
-            h3-inventory-run-id:
-                description: "Reuse a successful H3 hardware inventory; export on CPU without allocating GPUs"
-                required: false
-                type: string
-                default: ""
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -63,7 +32,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
                 default: ""
             require-power:
-                description: "Fail benchmark jobs when GPU power is invalid"
+                description: "Fail multi-node benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -78,22 +47,17 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             eval-limit:
-                description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
+                description: "Eval instance count: empty = whole split (default); N = first-N smoke slice"
                 required: false
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval runner override (auto uses model-aware selection; lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+                description: "Eval runner override (auto uses model-aware selection; lm-eval, kimi-vendor, minimax-vendor, or bfcl)"
                 required: false
                 type: string
                 default: "auto"
             eval-suite:
-                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
-                required: false
-                type: string
-                default: ""
-            swebench-gen-mode:
-                description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval"
                 required: false
                 type: string
                 default: ""
@@ -113,7 +77,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand evaluation selection to every fixed-sequence configuration"
+                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
@@ -127,50 +91,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
-            pr-labels-json:
-                description: "Labels from the source PR for priority scoring"
-                required: false
-                type: string
-                default: "[]"
     workflow_call:
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
             required: true
-          MODAL_TOKEN_ID:
-            required: false
-          MODAL_TOKEN_SECRET:
-            required: false
         inputs:
-            h3-video:
-                description: "Run H3 from the dispatched branch; ref only selects LLM configs; no LLM sweep"
-                required: false
-                type: boolean
-                default: false
-            h3-cluster:
-                description: "Prepared H3 site: h200-dgxc, h100-dgxc, b200-nscale; mi355x-amds retained-runtime C1"
-                required: false
-                type: string
-                default: h200-dgxc
-            h3-preparation:
-                description: "Optional preparation: amd-node 15m or amd-runtime 60m on 8 GPUs; amd-model/amd-serving need a source run; amd-serving uses one 120m lease"
-                required: false
-                type: string
-                default: none
-            h3-site-config:
-                description: "Pinned runner-local H3 site JSON; empty uses existing H200 configuration"
-                required: false
-                type: string
-                default: ""
-            h3-reuse-run-ids:
-                description: "Reprocess one or two accepted H3 CI runs (comma-separated); no new H3 generation"
-                required: false
-                type: string
-                default: ""
-            h3-inventory-run-id:
-                description: "Reuse a successful H3 hardware inventory; export on CPU without allocating GPUs"
-                required: false
-                type: string
-                default: ""
             generate-cli-command:
                 description: "Command passed to generate matrix script"
                 required: false
@@ -195,7 +120,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: string
                 default: ""
             require-power:
-                description: "Fail benchmark jobs when GPU power is invalid"
+                description: "Fail multi-node benchmark jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
@@ -210,22 +135,17 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             eval-limit:
-                description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
+                description: "Eval instance count: empty = whole split (default); N = first-N smoke slice"
                 required: false
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval runner override (auto uses model-aware selection; lm-eval, swebench, kimi-vendor, minimax-vendor, or bfcl)"
+                description: "Eval runner override (auto uses model-aware selection; lm-eval, kimi-vendor, minimax-vendor, or bfcl)"
                 required: false
                 type: string
                 default: "auto"
             eval-suite:
-                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval and swebench"
-                required: false
-                type: string
-                default: ""
-            swebench-gen-mode:
-                description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+                description: "Eval suite (kimi_tool_call_schema, kimi_tool_call_schema_full, minimax_m3_smoke, minimax_m3_full, bfcl_smoke, bfcl_vllm_minimax_m3, or bfcl_vllm_kimi); empty for lm-eval"
                 required: false
                 type: string
                 default: ""
@@ -245,7 +165,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand evaluation selection to every fixed-sequence configuration"
+                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
@@ -259,46 +179,12 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
-            pr-labels-json:
-                description: "Labels from the source PR for priority scoring"
-                required: false
-                type: string
-                default: "[]"
 
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
 
 jobs:
-    h3-fidelity:
-        if: ${{ inputs.h3-video && inputs.h3-preparation == 'fidelity' }}
-        permissions:
-            contents: read
-            actions: read # Read original H3 run metadata and retained media artifacts.
-        uses: $/.github/workflows/h3-fidelity.yml
-        with:
-            source-run-ids: ${{ inputs.h3-reuse-run-ids }}
-
-    h3-video:
-        if: ${{ inputs.h3-video && inputs.h3-preparation != 'fidelity' }}
-        permissions:
-            contents: read
-            actions: read # Read accepted H3 source runs and inventory artifacts for reuse.
-        uses: $/.github/workflows/h3-video.yml
-        with:
-            cluster: ${{ inputs.h3-cluster }}
-            preflight-only: ${{ inputs.h3-preparation == 'site-preflight' }}
-            stage-amd-model: ${{ inputs.h3-preparation == 'amd-model' }}
-            stage-amd-site: ${{ inputs.h3-preparation == 'amd-site' }}
-            inspect-amd-node: ${{ inputs.h3-preparation == 'amd-node' }}
-            prepare-amd-runtime: ${{ inputs.h3-preparation == 'amd-runtime' }}
-            recover-amd-rootfs: ${{ inputs.h3-preparation == 'amd-rootfs' }}
-            run-amd-serving: ${{ inputs.h3-preparation == 'amd-serving' }}
-            site-config: ${{ inputs.h3-site-config }}
-            source-run-ids: ${{ inputs.h3-reuse-run-ids }}
-            inventory-run-id: ${{ inputs.h3-inventory-run-id }}
-
     get-jobs:
-        if: ${{ !inputs.h3-video }}
         name: get-jobs
         runs-on: ubuntu-latest
         outputs:
@@ -312,6 +198,7 @@ jobs:
             agentic-eval-config: ${{ steps.get-jobs.outputs.agentic-eval-config }}
             multi-node-agentic-config: ${{ steps.get-jobs.outputs.multi-node-agentic-config }}
             multi-node-agentic-eval-config: ${{ steps.get-jobs.outputs.multi-node-agentic-eval-config }}
+            video-config: ${{ steps.get-jobs.outputs.video-config }}
         steps:
             - name: Checkout code (ref)
               id: checkout-ref
@@ -357,7 +244,6 @@ jobs:
             - id: get-jobs
               env:
                   GENERATE_COMMAND: ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
-                  PR_LABELS: ${{ inputs.pr-labels-json || toJson(github.event.pull_request.labels.*.name) }}
                   CHANGELOG_BASE_REF: ${{ inputs.changelog-base-ref }}
                   CHANGELOG_HEAD_REF: ${{ inputs.changelog-head-ref }}
                   TRIM_CONC: ${{ inputs.trim-conc }}
@@ -373,6 +259,7 @@ jobs:
                   if [[ -f "$PRIORITY_ROOT/inferencex-e2e/configs/runners.yaml" ]]; then
                     PRIORITY_ROOT="$PRIORITY_ROOT/inferencex-e2e"
                   fi
+                  env PYTHONPATH="$PRIORITY_ROOT" python3 -P -m infx.workflows.require_launcher "$GITHUB_WORKSPACE"
                   if [ -n "$CHANGELOG_BASE_REF" ] || [ -n "$CHANGELOG_HEAD_REF" ]; then
                     if [ -z "$CHANGELOG_BASE_REF" ] || [ -z "$CHANGELOG_HEAD_REF" ]; then
                       echo "Both changelog-base-ref and changelog-head-ref are required" >&2
@@ -381,7 +268,7 @@ jobs:
                     CMD=(
                       env PYTHONPATH="$PRIORITY_ROOT"
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml
-                      python -P -m infx.matrix.plan
+                      python -P -m infx.matrix.revision plan "$MEASURED_ROOT"
                       --changelog-file "${MEASURED_ROOT}/perf-changelog.yaml"
                       --base-ref "$CHANGELOG_BASE_REF"
                       --head-ref "$CHANGELOG_HEAD_REF"
@@ -412,19 +299,9 @@ jobs:
                     if [ "$EVALS_ONLY" = "true" ]; then
                       GENERATE_ARGS+=(--evals-only)
                     fi
-                    GENERATOR_PATH="${MEASURED_ROOT}"
-                    if [ -f "${MEASURED_ROOT}/infx/matrix/generate.py" ]; then
-                      GENERATOR=(-m infx.matrix.generate)
-                    elif [ -f "${MEASURED_ROOT}/utils/matrix_logic/generate_sweep_configs.py" ]; then
-                      GENERATOR=("${MEASURED_ROOT}/utils/matrix_logic/generate_sweep_configs.py")
-                      GENERATOR_PATH="${MEASURED_ROOT}/utils/matrix_logic:${MEASURED_ROOT}"
-                    else
-                      echo "Matrix generator not found in selected checkout" >&2
-                      exit 1
-                    fi
-                    CONFIG_JSON=$(env PYTHONPATH="$GENERATOR_PATH" \
+                    CONFIG_JSON=$(env PYTHONPATH="$PRIORITY_ROOT" \
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
-                      python -P "${GENERATOR[@]}" "${GENERATE_ARGS[@]}")
+                      python -P -m infx.matrix.revision generate "$MEASURED_ROOT" "${GENERATE_ARGS[@]}")
                   fi
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" \
                     uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
@@ -435,16 +312,16 @@ jobs:
                       python -P -m infx.workflows.ci_priority \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${GITHUB_EVENT_NAME}" \
-                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}" \
-                      --labels-json "$PR_LABELS"
+                      --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}"
                   }
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and not x.get('eval-only', False)]))" | score_matrix agentic)
                   AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and x.get('run-eval', False)]))" | score_matrix agentic-eval)
                   MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and not x.get('eval-only', False)]))" | score_matrix multi-agentic)
                   MULTI_AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x and x.get('run-eval', False)]))" | score_matrix multi-agentic-eval)
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix single)
+                  VIDEO=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'video-generation']))" | score_matrix video)
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') not in ('agentic-coding', 'video-generation') and not x.get('eval-only', False)]))" | score_matrix single)
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix multi)
-                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix eval)
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') not in ('agentic-coding', 'video-generation') and x.get('run-eval', False)]))" | score_matrix eval)
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix multi-eval)
                   {
                     echo "agentic-config=$AGENTIC"
@@ -455,6 +332,7 @@ jobs:
                     echo "multi-node-config=$MULTI"
                     echo "eval-config=$EVALS"
                     echo "multi-node-eval-config=$MULTI_EVAL"
+                    echo "video-config=$VIDEO"
                   } >> "$GITHUB_OUTPUT"
 
     test-sweep-multi-node:
@@ -468,8 +346,6 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -482,6 +358,7 @@ jobs:
             require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             power-producer-sha: ${{ inputs.power-producer-sha }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-evals:
         needs: get-jobs
@@ -494,8 +371,6 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -510,8 +385,8 @@ jobs:
             eval-limit: ${{ inputs.eval-limit }}
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-agentic:
         needs: get-jobs
@@ -524,9 +399,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
+            require-power: ${{ inputs.require-power }}
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
@@ -536,9 +410,9 @@ jobs:
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
-            require-power: ${{ inputs.require-power }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-agentic-evals:
         needs: get-jobs
@@ -551,8 +425,6 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -565,11 +437,11 @@ jobs:
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-agentic:
         needs: get-jobs
@@ -582,8 +454,6 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -600,6 +470,7 @@ jobs:
             power-producer-sha: ${{ inputs.power-producer-sha }}
             scenario-type: agentic-coding
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-multi-node-agentic-evals:
         needs: get-jobs
@@ -612,8 +483,6 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -628,10 +497,34 @@ jobs:
             eval-only: true
             eval-conc: ${{ matrix.config['eval-conc'] }}
             eval-limit: ${{ inputs.eval-limit }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
             scenario-type: agentic-coding
+            ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
+
+    test-sweep-video:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.video-config != '' && needs.get-jobs.outputs.video-config != '[]' }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: video /
+        strategy:
+            fail-fast: ${{ inputs.fail-fast }}
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.video-config) }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            require-power: ${{ inputs.require-power }}
+            config: ${{ toJSON(matrix.config) }}
+            klaud-run: ${{ inputs.klaud-run }}
+            runner: ${{ matrix.config.runner }}
+            test-name: ${{ inputs.test-name }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            run-eval: false
+            scenario-type: video-generation
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
 
     test-sweep-single-node:
@@ -645,9 +538,8 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
+            require-power: ${{ inputs.require-power }}
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
             runner: ${{ matrix.config.runner }}
@@ -655,8 +547,8 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
-            require-power: ${{ inputs.require-power || (matrix.config['require-power'] == true && matrix.config['eval-only'] != true) }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     test-sweep-evals:
         needs: get-jobs
@@ -669,8 +561,6 @@ jobs:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-            MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-            MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         with:
             config: ${{ toJSON(matrix.config) }}
             klaud-run: ${{ inputs.klaud-run }}
@@ -683,8 +573,8 @@ jobs:
             eval-limit: ${{ inputs.eval-limit }}
             eval-framework: ${{ inputs.eval-framework == 'auto' && (matrix.config['eval-framework'] || 'lm-eval') || inputs.eval-framework }}
             eval-suite: ${{ inputs.eval-suite != '' && inputs.eval-suite || (inputs.eval-framework == 'auto' && matrix.config['eval-suite'] || '') }}
-            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
+            test-name: ${{ inputs.test-name }}
 
     collect-results:
         name: collect-results
@@ -703,10 +593,21 @@ jobs:
         with:
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
+    collect-job-events:
+        name: collect-job-events
+        needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals, test-sweep-video]
+        if: ${{ !cancelled() && needs.get-jobs.result == 'success' }}
+        permissions:
+            actions: read # List the run's jobs to record the jobs that wrote no event.
+            contents: read
+        uses: $/.github/workflows/collect-job-events.yml
+        with:
+            tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
+
     calc-success-rate:
         name: calc-success-rate
         needs: [get-jobs, collect-results, collect-evals]
-        if: ${{ always() && !inputs.h3-video && needs.get-jobs.outputs.tooling-ref != '' }}
+        if: ${{ always() && needs.get-jobs.outputs.tooling-ref != '' }}
         runs-on: ubuntu-latest
         permissions:
             actions: read # Read job timings for run statistics.
@@ -721,7 +622,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.get-jobs.outputs.tooling-ref }}
-                  fetch-depth: 0
+                  fetch-depth: 1
                   persist-credentials: false
 
             - name: Download results artifacts

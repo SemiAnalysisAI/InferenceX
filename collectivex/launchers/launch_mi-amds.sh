@@ -11,7 +11,7 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
-  # mi300x's compute-0 nodes refuse the 256-CPU ask ("Requested node configuration is not
+  # mi300x's nodes refuse the 256-CPU ask ("Requested node configuration is not
   # available"), so that pool takes the whole node instead.
   mi300x) CPUS_PER_NODE=""; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
@@ -20,7 +20,7 @@ case "$RUNNER" in
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
 export COLLX_VENDOR=amd
-collx_launcher_prologue "$RUNNER"
+collx_launcher_prologue
 
 collx_set_placement 1 8 8 xgmi
 TIME_MIN="${COLLX_TIME:-60}"
@@ -33,7 +33,7 @@ case "$COLLX_BENCH" in
 esac
 
 export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
-export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
+# MORI_ENABLE_SDMA stays unset (off), as vLLM runs MoRI.
 export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
 export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
 export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
@@ -117,5 +117,5 @@ fi
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
 rm -f "$MOUNT_SRC"/collectivex/gpucore.* 2>/dev/null || true
-collx_log "done - result artifacts collected"
+collx_log "done - results collected"
 exit "$FINAL_RC"

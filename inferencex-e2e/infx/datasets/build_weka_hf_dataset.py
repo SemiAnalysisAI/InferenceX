@@ -47,9 +47,6 @@ PLOT_WEKA = HERE / "plot_weka_distributions.py"
 PLOT_SUBAGENT = HERE / "plot_subagent_distributions.py"
 
 
-# Pipeline stages
-
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -205,9 +202,6 @@ def stage_convert(args: argparse.Namespace, proxy_dir: Path, work_dir: Path) -> 
     return per_trace
 
 
-# Payload assembly
-
-
 def _concat_traces_jsonl(per_trace_dir: Path, out_path: Path) -> int:
     """Concat each per-trace .json (multi-line pretty-printed) into a single
     one-line-per-trace traces.jsonl. Re-serializes via json.dumps to guarantee
@@ -303,8 +297,6 @@ def _build_readme(
         else "semianalysis_cc_traces_weka_with_subagents"
     )
 
-    # HF YAML front-matter so the dataset card renders metadata and the
-    # data viewer picks up traces.jsonl as the default split.
     front_matter = (
         "---\n"
         "license: apache-2.0\n"
@@ -497,9 +489,6 @@ def _build_payload(
     return stats
 
 
-# Request-drop filters (256k total cap; ISL-only cap)
-
-
 def _is_oversize(req: dict, cap: int = CAP_TOKENS) -> bool:
     return (req.get("in") or 0) + (req.get("out") or 0) > cap
 
@@ -541,8 +530,6 @@ def _filter_trace(trace: dict, is_oversize: Callable[[dict], bool]) -> dict | No
     if not surviving:
         return None
 
-    # Most traces do not contain an oversize request. Keep those byte-for-byte
-    # identical, including overlapping subagent timestamps.
     if not dropped_any:
         return out
 
@@ -627,9 +614,6 @@ def stage_isl_filter(per_trace_dir: Path, work_dir: Path, cap: int) -> Path:
     )
 
 
-# Upload
-
-
 def stage_upload(
     args: argparse.Namespace, payload_dir: Path, repo_id: str, commit_msg: str
 ) -> None:
@@ -682,16 +666,11 @@ def _reconstruct_sampler_cmd(args: argparse.Namespace) -> list:
     return cmd
 
 
-# Main
-
-
 def main() -> int:
     args = parse_args()
     work_dir = args.work_dir
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # set DB URL into env so the subprocess inherits it cleanly even if
-    # the user only passed --db-url (sampler reads $AGENTIC_PROXY_DB_URL)
     if args.db_url:
         os.environ["AGENTIC_PROXY_DB_URL"] = args.db_url
 
@@ -699,8 +678,6 @@ def main() -> int:
     per_trace_dir = stage_convert(args, proxy_dir, work_dir)
     sampler_cmd = _reconstruct_sampler_cmd(args)
 
-    # --- base build (optionally with a per-request ISL cap to drop the
-    #     hash-block overcount artifacts that read above ~1M)
     base_src = per_trace_dir
     if args.base_max_isl is not None:
         base_src = stage_isl_filter(per_trace_dir, work_dir, args.base_max_isl)
@@ -723,7 +700,6 @@ def main() -> int:
         f"(v{args.min_trace_version or '?'}{'-' + str(args.max_trace_version) if args.max_trace_version and args.max_trace_version != args.min_trace_version else ''}{isl_note})",
     )
 
-    # --- 256k variant
     if args.repo_256k:
         per_trace_256k = stage_256k(per_trace_dir, work_dir)
         cap_payload = work_dir / "256k"

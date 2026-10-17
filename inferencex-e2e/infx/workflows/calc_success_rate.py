@@ -4,33 +4,13 @@ import re
 import sys
 from collections.abc import Iterable
 
-import yaml
-
 from infx import github
-from infx.config import repository_root
-
-CLUSTER_LABEL_PREFIX = "cluster:"
-
-
-def normalize_hardware_label(label: str) -> str:
-    """Return the hardware bucket name used in run-stats output."""
-    if label.startswith(CLUSTER_LABEL_PREFIX):
-        return label.removeprefix(CLUSTER_LABEL_PREFIX)
-    return label
+from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
 
 
 def load_hardware_labels() -> list[str]:
-    """Load distinct cluster hardware labels from runners.yaml."""
-    runners_path = repository_root() / "configs" / "runners.yaml"
-    with open(runners_path) as f:
-        runners = yaml.safe_load(f)
-
-    labels = runners.get("labels", runners)
-    hardware_labels = [label for label in labels if label.startswith(CLUSTER_LABEL_PREFIX)]
-    if not hardware_labels:
-        hardware_labels = runners.get("hardware", {}).keys()
-
-    return sorted(normalize_hardware_label(label) for label in hardware_labels)
+    """Return the run-stats hardware buckets: every cluster id in runners.yaml."""
+    return sorted(load_clusters())
 
 
 def build_hardware_match_patterns(

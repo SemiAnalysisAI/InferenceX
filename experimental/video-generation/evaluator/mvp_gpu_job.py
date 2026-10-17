@@ -26,7 +26,6 @@ import signal
 import socket
 import stat
 import subprocess
-import subprocess
 import sys
 import threading
 import time
@@ -298,7 +297,7 @@ def validate_gpu_job(spec: dict) -> dict:
     return frozen
 
 
-def _server_argv(spec: dict, role: str, *, output_path: str | None = None) -> list[str]:
+def _server_argv(spec: dict, role: str, *, host: str = "127.0.0.1", output_path: str | None = None) -> list[str]:
     if spec["plan"]["model_id"] == WAN_MODEL_ID:
         if not output_path:
             raise ValueError("Wan requires a job-owned server output path")
@@ -308,7 +307,7 @@ def _server_argv(spec: dict, role: str, *, output_path: str | None = None) -> li
                 "--revision", spec["model"]["revision"], "--num-gpus", str(len(spec["gpu_uuids"])),
                 "--ulysses-degree", str(server["ulysses_degree"]), "--tp-size", str(server["tp_size"]),
                 "--ring-degree", "1", "--enable-cfg-parallel", "false",
-                "--host", "127.0.0.1", "--port", str(spec["port"]), "--enable-torch-compile", "false",
+                "--host", host, "--port", str(spec["port"]), "--enable-torch-compile", "false",
                 "--dit-cpu-offload", str(server["dit_cpu_offload"]).lower(),
                 "--dit-layerwise-offload", "false",
                 "--text-encoder-cpu-offload", str(server["text_encoder_cpu_offload"]).lower(),
@@ -320,7 +319,7 @@ def _server_argv(spec: dict, role: str, *, output_path: str | None = None) -> li
             "--num-gpus", str(len(spec["gpu_uuids"])), "--ulysses-degree", str(spec["server"]["ulysses_degree"]),
             "--tp-size", str(spec["server"]["tp_size"]), "--encoder-parallel", spec["server"]["encoder_parallel"],
             "--performance-mode", spec["server"]["performance_mode"],
-            "--host", "127.0.0.1", "--port", str(spec["port"]), "--enable-torch-compile", "false"]
+            "--host", host, "--port", str(spec["port"]), "--enable-torch-compile", "false"]
     if "layerwise_offload" in spec["server"]:
         layerwise = spec["server"]["layerwise_offload"]
         args.extend(["--layerwise-offload-components", ",".join(layerwise["components"]),

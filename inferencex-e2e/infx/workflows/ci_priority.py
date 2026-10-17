@@ -22,9 +22,7 @@ SCORE_QUANTUM = Decimal("0.001")
 @dataclass(frozen=True)
 class PriorityContext:
     event_name: str = ""
-    labels: frozenset[str] = frozenset()
     queue_namespace: str = "local"
-    pr_number: int | None = None
     criteria: frozenset[str] | None = None
 
 
@@ -117,14 +115,9 @@ def calculate_priority(
     context: PriorityContext = PriorityContext(),
 ) -> Decimal:
     """Return a higher-is-sooner priority score for one benchmark matrix entry."""
-    patchwork = policy["labels"]["patchwork"]
-    patch_labels = set(patchwork["names"])
-    waiver_labels = set(patchwork.get("waived-by", []))
     criteria = context.criteria
-    if (
-        (criteria is not None and "patchwork" in criteria) or context.labels & patch_labels
-    ) and not context.labels & waiver_labels:
-        return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
+    if criteria is not None and "patchwork" in criteria:
+        return _decimal(policy["patchwork-score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
     if criteria is not None:
         entry = _entry_from_criteria(criteria, policy, entry)
@@ -155,11 +148,8 @@ def calculate_priority(
         adjustments.get("model-prefix", {}).get(str(entry.get("model-prefix", "")), 0)
     )
 
-    checklist = policy["labels"].get("checklist-complete", {})
-    if (criteria is not None and "checklist-complete" in criteria) or context.labels & set(
-        checklist.get("names", [])
-    ):
-        score += _decimal(checklist.get("adjustment", 0))
+    if criteria is not None and "checklist-complete" in criteria:
+        score += _decimal(adjustments.get("checklist-complete", 0))
 
     return score.quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
@@ -197,23 +187,7 @@ def annotate_jobs(
     if "runner" in value and "framework" in value:
         annotated["priority"] = format_priority(calculate_priority(value, policy, context))
         annotated["queue-token"] = queue_token(value, context.queue_namespace, _path)
-        if (
-            context.pr_number is not None
-            and policy["labels"]["skip-queue"]["name"] in context.labels
-        ):
-            annotated["skip-queue-pr"] = context.pr_number
     return annotated
-
-
-def _labels_from_json(raw_labels: str) -> frozenset[str]:
-    if not raw_labels:
-        return frozenset()
-    value = json.loads(raw_labels)
-    if value is None:
-        return frozenset()
-    if not isinstance(value, list) or not all(isinstance(label, str) for label in value):
-        raise ValueError("--labels-json must be a JSON array of strings")
-    return frozenset(value)
 
 
 def _criteria_from_json(raw_criteria: str) -> frozenset[str] | None:
@@ -231,9 +205,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--policy", default=str(repository_root() / "configs/ci-priority.yaml"))
     parser.add_argument("--event-name", default="")
-    parser.add_argument("--labels-json", default="[]")
     parser.add_argument("--queue-namespace", default="local")
-    parser.add_argument("--pr-number", type=int)
     parser.add_argument("--criteria-json", default="")
     parser.add_argument(
         "--input",
@@ -245,9 +217,7 @@ def main() -> int:
     policy = load_policy(args.policy)
     context = PriorityContext(
         event_name=args.event_name,
-        labels=_labels_from_json(args.labels_json),
         queue_namespace=args.queue_namespace,
-        pr_number=args.pr_number,
         criteria=_criteria_from_json(args.criteria_json),
     )
     source = args.input.read_text() if args.input else sys.stdin.read()

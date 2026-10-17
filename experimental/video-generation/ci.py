@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""InferenceX Slurm adapter for a prepared, trusted H3 runtime.
+"""InferenceX adapter that launches prepared H3 workloads through srt-slurm.
 
-No SSH, image import, dependency installation, or model download. The submit
-host and compute node share workspace.host, mounted at workspace.container by
-an immutable entry-only wrapper. A receipt, not a username, identifies reuse.
+GPU jobs submit an srt-slurm services-only recipe via ``python -m infx.launch``.
+srt-slurm owns allocation, container lifecycle, logs and teardown. This module
+keeps site admission, frozen-spec checks, package staging, media/result collect,
+and CPU-side helpers that srt-slurm does not cover.
 """
 from __future__ import annotations
 
@@ -105,9 +106,13 @@ def validate_config(config: dict) -> dict:
         path = absolute(value)
         need(not path.is_relative_to("/workspace"), "Use the declared persistent mount, not /workspace")
     runtime = config["runtime"]
-    need(set(runtime) == {"entry", "entry_sha256", "rootfs", "ready_marker", "python"}, "Invalid runtime contract")
+    need(
+        set(runtime) == {"entry", "entry_sha256", "rootfs", "ready_marker", "python", "container"},
+        "Invalid runtime contract",
+    )
     for key in ("entry", "rootfs", "ready_marker", "python"):
         absolute(runtime[key])
+    need(isinstance(runtime["container"], str) and runtime["container"].strip(), "runtime.container image/squash required")
     need(SHA.fullmatch(runtime["entry_sha256"]), "Runtime entry SHA256 required")
     need(set(config["spec"]) == {"path", "sha256"} and SHA.fullmatch(config["spec"]["sha256"]), "Pinned prepared spec required")
     absolute(config["spec"]["path"])
@@ -344,15 +349,6 @@ def collect(run_dir: Path, output: Path) -> None:
 def stage_package(source: Path, destination: Path) -> dict[str, str]:
     selected = {p.relative_to(source).as_posix(): p for p in [*source.glob("*.py"), *(source / "evaluator").glob("*.py"),
                 *(source / "runtime-patches").glob("*.patch")]}
-    # Read power modules from the e2e project; keep staged keys as infx/... so the
-    # retained runtime package layout and imports stay unchanged.
-    e2e_root = source.parents[1] / "inferencex-e2e"
-    shared_power = [e2e_root / "infx" / "__init__.py",
-                    e2e_root / "infx" / "results" / "__init__.py",
-                    *(e2e_root / "infx" / "results" / "power").glob("*.py")]
-    for path in shared_power:
-        if path.is_file():
-            selected[path.relative_to(e2e_root).as_posix()] = path
     expected = {name: digest(path) for name, path in selected.items()}
     if destination.exists():
         need(inventory(destination) == expected, "Staged source differs from this GitHub commit")
@@ -445,14 +441,48 @@ def prepared_spec(config: dict) -> dict:
     return spec
 
 
-def launch(config: dict, output: Path, *, required_allocation: str | None = None) -> int:
-    config = validate_config(config)
-    run_id = os.environ.get("GITHUB_RUN_ID", "")
-    attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
-    sha = os.environ.get("H3_SOURCE_SHA", "")
-    need(re.fullmatch(r"[0-9]+", run_id) and re.fullmatch(r"[0-9]+", attempt), "GitHub run ID and attempt required")
-    need(re.fullmatch(r"[0-9a-f]{40}", sha), "Exact H3_SOURCE_SHA required")
+def _ci_state(config: dict, run_dir: Path, *, launch_path: str, recipe: str | None) -> dict:
+    run_id = os.environ["GITHUB_RUN_ID"]
+    attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+    reserved_gpus = allocation_gpus(config)
+    state = {
+        "schema_version": 1, "task_id": config["task_id"], "run_id": run_id, "run_attempt": attempt,
+        "source_sha": os.environ["H3_SOURCE_SHA"], "started_at": now(), "phase": "preparing",
+        "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
+        "ci_accepted": False, "release_qualified": False,
+        "persistent_output": str(run_dir), "excluded_cache_paths": list(CACHE_PATHS),
+        "launch_path": launch_path,
+        "ci": {
+            "repository": os.environ.get("GITHUB_REPOSITORY"),
+            "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF"),
+            "workflow_sha": os.environ.get("GITHUB_WORKFLOW_SHA"),
+            "actor": os.environ.get("GITHUB_ACTOR"),
+            "triggering_actor": os.environ.get("GITHUB_TRIGGERING_ACTOR"),
+            "run_url": (
+                f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+                f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id}"
+            ),
+        },
+        "resources": {
+            "requested": config["resources"],
+            "new_allocation_gpus": reserved_gpus,
+            "new_allocation_gpu_hours_cap": reserved_gpus * config["resources"]["minutes"] / 60,
+        },
+    }
+    if recipe is not None:
+        state["recipe"] = recipe
+    return state
+
+
+def _launch_nested(config: dict, output: Path, *, required_allocation: str) -> int:
+    """Reuse one already-owned Slurm lease (AMD inspect → serving continuation).
+
+    srt-slurm owns fresh jobs end-to-end and cannot attach to a lease opened by
+    ``inspect_amd_node`` / inventory helpers, so this path keeps the nested
+    ``srun`` step against the reviewed Enroot entry.
+    """
     source = Path(__file__).resolve().parent
+    sha = os.environ["H3_SOURCE_SHA"]
     need(command(["git", "-C", str(source), "rev-parse", "HEAD"]).strip() == sha, "Checkout differs from admitted source SHA")
     need(not command(["git", "-C", str(source), "status", "--porcelain"]).strip(), "Harness checkout must be clean and committed")
     spec = prepared_spec(config)
@@ -462,20 +492,9 @@ def launch(config: dict, output: Path, *, required_allocation: str | None = None
     control = workspace / "campaigns" / config["task_id"] / "control"
     results.mkdir(parents=True, exist_ok=True)
     control.mkdir(parents=True, exist_ok=True)
-    run_dir = results / f"github-{run_id}-{attempt}"
+    run_dir = results / f"github-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
     reserved_gpus = allocation_gpus(config)
-    state = {"schema_version": 1, "task_id": config["task_id"], "run_id": run_id, "run_attempt": attempt,
-             "source_sha": sha, "started_at": now(), "phase": "preparing", "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
-             "ci_accepted": False, "release_qualified": False, "persistent_output": str(run_dir),
-             "excluded_cache_paths": list(CACHE_PATHS),
-             "ci": {"repository": os.environ.get("GITHUB_REPOSITORY"),
-                    "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF"),
-                    "workflow_sha": os.environ.get("GITHUB_WORKFLOW_SHA"),
-                    "actor": os.environ.get("GITHUB_ACTOR"),
-                    "triggering_actor": os.environ.get("GITHUB_TRIGGERING_ACTOR"),
-                    "run_url": f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{run_id}"},
-             "resources": {"requested": config["resources"], "new_allocation_gpus": reserved_gpus,
-                           "new_allocation_gpu_hours_cap": reserved_gpus * config["resources"]["minutes"] / 60}}
+    state = _ci_state(config, run_dir, launch_path="nested-slurm", recipe=None)
     with task_lock(control / "ci.lock"):
         run_dir.mkdir(exist_ok=False)
         write(run_dir / "ci.json", state)
@@ -489,15 +508,12 @@ def launch(config: dict, output: Path, *, required_allocation: str | None = None
             package_files = stage_package(source, package)
             decision = recover(config, results)
             write(run_dir / "recovery.json", decision)
-            if required_allocation is not None:
-                need(decision["action"] == "reuse" and decision["receipt"]["identity"]["JobId"] == required_allocation,
-                     "Serving continuation must reuse its original allocation; no replacement requested")
-            need(decision["action"] != "wait", "A task-owned allocation is pending or suspended; no duplicate submitted")
-            if decision["action"] == "reuse":
-                receipt, reused = decision["receipt"], True
-                write(run_dir / "allocation.json", receipt)
-            else:
-                receipt = allocate(config, run_dir)
+            need(
+                decision["action"] == "reuse" and decision["receipt"]["identity"]["JobId"] == required_allocation,
+                "Serving continuation must reuse its original allocation; no replacement requested",
+            )
+            receipt, reused = decision["receipt"], True
+            write(run_dir / "allocation.json", receipt)
             record = job_record(receipt["identity"]["JobId"])
             verify_identity(receipt, record, config["task_id"])
             need(record["JobState"] == "RUNNING", "Owned allocation is not RUNNING")
@@ -507,12 +523,15 @@ def launch(config: dict, output: Path, *, required_allocation: str | None = None
             need(digest(config["runtime"]["entry"]) == config["runtime"]["entry_sha256"], "Entry changed after preflight")
             state.update(phase="starting", allocation_reused=reused, allocation=receipt, slurm_job=record)
             write(run_dir / "ci.json", state)
-            # Any concurrent active measured step means cooperative sharing.
             active_steps = command(["squeue", "--steps", "--noheader", "--jobs=" + record["JobId"], "--format=%i|%N"])
-            write(run_dir / "context.json", {"config": config, "spec": spec, "allocation": receipt,
+            write(run_dir / "context.json", {
+                "config": config, "spec": spec, "allocation": receipt,
                 "node": record["NodeList"], "active_steps": active_steps, "source_sha": sha,
                 "exclusive_node": record.get("OverSubscribe") == "NO" and allocated_gpu_count(record) == 8,
-                "package_files": package_files, "run_id": f"github-{run_id}-{attempt}"})
+                "package_files": package_files,
+                "run_id": f"github-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+                "launch_path": "nested-slurm",
+            })
             argv = step_argv(config, receipt, record, run_dir, package)
             write(run_dir / "step-command.json", argv)
             code = run_step(argv, run_dir / "srun.log", config["resources"]["minutes"] * 60 - 300 + 60)
@@ -535,28 +554,56 @@ def launch(config: dict, output: Path, *, required_allocation: str | None = None
                 if receipt is not None and not reused:
                     state["allocation_cleanup"] = stop_allocation(receipt, config["task_id"])
                 elif reused:
-                    state["allocation_cleanup"] = {"status": "retained", "reason": "attached step does not own the parent allocation"}
+                    state["allocation_cleanup"] = {
+                        "status": "retained",
+                        "reason": "attached step does not own the parent allocation",
+                    }
             except Exception as error:
                 state.update(phase="failed", cleanup_error=str(error), ci_accepted=False)
                 code = 2
             state.update(finished_at=now(), exit_code=code)
             write(run_dir / "ci.json", state)
-            links = ("ci.json", "runtime-entry.sh", "runtime-readiness.record", "allocation.json", "recovery.json", "binding.json", "context.json", "step-result.json",
-                     "gpu/spec.json", "gpu/gpu-job.json", "gpu/baseline/run.json", "gpu/candidate/run.json",
-                     "gpu/comparison.json", "report/index.html")
+            links = (
+                "ci.json", "runtime-entry.sh", "runtime-readiness.record", "allocation.json",
+                "recovery.json", "binding.json", "context.json", "step-result.json",
+                "gpu/spec.json", "gpu/gpu-job.json", "gpu/baseline/run.json",
+                "gpu/candidate/run.json", "gpu/comparison.json", "report/index.html",
+            )
             if config["mode"] == "serving-smoke":
                 links += ("serving-smoke.json",)
-                links += tuple(f"gpu/c{concurrency}/{path}" for concurrency in (1, 2, 4)
-                               for path in ("spec.json", "gpu-job.json", "baseline/run.json", "power.json"))
-            write(run_dir / "manifest.json", {"schema_version": 1, "task_id": config["task_id"],
-                "git_commit": sha, "ci": state["ci"], "run_id": run_id, "run_attempt": attempt,
-                "slurm_allocation": receipt, "runtime": config["runtime"], "prepared_spec": config["spec"],
-                "workload_plan": spec.get("plan"), "mode": config["mode"], "site": config.get("site", DEFAULT_SITE),
-                "resources": state["resources"], "exit_code": code,
+                links += tuple(
+                    f"gpu/c{concurrency}/{path}"
+                    for concurrency in (1, 2, 4)
+                    for path in ("spec.json", "gpu-job.json", "baseline/run.json", "power.json")
+                )
+            write(run_dir / "manifest.json", {
+                "schema_version": 1, "task_id": config["task_id"], "git_commit": sha,
+                "ci": state["ci"], "run_id": os.environ["GITHUB_RUN_ID"],
+                "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+                "launch_path": "nested-slurm", "slurm_allocation": receipt,
+                "runtime": config["runtime"], "prepared_spec": config["spec"],
+                "workload_plan": spec.get("plan"), "mode": config["mode"],
+                "site": config.get("site", DEFAULT_SITE), "resources": state["resources"],
+                "exit_code": code,
                 "evidence": {path: digest(run_dir / path) for path in links if (run_dir / path).is_file()},
-                "artifact_checksums": "SHA256SUMS", "excluded_persistent_caches": list(CACHE_PATHS)})
+                "artifact_checksums": "SHA256SUMS", "excluded_persistent_caches": list(CACHE_PATHS),
+            })
             collect(run_dir, output)
     return code
+
+
+def launch(config: dict, output: Path, *, required_allocation: str | None = None) -> int:
+    config = validate_config(config)
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
+    sha = os.environ.get("H3_SOURCE_SHA", "")
+    need(re.fullmatch(r"[0-9]+", run_id) and re.fullmatch(r"[0-9]+", attempt), "GitHub run ID and attempt required")
+    need(re.fullmatch(r"[0-9a-f]{40}", sha), "Exact H3_SOURCE_SHA required")
+    need(required_allocation is not None,
+         "Fresh H3 serving runs launch through the native srt-slurm matrix "
+         "(h3-bf16-<sku>-sglang-video in configs/{nvidia,amd}-master.yaml via e2e-tests.yml); "
+         "ci.py only continues an owned allocation")
+    return _launch_nested(config, output, required_allocation=required_allocation)
 
 
 def enter(run_dir: Path) -> None:
@@ -698,8 +745,8 @@ def record_wan_preparation_failure(config: dict, output: Path, error: str) -> No
     run_id, attempt, sha = (os.environ.get(key, "") for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "H3_SOURCE_SHA"))
     need(run_id.isdigit() and attempt.isdigit() and re.fullmatch(r"[0-9a-f]{40}", sha), "CI identity required")
     run_dir = Path(config["workspace"]["host"]) / "results" / config["task_id"] / f"github-{run_id}-{attempt}"
-    # launch creates this directory before allocation. Its absence is required
-    # before treating an exception as preparation-only; collection can fail later.
+    # A persistent run directory means execution may have started. Do not replace
+    # its evidence with a preparation-only failure receipt.
     if run_dir.exists():
         return
     repository = os.environ.get("GITHUB_REPOSITORY", "")

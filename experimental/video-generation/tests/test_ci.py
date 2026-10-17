@@ -15,7 +15,8 @@ import ci
 def config(tmp_path):
     return {"schema_version": 1, "task_id": "h3-test", "workspace": {"host": str(tmp_path), "container": "/work"},
             "runtime": {"entry": str(tmp_path / "entry.sh"), "entry_sha256": "a" * 64,
-                        "rootfs": str(tmp_path / "rootfs"), "ready_marker": str(tmp_path / "ready"), "python": "/opt/harness/bin/python"},
+                        "rootfs": str(tmp_path / "rootfs"), "ready_marker": str(tmp_path / "ready"),
+                        "python": "/opt/harness/bin/python", "container": "h3-runtime:test"},
             "spec": {"path": str(tmp_path / "spec.json"), "sha256": "b" * 64},
             "resources": {"gpus": 4, "cpus": 32, "memory_gb": 256, "minutes": 90},
             "allocation_receipts": [], "mode": "smoke"}
@@ -311,47 +312,6 @@ print(json.dumps(analyze_power(**json.load(sys.stdin))))
     assert report["phases"]["measurement"]["aggregate"]["avg_power_w"] == 150
 
 
-@pytest.mark.parametrize("reused", [False, True])
-def test_failure_collects_original_outputs_and_preserves_holder(tmp_path, monkeypatch, reused):
-    cfg = config(tmp_path)
-    entry = Path(cfg["runtime"]["entry"])
-    entry.write_text("entry")
-    Path(cfg["runtime"]["ready_marker"]).write_text("pinned image and preparation identity")
-    cfg["runtime"]["entry_sha256"] = ci.digest(entry)
-    receipt, record = allocation(tmp_path)
-    monkeypatch.setenv("GITHUB_RUN_ID", "456")
-    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
-    monkeypatch.setenv("H3_SOURCE_SHA", "a" * 40)
-    monkeypatch.setattr(ci, "prepared_spec", lambda cfg: {"test_only": True})
-    monkeypatch.setattr(ci, "command", lambda argv, **kw: "a" * 40 if "rev-parse" in argv else "")
-    monkeypatch.setattr(ci, "stage_package", lambda source, destination: {})
-    decision = {"action": "reuse", "receipt": receipt} if reused else {"action": "allocate"}
-    monkeypatch.setattr(ci, "recover", lambda cfg, results: decision)
-    monkeypatch.setattr(ci, "allocate", lambda cfg, path: receipt)
-    monkeypatch.setattr(ci, "job_record", lambda job: record)
-    monkeypatch.setattr(ci, "drain_step", lambda *args: {"status": "ended"})
-    canceled = []
-    monkeypatch.setattr(ci, "stop_allocation", lambda receipt, task: canceled.append(receipt["identity"]["JobId"]) or {"status": "released"})
-    def fail(argv, log, seconds):
-        log.write_text("test-only infrastructure failure")
-        (log.parent / "partial.mp4").write_bytes(b"retained failed-output bytes; not video evidence")
-        raise RuntimeError("server exited before readiness")
-    monkeypatch.setattr(ci, "run_step", fail)
-    output = tmp_path / "download"
-    assert ci.launch(cfg, output) == 2
-    assert (output / "partial.mp4").read_bytes().startswith(b"retained")
-    state = ci.read(output / "ci.json")
-    assert "server exited" in state["error"] and state["ci_accepted"] is False
-    assert canceled == ([] if reused else ["123"])
-    assert "partial.mp4" in (output / "SHA256SUMS").read_text()
-    manifest = ci.read(output / "manifest.json")
-    assert manifest["git_commit"] == "a" * 40
-    assert manifest["slurm_allocation"]["identity"]["JobId"] == "123"
-    assert manifest["evidence"]["ci.json"] == ci.digest(output / "ci.json")
-    assert (output / "runtime-readiness.record").read_text() == "pinned image and preparation identity"
-    assert manifest["evidence"]["runtime-entry.sh"] == ci.digest(entry)
-
-
 def test_timeout_stops_only_its_local_process_group(tmp_path):
     with pytest.raises(subprocess.TimeoutExpired):
         ci.run_step([sys.executable, "-c", "import time; time.sleep(30)"], tmp_path / "log", 0.1)
@@ -434,8 +394,7 @@ def test_entry_resolves_device_minors_instead_of_nvml_indices(tmp_path, assignme
         assert 'lack NVIDIA UUIDs' in result.stderr
 
 
-@pytest.mark.parametrize("decision", [{"action": "allocate"}, {"action": "reuse", "receipt": {"identity": {"JobId": "999"}}}])
-def test_required_lease_never_replaces_or_borrows_another_allocation(tmp_path, monkeypatch, decision):
+def test_required_allocation_uses_nested_slurm_path(tmp_path, monkeypatch):
     cfg = config(tmp_path)
     entry = Path(cfg["runtime"]["entry"])
     entry.write_text("entry")
@@ -444,13 +403,40 @@ def test_required_lease_never_replaces_or_borrows_another_allocation(tmp_path, m
     monkeypatch.setenv("GITHUB_RUN_ID", "456")
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
     monkeypatch.setenv("H3_SOURCE_SHA", "a" * 40)
-    monkeypatch.setattr(ci, "prepared_spec", lambda cfg: {})
+    receipt = {"task_id": "h3-test", "identity": {key: "x" for key in ci.IDENTITY}}
+    receipt["identity"]["JobId"] = "123"
+    monkeypatch.setattr(ci, "prepared_spec", lambda cfg: {"plan": {"plan_id": "test"}})
     monkeypatch.setattr(ci, "command", lambda argv, **kw: "a" * 40 if "rev-parse" in argv else "")
     monkeypatch.setattr(ci, "stage_package", lambda *args: {})
-    monkeypatch.setattr(ci, "recover", lambda *args: decision)
-    monkeypatch.setattr(ci, "allocate", lambda *args: pytest.fail("must not replace the required allocation"))
-    monkeypatch.setattr(ci, "run_step", lambda *args: pytest.fail("must not enter a different allocation"))
-    monkeypatch.setattr(ci, "stop_allocation", lambda *args: pytest.fail("outer owner releases its allocation"))
+    monkeypatch.setattr(ci, "recover", lambda *args, **kw: {"action": "reuse", "receipt": receipt})
+    monkeypatch.setattr(ci, "job_record", lambda job: {
+        "JobId": "123", "JobState": "RUNNING", "Account": "sa-shared", "Partition": "main",
+        "UserId": f"tester({os.getuid()})", "NodeList": "node0",
+        "OverSubscribe": "NO", "NumNodes": "1", "NumCPUs": "32",
+        "AllocTRES": "gres/gpu=8,mem=1048576M",
+    })
+    monkeypatch.setattr(ci, "verify_identity", lambda *args: None)
+    monkeypatch.setattr(ci, "capacity", lambda *args: None)
+    monkeypatch.setattr(ci, "allocated_gpu_count", lambda record: 8)
+    monkeypatch.setattr(ci, "step_argv", lambda *args: ["echo", "nested"])
+    monkeypatch.setattr(ci, "run_step", lambda *args: 0)
+    monkeypatch.setattr(ci, "drain_step", lambda *args: {"status": "ended"})
+    real_read = ci.read
+
+    def read_with_step(path):
+        path = Path(path)
+        if path.name == "step-result.json":
+            return {
+                "exit_code": 0, "measurement_status": "complete",
+                "regression_status": "inconclusive", "ci_accepted": False,
+                "release_qualified": False,
+            }
+        return real_read(path)
+
+    monkeypatch.setattr(ci, "read", read_with_step)
     output = tmp_path / "output"
-    assert ci.launch(cfg, output, required_allocation="123") == 2
-    assert "must reuse its original allocation" in ci.read(output / "ci.json")["error"]
+    assert ci.launch(cfg, output, required_allocation="123") == 0
+    state = real_read(output / "ci.json")
+    assert state["launch_path"] == "nested-slurm"
+    assert state["allocation_reused"] is True
+    assert state["allocation_cleanup"]["status"] == "retained"

@@ -11,7 +11,8 @@
 # Required collection settings come from speedbench-al.yml.
 
 set -o pipefail
-source "$(dirname "$0")/../../benchmark_lib.sh"
+repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$repo_root/benchmarks/check_env.sh"
 check_env_vars \
     CATEGORY CHAT_TEMPLATE_KWARGS_ON DP_ATTENTION EP_SIZE MODEL MODEL_PATH \
     MTP_LIST OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
@@ -44,13 +45,6 @@ curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/
 if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     echo "CRITICAL: SPEED-Bench download failed — $SPEEDBENCH_DIR/qualitative.jsonl not found"
     exit 1
-fi
-
-if [[ " $THINKING_MODES " == *" on "* ]]; then
-    if ! apply_chat_template_kwargs_shim; then
-        echo "CRITICAL: --chat-template-kwargs shim failed — aborting"
-        exit 1
-    fi
 fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
@@ -108,8 +102,6 @@ cleanup_server() {
 }
 trap 'cleanup_server' EXIT
 
-start_gpu_monitor
-
 declare -A AL_RESULT
 
 run_cell() {
@@ -149,7 +141,8 @@ run_cell() {
     vllm serve "$SERVE_MODEL" "${serve_args[@]}" > "$server_log" 2>&1 &
     SERVER_PID=$!
 
-    if ! wait_for_server_ready --port "$PORT" --server-log "$server_log" --server-pid "$SERVER_PID"; then
+    if ! PYTHONSAFEPATH=1 PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench wait \
+            --url "http://0.0.0.0:${PORT}/health" --pid "$SERVER_PID" --log "$server_log"; then
         echo "  -> server failed to start (thinking=$mode mtp=$mtp), recording N/A"
         AL_RESULT["${mode}_${mtp}"]="N/A"
         cleanup_server
@@ -200,8 +193,6 @@ for mode in $THINKING_MODES; do
         run_cell "$mode" "$mtp"
     done
 done
-
-stop_gpu_monitor
 
 emit_mode_block() {
     local mode="$1"

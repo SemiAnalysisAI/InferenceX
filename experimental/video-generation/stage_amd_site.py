@@ -11,7 +11,7 @@ import subprocess
 
 import ci
 from evaluator.mvp_gpu_job import source_file_manifest, validate_gpu_job
-from prepare_amd_runtime import CONTAINER, REVISION
+from prepare_amd_runtime import CONTAINER, IMAGE, REVISION
 from stage_model_ci import source_spec
 
 WORKSPACE = Path("/it-share/data/wenyao-minimax-h3/work")
@@ -102,27 +102,28 @@ def stage(spec: dict, output: Path, *, server_timing: bool = False, allocation_m
                       "revision": identity["revision"], "python": probe["python"]}
     spec = validate_gpu_job(spec)
     destination.mkdir()
-    helper = destination / "benchmark_lib.sh"
+    helper = destination / "check_env.sh"
     helper.write_bytes(
-        (Path(__file__).parents[2] / "inferencex-e2e" / "benchmarks" / "benchmark_lib.sh").read_bytes()
+        (Path(__file__).parents[2] / "inferencex-e2e" / "benchmarks" / "check_env.sh").read_bytes()
     )
     entry = destination / "entry-only.sh"
     command = '-c \'exec "$@"\' h3-entry "$@"' if 'exec bash "$@"' in (runtime.get("entrypoint") or "") else '"$@"'
     entry.write_text((INPUTS / "entry-only-amd.sh").read_text().replace("@ENTRY@", command)
-                     .replace("@BENCHMARK_LIB_SHA256@", ci.digest(helper))
+                     .replace("@CHECK_ENV_SHA256@", ci.digest(helper))
                      .replace("runtime-inspected.json", readiness.name))
     ci.write(destination / "gpu-spec.json", spec)
     config = {"schema_version": 1, "task_id": "h3-cross-hardware", "site": ci.AMD_SITE,
               "workspace": {"host": str(workspace), "container": "/work"},
               "runtime": {"entry": str(entry), "entry_sha256": ci.digest(entry), "rootfs": str(rootfs),
-                          "ready_marker": str(readiness), "python": probe["python"]},
+                          "ready_marker": str(readiness), "python": probe["python"],
+                          "container": str(IMAGE)},
               "spec": {"path": str(destination / "gpu-spec.json"), "sha256": ci.digest(destination / "gpu-spec.json")},
               "resources": {"gpus": 4, "allocated_gpus": 8, "cpus": 32, "memory_gb": 1024, "minutes": allocation_minutes},
               "allocation_receipts": [], "mode": "serving-smoke", "concurrencies": [1]}
     config = ci.validate_config(config)
     ci.prepared_spec(config)
     ci.write(destination / "site.json", config)
-    for name in ("entry-only.sh", "benchmark_lib.sh", "gpu-spec.json", "site.json"):
+    for name in ("entry-only.sh", "check_env.sh", "gpu-spec.json", "site.json"):
         (output / name).write_bytes((destination / name).read_bytes())
     return {"site_config": str(destination / "site.json"), "source": identity,
             "runtime_inspection": runtime, "instrumentation": instrumentation,

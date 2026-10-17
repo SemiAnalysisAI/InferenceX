@@ -68,7 +68,8 @@ Each PR triggers a full GPU sweep, so surface the total PR count explicitly.
 ## Step 4 — create one PR per family
 
 Use these helpers (write them to /tmp) for precise, per-config-key edits. A blind
-`sed` is unsafe because the same old tag appears under many keys.
+`sed` is unsafe because the same old tag appears under many keys. Only the master `image:`
+changes: the srt-slurm binder writes it into the recipe.
 
 `/tmp/edit_image.py`:
 ```python
@@ -104,45 +105,6 @@ block += ["  description:", f'    - "{desc}"', "  pr-link: PRLINK_PLACEHOLDER"]
 open(f,'w').write(content + '\n' + '\n'.join(block) + '\n')
 ```
 
-`/tmp/edit_recipe_container.py` (single-node runs go through the srt-slurm
-recipe each master search-space row names in `srt-recipe:`, and
-`inferencex-e2e/infx/srt_slurm/single_node.py` rejects the run unless the recipe's
-`model.container` equals the master `image:` exactly):
-```python
-#!/usr/bin/env python3
-# Usage: edit_recipe_container.py <master_yaml> <new_image> <key1> [key2 ...]
-import os, re, sys
-f, new_image, keys = sys.argv[1], sys.argv[2], sys.argv[3:]
-# srt-recipe paths are relative to inferencex-e2e/, the parent of configs/
-root = os.path.dirname(os.path.dirname(os.path.abspath(f)))
-master = open(f).read().split('\n')
-recipes = set()
-for key in keys:
-    kre = re.compile(r'^' + re.escape(key) + r':\s*$')
-    start = next((i for i,l in enumerate(master) if kre.match(l)), None)
-    if start is None: sys.exit(f"ERROR: key not found: {key}")
-    for j in range(start+1, len(master)):
-        if re.match(r'^[A-Za-z0-9._-]+:\s*$', master[j]): break  # next top-level key
-        recipes.update(re.findall(r'srt-recipe:\s*([^\s,}]+)', master[j]))
-if not recipes: sys.exit(f"ERROR: no srt-recipe for keys {keys}")
-for r in sorted(os.path.join(root, x) for x in recipes):
-    lines = open(r).read().split('\n')
-    in_model, hit = False, False
-    for i, l in enumerate(lines):
-        if re.match(r'^\s*model:\s*$', l): in_model, indent = True, len(l) - len(l.lstrip()); continue
-        if in_model and l.strip() and len(l) - len(l.lstrip()) <= indent: in_model = False
-        m = re.match(r'^(\s+)container:\s*(.+?)\s*$', l) if in_model else None
-        if m:
-            lines[i] = f"{m.group(1)}container: {new_image}"; hit = True
-            print(f"{r}: {m.group(2)} -> {new_image}"); break
-    if not hit: sys.exit(f"ERROR: no model.container in {r}")
-    open(r, 'w').write('\n'.join(lines))
-```
-
-If `grep -rn '<recipe path>' inferencex-e2e/configs/*-master.yaml` shows a recipe is also
-referenced by a key outside this family, stop and ask the user: bumping it would
-break that other key's `model.container == image` check.
-
 For each family, run strictly sequentially because git checkouts can't be parallel:
 
 ```bash
@@ -150,7 +112,6 @@ git checkout main -q && git reset --hard origin/main -q
 branch="klaud/<basekey>-<TAG>"
 git checkout -b "$branch" -q
 python3 /tmp/edit_image.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
-python3 /tmp/edit_recipe_container.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
 python3 /tmp/append_changelog.py inferencex-e2e/perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
 git add -A
 git commit -q -m "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>"
@@ -173,7 +134,7 @@ git add inferencex-e2e/perf-changelog.yaml && git commit -q --amend --no-edit &&
 Conventions:
 - `<PHRASE>` = `vLLM image` / `vLLM ROCm image` / `SGLang image` / `SGLang ROCm image`.
 - Title gets `(+mtp)` only when the family has an mtp sibling.
-- Every PR carries the **`full-sweep-fail-fast`** label (strongly recommended over `full-sweep-enabled` - a broken image bump burns one job per matrix, not the full fan-out) so CI kicks off.
+- Every PR carries the **`full-sweep-fail-fast`** label so CI kicks off. It is strongly recommended over `full-sweep-enabled`: both labels are gated by the same canary, so an image bump that fails the canary skips every other matrix either way. Fail-fast matters once the canary passes: a later failure then cancels the rest of its matrix instead of letting the whole fan-out run.
 - `<DESC>` = `Update <PHRASE> from <old-tag> to <TAG>` (note both tags when the
   base/mtp differ, e.g. base already on target).
 - PR body:
@@ -183,11 +144,9 @@ Conventions:
 
   Recipes touched: `key1`, `key2`
 
-  ## Test plan
-  - [ ] full-sweep-fail-fast sweep passes.
-
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
+
+  Follow [PR descriptions](../../CONTRIBUTING.md#pr-descriptions): keep administrative sections collapsed by default, omit pending-validation boilerplate, and add validation evidence only after an actual integration or end-to-end run.
 
 ## Step 5 — finish
 

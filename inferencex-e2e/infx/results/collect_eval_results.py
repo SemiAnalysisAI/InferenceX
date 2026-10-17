@@ -5,8 +5,6 @@ from typing import Any
 
 from tabulate import tabulate
 
-# Names with a redundant alias are re-exported for callers that import
-# them through this module.
 from infx.results.evals import (
     EVAL_RESULT_FORMAT as EVAL_RESULT_FORMAT,
     as_int,
@@ -146,7 +144,6 @@ def main() -> None:
     single_node_rows = [r for r in rows if not r["is_multinode"]]
     multinode_rows = [r for r in rows if r["is_multinode"]]
 
-    # Sort for stable output (default: by model_prefix)
     sort_by = sys.argv[3] if len(sys.argv) > 3 else "model_prefix"
     single_node_sort_key = (
         (

@@ -10,35 +10,28 @@ import infx.config
 import infx.workflows.calc_success_rate as success_rate
 
 
-@pytest.mark.parametrize(
-    "runners,expected",
-    [
-        (
-            {
-                "labels": {
-                    "cluster:zeta": ["self-hosted"],
-                    "gpu": ["self-hosted"],
-                    "cluster:alpha": ["self-hosted"],
-                },
-                "hardware": {"legacy": {}},
-            },
-            ["alpha", "zeta"],
-        ),
-        ({"cluster:zeta": [], "unrelated": [], "cluster:alpha": []}, ["alpha", "zeta"]),
-        ({"labels": {"gpu": []}, "hardware": {"legacy": {}}}, ["legacy"]),
-        ({}, []),
-    ],
-    ids=["cluster-labels-take-precedence", "flat-labels", "legacy-fallback", "empty"],
-)
-def test_load_hardware_labels_normalizes_supported_layouts(
-    tmp_path, monkeypatch, runners, expected
-):
-    config_dir = tmp_path / "configs"
-    config_dir.mkdir()
-    (config_dir / "runners.yaml").write_text(yaml.safe_dump(runners, sort_keys=False))
+CLUSTER = {
+    "gpus-per-node": 8,
+    "arch": "x86_64",
+    "scheduler": "slurm",
+    "slurm": {"partition": "batch", "exclusive": True},
+}
+
+
+def write_runners(root, cluster_ids, extra_labels=None):
+    """Write a runners.yaml whose clusters each own one runner."""
+    labels = {f"cluster:{cluster_id}": [f"{cluster_id}_0"] for cluster_id in cluster_ids}
+    labels.update(extra_labels or {})
+    runners = {"labels": labels, "clusters": {cluster_id: CLUSTER for cluster_id in cluster_ids}}
+    (root / "configs").mkdir()
+    (root / "configs" / "runners.yaml").write_text(yaml.safe_dump(runners, sort_keys=False))
+
+
+def test_load_hardware_labels_lists_cluster_ids_only(tmp_path, monkeypatch):
+    write_runners(tmp_path, ["zeta", "alpha"], {"gpu": ["zeta_0", "alpha_0"]})
     monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx" / "config.py"))
 
-    assert success_rate.load_hardware_labels() == expected
+    assert success_rate.load_hardware_labels() == ["alpha", "zeta"]
 
 
 def test_extract_hardware_from_name_matches_cluster_label():
@@ -82,11 +75,7 @@ def test_hardware_matching_respects_case_boundaries_and_literal_punctuation(job_
 
 @pytest.fixture
 def run_stats_environment(tmp_path, monkeypatch):
-    configs = tmp_path / "configs"
-    configs.mkdir()
-    (configs / "runners.yaml").write_text(
-        "labels: {cluster:sample-a: [], cluster:sample-b: [], cluster:unused: []}\n"
-    )
+    write_runners(tmp_path, ["sample-a", "sample-b", "unused"])
     monkeypatch.setattr(infx.config, "__file__", str(tmp_path / "infx/config.py"))
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
