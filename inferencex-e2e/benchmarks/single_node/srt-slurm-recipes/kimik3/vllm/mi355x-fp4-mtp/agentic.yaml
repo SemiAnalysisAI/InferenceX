@@ -36,7 +36,6 @@ base:
         trust-remote-code: true
         moe-backend: auto
         tensor-parallel-size: 8
-        load-format: fastsafetensors
         gpu-memory-utilization: 0.9
         language-model-only: true
         enable-auto-tool-choice: true
