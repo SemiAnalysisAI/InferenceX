@@ -7261,7 +7261,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp:
 # GLM-5.2 NVFP4 GB200 AgentX aggregated TP8 variants use the committed
 # thinking-on golden acceptance length for four speculative tokens.
 glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260805-211ee642
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb200-nv
