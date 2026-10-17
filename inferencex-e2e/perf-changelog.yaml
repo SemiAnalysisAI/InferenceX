@@ -10085,5 +10085,5 @@
     - "TEP4 prefill uses max_num_tokens 32768; 1P1D decode uses the TRTLLM MoE backend and both 1P1D roles set cache_transceiver_config.kv_cache_bounce_size_mb to 2048; 3P2D decode free_gpu_memory_fraction goes from 0.8 to 0.85."
     - "Add ENROOT_ALLOW_DEV, TLLM_PROFILE_LOG_RANKS=all and TRTLLM_KV_TRANSFER_NUM_THREADS=8 to both roles, TRTLLM_SKIP_KV_CACHE_ESTIMATION=1 to prefill, TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=1 to 1P1D, and rc to UCX_TLS."
     - "Set router-session-affinity-ttl-secs to 14400, drop the explicit active-decode-blocks, active-prefill-tokens and active-prefill-tokens-frac thresholds."
-    - "Pin the benchmark to semianalysis_cc_traces_weka_062126_256k with AIPERF_REQUIRED_SERVER_METRIC_PREFIX=trtllm_kv_cache_utilization, and run the benchmark client on the last decode node; the colocated 1P1D point uses dram-utilization 0.457143 for 3 ranks on one node."
+    - "Pin the benchmark to semianalysis_cc_traces_weka_062126_256k with AIPERF_REQUIRED_SERVER_METRIC_PREFIX=trtllm_kv_cache_utilization, and run the benchmark client on the last decode node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4195

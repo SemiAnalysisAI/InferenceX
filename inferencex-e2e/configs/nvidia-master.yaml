@@ -4227,8 +4227,7 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
   scenarios:
     agentic-coding:
     # Recipes reserve 128 GiB per rank; each node has 840 GiB and 4 GPUs.
-    # Colocated 1P1D runs 3 ranks on one node.
-    - dram-utilization: 0.457143
+    - dram-utilization: 0.609524
       search-space:
       # 1P1D: 1 prefill (TP1/EP1/dp-attn), 1 decode (TP2/EP2) on the same node, batch 8, conc=38, 48
       - spec-decoding: "mtp"
@@ -4262,8 +4261,6 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           tp: 2
           ep: 2
           dp-attn: false
-    - dram-utilization: 0.609524
-      search-space:
       # 1P2D: 1 prefill (TP4/EP4), 2 decode (TP8/EP8), batch 4, conc=48
       - spec-decoding: "mtp"
         kv-offloading: dram

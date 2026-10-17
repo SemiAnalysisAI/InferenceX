@@ -196,7 +196,6 @@ base:
     placement:
       node: last_decode
 
-# Decode shares the prefill node; one decode worker on the remaining GPUs.
 override_1p1d_dep1_tep2_b8:
   name: disagg-gb300-1p1d-dep1-tep2-b8-mtp-kvoffload-bb2048
   roles:
@@ -260,7 +259,6 @@ override_1p1d_dep1_tep2_c45_b4:
 override_1p2d_tep4_tep8_c48_b4:
   name: disagg-gb300-1p2d-tep4-tep8-c48-b4-mtp-kvoffload
   roles:
-    # TP4/EP4 prefill without attention DP takes 32K-token chunks.
     prefill: &tep4_prefill
       workers: 1
       gpus: 4
