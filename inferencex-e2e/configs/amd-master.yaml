@@ -1500,7 +1500,7 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp:
   srt-recipe-dir: glm5.2/atom/mi355x-fp4/agentx
   scenarios:
     agentic-coding:
-    # 1.0 gives each 4-GPU server 1499 GB: 1P1D's 4 x 448 GiB owners hold 962 GB per NUMA node of its prefill's and colocated decode's shares; 1P2D and 1P3D owners hold the prefill's 1499 GB.
+    # 1.0 gives each 4-GPU server 1499 GB: 1P1D's 2 x 768 GiB owners hold 825 GB per NUMA node of its prefill's and colocated decode's shares; 1P2D and 1P3D owners hold the prefill's 1499 GB.
     - dram-utilization: 1.0
       search-space:
       - spec-decoding: "mtp"
