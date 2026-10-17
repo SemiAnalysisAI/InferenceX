@@ -109,9 +109,9 @@ zip_override_dep8:
         enable-expert-parallel: true
         enable-ep-weight-filter: true
         moe-backend: deep_gemm_amxf4_mega_moe
-        prefill-schedule-interval: 16
-        long-prefill-token-threshold: 512
-        max-num-batched-tokens: [8304, 8360, 8416, 8528, 8640, 8696]
+        prefill-schedule-interval: [32, 16, 32, 16, 16, 16]
+        long-prefill-token-threshold: [1024, 512, 1024, 512, 512, 512]
+        max-num-batched-tokens: [16496, 8360, 16608, 8528, 8640, 8696]
         gpu-memory-utilization: 0.92
         # Leave runtime workspace headroom at every concurrency.
         kv-cache-memory-bytes: 105000000000

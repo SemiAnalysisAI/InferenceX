@@ -185,6 +185,8 @@ override_dep8_c64:
     agg:
       args:
         <<: *dep8_args
+        enable-prefill-delayer: null
+        prefill-decode-interval: 40
         max-running-requests: 128
         mem-fraction-static: 0.9
       env: *dep8_env
@@ -199,6 +201,8 @@ override_dep8_c128:
     agg:
       args:
         <<: *dep8_args
+        enable-prefill-delayer: null
+        prefill-decode-interval: 40
         max-running-requests: 256
         mem-fraction-static: 0.9
       env: *dep8_env
@@ -222,11 +226,25 @@ override_dep8_c256:
       CONC: '256'
 
 override_dep8_c384:
-  frontend: *dep8_frontend
+  frontend: &dep8_frontend_cache_aware
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      retry-max-retries: 8
+      retry-initial-backoff-ms: 500
+      retry-max-backoff-ms: 10000
+      retry-backoff-multiplier: 2
   roles:
     agg:
       args:
         <<: *dep8_args
+        enable-prefill-delayer: null
+        prefill-decode-interval: 30
         max-running-requests: 768
         mem-fraction-static: 0.88
       env: *dep8_env

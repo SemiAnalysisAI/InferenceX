@@ -10072,3 +10072,14 @@
     - "Enable block verification and breakable prefill CUDA graphs; use mem-fraction-static 0.9, SWA/full ratio 0.4, admission 192 with decode graphs to batch 192 and the eager DFlash draft sampler, since c128 admits about 150 running requests and DFlash sampling fails above the largest decode graph."
     - "Keep the NVFP4 target, pinned SGLang image, published DFlash2 draft precision and acceptance selected from the committed golden curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4156
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-hicache-mtp
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "SGLang DEP8 C64 and C128: disable the prefill delayer and raise prefill-decode-interval from 20 to 40."
+    - "SGLang DEP8 C384: route with sglang-router cache_aware (default balance threshold) instead of consistent_hashing, disable the prefill delayer, and set prefill-decode-interval to 30."
+    - "vLLM DEP8 C64 and C128: raise prefill-schedule-interval from 16 to 32, long-prefill-token-threshold from 512 to 1024, and max-num-batched-tokens to 16384 plus 7 per sequence (16496 and 16608)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4200
