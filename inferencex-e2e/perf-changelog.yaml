@@ -10072,3 +10072,13 @@
     - "Enable block verification and breakable prefill CUDA graphs; use mem-fraction-static 0.9, SWA/full ratio 0.4, admission 192 with decode graphs to batch 192 and the eager DFlash draft sampler, since c128 admits about 150 running requests and DFlash sampling fails above the largest decode graph."
     - "Keep the NVFP4 target, pinned SGLang image, published DFlash2 draft precision and acceptance selected from the committed golden curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4156
+
+- config-keys:
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
+    - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
