@@ -8,7 +8,7 @@ frontend:
   type: none
 
 services:
-  - name: wan-server
+  - name: h3-server
     type: generic
     nodes: 1
     critical: true
@@ -33,5 +33,5 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/h3/run_client.sh
   env:
     PYTHONUNBUFFERED: "1"
-    H3_SERVER_SERVICE: wan-server
+    H3_SERVER_SERVICE: h3-server
     H3_SERVER_PORT: "30283"
