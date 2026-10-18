@@ -123,9 +123,10 @@ jobs:
               env:
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   SOURCE_HEAD_SHA: ${{ steps.reuse.outputs.reuse-source-head-sha }}
+                  SOURCE_RUN_ATTEMPT: ${{ steps.reuse.outputs.reuse-source-run-attempt }}
               run: |
                   python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
-                    --run-id "$SOURCE_RUN_ID" --head-sha "$SOURCE_HEAD_SHA"
+                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA"
 
             - name: Publish reused videos
               if: steps.plan.outputs.video == 'true'

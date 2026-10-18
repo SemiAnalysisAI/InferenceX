@@ -24,12 +24,16 @@ fingerprint separates hardware, engines and deployments. `manifest.artifact_name
 and `ci.artifact_name` preserve the exact name. `manifest.git_commit` is the executed
 checkout; `manifest.ci.head_sha` is the PR head and can differ from that checkout.
 The selected `plan_sha256` and `engine.name/revision` come from per-cell run records.
+Selected YAML workloads also retain their bound plan and engine identity before
+startup; failed startup bundles retain that declaration and cannot pass qualification.
 Power producer/exporter provenance is copied before the bundle is hashed.
 
-The `video-sweep-manifest` artifact retains the complete selected matrix. PR
+The `video-sweep-manifest` artifact retains the complete selected matrix for the
+current attempt and is replaced on rerun; earlier result bundles remain immutable.
+Only full video sweeps upload this reuse marker. PR
 validation and merge ingestion require every selected deployment and concurrency
-from that attempt, consistent CI identity, valid native power, complete measured
-requests and matching file hashes. This checks retained evidence; it does not
+from the trusted run attempt, consistent CI identity, valid native power, the
+frozen plan’s full measured request population and matching media/file hashes. This checks retained evidence; it does not
 rerun media decoding or establish perceptual quality, comparison sample sufficiency,
 or production acceptance. Old unsuffixed bundles remain readable by the App but
 do not qualify this new native reuse path. Video append-only sweeps are unsupported;

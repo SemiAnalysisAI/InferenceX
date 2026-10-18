@@ -11,17 +11,26 @@ import pytest
 from evaluator import mvp_srt, mvp_srt_bundle
 
 SPEC = json.loads((Path(__file__).resolve().parents[1] / "specs/h3-serving-2gpu.json").read_text())
+PLAN_SHA = hashlib.sha256(json.dumps(SPEC["plan"], sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
 def _run(concurrency, scheduled=4, valid=4, status="complete"):
+    records = []
+    for repetition in range(1, SPEC["plan"]["repetitions"] + 1):
+        for index, case in enumerate(SPEC["plan"]["cases"], 1):
+            slot_id = f"measurement-r{repetition:03d}-c{index:03d}"
+            records.append({**case, "slot_id": slot_id, "repetition": repetition,
+                "phase": "measurement", "attempted": True, "status": "succeeded", "media": {"valid": True},
+                "artifact_path": f"artifacts/{slot_id}.mp4", "sha256": hashlib.sha256(b"clip").hexdigest(),
+                "timing_window": {"end_monotonic_seconds": 150.0}})
     return {
-        "bundle_type": "mvp_run", "status": status, "plan_id": SPEC["plan"]["plan_id"], "plan_sha256": "f" * 64,
-        "plan": SPEC["plan"], "configuration": {"runtime": "sglang", "runtime_revision": "7" * 40},
+        "bundle_type": "mvp_run", "status": status, "plan_id": SPEC["plan"]["plan_id"], "plan_sha256": PLAN_SHA,
+        "plan": SPEC["plan"], "configuration": {"runtime": "sglang", "runtime_revision": "7" * 40, "model_revision": SPEC["plan"]["model_revision"]},
         "started_at": "2026-10-17T00:00:00Z", "finished_at": "2026-10-17T00:10:00Z",
         "measurement": {"boundary": "submit_to_downloaded_media", "concurrency": concurrency, "warmup_runs": 1,
                         "wall_seconds": 60.0, "start_monotonic_seconds": 100.0, "end_monotonic_seconds": 160.0},
         "serving": {"mode": "closed_loop", "concurrency": concurrency, "client_ready_latency_seconds": {"p50": 118.0}},
-        "records": [{"phase": "measurement", "attempted": True, "timing_window": {"end_monotonic_seconds": 150.0}}] * valid,
+        "records": records[:valid],
         "summary": {"scheduled": scheduled, "completed": valid, "valid": valid, "failed": scheduled - valid,
                     "not_started": 0, "latency_median_seconds": 119.0, "valid_clips_per_second": valid / 60},
     }  # fmt: skip
@@ -124,8 +133,10 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     for concurrency in concurrencies:
         cell = h3 / "gpu" / f"c{concurrency}"
         (cell / "baseline/artifacts").mkdir(parents=True)
-        (cell / "baseline/run.json").write_text(json.dumps(_run(concurrency)))
-        (cell / "baseline/artifacts/measurement-001.mp4").write_bytes(b"clip")
+        run = _run(concurrency)
+        (cell / "baseline/run.json").write_text(json.dumps(run))
+        for record in run["records"]:
+            (cell / "baseline" / record["artifact_path"]).write_bytes(b"clip")
         (cell / f"benchmark_concurrency_{concurrency}.json").write_text(json.dumps({
             "max_concurrency": concurrency, "benchmark_start_time_unix": 1005.0, "benchmark_end_time_unix": 1065.0,
             "duration": 60.0, "completed": 4, "scheduled": 4, "energy_normalization": "clips",
@@ -168,7 +179,7 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     assert (manifest["run_id"], manifest["run_attempt"], ci["run_id"]) == ("123", "2", "123")
     assert manifest["git_commit"] == ci["source_sha"] and manifest["workload_plan"] == matrix["plan"]
     assert manifest["artifact_name"] == ci["artifact_name"] == "h3-results-123-2-" + "c" * 64
-    assert manifest["plan_sha256"] == matrix["plan_sha256"] == "f" * 64
+    assert manifest["plan_sha256"] == matrix["plan_sha256"] == PLAN_SHA
     assert manifest["engine"] == matrix["engine"] == {"name": "sglang", "revision": "7" * 40}
     assert manifest["evidence"]["serving-smoke.json"] == checksums["serving-smoke.json"]
     assert ci["slurm_job"] == {"job_id": "77", "state": "COMPLETED"} and ci["power"]["producer_git_commit"] == "a" * 40
@@ -186,7 +197,7 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
         assert power["phases"]["measurement"]["aggregate"]["joules_per_valid_clip"] == 18000.25
         assert power["phases"]["measurement"]["aggregate"]["observed_peak_power_w"] == 1201.0
         assert len(power["sample_series"]) == 70 and set(power["per_gpu"]) == set(matrix["gpu_uuids"])
-    assert "gpu/c1/baseline/artifacts/measurement-001.mp4" in checksums
+    assert "gpu/c1/baseline/artifacts/measurement-r001-c001.mp4" in checksums
 
 
 def test_bundle_reports_invalid_power_without_verifying_the_cell(tmp_path):
@@ -244,20 +255,22 @@ def _sweep(tmp_path):
         mvp_srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
                                    result_filename="r", concurrencies=[1, 2], output=artifacts / name, environ=env)
         rows.append({"recipe-fingerprint": fingerprint, "runner": runner, "framework": "sglang",
-                     "gpus": 2, "conc-list": [1, 2]})
+                     "gpus": 2, "conc-list": [1, 2], "model": SPEC["plan"]["model_id"]})
     directory = artifacts / "video-sweep-manifest"
     directory.mkdir()
     (directory / "sweep_manifest.json").write_text(json.dumps({"run-id": 123, "run-attempt": 2,
-        "head": "c" * 40, "matrix": {"single_node": {"video": rows}}}))
+        "head": "c" * 40, "video-full-sweep": True, "matrix": {"single_node": {"video": rows}}}))
     return artifacts
 
 
 def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout_identity(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
     artifacts = _sweep(tmp_path)
-    assert validate_video_artifacts(artifacts, run_id="123", head_sha="c" * 40) == 2
+    assert validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
     with pytest.raises(ValueError, match="trusted run/head"):
-        validate_video_artifacts(artifacts, run_id="124", head_sha="c" * 40)
+        validate_video_artifacts(artifacts, run_id="124", run_attempt="2", head_sha="c" * 40)
+    with pytest.raises(ValueError, match="trusted run/head/attempt"):
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="3", head_sha="c" * 40)
 
 
 @pytest.mark.parametrize("fault,match", [("row", "coverage mismatch"), ("media", "checksum mismatch"),
@@ -290,13 +303,13 @@ def test_reuse_rejects_incomplete_or_altered_native_sweeps(tmp_path, fault, matc
             f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
             for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
     with pytest.raises(ValueError, match=match):
-        validate_video_artifacts(artifacts, run_id="123", head_sha="c" * 40)
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 
 
 def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    identity = {"plan_sha256": "f" * 64, "workload_plan": SPEC["plan"],
+    identity = {"plan_sha256": PLAN_SHA, "workload_plan": SPEC["plan"],
                 "engine": {"name": "vllm-omni", "revision": "a" * 40}}
     (workspace / "video-identity.json").write_text(json.dumps(identity))
     output = tmp_path / "bundle"
@@ -308,3 +321,85 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     assert {key: manifest[key] for key in identity} == identity
     assert matrix["engine"] == identity["engine"] and matrix["plan"] == identity["workload_plan"]
     assert "video-identity.json" in manifest["evidence"]
+
+
+@pytest.mark.parametrize("fault,match", [("power", "unverified native"), ("plan", "selected workload")])
+def test_reuse_rechecks_sealed_receipts_and_selected_workload(tmp_path, fault, match):
+    from infx.results.video_artifacts import validate_video_artifacts
+    artifacts = _sweep(tmp_path)
+    bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
+    matrix_path = bundle / "serving-smoke.json"
+    matrix = json.loads(matrix_path.read_text())
+    cell = matrix["cells"][0]
+    field = "power" if fault == "power" else "run"
+    path = bundle / cell[field]["path"]
+    value = json.loads(path.read_text())
+    if fault == "power":
+        value["valid"] = False
+    else:
+        value["plan"]["model_id"] = "another/model"
+    path.write_text(json.dumps(value))
+    cell[field]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    matrix_path.write_text(json.dumps(matrix))
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["evidence"] = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                            for p in bundle.rglob("*.json") if p != manifest_path}
+    manifest_path.write_text(json.dumps(manifest))
+    (bundle / "SHA256SUMS").write_text("".join(
+        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
+        for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
+    with pytest.raises(ValueError, match=match):
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+
+
+@pytest.mark.parametrize("fault,match", [
+    ("null_ref", "missing path or SHA256"), ("missing_ref", "reference mismatch"),
+    ("population", "request population"), ("missing_media", "reference mismatch"),
+    ("duplicate_gpu", "GPU count mismatch"), ("duplicate_slot", "request population"),
+])
+def test_reuse_rejects_resealed_missing_evidence_and_wrong_population(tmp_path, fault, match):
+    from infx.results.video_artifacts import validate_video_artifacts
+    artifacts = _sweep(tmp_path)
+    bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
+    matrix_path = bundle / "serving-smoke.json"
+    matrix = json.loads(matrix_path.read_text())
+    cell = matrix["cells"][0]
+    run_path = bundle / cell["run"]["path"]
+    run = json.loads(run_path.read_text())
+    if fault in {"null_ref", "missing_ref"}:
+        cell["receipt"] = {"path": "missing.json", "sha256": None if fault == "null_ref" else "a" * 64}
+    elif fault == "duplicate_gpu":
+        matrix["gpu_uuids"] = [matrix["gpu_uuids"][0]] * 2
+    else:
+        if fault == "population":
+            run["summary"].update(scheduled=1, valid=1)
+            run["records"] = run["records"][:1]
+        elif fault == "duplicate_slot":
+            run["records"][1] = run["records"][0]
+        else:
+            run["records"][0]["artifact_path"] = "artifacts/missing.mp4"
+        run_path.write_text(json.dumps(run))
+        cell["run"]["sha256"] = hashlib.sha256(run_path.read_bytes()).hexdigest()
+    matrix_path.write_text(json.dumps(matrix))
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["evidence"] = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                            for p in bundle.rglob("*.json") if p != manifest_path}
+    manifest_path.write_text(json.dumps(manifest))
+    (bundle / "SHA256SUMS").write_text("".join(
+        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
+        for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
+    with pytest.raises(ValueError, match=match):
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+
+
+def test_partial_native_sweep_cannot_qualify_for_reuse(tmp_path):
+    from infx.results.video_artifacts import validate_video_artifacts
+    artifacts = _sweep(tmp_path)
+    path = artifacts / "video-sweep-manifest/sweep_manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["video-full-sweep"] = False
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="requires a full video sweep"):
+        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)

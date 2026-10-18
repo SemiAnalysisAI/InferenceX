@@ -6,7 +6,7 @@ import argparse
 import hashlib
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
 
@@ -39,8 +39,28 @@ def _inventory(root: Path) -> dict[str, str]:
     return actual
 
 
+def _reference(inventory: dict[str, str], reference: dict, *, prefix: str = "") -> str:
+    if not isinstance(reference, dict):
+        raise ValueError("invalid video evidence reference")
+    path, digest = reference.get("path"), reference.get("sha256")
+    if (
+        not isinstance(path, str)
+        or not isinstance(digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", digest)
+    ):
+        raise ValueError("missing path or SHA256 in video evidence reference")
+    relative = PurePosixPath(prefix, path).as_posix()
+    if relative not in inventory or inventory[relative] != digest:
+        raise ValueError(f"video evidence reference mismatch: {relative}")
+    return relative
+
+
 def validate_video_artifacts(
-    root: Path, *, run_id: str | None = None, head_sha: str | None = None
+    root: Path,
+    *,
+    run_id: str | None = None,
+    run_attempt: str | None = None,
+    head_sha: str | None = None,
 ) -> int:
     """Return the deployment count; reject missing rows, cells, provenance or sealed files.
 
@@ -50,8 +70,14 @@ def validate_video_artifacts(
     """
     sweep = _read(root / "video-sweep-manifest/sweep_manifest.json")
     source_run, attempt, head = str(sweep["run-id"]), str(sweep["run-attempt"]), sweep["head"]
-    if (run_id is not None and run_id != source_run) or (head_sha is not None and head_sha != head):
-        raise ValueError("video sweep manifest disagrees with trusted run/head identity")
+    if (
+        (run_id is not None and run_id != source_run)
+        or (run_attempt is not None and run_attempt != attempt)
+        or (head_sha is not None and head_sha != head)
+    ):
+        raise ValueError("video sweep manifest disagrees with trusted run/head/attempt identity")
+    if sweep.get("video-full-sweep") is not True:
+        raise ValueError("native video reuse requires a full video sweep")
     rows = sweep["matrix"].get("single_node", {}).get("video", [])
     if not rows:
         raise ValueError("video sweep manifest has no selected video deployments")
@@ -103,17 +129,79 @@ def validate_video_artifacts(
             if cell.get("status") != "complete" or cell.get("verified") is not True:
                 raise ValueError(f"{name}: incomplete video cell")
             for field in ("run", "receipt", "power"):
-                reference = cell[field]
-                if inventory.get(reference["path"]) != reference["sha256"]:
-                    raise ValueError(f"{name}: {field} reference mismatch")
+                _reference(inventory, cell[field])
             run = _read(bundle / cell["run"]["path"])
+            receipt = _read(bundle / cell["receipt"]["path"])
+            power = _read(bundle / cell["power"]["path"])
+            if (
+                power.get("valid") is not True
+                or power.get("status") != "valid"
+                or receipt.get("measurement_verified") is not True
+                or receipt.get("power_verified") is not True
+                or receipt.get("status") != "complete"
+            ):
+                raise ValueError(f"{name}: unverified native measurement or power receipt")
+            plan = run.get("plan")
+            plan_sha = hashlib.sha256(
+                json.dumps(
+                    plan,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ).encode()
+            ).hexdigest()
+            if (
+                not isinstance(plan, dict)
+                or run.get("plan_sha256") != plan_sha
+                or manifest.get("workload_plan") != plan
+                or matrix.get("plan") != plan
+                or plan.get("model_id") != row["model"]
+            ):
+                raise ValueError(f"{name}: selected workload plan mismatch")
+            repetitions, cases = plan.get("repetitions"), plan.get("cases")
+            if (
+                not isinstance(repetitions, int)
+                or repetitions <= 0
+                or not isinstance(cases, list)
+                or not cases
+            ):
+                raise ValueError(f"{name}: invalid measured workload population")
+            expected_slots = {
+                f"measurement-r{repetition:03d}-c{index:03d}": {**case, "repetition": repetition}
+                for repetition in range(1, repetitions + 1)
+                for index, case in enumerate(cases, 1)
+            }
             summary = run.get("summary", {})
+            measured = [r for r in run.get("records", []) if r.get("phase") == "measurement"]
             if (
                 run.get("status") != "complete"
-                or not summary.get("scheduled")
-                or summary.get("valid") != summary["scheduled"]
+                or summary.get("scheduled") != len(expected_slots)
+                or summary.get("valid") != len(expected_slots)
+                or len(measured) != len(expected_slots)
+                or {r.get("slot_id") for r in measured} != expected_slots.keys()
             ):
                 raise ValueError(f"{name}: incomplete measured request population")
+            media_paths = set()
+            for record in measured:
+                expected_slot = expected_slots[record["slot_id"]]
+                if (
+                    any(
+                        record.get(key) != expected_slot[key]
+                        for key in ("case_id", "prompt", "seed", "repetition")
+                    )
+                    or record.get("status") != "succeeded"
+                    or record.get("media", {}).get("valid") is not True
+                ):
+                    raise ValueError(f"{name}: invalid measured workload slot")
+                path = _reference(
+                    inventory,
+                    {"path": record.get("artifact_path"), "sha256": record.get("sha256")},
+                    prefix=PurePosixPath(cell["run"]["path"]).parent.as_posix(),
+                )
+                if path in media_paths:
+                    raise ValueError(f"{name}: duplicate measured media reference")
+                media_paths.add(path)
             configuration = run.get("configuration", {})
             engine = {
                 "name": configuration.get("runtime"),
@@ -130,6 +218,7 @@ def validate_video_artifacts(
                 raise ValueError(f"{name}: workload or engine identity mismatch")
             if (
                 engine["name"] != row["framework"]
+                or len(set(matrix.get("gpu_uuids", []))) != row["gpus"]
                 or len(matrix.get("gpu_uuids", [])) != row["gpus"]
             ):
                 raise ValueError(f"{name}: selected engine or GPU count mismatch")
@@ -140,11 +229,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifacts-dir", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--run-attempt", required=True)
     parser.add_argument("--head-sha", required=True)
     args = parser.parse_args()
     try:
         count = validate_video_artifacts(
-            args.artifacts_dir, run_id=args.run_id, head_sha=args.head_sha
+            args.artifacts_dir,
+            run_id=args.run_id,
+            run_attempt=args.run_attempt,
+            head_sha=args.head_sha,
         )
     except (OSError, KeyError, TypeError, ValueError) as error:
         parser.exit(1, f"Video sweep artifact validation failed: {error}\n")

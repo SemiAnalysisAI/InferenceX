@@ -19,10 +19,13 @@ spec 的 `job_seconds` 不约束原生矩阵客户端；各请求仍使用显式
 引擎和部署。`manifest.artifact_name` 与 `ci.artifact_name` 保留准确名称。
 `manifest.git_commit` 是实际执行 checkout；`manifest.ci.head_sha` 是 PR head，
 两者可以不同。`plan_sha256` 与 `engine.name/revision` 从每格 run 记录取得。
-功耗 producer/exporter 来源在结果包计算哈希前复制。
+选定的 YAML 工作负载在服务启动前保留绑定的计划与引擎身份；启动失败的产物
+保留该声明，但不能通过结果资格验证。功耗 producer/exporter 来源在结果包计算哈希前复制。
 
-`video-sweep-manifest` 保留完整所选矩阵。PR 验证与合并导入要求该 attempt 的每个
-所选部署和并发都存在，CI 身份一致，原生功耗有效，测量请求完成且文件哈希匹配。
+`video-sweep-manifest` 保留当前 attempt 的完整所选矩阵，重跑时替换；之前的结果包
+保持不变。只有完整 video sweep 上传此复用标记。PR 验证与合并导入要求可信 attempt
+的每个所选部署和并发都存在，CI 身份一致，原生功耗有效，冻结计划的全部测量请求
+完成且媒体与文件哈希匹配。
 这是已保留证据的验证，不重新解码媒体，也不证明感知质量、比较样本充足或生产验收。
 App 继续读取旧的无后缀产物，但它们不能用于新的原生复用路径。Video 不支持
 append-only sweep；使用普通完整 sweep，保留一个服务作业的全部负载。

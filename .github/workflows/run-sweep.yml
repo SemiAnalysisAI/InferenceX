@@ -194,6 +194,7 @@ jobs:
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
+            has-benchmark-results: ${{ steps.setup.outputs.has-benchmark-results }}
         steps:
             - name: Checkout code
               id: checkout
@@ -315,6 +316,8 @@ jobs:
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+                  has_benchmark_results=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] | length > 0' <<<"$CONFIG_JSON")
+                  echo "has-benchmark-results=$has_benchmark_results" >> "$GITHUB_OUTPUT"
 
     canary-select:
         name: canary-select
@@ -783,6 +786,7 @@ jobs:
             ${{
               always() &&
               needs.setup.result == 'success' &&
+              needs.setup.outputs.has-benchmark-results == 'true' &&
               (
                 needs.canary-sweep.result == 'success' ||
                 needs.canary-multi-node-sweep.result == 'success' ||
@@ -861,6 +865,9 @@ jobs:
                       'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
                       # Klaud validates only full sweeps that ran fail-fast.
                       'full-sweep': sweep_labels == {'full-sweep-fail-fast'},
+                      'video-full-sweep': bool(sweep_labels & {
+                          'full-sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast',
+                      }) and not bool(sweep_labels & {'evals-only', 'agentx-fast'}),
                       'matrix': matrix,
                   }))
                   PY
@@ -870,13 +877,15 @@ jobs:
               with:
                   name: changelog-metadata
                   path: changelog_metadata.json
+                  overwrite: true
 
             - name: Upload selected video matrix
-              if: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
+              if: ${{ (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: video-sweep-manifest
                   path: sweep_manifest.json
+                  overwrite: true
                   if-no-files-found: error
 
             - name: Upload Klaud validation manifest
@@ -888,12 +897,13 @@ jobs:
                   if-no-files-found: error
 
     validate-video-results:
+        name: validate-video-results
         needs: [setup, canary-sweep, sweep-video, upload-changelog-metadata]
-        if: ${{ !cancelled() && needs.setup.result == 'success' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
+        if: ${{ !cancelled() && (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && needs.setup.result == 'success' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
         runs-on: ubuntu-latest
         permissions:
-            actions: read
-            contents: read
+            actions: read # Download the current run's video artifacts.
+            contents: read # Check out the video validator.
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -911,7 +921,7 @@ jobs:
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
               run: |
                   python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
-                    --run-id "$GITHUB_RUN_ID" --head-sha "$PR_HEAD_SHA"
+                    --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --head-sha "$PR_HEAD_SHA"
 
     calc-success-rate:
         name: calc-success-rate
