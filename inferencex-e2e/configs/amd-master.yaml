@@ -90,7 +90,7 @@ dsr1-fp4-mi355x-atom-mtp:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp8-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.12-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.21-rocm720-mi30x@sha256:0534eb382626ef55ace8be24f7d81cc6eb7451acac8a5727848397a5e9309d91
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi300x
