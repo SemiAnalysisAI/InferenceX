@@ -2,6 +2,61 @@
 
 [English](README.md) | **中文**
 
+## Wan2.2 本地 runner 接入
+
+现有 client 可通过 SGLang 或 vLLM-Omni 运行
+`Wan-AI/Wan2.2-T2V-A14B-Diffusers`；受控 `serving-smoke` 路径启动 SGLang。
+一台固定版本的八卡 H100 vLLM-Omni
+服务完成了一次 Wan 请求。完整工作负载、匹配的性能对比、质量及生产交付仍未验证。
+
+[Wan plan](mvp/wan22-serving.plan.json) 固定 checkpoint
+`5be7df9619b54f4e2667b2755bc6a756675b5cd7`，四条纯视频提示词、一次独立 warmup，
+832×480、81 帧、16 FPS（5.0625 秒）、40 步、两阶段 guidance 4/3、flow shift 12，
+并显式使用空 negative prompt。这是新工作负载，不是与 H3 匹配的对照，也不是上游
+默认 negative prompt。协议按 SGLang `71de97b264b04dcd514cf904003028aefe9775c8`
+核对。该版本忽略请求级 Wan flow-shift 覆盖，因此仅接受 12；第一阶段 guidance 必须
+大于 1，运行时才会应用两个 expert 的 guidance 值。
+[共享 Wan spec](specs/wan.yaml) 用 `frozen-3733` 保留原来的四个 case，并在
+`shared-v1` 中为每条提示词加入第二个 seed。[服务记录](specs/wan-vllm-omni-serving.md)
+保留固定版本的 vLLM-Omni 配置和单次请求证据。spec loader 与 H3 共用，plan hash
+不包含来源引用。
+
+在 `experimental/video-generation` 下无 GPU、无服务地预览请求：
+
+```bash
+python -m evaluator.cli run mvp/wan22-serving.plan.json --runtime sglang
+```
+
+[GPU 模板](mvp/wan22-gpu-job.template.json) 保持未批准授权、未填写路径和空文件清单。
+另行授权实际运行前，需要绑定任务拥有的 SemiAnalysis 资源及兼容的已有 runtime，
+核实全部 checkpoint 文件，并设置实际预算。本地受控入口是
+`python -m evaluator.cli serving-smoke --spec <prepared-spec.json> --output <new-evidence-dir> --concurrencies 1`。
+第一格为四条测量请求加一次 warmup；模板不能证明单卡显存足够。
+
+初始支持 NVIDIA、TP1、1/2/4/8 卡纯 Ulysses，显式设置 DiT/text-encoder/VAE
+offload，禁用 layerwise offload。launcher 关闭运行时 warmup、CFG 并行和 Ring，
+使用本次任务拥有的持久输出目录，确保轮询后的 `/v1/videos/{id}/content` 能下载 MP4。
+harness 单独记录 warmup。该 Wan launcher 拒绝 H3 专用启动参数/计时补丁、AMD
+及配对质量准入。runner 也可通过已核对的 multipart 协议连接由操作员管理的
+vLLM-Omni 服务。policy 仅记录未校准身份，不含音频阈值。
+
+媒体验证要求分辨率、时间间隔、帧数符合计划，且无音频流。音频生成和质量准入为
+unsupported，不生成音频或 A/V 分数。Dashboard 缺失质量及质量/SLO goodput 仍为 null。
+超时后保留远端是否完成的未知状态并停止后续提交；该版本删除 job 不代表真正取消。
+
+本地受控入口写入 `video_serving_smoke_matrix`，保留失败及未启动的请求数。
+由操作员管理的 `run --execute` 入口另写一份运行收据。父分支的 H3 CI 现在通过原生
+srt-slurm video matrix 行启动新作业。Wan 尚无对应的原生 recipe 或 config 行，
+因此这些本地入口不会提交或验收 Wan CI 作业。原生 Wan 行仍需经审核的 recipe
+及产物接线。Wan 不使用 H3 配对 `result.json` exporter。App 接受规范 Diffusers ID
+与此前短显示 ID，并拒绝冲突的模型声明。
+
+CPU 检查覆盖两种使用编码 fixture 的 HTTP transport、纯视频完整解码、启动预览、
+失败封存及 Dashboard 解析。保留的 H100 记录只证明一次请求已完成，不能代表共享
+工作负载或生产路径通过验收。fixture 不进入实测结果。
+
+## 既有 H3 路径
+
 此实验任务在 InferenceX CI 内使用 SemiAnalysis H200 资源运行现有 H3
 supervisor。首个目标是有时间上限的同版本冒烟测试：保留实际生成的 MP4，
 完整验证视频和音频，记录请求耗时，并验证清理结果。此任务不写入原生
@@ -135,9 +190,9 @@ H200 硬件盘点、CPU 导出）与 `h3-fidelity.yml`（保留媒体比较）�
 
 ## 结果与本地检查
 
-成功执行还会发布[前端结果契约](RESULTS_zh.md)：版本化的 `result.json`、
+成功执行还会发布[前端结果契约（英文）](RESULTS.md)：版本化的 `result.json`、
 逐卡功率序列、分阶段能量与覆盖率，以及可离线打开的 `power-report.html`。
-`h3-results-<run-id>-<attempt>` 包含索引、JSON Schema、双语指标说明，以及每次
+`h3-results-<run-id>-<attempt>` 包含索引、JSON Schema、指标说明，以及每次
 原始执行的媒体、测量、日志和报告。原始执行身份与校验文件和本次导出身份分开保留。
 遥测无效时功率和能量为空；导出失败会保留错误日志并返回失败状态。
 
@@ -170,7 +225,7 @@ gh workflow run h3-video.yml --repo SemiAnalysisAI/InferenceX \
 配置、实际执行、默认及最大功率上限均为 700 W；历史生成时的设置仍未知。
 原始盘点记录中的 unknown 分类保持不变；导出器使用新 producer 提交解析原始
 XML，同时支持带或不带 `0x` 的 PCI 编号，不重新查询硬件。
-[已保留的 A/A 测量及限制](RESULTS_zh.md#已观测的-aa-证据)提供具体数据。
+[已保留的 A/A 测量及限制（英文）](RESULTS.md#observed-aa-evidence)提供具体数据。
 
 原始工作负载失败时仍上传失败证据，但不会启动成功结果导出。
 
@@ -189,7 +244,8 @@ serving 运行由其基准测试作业上传 `h3-results-<run-id>-<attempt>`；�
 cd experimental/video-generation
 PYTHONPATH=../../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' python -m pytest -q
+  --with 'pyyaml==6.0.3' --with 'pytest>=8,<9' --with 'jsonschema>=4,<5' \
+  --with 'rfc3339-validator==0.1.4' python -m pytest -q
 bash -n runtime-entry.example.sh
 ```
 

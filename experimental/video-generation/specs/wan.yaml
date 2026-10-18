@@ -1,0 +1,184 @@
+# Wan2.2-T2V-A14B text-to-video workload shared by SGLang and vLLM-Omni; load it with h3_spec.py.
+# `sent` follows the Wan payload builder at
+#   feat/wan-serving-runner@77f2080ce:experimental/video-generation/evaluator/mvp_runner.py:227-240
+# (one dict for both engines; frame_count travels as num_frames). `checked_on_clip` follows the clip
+# checks at feat/wan-serving-runner@77f2080ce:experimental/video-generation/evaluator/mvp_media.py:386-404
+# against the expected media built at mvp_runner.py:666-669. The video-only model contract adds
+# audio.absent (mvp_media.py:409) from the model id, and requires_motion adds video.motion_presence
+# (mvp_media.py:422); neither is a generation field.
+
+schema_version: 1
+
+model:
+  id:
+    value: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:3
+  revision:
+    value: 5be7df9619b54f4e2667b2755bc6a756675b5cd7
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:4
+
+generation:
+  width:
+    value: 832
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:6
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: true
+  height:
+    value: 480
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:7
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: true
+  frame_count:
+    # Sent as num_frames on both engines. The clip duration check is derived: 81 / 16 = 5.0625 s.
+    value: 81
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:8
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: true
+  fps:
+    value: 16
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:9
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: true
+  num_inference_steps:
+    value: 40
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:10
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: false
+  guidance_scale:
+    value: 4.0
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:11
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: false
+  guidance_scale_2:
+    value: 3.0
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:12
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: false
+  flow_shift:
+    # validate_plan pins 12.0; vLLM-Omni a8576ccb applies the per-request value (pipeline_wan2_2.py:121-130).
+    value: 12.0
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:13
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: false
+  negative_prompt:
+    # Empty on purpose. FastAPI drops the empty multipart field on vLLM-Omni a8576ccb and
+    # pipeline_wan2_2.py encodes "" for the missing value; SGLang receives the key in JSON.
+    value: ""
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:14
+    sent: {sglang: true, vllm-omni: true}
+    checked_on_clip: false
+
+prompts:
+  drum-taps:
+    text: "A single continuous medium shot of a drummer tapping a snare drum three times in a rehearsal room. The drumsticks visibly contact the drumhead on each tap. The camera remains still. No subtitles or scene cuts."
+    requires_motion: true
+    requires_sound: false
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:19
+  pouring-water:
+    text: "A single continuous close-up of a hand steadily pouring water from a clear glass jug into an empty drinking glass on a wooden table. The water level visibly rises. Daylight, a still camera, no subtitles or scene cuts."
+    requires_motion: true
+    requires_sound: false
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:26
+  bicycle-pass:
+    text: "A single continuous wide shot of a cyclist riding from the left side of the frame to the right along a park path. The moving wheels remain visible. The camera stays still. No subtitles or scene cuts."
+    requires_motion: true
+    requires_sound: false
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:33
+  footsteps:
+    text: "A single continuous low-angle shot of a person in ordinary shoes walking across a wooden floor from left to right. Each step visibly lands on the floor. The camera stays still. No subtitles or scene cuts."
+    requires_motion: true
+    requires_sound: false
+    source: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:40
+
+sets:
+  frozen-3733:
+    # #3733's own plan: one seed per prompt, case ids without a seed suffix, plan_sha256
+    # 1f1a093b391bfd94f64d6e492948989850508ac4dad472eeaa98785fd26327d6.
+    plan_id: wan22-t2v-a14b-serving-smoke-v1
+    repetitions: 1
+    warmup_runs: 1
+    seed_sources:
+      11: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:20
+      23: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:27
+      37: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:34
+      53: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:41
+    cases:
+      - {case_id: drum-taps, prompt: drum-taps, seed: 11}
+      - {case_id: pouring-water, prompt: pouring-water, seed: 23}
+      - {case_id: bicycle-pass, prompt: bicycle-pass, seed: 37}
+      - {case_id: footsteps, prompt: footsteps, seed: 53}
+  shared-v1:
+    # The shared set uses every #3733 prompt with its recorded seed and a second seed 100 higher.
+    # The second seeds are new here, so each cites the #3733 line of the seed it is derived from.
+    plan_id: wan22-t2v-a14b-shared-v1
+    repetitions: 1
+    warmup_runs: 1
+    seed_sources:
+      11: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:20
+      111: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:20
+      23: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:27
+      123: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:27
+      37: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:34
+      137: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:34
+      53: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:41
+      153: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:41
+    cases:
+      - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
+      - {case_id: drum-taps-s111, prompt: drum-taps, seed: 111}
+      - {case_id: pouring-water-s23, prompt: pouring-water, seed: 23}
+      - {case_id: pouring-water-s123, prompt: pouring-water, seed: 123}
+      - {case_id: bicycle-pass-s37, prompt: bicycle-pass, seed: 37}
+      - {case_id: bicycle-pass-s137, prompt: bicycle-pass, seed: 137}
+      - {case_id: footsteps-s53, prompt: footsteps, seed: 53}
+      - {case_id: footsteps-s153, prompt: footsteps, seed: 153}
+  release-v1:
+    # Twenty measured inputs: four recorded prompts crossed with five seeds already cited above.
+    plan_id: wan22-native-engine-release-v1
+    repetitions: 1
+    warmup_runs: 1
+    seed_sources:
+      11: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:20
+      23: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:27
+      37: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:34
+      53: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:41
+      111: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:20
+    cases:
+      - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
+      - {case_id: drum-taps-s23, prompt: drum-taps, seed: 23}
+      - {case_id: drum-taps-s37, prompt: drum-taps, seed: 37}
+      - {case_id: drum-taps-s53, prompt: drum-taps, seed: 53}
+      - {case_id: drum-taps-s111, prompt: drum-taps, seed: 111}
+      - {case_id: pouring-water-s11, prompt: pouring-water, seed: 11}
+      - {case_id: pouring-water-s23, prompt: pouring-water, seed: 23}
+      - {case_id: pouring-water-s37, prompt: pouring-water, seed: 37}
+      - {case_id: pouring-water-s53, prompt: pouring-water, seed: 53}
+      - {case_id: pouring-water-s111, prompt: pouring-water, seed: 111}
+      - {case_id: bicycle-pass-s11, prompt: bicycle-pass, seed: 11}
+      - {case_id: bicycle-pass-s23, prompt: bicycle-pass, seed: 23}
+      - {case_id: bicycle-pass-s37, prompt: bicycle-pass, seed: 37}
+      - {case_id: bicycle-pass-s53, prompt: bicycle-pass, seed: 53}
+      - {case_id: bicycle-pass-s111, prompt: bicycle-pass, seed: 111}
+      - {case_id: footsteps-s11, prompt: footsteps, seed: 11}
+      - {case_id: footsteps-s23, prompt: footsteps, seed: 23}
+      - {case_id: footsteps-s37, prompt: footsteps, seed: 37}
+      - {case_id: footsteps-s53, prompt: footsteps, seed: 53}
+      - {case_id: footsteps-s111, prompt: footsteps, seed: 111}
+
+# Informational only; not hashed.
+reference:
+  sglang_3733:
+    pull_request: https://github.com/SemiAnalysisAI/InferenceX/pull/3733
+    head: 77f2080ce
+    sglang_revision: 71de97b264b04dcd514cf904003028aefe9775c8
+    plan_id: wan22-t2v-a14b-serving-smoke-v1
+    plan_sha256: 1f1a093b391bfd94f64d6e492948989850508ac4dad472eeaa98785fd26327d6
+  vllm_omni_h100:
+    serving_notes: wan-vllm-omni-serving.md
+    vllm_omni_revision: a8576ccb725c4e21cd13c3eb5f9a546b21149d2b
+    hardware: 8x NVIDIA H100 80GB HBM3 (dsxe, Slurm job 445, 2026-10-17)
+    plan_id: wan22-t2v-a14b-shared-v1
+    plan_sha256: e80434fcec2c322274fd743ca0c3e25e90be30eae2b5d98111644f2b0295db3f
+    outcome: >-
+      One request of case drum-taps-s11 (a one-case copy of shared-v1 with warmup_runs 0) returned a
+      valid 832x480, 81-frame, 16 fps clip 38.0 s after submission; the request, the server's job
+      record and the ffprobe are in tests/fixtures/wan-vllm-omni-a8576ccb.

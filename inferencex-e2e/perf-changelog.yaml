@@ -10118,3 +10118,13 @@
     - "Run both H200 MiniMax-H3 engines at concurrency 1 on the same selected YAML workload: four existing prompts crossed with five cited seeds, 20 measured clips and one warmup."
     - "Replace the H200 SGLang four-clip c1/c2/c4 recipe with the selected two-GPU c1 workload, and add the two-GPU vLLM-Omni FL2VA recipe with the pinned v0.30.0 image digest and TP2/VAE tile settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4243
+
+- config-keys:
+    - wan22-bf16-h200-sglang-video
+    - wan22-bf16-h200-vllm-omni-video
+  scenario-type:
+    - video-generation
+  description:
+    - "Add eight-GPU H200 SGLang and vLLM-Omni deployments for Wan2.2-T2V-A14B at concurrency 1 on the same selected YAML workload: 20 measured video-only clips and one warmup per engine."
+    - "Pin the model revision and vLLM-Omni v0.30.0 image digest; use SGLang TP1/Ulysses8 and vLLM-Omni HSDP/CFG2/USP4/VAE8 while preserving the shared generation and native power checks."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3733

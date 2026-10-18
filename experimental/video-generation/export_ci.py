@@ -178,7 +178,7 @@ def publish(run_ids: list[str], output: Path, hardware: Path | None, *, hardware
                 files = files_with_nested_seals(target)
                 (target / "SHA256SUMS").write_text("".join(f"{digest}  {name}\n" for name, digest in sorted(files.items())))
     ci.write(output / "index.json", catalog)
-    for name in ("result.schema.json", "RESULTS.md", "RESULTS_zh.md"):
+    for name in ("result.schema.json", "RESULTS.md"):
         shutil.copyfile(Path(__file__).parent / name, output / name)
     (output / "SHA256SUMS").write_text("".join(f"{digest}  {name}\n" for name, digest in files_with_nested_seals(output).items()))
     return exit_code

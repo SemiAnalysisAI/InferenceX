@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from infx.results import video
+from infx.config import repository_root
 from infx.tests.results.power.test_aggregate_power_multinode import (
     WINDOW_END,
     WINDOW_START,
@@ -116,6 +118,23 @@ def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path):
     assert aggregate["power_audit"]["source"] == "power_validation_h3_video_conc4.json"
     summary = json.loads((workspace / "h3_video.json").read_text())
     assert summary["cells"]["4"]["status"] == "complete" and summary["status"] == "complete"
+
+
+@pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
+def test_wan_service_role_is_admitted_by_native_power(tmp_path, runtime):
+    recipe = repository_root() / f"benchmarks/single_node/srt-slurm-recipes/wan/{runtime}/h200-bf16/serving-client.yaml"
+    [service] = yaml.safe_load(recipe.read_text())["services"]
+    assert service["name"] == video.SERVICE
+    pkg = _service_package(tmp_path, service=service["name"])
+    _cell(pkg, pkg.logs_root)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    assert video.run(
+        logs_root=pkg.logs_root, workspace=workspace, result_filename="wan_video", concurrencies=[4],
+        gpu_count=4, expected_producer_sha="a" * 40, identity=IDENTITY, require_power=True,
+    ) == 0
+    sidecar = json.loads((workspace / "power_validation_wan_video_conc4.json").read_text())
+    assert sidecar["power_valid"] and set(sidecar["per_gpu_role"].values()) == {service["name"]}
 
 
 def test_missing_power_never_publishes_as_measured_and_fails_only_when_required(tmp_path):

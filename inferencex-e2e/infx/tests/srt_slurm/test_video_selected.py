@@ -8,6 +8,7 @@ from infx.srt_slurm import video
 
 ROOT = repository_root()
 RECIPES = ROOT / "benchmarks/single_node/srt-slurm-recipes/h3"
+WAN_RECIPES = ROOT / "benchmarks/single_node/srt-slurm-recipes/wan"
 ENV = {
     "IMAGE": "vllm/vllm-omni:v0.30.0",
     "MODEL": "MiniMaxAI/MiniMax-H3",
@@ -54,6 +55,31 @@ def test_both_h3_engines_bind_the_same_selected_plan():
         assert client["H3_SPEC_PATH"] == "/h3-package/specs/h3.yaml"
         assert client["GPU_COUNT"] == "2"
     assert vllm["benchmark"]["env"]["H3_PLAN_SHA256"] == sglang["benchmark"]["env"]["H3_PLAN_SHA256"]
+
+
+def test_both_wan_engines_bind_one_eight_gpu_plan():
+    environment = {
+        **ENV, "MODEL": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+        "GPU_COUNT": "8", "H3_SPEC": "wan.yaml",
+    }
+    recipes = [
+        video.prepare(
+            WAN_RECIPES / "vllm-omni/h200-bf16/serving-client.yaml",
+            environment, root=ROOT,
+        ),
+        video.prepare(
+            WAN_RECIPES / "sglang/h200-bf16/serving-client.yaml",
+            {**environment, "FRAMEWORK": "sglang",
+             "IMAGE": "hongccc/sglang-omni:h3-runtime-71de97b"}, root=ROOT,
+        ),
+    ]
+    assert {recipe["resources"]["gpus_per_node"] for recipe in recipes} == {8}
+    assert {recipe["benchmark"]["env"]["H3_PLAN_SHA256"] for recipe in recipes} == {
+        video.load_spec("wan.yaml", root=ROOT, set_id="release-v1")["plan_sha256"]
+    }
+    assert {recipe["benchmark"]["env"]["H3_RUNTIME"] for recipe in recipes} == {
+        "sglang", "vllm-omni"
+    }
 
 
 @pytest.mark.parametrize("edits", [
