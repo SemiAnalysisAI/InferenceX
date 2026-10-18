@@ -177,7 +177,7 @@ collectors.
 PR qualification uses the ordinary changelog-driven `full-sweep-fail-fast`
 route and validates every selected video deployment before reuse. The manual
 command below is for diagnostics. See [native video delivery](../../inferencex-e2e/docs/video-generation.md)
-([中文](../../inferencex-e2e/docs/video-generation_zh.md)) for coverage, artifact
+for coverage, artifact
 identity and post-merge publication.
 
 A new serving run is an ordinary matrix row. Dispatch `e2e-tests.yml` from a

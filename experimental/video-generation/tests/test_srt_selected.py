@@ -1,5 +1,6 @@
 """The native YAML route preserves the selected request and model-view contract."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -8,7 +9,7 @@ import pytest
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE))
 
-from evaluator import mvp_srt_selected  # noqa: E402
+from evaluator import mvp_gpu_job, mvp_srt_selected  # noqa: E402
 from evaluator.mvp_runner import preview_plan  # noqa: E402
 from specs import h3_spec  # noqa: E402
 
@@ -80,3 +81,34 @@ def test_wan_commands_use_the_recorded_eight_gpu_profiles(tmp_path):
     assert vllm[vllm.index("--stage-init-timeout") + 1] == "3600"
     with pytest.raises(ValueError, match="eight Wan GPUs"):
         mvp_srt_selected.server_argv(plan, "vllm-omni", Path("/model"), 30283, 4)
+@pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
+@pytest.mark.parametrize("model_name,gpus", [("h3", 2), ("wan", 8)])
+def test_selected_server_seals_its_bound_execution_spec(tmp_path, monkeypatch, runtime, model_name, gpus):
+    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / f"specs/{model_name}.yaml"), "release-v1")
+    model = tmp_path / "model"
+    model.mkdir()
+    if model_name == "h3":
+        (model / "FL2VA").mkdir()
+        (model / "Ref2VA").mkdir()
+        for name in ("model_index.json", "LICENSE", "README.md", "Ref2VA/model_index.json"):
+            (model / name).write_text(name)
+    uuids = [f"GPU-{index}" for index in range(gpus)]
+    monkeypatch.setattr(mvp_gpu_job, "cuda_devices", lambda: uuids)
+    executed = []
+    monkeypatch.setattr(mvp_srt_selected.os, "execvpe", lambda file, argv, env: executed.append((file, argv)))
+    output = tmp_path / "server"
+    mvp_srt_selected.serve(
+        plan, runtime=runtime, runtime_revision="a" * 40,
+        model_path=model, port=30283, gpus=gpus, output=output,
+    )
+    spec = json.loads((output / "spec.json").read_text())
+    launch = json.loads((output / "launch.json").read_text())
+    assert spec["plan"] == plan and spec["gpu_uuids"] == launch["gpu_uuids"] == uuids
+    assert spec["serving"] == {"mode": "closed_loop"}
+    assert spec["baseline"]["name"] == launch["runtime"] == runtime
+    assert spec["baseline"]["revision"] == launch["runtime_revision"] == "a" * 40
+    assert spec["baseline"]["argv"] == launch["argv"] == executed[0][1]
+    if runtime == "vllm-omni" and model_name == "h3":
+        assert spec["baseline"]["model_path"] == executed[0][1][2]
+    else:
+        assert spec["baseline"]["model_path"] == str(model)
