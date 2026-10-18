@@ -120,6 +120,7 @@ class FileWindows:
         path = os.path.join(runtime.DIR, "torch", f"{rank}.{time.time_ns()}.pt.trace.json.gz")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         prof.export_chrome_trace(path)
+        log_profiler_event(rank, "exported")
 
     def close(self, rank):
         if self.active is not None:

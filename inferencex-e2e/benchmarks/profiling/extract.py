@@ -1100,6 +1100,17 @@ def trace_time(path):
     return int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
 
 
+def readable(path):
+    """The whole file decompresses: an engine killed mid-export leaves a truncated trace."""
+    try:
+        with (gzip.open(path) if path.endswith(".gz") else open(path, "rb")) as f:
+            while f.read(1 << 24):
+                pass
+        return True
+    except (OSError, EOFError, ValueError):
+        return False
+
+
 def main():
     profile_dir, out_dir = sys.argv[1], sys.argv[2]
     os.makedirs(out_dir, exist_ok=True)
@@ -1108,7 +1119,9 @@ def main():
              "families": collections.defaultdict(set)}
     traces = sorted(glob.glob(os.path.join(profile_dir, "torch", "**", "*.pt.trace.json*"),
                               recursive=True), key=trace_time)
-    needed = replayed_graphs(traces)
+    unreadable = {path for path in traces if not readable(path)}
+    report["unreadable_traces"] = sorted(os.path.relpath(p, profile_dir) for p in unreadable)
+    needed = replayed_graphs([p for p in traces if p not in unreadable])
     sessions = collections.defaultdict(list)
     for path in glob.glob(os.path.join(profile_dir, "capture", "*.json*")):
         name = os.path.basename(path).split(".")
@@ -1146,6 +1159,9 @@ def main():
     windows_seen = collections.Counter()
     index = []
     for path in traces:
+        if path in unreadable:
+            windows_seen[os.path.basename(path).split(".")[0]] += 1
+            continue
         trace = Trace(path)
         rank = next((ranks[p] for p in trace.process_ids() if p in ranks), None)
         window = windows_seen[rank]

@@ -22,6 +22,7 @@ DECODE_MIN_STEPS = 50
 MEASURED_S = float(os.environ.get("INFX_PROFILE_DURATION") or 600)
 DECODE_DEADLINE_S = max(0.0, MEASURED_S - 150.0)
 MIN_MEASURED_S = 60.0
+EXPORT_WAIT_S = 900.0
 CLOCK_WINDOW_MAX_S = 120.0
 CLOCK_TAIL_S = 0.5
 CLOCK_TAIL_MAX_S = 10.0
@@ -199,6 +200,18 @@ def wait_for_profilers(prof_dir: str, t_ns: int, due: float | None = None) -> in
     return None
 
 
+def wait_for_exports(prof_dir: str, t_ns: int) -> list[str]:
+    """Wait until every rank that profiled after t_ns has written its last trace; the ranks still exporting at the deadline."""
+    deadline = time.time() + EXPORT_WAIT_S
+    while True:
+        pending = [rank for rank, ev in profiler_events(prof_dir, t_ns).items()
+                   if any(e == "stop" for e, _ in ev)
+                   and max(t for e, t in ev if e == "stop") > max((t for e, t in ev if e == "exported"), default=0)]
+        if not pending or time.time() > deadline:
+            return pending
+        time.sleep(1.0)
+
+
 def wait_for_window_steps(counter: StepCounter, t_ns: int, iterations: int) -> None:
     """Until every rank that stepped since t_ns has stepped `iterations` times."""
     deadline = time.time() + CLOCK_WINDOW_MAX_S
@@ -343,6 +356,9 @@ def main() -> None:
                 note(event="rate_probe", seconds=result["seconds"])
             except Exception as e:
                 note(event="rate_probe", error=repr(e))
+        if mode == "file":
+            pending = wait_for_exports(os.path.dirname(steps_dir), int(started * 1e9))
+            note(event="exports", pending=pending, t_unix_done=time.time())
         stop_replay(aiperf_log, started, note)
 
 
