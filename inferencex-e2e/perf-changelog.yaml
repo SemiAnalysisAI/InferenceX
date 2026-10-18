@@ -10103,6 +10103,6 @@
   scenario-type:
   - agentic-coding
   description:
-  - ''
+  - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   no-evals: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
