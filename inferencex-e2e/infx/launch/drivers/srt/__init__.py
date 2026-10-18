@@ -135,7 +135,7 @@ def run_video(launch: Launch) -> int:
         if not package.is_dir():
             raise LaunchError(f"video-generation harness not found at {package}")
         hf_cache = models.single_node_hf_cache(run.cluster, request)
-        time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
+        time_limit = str(request.salloc_time_limit)
         root = Path(tempfile.mkdtemp(prefix="srt-video.", dir=run.workspace))
         checkout = prepare_checkout(run, root / "checkout", power=True)
         install_srtctl(run, checkout)
@@ -148,6 +148,10 @@ def run_video(launch: Launch) -> int:
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
+        collect.stage_video_identity(run, Path(bound))
+        fetched = root / "fetched-outputs"
+        submitted = submit.Submitted(manifest=run.workspace / submit.VIDEO_SUBMISSION)
+        run.life.callback(collect.finish_video, run, submitted, fetched)
         image, reference = config.stage_gpu_exporter(run, single_node=True)
         job_config = config.SrtJob(
             srtctl_root=checkout.root,
@@ -167,9 +171,6 @@ def run_video(launch: Launch) -> int:
         if rc := run_setup(run, checkout):
             return rc
 
-    fetched = root / "fetched-outputs"
-    submitted = submit.Submitted(manifest=run.workspace / submit.VIDEO_SUBMISSION)
-    run.life.callback(collect.finish_video, run, submitted, fetched)
     arguments = ["--json", "--yes", "--output", str(root / "outputs"), *runtime_args]
     applied = submit.apply(run, checkout, bound, arguments, stdout=submitted.manifest)
     if applied.returncode:

@@ -85,6 +85,7 @@ def _ci_context(environ: dict[str, str]) -> dict:
     return {
         "repository": repository or None,
         "workflow_ref": environ.get("GITHUB_WORKFLOW_REF"),
+        "head_sha": environ.get("GITHUB_HEAD_SHA"),
         "workflow_sha": environ.get("GITHUB_WORKFLOW_SHA") or environ.get("GITHUB_SHA"),
         "actor": environ.get("GITHUB_ACTOR"),
         "triggering_actor": environ.get("GITHUB_TRIGGERING_ACTOR"),
@@ -252,7 +253,12 @@ def build_bundle(
     slurm_job_id, slurm_state, *rest = (job_status.split("|") + ["", ""])[:3]
     failures: list[str] = []
     cells = []
-    plan = None
+    declared_path = workspace / "video-identity.json"
+    declared = _read(declared_path) if declared_path.is_file() else None
+    plan = declared["workload_plan"] if declared else None
+    identity = {key: declared[key] for key in ("plan_sha256", "engine")} if declared else None
+    if declared:
+        _write(output / "video-identity.json", declared)
     for concurrency in concurrencies:
         cell_dir = output / "gpu" / f"c{concurrency}"
         source_cell = h3_dir / "gpu" / f"c{concurrency}"
@@ -266,7 +272,14 @@ def build_bundle(
             continue
         _copy_tree(source_cell / "baseline", cell_dir / "baseline")
         run = _read(cell_dir / "baseline" / "run.json")
-        plan = plan or run.get("plan")
+        configuration = run.get("configuration") or {}
+        cell_identity = {"plan_sha256": run.get("plan_sha256"),
+                         "engine": {"name": configuration.get("runtime"),
+                                    "revision": configuration.get("runtime_revision")}}
+        if identity is not None and (identity != cell_identity or plan != run.get("plan")):
+            raise ValueError(f"c{concurrency}: workload or engine identity differs between cells")
+        identity = cell_identity
+        plan = run.get("plan")
         bench_path = source_cell / f"benchmark_concurrency_{concurrency}.json"
         bench = _read(bench_path) if bench_path.is_file() else {}
         validation_path = workspace / f"power_validation_{result_filename}_conc{concurrency}.json"
@@ -347,7 +360,10 @@ def build_bundle(
     status = "complete" if cells and all(c["status"] == "complete" for c in cells) else "failed"
     power_verified = bool(cells) and all(c["verified"] for c in cells)
     ci = _ci_context(environ)
+    identity = identity or {"plan_sha256": None, "engine": None}
+    artifact_name = environ.get("VIDEO_ARTIFACT_NAME")
     matrix = {
+        **identity,
         "schema_version": "1.0.0", "bundle_type": BUNDLE_TYPE, "evidence_kind": EVIDENCE_KIND,
         "status": status, "power_verified": power_verified, "started_at": started, "finished_at": finished,
         "plan": plan, "runtime": (spec or {}).get("baseline"), "server": (spec or {}).get("server"),
@@ -362,6 +378,7 @@ def build_bundle(
     }  # fmt: skip
     _write(output / "serving-smoke.json", matrix)
     ci_state = {
+        "artifact_name": artifact_name,
         "schema_version": 1, "task_id": TASK_ID, "run_id": run_id, "run_attempt": attempt,
         "source_sha": source_sha, "started_at": started, "finished_at": finished,
         "phase": "complete", "mode": MODE, "launcher": "srt-slurm", "evidence_kind": EVIDENCE_KIND,
@@ -376,6 +393,7 @@ def build_bundle(
     evidence = {path.relative_to(output).as_posix(): _hash(path)
                 for path in sorted(output.rglob("*.json"))}
     manifest = {
+        **identity, "artifact_name": artifact_name, "recipe_fingerprint": environ.get("RECIPE_FINGERPRINT"),
         "schema_version": 1, "task_id": TASK_ID, "git_commit": source_sha, "ci": ci,
         "run_id": run_id, "run_attempt": attempt, "mode": MODE, "launcher": "srt-slurm",
         "evidence_kind": EVIDENCE_KIND, "workload_plan": plan, "gpu_uuids": gpu_uuids,

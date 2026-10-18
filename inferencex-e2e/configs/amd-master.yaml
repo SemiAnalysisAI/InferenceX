@@ -1727,28 +1727,3 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           # Inherits the same P-only scratch-reclaim setting as 1P1D c48.
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-
-# Video-generation benchmarks (scenario video-generation): one frozen H3 workload
-# (experimental/video-generation/specs) served by a fixed deployment, every listed
-# concurrency against the same server. Rows run through the native srt-slurm launcher
-# (infx.launch path srt-video) with the cluster's GPU power exporter; the H3 client and
-# server come from experimental/video-generation, mounted into the job as /h3-package.
-# The image is the prepared H3 runtime squash staged in the cluster's squash cache
-# (sglang 71de97b with the H3 server-timing patch and the evaluator's media
-# dependencies); it is not pullable from a registry.
-h3-bf16-mi355x-sglang-video:
-  image: hongccc/sglang-omni:h3-runtime-71de97b
-  model: MiniMaxAI/MiniMax-H3
-  model-prefix: h3
-  runner: cluster:mi355x-amds
-  precision: bf16
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: h3/sglang/mi355x-bf16
-  scenarios:
-    video-generation:
-      - spec: h3-serving-2gpu.json
-        search-space:
-          - gpus: 2
-            srt-recipe: serving-client.yaml
-            conc-list: [1, 2, 4]

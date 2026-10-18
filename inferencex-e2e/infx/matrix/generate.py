@@ -1139,6 +1139,8 @@ def _video_entries(
             Fields.DP_ATTN.value: False,
             Fields.RUN_EVAL.value: False,
         }
+        if scenario.get("set") is not None:
+            entry["set"] = scenario["set"]
         entries.append(validate_video_matrix_entry(entry))
     return entries
 
@@ -1578,6 +1580,8 @@ def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
         try:
             fingerprint = recipe_fingerprint(row, root)
         except ValueError as error:
+            if row.get("scenario-type") == "video-generation":
+                raise
             print(f"WARNING: no recipe fingerprint: {error}", file=sys.stderr)
             fingerprinted.append(row)
         else:

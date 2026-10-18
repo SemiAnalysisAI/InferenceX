@@ -9851,20 +9851,3 @@ h3-bf16-b200-sglang-video:
           - gpus: 2
             srt-recipe: serving-client.yaml
             conc-list: [1, 2, 4]
-
-h3-bf16-h100-sglang-video:
-  image: hongccc/sglang-omni:h3-runtime-71de97b
-  model: MiniMaxAI/MiniMax-H3
-  model-prefix: h3
-  runner: cluster:h100-dsxe
-  precision: bf16
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: h3/sglang/h100-bf16
-  scenarios:
-    video-generation:
-      - spec: h3-serving-2gpu.json
-        search-space:
-          - gpus: 2
-            srt-recipe: serving-client.yaml
-            conc-list: [1, 2, 4]

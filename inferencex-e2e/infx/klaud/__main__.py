@@ -111,6 +111,9 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
                 continue
             demand = max(entry.get("node-count", 1) for entry in entries)
             for entry in entries:
+                if entry.get("scenario-type") == "video-generation":
+                    # Video bundles are outside Klaud's LLM observation/refresh contract.
+                    continue
                 agentic = entry.get("scenario-type") == "agentic-coding"
                 row = {
                     "model": entry["model-prefix"],
