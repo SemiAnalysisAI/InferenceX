@@ -110,7 +110,7 @@ override_tp4_parity:
         mamba-radix-cache-strategy: extra_buffer_lazy
         linear-attn-prefill-backend: flashinfer
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
+        linear-replayssm-cache-len: 16
         mem-fraction-static: 0.80
         max-mamba-cache-size: 360
 
@@ -142,7 +142,7 @@ override_tp2ep2_hicache:
         linear-attn-prefill-backend: flashinfer
         speculative-moe-runner-backend: flashinfer_trtllm
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
+        linear-replayssm-cache-len: 16
         mem-fraction-static: 0.88
         # extra_buffer_lazy uses four physical Mamba state slots per running request.
         # This layout is the measured K5 middle frontier through C28.
@@ -172,7 +172,7 @@ override_tp2ep2_hicache_cap48:
         speculative-num-steps: 3
         speculative-num-draft-tokens: 4
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
+        linear-replayssm-cache-len: 16
         cuda-graph-max-bs-decode: 48
         max-running-requests: 48
         mem-fraction-static: 0.88
@@ -202,7 +202,7 @@ override_tp2ep2_hicache_k3_baseline:
         speculative-num-steps: 3
         speculative-num-draft-tokens: 4
         enable-linear-replayssm-spec: true
-        linear-replayssm-cache-len: 8
+        linear-replayssm-cache-len: 16
         mem-fraction-static: 0.88
         max-mamba-cache-size: 320
         tokenizer-worker-num: 1
