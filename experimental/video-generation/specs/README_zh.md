@@ -41,4 +41,4 @@ uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' python experimental/vide
 `wan.yaml` 使用相同 schema 定义 Wan2.2-T2V-A14B 纯视频工作负载，并由同一个 `h3_spec.py` 加载。`frozen-3733` 集合还原 #3733 的 `wan22-t2v-a14b-serving-smoke-v1` plan，哈希为 `1f1a093b391bfd94f64d6e492948989850508ac4dad472eeaa98785fd26327d6`。`shared-v1` 为 #3733 的每条提示词保留原 seed，并增加一个高 100 的 seed；每个新 seed 引用其原 seed 的来源行。`release-v1` 将四条已有提示词与五个已记录的 seed 交叉组合，每个引擎运行 20 条测量视频和一次预热。
 
 两个引擎接收全部 generation 字段，其中 `frame_count` 作为 `num_frames` 发送。runner 检查视频宽度、高度、帧数和 FPS；纯视频模型约定还要求没有音频流。
-[Wan vLLM-Omni 服务记录](wan-vllm-omni-serving_zh.md)保留八卡 H100 上的固定镜像、服务命令和并行配置。`../tests/fixtures/wan-vllm-omni-a8576ccb/` 保留该次请求、服务记录和 ffprobe 输出。Wan 测试位于 `tests/test_wan_spec.py` 和 `tests/test_wan_runner.py`；`.github/workflows/test-h3-video.yml` 在草稿及正式 PR 上运行整个 `experimental/video-generation` 测试集。
+[Wan vLLM-Omni 服务记录](wan-vllm-omni-serving.md)保留八卡 H100 上的固定镜像、服务命令和并行配置。`../tests/fixtures/wan-vllm-omni-a8576ccb/` 保留该次请求、服务记录和 ffprobe 输出。Wan 测试位于 `tests/test_wan_spec.py` 和 `tests/test_wan_runner.py`；`.github/workflows/test-h3-video.yml` 在草稿及正式 PR 上运行整个 `experimental/video-generation` 测试集。

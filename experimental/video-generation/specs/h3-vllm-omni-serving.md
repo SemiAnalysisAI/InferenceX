@@ -1,6 +1,6 @@
 # Serving MiniMax-H3 on vLLM-Omni
 
-What the Phase A feasibility run used on 2x H100 80GB on 2026-10-17. Phase B benchmarking starts from this and records any change.
+Configuration observed for one MiniMax-H3 request on 2x H100 80GB on 2026-10-17.
 
 ## Pins
 
@@ -36,7 +36,7 @@ VLLM_OMNI_VIDEO_SYNC_TIMEOUT=14400
 
 ## Parallelism
 
-Tensor parallel 2 across both GPUs with Ulysses and ring degree 1, text encoder TP 2, VAE patch-parallel 2 in tile mode with tiling. This is the upstream recipe's only two-GPU resident layout; pure Ulysses replicates the whole DiT on every rank, so SGLang's `ulysses_degree 2 / tp_size 1` layout from #2916 does not fit 80 GB here. Phase A ran eager; Phase B should also try without `--enforce-eager` and report compile time separately.
+Tensor parallel 2 across both GPUs with Ulysses and ring degree 1, text encoder TP 2, VAE patch-parallel 2 in tile mode with tiling. This is the upstream recipe's only two-GPU resident layout; pure Ulysses replicates the whole DiT on every rank, so SGLang's `ulysses_degree 2 / tp_size 1` layout from #2916 does not fit 80 GB here. The observed request used `--enforce-eager`.
 
 ## Attention backend
 

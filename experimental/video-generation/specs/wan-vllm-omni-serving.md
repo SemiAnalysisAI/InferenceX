@@ -1,6 +1,6 @@
 # Serving Wan2.2-T2V-A14B on vLLM-Omni
 
-What the Phase A feasibility run used on 8x H100 80GB on 2026-10-17 (dsxe, Slurm job 445). Phase B benchmarking starts from this and records any change.
+Configuration observed for one Wan2.2-T2V-A14B request on 8x H100 80GB on 2026-10-17 (dsxe, Slurm job 445).
 
 ## Pins
 
