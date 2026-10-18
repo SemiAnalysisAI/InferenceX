@@ -23,6 +23,10 @@ base:
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
       router-session-affinity-ttl-secs: 3600
+      dyn-chat-processor: sglang
+      trust-remote-code: true
+      reasoning-parser: muse
+      tool-call-parser: muse
   engine: sglang
   roles:
     prefill:
@@ -61,7 +65,7 @@ base:
         max-running-requests: 32
         enable-hierarchical-cache: true
         hicache-write-policy: write_back
-        hicache-size: 130
+        hicache-size: 110
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
         speculative-draft-attention-backend: fa4
@@ -103,6 +107,7 @@ base:
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         disaggregation-mode: decode
+        max-total-tokens: 10000000
         disaggregation-transfer-backend: nixl
         disable-radix-cache: true
         speculative-algorithm: DFLASH
