@@ -197,7 +197,7 @@ override_1p4d_tep8_b1_mtp3_c12:
 override_1p4d_tep8_b2_mtp3_c8:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.4.0rc0
   roles:
     prefill:
       nodes: 1
@@ -305,7 +305,7 @@ override_4p3d_tep8_b32_mtp3_c126:
 override_5p1d_dep16_b8_mtp3_c154:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.4.0rc0
   engine:
     sequential_node_start: 2
   roles:
@@ -415,7 +415,7 @@ override_7p1d_dep16_b32_mtp3_c666:
 override_11p1d_dep8_b128_mtp3_c1229:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.4.0rc0
   engine:
     sequential_node_start: 2
   roles:
@@ -501,7 +501,7 @@ override_11p1d_dep8_b128_mtp3_c1229:
 override_17p2d_dep8_b64_mtp3_c1126:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.4.0rc0
   engine:
     sequential_node_start: 2
   roles:
@@ -569,7 +569,7 @@ override_17p2d_dep8_b64_mtp3_c1126:
 override_26p1d_dep16_b256_mtp2_c4301:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.4.0rc0
   engine:
     sequential_node_start: 2
   roles:
@@ -687,7 +687,7 @@ override_26p1d_dep16_b256_mtp2_c4301:
 override_24p1d_dep16_b512_mtp0_c8192_mtp_sweep:
   identity:
     frameworks:
-      tensorrt_llm: 1.3.0rc24
+      tensorrt_llm: 1.4.0rc0
   engine:
     sequential_node_start: 2
   roles:
