@@ -533,7 +533,8 @@ def check_stop() -> dict:
     try:
         session = current_session()
         pulls = session.pulls()
-        if pulls and session.handed_off(pulls[0]):
+        # The job's recover-current step cancels an aborted candidate's runs and closes its PR.
+        if pulls and (session.handed_off(pulls[0]) or session.aborted(pulls[0])):
             return {}
         outcome = CandidateOutcome.model_validate_json(
             (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").read_text()

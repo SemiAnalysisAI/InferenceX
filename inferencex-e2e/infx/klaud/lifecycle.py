@@ -15,13 +15,15 @@ from urllib.parse import urlencode
 from . import claims, github
 from .github import VerificationError
 from .models import CandidateOutcome, OwnedCandidate, Ownership, identity, utc
-from .reporting import latest_next, translated
+from .reporting import Prose, latest_next, translated
 from .validation import verify_sweep
 
 BOT = "Klaud-Cold"
 COMMITTER = "github-actions[bot]"
 ACTIVE_STATUSES = ("requested", "waiting", "pending", "queued", "in_progress")
 CANDIDATE_ID = r"[0-9a-f]{16}-[0-9a-f]{16}"
+# A maintainer label that stops a candidate for good: its runs are cancelled, its PR closed.
+ABORT_LABEL = "klaud-abort"
 SWEEP_LABELS = {
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
@@ -183,6 +185,9 @@ class Session:
 
     def handed_off(self, pull: dict) -> bool:
         return any(label["name"] == "klaud-handoff" for label in pull["labels"])
+
+    def aborted(self, pull: dict) -> bool:
+        return any(label["name"] == ABORT_LABEL for label in pull["labels"])
 
     def refresh(self, pull: dict) -> dict:
         self.check_parent()
@@ -452,7 +457,13 @@ class Session:
                 repairs = outcome.repairs_used if outcome.repairs_used is not None else "unknown"
                 reason_en = f" · Reason: {outcome.reason_code}" if outcome.reason_code else ""
                 reason_zh = f" · 原因：{outcome.reason_code}" if outcome.reason_code else ""
-                why = None if proof or self.recovering else latest_next(self, pull)
+                why = (
+                    Prose(en="Stopped by the klaud-abort label.", zh="已由 klaud-abort 标签停止。")
+                    if outcome.outcome == "aborted"
+                    else None
+                    if proof or self.recovering
+                    else latest_next(self, pull)
+                )
                 why_en = f"**Reason:** {why.en}  \n" if why else ""
                 why_zh = f"**原因：**{why.zh}  \n" if why else ""
                 body = (
@@ -561,6 +572,7 @@ def resumable(session: Session, pull: dict | None) -> bool:
     return (
         unfinished_draft(session, pull)
         and not session.handed_off(pull)
+        and not session.aborted(pull)
         and session.branch_exists()
         and not session.report(pull)
         and not session.pending(pull)
@@ -602,17 +614,6 @@ def sessions_started(session: Session) -> int:
     return sum(started_session(job) for job in candidate_jobs(session))
 
 
-def continues(repository: str, job: dict) -> bool:
-    """Whether resuming continues the session of this ended candidate job.
-
-    A session that runs out fails its job. GitHub cancels a job that reaches its time limit and
-    annotates it; a person's cancel stops the session for good.
-    """
-    return job["conclusion"] in ("failure", "timed_out") or (
-        job["conclusion"] == "cancelled" and hit_timeout(repository, job)
-    )
-
-
 def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
     """Whether rerunning its planner run's failed jobs would continue this unfinished session."""
     parent = session.parent
@@ -625,7 +626,9 @@ def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
         job["run_attempt"] == parent["run_attempt"]
         # A planner run from before resumption has no gate; its reruns skip the candidate.
         and any(step["name"] == GATE_STEP for step in job["steps"])
-        and continues(session.repository, job)
+        # A session that runs out fails its job, and a cancelled session was preempted like any
+        # other Klaud work; only klaud-abort stops a candidate for good.
+        and job["conclusion"] in ("failure", "timed_out", "cancelled")
         for job in jobs
     )
 
@@ -683,9 +686,9 @@ def grant(repository: str, parent: dict, sessions: list[tuple[Session, dict]]) -
                 resume_marker(parent["id"], session.candidate.id, attempt)
                 + "\n"
                 + translated(
-                    f"**resumed** · The session ran out before finishing; attempt {attempt} of "
+                    f"**resumed** · The session ended before finishing; attempt {attempt} of "
                     f"[its planner run]({link}) continues it.",
-                    f"**resumed** · 会话未完成即已超时；[其规划运行]({link})"
+                    f"**resumed** · 会话未完成即已结束；[其规划运行]({link})"
                     f"的第 {attempt} 次尝试将继续该会话。",
                 )
             )
@@ -747,6 +750,17 @@ def reconcile(session: Session, now: datetime) -> bool:
     if not pull and not runs:
         return False
     pending = session.pending(pull) if pull else None
+    if pull and not pending and session.aborted(pull):
+        session.finish(
+            CandidateOutcome(
+                outcome="aborted",
+                phase="cleanup",
+                pull_request=pull["number"],
+                run_ids=[run["id"] for run in runs],
+                repairs_used=None,
+            )
+        )
+        return True
     final = [
         run
         for run in runs

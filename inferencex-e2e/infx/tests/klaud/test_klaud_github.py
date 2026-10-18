@@ -561,9 +561,9 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
 
     def planner_job(job_id, name, number, outcome):
         """Attempt ``number``'s job ``name``, which concluded ``outcome``: ``None`` while it
-        runs, ``ungranted`` for a gate that failed it without a grant, ``gated-off`` for a gate
-        that let it end without a session and ``cancelled-timeout`` for a cancel at the job's
-        time limit. A ``-copied`` suffix marks a copy, which keeps attempt 1's start."""
+        runs, ``ungranted`` for a gate that failed it without a grant and ``gated-off`` for a
+        gate that let it end without a session. A ``-copied`` suffix marks a copy, which keeps
+        attempt 1's start."""
         created = start + timedelta(hours=6 * (number - 1), minutes=20)
         copied = bool(outcome) and outcome.endswith("-copied")
         kind = outcome.removesuffix("-copied") if outcome else None
@@ -572,7 +572,6 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
             "ungranted": ("failure", "failure", "skipped"),
             "gated-off": ("success", "success", "skipped"),
             "cancelled": ("cancelled", "success", "cancelled"),
-            "cancelled-timeout": ("cancelled", "success", "cancelled"),
         }.get(kind, (kind, "success", "success"))
         if copied:
             began = start + timedelta(minutes=21)
@@ -609,14 +608,6 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
                 if job.endswith("-timeout") else "The operation was canceled."
             )}]
             for index, job in enumerate(jobs)
-        },
-        **{
-            f"check-runs/{1000 + number}/annotations?per_page=100": [{"message": (
-                "The job has exceeded the maximum execution time of 6h0m0s"
-                if outcome == "cancelled-timeout" else "The operation was canceled."
-            )}]
-            for number, outcome in enumerate(sessions, 1)
-            if outcome in ("cancelled", "cancelled-timeout")
         },
         "actions/runs/9/artifacts?per_page=100": list(artifacts),
         "pulls?state=open&per_page=100": [pull] if state == "open" else [],
@@ -826,10 +817,8 @@ def resume_check(tmp_path, monkeypatch, world, attempt):
     pytest.param(("failure", "gated-off"), {}, 1, False, id="rerun-that-ended-without-a-session"),
     pytest.param(("failure",), {"planner": "cancelled"}, 1, True,
                  id="failed-job-in-a-cancelled-run"),
-    pytest.param(("cancelled",), {"planner": "cancelled"}, 1, False,
-                 id="job-cancelled-by-a-person"),
-    pytest.param(("cancelled-timeout",), {"planner": "cancelled"}, 1, True,
-                 id="job-cancelled-at-its-time-limit"),
+    pytest.param(("cancelled",), {"planner": "cancelled"}, 1, True,
+                 id="cancelled-session-is-preempted"),
     pytest.param(("failure",), {"gated": False}, 1, False, id="planner-run-predates-resumption"),
     pytest.param(("failure", "skipped"), {"gated": False}, 1, False,
                  id="rerun-of-a-planner-run-from-before-resumption"),
@@ -868,12 +857,15 @@ def test_recovery_stops_resuming_a_day_after_the_planner_run_ended(monkeypatch, 
     assert world.finished == ([] if approved else [UNEXPECTED_ERROR])
 
 
-@pytest.mark.parametrize("change", ["handed-off", "closed", "outcome-recorded", "cleanup-pending"])
-def test_recovery_never_resumes_a_handed_off_closed_or_recorded_pr(monkeypatch, change):
+@pytest.mark.parametrize("change", [
+    "handed-off", "aborted", "closed", "outcome-recorded", "cleanup-pending",
+])  # fmt: skip
+def test_recovery_never_resumes_a_handed_off_aborted_closed_or_recorded_pr(monkeypatch, change):
     world = ended_session_sweep(monkeypatch, state="closed" if change == "closed" else "open",
                                 sessions=("failure",))
-    if change == "handed-off":
-        world.pull["labels"].append({"name": "klaud-handoff"})
+    if change in ("handed-off", "aborted"):
+        label = "klaud-handoff" if change == "handed-off" else lifecycle.ABORT_LABEL
+        world.pull["labels"].append({"name": label})
     elif change != "closed":
         world.comments.append(recorded(
             world.session, "klaud-cleanup:" if change == "cleanup-pending" else "klaud-outcome:"))
@@ -881,6 +873,27 @@ def test_recovery_never_resumes_a_handed_off_closed_or_recorded_pr(monkeypatch, 
     lifecycle.resume(world.session, world.pull, NOW)
 
     assert world.writes == []
+
+
+@pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
+def test_klaud_abort_stops_a_candidate_for_good(monkeypatch, conclusion):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
+    world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
+
+    assert lifecycle.reconcile(world.session, NOW) is True
+    assert [outcome.outcome for outcome in world.finished] == ["aborted"]
+    assert world.writes == []
+
+
+def test_an_aborted_session_may_stop_without_its_own_outcome(tmp_path, monkeypatch):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=(None,))
+    world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
+    monkeypatch.setattr(lifecycle, "current_session", lambda: world.session)
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path))
+
+    assert klaud.check_stop() == {}
+    world.pull["labels"].pop()
+    assert klaud.check_stop()["decision"] == "block"
 
 
 def test_a_resumed_planner_run_never_adopts_a_newer_runs_pr_on_its_branch(tmp_path, monkeypatch):
@@ -917,9 +930,9 @@ def test_recovery_grants_an_unfinished_session_the_next_attempt_of_its_planner_r
     assert world.writes == [GRANT, RESUME]
     assert [comment["body"] for comment in world.comments] == [
         f"<!-- klaud-resume:42:{candidate}:attempt-2 -->\n" + reporting.translated(
-            f"**resumed** · The session ran out before finishing; attempt 2 of [its planner run]"
+            f"**resumed** · The session ended before finishing; attempt 2 of [its planner run]"
             f"({link}) continues it.",
-            f"**resumed** · 会话未完成即已超时；[其规划运行]({link})的第 2 次尝试将继续该会话。",
+            f"**resumed** · 会话未完成即已结束；[其规划运行]({link})的第 2 次尝试将继续该会话。",
         )
     ]
     assert world.finished == world.released == []
@@ -1075,6 +1088,7 @@ def test_a_planner_job_runs_its_first_session_without_reading_github(
                  0, id="ungranted-reruns-not-counted"),
     pytest.param(("failure",) * 4 + (None,), None, False, 0, id="over-the-cap"),
     pytest.param(("failure", None), "outcome-recorded", False, 0, id="outcome-recorded"),
+    pytest.param(("failure", None), "aborted", False, 0, id="aborted-despite-a-grant"),
     pytest.param(("failure", None), "ungranted", False, 1, id="no-grant"),
     pytest.param(("failure", None), "other-attempt", False, 1, id="grant-for-another-attempt"),
     pytest.param(("failure", None), "forged", False, 1, id="grant-from-someone-else"),
@@ -1090,6 +1104,8 @@ def test_a_rerun_planner_job_runs_only_a_session_recovery_granted_to_it(
             author="maintainer" if change == "forged" else "Klaud-Cold"))
     if change == "outcome-recorded":
         world.comments.append(recorded(world.session))
+    if change == "aborted":
+        world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
 
     decision = str(resumes).lower()
     assert resume_check(tmp_path, monkeypatch, world, attempt) == (
@@ -2212,6 +2228,7 @@ STOP = ("Stop as uncertain: the new image stalls every deployment.",
                  id="raw-log"),
     pytest.param("validated", STOP, False, False, False, id="validated"),
     pytest.param("uncertain", STOP, False, True, False, id="recovered-session"),
+    pytest.param("aborted", STOP, False, False, False, id="aborted-by-label"),
 ])  # fmt: skip
 def test_closing_report_states_why_from_the_latest_own_attempt(
     monkeypatch, outcome, latest, chunked, recovering, shown
@@ -2233,9 +2250,13 @@ def test_closing_report_states_why_from_the_latest_own_attempt(
     runs = "[9](https://github.com/example/project/actions/runs/9)"
     done = {
         "uncertain": ("PR closed; branch deleted for retry.", "PR 已关闭；分支已删除，可重新尝试。"),
+        "aborted": ("PR closed; branch deleted for retry.", "PR 已关闭；分支已删除，可重新尝试。"),
         "validated": ("Full sweep verified; ready for review.", "完整 sweep 已验证；已就绪，等待审查。"),
     }[outcome]
     why = (f"**Reason:** {latest[0]}  \n", f"**原因：**{latest[1]}  \n") if shown else ("", "")
+    if outcome == "aborted":
+        why = ("**Reason:** Stopped by the klaud-abort label.  \n",
+               "**原因：**已由 klaud-abort 标签停止。  \n")
 
     assert finish_report(monkeypatch, outcome, comments, recovering) == (
         f"**{outcome}** · Repairs: 0 · Runs: {runs}  \n{why[0]}All owned runs ended. {done[0]}"
