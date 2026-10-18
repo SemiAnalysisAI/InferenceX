@@ -50,8 +50,9 @@ base:
 
 # One variant per point, all TP4. Decode graphs are captured for every batch
 # size up to max(8, 2x CONC). From CONC 32 the prefill delayer coalesces longer;
-# from CONC 48 LMCache offloads to host DRAM: 239 GiB of KV plus 110 GiB of GDN
-# state per rank, 349 GiB x 4 ranks = 1499 GB (dram-utilization 1.0 at TP4).
+# from CONC 48 LMCache offloads to host DRAM: 253 GB of KV plus 110 GB of GDN
+# state per rank, 363 GB x 4 ranks = 1452 GB, within the 1499 GB TP4 share at
+# dram-utilization 1.0.
 override_tp4_c1:
   roles:
     agg:
@@ -142,7 +143,7 @@ override_tp4_c48_lmcache:
         ATOM_PREFILL_DELAYER_TTFT_MAX_TICKS: '15'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_CHUNK_SIZE: '256'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '239'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '253'
         LMCACHE_NUMA_MODE: auto
         OFFLOAD_MIN_LOAD_TOKENS: '8192'
         OFFLOAD_STATE_CPU_SIZE: '110'
@@ -164,7 +165,7 @@ override_tp4_c56_lmcache:
         ATOM_PREFILL_DELAYER_TTFT_MAX_TICKS: '15'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_CHUNK_SIZE: '256'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '239'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '253'
         LMCACHE_NUMA_MODE: auto
         OFFLOAD_MIN_LOAD_TOKENS: '8192'
         OFFLOAD_STATE_CPU_SIZE: '110'
@@ -186,7 +187,7 @@ override_tp4_c64_lmcache:
         ATOM_PREFILL_DELAYER_TTFT_MAX_TICKS: '15'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_CHUNK_SIZE: '256'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '239'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '253'
         LMCACHE_NUMA_MODE: auto
         OFFLOAD_MIN_LOAD_TOKENS: '8192'
         OFFLOAD_STATE_CPU_SIZE: '110'
@@ -208,7 +209,7 @@ override_tp4_c80_lmcache:
         ATOM_PREFILL_DELAYER_TTFT_MAX_TICKS: '15'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_CHUNK_SIZE: '256'
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '239'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '253'
         LMCACHE_NUMA_MODE: auto
         OFFLOAD_MIN_LOAD_TOKENS: '8192'
         OFFLOAD_STATE_CPU_SIZE: '110'
