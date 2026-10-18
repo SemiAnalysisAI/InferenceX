@@ -10102,4 +10102,4 @@
     - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
   description:
     - "Update GLM-5.2 GB300 TensorRT-LLM image and disaggregated AgentX recipes"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4273
