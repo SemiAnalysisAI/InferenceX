@@ -178,11 +178,8 @@ class Session:
             utc(run["created_at"]) > utc(self.parent["updated_at"]) and run["actor"]["login"] != BOT
             for run in sweeps
         ):
-            raise VerificationError("New maintainer runs require explicit handoff")
+            raise VerificationError("Maintainer started runs after the session; leave them intact")
         return targeted + sweeps
-
-    def handed_off(self, pull: dict) -> bool:
-        return any(label["name"] == "klaud-handoff" for label in pull["labels"])
 
     def aborted(self, pull: dict) -> bool:
         return any(label["name"] == ABORT_LABEL for label in pull["labels"])
@@ -194,7 +191,6 @@ class Session:
             current["head"]["sha"] != pull["head"]["sha"]
             or current["merged_at"]
             or current["user"]["login"] != BOT
-            or self.handed_off(current)
         ):
             raise VerificationError("Ownership changed; leave maintainer work intact")
         return current
@@ -230,7 +226,7 @@ class Session:
         if record["head"] != pull["head"]["sha"]:
             raise VerificationError("PR head changed after cleanup was requested")
         outcome = CandidateOutcome.model_validate(record["outcome"])
-        if outcome.outcome in ("validated", "handoff"):
+        if outcome.outcome == "validated":
             raise VerificationError("Invalid pending cleanup category")
         return outcome
 
@@ -258,11 +254,7 @@ class Session:
     ) -> None:
         pulls = self.pulls()
         pull = pulls[0] if pulls else None
-        if outcome.outcome == "handoff":
-            if not pull or pull["number"] != outcome.pull_request or not self.handed_off(pull):
-                raise VerificationError("No explicit maintainer handoff")
-            return
-        if pull and (self.handed_off(pull) or pull["merged_at"]):
+        if pull and pull["merged_at"]:
             raise VerificationError("Maintainer owns the PR")
         runs = self.runs()
         if any(not terminal(run) for run in runs):
@@ -326,18 +318,8 @@ class Session:
         pulls = self.pulls()
         pull = pulls[0] if pulls else None
         runs = self.runs()
-        if pull and self.handed_off(pull):
-            return CandidateOutcome(
-                outcome="handoff",
-                phase="cleanup",
-                pull_request=pull["number"],
-                run_ids=[r["id"] for r in runs],
-                repairs_used=outcome.repairs_used,
-            )
         if pull and pull["merged_at"]:
             raise VerificationError("Merged PR belongs to maintainers")
-        if outcome.outcome == "handoff":
-            raise VerificationError("No explicit maintainer handoff")
         outcome = outcome.model_copy(
             update={
                 "pull_request": pull["number"] if pull else None,
@@ -569,7 +551,6 @@ def resumable(session: Session, pull: dict | None) -> bool:
     """Whether a later session may continue this candidate's unfinished draft PR."""
     return (
         unfinished_draft(session, pull)
-        and not session.handed_off(pull)
         and not session.aborted(pull)
         and session.branch_exists()
         and not session.report(pull)
@@ -732,14 +713,14 @@ def summarize(repository: str, candidate: OwnedCandidate, parent: int, status: s
 def reconcile(session: Session, now: datetime) -> bool:
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
-    if pull and (pull["merged_at"] or session.handed_off(pull)):
+    if pull and pull["merged_at"]:
         return False
     record = session.report(pull) if pull else None
     if record:
         outcome = CandidateOutcome.model_validate(record["outcome"])
         session.verify(outcome, require_branch_deleted=False)
         changed = False
-        if outcome.outcome not in ("validated", "handoff") and pull and session.branch_exists():
+        if outcome.outcome != "validated" and pull and session.branch_exists():
             session.delete_branch(pull)
             changed = True
         session.verify(outcome)
@@ -985,7 +966,6 @@ def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
             pull["draft"]
             and pull["user"]["login"] == BOT
             and (pull["head"]["repo"] or {}).get("full_name") == repository
-            and not any(label["name"] == "klaud-handoff" for label in pull["labels"])
             and bot_committed(
                 github.items(repository, f"pulls/{pull['number']}/commits?per_page=100")
             )

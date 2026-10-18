@@ -435,24 +435,23 @@ def test_recovery_lease_frees_once_the_holders_reconcile_job_ends(
 def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
     monkeypatch, other_recovery
 ):
-    names = ["dead", "session", "sweeping", "handoff", "human", "ready", "leftover",
+    names = ["dead", "session", "sweeping", "human", "ready", "leftover",
              "closed-by-human", "stale-claim", "live-claim"]  # fmt: skip
     ids = {name: f"{digit * 16}-{digit * 16}" for name, digit in zip(names, "123456789a")}
 
-    def pull(name, number, *, draft=True, labels=()):
+    def pull(name, number, *, draft=True):
         return {
             "number": number, "draft": draft, "user": {"login": "Klaud-Cold"},
             "head": {"ref": f"klaud/auto-{ids[name]}", "repo": {"full_name": "example/project"}},
-            "labels": [{"name": label} for label in labels], "created_at": "2026-10-15T00:00:00Z",
-            "merged_at": None,
+            "created_at": "2026-10-15T00:00:00Z", "merged_at": None,
         }  # fmt: skip
 
     open_pulls = [
-        pull("dead", 1), pull("session", 2), pull("sweeping", 3),
-        pull("handoff", 4, labels=["klaud-handoff"]), pull("human", 5), pull("ready", 6, draft=False),
+        pull("dead", 1), pull("session", 2), pull("sweeping", 3), pull("human", 5),
+        pull("ready", 6, draft=False),
     ]  # fmt: skip
     closed = {"leftover": (7, "Klaud-Cold"), "closed-by-human": (8, "maintainer")}
-    smoke = {"dead": 501, "handoff": 502}
+    smoke = {"dead": 501, "ready": 502}
 
     def items(_repository, path, _key=None):
         if path.startswith("actions/workflows/e2e-tests.yml/runs?status=queued"):
@@ -508,8 +507,7 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
 
     live = lifecycle.sweep_abandoned("example/project", set())
 
-    assert live == {ids[name] for name in
-                    ("session", "sweeping", "handoff", "human", "ready")}
+    assert live == {ids[name] for name in ("session", "sweeping", "human", "ready")}
     assert released == [(ids["stale-claim"], 1)]
     assert writes == [
         ("POST", "actions/runs/501/cancel"),
@@ -858,14 +856,13 @@ def test_recovery_stops_resuming_a_day_after_the_planner_run_ended(monkeypatch, 
 
 
 @pytest.mark.parametrize("change", [
-    "handed-off", "aborted", "closed", "outcome-recorded", "cleanup-pending",
+    "aborted", "closed", "outcome-recorded", "cleanup-pending",
 ])  # fmt: skip
-def test_recovery_never_resumes_a_handed_off_aborted_closed_or_recorded_pr(monkeypatch, change):
+def test_recovery_never_resumes_an_aborted_closed_or_recorded_pr(monkeypatch, change):
     world = ended_session_sweep(monkeypatch, state="closed" if change == "closed" else "open",
                                 sessions=("failure",))
-    if change in ("handed-off", "aborted"):
-        label = "klaud-handoff" if change == "handed-off" else lifecycle.ABORT_LABEL
-        world.pull["labels"].append({"name": label})
+    if change == "aborted":
+        world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
     elif change != "closed":
         world.comments.append(recorded(
             world.session, "klaud-cleanup:" if change == "cleanup-pending" else "klaud-outcome:"))
@@ -876,7 +873,7 @@ def test_recovery_never_resumes_a_handed_off_aborted_closed_or_recorded_pr(monke
 
 
 @pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
-def test_klaud_abort_stops_a_candidate_for_good(monkeypatch, conclusion):
+def test_klaud_abort_closes_the_candidate_pr_as_aborted(monkeypatch, conclusion):
     world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
     world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
 

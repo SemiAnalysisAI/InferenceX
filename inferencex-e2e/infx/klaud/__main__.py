@@ -597,7 +597,7 @@ def check_stop() -> dict:
         session = current_session()
         pulls = session.pulls()
         # The job's recover-current step cancels an aborted candidate's runs and closes its PR.
-        if pulls and (session.handed_off(pulls[0]) or session.aborted(pulls[0])):
+        if pulls and session.aborted(pulls[0]):
             return {}
         outcome = CandidateOutcome.model_validate_json(
             (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").read_text()
@@ -663,16 +663,7 @@ def save_diagnostics(
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         failure = "session-state-unavailable"
     else:
-        if pulls and session.handed_off(pulls[0]):
-            outcome = CandidateOutcome(
-                outcome="handoff",
-                phase="cleanup",
-                pull_request=pulls[0]["number"],
-                run_ids=[run["id"] for run in runs],
-                repairs_used=None,
-            )
-            diagnostics["outcome-source"] = "maintainer-handoff"
-        elif receipt:
+        if receipt:
             try:
                 outcome = CandidateOutcome.model_validate(receipt["outcome"])
             except (ValueError, KeyError, TypeError):
@@ -1053,7 +1044,7 @@ def main() -> int:
     )
     commands.add_parser(
         "check-stop",
-        help="Claude Stop hook: require finished runs and validated, closed or handed-off PRs",
+        help="Claude Stop hook: require finished runs and validated or closed PRs",
     )
     recovery = commands.add_parser(
         "recover", help="Reconcile interrupted sessions from completed autosweeps"

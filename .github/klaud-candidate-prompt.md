@@ -55,11 +55,9 @@ overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
 workspace permissions and artifact contracts; follow the CODEOWNER checklist.
 
-Before every PR/branch mutation or cancellation, re-read labels. `klaud-handoff` means
-maintainer ownership: leave PR/branch/labels/jobs intact, report handoff and stop.
-`klaud-abort` means a maintainer stopped this candidate: stop immediately without further
-changes; the job's cleanup cancels your runs and closes the PR. Never add or remove either
-label yourself.
+Before every PR/branch mutation or cancellation, re-read labels. `klaud-abort` means a
+maintainer stopped this candidate: stop immediately without further changes; the job's
+cleanup cancels your runs and closes the PR. Never add or remove that label yourself.
 
 The planner checks capacity once, when it selects a candidate; never check or defer for
 capacity inside this session. Klaud runs at the lowest scheduler priority: dispatch every
