@@ -240,7 +240,7 @@ override_tp8_c128_dp_ep8_megamoe_hicache:
         enable-dp-attention-local-control-broadcast: true
         tokenizer-worker-num: 8
         stream-interval: 20
-        prefill-decode-interval: 20
+        prefill-decode-interval: 40
         prefill-delayer-token-usage-low-watermark: 0.7
         load-balance-method: total_requests
         chunked-prefill-size: 131072
