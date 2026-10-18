@@ -897,12 +897,13 @@ jobs:
                   if-no-files-found: error
 
     validate-video-results:
+        name: validate-video-results
         needs: [setup, canary-sweep, sweep-video, upload-changelog-metadata]
         if: ${{ !cancelled() && (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) && !contains(github.event.pull_request.labels.*.name, 'evals-only') && !contains(github.event.pull_request.labels.*.name, 'agentx-fast') && needs.setup.result == 'success' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
         runs-on: ubuntu-latest
         permissions:
-            actions: read
-            contents: read
+            actions: read # Download the current run's video artifacts.
+            contents: read # Check out the video validator.
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
