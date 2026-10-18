@@ -108,7 +108,6 @@ base:
         VLLM_SSM_CONV_STATE_LAYOUT: "DS"
         VLLM_ENABLE_GEMM_RS: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
-        TOKENSPEED_MLA_FP16_PARTIALS: '0'
       args:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3"
@@ -216,34 +215,32 @@ override_1p4d_cap2_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-override_1p3d_cap4_fp16:
+override_1p3d_cap4:
   roles:
-    prefill: &override_1p3d_cap4_fp16_prefill
+    prefill: &override_1p3d_cap4_prefill
       nodes: 2
       workers: 1
-      args: &override_1p3d_cap4_fp16_prefill_args {}
-    decode: &override_1p3d_cap4_fp16_decode
+      args: &override_1p3d_cap4_prefill_args {}
+    decode: &override_1p3d_cap4_decode
       nodes: 6
       workers: 3
-      env:
-        TOKENSPEED_MLA_FP16_PARTIALS: "1"
-      args: &override_1p3d_cap4_fp16_decode_args
+      args: &override_1p3d_cap4_decode_args
         max-num-seqs: 4
 
-override_1p3d_cap4_fp16_eval:
+override_1p3d_cap4_eval:
   roles:
     prefill:
-      <<: *override_1p3d_cap4_fp16_prefill
+      <<: *override_1p3d_cap4_prefill
       args:
-        <<: *override_1p3d_cap4_fp16_prefill_args
+        <<: *override_1p3d_cap4_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_1p3d_cap4_fp16_decode
+      <<: *override_1p3d_cap4_decode
       args:
-        <<: *override_1p3d_cap4_fp16_decode_args
+        <<: *override_1p3d_cap4_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3

@@ -7895,8 +7895,8 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           version: 0.3.13.post1
         conc-list:
         - 48
-        srt-recipe: disagg-variants.yaml:override_1p3d_cap4_fp16
-        eval-srt-recipe: disagg-variants.yaml:override_1p3d_cap4_fp16_eval
+        srt-recipe: disagg-variants.yaml:override_1p3d_cap4
+        eval-srt-recipe: disagg-variants.yaml:override_1p3d_cap4_eval
         power: true
         prefill:
           num-worker: 1
