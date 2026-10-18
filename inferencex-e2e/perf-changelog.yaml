@@ -10107,4 +10107,4 @@
     - "Use trtllm_mha attention, flashinfer_trtllm target and draft MoE runners, ReplaySSM speculative verification, BF16 target and draft KV, page size 64, full decode CUDA graphs to batch 96 and 96 max running requests, PLE embedding offload to pinned host memory, mem-fraction-static 0.88 and scheduler-recv-interval 1."
     - "Serve concurrency 1, 4, 8, 12 and 16 GPU-only: no KV offload, SGLang's default Mamba radix cache, decode CUDA graph batch sizes 1-8, 10, 12, 14, 16 and then every 8 up to 96, six tokenizer workers, and max-running-requests 2 at concurrency 1."
     - "Add concurrency 32 and 48 with SGLang HiCache (hicache-size 298 GB, write_back, page_first, kernel IO) inside the 299 GB per-GPU allowance from dram-utilization 0.8, and the extra_buffer_lazy Mamba radix cache with a 480-slot pool."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4280
