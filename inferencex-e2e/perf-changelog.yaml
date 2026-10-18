@@ -10097,3 +10097,9 @@
     - "Move the complete GB300 Kimi-K3 AgentX curve to vLLM nightly-49cb2bbf, use probabilistic DSpark sampling throughout (golden AL 3.36/3.62/3.84 for 4/5/7 drafts), and add low-latency megakernel points."
     - "Pin Dynamo ffbbaaa6 (dynamo-parsers 8.1.0), use Kimi-K3 parsers only in evaluation recipes, and set DYN_TCP_REQUEST_TIMEOUT=120 for the frontend and workers."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4208
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4282
