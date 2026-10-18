@@ -61,6 +61,7 @@ from .prepare_perf_changelog_merge import (  # noqa: E402
     resolve_conflict_bytes,
 )
 from .sweep_runs import (  # noqa: E402
+    VideoValidationError,
     artifact_names,
     completed_pr_runs,
     has_reusable_result_artifacts,
@@ -276,7 +277,10 @@ def find_eligible_run(
             continue
         names = artifact_names(repo, int(run["id"]), token)
         if has_reusable_result_artifacts(names):
-            validate_video_run(repo, run, token, names)
+            try:
+                validate_video_run(repo, run, token, names)
+            except VideoValidationError:
+                continue
             return int(run["id"])
     return None
 

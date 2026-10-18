@@ -19,6 +19,10 @@ REUSABLE_AGGREGATE_ARTIFACTS = {
 }
 
 
+class VideoValidationError(RuntimeError):
+    """A candidate run's native video artifacts could not be validated."""
+
+
 def completed_pr_runs(
     repo: str, workflow_id: str, head_branch: str, token: str
 ) -> list[dict[str, Any]]:
@@ -118,6 +122,6 @@ def validate_video_run(repo: str, run: dict, token: str, names: set[str]) -> Non
                 root, run_id=str(run_id), run_attempt=str(attempt), head_sha=head
             )
     except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError) as error:
-        raise RuntimeError(
+        raise VideoValidationError(
             f"Reusable source run {run_id} has invalid native video artifacts: {error}"
         ) from error

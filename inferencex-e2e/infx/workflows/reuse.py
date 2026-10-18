@@ -21,6 +21,7 @@ from infx import github
 
 from .sweep_runs import (
     REUSABLE_AGGREGATE_ARTIFACTS as REUSABLE_AGGREGATE_ARTIFACTS,
+    VideoValidationError,
     artifact_names as artifact_names,
     completed_pr_runs,
     has_reusable_result_artifacts as has_reusable_result_artifacts,
@@ -151,7 +152,10 @@ def find_latest_successful_pr_run(
         names = artifact_names(repo, int(run["id"]), token)
         if not has_reusable_result_artifacts(names):
             continue
-        validate_video_run(repo, run, token, names)
+        try:
+            validate_video_run(repo, run, token, names)
+        except VideoValidationError:
+            continue
         return run
     return None
 

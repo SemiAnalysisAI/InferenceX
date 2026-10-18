@@ -144,13 +144,57 @@ def test_resealed_invalid_video_evidence_fails_closed(sweep, fault, match):
         validate_video_artifacts(sweep, run_id=RUN, run_attempt=ATTEMPT, head_sha=HEAD)
 
 
-@pytest.mark.parametrize("entrypoint", ["pin", "latest", "merge", "stage"])
-@pytest.mark.parametrize("fault", [None, "row", "attempt", "head", "run", "partial", "mixed", "name", "metadata"])
-def test_reuse_entrypoints_validate_retained_video_bytes(sweep, monkeypatch, entrypoint, fault):
+def mock_retained_runs(sweep, monkeypatch, runs):
     import io
     import zipfile
 
     from infx import github
+
+    artifacts, archives = [], {}
+    for index, folder in enumerate(sorted(sweep.iterdir()), start=1):
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, "w") as archive:
+            for path in folder.rglob("*"):
+                if path.is_file():
+                    archive.write(path, path.relative_to(folder))
+        raw = data.getvalue()
+        artifacts.append({"id": index, "name": folder.name, "expired": False,
+                          "size_in_bytes": len(raw),
+                          "digest": "sha256:" + hashlib.sha256(raw).hexdigest()})
+        archives[index] = raw
+    artifacts.append({"id": 99, "name": "changelog-metadata", "expired": False})
+    downloads = []
+
+    def paginate(repo, path, token, item_key="", params=None):
+        if path.endswith("/artifacts"):
+            return artifacts
+        if path.endswith("/commits"):
+            return [{"sha": run["head_sha"]} for run in runs]
+        if path.endswith("/timeline"):
+            return [{"event": "labeled", "label": {"name": "full-sweep-enabled"},
+                     "created_at": "2026-10-18T00:00:00Z"}]
+        if path.endswith("/runs"):
+            return runs
+        raise AssertionError(path)
+
+    def download(command, **kwargs):
+        assert command[:2] == ["gh", "api"]
+        assert kwargs["env"]["GH_TOKEN"] == "test-token"
+        artifact_id = int(command[2].split("/")[-2])
+        downloads.append(artifact_id)
+        return archives[artifact_id]
+
+    monkeypatch.setattr(github, "paginate", paginate)
+    monkeypatch.setattr(github, "api", lambda repo, path, token: next(
+        run for run in runs if str(run["id"]) == path.rsplit("/", 1)[-1]))
+    monkeypatch.setattr(github.subprocess, "check_output", download)
+
+    return downloads
+
+
+@pytest.mark.parametrize("entrypoint", ["pin", "latest", "merge", "stage", "stage_auto"])
+@pytest.mark.parametrize("fault", [None, "row", "attempt", "head", "run", "partial", "mixed", "name", "metadata"])
+def test_reuse_entrypoints_validate_retained_video_bytes(sweep, monkeypatch, entrypoint, fault):
     from infx.workflows import merge_with_reuse, reuse, stage_results
 
     run = {"id": int(RUN), "run_attempt": int(ATTEMPT), "head_sha": HEAD,
@@ -175,63 +219,53 @@ def test_reuse_entrypoints_validate_retained_video_bytes(sweep, monkeypatch, ent
         write(sweep / "results_bmk/result.json", [])
     elif fault == "metadata":
         run.pop("run_attempt")
-    artifacts, archives = [], {}
-    for index, folder in enumerate(sorted(sweep.iterdir()), start=1):
-        data = io.BytesIO()
-        with zipfile.ZipFile(data, "w") as archive:
-            for path in folder.rglob("*"):
-                if path.is_file():
-                    archive.write(path, path.relative_to(folder))
-        raw = data.getvalue()
-        artifacts.append({"id": index, "name": folder.name, "expired": False,
-                          "size_in_bytes": len(raw),
-                          "digest": "sha256:" + hashlib.sha256(raw).hexdigest()})
-        archives[index] = raw
-    artifacts.append({"id": 99, "name": "changelog-metadata", "expired": False})
-    downloads = []
-
-    def paginate(repo, path, token, item_key="", params=None):
-        if path.endswith("/artifacts"):
-            return artifacts
-        if path.endswith("/commits"):
-            return [{"sha": run["head_sha"]}]
-        if path.endswith("/timeline"):
-            return [{"event": "labeled", "label": {"name": "full-sweep-enabled"},
-                     "created_at": "2026-10-18T00:00:00Z"}]
-        if path.endswith("/runs"):
-            return [run]
-        raise AssertionError(path)
-
-    def download(command, **kwargs):
-        assert command[:2] == ["gh", "api"]
-        assert kwargs["env"]["GH_TOKEN"] == "test-token"
-        artifact_id = int(command[2].split("/")[-2])
-        downloads.append(artifact_id)
-        return archives[artifact_id]
-
-    monkeypatch.setattr(github, "paginate", paginate)
-    monkeypatch.setattr(github, "api", lambda *args, **kwargs: run)
-    monkeypatch.setattr(github.subprocess, "check_output", download)
+    downloads = mock_retained_runs(sweep, monkeypatch, [run])
 
     def invoke():
         if entrypoint == "pin":
             reuse.validate_reusable_run("example/project", "run-sweep.yml", 7, run,
                                         "test-token", allow_failed=True)
         elif entrypoint == "latest":
-            assert reuse.find_latest_successful_pr_run("example/project", "run-sweep.yml",
-                       "feature", {run["head_sha"]}, "test-token") == run
+            return reuse.find_latest_successful_pr_run("example/project", "run-sweep.yml",
+                       "feature", {run["head_sha"]}, "test-token")
         elif entrypoint == "merge":
-            assert merge_with_reuse.find_eligible_run("example/project", 7, "feature", "test-token") == run["id"]
+            return merge_with_reuse.find_eligible_run("example/project", 7, "feature", "test-token")
         else:
-            assert stage_results.resolve_run("example/project", 7, {"head": {"ref": "feature"}},
-                       "test-token", str(run["id"])) == run
+            return stage_results.resolve_run("example/project", 7, {"head": {"ref": "feature"}},
+                       "test-token", str(run["id"]) if entrypoint == "stage" else None)
 
-    if fault:
-        with pytest.raises(RuntimeError, match="video"):
+    if fault and entrypoint in {"latest", "merge"}:
+        assert invoke() is None
+    elif fault:
+        with pytest.raises(RuntimeError, match="No stageable" if entrypoint == "stage_auto" else "video"):
             invoke()
     else:
-        invoke()
+        expected = {"latest": run, "merge": run["id"], "stage": run, "stage_auto": run}.get(entrypoint)
+        assert invoke() == expected
         assert len(downloads) == 3
+
+
+@pytest.mark.parametrize("entrypoint", ["latest", "merge", "stage"])
+def test_automatic_selection_skips_stale_video_run(sweep, monkeypatch, entrypoint):
+    from infx.workflows import merge_with_reuse, reuse, stage_results
+
+    valid = {"id": int(RUN), "run_attempt": int(ATTEMPT), "head_sha": HEAD,
+             "event": "pull_request", "status": "completed", "conclusion": "success",
+             "path": ".github/workflows/run-sweep.yml", "created_at": "2026-10-18T01:00:00Z"}
+    # The newer run retained the older run's bundles and manifest.
+    stale = {**valid, "id": 124, "created_at": "2026-10-18T02:00:00Z"}
+    downloads = mock_retained_runs(sweep, monkeypatch, [stale, valid])
+
+    if entrypoint == "latest":
+        assert reuse.find_latest_successful_pr_run("example/project", "run-sweep.yml",
+                   "feature", {HEAD}, "test-token") == valid
+    elif entrypoint == "merge":
+        assert merge_with_reuse.find_eligible_run("example/project", 7, "feature", "test-token") == valid["id"]
+    else:
+        assert stage_results.resolve_run("example/project", 7, {"head": {"ref": "feature"}},
+                   "test-token", None) == valid
+    # Reject the stale manifest, then validate every artifact of the older sweep.
+    assert len(downloads) == 4
 
 
 @pytest.mark.parametrize("fault", [None, "json_only", "traversal", "absolute", "duplicate", "collision", "symlink", "special", "digest"])
