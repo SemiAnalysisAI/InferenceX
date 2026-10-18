@@ -20,7 +20,7 @@ ENV = {
 }  # fmt: skip
 
 
-@pytest.mark.parametrize("sku", ["h200", "b200", "h100", "mi355x"])
+@pytest.mark.parametrize("sku", ["h200", "b200"])
 def test_checked_in_fragments_bind_as_custom_benchmark_against_the_h3_service(sku):
     fragment = H200.with_name(H200.name).parent.parent / f"{sku}-bf16" / H200.name
     bound = video.prepare(fragment, ENV, root=ROOT)

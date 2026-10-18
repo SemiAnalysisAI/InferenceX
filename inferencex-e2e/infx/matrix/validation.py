@@ -420,8 +420,12 @@ VIDEO_SPEC_DIR = "experimental/video-generation/specs"
 
 def _video_spec_path(value: str) -> str:
     """A spec file name under experimental/video-generation/specs, without directories."""
-    if not value or value != PurePosixPath(value).name or not value.endswith(".json"):
-        raise ValueError(f"{value!r} must be a JSON file name under {VIDEO_SPEC_DIR}")
+    if (
+        not value
+        or value != PurePosixPath(value).name
+        or not value.endswith((".json", ".yaml", ".yml"))
+    ):
+        raise ValueError(f"{value!r} must be a JSON or YAML file name under {VIDEO_SPEC_DIR}")
     return value
 
 
@@ -441,6 +445,7 @@ class VideoMatrixEntry(BaseModel):
     framework: str
     runner: str
     spec: VideoSpec
+    video_set: str | None = Field(default=None, alias="set", pattern=r"^[A-Za-z0-9_-]+$")
     gpus: int = Field(gt=0, strict=True)
     conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
@@ -825,6 +830,7 @@ class VideoGenerationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     spec: VideoSpec
+    video_set: str | None = Field(default=None, alias="set", pattern=r"^[A-Za-z0-9_-]+$")
     search_space: list[VideoGenerationSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
 
 

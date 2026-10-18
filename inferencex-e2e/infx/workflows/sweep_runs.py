@@ -6,6 +6,7 @@ import urllib.parse
 from typing import Any
 
 from infx import github
+from infx.results.video_artifacts import VIDEO_ARTIFACT
 
 REUSABLE_AGGREGATE_ARTIFACTS = {
     "results_bmk",
@@ -47,8 +48,13 @@ def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
 
 def has_reusable_result_artifacts(names: set[str]) -> bool:
     """Return whether a run produced ingest-relevant result artifacts."""
-    return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
-        name.startswith("bmk_agentic_") for name in names
+    return (
+        bool(names & REUSABLE_AGGREGATE_ARTIFACTS)
+        or any(name.startswith("bmk_agentic_") for name in names)
+        or (
+            "video-sweep-manifest" in names
+            and any(VIDEO_ARTIFACT.fullmatch(name) for name in names)
+        )
     )
 
 

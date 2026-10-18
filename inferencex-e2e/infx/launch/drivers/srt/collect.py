@@ -6,6 +6,8 @@ Logs are staged on every exit path, and always before the job's outputs are dele
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import json
 import os
 import shutil
 import sys
@@ -13,6 +15,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 from infx.bench.env import InputError
 from infx.bench.eval import meta as eval_meta
@@ -32,6 +36,7 @@ from infx.launch.artifacts import (
 from infx.launch.backends.base import BackendError
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.drivers.srt.run import SrtRun, require
+from infx.srt_slurm.video import load_spec
 
 if TYPE_CHECKING:
     from infx.launch.backends.base import Job
@@ -139,19 +144,55 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     return power_rc
 
 
+def stage_video_identity(run: SrtRun, bound: Path) -> None:
+    """Retain the selected workload before startup, using the binder's declared identity."""
+    environment = yaml.safe_load(bound.read_text())["benchmark"].get("env", {})
+    if not environment.get("H3_PLAN_SHA256"):
+        return  # Legacy JSON recipes declare their identity in the completed run.
+    selection = {"set_id": environment["H3_SET"]} if environment.get("H3_SET") else {}
+    plan = load_spec(run.request.env["H3_SPEC"], root=run.workspace, **selection)["plan"]
+    digest = hashlib.sha256(
+        json.dumps(
+            plan,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+    if digest != environment["H3_PLAN_SHA256"] or plan["model_id"] != run.request.model:
+        raise ValueError("bound video identity disagrees with the selected workload")
+    identity = {
+        "plan_sha256": digest,
+        "workload_plan": plan,
+        "engine": {
+            "name": environment["H3_RUNTIME"],
+            "revision": environment["H3_RUNTIME_REVISION"],
+        },
+    }
+    (run.workspace / "video-identity.json").write_text(json.dumps(identity, sort_keys=True) + "\n")
+
+
 def finish_video(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
-    """Exit cleanup of a video job: cancel a live job, then retain its logs and power package."""
+    """Cancel a live job and retain diagnostics, including a bundle when startup failed."""
     job = submitted.recover(run.backend)
-    if job is None:
-        return 0
-    run.backend.cancel(job)
-    with run.life.event.stage("collect"):
+    output = fetched
+    if job is not None:
+        run.backend.cancel(job)
         output = run.backend.fetch_outputs(job, fetched)
-        if not output.is_dir():
-            return 0
-        power_rc = _stage_power_package(run, output / "logs")
-        bundle_server_logs(output, run.workspace / VIDEO_LOGS)
-    return power_rc
+    with run.life.event.stage("collect"):
+        logs = output / "logs"
+        rc = 0
+        if not (run.workspace / VIDEO_BUNDLE / "manifest.json").is_file():
+            producer = run.workspace / "power-producer-sha.txt"
+            rc = finalize_video_results(
+                run, logs, producer.read_text().strip() if producer.is_file() else ""
+            )
+        elif logs.is_dir():
+            rc = _stage_power_package(run, logs)
+        if output.is_dir():
+            bundle_server_logs(output, run.workspace / VIDEO_LOGS)
+    return rc
 
 
 def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
@@ -163,9 +204,7 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
     """
     request, event = run.request, run.life.event
     require(request, "INFERENCEX_RESULTS_PYTHON", "CONC_LIST", "GPU_COUNT", "H3_SPEC")
-    if not (logs / "h3").is_dir():
-        event.fail("ResultMissing", f"H3 results are missing under {logs / 'h3'}")
-        return 1
+    power_rc = _stage_power_package(run, logs)
     rc = validate_video_results(
         request.inferencex_results_python, run.workspace, logs, producer_sha,
         result_filename=request.result_filename, concurrencies=request.conc_list,
@@ -186,7 +225,7 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
     )  # fmt: skip
     if bundle_rc:
         event.fail("VideoBundleFailed", "H3 results bundle was not built", report=False)
-    return rc or bundle_rc
+    return power_rc or rc or bundle_rc
 
 
 def _stage_logs(run: SrtRun, logs: Path, power: PowerDecision) -> None:

@@ -218,7 +218,7 @@ def video_env(harness, cluster_id: str, **overrides: str) -> dict[str, str]:
 
 def test_video_point_serves_the_h3_service_and_stages_every_concurrency(harness):
     workspace = harness.workspace
-    env = video_env(harness, "h100-cw")
+    env = video_env(harness, "b200-nscale", SALLOC_TIME_LIMIT="75")
     assert_ok(launch(env, harness.config, workspace))
 
     [call] = srtctl_calls(harness.logs)
@@ -235,6 +235,7 @@ def test_video_point_serves_the_h3_service_and_stages_every_concurrency(harness)
     ClusterConfig.Schema().load(rendered)
     mounts = rendered["default_mounts"]
     assert mounts[str(workspace.parent / "experimental/video-generation")] == "/h3-package"
+    assert rendered["default_time_limit"] == "75"
     assert "/mnt/hf_hub_cache/" in mounts.values()
     assert rendered["containers"][rendered["default_gpu_exporter"]["container_image"]]
     # Every concurrency's aggregate and validation sidecar, the point summary, and the app bundle.
@@ -250,6 +251,9 @@ def test_video_point_serves_the_h3_service_and_stages_every_concurrency(harness)
     assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
     assert all(cell["status"] == "complete" and not cell["verified"] for cell in matrix["cells"])
     assert (bundle / "SHA256SUMS").is_file() and (bundle / "gpu/c1/power.json").is_file()
+    ci = json.loads((bundle / "ci.json").read_text())
+    assert ci["power"]["producer_git_commit"] == (workspace / "power-producer-sha.txt").read_text().strip()
+    assert ci["power"]["exporter_image_sha256"] == (workspace / "exporter-image.sha256").read_text().strip()
     assert (workspace / "LOGS/power/samples.csv").read_text() == "retained native samples\n"
     assert (workspace / "LOGS/power/native-job-status.txt").read_text() == "42|COMPLETED|0:0\n"
     assert (workspace / "srt-video-logs.tar.gz").stat().st_size > 0
@@ -890,3 +894,40 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
         "http://worker:8000",
         str(harness.workspace),
     ]
+
+
+def test_video_startup_failure_keeps_a_failed_bundle_without_client_results(harness):
+    env = video_env(harness, "h100-cw", FAKE_RESULTS="none", FAKE_STATE="FAILED|1:0")
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode != 0
+    bundle = harness.workspace / "h3-results"
+    matrix = json.loads((bundle / "serving-smoke.json").read_text())
+    assert matrix["status"] == "failed" and matrix["power_verified"] is False
+    assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]
+    assert all(cell["status"] == "failed" for cell in matrix["cells"])
+    assert (bundle / "SHA256SUMS").is_file()
+
+
+def test_declared_video_identity_is_retained_before_startup(tmp_path, monkeypatch):
+    import hashlib
+    from infx.launch.drivers.srt import collect
+
+    plan = {"model_id": "test/video", "prompt": "夜空"}
+    digest = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    bound = tmp_path / "config.yaml"
+    bound.write_text(yaml.safe_dump({"benchmark": {"env": {
+        "H3_SET": "release-v1", "H3_PLAN_SHA256": digest,
+        "H3_RUNTIME": "vllm-omni", "H3_RUNTIME_REVISION": "a" * 40,
+    }}}))
+    run = SimpleNamespace(workspace=tmp_path, request=SimpleNamespace(model="test/video", env={"H3_SPEC": "video.yaml"}))
+    def selected(name, *, root, set_id):
+        assert (name, root, set_id) == ("video.yaml", tmp_path, "release-v1")
+        return {"plan": plan}
+    monkeypatch.setattr(collect, "load_spec", selected)
+    collect.stage_video_identity(run, bound)
+    identity = json.loads((tmp_path / "video-identity.json").read_text())
+    assert identity == {"plan_sha256": digest, "workload_plan": plan,
+                        "engine": {"name": "vllm-omni", "revision": "a" * 40}}
+    run.request.model = "wrong/model"
+    with pytest.raises(ValueError, match="disagrees"):
+        collect.stage_video_identity(run, bound)
