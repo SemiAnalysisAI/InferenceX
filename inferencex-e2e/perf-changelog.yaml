@@ -10097,3 +10097,14 @@
     - "Move the complete GB300 Kimi-K3 AgentX curve to vLLM nightly-49cb2bbf, use probabilistic DSpark sampling throughout (golden AL 3.36/3.62/3.84 for 4/5/7 drafts), and add low-latency megakernel points."
     - "Pin Dynamo ffbbaaa6 (dynamo-parsers 8.1.0), use Kimi-K3 parsers only in evaluation recipes, and set DYN_TCP_REQUEST_TIMEOUT=120 for the frontend and workers."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4208
+
+- config-keys:
+    - qwen3.8next-fp8-h200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image from lmsysorg/sglang:qwen38flashnext to lmsysorg/sglang:v0.5.22-cu130, pinned by digest, and drop SGLANG_ENABLE_SPEC_V2."
+    - "Size decode CUDA graphs to the full admission (cuda-graph-max-bs-decode = max-running-requests = 2x concurrency) instead of capturing graphs only up to the concurrency, so no decode step runs eager."
+    - "Replace the TP4/EP4 concurrency 1-16 curve with seven points: TP2/EP2 at concurrency 1, 8, 12, 14 and 16, and TP4/EP4 at concurrency 1 and 8."
+    - "Enable --enable-linear-replayssm-spec on the TP2/EP2 points at concurrency 8, 12, 14 and 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
