@@ -426,7 +426,7 @@ def test_srt_shim_builds_the_runtime_waits_for_the_server_and_writes_the_point(
 
     assert result.returncode == 0, result.stderr
     assert _events(tmp_path) == [
-        f"hf download --repo-type dataset {traces.LOADERS[traces.CAPPED]}",
+        f"hf download --repo-type dataset {traces.LOADERS[traces.UNCAPPED]}",
         "GET /v1/models",
         "GET /v1/chat/completions",
         "replay",
