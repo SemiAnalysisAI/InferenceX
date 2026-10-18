@@ -10,6 +10,7 @@ fragment owns only the service and client shape.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -50,6 +51,10 @@ VIDEO_ENV = (
     "H3_PACKAGE_ROOT",
     "H3_MODEL_PATH",
     "H3_RESULT_DIR",
+    "H3_SET",
+    "H3_PLAN_SHA256",
+    "H3_RUNTIME",
+    "H3_RUNTIME_REVISION",
 )
 _BOUND_KEYS = (
     ("model",),
@@ -59,7 +64,17 @@ _BOUND_KEYS = (
     ("benchmark", "concurrencies"),
     *(("benchmark", "env", name) for name in VIDEO_ENV),
 )
-_SERVICE_ENV = ("H3_SPEC_PATH", "H3_PACKAGE_ROOT", "H3_MODEL_PATH", "H3_RESULT_DIR")
+_SERVICE_ENV = (
+    "H3_SPEC_PATH",
+    "H3_PACKAGE_ROOT",
+    "H3_MODEL_PATH",
+    "H3_RESULT_DIR",
+    "H3_SET",
+    "H3_PLAN_SHA256",
+    "H3_RUNTIME",
+    "H3_RUNTIME_REVISION",
+    "GPU_COUNT",
+)
 
 
 def video_package(root: Path | None = None) -> Path:
@@ -121,15 +136,35 @@ def spec_model_path(hf_hub_cache: str, model: str, revision: str) -> str:
     return str(cache / f"models--{model.replace('/', '--')}" / "snapshots" / revision)
 
 
-def load_spec(name: str, *, root: Path) -> dict[str, Any]:
-    """The frozen H3 workload ``name`` under the harness's ``specs`` directory."""
-    if name != PurePosixPath(name).name or not name.endswith(".json"):
+def load_spec(name: str, *, root: Path, set_id: str | None = None) -> dict[str, Any]:
+    """The selected video workload under the harness's ``specs`` directory."""
+    if name != PurePosixPath(name).name or not name.endswith((".json", ".yaml", ".yml")):
         raise ValueError(
-            f"H3_SPEC must name a JSON file under {VIDEO_PACKAGE}/{SPEC_DIR}: {name!r}"
+            f"H3_SPEC must name a JSON or YAML file under {VIDEO_PACKAGE}/{SPEC_DIR}: {name!r}"
         )
     path = video_package(root) / SPEC_DIR / name
     if not path.is_file():
         raise ValueError(f"H3 spec not found: {path}")
+    if path.suffix in {".yaml", ".yml"}:
+        if not set_id or not re.fullmatch(r"[A-Za-z0-9_-]+", set_id):
+            raise ValueError("H3_SET must select a safe nonempty YAML workload set")
+        helper = path.with_name("h3_spec.py")
+        module_spec = importlib.util.spec_from_file_location("video_workload_spec", helper)
+        if module_spec is None or module_spec.loader is None:
+            raise ValueError(f"cannot load workload helper: {helper}")
+        module = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(module)
+        source = module.load_spec(path)
+        if set_id not in source["sets"]:
+            raise ValueError(f"H3_SET {set_id!r} is not defined in {name}")
+        plan = module.plan_for(source, set_id)
+        return {
+            "plan": plan,
+            "model": {"revision": source["model"]["revision"]["value"]},
+            "plan_sha256": module.plan_sha256(plan),
+        }
+    if set_id:
+        raise ValueError("H3_SET is only valid with a YAML workload")
     spec = json.loads(path.read_text())
     if not isinstance(spec, dict):
         raise ValueError(f"{path}: spec must be an object")
@@ -162,13 +197,14 @@ def bind_video(
     gpus = _positive(_required(environment, "GPU_COUNT"), "GPU_COUNT")
     concurrencies = parse_concurrencies(_required(environment, "CONC_LIST"))
     spec_name = _required(environment, "H3_SPEC")
-    spec = load_spec(spec_name, root=root)
+    set_id = environment.get("H3_SET") or None
+    spec = load_spec(spec_name, root=root, set_id=set_id)
     if spec["plan"]["model_id"] != model:
         raise ValueError(f"H3 spec serves {spec['plan']['model_id']!r}, the point {model!r}")
     model_path = spec_model_path(
         _required(environment, "HF_HUB_CACHE"), model, spec["model"]["revision"]
     )
-    if spec["model"]["path"] != model_path:
+    if "path" in spec["model"] and spec["model"]["path"] != model_path:
         raise ValueError(
             f"H3 spec model.path {spec['model']['path']!r} is not the mounted hub cache "
             f"snapshot {model_path!r}"
@@ -190,7 +226,7 @@ def bind_video(
     ):
         raise ValueError(f"video recipes run {CLIENT_SCRIPT} as benchmark.type custom")
     workload = benchmark.setdefault("env", {})
-    port = str(spec["port"])
+    port = str(spec.get("port", (service.get("readiness") or {}).get("http", {}).get("port", "")))
     readiness = (service.get("readiness") or {}).get("http") or {}
     if (
         str(workload.get("H3_SERVER_PORT")) != port
@@ -214,8 +250,27 @@ def bind_video(
         "H3_MODEL_PATH": model_path,
         "H3_RESULT_DIR": RESULT_DIR,
     }
+    if set_id:
+        runtime = _required(environment, "FRAMEWORK")
+        if runtime not in {"sglang", "vllm-omni"}:
+            raise ValueError(f"unsupported YAML video runtime: {runtime!r}")
+        revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
+        values.update(
+            {
+                "H3_SET": set_id,
+                "H3_PLAN_SHA256": spec["plan_sha256"],
+                "H3_RUNTIME": runtime,
+                "H3_RUNTIME_REVISION": revision,
+                "GPU_COUNT": str(gpus),
+            }
+        )
     workload.update(values)
-    service["env"] = {**(service.get("env") or {}), **{k: values[k] for k in _SERVICE_ENV}}
+    service["env"] = {
+        **(service.get("env") or {}),
+        **{k: values[k] for k in _SERVICE_ENV if k in values},
+    }
     if (bound.get("telemetry") or {}).get("enabled") is True:
         benchmark["concurrencies"] = list(concurrencies)
         required = environment.get("REQUIRE_POWER", "0") in _POWER_FLAGS

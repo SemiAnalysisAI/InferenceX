@@ -100,6 +100,33 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
                 host=arguments.host, record=arguments.record,
             )
 
+        if arguments.command == "srt-yaml-serve":
+            from .mvp_srt_selected import selected_plan, serve
+
+            plan = selected_plan(arguments.spec, arguments.set, arguments.plan_sha256)
+            serve(
+                plan, runtime=arguments.runtime, runtime_revision=arguments.runtime_revision,
+                model_path=arguments.model_path, port=arguments.port,
+                gpus=arguments.gpus, output=arguments.record,
+            )
+            return 0
+
+        if arguments.command == "srt-yaml-client":
+            from .mvp_srt_selected import run_matrix, selected_plan
+
+            plan = selected_plan(arguments.spec, arguments.set, arguments.plan_sha256)
+            runs = run_matrix(
+                plan, runtime=arguments.runtime, runtime_revision=arguments.runtime_revision,
+                endpoint=arguments.endpoint, output=arguments.output,
+                concurrencies=arguments.concurrencies, gpus=arguments.gpus,
+                window_dir=arguments.window_dir,
+            )
+            for concurrency, run in runs.items():
+                print(json.dumps({"concurrency": concurrency, "summary": run.get("summary"),
+                                  "status": run.get("status")}, indent=2, sort_keys=True))
+            return 0 if all(run["summary"]["valid"] == run["summary"]["scheduled"]
+                            and run["summary"]["scheduled"] for run in runs.values()) else 1
+
         if arguments.command == "srt-client":
             from .mvp_srt import run_srt_client, run_srt_matrix
 
@@ -263,6 +290,29 @@ def _parser() -> argparse.ArgumentParser:
                             help="run every concurrency in turn under <output>/gpu/c<N>")
     srt_client.add_argument("--window-dir", type=Path,
                             help="srt-slurm measurement-window directory (SRT_MEASUREMENT_WINDOW_DIR)")
+
+    selected_server = subparsers.add_parser("srt-yaml-serve", help="serve a selected YAML video workload")
+    selected_server.add_argument("--spec", required=True, type=Path)
+    selected_server.add_argument("--set", required=True)
+    selected_server.add_argument("--plan-sha256", required=True)
+    selected_server.add_argument("--runtime", required=True, choices=("sglang", "vllm-omni"))
+    selected_server.add_argument("--runtime-revision", required=True)
+    selected_server.add_argument("--model-path", required=True, type=Path)
+    selected_server.add_argument("--port", required=True, type=int)
+    selected_server.add_argument("--gpus", required=True, type=int)
+    selected_server.add_argument("--record", required=True, type=Path)
+
+    selected_client = subparsers.add_parser("srt-yaml-client", help="measure a selected YAML video workload")
+    selected_client.add_argument("--spec", required=True, type=Path)
+    selected_client.add_argument("--set", required=True)
+    selected_client.add_argument("--plan-sha256", required=True)
+    selected_client.add_argument("--runtime", required=True, choices=("sglang", "vllm-omni"))
+    selected_client.add_argument("--runtime-revision", required=True)
+    selected_client.add_argument("--endpoint", required=True)
+    selected_client.add_argument("--output", required=True, type=Path)
+    selected_client.add_argument("--concurrencies", required=True, nargs="+", type=int)
+    selected_client.add_argument("--gpus", required=True, type=int)
+    selected_client.add_argument("--window-dir", required=True, type=Path)
 
     srt_finalize = subparsers.add_parser(
         "srt-finalize",
