@@ -10119,4 +10119,4 @@
     - agentic-coding
   description:
     - "Re-sweep Muse Spark Open GB300 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image, recipe and search space are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4294
