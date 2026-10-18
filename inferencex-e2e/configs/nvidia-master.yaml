@@ -7849,82 +7849,163 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
 # Kimi-K3 GB300 points on the measured global p90-ITL Pareto front. Each
 # DCP8 worker spans two 4-GPU nodes.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
-  image: vllm/vllm-openai:nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294@sha256:a8d84c552462d1c60da4d7fc97f8f8f48a8fbfbf6820f73477fa0efe2571bf9d
+  image: vllm/vllm-openai:nightly-39983a5e7a5a575a7829f5d5ada50a33d9337ec1@sha256:a3bc7f09c1e2e72e068021feb75118c92e98c538706caa0c5d1acc0bb9252623
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1" }
+  router:
+    name: dynamo-router
+    version: ffbbaaa6c44370e798687881317535ac17d66a76
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   srt-recipe-dir: kimik3/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    # 0.1775 resolves to 160 GB of host DRAM per 4-GPU server node on
-    # cluster:gb300-nv, matching the recipe's Mooncake segment size.
     - dram-utilization: 0.1775
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
-        conc-list: [48, 56]
-        srt-recipe: disagg-variants.yaml:override_1p1d_dcp8_dcp8_dspark4
-        eval-srt-recipe: disagg-variants.yaml:override_1p1d_dcp8_dcp8_dspark4_eval
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.13.post1
+        conc-list:
+        - 40
+        srt-recipe: disagg-variants.yaml:override_1p4d_cap2
+        eval-srt-recipe: disagg-variants.yaml:override_1p4d_cap2_eval
         power: true
         prefill:
           num-worker: 1
           tp: 8
           dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 4
+          tp: 8
+          dcp-size: 8
           ep: 1
           dp-attn: false
-        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
-        conc-list: [48, 64]
-        srt-recipe: disagg-variants.yaml:override_1p2d_dcp8_dcp8_dspark4
-        eval-srt-recipe: disagg-variants.yaml:override_1p2d_dcp8_dcp8_dspark4_eval
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.13.post1
+        conc-list:
+        - 48
+        srt-recipe: disagg-variants.yaml:override_1p3d_cap4_fp16
+        eval-srt-recipe: disagg-variants.yaml:override_1p3d_cap4_fp16_eval
         power: true
         prefill:
           num-worker: 1
           tp: 8
           dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
           ep: 1
           dp-attn: false
-        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
-        conc-list: [1]
-        srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark7
-        eval-srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark7_eval
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.13.post1
+        conc-list:
+        - 48
+        srt-recipe: disagg-variants.yaml:override_1p2d_cap8
+        eval-srt-recipe: disagg-variants.yaml:override_1p2d_cap8_eval
         power: true
         prefill:
           num-worker: 1
           tp: 8
           dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
           ep: 1
           dp-attn: false
-        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
-        conc-list: [48]
-        srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark4
-        eval-srt-recipe: disagg-variants.yaml:override_1p3d_dcp8_dcp8_dspark4_eval
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.13.post1
+        conc-list:
+        - 176
+        srt-recipe: disagg-variants.yaml:override_2p5d_cap16
+        eval-srt-recipe: disagg-variants.yaml:override_2p5d_cap16_eval
         power: true
         prefill:
-          num-worker: 1
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 5
           tp: 8
           dcp-size: 8
           ep: 1
           dp-attn: false
-        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.13.post1
+        conc-list:
+        - 176
+        srt-recipe: disagg-variants.yaml:override_2p3d_cap24
+        eval-srt-recipe: disagg-variants.yaml:override_2p3d_cap24_eval
+        power: true
+        prefill:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.13.post1
+        conc-list:
+        - 176
+        - 192
+        - 208
+        - 224
+        - 240
+        srt-recipe: disagg-variants.yaml:override_2p3d_cap128
+        eval-srt-recipe: disagg-variants.yaml:override_2p3d_cap128_eval
+        power: true
+        prefill:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+
 
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294@sha256:a8d84c552462d1c60da4d7fc97f8f8f48a8fbfbf6820f73477fa0efe2571bf9d
+  image: vllm/vllm-openai:nightly-39983a5e7a5a575a7829f5d5ada50a33d9337ec1@sha256:a3bc7f09c1e2e72e068021feb75118c92e98c538706caa0c5d1acc0bb9252623
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -7935,40 +8016,11 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
   srt-recipe-dir: kimik3/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.1775
-      search-space:
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
-        conc-list: [1, 4]
-        num-nodes: 2
-        srt-recipe: agg-variants.yaml:override_dcp8_dspark7_maxseq2
-        eval-srt-recipe: agg-variants.yaml:override_dcp8_dspark7_maxseq2_eval
-        power: true
-        worker:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
-        conc-list: [48, 52, 56]
-        num-nodes: 2
-        srt-recipe: agg-variants.yaml:override_dcp8_dspark4
-        eval-srt-recipe: agg-variants.yaml:override_dcp8_dspark4_eval
-        power: true
-        worker:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
     - search-space:
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [1, 2]
+        conc-list:
+        - 1
         num-nodes: 4
         srt-recipe: agg-megakernel-variants.yaml:override_tp16_dspark5
         power: true
@@ -7980,7 +8032,9 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           dp-attn: false
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [2, 4]
+        conc-list:
+        - 2
+        - 4
         num-nodes: 2
         srt-recipe: agg-megakernel-variants.yaml:override_tp8_dspark7
         power: true
@@ -7990,6 +8044,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
           dcp-size: 8
           ep: 1
           dp-attn: false
+
 
 # Kimi-K3 MXFP4 B200 aggregated vLLM (TP8 x PP2, 2 nodes / 16 GPUs), agentic
 # coding. The native MXFP4 checkpoint (2.8T total params, ~1.4TB weights) does
