@@ -804,3 +804,9 @@ def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, m
     git("commit", "-qam", "append entry")
     monkeypatch.chdir(tmp_path / "inferencex-e2e")
     assert process_changelog.get_added_lines(base, "HEAD", "perf-changelog.yaml") == "new entry"
+
+
+def test_video_append_only_requires_the_full_serving_job():
+    row = {"scenario-type": "video-generation", "conc-list": [1], "gpus": 2}
+    with pytest.raises(ValueError, match="video-generation requires a regular sweep"):
+        process_changelog.append_only_delta([row], [{**row, "conc-list": [1, 2]}])

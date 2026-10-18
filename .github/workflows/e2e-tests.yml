@@ -87,7 +87,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             fail-fast:
-                description: "Cancel the rest of each matrix after its first failure"
+                description: "Cancel the rest of each matrix after its first failure (always on for klaud-run)"
                 required: false
                 type: boolean
                 default: false
@@ -175,7 +175,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             fail-fast:
-                description: "Cancel the rest of each matrix after its first failure"
+                description: "Cancel the rest of each matrix after its first failure (always on for klaud-run)"
                 required: false
                 type: boolean
                 default: false
@@ -341,7 +341,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets:
@@ -366,7 +366,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets:
@@ -394,7 +394,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets:
@@ -420,7 +420,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets:
@@ -449,7 +449,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets:
@@ -478,7 +478,7 @@ jobs:
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-eval-config) }}
         secrets:
@@ -533,7 +533,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: single-node /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets:
@@ -556,7 +556,7 @@ jobs:
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
-            fail-fast: ${{ inputs.fail-fast }}
+            fail-fast: ${{ inputs.fail-fast || inputs.klaud-run }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets:

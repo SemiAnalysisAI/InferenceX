@@ -142,8 +142,10 @@ locks and telemetry continue to use the assigned UUIDs.
 
 Fresh GPU execution runs through InferenceX's native srt-slurm launcher as the
 `video-generation` scenario of the vendor master configs
-(`inferencex-e2e/configs/{nvidia,amd}-master.yaml`, keys `h3-bf16-<sku>-sglang-video`):
-`e2e-tests.yml` buckets those rows into `test-sweep-video`, and `python -m infx.launch run`
+(`inferencex-e2e/configs/nvidia-master.yaml`, active H200/B200 keys
+`h3-bf16-<sku>-sglang-video`). `run-sweep.yml` consumes the changelog-selected
+video bucket, including canary and fail-fast handling; `e2e-tests.yml` also
+supports bounded diagnostics. `python -m infx.launch run`
 takes the `srt-video` path. The SKU recipe
 `benchmarks/single_node/srt-slurm-recipes/h3/sglang/<sku>-bf16/serving-client.yaml`
 starts the diffusion server as a generic service (`benchmarks/h3/run_server.sh`) and runs
@@ -152,7 +154,7 @@ against the same server. This package is mounted as `/h3-package`; `specs/<name>
 frozen workload (`H3_SPEC`), served from the cluster's HF hub cache. GPU power comes from
 srt-slurm's native telemetry: each cell publishes its measured window, InferenceX
 re-validates it per concurrency (`infx.results.video`), and `evaluator.cli srt-finalize`
-assembles the `h3-results-<run>-<attempt>` bundle the dashboard ingests. `ci.py` no longer
+assembles the `h3-results-<run>-<attempt>-<recipe-fingerprint>` bundle the dashboard ingests. `ci.py` no longer
 submits fresh jobs; it only continues an owned allocation.
 
 AMD one-lease inspect→serving continuation (`run_amd_serving_ci.py`) still
@@ -172,6 +174,12 @@ collectors.
 
 ## Dispatch through InferenceX
 
+PR qualification uses the ordinary changelog-driven `full-sweep-fail-fast`
+route and validates every selected video deployment before reuse. The manual
+command below is for diagnostics. See [native video delivery](../../inferencex-e2e/docs/video-generation.md)
+([中文](../../inferencex-e2e/docs/video-generation_zh.md)) for coverage, artifact
+identity and post-merge publication.
+
 A new serving run is an ordinary matrix row. Dispatch `e2e-tests.yml` from a
 branch whose workflow carries the video bucket and select the SKU's key:
 
@@ -186,7 +194,7 @@ gh workflow run e2e-tests.yml --repo SemiAnalysisAI/InferenceX \
 `ref` selects the benchmarked source. The row runs on the SKU's cluster runner
 through `python -m infx.launch run` on the `srt-video` path, with the same
 admission, priority labels and job record as every other benchmark job. The
-job uploads `h3-results-<run-id>-<attempt>` (the dashboard bundle) and the
+job uploads `h3-results-<run-id>-<attempt>-<recipe-fingerprint>` (the dashboard bundle) and the
 `LOGS/power` native telemetry package.
 
 Preparation and reprocessing of accepted runs stay on the standalone
@@ -274,7 +282,7 @@ skips the paired frontend export and cannot claim regression acceptance.
 
 ## Results and local checks
 
-A serving run uploads `h3-results-<run-id>-<attempt>` from its benchmark job; a
+A serving run uploads `h3-results-<run-id>-<attempt>-<recipe-fingerprint>` from its benchmark job; a
 preparation attempt uploads its operation's artifact (`h3-hardware-…`,
 `h3-site-preflight-…`, `h3-amd-…`) for 14 days, with compression disabled for
 media. The upload runs even after failure and includes the complete adapter
@@ -284,7 +292,7 @@ are excluded from the upload. Missing reports or media remain missing; fixtures 
 replace them. Persistent source evidence remains at the configured workspace.
 Retain/download the complete artifact before GitHub retention expires.
 
-The hosted export job publishes `h3-results-<run-id>-<attempt>` containing
+The hosted export job publishes `h3-results-<run-id>-<attempt>-<recipe-fingerprint>` containing
 `index.json`, the JSON schema, bilingual metric definitions, and one source
 subdirectory per original execution. Each source contains `result.json`, original
 media/logs/report, per-GPU power series, phase integration/coverage and

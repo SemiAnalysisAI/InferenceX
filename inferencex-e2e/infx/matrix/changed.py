@@ -29,7 +29,10 @@ def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
         except ValueError as error:
             fingerprint = None
             errors.append(str(error))
-        for conc in row["conc"] if isinstance(row["conc"], list) else [row["conc"]]:
+        concurrencies = (
+            row["conc-list"] if row.get("scenario-type") == "video-generation" else row["conc"]
+        )
+        for conc in concurrencies if isinstance(concurrencies, list) else [concurrencies]:
             points[fingerprint, conc] = {**row, "conc": conc, "recipe-fingerprint": fingerprint}
     return points, errors
 
@@ -96,7 +99,9 @@ def compare(base: Matrix, head: Matrix) -> list[dict]:
 
 
 def _label(point: dict) -> str:
-    if "prefill" in point:
+    if point.get("scenario-type") == "video-generation":
+        shape = f"gpus{point['gpus']}"
+    elif "prefill" in point:
         shape = str(point.get("srt-recipe", "")).rpartition("/")[2]
     else:
         shape = f"tp{point['tp']} ep{point['ep']}"

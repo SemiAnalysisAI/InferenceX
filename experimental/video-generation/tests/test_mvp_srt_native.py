@@ -154,7 +154,8 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     logs, workspace = _native_job(tmp_path)
     output = tmp_path / "h3-results"
     environ = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
-               "GITHUB_SHA": "b" * 40, "IMAGE": "img:tag", "PATH": os.environ["PATH"]}
+               "GITHUB_SHA": "b" * 40, "IMAGE": "img:tag", "PATH": os.environ["PATH"],
+               "VIDEO_ARTIFACT_NAME": "h3-results-123-2-" + "c" * 64}
     result = mvp_srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
                                          result_filename="r", concurrencies=[1, 2], output=output, environ=environ)
     assert result["status"] == "complete" and result["power_verified"] and all(c["verified"] for c in result["cells"])
@@ -166,6 +167,9 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     assert matrix["completion"]["valid"] == 8 and matrix["scheduled"] == 8
     assert (manifest["run_id"], manifest["run_attempt"], ci["run_id"]) == ("123", "2", "123")
     assert manifest["git_commit"] == ci["source_sha"] and manifest["workload_plan"] == matrix["plan"]
+    assert manifest["artifact_name"] == ci["artifact_name"] == "h3-results-123-2-" + "c" * 64
+    assert manifest["plan_sha256"] == matrix["plan_sha256"] == "f" * 64
+    assert manifest["engine"] == matrix["engine"] == {"name": "sglang", "revision": "7" * 40}
     assert manifest["evidence"]["serving-smoke.json"] == checksums["serving-smoke.json"]
     assert ci["slurm_job"] == {"job_id": "77", "state": "COMPLETED"} and ci["power"]["producer_git_commit"] == "a" * 40
     for cell in matrix["cells"]:
@@ -210,3 +214,97 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     assert cells[1]["status"] == "failed" and cells[1]["completion"]["valid"] == 3
     assert cells[4]["status"] == "failed" and "run" not in cells[4]
     assert any("c4: run.json missing" in f for f in result["failures"])
+
+
+@pytest.mark.parametrize("field,value", [("plan_sha256", "a" * 64),
+                                        ("configuration", {"runtime": "other", "runtime_revision": "9" * 40})])
+def test_bundle_rejects_cells_with_different_workload_or_engine(tmp_path, field, value):
+    logs, workspace = _native_job(tmp_path)
+    path = logs / "h3/gpu/c2/baseline/run.json"
+    run = json.loads(path.read_text())
+    run[field] = value
+    path.write_text(json.dumps(run))
+    with pytest.raises(ValueError, match="identity differs"):
+        mvp_srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
+                                   result_filename="r", concurrencies=[1, 2], output=tmp_path / "bundle")
+
+
+def _sweep(tmp_path):
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    rows = []
+    for index, runner in enumerate(("cluster:h200", "cluster:b200"), start=1):
+        fixture = tmp_path / runner.split(":")[1]
+        fixture.mkdir()
+        logs, workspace = _native_job(fixture)
+        fingerprint = str(index) * 64
+        name = f"h3-results-123-2-{fingerprint}"
+        env = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_HEAD_SHA": "c" * 40,
+               "GITHUB_SHA": "b" * 40, "RECIPE_FINGERPRINT": fingerprint, "VIDEO_ARTIFACT_NAME": name}
+        mvp_srt_bundle.build_bundle(h3_dir=logs / "h3", power_dir=logs / "power", workspace=workspace,
+                                   result_filename="r", concurrencies=[1, 2], output=artifacts / name, environ=env)
+        rows.append({"recipe-fingerprint": fingerprint, "runner": runner, "framework": "sglang",
+                     "gpus": 2, "conc-list": [1, 2]})
+    directory = artifacts / "video-sweep-manifest"
+    directory.mkdir()
+    (directory / "sweep_manifest.json").write_text(json.dumps({"run-id": 123, "run-attempt": 2,
+        "head": "c" * 40, "matrix": {"single_node": {"video": rows}}}))
+    return artifacts
+
+
+def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout_identity(tmp_path):
+    from infx.results.video_artifacts import validate_video_artifacts
+    artifacts = _sweep(tmp_path)
+    assert validate_video_artifacts(artifacts, run_id="123", head_sha="c" * 40) == 2
+    with pytest.raises(ValueError, match="trusted run/head"):
+        validate_video_artifacts(artifacts, run_id="124", head_sha="c" * 40)
+
+
+@pytest.mark.parametrize("fault,match", [("row", "coverage mismatch"), ("media", "checksum mismatch"),
+                                        ("cell", "concurrency coverage mismatch"), ("head", "CI identity mismatch")])
+def test_reuse_rejects_incomplete_or_altered_native_sweeps(tmp_path, fault, match):
+    import shutil
+    from infx.results.video_artifacts import validate_video_artifacts
+    artifacts = _sweep(tmp_path)
+    bundle = artifacts / ("h3-results-123-2-" + "2" * 64)
+    if fault == "row":
+        shutil.rmtree(bundle)
+    elif fault == "media":
+        media = next(bundle.rglob("*.mp4"))
+        media.write_bytes(b"corrupted")
+    else:
+        path = bundle / ("serving-smoke.json" if fault == "cell" else "manifest.json")
+        data = json.loads(path.read_text())
+        if fault == "cell":
+            data["cells"].pop()
+        else:
+            data["ci"]["head_sha"] = "d" * 40
+        path.write_text(json.dumps(data))
+        manifest_path = bundle / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["evidence"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        # The manifest does not include itself in evidence.
+        manifest["evidence"].pop("manifest.json", None)
+        manifest_path.write_text(json.dumps(manifest))
+        (bundle / "SHA256SUMS").write_text("".join(
+            f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(bundle).as_posix()}\n"
+            for p in sorted(bundle.rglob("*")) if p.is_file() and p.name != "SHA256SUMS"))
+    with pytest.raises(ValueError, match=match):
+        validate_video_artifacts(artifacts, run_id="123", head_sha="c" * 40)
+
+
+def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    identity = {"plan_sha256": "f" * 64, "workload_plan": SPEC["plan"],
+                "engine": {"name": "vllm-omni", "revision": "a" * 40}}
+    (workspace / "video-identity.json").write_text(json.dumps(identity))
+    output = tmp_path / "bundle"
+    result = mvp_srt_bundle.build_bundle(h3_dir=tmp_path / "absent", power_dir=tmp_path / "power",
+        workspace=workspace, result_filename="r", concurrencies=[1, 2], output=output)
+    manifest = json.loads((output / "manifest.json").read_text())
+    matrix = json.loads((output / "serving-smoke.json").read_text())
+    assert result["status"] == "failed" and result["power_verified"] is False
+    assert {key: manifest[key] for key in identity} == identity
+    assert matrix["engine"] == identity["engine"] and matrix["plan"] == identity["workload_plan"]
+    assert "video-identity.json" in manifest["evidence"]

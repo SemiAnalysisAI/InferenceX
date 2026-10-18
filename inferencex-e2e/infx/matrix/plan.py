@@ -130,6 +130,8 @@ def _matrix_visual_series_key(entry: dict) -> tuple:
 
 
 def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
+    if entry.get("scenario-type") == "video-generation":
+        raise ValueError("video-generation requires a regular sweep; append-only is not supported")
     conc = entry.get("conc")
     if isinstance(conc, int):
         return (conc,)
