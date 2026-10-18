@@ -261,6 +261,22 @@ Keep the command and required run ID on one line. This pins an eligible complete
 `run-sweep.yml` PR run whose commit remains in the PR, including failed or cancelled
 runs with usable results.
 
+Native video discovery requires both `video-sweep-manifest` and a bundle named
+`h3-results-<run>-<attempt>-<64-hex recipe fingerprint>`. Discovery only identifies
+candidate artifacts. Validate downloaded bundles against the trusted run identity:
+
+```bash
+python -m infx.results.video_artifacts --artifacts-dir artifacts \
+  --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT" --head-sha "$HEAD_SHA"
+```
+
+The validator requires the full selected video matrix, frozen measured request
+population, native power verification and matching media/file hashes. Partial runs,
+missing cells and stale attempts fail. The generic `validate_reusable_sweep_artifacts`
+command also checks native video when its selected-matrix manifest is present.
+Executed checkout identity remains separate from the workflow's PR head. Retained
+artifact validation does not rerun media decoding or establish perceptual quality.
+
 The legacy `/reuse-sweep-run <run_id>` remains equivalent. Bare `/reuse-sweep-run`
 selects the latest successful eligible run automatically; bare `/use` is rejected.
 Both names share authorization, validation, and reactions.
