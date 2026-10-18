@@ -25,6 +25,7 @@ from .sweep_runs import (
     completed_pr_runs,
     has_reusable_result_artifacts as has_reusable_result_artifacts,
     pr_commit_shas as pr_commit_shas,
+    validate_video_run,
 )
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
@@ -150,6 +151,7 @@ def find_latest_successful_pr_run(
         names = artifact_names(repo, int(run["id"]), token)
         if not has_reusable_result_artifacts(names):
             continue
+        validate_video_run(repo, run, token, names)
         return run
     return None
 
@@ -203,6 +205,8 @@ def validate_reusable_run(
         raise RuntimeError(
             f"Reusable source run {run_id} has no benchmark, eval, or agentic result artifact."
         )
+
+    validate_video_run(repo, run, token, names)
 
 
 def resolve_reusable_run(

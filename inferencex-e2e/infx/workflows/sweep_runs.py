@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
+import tempfile
 import urllib.parse
+from pathlib import Path
 from typing import Any
 
 from infx import github
-from infx.results.video_artifacts import VIDEO_ARTIFACT
+from infx.klaud.github import download_files
+from infx.results.video_artifacts import VIDEO_ARTIFACT, validate_video_artifacts
 
 REUSABLE_AGGREGATE_ARTIFACTS = {
     "results_bmk",
@@ -73,3 +78,46 @@ def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
         and artifact.get("name")
         and not artifact.get("expired", False)
     }
+
+
+def validate_video_run(repo: str, run: dict, token: str, names: set[str]) -> None:
+    """Validate retained video bytes before any reuse or staging admission."""
+    video = {name for name in names if name.startswith("h3-results-")}
+    if not video and "video-sweep-manifest" not in names:
+        return
+    run_id, attempt, head = run.get("id"), run.get("run_attempt"), run.get("head_sha")
+    try:
+        if (
+            type(run_id) is not int
+            or run_id <= 0
+            or type(attempt) is not int
+            or attempt <= 0
+            or not isinstance(head, str)
+            or not re.fullmatch(r"[0-9a-f]{40}", head)
+        ):
+            raise ValueError("missing trusted video run/head/attempt identity")
+        if "video-sweep-manifest" not in names or not video:
+            raise ValueError("video source requires a full sweep manifest and result bundles")
+        if any(not VIDEO_ARTIFACT.fullmatch(name) for name in video):
+            raise ValueError("invalid native video artifact name")
+        selected = {name for name in video if name.startswith(f"h3-results-{run_id}-{attempt}-")}
+        selected.add("video-sweep-manifest")
+        artifacts = github.paginate(repo, f"/actions/runs/{run_id}/artifacts", token, "artifacts")
+        retained = [
+            item
+            for item in artifacts
+            if item.get("name") in selected and not item.get("expired", False)
+        ]
+        if len(retained) != len(selected) or {item["name"] for item in retained} != selected:
+            raise ValueError("missing or duplicate native video artifacts")
+        with tempfile.TemporaryDirectory(prefix="infx-video-reuse-") as temporary:
+            root = Path(temporary)
+            for artifact in retained:
+                download_files(repo, artifact, root / artifact["name"], token=token)
+            validate_video_artifacts(
+                root, run_id=str(run_id), run_attempt=str(attempt), head_sha=head
+            )
+    except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError) as error:
+        raise RuntimeError(
+            f"Reusable source run {run_id} has invalid native video artifacts: {error}"
+        ) from error

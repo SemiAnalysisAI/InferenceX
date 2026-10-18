@@ -65,6 +65,7 @@ from .sweep_runs import (  # noqa: E402
     completed_pr_runs,
     has_reusable_result_artifacts,
     pr_commit_shas,
+    validate_video_run,
 )
 from .validate_perf_changelog import read_git_file  # noqa: E402
 
@@ -275,6 +276,7 @@ def find_eligible_run(
             continue
         names = artifact_names(repo, int(run["id"]), token)
         if has_reusable_result_artifacts(names):
+            validate_video_run(repo, run, token, names)
             return int(run["id"])
     return None
 

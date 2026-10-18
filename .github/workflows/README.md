@@ -263,7 +263,10 @@ runs with usable results.
 
 Native video discovery requires both `video-sweep-manifest` and a bundle named
 `h3-results-<run>-<attempt>-<64-hex recipe fingerprint>`. Discovery only identifies
-candidate artifacts. Validate downloaded bundles against the trusted run identity:
+candidate artifacts. Reuse authorization, automatic source selection, merge selection and
+staging all download the retained video files and validate them against the trusted
+run ID, attempt and head before admission, including mixed LLM/video runs. The same
+check is available offline:
 
 ```bash
 python -m infx.results.video_artifacts --artifacts-dir artifacts \
@@ -276,12 +279,15 @@ missing cells and stale attempts fail. The generic `validate_reusable_sweep_arti
 command also checks native video when its selected-matrix manifest is present.
 Executed checkout identity remains separate from the workflow's PR head. Retained
 artifact validation does not rerun media decoding or establish perceptual quality.
+Each downloaded ZIP is limited to 256 MiB compressed and 1 GiB expanded; larger
+bundles fail closed.
 
 The legacy `/reuse-sweep-run <run_id>` remains equivalent. Bare `/reuse-sweep-run`
 selects the latest successful eligible run automatically; bare `/use` is rejected.
 Both names share authorization, validation, and reactions.
 
-Source validation checks identity and artifacts, not full-matrix coverage.
+For LLM and agentic results, source validation checks identity and artifacts, not
+full-matrix coverage. Native video additionally requires its complete selected matrix.
 Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
