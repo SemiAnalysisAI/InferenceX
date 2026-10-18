@@ -1,9 +1,13 @@
-"""Sample every GPU's clocks and power, for one profile window: NVML on NVIDIA, amdsmi on AMD."""
+"""Sample every GPU's clocks and power, for one profile window: NVML on NVIDIA, amdsmi (or its CLI) on AMD."""
 
 import array
 import ctypes
 import json
 import os
+import re
+import shutil
+import subprocess
+import sys
 import threading
 import time
 
@@ -170,7 +174,11 @@ class AmdSmi:
     }
 
     def __init__(self):
-        import amdsmi
+        try:
+            import amdsmi
+        except ImportError:
+            sys.path.append(os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "share", "amd_smi"))
+            import amdsmi
 
         self.lib = amdsmi
         amdsmi.amdsmi_init()
@@ -234,6 +242,110 @@ class AmdSmi:
         return poll
 
 
+def _mhz(raw):
+    if isinstance(raw, dict):
+        raw = raw.get("value")
+    if isinstance(raw, (int, float)):
+        return int(raw) if raw > 0 else None
+    match = re.search(r"(\d+(?:\.\d+)?)", str(raw or ""))
+    return int(float(match.group(1))) if match else None
+
+
+def amd_smi_clocks(doc):
+    """(graphics, memory) MHz from `amd-smi metric -c --json`: the first XCC with a reading."""
+    gpu = doc[0] if isinstance(doc, list) else doc
+    gpu = gpu.get("gpu_data", [gpu])[0] if isinstance(gpu.get("gpu_data"), list) else gpu
+    clocks = gpu.get("clock") or {}
+    found = {}
+    for name, entry in clocks.items():
+        kind = name.lower().split("_")[0]
+        if kind in ("gfx", "mem") and kind not in found and isinstance(entry, dict):
+            value = _mhz(entry.get("clk"))
+            if value:
+                found[kind] = value
+    return found.get("gfx"), found.get("mem")
+
+
+def rocm_smi_clocks(doc):
+    """(graphics, memory) MHz from `rocm-smi --showclocks --json`."""
+    card = next(iter(doc.values()), {}) if isinstance(doc, dict) else {}
+    pick = {kind: next((_mhz(v) for k, v in card.items() if k.lower().startswith(kind) and "speed" in k.lower()),
+                       None) for kind in ("sclk", "mclk")}
+    return pick["sclk"], pick["mclk"]
+
+
+class SmiCli:
+    """amd-smi (or rocm-smi) run once per poll, for images without ROCm's Python bindings: graphics and memory clocks only, each poll a few hundred ms."""
+
+    COMMANDS = (
+        ("amd-smi", lambda i: ["amd-smi", "metric", "-g", str(i), "-c", "--json"], amd_smi_clocks),
+        ("rocm-smi", lambda i: ["rocm-smi", "-d", str(i), "--showclocks", "--json"], rocm_smi_clocks),
+    )
+
+    def __init__(self):
+        errors = []
+        for name, command, parse in self.COMMANDS:
+            if not shutil.which(name):
+                errors.append(f"{name} not found")
+                continue
+            try:
+                gfx, _ = parse(self._run(command(0)))
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+                continue
+            if gfx:
+                self.name, self.command, self.parse = name, command, parse
+                break
+            errors.append(f"{name}: no graphics clock")
+        else:
+            raise RuntimeError("; ".join(errors))
+        self.handles = list(range(self._count()))
+
+    @staticmethod
+    def _run(argv):
+        return json.loads(subprocess.run(argv, capture_output=True, text=True, timeout=30, check=True).stdout)
+
+    def _count(self):
+        n = 0
+        while n < 64:
+            try:
+                gfx, _ = self.parse(self._run(self.command(n)))
+            except Exception:
+                break
+            if not gfx:
+                break
+            n += 1
+        return n
+
+    def _identities(self):
+        """GPU index -> {bdf, uuid}: what the extractor matches ranks by."""
+        try:
+            if self.name == "amd-smi":
+                listing = self._run(["amd-smi", "list", "--json"])
+                return {int(g["gpu"]): {"bdf": g.get("bdf"), "uuid": g.get("uuid")} for g in listing}
+            listing = self._run(["rocm-smi", "--showbus", "--json"])
+            return {int(re.sub(r"\D", "", card)): {"bdf": next((v for k, v in info.items() if "bus" in k.lower()), None)}
+                    for card, info in listing.items() if card.startswith("card")}
+        except Exception:
+            return {}
+
+    def gpus(self):
+        ids = self._identities()
+        return {str(i): {"backend": f"{self.name} cli", "fields": {"graphics_mhz": "gfx clk", "mem_mhz": "mem clk"},
+                         **ids.get(i, {})} for i in self.handles}
+
+    def poller(self, i):
+        argv = self.command(i)
+
+        def poll():
+            try:
+                gfx, mem = self.parse(self._run(argv))
+            except Exception:
+                return [-1] * 7
+            return [gfx or -1, gfx or -1, mem or -1, -1, -1, -1, -1]
+        return poll
+
+
 class ClockSampler:
     """Polls every GPU, one thread each, between start(window) and stop()."""
 
@@ -242,7 +354,7 @@ class ClockSampler:
         self.nvml = None
         self.error = None
         errors = []
-        for backend in (Nvml, AmdSmi):
+        for backend in (Nvml, AmdSmi, SmiCli):
             try:
                 self.nvml = backend()
                 break

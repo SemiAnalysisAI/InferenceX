@@ -159,6 +159,7 @@ PROFILE_DEFAULTS: dict[str, Any] = {
     "mode": "agentic",
     "isl": 8192,
     "osl": 4096,
+    "engine_args": {},
 }
 PROFILE_MODES = ("agentic", "synthetic")
 PROFILE_PHASES = ("warmup", "decode", "profiling")
@@ -405,6 +406,8 @@ def profiling_arguments(
         raise ValueError("INFX_PROFILE windows must be ordered by phase")
     profile = ProfileRequest(settings, role_args or {}, recipe or {})
     overrides = engine.role_arguments(profile)
+    for flag, value in (settings.get("engine_args") or {}).items():
+        overrides += _set(f"roles.agg.args.{flag}", value)
     for name, value in engine.worker_env(profile).items():
         overrides += _set(f"roles.agg.env.{name}", value)
     measured = [int(w[1]) for w in windows if w[0] == "profiling"]
