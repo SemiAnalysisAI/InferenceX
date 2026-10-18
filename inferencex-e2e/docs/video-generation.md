@@ -1,7 +1,5 @@
 # Native video delivery
 
-**English** | [中文](video-generation_zh.md)
-
 The `video-generation` scenario schedules one server job per deployment. H3 SGLang
 has active H200 and B200 configs. Each serves C1/C2/C4 with four measured requests
 and one warmup per cell: 12 measured requests and three warmups per SKU. The frozen
