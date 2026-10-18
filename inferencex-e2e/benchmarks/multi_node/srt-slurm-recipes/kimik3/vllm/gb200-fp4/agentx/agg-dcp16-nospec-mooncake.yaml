@@ -5,13 +5,13 @@ identity:
   model: {}
   container: {}
   frameworks:
-    dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+    dynamo: "7b0e63e683bd37074ce736b3c3f378f2544a2cce"
 
 dynamo:
   install: true
 
   source:
-    rev: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+    rev: "7b0e63e683bd37074ce736b3c3f378f2544a2cce"
 slurm:
   time_limit: "04:00:00"
 
@@ -51,7 +51,11 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
+    dyn-chat-processor: "vllm"
     trust-remote-code: true
+    tool-call-parser: "kimi_k3"
+    reasoning-parser: "kimi_k3"
+    enable-auto-tool-choice: true
     router-mode: "random"
     router-session-affinity-ttl-secs: 900
   env:
