@@ -1,5 +1,14 @@
 schema: 2
 base:
+  # Diagnostic branch only: capture native host state, then stop before workers.
+  host_setup:
+    nodes: workers
+    timeout_seconds: 60
+    ignore_failure: false
+    commands:
+      - nvidia-smi -q
+      - nvidia-smi topo -m
+      - 'echo "FABRIC_DIAGNOSTIC_CAPTURE_COMPLETE: deliberate stop before model loading"; exit 77'
   identity:
     model: {}
     container: {}
