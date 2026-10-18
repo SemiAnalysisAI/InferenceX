@@ -10108,4 +10108,4 @@
     - "FULL_AND_PIECEWISE CUDA graphs capture 4 x n tokens up to the max-num-seqs batch plus 256-2048; the GPU-resident points also capture 1 and 2 tokens so the EAGLE3 drafter decodes in full graphs. The frontend uses the fastokens tokenizer with an 8 GiB cache."
     - "Engines set minimax_m3_msa_decode_backend=cutlass. In nightly-5555a2d8 the CUTLASS path engages only at 16 or more concurrent FP8-KV decode requests, so it can take effect only at C25/C30; the other points run Triton MSA decode."
     - "The shipped BF16 EAGLE3-GQA draft (3 tokens) uses FlashInfer attention with local argmax reduction; AgentX throughput applies the committed golden AL."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4281
