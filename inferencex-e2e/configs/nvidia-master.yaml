@@ -7061,20 +7061,31 @@ glm5.2-fp8-b200-sglang-agentic-mtp:
 # infx/golden_al_distribution/glm5.2_mtp.yaml. Both arms use HiCache write-back
 # DRAM offload for the agentic working set.
 glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20260910-00840301
+  image: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:b200-nscale
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.5.0.dev20260909" }
+  router: { name: dynamo-router, version: "1.5.0.dev20260903" }
   multinode: true
   disagg: false
   srt-recipe-dir: glm5.2/sglang/b200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 1.0
       search-space:
+      - spec-decoding: mtp
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_c1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
@@ -7083,7 +7094,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         srt-recipe: agg-variants.yaml:override_c1
         worker:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
@@ -7094,7 +7105,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         srt-recipe: agg-variants.yaml:override_c4
         worker:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
@@ -7105,9 +7116,31 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-agg:
         srt-recipe: agg-variants.yaml:override_c8
         worker:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [12]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_c12
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [32]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_dp8attn_c32
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
 
 glm5.2-fp4-b200-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-20260910-00840301
