@@ -625,7 +625,7 @@ def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
         # A planner run from before resumption has no gate; its reruns skip the candidate.
         and any(step["name"] == GATE_STEP for step in job["steps"])
         # A session that runs out fails its job, and a cancelled session was preempted like any
-        # other Klaud work; only klaud-abort stops a candidate for good.
+        # other Klaud work; only klaud-abort stops a candidate.
         and job["conclusion"] in ("failure", "timed_out", "cancelled")
         for job in jobs
     )

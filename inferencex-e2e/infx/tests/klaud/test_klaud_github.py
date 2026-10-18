@@ -2270,10 +2270,63 @@ def test_every_candidate_pr_body_says_how_to_stop_the_candidate(monkeypatch):
     body = reporting.render_body(frozen_dsr1_baseline(monkeypatch))
     english, chinese = body.split("<summary>中文</summary>")
 
-    assert ("**Stop:** Add the `klaud-abort` label at any time to stop this candidate for good; "
-            "Klaud cancels its runs and closes this PR.") in english
-    assert ("**停止：**随时添加 `klaud-abort` 标签即可彻底停止该候选，Klaud 会取消其运行并关闭此 PR。"
-            in chinese)
+    assert ("**Stop:** Add the `klaud-abort` label at any time to stop this candidate now; Klaud "
+            "cancels its runs, closes this PR and does not retry it. Remove the label to let the "
+            "planner pick it up again.") in english
+    assert ("**停止：**随时添加 `klaud-abort` 标签即可立即停止该候选：Klaud 会取消其运行、关闭此 PR "
+            "且不再重试。移除该标签后，规划器会在下次扫描时重新考虑它。") in chinese
+
+
+def test_the_planner_skips_aborted_candidates_until_the_label_is_removed(monkeypatch):
+    aborted, other = "1" * 16 + "-" + "2" * 16, "3" * 16 + "-" + "4" * 16
+    issues = [
+        {"number": 7, "user": {"login": "Klaud-Cold"}, "pull_request": {}},
+        {"number": 8, "user": {"login": "maintainer"}, "pull_request": {}},
+        {"number": 9, "user": {"login": "Klaud-Cold"}},
+    ]
+    heads = {"pulls/7": f"klaud/auto-{aborted}", "pulls/8": f"klaud/auto-{other}"}
+    monkeypatch.setattr(klaud, "github_items", lambda _repository, path, _key=None: (
+        issues if path == "issues?labels=klaud-abort&state=all&per_page=100"
+        else pytest.fail(path)))
+    monkeypatch.setattr(klaud, "github_read", lambda _repository, path: (
+        {"head": {"ref": heads[path]}}))
+
+    assert klaud.aborted_candidates("example/project") == {aborted}
+
+
+@pytest.mark.parametrize(("labels", "outcome", "released"), [
+    pytest.param([], "aborted", True, id="label-removed"),
+    pytest.param(["klaud-abort"], "aborted", False, id="still-labeled"),
+    pytest.param([], "uncertain", False, id="closed-for-another-reason"),
+])  # fmt: skip
+def test_removing_klaud_abort_lifts_the_cooldown_of_an_aborted_candidate(
+    monkeypatch, labels, outcome, released
+):
+    candidate = "1" * 16 + "-" + "2" * 16
+    record = {"head": "c" * 40, "outcome": {**UNEXPECTED_ERROR.model_dump(by_alias=True),
+                                            "outcome": outcome}}
+    comments = [
+        {"id": 1, "user": {"login": "Klaud-Cold"}, "body": f"<!-- klaud-outcome:41:{candidate}\n"
+         + json.dumps({**record, "outcome": {**record["outcome"], "outcome": "uncertain"}})
+         + "\n-->\nOlder."},
+        {"id": 2, "user": {"login": "Klaud-Cold"},
+         "body": f"<!-- klaud-outcome:42:{candidate}\n{json.dumps(record)}\n-->\nLatest."},
+    ]
+    pulls = [{"number": 7, "user": {"login": "Klaud-Cold"}, "created_at": "2026-10-15T00:00:00Z",
+              "labels": [{"name": name} for name in labels]}]
+
+    def items(_repository, path, _key=None):
+        if path.startswith("pulls?state=closed&head=example%3Aklaud%2Fauto-"):
+            return pulls
+        if path == "issues/7/comments?per_page=100":
+            return comments
+        raise AssertionError(path)
+
+    monkeypatch.setattr(klaud, "github_items", items)
+
+    assert klaud.abort_released("example/project", candidate) is released
+    assert [c["id"] for c in klaud.order_by_cooldown([{"id": candidate}], {candidate: "aborted"})] \
+        == [candidate]
 
 
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):

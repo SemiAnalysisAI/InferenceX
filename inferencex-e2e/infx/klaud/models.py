@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# A maintainer label that stops a candidate for good: its runs are cancelled, its PR closed.
+# A maintainer label that stops a candidate now and keeps the planner from retrying it while set.
 ABORT_LABEL = "klaud-abort"
 
 

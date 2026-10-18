@@ -82,6 +82,7 @@ jobs:
       contents: read
       actions: read # Read workflow runs and artifacts.
       pull-requests: read # Read PR metadata.
+      issues: read # Read klaud-abort labels and Klaud outcome comments.
     env:
       REVIEW_BATCH_SIZE: '64'
       CANDIDATE_COOLDOWN_HOURS: '24'

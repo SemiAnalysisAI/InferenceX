@@ -26,6 +26,7 @@ from .github import (
     read as github_read,
 )
 from .models import (
+    ABORT_LABEL,
     CandidateOutcome,
     OwnedCandidate,
     Ownership,
@@ -40,7 +41,8 @@ if TYPE_CHECKING:
     from infx.clusters import RunnerInventory
 
 PRODUCERS = "producers.json"
-RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started"})
+# An abort is lifted by removing its label, so it never delays the next attempt by itself.
+RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started", "aborted"})
 
 
 def observation_key(row: dict) -> tuple:
@@ -303,6 +305,59 @@ def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> 
     return fresh + deferred
 
 
+def aborted_candidates(repository: str) -> set[str]:
+    """Candidates whose Klaud PR carries klaud-abort; the planner never retries them.
+
+    Removing the label returns the candidate to the pool at the planner's next scan.
+    """
+    from .lifecycle import BOT
+
+    aborted = set()
+    for issue in github_items(repository, f"issues?labels={ABORT_LABEL}&state=all&per_page=100"):
+        if "pull_request" not in issue or issue["user"]["login"] != BOT:
+            continue
+        pull = github_read(repository, f"pulls/{issue['number']}")
+        if match := re.fullmatch(r"klaud/auto-([0-9a-f]{16}-[0-9a-f]{16})", pull["head"]["ref"]):
+            aborted.add(match[1])
+    return aborted
+
+
+def abort_released(repository: str, candidate_id: str) -> bool:
+    """Whether the candidate's latest Klaud PR ended in an abort whose label was since removed."""
+    from urllib.parse import urlencode
+
+    from .lifecycle import BOT
+
+    query = urlencode(
+        {
+            "state": "closed",
+            "head": f"{repository.split('/', maxsplit=1)[0]}:klaud/auto-{candidate_id}",
+            "per_page": 100,
+        }
+    )
+    try:
+        pulls = [
+            pull
+            for pull in github_items(repository, "pulls?" + query)
+            if pull["user"]["login"] == BOT
+        ]
+        if not pulls:
+            return False
+        latest = max(pulls, key=lambda pull: pull["created_at"])
+        if any(label["name"] == ABORT_LABEL for label in latest["labels"]):
+            return False
+        comments = github_items(repository, f"issues/{latest['number']}/comments?per_page=100")
+        for comment in reversed(comments):
+            if comment["user"]["login"] == BOT and comment["body"].startswith(
+                "<!-- klaud-outcome:"
+            ):
+                record = json.loads(comment["body"].split("\n", 1)[1].split("\n-->", 1)[0])
+                return record["outcome"]["outcome"] == "aborted"
+    except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.SubprocessError):
+        print(f"::warning::Klaud abort history unavailable for {candidate_id}; keeping cooldown")
+    return False
+
+
 def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
     cutoff = now - timedelta(days=stale_days)
     return [
@@ -346,7 +401,15 @@ def plan(
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
+    # klaud-abort keeps a candidate out of the pool until someone removes the label.
+    aborted = aborted_candidates(repository)
+    candidates = [candidate for candidate in candidates if candidate["id"] not in aborted]
     recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
+    for candidate in candidates:
+        # Only candidates the cooldown would hold back need their abort history.
+        held = candidate["id"] in recent and recent[candidate["id"]] not in RETRY_NEXT_WAVE
+        if held and abort_released(repository, candidate["id"]):
+            recent[candidate["id"]] = "aborted"
     candidates = [
         candidate
         for candidate in candidates
