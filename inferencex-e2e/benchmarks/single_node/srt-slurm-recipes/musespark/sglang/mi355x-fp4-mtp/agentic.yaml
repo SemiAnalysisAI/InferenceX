@@ -50,6 +50,8 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # TP8/EP8 adds KV headroom at higher concurrency.
+# Above conc 8 both layouts add a 180 GB-per-rank HiCache DRAM tier
+# (720 GB at TP4, 1.44 TB at TP8).
 
 override_tp4_c1:
   roles:
@@ -87,29 +89,35 @@ override_tp4_c8:
       CONC: '8'
       KV_OFFLOADING: none
 
-override_tp4_c12:
+override_tp4_c12_hicache:
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '12'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
-override_tp4_c16:
+override_tp4_c16_hicache:
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '16'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_tp8_c1:
   roles:
@@ -147,26 +155,32 @@ override_tp8_c8:
       CONC: '8'
       KV_OFFLOADING: none
 
-override_tp8_c12:
+override_tp8_c12_hicache:
   roles:
     agg:
       gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '12'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
-override_tp8_c16:
+override_tp8_c16_hicache:
   roles:
     agg:
       gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '16'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram

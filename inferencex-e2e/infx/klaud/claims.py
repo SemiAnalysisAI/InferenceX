@@ -14,6 +14,8 @@ from . import github
 from .github import VerificationError
 from .models import OwnedCandidate, Ownership, identity
 
+RECONCILE_JOB = "Reconcile interrupted candidates"
+
 
 def ref(repository: str, name: str) -> dict | None:
     return next(
@@ -119,11 +121,17 @@ def recovery_lease(repository: str, parent: int, candidate: OwnedCandidate) -> b
         if prior == owner:
             return True
         run = github.read(repository, f"actions/runs/{int(prior['run-id'])}")
-        if (
-            run["path"] != ".github/workflows/klaud-plan.yml"
-            or run["head_branch"] != "main"
-            or run["status"] != "completed"
-            or not run.get("conclusion")
-        ):
+        if run["path"] != ".github/workflows/klaud-plan.yml" or run["head_branch"] != "main":
             return False
+        if run["status"] != "completed" or not run.get("conclusion"):
+            jobs = github.items(
+                repository,
+                f"actions/runs/{int(prior['run-id'])}/attempts/{int(prior['run-attempt'])}"
+                "/jobs?per_page=100",
+                "jobs",
+            )
+            if not any(
+                job["name"] == RECONCILE_JOB and job["status"] == "completed" for job in jobs
+            ):
+                return False
     return create(repository, name, owner, candidate.base, previous)
