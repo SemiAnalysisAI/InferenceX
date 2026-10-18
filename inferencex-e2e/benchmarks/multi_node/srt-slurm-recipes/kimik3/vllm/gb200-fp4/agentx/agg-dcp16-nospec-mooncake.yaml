@@ -51,11 +51,7 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    dyn-chat-processor: "vllm"
     trust-remote-code: true
-    tool-call-parser: "kimi_k3"
-    reasoning-parser: "kimi_k3"
-    enable-auto-tool-choice: true
     router-mode: "random"
     router-session-affinity-ttl-secs: 900
   env:
