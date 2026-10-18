@@ -42,7 +42,7 @@ def is_video(point: Mapping[str, Any]) -> bool:
 def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
     """The workflow environment the launcher reads for ``point``."""
     if is_video(point):
-        return {
+        environment = {
             "IMAGE": point["image"],
             "MODEL": point["model"],
             "MODEL_PREFIX": point["model-prefix"],
@@ -63,6 +63,9 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             "HF_HUB_CACHE": HF_HUB_CACHE,
             "RESULT_FILENAME": point["exp-name"],
         }
+        if "set" in point:
+            environment["H3_SET"] = point["set"]
+        return environment
     agentic = point.get("scenario-type") == "agentic-coding"
     environment = {
         "IMAGE": point["image"],

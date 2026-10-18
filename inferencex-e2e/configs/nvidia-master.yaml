@@ -9827,11 +9827,30 @@ h3-bf16-h200-sglang-video:
   srt-recipe-dir: h3/sglang/h200-bf16
   scenarios:
     video-generation:
-      - spec: h3-serving-2gpu.json
+      - spec: h3.yaml
+        set: release-v1
         search-space:
           - gpus: 2
             srt-recipe: serving-client.yaml
-            conc-list: [1, 2, 4]
+            conc-list: [1]
+
+h3-bf16-h200-vllm-omni-video:
+  image: vllm/vllm-omni:v0.30.0
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: h3/vllm-omni/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3.yaml
+        set: release-v1
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
 
 h3-bf16-b200-sglang-video:
   # The B200 runtime is a CUDA 13 build whose SGLang lives in the /opt/sglang venv, so its
