@@ -24,6 +24,15 @@ mkdir -p "$H3_RESULT_DIR" "$SRT_MEASUREMENT_WINDOW_DIR"
 
 # shellcheck disable=SC2086 # CONC_LIST is a space-separated list of integers.
 export PYTHONPATH="${H3_PACKAGE_ROOT}:${INFMAX_CONTAINER_WORKSPACE}${PYTHONPATH:+:$PYTHONPATH}"
+if [[ -n "${H3_SET:-}" ]]; then
+    check_env_vars H3_PLAN_SHA256 H3_RUNTIME H3_RUNTIME_REVISION GPU_COUNT
+    exec python3 -m evaluator.cli srt-yaml-client \
+        --spec "$H3_SPEC_PATH" --set "$H3_SET" --plan-sha256 "$H3_PLAN_SHA256" \
+        --runtime "$H3_RUNTIME" --runtime-revision "$H3_RUNTIME_REVISION" \
+        --endpoint "$endpoint" --output "$H3_RESULT_DIR" \
+        --window-dir "$SRT_MEASUREMENT_WINDOW_DIR" --gpus "$GPU_COUNT" \
+        --concurrencies $CONC_LIST
+fi
 exec python3 -m evaluator.cli srt-client \
     --spec "$H3_SPEC_PATH" \
     --endpoint "$endpoint" \

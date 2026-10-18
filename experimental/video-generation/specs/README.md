@@ -7,6 +7,8 @@
 `h3.yaml` defines the MiniMax-H3 text-to-video-and-audio workload that SGLang and vLLM-Omni both run.
 `h3_spec.py` loads and validates it, then builds the plan object that the runner from PR #2916 executes and hashes.
 The H3 spec is an explicit dependency of the shared loader's default command.
+`h3-vllm-omni-serving.md` records the pinned vLLM-Omni H3 image and two-GPU server command.
+The `release-v1` set crosses the four existing prompts with five recorded seeds for 20 measured clips.
 
 ## What the YAML records
 
@@ -39,7 +41,7 @@ It serializes with sorted keys, compact separators, UTF-8, and no NaN.
 From the repository root:
 
 ```bash
-uv run --no-project --python 3.12 --with 'pyyaml==6.0.3' --with 'pytest>=8,<9' python -m pytest experimental/video-generation/tests/test_wan_spec.py -q
+uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest experimental/video-generation/tests/test_h3_spec.py experimental/video-generation/tests/test_wan_spec.py -q
 uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' python experimental/video-generation/specs/h3_spec.py
 ```
 
