@@ -85,6 +85,8 @@ base:
         TILELANG_CLEANUP_TEMP_FILES: "1"
         VLLM_USE_NCCL_SYMM_MEM: "0"
         NCCL_CUMEM_ENABLE: "1"
+        # Avoid CUDA host-memory access failures during NCCL initialization.
+        NCCL_CUMEM_HOST_ENABLE: "0"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
         VLLM_SERVER_DEV_MODE: "1"

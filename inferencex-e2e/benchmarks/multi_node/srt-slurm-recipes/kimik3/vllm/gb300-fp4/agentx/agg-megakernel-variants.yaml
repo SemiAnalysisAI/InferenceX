@@ -27,6 +27,8 @@ base:
       workers: 1
       gpus: 8
       env:
+        # Avoid CUDA host-memory access failures during NCCL initialization.
+        NCCL_CUMEM_HOST_ENABLE: '0'
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
         VLLM_USE_DIRECT_DCP_A2A: '1'
