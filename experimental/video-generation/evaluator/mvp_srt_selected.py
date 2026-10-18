@@ -91,6 +91,19 @@ def serve(
         storage = output / "storage"
         storage.mkdir(parents=True, exist_ok=True)
         env["VLLM_OMNI_SERVER_STORAGE__PATH"] = str(storage)
+    _write(output / "spec.json", {
+        "schema_version": "0.1.0",
+        "plan": plan,
+        "gpu_uuids": uuids,
+        "baseline": {
+            "name": runtime,
+            "revision": runtime_revision,
+            "model_path": str(model_path),
+            "model_revision": plan["model_revision"],
+            "argv": argv,
+        },
+        "serving": {"mode": "closed_loop"},
+    })
     _write(output / "launch.json", {
         "runtime": runtime, "runtime_revision": runtime_revision,
         "model_id": plan["model_id"], "model_revision": plan["model_revision"],
