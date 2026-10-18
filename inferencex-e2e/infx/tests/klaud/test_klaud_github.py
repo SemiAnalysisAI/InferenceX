@@ -2266,6 +2266,16 @@ def test_closing_report_states_why_from_the_latest_own_attempt(
     )
 
 
+def test_every_candidate_pr_body_says_how_to_stop_the_candidate(monkeypatch):
+    body = reporting.render_body(frozen_dsr1_baseline(monkeypatch))
+    english, chinese = body.split("<summary>中文</summary>")
+
+    assert ("**Stop:** Add the `klaud-abort` label at any time to stop this candidate for good; "
+            "Klaud cancels its runs and closes this PR.") in english
+    assert ("**停止：**随时添加 `klaud-abort` 标签即可彻底停止该候选，Klaud 会取消其运行并关闭此 PR。"
+            in chinese)
+
+
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):
     remote = tmp_path / "remote"
     remote.mkdir()

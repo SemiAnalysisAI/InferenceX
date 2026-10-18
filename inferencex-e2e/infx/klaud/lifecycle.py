@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 
 from . import claims, github
 from .github import VerificationError
-from .models import CandidateOutcome, OwnedCandidate, Ownership, identity, utc
+from .models import ABORT_LABEL, CandidateOutcome, OwnedCandidate, Ownership, identity, utc
 from .reporting import Prose, latest_next, translated
 from .validation import verify_sweep
 
@@ -22,8 +22,6 @@ BOT = "Klaud-Cold"
 COMMITTER = "github-actions[bot]"
 ACTIVE_STATUSES = ("requested", "waiting", "pending", "queued", "in_progress")
 CANDIDATE_ID = r"[0-9a-f]{16}-[0-9a-f]{16}"
-# A maintainer label that stops a candidate for good: its runs are cancelled, its PR closed.
-ABORT_LABEL = "klaud-abort"
 SWEEP_LABELS = {
     "full-sweep-enabled",
     "non-canary-full-sweep-enabled",
