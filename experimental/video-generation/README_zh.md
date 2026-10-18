@@ -190,9 +190,9 @@ H200 硬件盘点、CPU 导出）与 `h3-fidelity.yml`（保留媒体比较）�
 
 ## 结果与本地检查
 
-成功执行还会发布[前端结果契约](RESULTS_zh.md)：版本化的 `result.json`、
+成功执行还会发布[前端结果契约（英文）](RESULTS.md)：版本化的 `result.json`、
 逐卡功率序列、分阶段能量与覆盖率，以及可离线打开的 `power-report.html`。
-`h3-results-<run-id>-<attempt>` 包含索引、JSON Schema、双语指标说明，以及每次
+`h3-results-<run-id>-<attempt>` 包含索引、JSON Schema、指标说明，以及每次
 原始执行的媒体、测量、日志和报告。原始执行身份与校验文件和本次导出身份分开保留。
 遥测无效时功率和能量为空；导出失败会保留错误日志并返回失败状态。
 
@@ -225,7 +225,7 @@ gh workflow run h3-video.yml --repo SemiAnalysisAI/InferenceX \
 配置、实际执行、默认及最大功率上限均为 700 W；历史生成时的设置仍未知。
 原始盘点记录中的 unknown 分类保持不变；导出器使用新 producer 提交解析原始
 XML，同时支持带或不带 `0x` 的 PCI 编号，不重新查询硬件。
-[已保留的 A/A 测量及限制](RESULTS_zh.md#已观测的-aa-证据)提供具体数据。
+[已保留的 A/A 测量及限制（英文）](RESULTS.md#observed-aa-evidence)提供具体数据。
 
 原始工作负载失败时仍上传失败证据，但不会启动成功结果导出。
 

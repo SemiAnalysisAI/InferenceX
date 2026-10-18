@@ -108,7 +108,7 @@ sets:
       - {case_id: bicycle-pass, prompt: bicycle-pass, seed: 37}
       - {case_id: footsteps, prompt: footsteps, seed: 53}
   shared-v1:
-    # The shared Phase A/B set: every #3733 prompt with its #3733 seed and a second seed 100 higher.
+    # The shared set uses every #3733 prompt with its recorded seed and a second seed 100 higher.
     # The second seeds are new here, so each cites the #3733 line of the seed it is derived from.
     plan_id: wan22-t2v-a14b-shared-v1
     repetitions: 1

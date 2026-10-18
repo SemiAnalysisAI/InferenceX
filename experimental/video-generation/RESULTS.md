@@ -1,7 +1,5 @@
 # H3 backend result contract
 
-**English** | [中文](./RESULTS_zh.md)
-
 `result.json` is the frontend entry point for a downloaded H3 CI artifact. Its
 `schema_version` is **1.0.0**; [result.schema.json](./result.schema.json) describes
 its external shape. Reject unknown versions. This contract does not ingest a
