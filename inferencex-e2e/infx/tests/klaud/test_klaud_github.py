@@ -309,34 +309,48 @@ def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
     assert [pr["number"] for pr in klaud.active_pulls(pulls, now, 7)] == [1, 3, 4]
 
 
-def test_capacity_aborts_only_above_200_percent_with_queued_nodes():
+def test_capacity_is_idle_headroom_on_clusters_without_waiting_human_jobs():
     now = "2026-10-15T00:05:00Z"
 
-    def metric(name, allocated, queued, schedulable):
-        return {"clusterLabel": f"cluster:{name}", "allocatedNodes": allocated,
-                "queuedNodes": queued, "schedulableNodes": schedulable}
+    def metric(name, schedulable, allocated):
+        return {"clusterLabel": f"cluster:{name}", "schedulableNodes": schedulable,
+                "allocatedNodes": allocated}
 
-    def feed(snapshot_at, metrics):
-        return Feed(
-            url="https://dash.inferencex.semianalysis.com/api/status/scheduler",
-            retrieved_at=now, sha256="0" * 64,
-            payload={"kind": "inferencex.status.scheduler", "generatedAt": now, "data": {
-                "available": True,
-                "snapshot": {"snapshotAt": snapshot_at, "stalled": False,
-                             "packingMetrics": metrics},
-            }},
-        )
+    def job(name, clusters, nodes, runner=None):
+        return {"name": name, "clusterIds": [f"cluster:{cluster}" for cluster in clusters],
+                "nodeCount": nodes, "runnerName": runner}
 
     metrics = [
-        metric("at-200", 8, 12, 10), metric("over-200", 8, 13, 10),
-        metric("idle", 0, 0, 4), metric("drained", 0, 0, 0), metric("corrupt", 1, -1, 10),
+        metric("idle", 4, 0), metric("human", 10, 2), metric("shared", 10, 2), metric("full", 6, 4),
+        metric("over", 6, 5), metric("admitted", 8, 6), metric("unlabeled", 3, 1),
+        metric("drained", 0, 0), metric("corrupt", 10, -1),
     ]
-    policy = api.Policy()
-    fresh, stale = "2026-10-15T00:00:00Z", "2026-10-14T23:59:59Z"
-    assert api.available_clusters(feed(fresh, metrics), policy, api.utc(now)) == {"at-200", "idle"}
-    assert api.available_clusters(feed(stale, metrics), policy, api.utc(now)) == set()
-    pre_deploy = [{k: v for k, v in m.items() if k != "queuedNodes"} for m in metrics]
-    assert api.available_clusters(feed(fresh, pre_deploy), policy, api.utc(now)) == set()
+    queue = [
+        job("sweep / p1 | klaud | dsr1 fp8", ["human"], 1),
+        job("sweep / klaud | p3 | dsr1 fp8", ["shared"], 3),
+        job("Klaud | p3 | dsr1 fp4", ["shared", "full", "over"], 2),
+        job("sweep / p1 | dsr1 fp4", ["admitted"], 2, runner="admitted_00"),
+        job("sweep / klaud | p3 | dsr1 fp4", ["admitted"], 2, runner="admitted_02"),
+        job("e2e / klaud | p3 | dsr1 fp8", ["unlabeled"], None),
+    ]
+
+    def headroom(metrics=metrics, queue=queue, snapshot_at="2026-10-15T00:00:00Z",
+                 generated_at=now, stalled=False):
+        payload = {"kind": "inferencex.status.scheduler", "generatedAt": generated_at, "data": {
+            "available": True, "snapshot": {"snapshotAt": snapshot_at, "stalled": stalled,
+                                            "packingMetrics": metrics, "queue": queue},
+        }}
+        feed = Feed(url=api.ENDPOINTS["scheduler"], retrieved_at=now, sha256="0" * 64,
+                    payload=payload)
+        return api.cluster_headroom(feed, api.Policy(), api.utc(now))
+
+    assert headroom() == {"idle": 4, "shared": 3, "admitted": 2, "unlabeled": 1}
+    assert headroom(snapshot_at="2026-10-14T23:59:59Z") == {}
+    assert headroom(generated_at="2026-10-15T00:02:59Z") == {}
+    assert headroom(stalled=True) == {}
+    assert headroom(metrics=[*metrics, metric("idle", 4, 0)]) == {}
+    for malformed in ({"nodeCount": 0}, {"clusterIds": "cluster:idle"}, {"runnerName": 7}):
+        assert headroom(queue=[*queue, {**queue[1], **malformed}]) == {}
 
 
 @pytest.mark.parametrize(("run_status", "reconcile_status", "taken"), [
@@ -462,6 +476,181 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
     ]
 
 
+UNEXPECTED_ERROR = CandidateOutcome(
+    outcome="unexpected-error", phase="cleanup", pull_request=7, run_ids=[9], repairs_used=None,
+)
+
+
+def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelled", state="open",
+                        artifacts=()):
+    """Serve finished planner run 42 whose draft PR 7 has one final sweep, run 9, that ended
+    ``conclusion`` at attempt ``attempt`` on 2026-10-15 00:00 UTC with ``jobs`` (a
+    ``-timeout`` suffix marks a job GitHub stopped at its timeout); record GitHub writes,
+    finished outcomes and released family claims."""
+    candidate = OwnedCandidate(id=f"{identity(FAMILY)[:16]}-{'2' * 16}", family=FAMILY,
+                               base="a" * 40)
+    branch = f"klaud/auto-{candidate.id}"
+    parent = {"id": 42, "head_branch": "main", "path": ".github/workflows/klaud-plan.yml",
+              "event": "schedule", "status": "completed", "conclusion": "success",
+              "run_attempt": 1, "created_at": "2026-10-14T00:00:00Z",
+              "updated_at": "2026-10-14T06:00:00Z"}
+    pull = {"number": 7, "state": state, "draft": True, "merged_at": None,
+            "user": {"login": "Klaud-Cold"}, "created_at": "2026-10-14T01:00:00Z",
+            "labels": [{"name": "full-sweep-fail-fast"}],
+            "head": {"ref": branch, "sha": "c" * 40, "repo": {"full_name": "example/project"}}}
+    sweep = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": attempt,
+             "status": "completed", "conclusion": conclusion, "actor": {"login": "Klaud-Cold"},
+             "created_at": "2026-10-14T02:00:00Z", "updated_at": "2026-10-15T00:00:00Z",
+             "head_repository": {"full_name": "example/project"}, "pull_requests": [{"number": 7}]}
+    attempt_jobs = [
+        {"id": 100 + index, "conclusion": job.removesuffix("-timeout"), "runner_name": "gpu-0"}
+        for index, job in enumerate(jobs)
+    ]
+    listings = {
+        f"actions/runs/9/attempts/{attempt}/jobs?per_page=100": attempt_jobs,
+        **{
+            f"check-runs/{100 + index}/annotations?per_page=100": [{"message": (
+                "The job has exceeded the maximum execution time of 8h20m0s"
+                if job.endswith("-timeout") else "The operation was canceled."
+            )}]
+            for index, job in enumerate(jobs)
+        },
+        "actions/runs/9/artifacts?per_page=100": list(artifacts),
+        "pulls?state=open&per_page=100": [pull],
+        "pulls/7/commits?per_page=100": [{"committer": {"login": "github-actions[bot]"}}],
+        "git/matching-refs/heads/klaud/recovery-": [
+            {"ref": f"refs/heads/klaud/recovery-42-{candidate.id}"}],
+        "git/matching-refs/heads/klaud/auto-": [
+            {"ref": f"refs/heads/{branch}", "object": {"sha": "c" * 40}}],
+    }
+
+    def items(_repository, path, _key=None):
+        if path in listings:
+            return listings[path]
+        if path.startswith("pulls?state=all&"):
+            return [pull]
+        if path.startswith("actions/workflows/run-sweep.yml/runs?per_page=100&created="):
+            return [sweep]
+        if path.startswith(("issues/7/comments?", "actions/workflows/", "actions/artifacts?")):
+            return []
+        raise AssertionError(path)
+
+    reads = {"actions/runs/42": parent, "pulls/7": pull,
+             f"actions/runs/9/attempts/{attempt}": {"run_started_at": "2026-10-14T20:00:00Z"}}
+    world = SimpleNamespace(
+        session=lifecycle.Session("example/project", parent, candidate, recovering=True),
+        writes=[], finished=[], released=[],
+    )
+    monkeypatch.setattr(github, "items", items)
+    monkeypatch.setattr(github, "read", lambda _r, path: (
+        reads[path] if path in reads else pytest.fail(path)))
+    monkeypatch.setattr(github, "write", lambda _r, path, method, _payload=None: (
+        world.writes.append((method, path))))
+    monkeypatch.setattr(lifecycle.Session, "finish", lambda _session, outcome: (
+        world.finished.append(outcome)))
+    monkeypatch.setattr(claims, "family_owners", lambda _r: [
+        Ownership(run_id=42, candidates=[candidate])])
+    monkeypatch.setattr(claims, "recovery_lease", lambda *_: True)
+    monkeypatch.setattr(claims, "release_family", lambda _r, owned, run: (
+        world.released.append((owned.id, run))))
+    return world
+
+
+@pytest.mark.parametrize(("now", "attempt", "jobs", "state", "waiting", "rerun"), [
+    pytest.param("2026-10-15T00:29:59Z", 1, ["success", "cancelled"], "open",
+                 "Preempted final sweep is waiting for its rerun", False, id="within-grace"),
+    pytest.param("2026-10-15T00:30:00Z", 9, ["success", "cancelled"], "open",
+                 "Reran preempted final sweep", True, id="after-grace"),
+    pytest.param("2026-10-15T23:59:59Z", 1, ["success", "cancelled"], "open",
+                 "Reran preempted final sweep", True, id="before-give-up"),
+    pytest.param("2026-10-16T00:00:00Z", 1, ["success", "cancelled"], "open", None, False,
+                 id="give-up"),
+    pytest.param("2026-10-15T00:30:00Z", 10, ["success", "cancelled"], "open", None, False,
+                 id="attempt-cap"),
+    pytest.param("2026-10-15T00:29:59Z", 1, ["failure", "cancelled"], "open", None, False,
+                 id="failed-job"),
+    pytest.param("2026-10-15T00:30:00Z", 1, ["timed_out", "cancelled"], "open", None, False,
+                 id="timed-out-job"),
+    pytest.param("2026-10-15T00:30:00Z", 1, ["success", "cancelled-timeout"], "open", None,
+                 False, id="job-hit-its-timeout"),
+    pytest.param("2026-10-15T00:30:00Z", 1, ["success", "cancelled"], "closed", None, False,
+                 id="closed-pr"),
+])  # fmt: skip
+def test_recovery_holds_a_preempted_final_sweep_and_reruns_it_after_the_grace_period(
+    monkeypatch, now, attempt, jobs, state, waiting, rerun
+):
+    world = ended_session_sweep(monkeypatch, attempt=attempt, jobs=jobs, state=state)
+    at = lifecycle.utc(now)
+
+    if waiting:
+        with pytest.raises(lifecycle.AwaitingRerun, match=waiting):
+            lifecycle.reconcile(world.session, at)
+    else:
+        assert lifecycle.reconcile(world.session, at) is True
+    assert world.writes == ([("POST", "actions/runs/9/rerun-failed-jobs")] if rerun else [])
+    assert world.finished == ([] if waiting else [UNEXPECTED_ERROR])
+
+
+@pytest.mark.parametrize(("broken", "waiting"), [
+    ("items", "Preemption check unavailable; retrying next pass"),
+    ("write", "Rerun request failed; retrying next pass"),
+])  # fmt: skip
+def test_recovery_retries_a_preempted_final_sweep_after_github_errors(
+    monkeypatch, broken, waiting
+):
+    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
+    working = getattr(github, broken)
+
+    def flaky(repository, path, *args):
+        if path.startswith(("actions/runs/9/attempts/", "actions/runs/9/rerun-failed-jobs")):
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return working(repository, path, *args)
+
+    monkeypatch.setattr(github, broken, flaky)
+
+    with pytest.raises(lifecycle.AwaitingRerun, match=waiting):
+        lifecycle.reconcile(world.session, lifecycle.utc("2026-10-15T01:00:00Z"))
+    assert world.finished == []
+
+
+def test_recovery_keeps_the_pr_claim_and_lease_of_a_rerun_final_sweep(monkeypatch, tmp_path):
+    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
+    summary = tmp_path / "summary.md"
+    for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", "1000"),
+                        ("RUNNER_TEMP", str(tmp_path)), ("GITHUB_STEP_SUMMARY", str(summary))):
+        monkeypatch.setenv(name, value)
+
+    class Clock(lifecycle.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return lifecycle.utc("2026-10-15T01:00:00Z")
+
+    monkeypatch.setattr(lifecycle, "datetime", Clock)
+
+    lifecycle.recover()
+
+    assert world.writes == [("POST", "actions/runs/9/rerun-failed-jobs")]
+    assert world.finished == world.released == []
+    assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+    assert summary.read_text() == (
+        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted final "
+        "sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
+
+
+def test_recovery_warns_why_a_passed_final_sweep_failed_validation(monkeypatch, capsys):
+    world = ended_session_sweep(monkeypatch, attempt=2, conclusion="success", artifacts=[{
+        "id": 1, "name": "klaud-sweep-manifest", "expired": False,
+        "created_at": "2026-10-14T03:00:00Z", "workflow_run": {"id": 9, "head_sha": "c" * 40},
+    }])
+
+    assert lifecycle.reconcile(world.session, lifecycle.utc("2026-10-15T01:00:00Z")) is True
+    assert capsys.readouterr().out == (
+        f"::warning::Klaud: final sweep of candidate {world.session.candidate.id} failed "
+        "validation: Manifest belongs to an earlier run attempt.\n")
+    assert world.finished == [UNEXPECTED_ERROR]
+    assert world.writes == []
+
+
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
     first_id = "1" * 16 + "-" + "2" * 16
     second_id = "3" * 16 + "-" + "4" * 16
@@ -471,7 +660,8 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
         "configs/nvidia-master.yaml:second-family",
     ]
     contexts = [
-        {"id": candidate_id, "family": family, "base": base, "source": {}, "clusters": ["cluster-a"]}
+        {"id": candidate_id, "family": family, "base": base, "source": {},
+         "clusters": ["cluster-a"], "node-demand": 1}
         for candidate_id, family in zip((first_id, second_id), families, strict=True)
     ]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -507,7 +697,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(reporting, "resolve_baseline", resolve)
     monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
@@ -529,19 +719,22 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     assert selected["baseline-model"] == "Model"
 
 
-@pytest.mark.parametrize(("eligible", "selected", "deferred"), [
-    ({"h100-dsxe"}, ["exact"], ["spanning"]),
-    ({"h100-cw", "h100-dsxe"}, ["spanning", "exact"], []),
+@pytest.mark.parametrize(("headroom", "selected", "deferred"), [
+    ({"h100-dsxe": 2, "h200-dgxc": 1}, ["exact", "elsewhere"], ["spanning"]),
+    ({"h100-cw": 1, "h100-dsxe": 2, "h200-dgxc": 1}, ["spanning", "elsewhere"], ["exact"]),
+    ({"h100-cw": 1, "h100-dsxe": 3, "h200-dgxc": 1}, ["spanning", "exact", "elsewhere"], []),
 ])  # fmt: skip
-def test_select_needs_every_planner_target_cluster_eligible(
-    tmp_path, monkeypatch, eligible, selected, deferred
+def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wave(
+    tmp_path, monkeypatch, headroom, selected, deferred
 ):
-    ids = {"spanning": "1" * 16 + "-" + "2" * 16, "exact": "3" * 16 + "-" + "4" * 16}
-    targets = {"spanning": ["h100-cw", "h100-dsxe"], "exact": ["h100-dsxe"]}
+    ids = {"spanning": "1" * 16 + "-" + "2" * 16, "exact": "3" * 16 + "-" + "4" * 16,
+           "elsewhere": "5" * 16 + "-" + "6" * 16}
+    targets = {"spanning": (["h100-cw", "h100-dsxe"], 1), "exact": (["h100-dsxe"], 2),
+               "elsewhere": (["h200-dgxc"], 1)}
     contexts = [
         {"id": ids[name], "family": f"configs/nvidia-master.yaml:{name}", "base": "a" * 40,
-         "source": {}, "clusters": targets[name]}
-        for name in ("spanning", "exact")
+         "source": {}, "clusters": clusters, "node-demand": demand}
+        for name, (clusters, demand) in targets.items()
     ]  # fmt: skip
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
     (tmp_path / "producers.json").write_text("{}\n")
@@ -561,7 +754,7 @@ def test_select_needs_every_planner_target_cluster_eligible(
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps(review))
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: eligible)
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: dict(headroom))
     monkeypatch.setattr(reporting, "resolve_baseline", resolve)
     monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
@@ -925,7 +1118,7 @@ def review_candidate(directory, monkeypatch, source):
     directory.mkdir()
     (directory / "candidates.json").write_text(json.dumps(
         [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source,
-          "clusters": ["cluster-a"]}]
+          "clusters": ["cluster-a"], "node-demand": 1}]
     ))
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
@@ -958,7 +1151,7 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
         raise AssertionError(f"select started {args!r}")
 
     monkeypatch.setattr(subprocess, "Popen", no_process)
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
 
     klaud.select(directory, 5)
@@ -990,7 +1183,7 @@ def test_select_defers_a_baseline_the_current_family_no_longer_generates(tmp_pat
     def no_claim(*_args):
         raise AssertionError("a deferred candidate must not be claimed")
 
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(claims, "claim_family", no_claim)
 
     klaud.select(directory, 5)
@@ -1149,7 +1342,7 @@ def test_select_exempts_only_points_models_md_retired_after_the_baseline(
     directory = tmp_path / "klaud"
     review_candidate(directory, monkeypatch, source)
     (directory / "producers.json").write_text(json.dumps({FAMILY: producers}))
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a"})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 1})
     monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
 
     klaud.select(directory, 5)
@@ -1391,7 +1584,7 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
     validated = outcome == "validated"
     pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": not validated,
             "state": "open" if validated else "closed",
-            "labels": [{"name": "full-sweep-enabled"}] if validated else []}
+            "labels": [{"name": "full-sweep-fail-fast"}] if validated else []}
     run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
            "created_at": "2026-10-15T00:00:00Z", "status": "completed",
            "conclusion": "success" if validated else "cancelled"}
@@ -1414,6 +1607,39 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
 
     [report] = [body for body in posted if body.startswith(session.marker)]
     return report.split("\n-->\n", 1)[1]
+
+
+@pytest.mark.parametrize(("labels", "accepted"), [
+    (["full-sweep-fail-fast"], True),
+    (["full-sweep-enabled"], False),
+    (["non-canary-full-sweep-enabled"], False),
+    (["full-sweep-fail-fast", "full-sweep-enabled"], False),
+    (["full-sweep-fail-fast", "all-evals"], False),
+])  # fmt: skip
+def test_validated_outcome_requires_a_fail_fast_only_sweep(monkeypatch, labels, accepted):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+    )
+    pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": False,
+            "state": "open", "labels": [{"name": name} for name in labels]}
+    run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
+           "created_at": "2026-10-15T00:00:00Z", "status": "completed", "conclusion": "success"}
+    validated = []
+    monkeypatch.setattr(session, "pulls", lambda: [pull])
+    monkeypatch.setattr(session, "runs", lambda: [run])
+    monkeypatch.setattr(session, "validation", validated.append)
+    outcome = CandidateOutcome(
+        outcome="validated", phase="final-sweep", pull_request=7, run_ids=[9], repairs_used=0
+    )
+
+    if accepted:
+        session.verify(outcome, require_report=False)
+        assert validated == [run]
+    else:
+        with pytest.raises(github.VerificationError, match="incompatible sweep labels"):
+            session.verify(outcome, require_report=False)
+        assert validated == []
+
 
 
 STOP = ("Stop as uncertain: the new image stalls every deployment.",
@@ -1552,7 +1778,9 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
+         1024, 1024, "example/image:stable"): {
+            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1),
+        },
     }
 
 
@@ -1587,18 +1815,27 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
 
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {"configs/nvidia-master.yaml:fixture": {"fixture"}},
+         1024, 1024, "example/image:stable"): {
+            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1),
+        },
     }
 
 
-def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runners(
+def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_runners(
     tmp_path, family_configs, capsys
 ):
     master, runners = family_configs
     fixture, record = master["fixture"], runners["clusters"]["fixture"]
+    worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
     master = {
         "spanning": {**fixture, "runner": "h100"},
         "exact": {**fixture, "runner": "cluster:h100-dsxe"},
+        "wide": {**fixture, "runner": "cluster:h100-dsxe", "multinode": True, "scenarios": {
+            "fixed-seq-len": [{"isl": 1024, "osl": 1024, "search-space": [
+                {"num-nodes": nodes, "worker": worker, "conc-list": [4], "srt-recipe": "wide.yaml"}
+                for nodes in (2, 4, 3)
+            ]}],
+        }},
         "unmapped": {**fixture, "runner": "h100-retired"},
     }
     runners = {
@@ -1614,6 +1851,9 @@ def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runn
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
     write_fixture_recipe(tmp_path)
+    recipe = tmp_path / "benchmarks/multi_node/srt-slurm-recipes/fixture/wide.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("{}\n")
 
     families = klaud.live_families(tmp_path)
 
@@ -1623,8 +1863,9 @@ def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runn
     assert families == {
         ("dsr1", "h100", "sglang", "fp8", "none", False, "single_turn",
          1024, 1024, "example/image:stable"): {
-            "configs/nvidia-master.yaml:spanning": {"h100-cw", "h100-dsxe"},
-            "configs/nvidia-master.yaml:exact": {"h100-dsxe"},
+            "configs/nvidia-master.yaml:spanning": ({"h100-cw", "h100-dsxe"}, 1),
+            "configs/nvidia-master.yaml:exact": ({"h100-dsxe"}, 1),
+            "configs/nvidia-master.yaml:wide": ({"h100-dsxe"}, 4),
         },
     }  # fmt: skip
     source = {
@@ -1634,14 +1875,16 @@ def test_choose_needs_every_target_cluster_of_a_family_and_skips_unresolved_runn
     }  # fmt: skip
     items = [{"source-status": "baseline", "source-id": "1", "source": source}]
 
-    def chosen(available):
+    def chosen(headroom):
         return sorted(
-            (candidate["family"].removeprefix("configs/nvidia-master.yaml:"), candidate["clusters"])
-            for candidate in klaud.choose(items, available, set(), families)
+            (candidate["family"].removeprefix("configs/nvidia-master.yaml:"),
+             candidate["clusters"], candidate["node-demand"])
+            for candidate in klaud.choose(items, headroom, set(), families)
         )
 
-    assert chosen({"h100-cw"}) == []
-    assert chosen({"h100-dsxe"}) == [("exact", ["h100-dsxe"])]
-    assert chosen({"h100-cw", "h100-dsxe"}) == [
-        ("exact", ["h100-dsxe"]), ("spanning", ["h100-cw", "h100-dsxe"]),
+    assert chosen({"h100-cw": 1}) == []
+    assert chosen({"h100-dsxe": 3}) == [("exact", ["h100-dsxe"], 1)]
+    assert chosen({"h100-cw": 1, "h100-dsxe": 4}) == [
+        ("exact", ["h100-dsxe"], 1), ("spanning", ["h100-cw", "h100-dsxe"], 1),
+        ("wide", ["h100-dsxe"], 4),
     ]
