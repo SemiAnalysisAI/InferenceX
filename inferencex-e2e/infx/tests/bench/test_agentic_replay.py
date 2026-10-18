@@ -40,7 +40,7 @@ def test_default_point_leaves_the_replay_policy_to_the_scenario():
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
         "--concurrency", "8", "--benchmark-duration", "3600", "--tokenizer-trust-remote-code",
         "--output-artifact-dir", "/results/aiperf_artifacts",
-        "--public-dataset", traces.UNCAPPED,
+        "--public-dataset", "semianalysis_cc_traces_weka_062126",
     ]  # fmt: skip
 
 
@@ -173,7 +173,7 @@ def test_malformed_replay_inputs_are_rejected(overrides, message):
         ("dsr1", None, True),
         ("qwen3.5", None, True),
         ("qwen3.8next", None, True),
-        ("musespark", None, True),
+        ("musespark", None, False),
         ("qwen3.5-variant", None, True),
         ("dsv4", None, False),
         ("dsv41flash", None, False),

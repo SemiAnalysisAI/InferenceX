@@ -45,7 +45,7 @@ needed only for tokenizers with custom code.
 
 InferenceX's `python3 -m infx.bench agentic` wrapper defaults to the full,
 uncapped corpus (`semianalysis_cc_traces_weka_062126`). Model prefixes beginning
-with `dsr1`, `qwen3.5`, `qwen3.8next`, or `musespark` explicitly select the
+with `dsr1`, `qwen3.5`, or `qwen3.8next` explicitly select the
 256k-capped corpus (`semianalysis_cc_traces_weka_062126_256k`). New model families
 use the full corpus unless added to `CAPPED_FAMILIES` in
 `infx/bench/agentic/traces.py`. `WEKA_LOADER_OVERRIDE` can pin either loader

@@ -10,7 +10,7 @@ LOADERS = {
     UNCAPPED: "semianalysisai/cc-traces-weka-062126",
     CAPPED: "semianalysisai/cc-traces-weka-062126-256k",
 }
-CAPPED_FAMILIES = ("dsr1", "qwen3.5", "qwen3.8next", "musespark")
+CAPPED_FAMILIES = ("dsr1", "qwen3.5", "qwen3.8next")
 
 
 def resolve(model_prefix: str, override: str | None) -> tuple[str, str]:
