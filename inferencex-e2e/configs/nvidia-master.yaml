@@ -7849,7 +7849,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
 # Kimi-K3 GB300 points on the measured global p90-ITL Pareto front. Each
 # DCP8 worker spans two 4-GPU nodes.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
-  image: vllm/vllm-openai:nightly-39983a5e7a5a575a7829f5d5ada50a33d9337ec1@sha256:a3bc7f09c1e2e72e068021feb75118c92e98c538706caa0c5d1acc0bb9252623
+  image: vllm/vllm-openai:nightly-1b2a666391f2a24228a1436b64d547c34cc6b6ce@sha256:12496a6e0249d42c0268093fcd2bc82c3883c9a35bc8eb06acbf024944aafbd5
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -8005,7 +8005,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
 
 
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-39983a5e7a5a575a7829f5d5ada50a33d9337ec1@sha256:a3bc7f09c1e2e72e068021feb75118c92e98c538706caa0c5d1acc0bb9252623
+  image: vllm/vllm-openai:nightly-1b2a666391f2a24228a1436b64d547c34cc6b6ce@sha256:12496a6e0249d42c0268093fcd2bc82c3883c9a35bc8eb06acbf024944aafbd5
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
