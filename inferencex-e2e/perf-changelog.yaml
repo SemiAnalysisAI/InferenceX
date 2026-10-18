@@ -10087,3 +10087,13 @@
     - "Set router-session-affinity-ttl-secs to 14400, drop the explicit active-decode-blocks, active-prefill-tokens and active-prefill-tokens-frac thresholds."
     - "Pin the benchmark to semianalysis_cc_traces_weka_062126_256k with AIPERF_REQUIRED_SERVER_METRIC_PREFIX=trtllm_kv_cache_utilization, and run the benchmark client on the last decode node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4195
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the complete GB300 Kimi-K3 AgentX curve to vLLM nightly-49cb2bbf, use probabilistic DSpark sampling throughout (golden AL 3.36/3.62/3.84 for 4/5/7 drafts), and add low-latency megakernel points."
+    - "Pin Dynamo ffbbaaa6 (dynamo-parsers 8.1.0), use Kimi-K3 parsers only in evaluation recipes, and set DYN_TCP_REQUEST_TIMEOUT=120 for the frontend and workers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4208
