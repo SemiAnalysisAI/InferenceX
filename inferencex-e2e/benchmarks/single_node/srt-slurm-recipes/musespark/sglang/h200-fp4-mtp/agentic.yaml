@@ -29,7 +29,8 @@ base:
         fp4-gemm-backend: marlin
         attention-backend: fa3
         kv-cache-dtype: fp8_e4m3
-        mem-fraction-static: 0.85
+        mem-fraction-static: 0.90
+        swa-full-tokens-ratio: 0.1
         # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
@@ -62,14 +63,13 @@ zip_override_tp8_hicache:
   roles:
     agg:
       args:
-        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128]
-        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 96, 128]
+        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 48, 96, 128]
+        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 48, 96, 128]
         # The host pool keeps evicted agentic prefixes for reuse across turns.
-        # 160 GB per rank plus the ~30 GB DFlash draft pool exceeded the
-        # ~1.39 TiB cgroup across 8 ranks; 120 GB keeps the total near 1.2 TB.
         enable-hierarchical-cache: true
-        hicache-size: 120
+        hicache-size: 96
+        prefill-decode-interval: [null, null, null, null, 16, 16, 16, 8, null, null]
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64']
+      CONC: ['1', '2', '4', '8', '16', '24', '32', '40', '48', '64']
       KV_OFFLOADING: dram
