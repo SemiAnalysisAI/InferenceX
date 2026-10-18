@@ -10101,5 +10101,5 @@
 - config-keys:
     - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
   description:
-    - "Update SGLang to v0.5.22-cu130 and use its bundled Dynamo 1.6.0.dev20261015 wheel."
+    - "Update SGLang to v0.5.22-cu130 and use the Dynamo 1.6.0.dev20261015 bundled in the image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4278
