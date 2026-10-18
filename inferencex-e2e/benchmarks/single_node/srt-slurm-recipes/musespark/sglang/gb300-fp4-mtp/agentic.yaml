@@ -77,6 +77,8 @@ zip_override_tp4_hicache:
         max-running-requests: [16, 20, 24, 32]
         enable-hierarchical-cache: true
         hicache-size: 120
+        prefill-decode-interval: [null, null, 32, 32]
+        hicache-write-policy: [null, null, null, write_back]
   benchmark:
     env:
       CONC: ['16', '20', '24', '32']

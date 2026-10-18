@@ -63,13 +63,28 @@ zip_override_tp8_hicache:
   roles:
     agg:
       args:
-        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 48, 96, 128]
-        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 48, 96, 128]
+        max-running-requests: [2, 4, 8, 16, 32, 48]
+        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48]
         # The host pool keeps evicted agentic prefixes for reuse across turns.
         enable-hierarchical-cache: true
         hicache-size: 96
-        prefill-decode-interval: [null, null, null, null, 16, 16, 16, 8, null, null]
+        prefill-decode-interval: [null, null, null, null, 16, 16]
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8', '16', '24', '32', '40', '48', '64']
+      CONC: ['1', '2', '4', '8', '16', '24']
+      KV_OFFLOADING: dram
+
+zip_override_tp8_hicache_high:
+  roles:
+    agg:
+      args:
+        max-running-requests: [64, 96, 128]
+        cuda-graph-max-bs-decode: [64, 96, 128]
+        mem-fraction-static: 0.85
+        swa-full-tokens-ratio: 0.8
+        enable-hierarchical-cache: true
+        hicache-size: 120
+  benchmark:
+    env:
+      CONC: ['32', '48', '64']
       KV_OFFLOADING: dram
