@@ -109,6 +109,7 @@ override_1p2d_tep8_b8_mtp3_c20:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -124,6 +125,7 @@ override_1p2d_tep8_b8_mtp3_c20:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -158,6 +160,7 @@ override_1p4d_tep8_b1_mtp3_c12:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -173,6 +176,7 @@ override_1p4d_tep8_b1_mtp3_c12:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -209,6 +213,7 @@ override_1p4d_tep8_b2_mtp3_c8:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -224,6 +229,7 @@ override_1p4d_tep8_b2_mtp3_c8:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -259,6 +265,7 @@ override_4p3d_tep8_b32_mtp3_c126:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -274,6 +281,7 @@ override_4p3d_tep8_b32_mtp3_c126:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -369,6 +377,7 @@ override_7p1d_dep16_b32_mtp3_c666:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
         max_batch_size: 32
@@ -384,6 +393,7 @@ override_7p1d_dep16_b32_mtp3_c666:
       args:
         cache_transceiver_config:
           backend: UCX
+          transceiver_runtime: CPP
         cuda_graph_config:
           batch_sizes:
             - 1
