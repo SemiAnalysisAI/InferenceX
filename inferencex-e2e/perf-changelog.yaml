@@ -10108,4 +10108,4 @@
     - "Offload KV to host DRAM with SGLang HiCache at c16, c24 and c32: 213 GB against the 214 GB TP1 allowance (dram-utilization 0.8 of one GPU's share of the 2,047,536 MiB B200 node DRAM), with the extra_buffer_lazy Mamba radix cache (max-mamba-cache-size 320), one tokenizer worker and decode graphs at batch 1, 2, 4 and 8 and from 16 to 64 in steps of 8."
     - "Size for 180 GB HBM: mem-fraction-static 0.85, max-running-requests 64 from c4 up and decode graphs to batch 64. Sweep concurrency 1, 2, 4, 8, 16, 24 and 32; c48 is left out because the GPU KV pool leaves too few tokens per request there."
     - "Keep the RadixArk/Qwen3.8-Flash-Next-NVFP4 checkpoint with its BF16 MTP head as shipped (SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE=0); NEXTN 3/1/4 acceptance comes from the committed qwen3.8next MTP golden curve."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4279
