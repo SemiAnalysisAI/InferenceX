@@ -535,11 +535,10 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     ``jobs`` (a ``-timeout`` suffix marks a job GitHub stopped at its timeout).
 
     Planner attempt N starts 6(N - 1) hours after 2026-10-14 00:00 UTC and lasts 6 hours; its
-    candidate job concluded ``sessions[N - 1]``, where ``None`` is a session still running and a
-    ``-copied`` suffix marks a job the attempt copied from an earlier one. By default every
-    session ran, so none is left to resume. Otherwise the run ended ``planner``; its candidate
-    jobs have the resume gate when ``gated``. Record GitHub writes, finished outcomes, released
-    family claims and posted PR comments; tests may add comments and replace reads."""
+    candidate job ended ``sessions[N - 1]`` (see ``planner_job``). By default every session ran,
+    so none is left to resume. Otherwise the run ended ``planner``; its candidate jobs have the
+    resume gate when ``gated``. Record GitHub writes, finished outcomes, released family claims
+    and posted PR comments; tests may add comments and replace reads."""
     candidate = OwnedCandidate(id=f"{identity(FAMILY)[:16]}-{'2' * 16}", family=FAMILY,
                                base="a" * 40)
     branch = f"klaud/auto-{candidate.id}"
@@ -560,27 +559,42 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
              "updated_at": "2026-10-15T00:00:00Z",
              "head_repository": {"full_name": "example/project"}, "pull_requests": [{"number": 7}]}
 
-    def planner_job(name, number, outcome):
-        """Attempt ``number``'s job ``name``; a copy keeps the start of attempt 1's job."""
+    def planner_job(job_id, name, number, outcome):
+        """Attempt ``number``'s job ``name``, which concluded ``outcome``: ``None`` while it
+        runs, ``ungranted`` for a gate that failed it without a grant, ``gated-off`` for a gate
+        that let it end without a session and ``cancelled-timeout`` for a cancel at the job's
+        time limit. A ``-copied`` suffix marks a copy, which keeps attempt 1's start."""
         created = start + timedelta(hours=6 * (number - 1), minutes=20)
         copied = bool(outcome) and outcome.endswith("-copied")
-        outcome = outcome.removesuffix("-copied") if outcome else None
+        kind = outcome.removesuffix("-copied") if outcome else None
+        ended, gate, agent = {
+            None: (None, None, None),
+            "ungranted": ("failure", "failure", "skipped"),
+            "gated-off": ("success", "success", "skipped"),
+            "cancelled": ("cancelled", "success", "cancelled"),
+            "cancelled-timeout": ("cancelled", "success", "cancelled"),
+        }.get(kind, (kind, "success", "success"))
         if copied:
             began = start + timedelta(minutes=21)
         else:
-            began = created if outcome == "skipped" else created + timedelta(minutes=1)
-        steps = [] if outcome == "skipped" else [{"name": "Set up job"}] + (
-            [{"name": lifecycle.GATE_STEP}] if gated else [])
-        return {"name": name, "run_attempt": number, "conclusion": outcome, "steps": steps,
-                "created_at": stamp(created), "started_at": stamp(began)}
+            began = created if kind == "skipped" else created + timedelta(minutes=1)
+        steps = [] if kind == "skipped" else [
+            {"name": "Set up job", "conclusion": "success"},
+            *([{"name": lifecycle.GATE_STEP, "conclusion": gate}] if gated else []),
+            {"name": lifecycle.AGENT_STEP, "conclusion": agent},
+        ]
+        return {"id": job_id, "name": name, "run_attempt": number, "conclusion": ended,
+                "runner_name": "GitHub Actions 1", "steps": steps, "created_at": stamp(created),
+                "started_at": stamp(began)}
 
     planner_jobs = [
         job
         for number, outcome in enumerate(sessions, 1)
         for job in (
-            planner_job(f"Run candidate {candidate.id} / Klaud Cold", number, outcome),
-            planner_job(f"Run candidate {'3' * 16}-{'4' * 16} / Klaud Cold", number,
-                        "success" if number == 1 else "success-copied"),
+            planner_job(1000 + number, f"Run candidate {candidate.id} / Klaud Cold", number,
+                        outcome),
+            planner_job(2000 + number, f"Run candidate {'3' * 16}-{'4' * 16} / Klaud Cold",
+                        number, "success" if number == 1 else "success-copied"),
         )
     ]
     attempt_jobs = [
@@ -595,6 +609,14 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
                 if job.endswith("-timeout") else "The operation was canceled."
             )}]
             for index, job in enumerate(jobs)
+        },
+        **{
+            f"check-runs/{1000 + number}/annotations?per_page=100": [{"message": (
+                "The job has exceeded the maximum execution time of 6h0m0s"
+                if outcome == "cancelled-timeout" else "The operation was canceled."
+            )}]
+            for number, outcome in enumerate(sessions, 1)
+            if outcome in ("cancelled", "cancelled-timeout")
         },
         "actions/runs/9/artifacts?per_page=100": list(artifacts),
         "pulls?state=open&per_page=100": [pull] if state == "open" else [],
@@ -634,8 +656,13 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     def write(_repository, path, method, payload=None):
         world.writes.append((method, path))
         if (method, path) == ("POST", "issues/7/comments"):
-            comments.append({"id": 100 + len(comments), "user": {"login": "Klaud-Cold"},
+            comments.append({"id": 100 + len(world.writes), "user": {"login": "Klaud-Cold"},
                              "body": payload["body"]})
+            return comments[-1]
+        if method == "DELETE" and path.startswith("issues/comments/"):
+            comments[:] = [comment for comment in comments
+                           if path != f"issues/comments/{comment['id']}"]
+        return {}
 
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     monkeypatch.setattr(github, "items", items)
@@ -774,7 +801,8 @@ def grant_comment(world, attempt, author="Klaud-Cold"):
 
 
 def resume_check(tmp_path, monkeypatch, world, attempt):
-    """Run the resume gate of planner run 42's ``attempt`` for the world's candidate."""
+    """Run the resume gate of planner run 42's ``attempt`` for the world's candidate; return
+    its exit code and outputs."""
     (tmp_path / "candidate.json").write_text(world.session.candidate.model_dump_json())
     output = tmp_path / "gate-output"
     for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", "42"),
@@ -782,8 +810,8 @@ def resume_check(tmp_path, monkeypatch, world, attempt):
                         ("GITHUB_OUTPUT", str(output))):
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(sys, "argv", ["klaud", "resume-check"])
-    assert klaud.main() == 0
-    return output.read_text()
+    code = klaud.main()
+    return code, output.read_text()
 
 
 @pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
@@ -793,8 +821,15 @@ def resume_check(tmp_path, monkeypatch, world, attempt):
     pytest.param(("failure",) * 4, {}, 4, False, id="at-the-cap"),
     pytest.param(("failure", "failure-copied", "failure", "failure"), {}, 3, True,
                  id="copied-jobs-do-not-count"),
-    pytest.param(("failure", "success"), {}, 2, False, id="rerun-without-a-grant"),
-    pytest.param(("failure",), {"planner": "cancelled"}, 1, False, id="planner-run-cancelled"),
+    pytest.param(("failure",) + ("ungranted",) * 3, {}, 1, True,
+                 id="ungranted-reruns-do-not-count"),
+    pytest.param(("failure", "gated-off"), {}, 1, False, id="rerun-that-ended-without-a-session"),
+    pytest.param(("failure",), {"planner": "cancelled"}, 1, True,
+                 id="failed-job-in-a-cancelled-run"),
+    pytest.param(("cancelled",), {"planner": "cancelled"}, 1, False,
+                 id="job-cancelled-by-a-person"),
+    pytest.param(("cancelled-timeout",), {"planner": "cancelled"}, 1, True,
+                 id="job-cancelled-at-its-time-limit"),
     pytest.param(("failure",), {"gated": False}, 1, False, id="planner-run-predates-resumption"),
     pytest.param(("failure", "skipped"), {"gated": False}, 1, False,
                  id="rerun-of-a-planner-run-from-before-resumption"),
@@ -856,15 +891,16 @@ def test_a_resumed_planner_run_never_adopts_a_newer_runs_pr_on_its_branch(tmp_pa
 
     assert lifecycle.reconcile(world.session, NOW) is False
     assert world.writes == world.finished == world.released == []
-    assert resume_check(tmp_path, monkeypatch, world, 3) == "run=false\nresume=false\n"
+    assert resume_check(tmp_path, monkeypatch, world, 3) == (0, "run=false\nresume=false\n")
 
 
-def test_resumes_go_to_whole_planner_runs_oldest_first_within_the_wave_budget():
+def test_resumes_go_to_whole_planner_runs_strictly_oldest_first_within_the_wave_budget():
     approved = {44: ["a", "b"], 42: ["c"], 43: ["d", "e", "f"]}
 
     assert lifecycle.allot(approved, 6) == [42, 43, 44]
-    assert lifecycle.allot(approved, 3) == [42, 44]
-    assert lifecycle.allot(approved, 2) == [42]
+    assert lifecycle.allot(approved, 5) == [42, 43]
+    # Run 44 would fit, but it never overtakes the older run 43.
+    assert lifecycle.allot(approved, 3) == [42]
     assert lifecycle.allot(approved, 0) == []
 
 
@@ -891,7 +927,7 @@ def test_recovery_grants_an_unfinished_session_the_next_attempt_of_its_planner_r
     assert output.read_text() == "resumed=1\n"
     assert summary.read_text() == (
         f"Klaud `{candidate}`: resumed / 已恢复 (attempt 2). [Parent run / 父运行]({link})\n\n")
-    assert resume_check(tmp_path, monkeypatch, world, 2) == "run=true\nresume=true\n"
+    assert resume_check(tmp_path, monkeypatch, world, 2) == (0, "run=true\nresume=true\n")
 
 
 def test_recovery_keeps_an_approved_session_without_a_resume_slot_for_the_next_wave(
@@ -910,7 +946,7 @@ def test_recovery_keeps_an_approved_session_without_a_resume_slot_for_the_next_w
         "\n\n")
 
 
-def test_recovery_keeps_a_session_whose_rerun_request_failed_and_retries_its_grant(
+def test_recovery_keeps_a_session_whose_rerun_request_failed_without_leaving_its_grant(
     monkeypatch, tmp_path, capsys
 ):
     world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
@@ -924,7 +960,8 @@ def test_recovery_keeps_a_session_whose_rerun_request_failed_and_retries_its_gra
     monkeypatch.setattr(github, "write", flaky)
     summary, output = recovery_pass(monkeypatch, tmp_path)
 
-    assert world.writes == [GRANT]
+    assert world.writes == [GRANT, ("DELETE", "issues/comments/101")]
+    assert world.comments == []
     assert world.finished == world.released == []
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
     assert capsys.readouterr().out == (
@@ -937,7 +974,9 @@ def test_recovery_keeps_a_session_whose_rerun_request_failed_and_retries_its_gra
     monkeypatch.setattr(github, "write", recording)
     recovery_pass(monkeypatch, tmp_path)
 
-    assert world.writes == [GRANT, RESUME]
+    assert world.writes[2:] == [GRANT, RESUME]
+    assert [comment["body"].split("\n", 1)[0] for comment in world.comments] == [
+        lifecycle.resume_marker(42, world.session.candidate.id, 2)]
     assert output.read_text() == "resumed=0\nresumed=1\n"
 
 
@@ -1027,19 +1066,21 @@ def test_a_planner_job_runs_its_first_session_without_reading_github(
     assert output.read_text() == capsys.readouterr().out == "run=true\nresume=false\n"
 
 
-@pytest.mark.parametrize(("sessions", "change", "resumes"), [
-    pytest.param(("failure", None), None, True, id="granted"),
-    pytest.param(("failure",) * 3 + (None,), None, True, id="last-session"),
-    pytest.param(("failure", "failure-copied", "failure", "failure", None), None, True,
+@pytest.mark.parametrize(("sessions", "change", "resumes", "code"), [
+    pytest.param(("failure", None), None, True, 0, id="granted"),
+    pytest.param(("failure",) * 3 + (None,), None, True, 0, id="last-session"),
+    pytest.param(("failure", "failure-copied", "failure", "failure", None), None, True, 0,
                  id="copied-job-not-counted"),
-    pytest.param(("failure",) * 4 + (None,), None, False, id="over-the-cap"),
-    pytest.param(("failure", None), "ungranted", False, id="no-grant"),
-    pytest.param(("failure", None), "other-attempt", False, id="grant-for-another-attempt"),
-    pytest.param(("failure", None), "forged", False, id="grant-from-someone-else"),
-    pytest.param(("failure", None), "outcome-recorded", False, id="outcome-recorded"),
+    pytest.param(("failure", "ungranted", "failure", "ungranted", "failure", None), None, True,
+                 0, id="ungranted-reruns-not-counted"),
+    pytest.param(("failure",) * 4 + (None,), None, False, 0, id="over-the-cap"),
+    pytest.param(("failure", None), "outcome-recorded", False, 0, id="outcome-recorded"),
+    pytest.param(("failure", None), "ungranted", False, 1, id="no-grant"),
+    pytest.param(("failure", None), "other-attempt", False, 1, id="grant-for-another-attempt"),
+    pytest.param(("failure", None), "forged", False, 1, id="grant-from-someone-else"),
 ])  # fmt: skip
 def test_a_rerun_planner_job_runs_only_a_session_recovery_granted_to_it(
-    tmp_path, monkeypatch, sessions, change, resumes
+    tmp_path, monkeypatch, sessions, change, resumes, code
 ):
     world = ended_session_sweep(monkeypatch, conclusion=None, sessions=sessions)
     attempt = len(sessions)
@@ -1052,8 +1093,25 @@ def test_a_rerun_planner_job_runs_only_a_session_recovery_granted_to_it(
 
     decision = str(resumes).lower()
     assert resume_check(tmp_path, monkeypatch, world, attempt) == (
-        f"run={decision}\nresume={decision}\n")
+        code, f"run={decision}\nresume={decision}\n")
     assert world.writes == []
+
+
+def test_an_ungranted_rerun_fails_so_a_later_pass_can_still_resume_its_session(
+    tmp_path, monkeypatch, capsys
+):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=("failure", None))
+
+    assert resume_check(tmp_path, monkeypatch, world, 2) == (1, "run=false\nresume=false\n")
+    assert capsys.readouterr().out == (
+        "run=false\nresume=false\n::notice::Klaud: no resume grant for this attempt; a later "
+        "rerun of the planner run may still resume the session.\n")
+
+    # That job ends failed without starting its agent, so the next pass approves it again.
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=("failure", "ungranted"))
+    assert lifecycle.sessions_started(world.session) == 1
+    with pytest.raises(lifecycle.ResumeSession):
+        lifecycle.reconcile(world.session, NOW)
 
 
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):

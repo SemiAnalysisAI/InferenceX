@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -42,6 +43,8 @@ WAVE_HOURS = 6
 RESUME_GIVE_UP_SECONDS = 24 * 60 * 60
 # The klaud-candidate.yml step that lets a rerun candidate job run only a granted session.
 GATE_STEP = "Check whether this session should run"
+# The klaud-candidate.yml step that runs the session's agent.
+AGENT_STEP = "Let Klaud Cold own the candidate PR"
 # GitHub concludes a job stopped at its timeout-minutes as cancelled, with this annotation.
 TIMEOUT_ANNOTATION = "exceeded the maximum execution time"
 
@@ -564,11 +567,10 @@ def resumable(session: Session, pull: dict | None) -> bool:
     )
 
 
-def session_jobs(session: Session) -> list[dict]:
-    """The candidate's job in each attempt of its planner run that actually ran it.
+def candidate_jobs(session: Session) -> list[dict]:
+    """The candidate's job in each attempt of its planner run that ran rather than copied it.
 
-    Rerunning failed jobs copies the other jobs into the new attempt with their original start,
-    and a planner run from before resumption skips the candidate job when rerun.
+    Rerunning failed jobs copies the other jobs into the new attempt with their original start.
     """
     prefix = f"Run candidate {session.candidate.id}"
     return [
@@ -579,33 +581,51 @@ def session_jobs(session: Session) -> list[dict]:
             "jobs",
         )
         if job["name"].startswith(prefix)
-        and job["conclusion"] != "skipped"
         and job["started_at"]
         and utc(job["started_at"]) >= utc(job["created_at"])
     ]
 
 
+def started_session(job: dict) -> bool:
+    """Whether a candidate job started its agent, or still may while its gate runs.
+
+    A planner run from before resumption skips the candidate job when rerun, and a rerun job
+    without a grant skips the agent step.
+    """
+    return job["conclusion"] != "skipped" and not any(
+        step["name"] == AGENT_STEP and step["conclusion"] == "skipped" for step in job["steps"]
+    )
+
+
 def sessions_started(session: Session) -> int:
     """Sessions the planner run started for the candidate, a running one included."""
-    return len(session_jobs(session))
+    return sum(started_session(job) for job in candidate_jobs(session))
+
+
+def continues(repository: str, job: dict) -> bool:
+    """Whether resuming continues the session of this ended candidate job.
+
+    A session that runs out fails its job. GitHub cancels a job that reaches its time limit and
+    annotates it; a person's cancel stops the session for good.
+    """
+    return job["conclusion"] in ("failure", "timed_out") or (
+        job["conclusion"] == "cancelled" and hit_timeout(repository, job)
+    )
 
 
 def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
     """Whether rerunning its planner run's failed jobs would continue this unfinished session."""
     parent = session.parent
-    # A person cancelled the run; a session that runs out fails its job instead.
-    if parent["conclusion"] == "cancelled":
-        return False
     if now - utc(parent["updated_at"]) >= timedelta(seconds=RESUME_GIVE_UP_SECONDS):
         return False
     if not resumable(session, pull):
         return False
-    jobs = session_jobs(session)
-    return len(jobs) < MAX_SESSIONS and any(
+    jobs = candidate_jobs(session)
+    return sum(started_session(job) for job in jobs) < MAX_SESSIONS and any(
         job["run_attempt"] == parent["run_attempt"]
-        and job["conclusion"] in ("failure", "timed_out", "cancelled")
         # A planner run from before resumption has no gate; its reruns skip the candidate.
         and any(step["name"] == GATE_STEP for step in job["steps"])
+        and continues(session.repository, job)
         for job in jobs
     )
 
@@ -632,16 +652,17 @@ def granted(session: Session, pull: dict, attempt: int) -> bool:
 
 
 def allot(approved: dict[int, list], budget: int) -> list[int]:
-    """Planner runs to resume: whole runs, oldest first, while their sessions fit ``budget``.
+    """Planner runs to resume: whole runs, oldest first, until one exceeds ``budget``.
 
-    One rerun restarts every failed candidate job of its run, and a rerun job without a grant
-    ends successfully and can never resume, so a run is never resumed in part.
+    One rerun restarts every failed candidate job of its run. A run has at most the wave's
+    candidate cap of sessions, so the oldest run always fits a full budget.
     """
     runs = []
     for run_id in sorted(approved):
-        if len(approved[run_id]) <= budget:
-            budget -= len(approved[run_id])
-            runs.append(run_id)
+        if len(approved[run_id]) > budget:
+            break
+        budget -= len(approved[run_id])
+        runs.append(run_id)
     return runs
 
 
@@ -652,22 +673,35 @@ def grant(repository: str, parent: dict, sessions: list[tuple[Session, dict]]) -
         raise VerificationError("Planner run changed after recovery read it")
     attempt = current["run_attempt"] + 1
     link = f"https://github.com/{repository}/actions/runs/{parent['id']}"
-    for session, pull in sessions:
-        session.refresh(pull)
-        if granted(session, pull, attempt):
-            continue
-        body = (
-            resume_marker(parent["id"], session.candidate.id, attempt)
-            + "\n"
-            + translated(
-                f"**resumed** · The session ran out before finishing; attempt {attempt} of "
-                f"[its planner run]({link}) continues it.",
-                f"**resumed** · 会话未完成即已超时；[其规划运行]({link})"
-                f"的第 {attempt} 次尝试将继续该会话。",
+    posted = []
+    try:
+        for session, pull in sessions:
+            session.refresh(pull)
+            if granted(session, pull, attempt):
+                continue
+            body = (
+                resume_marker(parent["id"], session.candidate.id, attempt)
+                + "\n"
+                + translated(
+                    f"**resumed** · The session ran out before finishing; attempt {attempt} of "
+                    f"[its planner run]({link}) continues it.",
+                    f"**resumed** · 会话未完成即已超时；[其规划运行]({link})"
+                    f"的第 {attempt} 次尝试将继续该会话。",
+                )
             )
-        )
-        github.write(repository, f"issues/{pull['number']}/comments", "POST", {"body": body})
-    github.write(repository, f"actions/runs/{parent['id']}/rerun-failed-jobs", "POST")
+            comment = github.write(
+                repository, f"issues/{pull['number']}/comments", "POST", {"body": body}
+            )
+            posted.append(comment["id"])
+        github.write(repository, f"actions/runs/{parent['id']}/rerun-failed-jobs", "POST")
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        # A grant without its rerun could let a later rerun of this attempt start uncounted.
+        for comment in posted:
+            with contextlib.suppress(
+                OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError
+            ):
+                github.write(repository, f"issues/comments/{comment}", "DELETE")
+        raise
 
 
 def retained(session: Session, now: datetime) -> bool:

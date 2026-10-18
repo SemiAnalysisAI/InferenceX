@@ -28,9 +28,10 @@ When KLAUD_RESUME=true, an earlier session ran out before finishing this candida
 session continues it in the same run. The branch, draft PR, frozen baseline (prepare-baseline
 returns it), attempt comments and runs are yours; never recreate them. Check out
 origin/$KLAUD_BRANCH before editing. Recover the attempt counter, repairs used and run IDs from
-your attempt comments; a pushed commit without a matching attempt comment counts as a used
-repair. Inspect those runs (queued, running, preempted or finished) and continue. Repair budget,
-infrastructure-retry limits and failure rules carry over.
+your attempt comments; a commit pushed after the head of your last attempt comment, other than
+the perf-changelog entry, counts as a used repair. Inspect those runs (queued, running, preempted
+or finished) and continue. Repair budget, infrastructure-retry limits and failure rules carry
+over.
 
 Compare the actual old/new bundled engine source at its tags/commits in vLLM, SGLang,
 ATOM or TensorRT-LLM, including coupled dependencies and used flags/config parsers.

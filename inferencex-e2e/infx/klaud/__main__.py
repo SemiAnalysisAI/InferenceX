@@ -547,23 +547,26 @@ def check_stop() -> dict:
     return {}
 
 
-def resume_check() -> dict[str, bool]:
-    """Run the planner's first session; a rerun runs only a session recovery granted to it."""
+def resume_check() -> tuple[dict[str, bool], bool]:
+    """The session gate's outputs, and whether its job must fail to stay re-runnable.
+
+    A planner run's first attempt runs its session. A rerun runs only a session that recovery
+    granted to this attempt; a resumable session without that grant fails its job, so a later
+    rerun of the planner run can still resume it.
+    """
     attempt = int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
     if attempt == 1:
-        return {"run": True, "resume": False}
+        return {"run": True, "resume": False}, False
     from .lifecycle import MAX_SESSIONS, current_session, granted, resumable, sessions_started
 
     session = current_session()
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
-    resume = (
-        resumable(session, pull)
-        and granted(session, pull, attempt)
-        # This job's own session is already one of the started ones.
-        and sessions_started(session) <= MAX_SESSIONS
-    )
-    return {"run": resume, "resume": resume}
+    # This job's own session is already one of the started ones.
+    if not resumable(session, pull) or sessions_started(session) > MAX_SESSIONS:
+        return {"run": False, "resume": False}, False
+    resume = granted(session, pull, attempt)
+    return {"run": resume, "resume": resume}, not resume
 
 
 def save_diagnostics(
@@ -1003,7 +1006,7 @@ def main() -> int:
     )
     commands.add_parser(
         "resume-check",
-        help="Run a rerun candidate job only to resume its unfinished session",
+        help="Gate a rerun candidate job: run only a granted session, fail an ungranted resumable one",
     )
     preflight = commands.add_parser(
         "check-final",
@@ -1115,12 +1118,18 @@ def main() -> int:
                 )
             return 0
         if args.command == "resume-check":
-            decision = resume_check()
+            decision, ungranted = resume_check()
             outputs = "".join(f"{key}={str(value).lower()}\n" for key, value in decision.items())
             print(outputs, end="")
             if filename := os.environ.get("GITHUB_OUTPUT"):
                 with open(filename, "a") as output:
                     output.write(outputs)
+            if ungranted:
+                print(
+                    "::notice::Klaud: no resume grant for this attempt; a later rerun of the "
+                    "planner run may still resume the session."
+                )
+                return 1
             return 0
         if args.command == "recover":
             from .lifecycle import recover

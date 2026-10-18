@@ -74,8 +74,9 @@ jobs:
           rm -r "$RUNNER_TEMP/plan"
           outcome_schema=$(uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud outcome-schema)
           echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
-      # A rerun of the planner's failed jobs runs only a session that recovery granted to it.
-      # lifecycle.GATE_STEP names this step; recovery resumes only planner runs that have it.
+      # A rerun of the planner's failed jobs runs only a session that recovery granted to it. A
+      # resumable session without that grant fails here, skipping every later step, so a later
+      # rerun can still resume it. lifecycle.GATE_STEP and AGENT_STEP name these steps.
       - name: Check whether this session should run
         id: gate
         env:
