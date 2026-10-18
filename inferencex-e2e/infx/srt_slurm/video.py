@@ -65,8 +65,15 @@ _BOUND_KEYS = (
     *(("benchmark", "env", name) for name in VIDEO_ENV),
 )
 _SERVICE_ENV = (
-    "H3_SPEC_PATH", "H3_PACKAGE_ROOT", "H3_MODEL_PATH", "H3_RESULT_DIR",
-    "H3_SET", "H3_PLAN_SHA256", "H3_RUNTIME", "H3_RUNTIME_REVISION", "GPU_COUNT",
+    "H3_SPEC_PATH",
+    "H3_PACKAGE_ROOT",
+    "H3_MODEL_PATH",
+    "H3_RESULT_DIR",
+    "H3_SET",
+    "H3_PLAN_SHA256",
+    "H3_RUNTIME",
+    "H3_RUNTIME_REVISION",
+    "GPU_COUNT",
 )
 
 
@@ -250,13 +257,15 @@ def bind_video(
         revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
-        values.update({
-            "H3_SET": set_id,
-            "H3_PLAN_SHA256": spec["plan_sha256"],
-            "H3_RUNTIME": runtime,
-            "H3_RUNTIME_REVISION": revision,
-            "GPU_COUNT": str(gpus),
-        })
+        values.update(
+            {
+                "H3_SET": set_id,
+                "H3_PLAN_SHA256": spec["plan_sha256"],
+                "H3_RUNTIME": runtime,
+                "H3_RUNTIME_REVISION": revision,
+                "GPU_COUNT": str(gpus),
+            }
+        )
     workload.update(values)
     service["env"] = {
         **(service.get("env") or {}),
