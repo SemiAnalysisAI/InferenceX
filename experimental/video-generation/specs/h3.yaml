@@ -141,6 +141,39 @@ sets:
       - {case_id: bicycle-pass-s29, prompt: bicycle-pass, seed: 29}
       - {case_id: footsteps-s11, prompt: footsteps, seed: 11}
       - {case_id: footsteps-s29, prompt: footsteps, seed: 29}
+  release-v1:
+    # Twenty measured inputs: four existing prompts crossed with five previously used seeds.
+    # The generation block above keeps the actual 107-frame, 4.458 s H3 output contract.
+    plan_id: h3-native-engine-release-v1
+    repetitions: 1
+    warmup_runs: 1
+    seed_sources:
+      11: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:8
+      23: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/h3-smoke.plan.json:29
+      29: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:22
+      47: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:29
+      83: feat/h3-cross-hardware@0cb4c847d:experimental/video-generation/campaigns/h3-cross-hardware/formal-8s-plan.json:64
+    cases:
+      - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
+      - {case_id: drum-taps-s23, prompt: drum-taps, seed: 23}
+      - {case_id: drum-taps-s29, prompt: drum-taps, seed: 29}
+      - {case_id: drum-taps-s47, prompt: drum-taps, seed: 47}
+      - {case_id: drum-taps-s83, prompt: drum-taps, seed: 83}
+      - {case_id: pouring-water-s11, prompt: pouring-water, seed: 11}
+      - {case_id: pouring-water-s23, prompt: pouring-water, seed: 23}
+      - {case_id: pouring-water-s29, prompt: pouring-water, seed: 29}
+      - {case_id: pouring-water-s47, prompt: pouring-water, seed: 47}
+      - {case_id: pouring-water-s83, prompt: pouring-water, seed: 83}
+      - {case_id: bicycle-pass-s11, prompt: bicycle-pass, seed: 11}
+      - {case_id: bicycle-pass-s23, prompt: bicycle-pass, seed: 23}
+      - {case_id: bicycle-pass-s29, prompt: bicycle-pass, seed: 29}
+      - {case_id: bicycle-pass-s47, prompt: bicycle-pass, seed: 47}
+      - {case_id: bicycle-pass-s83, prompt: bicycle-pass, seed: 83}
+      - {case_id: footsteps-s11, prompt: footsteps, seed: 11}
+      - {case_id: footsteps-s23, prompt: footsteps, seed: 23}
+      - {case_id: footsteps-s29, prompt: footsteps, seed: 29}
+      - {case_id: footsteps-s47, prompt: footsteps, seed: 47}
+      - {case_id: footsteps-s83, prompt: footsteps, seed: 83}
 
 # Informational only; not hashed.
 reference:

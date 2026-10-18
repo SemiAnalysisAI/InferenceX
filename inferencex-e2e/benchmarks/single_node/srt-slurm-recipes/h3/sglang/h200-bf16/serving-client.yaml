@@ -28,6 +28,7 @@ services:
       PYTHONUNBUFFERED: "1"
       H3_SERVER_ROLE: baseline
       H3_SERVER_PORT: "30283"
+      VIDEO_RUNTIME_REVISION: 71de97b264b04dcd514cf904003028aefe9775c8
     readiness:
       http:
         port: 30283
