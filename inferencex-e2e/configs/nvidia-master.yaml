@@ -9835,7 +9835,7 @@ h3-bf16-h200-sglang-video:
             conc-list: [1]
 
 h3-bf16-h200-vllm-omni-video:
-  image: vllm/vllm-omni:v0.30.0
+  image: vllm/vllm-omni:v0.30.0@sha256:fc77cfaac7b1b43c30cbf32eaea214864434c6e0f303e6e9eb9f64104241a994
   model: MiniMaxAI/MiniMax-H3
   model-prefix: h3
   runner: cluster:h200-dgxc
@@ -9871,7 +9871,7 @@ wan22-bf16-h200-sglang-video:
             conc-list: [1]
 
 wan22-bf16-h200-vllm-omni-video:
-  image: vllm/vllm-omni:v0.30.0
+  image: vllm/vllm-omni:v0.30.0@sha256:fc77cfaac7b1b43c30cbf32eaea214864434c6e0f303e6e9eb9f64104241a994
   model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
   model-prefix: wan22
   runner: cluster:h200-dgxc
