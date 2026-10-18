@@ -5292,10 +5292,8 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32], srt-recipe: agentic.yaml }
 
 
-# Qwen3.8-Flash-Next NVFP4 AgentX on B200 via SGLang with native NEXTN MTP.
-# TP1 matches the verified single-node recipe.
 qwen3.8next-fp4-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:qwen38flashnext
+  image: lmsysorg/sglang:v0.5.21-cu130@sha256:2dbe4c7f53230b09aaa8fa41891c13c51d9d2e253f486a70822aaf08783fff75
   model: RadixArk/Qwen3.8-Flash-Next-NVFP4
   model-prefix: qwen3.8next
   runner: cluster:b200-nscale
@@ -5305,9 +5303,25 @@ qwen3.8next-fp4-b200-sglang-agentic-mtp:
   srt-recipe-dir: qwen3.8next/sglang/b200-fp4-mtp
   scenarios:
     agentic-coding:
+    # One GPU's 80% share of 2,047,536 MiB node DRAM: 214 GB; hicache-size 213 in the recipe.
     - dram-utilization: 0.8
       search-space:
-      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
+      - tp: 1
+        ep: 1
+        dp-attn: false
+        spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1, 2, 4, 8]
+        srt-recipe: agentic.yaml
+      - tp: 1
+        ep: 1
+        dp-attn: false
+        spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        # No c48: the GPU KV pool leaves too few tokens per request.
+        conc-list: [16, 24, 32]
+        srt-recipe: agentic.yaml
 qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
   image: lmsysorg/sglang:nightly-dev-20260818-c0b6474b
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
