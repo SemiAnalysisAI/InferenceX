@@ -7193,7 +7193,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "b4540b8767aaa8d98582251bbe9e2ceaba1ed1b1" }
+  router: { name: dynamo-router, version: "71eb001e17fa73c742f0afe1a6ed96836cb135fd" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
