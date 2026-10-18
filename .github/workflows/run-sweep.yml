@@ -194,6 +194,7 @@ jobs:
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
+            has-benchmark-results: ${{ steps.setup.outputs.has-benchmark-results }}
         steps:
             - name: Checkout code
               id: checkout
@@ -315,6 +316,8 @@ jobs:
                     --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+                  has_benchmark_results=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] | length > 0' <<<"$CONFIG_JSON")
+                  echo "has-benchmark-results=$has_benchmark_results" >> "$GITHUB_OUTPUT"
 
     canary-select:
         name: canary-select
@@ -783,6 +786,7 @@ jobs:
             ${{
               always() &&
               needs.setup.result == 'success' &&
+              needs.setup.outputs.has-benchmark-results == 'true' &&
               (
                 needs.canary-sweep.result == 'success' ||
                 needs.canary-multi-node-sweep.result == 'success' ||
