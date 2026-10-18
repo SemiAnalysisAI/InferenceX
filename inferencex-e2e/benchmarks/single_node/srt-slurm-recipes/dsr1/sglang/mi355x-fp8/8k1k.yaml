@@ -41,6 +41,8 @@ zip_override_tp4_ep1:
     agg:
       args:
         cuda-graph-max-bs-decode: [32, 64]
+        # AITER CK bpreshuffle rejects the TP4 dense gate_up GEMM (N=9216, K=7168) at 8k prefill.
+        fp8-gemm-backend: triton
   benchmark:
     env:
       CONC: ['32', '64']
