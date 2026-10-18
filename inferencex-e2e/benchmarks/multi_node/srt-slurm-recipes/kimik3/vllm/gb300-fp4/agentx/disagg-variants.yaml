@@ -1,7 +1,6 @@
 schema: 2
 
 base:
-  setup_script: kimik3-optimizations.sh
   identity:
     model: {}
     container: {}
