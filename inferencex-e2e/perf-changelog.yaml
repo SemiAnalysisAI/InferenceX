@@ -10104,4 +10104,5 @@
     - agentic-coding
   description:
     - "Replace the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX disaggregated curve with DEP2 prefill and DEP32 decode at 6P1D c2888, 12P1D c7388 and 16P1D c11018, and DEP16 decode at 12P1D c9688, on vllm/vllm-openai:cu134-nightly-aarch64-dev-20261017, with 80 GiB of CPU KV offload per prefill rank."
+    - "Keep the prefill Engram host tables in pinned memory (use_thp false): on this image, THP-registered tables hang the first prefill forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4266
