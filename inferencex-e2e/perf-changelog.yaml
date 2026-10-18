@@ -10108,3 +10108,13 @@
     - "The H3 server runs as a recipe service and the H3 client as the custom benchmark; GPU power comes from srt-slurm's native telemetry re-validated per concurrency with energy normalized per valid clip."
     - "Include video deployments in the PR canary/full sweep, seal per-deployment artifacts and native power provenance, and validate complete source coverage before video publication."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2916
+
+- config-keys:
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-h200-vllm-omni-video
+  scenario-type:
+    - video-generation
+  description:
+    - "Run both H200 MiniMax-H3 engines at concurrency 1 on the same selected YAML workload: four existing prompts crossed with five cited seeds, 20 measured clips and one warmup."
+    - "Replace the H200 SGLang four-clip c1/c2/c4 recipe with the selected two-GPU c1 workload, and add the two-GPU vLLM-Omni FL2VA recipe with the pinned v0.30.0 image digest and TP2/VAE tile settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4243
