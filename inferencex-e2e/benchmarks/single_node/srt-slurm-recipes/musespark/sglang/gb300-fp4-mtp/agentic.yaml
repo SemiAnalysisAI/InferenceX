@@ -86,12 +86,12 @@ zip_override_tp4_hicache_high:
   roles:
     agg:
       args:
-        max-running-requests: [40, 48]
-        cuda-graph-max-bs-decode: [40, 48]
+        max-running-requests: [40, 48, 64]
+        cuda-graph-max-bs-decode: [40, 48, 64]
         enable-hierarchical-cache: true
         hicache-size: 140
         prefill-decode-interval: 8
   benchmark:
     env:
-      CONC: ['40', '48']
+      CONC: ['40', '48', '64']
       KV_OFFLOADING: dram
