@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -eo pipefail
-root=${SGLANG_PYTHON_ROOT:-/sgl-workspace/sglang/python}
-python3 - "$root/sglang" <<'PY'
+package=$(python3 -P -c 'import importlib.util,os;print(os.path.dirname(importlib.util.find_spec("sglang").origin))')
+echo "Patching SGLang at $package"
+python3 - "$package" <<'PY'
 import sys
 from pathlib import Path
 
