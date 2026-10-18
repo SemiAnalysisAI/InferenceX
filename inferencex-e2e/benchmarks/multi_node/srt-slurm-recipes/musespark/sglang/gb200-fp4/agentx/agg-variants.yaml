@@ -47,7 +47,7 @@ base:
         quantization: modelopt_fp4
         moe-runner-backend: flashinfer_trtllm
         kv-cache-dtype: fp8_e4m3
-        mem-fraction-static: 0.88
+        mem-fraction-static: 0.80
         swa-full-tokens-ratio: 0.3
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true

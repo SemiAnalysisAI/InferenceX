@@ -47,6 +47,7 @@ base:
         NCCL_CUMEM_ENABLE: '1'
         UCX_TLS: ib,cuda_copy,cuda_ipc,sm,self
         NVSHMEM_REMOTE_TRANSPORT: none
+        SGLANG_ENABLE_POST_CAPTURE_KV_SIZING: '0'
       args:
         served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
         trust-remote-code: true
@@ -93,6 +94,7 @@ base:
         NCCL_CUMEM_ENABLE: '1'
         UCX_TLS: ib,cuda_copy,cuda_ipc,sm,self
         NVSHMEM_REMOTE_TRANSPORT: none
+        SGLANG_ENABLE_POST_CAPTURE_KV_SIZING: '0'
       args:
         served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
         trust-remote-code: true
