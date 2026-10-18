@@ -49,3 +49,34 @@ def test_h3_vllm_command_uses_the_tested_two_gpu_fl2va_profile():
     assert argv[argv.index("--num-gpus") + 1] == "2"
     with pytest.raises(ValueError, match="two GPUs"):
         mvp_srt_selected.server_argv(plan, "vllm-omni", Path("/model"), 30283, 4)
+
+
+def test_wan_selected_plan_uses_the_same_video_request_on_both_engines():
+    path = PACKAGE / "specs/wan.yaml"
+    spec = h3_spec.load_spec(path)
+    expected = h3_spec.plan_sha256(h3_spec.plan_for(spec, "release-v1"))
+    plan = mvp_srt_selected.selected_plan(path, "release-v1", expected)
+    sglang = preview_plan(plan, runtime="sglang")
+    vllm = preview_plan(plan, runtime="vllm-omni")
+    assert sglang["plan_sha256"] == vllm["plan_sha256"] == expected
+    assert sglang["measurement_count"] == vllm["measurement_count"] == 20
+    assert sglang["total_requests"] == vllm["total_requests"] == 21
+    assert sglang["slots"][1]["request"] == vllm["slots"][1]["request"]
+
+
+def test_wan_commands_use_the_recorded_eight_gpu_profiles(tmp_path):
+    plan = h3_spec.plan_for(h3_spec.load_spec(PACKAGE / "specs/wan.yaml"), "release-v1")
+    sglang = mvp_srt_selected.server_argv(
+        plan, "sglang", Path("/model"), 30283, 8, output=tmp_path
+    )
+    assert sglang[sglang.index("--num-gpus") + 1] == "8"
+    assert sglang[sglang.index("--ulysses-degree") + 1] == "8"
+    assert sglang[sglang.index("--tp-size") + 1] == "1"
+    assert sglang[sglang.index("--output-path") + 1] == str(tmp_path / "generated")
+    vllm = mvp_srt_selected.server_argv(plan, "vllm-omni", Path("/model"), 30283, 8)
+    assert vllm[:3] == ["vllm", "serve", "/model"]
+    assert vllm[vllm.index("--cfg-parallel-size") + 1] == "2"
+    assert vllm[vllm.index("--usp") + 1] == "4"
+    assert vllm[vllm.index("--stage-init-timeout") + 1] == "3600"
+    with pytest.raises(ValueError, match="eight Wan GPUs"):
+        mvp_srt_selected.server_argv(plan, "vllm-omni", Path("/model"), 30283, 4)

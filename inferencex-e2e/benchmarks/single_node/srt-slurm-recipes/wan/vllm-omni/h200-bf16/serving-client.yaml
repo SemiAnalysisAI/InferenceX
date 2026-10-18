@@ -1,0 +1,37 @@
+schema: 2
+name: wan-vllm-omni-serving-client
+
+resources:
+  gpu_type: h200
+
+frontend:
+  type: none
+
+services:
+  - name: wan-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command:
+      - bash
+      - /infmax-workspace/benchmarks/h3/run_server.sh
+    env:
+      PYTHONUNBUFFERED: "1"
+      H3_SERVER_ROLE: baseline
+      H3_SERVER_PORT: "30283"
+      VIDEO_RUNTIME_REVISION: a8576ccb725c4e21cd13c3eb5f9a546b21149d2b
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      timeout_seconds: 2400
+      interval_seconds: 5
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/h3/run_client.sh
+  env:
+    PYTHONUNBUFFERED: "1"
+    H3_SERVER_SERVICE: wan-server
+    H3_SERVER_PORT: "30283"

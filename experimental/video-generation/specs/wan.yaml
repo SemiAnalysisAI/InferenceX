@@ -131,6 +131,38 @@ sets:
       - {case_id: bicycle-pass-s137, prompt: bicycle-pass, seed: 137}
       - {case_id: footsteps-s53, prompt: footsteps, seed: 53}
       - {case_id: footsteps-s153, prompt: footsteps, seed: 153}
+  release-v1:
+    # Twenty measured inputs: four recorded prompts crossed with five seeds already cited above.
+    plan_id: wan22-native-engine-release-v1
+    repetitions: 1
+    warmup_runs: 1
+    seed_sources:
+      11: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:20
+      23: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:27
+      37: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:34
+      53: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:41
+      111: feat/wan-serving-runner@77f2080ce:experimental/video-generation/mvp/wan22-serving.plan.json:20
+    cases:
+      - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
+      - {case_id: drum-taps-s23, prompt: drum-taps, seed: 23}
+      - {case_id: drum-taps-s37, prompt: drum-taps, seed: 37}
+      - {case_id: drum-taps-s53, prompt: drum-taps, seed: 53}
+      - {case_id: drum-taps-s111, prompt: drum-taps, seed: 111}
+      - {case_id: pouring-water-s11, prompt: pouring-water, seed: 11}
+      - {case_id: pouring-water-s23, prompt: pouring-water, seed: 23}
+      - {case_id: pouring-water-s37, prompt: pouring-water, seed: 37}
+      - {case_id: pouring-water-s53, prompt: pouring-water, seed: 53}
+      - {case_id: pouring-water-s111, prompt: pouring-water, seed: 111}
+      - {case_id: bicycle-pass-s11, prompt: bicycle-pass, seed: 11}
+      - {case_id: bicycle-pass-s23, prompt: bicycle-pass, seed: 23}
+      - {case_id: bicycle-pass-s37, prompt: bicycle-pass, seed: 37}
+      - {case_id: bicycle-pass-s53, prompt: bicycle-pass, seed: 53}
+      - {case_id: bicycle-pass-s111, prompt: bicycle-pass, seed: 111}
+      - {case_id: footsteps-s11, prompt: footsteps, seed: 11}
+      - {case_id: footsteps-s23, prompt: footsteps, seed: 23}
+      - {case_id: footsteps-s37, prompt: footsteps, seed: 37}
+      - {case_id: footsteps-s53, prompt: footsteps, seed: 53}
+      - {case_id: footsteps-s111, prompt: footsteps, seed: 111}
 
 # Informational only; not hashed.
 reference:

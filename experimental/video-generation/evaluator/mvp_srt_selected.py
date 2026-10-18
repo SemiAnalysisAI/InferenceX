@@ -9,7 +9,7 @@ from pathlib import Path
 
 from specs import h3_spec
 
-from .mvp_runner import run_plan, validate_plan
+from .mvp_runner import WAN_MODEL_ID, run_plan, validate_plan
 from .mvp_srt import BENCHMARK_STEM, CELL_DIR, _write, benchmark_window
 
 
@@ -37,23 +37,46 @@ def h3_vllm_model_view(snapshot: Path, output: Path) -> Path:
     return output
 
 
-def server_argv(plan: dict, runtime: str, model_path: Path, port: int, gpus: int) -> list[str]:
-    if plan["model_id"] != "MiniMaxAI/MiniMax-H3" or gpus != 2:
-        raise ValueError("this H3 native profile requires two GPUs")
+def server_argv(
+    plan: dict, runtime: str, model_path: Path, port: int, gpus: int,
+    *, output: Path | None = None,
+) -> list[str]:
+    wan = plan["model_id"] == WAN_MODEL_ID
+    if (wan and gpus != 8) or (not wan and (plan["model_id"] != "MiniMaxAI/MiniMax-H3" or gpus != 2)):
+        raise ValueError("the native video profiles require two GPUs for H3 or eight Wan GPUs")
     if runtime == "sglang":
         from .mvp_gpu_job import _server_argv
 
+        if wan and output is None:
+            raise ValueError("Wan SGLang requires a job-owned output path")
         spec = {
             "baseline": {"python": "/usr/bin/python3"},
             "model": {"path": str(model_path), "revision": plan["model_revision"]},
             "plan": plan,
-            "server": {"ulysses_degree": 2, "tp_size": 1, "encoder_parallel": "auto",
-                       "performance_mode": "speed", "dit_cpu_offload": False},
+            "server": (
+                {"ulysses_degree": 8, "tp_size": 1, "dit_cpu_offload": False,
+                 "dit_layerwise_offload": False, "text_encoder_cpu_offload": False,
+                 "vae_cpu_offload": False}
+                if wan else
+                {"ulysses_degree": 2, "tp_size": 1, "encoder_parallel": "auto",
+                 "performance_mode": "speed", "dit_cpu_offload": False}
+            ),
             "gpu_uuids": ["assigned"] * gpus,
             "port": port,
         }
-        return _server_argv(spec, "baseline", host="0.0.0.0")
+        return _server_argv(
+            spec, "baseline", host="0.0.0.0",
+            output_path=str(output / "generated") if wan else None,
+        )
     if runtime == "vllm-omni":
+        if wan:
+            return [
+                "vllm", "serve", str(model_path), "--omni",
+                "--served-model-name", plan["model_id"], "--host", "0.0.0.0", "--port", str(port),
+                "--use-hsdp", "--cfg-parallel-size", "2", "--usp", "4",
+                "--vae-patch-parallel-size", "8", "--vae-use-tiling",
+                "--init-timeout", "3600", "--stage-init-timeout", "3600",
+            ]
         return [
             "vllm", "serve", str(model_path), "--served-model-name", plan["model_id"],
             "--omni", "--host", "0.0.0.0", "--port", str(port),
@@ -73,9 +96,11 @@ def serve(
         raise ValueError("runtime revision must be an immutable commit")
     if not model_path.is_dir():
         raise ValueError("the pinned model snapshot is unavailable")
-    if runtime == "vllm-omni":
+    if runtime == "vllm-omni" and plan["model_id"] == "MiniMaxAI/MiniMax-H3":
         model_path = h3_vllm_model_view(model_path, output / "model-view")
-    argv = server_argv(plan, runtime, model_path, port, gpus)
+    if plan["model_id"] == WAN_MODEL_ID and runtime == "sglang":
+        (output / "generated").mkdir(parents=True, exist_ok=True)
+    argv = server_argv(plan, runtime, model_path, port, gpus, output=output)
     from .mvp_gpu_job import cuda_devices
 
     uuids = cuda_devices()
