@@ -96,6 +96,7 @@ override_tp16_dspark5:
       args:
         tensor-parallel-size: 16
         decode-context-parallel-size: 16
+        disable-custom-all-reduce: true
         # Specialized decode requires multicast across the whole TP group.
         additional-config: '{"decode_backend":"auto"}'
         max-cudagraph-capture-size: 48
