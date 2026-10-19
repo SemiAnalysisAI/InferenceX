@@ -10229,6 +10229,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4272
 
 - config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945 to vllm/vllm-openai-rocm:nightly-rocm100-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294."
+    - "Sweep dcp1 concurrency 1 and 4 GPU-resident, and dcp8 concurrency 4, 10, 16, 24, 32, 48, 52 and 60 with the SimpleCPUOffloadConnector DRAM tier (224.875 GB/rank). dcp8 concurrency 1 and 2 are dropped; dcp1 concurrency 4 and dcp8 concurrency 52 and 60 are new."
+    - "dcp1 concurrency 4 uses a 7-token DSpark draft, matching kimik3-fp4-mi355x-atom-agentic-mtp at that point, with max-num-seqs 8 and FULL_AND_PIECEWISE CUDA graphs at every even size up to 64."
+    - "Concurrency 52 and 60 use the concurrency 48 layout: a 4-token DSpark draft with synthetic acceptance, max-num-seqs 2x concurrency (104, 120) and FULL_AND_PIECEWISE CUDA graphs at every even size up to 2x concurrency x 5 (520, 600)."
+    - "Every point except concurrency 1 sets quantization-config {\"targets\":{\"*in_proj_qkvgfab\":\"fp8_per_channel\"}}: only the KDA in_proj_qkvgfab projection is quantized online to FP8 per-channel."
+    - "Concurrency 1 no longer ignores *in_proj_qkvgfab in its fp8_per_channel linear quantization-config, so that projection is FP8 per-channel at every concurrency."
+    - "Set VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB=16 at every concurrency, so QuickReduce INT4 handles only all-reduces of 16 MB or more."
+    - "Set AITER_FLYDSL_STAGE2_FP8=1 at every concurrency, matching kimik3-fp4-mi355x-atom-agentic-mtp."
+    - "Drop load-format fastsafetensors and load with the default safetensors loader at every concurrency. With fastsafetensors on this image, servers failed during weight loading when rank 3 or 4 ran out of GPU memory (hipErrorLaunchOutOfResources, 200-310 MB free) at shard 10 or 11 of 12."
+    - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#57392 (AITER Gluon KDA kernels for decode and spec decode), #61207 (stage fused KDA decode weights after loading), #61654 (MLA wrapper no longer reads W_UK_T before weight loading), #61895 (any-shape low-latency MoE router GEMM on MI355), #59406 (preshuffled FP4 GEMM config probed by logical K), #58381 (lighter MLA metadata build), #59070 (DCP prefill context kept in FP8 through AllGather), #59468 (DSpark draft slots no longer reserved in the scheduler token budget) and #61230 (AITER v0.1.25 base)."
+    - "No change to the Inferact/Kimi-K3-DSpark draft's precision: the checkpoint is all BF16 with no quantization_config, and at both images the draft takes its own quantization config (get_draft_quant_config()), so the target quantization-config does not reach it. The draft runs BF16 weights with an fp8 KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
+
+- config-keys:
     - dsv41flash-fp4-h200-sglang-agentic-dspark
   scenario-type:
     - agentic-coding
