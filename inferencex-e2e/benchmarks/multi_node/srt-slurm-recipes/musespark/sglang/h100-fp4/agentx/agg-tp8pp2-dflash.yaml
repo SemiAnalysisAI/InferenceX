@@ -1,4 +1,5 @@
 schema: 2
+name: "musespark-sglang-agg-h100-tp8pp2-dflash-agentic"
 
 dynamo:
   install: false
