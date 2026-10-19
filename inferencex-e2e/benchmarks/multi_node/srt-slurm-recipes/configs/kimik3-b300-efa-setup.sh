@@ -65,7 +65,7 @@ if [ ! -f "$cache/ready" ]; then
             -DWITH_STORE_RUST=OFF -DWITH_EP=OFF -DBUILD_UNIT_TESTS=OFF \
             -DBUILD_BENCHMARK=OFF -DBUILD_EXAMPLES=ON
         cmake --build build --parallel 12 --target \
-            engine store mooncake_master mooncake_client transfer_engine_bench nvlink_allocator
+            engine store mooncake_master mooncake_client transfer_engine_bench build_nvlink_allocator
         sed -i 's/^version = .*/version = "0.3.13.post1+gc3fa13ec"/' \
             mooncake-wheel/pyproject.toml
         mkdir -p "$task_dir/wheels"
