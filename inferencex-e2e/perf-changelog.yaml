@@ -10015,6 +10015,19 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4181
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the GB300 DeepSeek-V4.1-Flash Dynamo + SGLang points on lmsysorg/sglang:nightly-dev-cu13-20261015-a6a8c560 (digest sha256:0a1ba33aa4e032b8c5bcebdc69c45664074c032074add4f7db01629ec1fcc381) with the ai-dynamo 1.6.0.dev20261014 it ships (dynamo.install: false, TCP request plane). Tachometer exporters and the OTel collector are off."
+    - "Aggregated: replace TP4 c1 and TP2/EP2 c1 with TP4/EP1 c1, c4 and c16 and TP2/EP2 c16 on one node each. Engine args follow the matching standalone SGLang points of dsv41flash-fp4-gb300-sglang-agentic-dspark (#4033). The Dynamo frontend tokenizes with fastokens, so SGLang's tokenizer-backend and tokenizer-worker-num are dropped, as are env settings that restate this image's defaults or only configure SGLang's own HTTP server."
+    - "Disaggregated: add dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg with 4x DEP2 prefill (2 nodes) and one DEP16 decode (4 nodes) at c1228, and 6x DEP2 prefill (3 nodes) and one DEP16 decode at c2884. MegaMoE all-to-all, FlashMLA attention, DSpark block size 5, Mooncake KV transfer, prefill HiCache write-back DRAM KV offload (ratio 1.02 at c1228, 1.1 at c2884), 8 decode gateway workers and NCCL DP-batch sync. One CPU node hosts etcd, NATS, the frontend and the AgentX client."
+    - "Remove dsv41flash-fp4-gb300-dynamo-sglang-agentic-disagg (six TP2/EP2 1PxD points, c16 to c256, on the 20260928 image)."
+    - "The Dynamo frontend renders the chat template, so the AgentX client sends thinking=true, reasoning_effort=high and temperature 1 with every request."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4180
+
+- config-keys:
     - musespark-fp4-h100-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
@@ -10099,6 +10112,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4208
 
 - config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the GLM-5.2 NVFP4 B200 AgentX aggregate key on Dynamo (KV router) + SGLang: move it to the image and Dynamo build of glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4 (lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729, Dynamo 1.5.0.dev20260903) with one aggregated engine per point, EAGLE speculative decoding (5 steps, 6 draft tokens) and HiCache write-back host-DRAM offload."
+    - "Sweep six points in place of the three TP8 points: TP8 and TP4 at conc 1, TP4 at conc 4, 8 and 12, and TP8 MoE with DP8 attention at conc 32."
+    - "Cap admission and decode CUDA graphs at 2 for TP8 conc 1 and at 1 for TP4 conc 1, so fan-out subagents queue instead of widening the decode batch."
+    - "Use mem-fraction-static 0.85 and 170 GB of HiCache per rank, so the KV and DSA indexer host pools of the four ranks on each NUMA node (~836 GB) fit that node; dram-utilization 1.0 records each engine's full GPU share of host DRAM (1,073 GB at TP4, 2,146 GB at TP8) as its offload budget."
+    - "The DP8-attention point runs attention TP1 per rank with the DP LM head and the prefill delayer, mem-fraction-static 0.82, node totals of 65536 chunked-prefill tokens and 128 running requests (8192 and 16 per rank), and decode CUDA graphs up to batch 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4286
+
+- config-keys:
     - musespark-fp4-mi355x-sglang-agentic-dflash
     - musespark-fp4-gb200-sglang-agentic-dflash
     - musespark-fp4-b200-sglang-agentic-dflash
@@ -10112,6 +10137,24 @@
     - "Default AgentX trace selection to the full corpus, retaining explicit 256k exceptions for dsr1, qwen3.5, and qwen3.8next."
     - "Move Muse Spark Open AgentX points from the 256k-capped corpus to semianalysis_cc_traces_weka_062126; preserve explicit loader overrides."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4287
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Muse Spark Open GB300 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image and search space are unchanged."
+    - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4294
+
+- config-keys:
+    - musespark-fp4-h200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Muse Spark Open H200 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image and search space are unchanged."
+    - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4290
 
 - config-keys:
     - musespark-fp4-b300-sglang-agentic-dflash
@@ -10132,6 +10175,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4293
 
 - config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Configure Muse Spark Open GB200 SGLang AgentX prefill graphs, scheduling, memory allocation, and draft attention per concurrency."
+    - "Add concurrency 20 and 28 with matching request admission and decode graph batch limits."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4302
+
+- config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
@@ -10139,6 +10191,14 @@
     - "Re-sweep Muse Spark Open B200 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image and search space are unchanged."
     - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4291
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Muse Spark Open MI355X AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image, recipe and search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4295
 
 - config-keys:
     - glm5.2-fp4-mi355x-atom-agentic-mtp
