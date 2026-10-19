@@ -553,6 +553,18 @@ patch(
 patch(
     srt / "speculative/dflash_worker_v2.py",
     [
+        # draft_pp_context hides pp_size from TpModelWorker, so its PP+spec
+        # seed branch is skipped and the draft enters a WORLD broadcast that
+        # earlier stages never join. Reuse the target's broadcast seed.
+        (
+            "                target_model_config=target_worker.model_runner.model_config,\n"
+            "                algo_label=\"DFLASH\",\n"
+            "            )\n",
+            "                target_model_config=target_worker.model_runner.model_config,\n"
+            "                algo_label=\"DFLASH\",\n"
+            "                random_seed=target_worker.random_seed,\n"
+            "            )\n",
+        ),
         (
             "        grammar_barrier=None,\n"
             "        pp_proxy_tensors=None,\n"
