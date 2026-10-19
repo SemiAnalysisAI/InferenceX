@@ -30,6 +30,8 @@ base:
         # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
+        # X1-LR observation overlay, both arms: usage.prompt_tokens_details.cached_tokens (reporting only).
+        enable-cache-report: true
         tokenizer-backend: fastokens
       env:
         PYTHONNOUSERSITE: '1'

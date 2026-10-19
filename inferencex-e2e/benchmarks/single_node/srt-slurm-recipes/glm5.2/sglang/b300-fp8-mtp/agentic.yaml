@@ -44,6 +44,8 @@ base:
         hicache-mem-layout: page_first_direct
         watchdog-timeout: 1800
         enable-metrics: true
+        # X1-LR observation overlay, both arms: usage.prompt_tokens_details.cached_tokens (reporting only).
+        enable-cache-report: true
       env:
         PYTHONNOUSERSITE: '1'
         TORCH_CUDA_ARCH_LIST: '10.0'

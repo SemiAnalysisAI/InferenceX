@@ -12,6 +12,7 @@ ARTIFACTS = (
     "*_results.jsonl",
     "*_artifacts.tar.gz",
     "sample*.jsonl",
+    "eval_client.json",
 )
 _EXTENSIONS = (".tar.gz", ".jsonl", ".json")
 
