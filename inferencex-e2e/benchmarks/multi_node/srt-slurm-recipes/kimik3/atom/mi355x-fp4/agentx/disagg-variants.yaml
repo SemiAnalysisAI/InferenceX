@@ -110,6 +110,32 @@ override_1p1d_tp8_c1:
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
 
 override_1p2d_dcp8_c16:
+  # A 4 KiB LMCache pool stays movable after hipHostRegister, and each migrated
+  # page stalls the rank's GPU queues until KFD re-validates the whole pool, so
+  # the pools use 2 MiB HugeTLB pages, reserved here on the head node (the
+  # prefill's): 4 pools per NUMA node, plus 400 GiB left free for model loading.
+  # A recipe host_setup replaces the cluster default, so setup.sh runs first.
+  host_setup:
+    nodes: all
+    timeout_seconds: 1800
+    commands:
+      - &k3_host_setup_sh IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
+      # 4 ranks x 128 GiB per NUMA node, in 2 MiB pages.
+      - pages_per_numa=262144
+      - &k3_reserve_lmcache_hugepages >-
+        if hostname -I | tr ' ' '\n' | grep -qxF "${SLURM_LAUNCH_NODE_IPADDR:?srun did not set SLURM_LAUNCH_NODE_IPADDR}"; then
+        echo "[hugepage] $(hostname -s) is the head node; reserving the LMCache pools' pages";
+        held=$(awk '/^HugePages_Total:/ {total = $2} /^HugePages_Free:/ {free = $2} /^HugePages_Rsvd:/ {rsvd = $2} END {print total - free + rsvd}' /proc/meminfo);
+        HUGEPAGES_TARGET=$(( held + 2 * pages_per_numa * 102 / 100 )) HUGEPAGE_GROW_TOLERANCE_PCT=1
+        bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh" || exit 1;
+        for node in 0 1; do
+        free=$(cat /sys/devices/system/node/node$node/hugepages/hugepages-2048kB/free_hugepages);
+        mem_gib=$(awk '/MemFree:/ {print int($4 / 1048576)}' /sys/devices/system/node/node$node/meminfo);
+        echo "[hugepage] NUMA$node: $free free 2 MiB pages, pools need $pages_per_numa; $mem_gib GiB other memory free, need 400";
+        [[ $free -ge $pages_per_numa && $mem_gib -ge 400 ]] || exit 1;
+        done; fi
+    teardown: &k3_release_hugepages
+      - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   roles:
     prefill:
       args:
@@ -127,6 +153,8 @@ override_1p2d_dcp8_c16:
           LMCACHE_CHUNK_SIZE: '1024'
           # Pin the eight ranks to the two sockets explicitly.
           LMCACHE_NUMA_MODE: auto
+          # Back each pool with 2 MiB HugeTLB pages; host_setup reserves them.
+          LMCACHE_LOCAL_CPU_USE_HUGEPAGES: 'True'
           ATOM_NUMA_BIND: '1'
           ATOM_NUMA_NODE: 0,0,0,0,1,1,1,1
           ATOM_AUTO_NUMA_BIND: '0'
@@ -151,6 +179,15 @@ override_1p2d_dcp8_c16:
         ATOM_STATE_CHECKPOINT_DEMAND: '0'
 
 override_1p1d_dcp8_c48:
+  host_setup: &k3_lmcache_224_host_setup
+    nodes: all
+    timeout_seconds: 1800
+    commands:
+      - *k3_host_setup_sh
+      # 4 ranks x 224 GiB per NUMA node, in 2 MiB pages.
+      - pages_per_numa=458752
+      - *k3_reserve_lmcache_hugepages
+    teardown: *k3_release_hugepages
   roles:
     prefill:
       args:
@@ -176,6 +213,7 @@ override_1p1d_dcp8_c48:
         ATOM_STATE_CHECKPOINT_DEMAND: '1'
 
 override_1p2d_dcp8_c48:
+  host_setup: *k3_lmcache_224_host_setup
   roles:
     prefill:
       args:
@@ -203,6 +241,7 @@ override_1p2d_dcp8_c48:
         ATOM_STATE_CHECKPOINT_DEMAND: '1'
 
 override_1p1d_dcp8_c72:
+  host_setup: *k3_lmcache_224_host_setup
   roles:
     prefill:
       args:
@@ -228,6 +267,7 @@ override_1p1d_dcp8_c72:
         ATOM_STATE_CHECKPOINT_DEMAND: '1'
 
 override_1p1d_dcp8_c88:
+  host_setup: *k3_lmcache_224_host_setup
   roles:
     prefill:
       args:

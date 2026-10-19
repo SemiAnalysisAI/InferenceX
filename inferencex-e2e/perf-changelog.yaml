@@ -10208,4 +10208,5 @@
     - "Add native Kimi-K3 MI355X ATOM P/D AgentX points behind AToMesh with Mooncake P->D transfer: 1P1D TP8 DSpark7 c1, 1P2D TP8+DCP8 DSpark7 c16, 1P1D TP8+DCP8 DSpark4 c48/c72/c88 and 1P2D TP8+DCP8 DSpark4 c48."
     - "Prefill keeps the paged KV and the KDA state images in an LMCache CPU tier (lmcache_offload): 224 GB per rank with the state images capped at 128 GB and on-demand checkpoints for the DSpark4 points, 128 GB per rank for c16. The c1 point is GPU-resident."
     - "The DSpark draft stays BF16: the ATOM online_quant_config exclusions cover every draft layer."
+    - "The prefill LMCache pools are backed by 2 MiB HugeTLB pages (LMCACHE_LOCAL_CPU_USE_HUGEPAGES), which host_setup reserves on the prefill node through hugepage_sanity.sh and teardown releases. A 4 KiB pool registered with hipHostRegister stays movable, and each page the kernel migrates stalls the rank's GPU queues, which left LMCache prefills stuck in their startup barrier on mi355x-amds."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4311
