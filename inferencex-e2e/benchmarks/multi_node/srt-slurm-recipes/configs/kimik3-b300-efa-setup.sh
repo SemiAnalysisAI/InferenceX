@@ -10,7 +10,8 @@ apt-get install -y -qq --no-install-recommends \
     autoconf automake build-essential ca-certificates curl git libboost-filesystem-dev \
     libboost-system-dev libcurl4-openssl-dev libgflags-dev libgoogle-glog-dev \
     libhwloc15 libibverbs-dev libjsoncpp-dev libnuma-dev libprotobuf-dev libssl-dev \
-    libtool libyaml-cpp-dev numactl patchelf pkg-config protobuf-compiler cuda-nvml-dev-13-0
+    libtool libxxhash-dev libyaml-cpp-dev libzstd-dev numactl patchelf pkg-config \
+    protobuf-compiler cuda-nvml-dev-13-0
 
 task_dir=$(mktemp -d /tmp/kimi-k3-efa.XXXXXX)
 curl -fsSL --retry 3 --retry-all-errors \

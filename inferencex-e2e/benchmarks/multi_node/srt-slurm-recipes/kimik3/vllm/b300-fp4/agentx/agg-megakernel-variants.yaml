@@ -88,6 +88,11 @@ override_tp16_dspark5:
     agg:
       nodes: 2
       gpus: 16
+      env:
+        # Separate B300 nodes cannot exchange direct symmetric-memory pointers.
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
       args:
         tensor-parallel-size: 16
         decode-context-parallel-size: 16
