@@ -30,7 +30,7 @@ mkdir -p "$cache"
 exec 9>"$cache/build.lock"
 flock 9
 if [ ! -f "$cache/ready" ]; then
-    git clone https://github.com/ofiwg/libfabric.git "$task_dir/libfabric"
+    git clone https://github.com/aws/libfabric.git "$task_dir/libfabric"
     git -C "$task_dir/libfabric" checkout --detach e83bf01a834a1a7c776d93efcaee3f8f28ff2705
     git -C "$task_dir/libfabric" apply \
         "$(dirname "${BASH_SOURCE[0]}")/libfabric-efa-vmm.patch"
