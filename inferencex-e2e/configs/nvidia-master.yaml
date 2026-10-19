@@ -8599,6 +8599,44 @@ musespark-fp4-gb200-dynamo-sglang-agentic-agg-1m:
           ep: 8
           dp-attn: false
 
+musespark-fp4-gb200-dynamo-sglang-agentic-agg-draft-swa-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.5.0.dev20260914" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/sglang/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: draft_model
+        conc-list: [32]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-draft-swa-variants.yaml:override_tp8_c32
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [48]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-draft-swa-variants.yaml:override_tp8_c48
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
 musespark-fp4-gb200-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
@@ -8802,6 +8840,36 @@ musespark-fp4-b200-sglang-agentic-dflash-1m:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [4, 12], srt-recipe: agentic-1m.yaml }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 24, 32, 48, 64, 96], srt-recipe: agentic-1m.yaml }
 
+musespark-fp4-b200-sglang-agentic-dflash-gemm-ag-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [32, 48, 64], srt-recipe: agentic-1m-gemm-ag.yaml }
+
+musespark-fp4-b200-sglang-agentic-dflash-draft-swa-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96], srt-recipe: agentic-1m-draft-swa.yaml }
+
 musespark-fp4-b200-sglang-agentic-dflash-spf-1m:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
@@ -8878,6 +8946,21 @@ musespark-fp4-h200-sglang-agentic-dflash-1m:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 24], srt-recipe: agentic-1m.yaml }
+
+musespark-fp4-h200-sglang-agentic-dflash-gemm-ag-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/h200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 24], srt-recipe: agentic-1m-gemm-ag.yaml }
 
 musespark-fp4-h200-sglang-agentic-dflash-gemm-ag:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
@@ -9949,6 +10032,44 @@ musespark-fp4-gb300-dynamo-sglang-agentic-agg-1m:
           ep: 8
           dp-attn: false
 
+musespark-fp4-gb300-dynamo-sglang-agentic-agg-draft-swa-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.5.0.dev20260914" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/sglang/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: draft_model
+        conc-list: [48]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-draft-swa-variants.yaml:override_tp8_c48
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [64]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-draft-swa-variants.yaml:override_tp8_c64
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
 musespark-fp4-gb300-dynamo-sglang-agentic-disagg-1m:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
@@ -10622,6 +10743,21 @@ musespark-fp4-b300-sglang-agentic-dflash-1m:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8], srt-recipe: agentic-1m.yaml }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 24, 32, 48, 64, 96, 128], srt-recipe: agentic-1m.yaml }
+
+musespark-fp4-b300-sglang-agentic-dflash-draft-swa-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [96, 128], srt-recipe: agentic-1m-draft-swa.yaml }
 
 musespark-fp4-b300-sglang-agentic-dflash-spf-1m:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
