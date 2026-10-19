@@ -10239,4 +10239,4 @@
     - "Disaggregated: add GB200 Kimi-K3 FP4 Dynamo and vLLM AgentX serving with one TP16 DCP16 prefill role and one TP16 DCP16 decode role at concurrency 16, 32 and 48, NIXL for prefill-to-decode KV transfer, Mooncake DRAM KV offload and DSpark depth 4."
     - "Disaggregated: bfloat16 mamba SSM cache on both roles, FlashInfer autotune on, and decode max-num-batched-tokens 1024 so the autotune stops at the token counts decode can reach."
     - "Disaggregated: Dynamo ffbbaaa6c44370e798687881317535ac17d66a76; eval runs add the Kimi K3 tool and reasoning parsers with structural tags."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4322
