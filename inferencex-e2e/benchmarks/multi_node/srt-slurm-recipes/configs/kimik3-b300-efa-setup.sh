@@ -9,7 +9,7 @@ apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
     autoconf automake build-essential ca-certificates curl git libboost-filesystem-dev \
     libboost-system-dev libcurl4-openssl-dev libgflags-dev libgoogle-glog-dev \
-    libhwloc15 libibverbs-dev libjsoncpp-dev libnuma-dev libprotobuf-dev libssl-dev \
+    libhwloc15 libibverbs-dev libjsoncpp-dev libmsgpack-dev libnuma-dev libprotobuf-dev libssl-dev \
     libtool libxxhash-dev libyaml-cpp-dev libzstd-dev numactl patchelf pkg-config \
     protobuf-compiler cuda-nvml-dev-13-0
 
