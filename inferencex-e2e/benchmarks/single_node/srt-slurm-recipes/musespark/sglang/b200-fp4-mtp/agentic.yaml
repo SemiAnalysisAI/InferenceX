@@ -54,6 +54,7 @@ base:
         OMP_NUM_THREADS: '8'
         SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN: '1'
         SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
+        HF_HUB_OFFLINE: '1'
   health_check:
     max_attempts: 1440
     interval_seconds: 5
