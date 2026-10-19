@@ -13,14 +13,12 @@ identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
   container:
-    image: "lmsysorg/sglang:nightly-dev-20261013-7224fce1"
+    image: "lmsysorg/sglang:nightly-dev-efa-20261019-3c560089"
 
 dynamo:
-  # The image's Dynamo 1.6.0.dev20261010 predates ai-dynamo/dynamo#16005 and
-  # registers one DP rank for an attn-dp-size worker; this commit counts all.
-  install: true
-  source:
-    rev: "b208989fbe1cfbfde64d11334d8af4ff04fe1a99"
+  # The image's Dynamo 1.6.0.dev20261018 includes ai-dynamo/dynamo#16005, so it
+  # registers every DP rank of an attn-dp-size worker.
+  install: false
 
 health_check:
   max_attempts: 1440

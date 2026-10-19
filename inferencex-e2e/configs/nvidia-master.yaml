@@ -1123,13 +1123,13 @@ dsv4-fp4-b300-sglang-agentic-hicache-eagle:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 128, 256, 384, 512], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 dsv4-fp4-b300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20261013-7224fce1
+  image: lmsysorg/sglang:nightly-dev-efa-20261019-3c560089
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "b208989fbe1cfbfde64d11334d8af4ff04fe1a99" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261018" }
   multinode: true
   disagg: false
   scenarios:
@@ -1183,13 +1183,13 @@ dsv4-fp4-b300-dynamo-sglang-agentic-agg:
           - "CONFIG_FILE=recipes/dsv4/sglang/b300-fp4/agentx/agg-dep8-c384-mtp-kvoffload.yaml"
 
 dsv4-fp4-b300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-20261013-7224fce1
+  image: lmsysorg/sglang:nightly-dev-efa-20261019-3c560089
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:b300-dsxe
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "b208989fbe1cfbfde64d11334d8af4ff04fe1a99" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261018" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
