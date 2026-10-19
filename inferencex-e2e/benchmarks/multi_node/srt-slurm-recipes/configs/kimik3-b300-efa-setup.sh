@@ -11,7 +11,7 @@ apt-get install -y -qq --no-install-recommends \
     libboost-system-dev libcurl4-openssl-dev libgflags-dev libgoogle-glog-dev \
     libhwloc15 libibverbs-dev libjsoncpp-dev libmsgpack-dev libnuma-dev libprotobuf-dev libssl-dev \
     libtool libxxhash-dev libyaml-cpp-dev libzstd-dev numactl patchelf pkg-config \
-    protobuf-compiler cuda-nvml-dev-13-0
+    protobuf-compiler python-is-python3 cuda-nvml-dev-13-0
 
 task_dir=$(mktemp -d /tmp/kimi-k3-efa.XXXXXX)
 curl -fsSL --retry 3 --retry-all-errors \
