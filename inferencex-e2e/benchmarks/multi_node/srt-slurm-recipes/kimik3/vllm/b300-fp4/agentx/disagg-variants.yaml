@@ -177,7 +177,6 @@ base:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   sbatch_directives:
     mem: "0"
-    cpus-per-task: "72"
     comment: >-
       '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will
       take extra loading time."}}'

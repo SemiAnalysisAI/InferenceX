@@ -71,7 +71,6 @@ base:
         additional-config: '{"decode_backend":"latency_specialized"}'
   sbatch_directives:
     mem: '0'
-    cpus-per-task: '72'
     comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
   srun_options:
     mem: '0'
