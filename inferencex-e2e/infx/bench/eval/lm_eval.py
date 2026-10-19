@@ -25,6 +25,9 @@ PATCH = "infx/evals/patches/lm_eval_sitecustomize.py"
 CLIENT_LOCKS = (("infx/evals/lm_eval_client_torch.lock", "https://download.pytorch.org/whl/cpu"),
                 ("infx/evals/lm_eval_client.lock", "https://pypi.org/simple"))
 CLIENT_PYTHON = "INFX_EVAL_CLIENT_PYTHON"
+# The installer the client locks were checked with; a serving image's own uv and its UV_*/PIP_* settings and uv.toml
+# files are not used for the client.
+CLIENT_UV = "0.12.5"
 CLIENT_PROBE = (
     "import json, importlib.metadata as m; from lm_eval.models.openai_completions import LocalChatCompletion; "
     "u = json.loads(m.distribution('lm-eval').read_text('direct_url.json') or '{}'); "
@@ -84,23 +87,53 @@ def _lock_sha256() -> str:
     return digest.hexdigest()
 
 
+def _uv_version(binary: str | os.PathLike[str], environ: Mapping[str, str]) -> str | None:
+    try:
+        out = subprocess.run([str(binary), "--version"], env=dict(environ), capture_output=True, text=True, timeout=60, check=False).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    parts = out.split()
+    return parts[1] if len(parts) > 1 and parts[0] == "uv" else None
+
+
+def _client_uv(environ: Mapping[str, str]) -> str:
+    """``uv`` at CLIENT_UV: the one on PATH when it is that version, else Astral's standalone build of it."""
+    found = shutil.which("uv", path=environ.get("PATH"))
+    image_version = _uv_version(found, environ) if found else None
+    ignored = sorted(k for k in os.environ if k.startswith(("UV_", "PIP_")))
+    print(f"Eval client installer: uv {CLIENT_UV}; image uv {image_version or 'absent'}; ignored settings {ignored}")
+    if found and image_version == CLIENT_UV:
+        return found
+    target = Path(tempfile.gettempdir()) / f"infx-uv-{CLIENT_UV}"
+    binary = target / "uv"
+    if _uv_version(binary, environ) != CLIENT_UV:
+        target.mkdir(parents=True, exist_ok=True)
+        proc.call(["sh", "-c", f"curl -LsSf https://astral.sh/uv/{CLIENT_UV}/install.sh | sh"],
+                  {**environ, "UV_INSTALL_DIR": str(target), "UV_NO_MODIFY_PATH": "1"})
+    if _uv_version(binary, environ) != CLIENT_UV:
+        raise env.BenchError(f"no uv {CLIENT_UV} for the eval client")
+    return str(binary)
+
+
 def _isolated(environ: Mapping[str, str]) -> str:
     """Build the isolated client environment once per container; return its interpreter."""
     root = Path(tempfile.gettempdir()) / f"infx-lm-eval-client-{REF[:12]}-{_lock_sha256()[:12]}"
     python = root / "bin" / "python"
-    uv_bin = uv.find()
+    clean = {k: v for k, v in environ.items() if not k.startswith(("UV_", "PIP_"))}
+    clean["UV_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / "infx-lm-eval-client-uv-cache")
+    uv_bin = _client_uv(clean)
     if not python.exists():
-        if proc.call([uv_bin, "venv", "-q", "--python", sys.executable, str(root)], environ):
+        if proc.call([uv_bin, "venv", "-q", "--no-config", "--python", sys.executable, str(root)], clean):
             raise env.BenchError(f"uv venv {root} failed")
         for lock, index in CLIENT_LOCKS:
-            if proc.call([uv_bin, "pip", "install", "-q", "--no-cache", "--no-deps", "--require-hashes", "-r",
-                          str(proc.REPO_ROOT / lock), "--index-url", index, "--python", str(python)], environ):
+            if proc.call([uv_bin, "pip", "install", "-q", "--no-config", "--no-cache", "--no-deps", "--require-hashes", "-r",
+                          str(proc.REPO_ROOT / lock), "--index-url", index, "--python", str(python)], clean):
                 shutil.rmtree(root, ignore_errors=True)
                 raise env.BenchError(f"installing {lock} failed")
-        pinned = ["pip", "install", "-q", "--no-cache", "--no-deps", "--python", str(python)]
+        pinned = ["pip", "install", "-q", "--no-config", "--no-cache", "--no-deps", "--python", str(python)]
         git = shutil.which("git", path=environ.get("PATH"))
-        if not (git and proc.call([uv_bin, *pinned, f"git+{REPOSITORY}.git@{REF}"], environ) == 0) and proc.call(
-            [uv_bin, *pinned, f"{REPOSITORY}/archive/{REF}.tar.gz"], environ
+        if not (git and proc.call([uv_bin, *pinned, f"git+{REPOSITORY}.git@{REF}"], clean) == 0) and proc.call(
+            [uv_bin, *pinned, f"{REPOSITORY}/archive/{REF}.tar.gz"], clean
         ):
             shutil.rmtree(root, ignore_errors=True)
             raise env.BenchError(f"installing lm-eval at {REF} failed")
