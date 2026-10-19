@@ -82,6 +82,14 @@ override_tp8_c2:
 
 
 override_tp8_c4:
+  roles:
+    agg:
+      args:
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        prefill-decode-interval: 64
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
     env:
       CONC: '4'
@@ -89,6 +97,14 @@ override_tp8_c4:
 
 
 override_tp8_c8:
+  roles:
+    agg:
+      args:
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        prefill-decode-interval: 64
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
     env:
       CONC: '8'
@@ -96,6 +112,14 @@ override_tp8_c8:
 
 
 override_tp8_c12:
+  roles:
+    agg:
+      args:
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        prefill-decode-interval: 64
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
     env:
       CONC: '12'
@@ -109,6 +133,7 @@ override_tp8_c16:
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
+        prefill-decode-interval: 64
         hicache-size: 120
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
@@ -125,6 +150,7 @@ override_tp8_c24:
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
+        prefill-decode-interval: 64
         hicache-size: 160
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
@@ -142,6 +168,7 @@ override_tp8_c32:
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
         hicache-size: 160
+        prefill-decode-interval: 48
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
@@ -158,9 +185,27 @@ override_tp8_c48:
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
         hicache-size: 160
+        prefill-decode-interval: 32
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
     env:
       CONC: '48'
+      KV_OFFLOADING: dram
+
+
+override_tp8_c64:
+  roles:
+    agg:
+      args:
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 160
+        prefill-decode-interval: 16
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
+  benchmark:
+    env:
+      CONC: '64'
       KV_OFFLOADING: dram
