@@ -51,7 +51,7 @@ base:
         swa-full-tokens-ratio: 0.1
         disable-prefill-cuda-graph: true
         enable-hierarchical-cache: true
-        hicache-size: 160
+        hicache-size: 80
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
         speculative-draft-attention-backend: fa4
