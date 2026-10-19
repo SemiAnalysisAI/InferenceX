@@ -26,7 +26,7 @@ tar -xzf "$task_dir/efa.tar.gz" -C "$task_dir"
     ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify --skip-mpi
 )
 
-cache="$KIMI_EFA_BUILD_CACHE/c3fa13ec-e83bf01a-v1"
+cache="$KIMI_EFA_BUILD_CACHE/c3fa13ec-e83bf01a-v2"
 mkdir -p "$cache"
 exec 9>"$cache/build.lock"
 flock 9
@@ -59,6 +59,7 @@ if [ ! -f "$cache/ready" ]; then
     (
         cd "$task_dir/Mooncake"
         cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON '-DCMAKE_INSTALL_RPATH=$ORIGIN' \
             -DCMAKE_PREFIX_PATH=/opt/amazon/efa \
             -DPython3_EXECUTABLE="$(command -v python3)" \
             -DUSE_EFA=ON -DUSE_CUDA=ON -DUSE_ETCD=OFF \
