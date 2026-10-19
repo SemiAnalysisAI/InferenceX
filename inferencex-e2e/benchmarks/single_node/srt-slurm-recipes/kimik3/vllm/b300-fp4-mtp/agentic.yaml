@@ -22,7 +22,7 @@ base:
   # setup script installs the master config's Mooncake and fills in the node's
   # active RDMA rail. DSXE rails are InfiniBand without a netdev, so the transfer
   # engine picks its own GID (a RoCE v2 index 3 does not exist).
-  setup_script: kimik3-b300-mooncake-x1lp-diag.sh  # X1-LP diagnostic branch: stops before the engine
+  setup_script: kimik3-b300-mooncake-x1lq-mrprobe.sh  # X1-LQ diagnostic branch: verbs MR probe, stops before the engine
   services:
     - name: mooncake-master
       type: mooncake-master
