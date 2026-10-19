@@ -620,7 +620,7 @@ dsr1-fp8-b300-dynamo-trt:
   runner: b300
   precision: fp8
   framework: dynamo-trt
-  router: { name: dynamo-router, version: "1.5.1" }
+  router: { name: dynamo-router, version: "0.8.1.post1" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
