@@ -41,9 +41,14 @@ def run_phase(name, server, model, conc, isl, osl, done, stats, phase_log):
     deadline = time.time() + PHASE_MAX_S
     rng = random.Random(name)
     lock = threading.Lock()
+    wave = threading.Barrier(conc)
 
     def lane():
         while not done() and time.time() < deadline:
+            try:
+                wave.wait(timeout=max(1.0, deadline - time.time()))
+            except threading.BrokenBarrierError:
+                return
             with lock:
                 prompt = [rng.randrange(*TOKEN_RANGE) for _ in range(isl)]
             body = {"model": model, "prompt": prompt, "max_tokens": osl, "min_tokens": osl,
