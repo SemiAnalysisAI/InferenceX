@@ -1,7 +1,8 @@
 """Join a sweep's per-job ``job_event.json`` records into one JSON Lines file.
 
-Given the run, each record also gains what only its finished GitHub job knows, and every
-benchmark or eval job that left no record gets one synthesized from the run's job listing.
+Given the run, each record also gains what only its finished GitHub job knows, failing if
+its job failed after the launcher succeeded, and every benchmark or eval job that left no
+record gets one synthesized from the run's job listing.
 Given a summary file, the job counts and a table of the failed jobs are appended to it.
 Records are diagnostics: a listing that cannot be read leaves the records as they are, and a
 summary that cannot be written is skipped.
@@ -26,13 +27,14 @@ from infx import github
 FILENAME = "job_event.json"
 SCHEMA_VERSION = 2
 NO_RECORD = "NoLauncherRecord"
+STEP_FAILED = "StepFailed"
 # The names benchmark-tmpl.yml and benchmark-multinode-tmpl.yml give their jobs: an optional
 # klaud marker, the priority, model prefix, precision and runner, then the concurrency last.
 _BENCHMARK_JOB = re.compile(
     r"(?:^|/ )(?:klaud \| )?p[0-9.]+ \| (?P<point>(?P<model_prefix>\S+) (?P<precision>\S+)"
     r" (?P<runner>\S+) .* c(?P<conc>[0-9]+(?:x[0-9]+)*)(?: \| (?P<eval>eval|eval-only))?)$"
 )
-_FAILED_STEP = frozenset({"failure", "cancelled", "timed_out"})
+_FAILED = frozenset({"failure", "cancelled", "timed_out"})
 _SUMMARY_COLUMNS = ("Cluster", "Job", "Stage", "Error", "Retriable", "Cause", "Link")
 _CAUSE_CHARS = 200
 
@@ -56,7 +58,10 @@ def read_events(directory: Path) -> list[dict[str, Any]]:
 def reconcile(
     events: list[dict[str, Any]], jobs: Iterable[dict[str, Any]], *, run_url: str
 ) -> list[dict[str, Any]]:
-    """``events`` with their jobs' outcomes, then a record for each benchmark job without one."""
+    """``events`` with their jobs' outcomes, then a record for each benchmark job without one.
+
+    A record whose launcher succeeded fails with its job, at the job's failed step.
+    """
     events = [dict(event) for event in events]
     synthesized = []
     for job in jobs:
@@ -66,8 +71,13 @@ def reconcile(
         event = next((event for event in events if _ran(event, job)), None)
         if event is None:
             synthesized.append(_synthesized(job, run_url))
-        elif isinstance(event.get("github"), dict):
-            event["github"] = {**event["github"], **_outcome(job)}
+            continue
+        outcome = _outcome(job)
+        if isinstance(event.get("github"), dict):
+            event["github"] = {**event["github"], **outcome}
+        if event.get("outcome") == "success" and outcome["conclusion"] in _FAILED:
+            event["outcome"] = "failure"
+            event["error"] = event.get("error") or _failed_after_launch(outcome)
     return [*events, *synthesized]
 
 
@@ -92,15 +102,27 @@ def _ran(event: dict[str, Any], job: dict[str, Any]) -> bool:
 def _outcome(job: dict[str, Any]) -> dict[str, Any]:
     """The finished job's identity and conclusion, and the step that failed it."""
     steps = job.get("steps") or []
-    failed = next(
-        (step.get("name") for step in steps if step.get("conclusion") in _FAILED_STEP), None
-    )
+    failed = next((step.get("name") for step in steps if step.get("conclusion") in _FAILED), None)
     return {
         "job_id": job.get("id"),
         "job_url": job.get("html_url"),
         "job_name": job.get("name"),
         "conclusion": job.get("conclusion"),
         "failed_step": failed,
+    }
+
+
+def _failed_after_launch(outcome: dict[str, Any]) -> dict[str, Any]:
+    """The error of a job that failed in a later step than its launcher, or outside any step."""
+    step = outcome["failed_step"]
+    where = f" at step {step!r}" if step else ""
+    return {
+        "stage": step or "runner",
+        "type": STEP_FAILED,
+        "message": f"job concluded {outcome['conclusion']}{where} after the launcher succeeded",
+        "exit_code": None,
+        "retriable": False,
+        "evidence": outcome["job_url"],
     }
 
 

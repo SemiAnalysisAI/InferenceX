@@ -97,6 +97,51 @@ def test_jobs_without_a_record_get_one_and_recorded_jobs_gain_their_conclusion(t
         assert JobEvent.model_validate(record).github.run_url == RUN
 
 
+def test_a_job_that_fails_after_its_launcher_succeeded_fails_its_record_and_summary_row(tmp_path, monkeypatch):
+    jobs = [
+        job(21, "eval / (img...) / p5.000 | dsr1 fp8 cluster:h200-dgxc sgl TP8    c4 | eval-only", "failure",
+            [("Launch job script", "success"), ("Verify eval scores", "failure")]),
+        job(22, "single-node 1k1k / (img...) / p5.000 | dsr1 fp8 cluster:h200-dgxc sgl TP8    c8", "cancelled",
+            [("Launch job script", "success"), ("Process result", "cancelled")]),
+        job(23, "single-node 1k1k / (img...) / p5.000 | dsr1 fp8 cluster:h200-dgxc sgl TP8    c16", "timed_out",
+            [("Launch job script", "success")]),
+    ]  # fmt: skip
+    serve_jobs(tmp_path, monkeypatch, jobs)
+    kept = {"stage": "collect", "type": "ArtifactError", "message": "kept", "exit_code": None, "retriable": False}
+    for name, job_id, error in (("a", 21, None), ("b", 22, kept), ("c", 23, None)):
+        artifact = tmp_path / "job_events" / f"job_event_{name}"
+        artifact.mkdir(parents=True)
+        record = {"outcome": "success", "cluster": "h200-dgxc", "error": error, "github": {"job_id": job_id}}
+        (artifact / "job_event.json").write_text(json.dumps(record))
+    output, summary = tmp_path / "events.jsonl", tmp_path / "summary.md"
+
+    assert main([str(tmp_path / "job_events"), str(output), "--run", "https://github.com", "o/r", "77",
+                 "--summary", str(summary)]) == 0  # fmt: skip
+
+    eval_scores, cancelled, timed_out = [json.loads(line) for line in output.read_text().splitlines()]
+    assert [record["outcome"] for record in (eval_scores, cancelled, timed_out)] == ["failure"] * 3
+    assert eval_scores["error"] == {
+        "stage": "Verify eval scores", "type": "StepFailed",
+        "message": "job concluded failure at step 'Verify eval scores' after the launcher succeeded",
+        "exit_code": None, "retriable": False, "evidence": f"{RUN}/job/21",
+    }  # fmt: skip
+    assert cancelled["error"] == kept
+    assert (timed_out["error"]["stage"], timed_out["error"]["message"]) == (
+        "runner", "job concluded timed_out after the launcher succeeded")  # fmt: skip
+    assert JobEvent.model_validate(timed_out).error.type == "StepFailed"
+    assert summary.read_text(encoding="utf-8").splitlines() == [
+        "**Job events:** 3 total, 0 succeeded, 3 failed, 0 synthesized",
+        "",
+        "| Cluster | Job | Stage | Error | Retriable | Cause | Link |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+        f"| h200-dgxc | dsr1 fp8 cluster:h200-dgxc sgl TP8    c4 \\| eval-only | Verify eval scores | StepFailed | no | "
+        f"job concluded failure at step 'Verify eval scores' after the launcher succeeded | [job]({RUN}/job/21) |",
+        f"| h200-dgxc | dsr1 fp8 cluster:h200-dgxc sgl TP8    c8 | collect | ArtifactError | no | kept | [job]({RUN}/job/22) |",
+        f"| h200-dgxc | dsr1 fp8 cluster:h200-dgxc sgl TP8    c16 | runner | StepFailed | no | "
+        f"job concluded timed_out after the launcher succeeded | [job]({RUN}/job/23) |",
+    ]  # fmt: skip
+
+
 def test_summary_counts_the_jobs_and_lists_failures_with_retriable_ones_last(tmp_path, monkeypatch):
     jobs = [
         job(11, "single-node 1k1k / (img...) / p5.000 | dsr1 fp8 cluster:h200-dgxc sgl TP8    c4", "success", []),
