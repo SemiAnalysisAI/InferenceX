@@ -11,6 +11,9 @@ Phases:
   ib_split          ranks split across the ACTIVE InfiniBand HCAs
   tcp               protocol tcp, small segments
   efa_same_device   two clients on one EFA device, 200 GiB each (per-device aggregate control)
+  efa_small_per_rank / efa_small_one
+                    8 GiB segments (one EFA device per rank / every rank on one EFA device): registration far below
+                    the observed EFA limits, so the store round trips test the RDMA data path itself
 
 Results go to --out (JSON) and stdout. Only user-space verbs and store calls; no system setting is changed.
 """
@@ -378,6 +381,14 @@ def parent(a):
                             GiB, world)
         elif phase == "tcp":
             res = run_phase(a, phase, [""] * world, "tcp", 8 * GiB, local, 0, GiB, world)
+        elif phase in ("efa_small_per_rank", "efa_small_one"):
+            devices = [efa_map[r]["device"] or "" for r in range(world)]
+            if phase == "efa_small_one":
+                devices = [devices[0]] * world
+            if not all(devices):
+                report["phases"].append({"phase": phase, "skipped": "fewer active EFA devices than ranks"})
+                continue
+            res = run_phase(a, phase, devices, "rdma", 8 * GiB, local, 8 * GiB, GiB, world)
         elif phase == "efa_same_device":
             dev = efa_map[0]["device"]
             res = run_phase(a, phase, [dev, dev], "rdma", 200 * GiB, GiB, 0, 0, 2, sequential=True)
