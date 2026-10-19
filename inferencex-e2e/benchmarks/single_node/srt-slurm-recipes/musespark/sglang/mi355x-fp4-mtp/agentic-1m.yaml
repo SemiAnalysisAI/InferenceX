@@ -93,7 +93,7 @@ override_tp4_c48_hicache:
         tensor-parallel-size: 4
         expert-parallel-size: 4
         max-running-requests: 48
-        cuda-graph-max-bs: 48
+        cuda-graph-max-bs-decode: 48
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
