@@ -146,13 +146,19 @@ class Session:
     def resume_runs(self) -> list[dict]:
         """Recovery's resume runs of this candidate's session, oldest first."""
         prefix = resume_title(self.parent["id"], self.candidate.id, 0).removesuffix("0")
+        # A session resumes within RESUME_GIVE_UP_SECONDS of the last one ending, and each
+        # session lasts at most a GitHub job's 6 hours, so every resume run starts by then.
+        until = utc(self.parent["created_at"]) + MAX_SESSIONS * timedelta(
+            seconds=RESUME_GIVE_UP_SECONDS, hours=6
+        )
         runs = github.items(
             self.repository,
             "actions/workflows/klaud-plan.yml/runs?"
             + urlencode(
                 {
                     "event": "workflow_dispatch",
-                    "created": ">=" + self.parent["created_at"],
+                    "actor": BOT,
+                    "created": f"{self.parent['created_at']}..{until:%Y-%m-%dT%H:%M:%SZ}",
                     "per_page": 100,
                 }
             ),
@@ -646,14 +652,14 @@ def sessions_started(session: Session) -> int:
 
 def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
     """Whether a new resume run would continue this unfinished session."""
-    ended = session.last_session_end()
-    if ended is None or now - utc(ended) >= timedelta(seconds=RESUME_GIVE_UP_SECONDS):
-        return False
-    if not resumable(session, pull):
+    if session.last_session_end() is None or not resumable(session, pull):
         return False
     started = [job for job in candidate_jobs(session) if started_session(job)]
     return (
         0 < len(started) < MAX_SESSIONS
+        # Runs that failed before their agent started never extend this.
+        and bool(started[-1].get("completed_at"))
+        and now - utc(started[-1]["completed_at"]) < timedelta(seconds=RESUME_GIVE_UP_SECONDS)
         # A planner run from before resumption has no gate.
         and any(step["name"] == GATE_STEP for step in started[-1]["steps"])
         # A session that runs out fails its job, and a cancelled session was preempted like any
@@ -688,6 +694,8 @@ def grant(session: Session, pull: dict) -> int:
     repository, parent = session.repository, session.parent["id"]
     session.refresh(pull)
     number = sessions_started(session) + 1
+    if not 2 <= number <= MAX_SESSIONS:
+        raise VerificationError(f"Session {number} cannot resume")
     posted = None
     if not granted(session, pull, number):
         link = f"https://github.com/{repository}/actions/runs/{parent}"

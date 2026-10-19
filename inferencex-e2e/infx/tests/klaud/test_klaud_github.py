@@ -594,11 +594,12 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
              "updated_at": "2026-10-15T00:00:00Z",
              "head_repository": {"full_name": "example/project"}, "pull_requests": [{"number": 7}]}
 
-    def candidate_job(job_id, name, run_start, number, outcome):
-        """The job ``name`` of attempt ``number`` of a session run started at ``run_start``,
-        which concluded ``outcome``: ``None`` while it runs, ``ungranted`` for a gate that
-        failed it without a grant and ``gated-off`` for a gate that let it end without a
-        session. A ``-copied`` suffix marks a copy, which keeps attempt 1's start."""
+    def candidate_job(job_id, run_id, name, run_start, number, outcome):
+        """The job ``name`` of attempt ``number`` of session run ``run_id``, started at
+        ``run_start`` for 6 hours, which concluded ``outcome``: ``None`` while it runs,
+        ``ungranted`` for a gate (or step before the agent) that failed it and ``gated-off`` for
+        a gate that let it end without a session. A ``-copied`` suffix marks a copy, which keeps
+        attempt 1's start."""
         created = run_start + timedelta(minutes=20)
         copied = bool(outcome) and outcome.endswith("-copied")
         kind = outcome.removesuffix("-copied") if outcome else None
@@ -617,36 +618,41 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
             *([{"name": lifecycle.GATE_STEP, "conclusion": gate}] if gated else []),
             {"name": lifecycle.AGENT_STEP, "conclusion": agent},
         ]
-        return {"id": job_id, "name": name, "run_attempt": number, "conclusion": ended,
-                "runner_name": "GitHub Actions 1", "steps": steps, "created_at": stamp(created),
-                "started_at": stamp(began)}
+        return {"id": job_id, "run_id": run_id, "name": name, "run_attempt": number,
+                "conclusion": ended, "runner_name": "GitHub Actions 1", "steps": steps,
+                "created_at": stamp(created), "started_at": stamp(began),
+                "completed_at": stamp(run_start + timedelta(hours=6)) if ended else None}
 
     own_name = f"Run candidate {candidate.id} / Klaud Cold"
     jobs_by_run = {42: [
         job
         for number, outcome in enumerate((sessions[0], *reruns), 1)
         for job in (
-            candidate_job(1000 + number, own_name, start + timedelta(hours=6 * (number - 1)),
+            candidate_job(1000 + number, 42, own_name, start + timedelta(hours=6 * (number - 1)),
                           number, outcome),
-            candidate_job(2000 + number, f"Run candidate {'3' * 16}-{'4' * 16} / Klaud Cold",
+            candidate_job(2000 + number, 42, f"Run candidate {'3' * 16}-{'4' * 16} / Klaud Cold",
                           start + timedelta(hours=6 * (number - 1)), number,
                           "success" if number == 1 else "success-copied"),
         )
     ]}
     resume_runs = []
 
-    def start_resume(number, outcome=None):
-        """Add resume run 4200 + ``number`` for session ``number``; its job ended ``outcome``."""
-        began = start + timedelta(hours=6 * (attempts + number - 2))
+    def start_resume(number, outcome=None, run_id=None, actor="Klaud-Cold", hours=None):
+        """Add resume run ``run_id`` (4200 + ``number`` by default), dispatched by ``actor``
+        ``hours`` after 2026-10-14 00:00 UTC (the next free 6-hour slot by default), for session
+        ``number``; its job ended ``outcome``."""
+        run_id = run_id or 4200 + number
+        slot = attempts + number - 2 if hours is None else hours / 6
+        began = start + timedelta(hours=6 * slot)
         ended = {"ungranted": "failure", "gated-off": "success"}.get(outcome, outcome)
         resume_runs.append({
-            "id": 4200 + number, "display_title": lifecycle.resume_title(42, candidate.id, number),
-            "head_branch": "main", "event": "workflow_dispatch", "actor": {"login": "Klaud-Cold"},
+            "id": run_id, "display_title": lifecycle.resume_title(42, candidate.id, number),
+            "head_branch": "main", "event": "workflow_dispatch", "actor": {"login": actor},
             "run_attempt": 1, "status": "in_progress" if outcome is None else "completed",
             "conclusion": ended, "created_at": stamp(began),
             "updated_at": stamp(began + timedelta(hours=6)),
         })
-        jobs_by_run[4200 + number] = [candidate_job(3000 + number, own_name, began, 1, outcome)]
+        jobs_by_run[run_id] = [candidate_job(run_id - 1200, run_id, own_name, began, 1, outcome)]
 
     for number, outcome in enumerate(sessions[1:], 2):
         start_resume(number, outcome)
@@ -853,17 +859,18 @@ def grant_comment(world, number, author="Klaud-Cold"):
         lifecycle.resume_marker(42, world.session.candidate.id, number) + "\nResumed.")}
 
 
-def resume_check(tmp_path, monkeypatch, world, number, attempt=1):
-    """Run the resume gate of the world's session ``number`` (planner run 42's job for session
-    1, else resume run 4200 + ``number``) in that run's ``attempt``; return its exit code and
+def resume_check(tmp_path, monkeypatch, world, number, attempt=1, run=None, session=None):
+    """Run the resume gate of the world's session ``number`` in ``run`` (planner run 42 for
+    session 1, else resume run 4200 + ``number`` by default) at that run's ``attempt``, with
+    ``session`` (``number`` by default) as the run's session input; return its exit code and
     outputs."""
     (tmp_path / "candidate.json").write_text(world.session.candidate.model_dump_json())
     output = tmp_path / "gate-output"
-    run = 42 if number == 1 else 4200 + number
+    run = run or (42 if number == 1 else 4200 + number)
     for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", str(run)),
                         ("GITHUB_RUN_ATTEMPT", str(attempt)), ("KLAUD_PARENT_RUN", "42"),
-                        ("KLAUD_SESSION", str(number)), ("KLAUD_EVIDENCE", str(tmp_path)),
-                        ("GITHUB_OUTPUT", str(output))):
+                        ("KLAUD_SESSION", str(number) if session is None else session),
+                        ("KLAUD_EVIDENCE", str(tmp_path)), ("GITHUB_OUTPUT", str(output))):
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(sys, "argv", ["klaud", "resume-check"])
     output.write_text("")
@@ -922,6 +929,10 @@ def test_recovery_approves_resuming_only_sessions_a_resume_run_can_continue(
                  id="within-a-day-of-the-resume-run"),
     pytest.param(("failure", "failure"), "2026-10-15T12:00:00Z", False,
                  id="a-day-after-the-resume-run"),
+    pytest.param(("failure", "ungranted"), "2026-10-15T05:59:59Z", True,
+                 id="within-a-day-of-the-last-started-session"),
+    pytest.param(("failure", "ungranted"), "2026-10-15T06:00:00Z", False,
+                 id="a-run-that-never-started-its-agent-does-not-extend-it"),
 ])  # fmt: skip
 def test_recovery_stops_resuming_a_day_after_the_last_session_ended(
     monkeypatch, sessions, now, approved
@@ -1199,6 +1210,42 @@ def test_a_resume_run_starts_only_the_session_recovery_granted_it(
 
     decision = str(resumes).lower()
     assert resume_check(tmp_path, monkeypatch, world, number) == (
+        0, f"run={decision}\nresume={decision}\n")
+    assert world.writes == []
+
+
+@pytest.mark.parametrize("session", ["", "1"])
+def test_a_resume_run_without_a_later_session_number_never_starts_a_session(
+    tmp_path, monkeypatch, session
+):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=("failure", None))
+    world.comments.append(grant_comment(world, 2))
+
+    assert resume_check(tmp_path, monkeypatch, world, 2, session=session) == (
+        0, "run=false\nresume=false\n")
+
+
+@pytest.mark.parametrize(("change", "resumes"), [
+    pytest.param("dispatched-by-someone-else", False, id="dispatched-by-someone-else"),
+    pytest.param("failure", False, id="second-run-of-a-started-session"),
+    pytest.param("ungranted", True, id="retry-after-a-run-that-never-started-its-agent"),
+])  # fmt: skip
+def test_a_resume_run_never_repeats_or_replaces_recoverys_session(
+    tmp_path, monkeypatch, change, resumes
+):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=("failure",))
+    world.comments.append(grant_comment(world, 2))
+    if change == "dispatched-by-someone-else":
+        world.start_resume(2, actor="maintainer")
+        run = 4202
+    else:
+        # An earlier resume run of session 2 already ended ``change``.
+        world.start_resume(2, outcome=change, hours=6)
+        world.start_resume(2, run_id=4302, hours=12)
+        run = 4302
+
+    decision = str(resumes).lower()
+    assert resume_check(tmp_path, monkeypatch, world, 2, run=run) == (
         0, f"run={decision}\nresume={decision}\n")
     assert world.writes == []
 

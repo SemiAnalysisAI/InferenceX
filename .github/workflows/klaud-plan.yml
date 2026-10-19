@@ -340,11 +340,13 @@ jobs:
       AGENT_PAT: ${{ secrets.AGENT_PAT }}
       DASH_API_KEY: ${{ secrets.DASH_API_KEY }}
 
-  # A resume run continues one unfinished session; klaud-candidate.yml's gate starts it only
-  # with recovery's grant for that session.
+  # A resume run continues one unfinished session. Only recovery, as Klaud-Cold, starts one, and
+  # klaud-candidate.yml's gate starts its agent only with recovery's grant for that session.
   resume:
     name: Run candidate ${{ inputs.resume-candidate }}
-    if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent != ''
+    if: >-
+      github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent != ''
+      && github.actor == 'Klaud-Cold'
     uses: $/.github/workflows/klaud-candidate.yml
     with:
       candidate: ${{ inputs.resume-candidate }}

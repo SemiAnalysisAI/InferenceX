@@ -627,21 +627,43 @@ def check_stop() -> dict:
 def resume_check() -> dict[str, bool]:
     """The session gate's outputs.
 
-    A planner run's first attempt runs its session; its reruns start none. A resume run (session
-    2 and later) runs only the session recovery granted it, once.
+    A planner run's job runs its session in the run's first attempt only. A resume run runs the
+    session recovery granted it, once: only in its first attempt, only if recovery dispatched it
+    for that later session, and never after another run already started that session.
     """
-    number = int(os.environ.get("KLAUD_SESSION") or "1")
+    no = {"run": False, "resume": False}
+    run = os.environ.get("GITHUB_RUN_ID")
     attempt = int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
-    if number == 1 or attempt != 1:
-        return {"run": number == 1 and attempt == 1, "resume": False}
-    from .lifecycle import MAX_SESSIONS, current_session, granted, resumable, sessions_started
+    if (os.environ.get("KLAUD_PARENT_RUN") or run) == run:
+        return {"run": attempt == 1, "resume": False}
+    number = int(os.environ.get("KLAUD_SESSION") or "0")
+    if attempt != 1 or number < 2:
+        return no
+    from .lifecycle import (
+        MAX_SESSIONS,
+        candidate_jobs,
+        current_session,
+        granted,
+        resumable,
+        resume_title,
+        started_session,
+    )
 
     session = current_session()
+    title = resume_title(session.parent["id"], session.candidate.id, number)
+    same = {resume["id"] for resume in session.resume_runs() if resume["display_title"] == title}
+    if run is None or int(run) not in same:
+        return no
+    jobs = [job for job in candidate_jobs(session) if started_session(job)]
+    # This job's own session is already one of the started ones.
+    if len(jobs) > MAX_SESSIONS or any(
+        job["run_id"] in same and job["run_id"] != int(run) for job in jobs
+    ):
+        return no
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
-    # This job's own session is already one of the started ones.
-    if not resumable(session, pull) or sessions_started(session) > MAX_SESSIONS:
-        return {"run": False, "resume": False}
+    if not resumable(session, pull):
+        return no
     resume = granted(session, pull, number)
     return {"run": resume, "resume": resume}
 
