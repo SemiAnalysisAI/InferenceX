@@ -1,0 +1,174 @@
+schema: 2
+
+base:
+  identity:
+    container: {}
+  dynamo:
+    install: true
+    source:
+      wheel: "1.5.0.dev20260914"
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    type: dynamo
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+    enable_multiple_frontends: true
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    args:
+      router-mode: kv
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+      router-session-affinity-ttl-secs: 3600
+      dyn-chat-processor: sglang
+      trust-remote-code: true
+  engine: sglang
+  setup_script: musespark-mixed-tp-disagg.sh
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        UCX_TLS: ib,cuda_copy,cuda_ipc,sm,self
+        NVSHMEM_REMOTE_TRANSPORT: none
+        SGLANG_ENABLE_POST_CAPTURE_KV_SIZING: '0'
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        disaggregation-mode: prefill
+        disaggregation-transfer-backend: nixl
+        disable-prefill-cuda-graph: true
+        max-running-requests: 32
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-size: 110
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+      kv_events: true
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        UCX_TLS: ib,cuda_copy,cuda_ipc,sm,self
+        NVSHMEM_REMOTE_TRANSPORT: none
+        SGLANG_ENABLE_POST_CAPTURE_KV_SIZING: '0'
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.05
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        disaggregation-mode: decode
+        max-total-tokens: 10000000
+        disaggregation-transfer-backend: nixl
+        disable-radix-cache: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 64
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_1p2d_c8:
+  roles:
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+
+override_1p2d_c16:
+  roles:
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
