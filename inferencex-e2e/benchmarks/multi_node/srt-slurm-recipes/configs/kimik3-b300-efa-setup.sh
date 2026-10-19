@@ -32,7 +32,7 @@ tar -xzf "$task_dir/efa.tar.gz" -C "$task_dir"
     ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify --skip-mpi
 )
 
-cache="$KIMI_EFA_BUILD_CACHE/c3fa13ec-e83bf01a-v2"
+cache="$KIMI_EFA_BUILD_CACHE/c3fa13ec-e83bf01a-collapse-v3"
 mkdir -p "$cache"
 exec 9>"$cache/build.lock"
 flock 9
@@ -61,6 +61,8 @@ if [ ! -f "$cache/ready" ]; then
         'wheel==0.48.0' 'setuptools==84.0.0' numpy 'pybind11==3.1.0'
     git clone https://github.com/kvcache-ai/Mooncake.git "$task_dir/Mooncake"
     git -C "$task_dir/Mooncake" checkout --detach c3fa13ecaf1038df933dcb784ff8ffe026381100
+    git -C "$task_dir/Mooncake" apply \
+        "$(dirname "${BASH_SOURCE[0]}")/mooncake-efa-collapse-host-chunks.patch"
     git -C "$task_dir/Mooncake" submodule update --init --recursive
     (
         cd "$task_dir/Mooncake"
@@ -73,7 +75,7 @@ if [ ! -f "$cache/ready" ]; then
             -DBUILD_BENCHMARK=OFF -DBUILD_EXAMPLES=ON
         cmake --build build --parallel 12 --target \
             engine store mooncake_master mooncake_client transfer_engine_bench build_nvlink_allocator
-        sed -i 's/^version = .*/version = "0.3.13.post1+gc3fa13ec"/' \
+        sed -i 's/^version = .*/version = "0.3.13.post1+gc3fa13ec.collapse1"/' \
             mooncake-wheel/pyproject.toml
         mkdir -p "$task_dir/wheels"
         EFA_CU13_BUILD=1 OUTPUT_DIR="$task_dir/wheels" bash scripts/build_wheel.sh
@@ -98,6 +100,6 @@ from mooncake.store import MooncakeDistributedStore
 fabric = ctypes.CDLL("libfabric.so.1")
 fabric.fi_version.restype = ctypes.c_uint32
 assert fabric.fi_version() == (2 << 16 | 6)
-assert importlib.metadata.version("mooncake-transfer-engine-efa-cuda13") == "0.3.13.post1+gc3fa13ec"
+assert importlib.metadata.version("mooncake-transfer-engine-efa-cuda13") == "0.3.13.post1+gc3fa13ec.collapse1"
 print("EFA libfabric 2.6 and THP-enabled Mooncake Store are available")
 PY
