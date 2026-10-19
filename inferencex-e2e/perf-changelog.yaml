@@ -10124,4 +10124,4 @@
     - "Disaggregated: replace the DEP4-prefill 1P2D, 1P4D and 1P6D points and the DEP8/DEP16 2P1D point with PP4 prefill workers (one node each, HiCache write_back, MTP 5 steps) feeding TP4 decode at 1P5D c30 and 1P3D c40, DEP8 decode at 1P1D c56, 3P1D c216 and 3P1D c264, and DEP16 decode at 4P1D c256."
     - "c216 and c264 split the PP4 prefill layers 20,20,20,18; c56 and c264 prefill with 8k chunks. Prefill HiCache is 100 GB per rank at c30 and c40, 185 GB per rank at c264 (dram-utilization 0.85) and the default ratio elsewhere. Prefill workers advertise a 3600 s session-affinity TTL to the prefill router and decode workers an active-request weight of 8192 to the decode router."
     - "Tachometer and the Dynamo OTel collector are off. Acceptance follows the golden GLM-5.2 thinking-on AL: 3.33 at 4 MTP steps, 3.61 at 5."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4300
