@@ -14,7 +14,7 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  setup_script: musespark-dflash-draft-swa.sh
+  setup_script: musespark-dflash-draft-swa-lmo.sh
   roles:
     agg:
       nodes: 1
@@ -70,3 +70,18 @@ zip_override_tp8_gpu_kv:
     env:
       CONC: ['1', '2']
       KV_OFFLOADING: none
+
+zip_override_tp8_hicache:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.965
+        swa-full-tokens-ratio: 0.02
+        max-running-requests: [1, 2]
+        cuda-graph-max-bs-decode: [1, 2]
+        enable-hierarchical-cache: true
+        hicache-size: 160
+  benchmark:
+    env:
+      CONC: ['1', '2']
+      KV_OFFLOADING: dram
