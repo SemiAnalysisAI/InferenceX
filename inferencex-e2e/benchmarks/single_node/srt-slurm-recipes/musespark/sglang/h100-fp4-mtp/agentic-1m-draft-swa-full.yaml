@@ -1,0 +1,72 @@
+base:
+  schema: 2
+  name: musespark-fp4-h100-sglang-agentic-draft-swa-full
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  setup_script: musespark-dflash-draft-swa.sh
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        quantization: modelopt_fp4
+        moe-runner-backend: marlin
+        fp4-gemm-backend: marlin
+        attention-backend: fa3
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.98
+        chunked-prefill-size: 1024
+        swa-full-tokens-ratio: 0.03
+        disable-prefill-cuda-graph: true
+        language-model-only: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-draft-model-quantization: fp8
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+zip_override_tp8_gpu_kv:
+  roles:
+    agg:
+      args:
+        max-running-requests: [1, 2]
+        cuda-graph-max-bs-decode: [1, 2]
+  benchmark:
+    env:
+      CONC: ['1', '2']
+      KV_OFFLOADING: none
