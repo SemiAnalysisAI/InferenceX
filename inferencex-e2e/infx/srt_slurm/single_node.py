@@ -313,7 +313,7 @@ class VllmProfiling(ProfiledEngine):
             "torch_profiler_with_stack": False,
             "torch_profiler_dump_cuda_time_total": False,
             "ignore_frontend": True,
-            "max_iterations": int(profile.settings["windows"][0][2]),
+            "max_iterations": max(int(w[2]) for w in profile.settings["windows"]),
         }
         return [
             "--set",
