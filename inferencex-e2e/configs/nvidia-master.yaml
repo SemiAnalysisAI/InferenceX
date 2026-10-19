@@ -2030,7 +2030,7 @@ dsr1-fp4-gb200-dynamo-trt:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
-  router: { name: dynamo-router, version: "1.5.1" }
+  router: { name: dynamo-router, version: "0.8.1.post2" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
