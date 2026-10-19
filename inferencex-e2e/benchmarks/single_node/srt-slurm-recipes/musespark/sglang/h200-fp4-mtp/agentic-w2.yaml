@@ -84,7 +84,7 @@ override_tp8_c48:
         mem-fraction-static: 0.90
         swa-full-tokens-ratio: 0.1
         enable-hierarchical-cache: true
-        hicache-size: 140
+        hicache-size: 120
         prefill-decode-interval: 8
   benchmark:
     env:
