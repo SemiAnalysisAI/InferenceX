@@ -25,7 +25,6 @@ permissions:
 jobs:
   claude:
     name: Klaud Cold
-    if: github.run_attempt == 1
     runs-on: ubuntu-latest
     env:
       # Repair attempts after the initial update; the baseline is already published.
@@ -75,8 +74,17 @@ jobs:
           rm -r "$RUNNER_TEMP/plan"
           outcome_schema=$(uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud outcome-schema)
           echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
+      # A rerun of the planner's failed jobs runs only a session that recovery granted to it. A
+      # resumable session without that grant fails here, skipping every later step, so a later
+      # rerun can still resume it. lifecycle.GATE_STEP and AGENT_STEP name these steps.
+      - name: Check whether this session should run
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_PAT }}
+        run: uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud resume-check
       - name: Install Claude Code 2.1.282
         id: claude_cli
+        if: steps.gate.outputs.run == 'true'
         run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
           claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
           for attempt in 1 2; do
@@ -89,10 +97,14 @@ jobs:
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Let Klaud Cold own the candidate PR
         id: claude
+        if: steps.gate.outputs.run == 'true'
         continue-on-error: true
+        # Stops a session that runs out before the 6-hour job limit, so the steps below still run.
+        timeout-minutes: 330
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }}
+          KLAUD_RESUME: ${{ steps.gate.outputs.resume }}
         with:
           path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -116,7 +128,7 @@ jobs:
           prompt: |
             Read .github/klaud-candidate-prompt.md and follow it for the candidate in
             ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH,
-            KLAUD_TEST_NAME and KLAUD_EVIDENCE are provided in your environment.
+            KLAUD_TEST_NAME, KLAUD_EVIDENCE and KLAUD_RESUME are provided in your environment.
       - name: Reconcile agent-owned state
         if: always() && steps.claude.outcome != 'skipped'
         env:
@@ -124,7 +136,7 @@ jobs:
         run: uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud recover-current
       - name: Save sanitized candidate diagnostics
         id: diagnostics
-        if: always()
+        if: always() && steps.gate.outputs.run == 'true'
         continue-on-error: true
         env:
           KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
@@ -138,7 +150,7 @@ jobs:
             --structured-outcome-file "$RUNNER_TEMP/candidate-outcome.json" \
             --outcome "${KLAUD_OUTCOME:-unknown}" --output "$RUNNER_TEMP/candidate-diagnostics.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
+        if: always() && steps.gate.outputs.run == 'true'
         with:
           name: klaud-candidate-${{ inputs.candidate }}
           # Never upload the execution transcript or private API/scratch data.
