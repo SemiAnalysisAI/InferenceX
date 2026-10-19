@@ -1,0 +1,147 @@
+# AgentX dsv41flash sglang b200-fp4 disaggregated recipe (Dynamo frontend with the
+# KV-aware router and session affinity + SGLang, DSpark K=5) on SGLang
+# nightly-dev-20260928-81f27fb3 pinned by digest. Two prefill TP4/EP4 workers share
+# one eight-GPU node; one decode TP4/EP4 worker runs on a second node; KV moves
+# with Mooncake. Decode reserves 56 extra transfer slots and disables the radix
+# cache. The harness applies the golden acceptance length (3.51 at K=5). Select with
+# srt-recipe: disagg-variants.yaml:override_2p1d_tp4_c112.
+
+schema: 2
+base:
+  name: dsv41flash-fp4-b200-dynamo-sglang-agentx-disagg
+  model: {}
+  identity:
+    model:
+      revision: dba1be0a40aa45a94ad051997016db3960a90277
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20260929
+  slurm:
+    time_limit: '4:00:00'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  frontend:
+    type: dynamo
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: '3600'
+    enable_multiple_frontends: false
+    env:
+      DYN_NATS_REQUEST_TIMEOUT_SECS: '1800'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 2
+      gpus: 4
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        HF_HUB_CACHE: /hf_hub_cache
+      args:
+        chunked-prefill-size: 8192
+        context-length: 1048576
+        disable-cuda-graph: true
+        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+        disaggregation-transfer-backend: mooncake
+        enable-metrics: true
+        expert-parallel-size: 4
+        max-prefill-tokens: 16384
+        max-running-requests: 64
+        mem-fraction-static: 0.8
+        reasoning-parser: auto
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        swa-prefix-tails: 4096
+        tensor-parallel-size: 4
+        tool-call-parser: auto
+        trust-remote-code: true
+        watchdog-timeout: 3600
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        HF_HUB_CACHE: /hf_hub_cache
+      args:
+        context-length: 1048576
+        cuda-graph-max-bs-decode: 128
+        disable-radix-cache: true
+        disaggregation-decode-extra-slots: 56
+        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+        disaggregation-transfer-backend: mooncake
+        enable-metrics: true
+        expert-parallel-size: 4
+        max-running-requests: 112
+        mem-fraction-static: 0.85
+        reasoning-parser: auto
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        tensor-parallel-size: 4
+        tool-call-parser: auto
+        trust-remote-code: true
+        watchdog-timeout: 3600
+  sbatch_directives:
+    mem: '0'
+    exclusive: ''
+  srun_options:
+    container-remap-root: ''
+    mem: '0'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      PORT: '8000'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      PP_SIZE: '1'
+      PCP_SIZE: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+override_2p1d_tp4_c112:
+  name: disagg-b200-2p1d-tp4ep4-c112
