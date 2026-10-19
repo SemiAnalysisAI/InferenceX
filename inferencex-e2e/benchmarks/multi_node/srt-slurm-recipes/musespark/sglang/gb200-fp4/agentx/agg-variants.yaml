@@ -22,8 +22,6 @@ base:
       router-session-affinity-ttl-secs: 3600
       dyn-chat-processor: sglang
       trust-remote-code: true
-      reasoning-parser: muse
-      tool-call-parser: muse
   engine: sglang
   roles:
     agg:
