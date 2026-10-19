@@ -1621,7 +1621,7 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
       search-space:
       - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [12, 16], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [12, 16, 24, 32], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [12, 16], srt-recipe: agentic.yaml }
 
 # Native Kimi-K3 PD with TP8 workers and MoRIIO READ.

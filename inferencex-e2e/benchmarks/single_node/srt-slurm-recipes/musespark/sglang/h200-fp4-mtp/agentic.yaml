@@ -62,8 +62,8 @@ zip_override_tp8_hicache:
   roles:
     agg:
       args:
-        max-running-requests: [2, 4, 8, 16, 32, 48, 64, 96, 128]
-        cuda-graph-max-bs-decode: [2, 4, 8, 16, 32, 48, 64, 96, 128]
+        max-running-requests: [2, 4, 8, 16, 64, 96, 128]
+        cuda-graph-max-bs-decode: [2, 4, 8, 16, 64, 96, 128]
         # The host pool keeps evicted agentic prefixes for reuse across turns.
         # 160 GB per rank plus the ~30 GB DFlash draft pool exceeded the
         # ~1.39 TiB cgroup across 8 ranks; 120 GB keeps the total near 1.2 TB.
@@ -71,5 +71,21 @@ zip_override_tp8_hicache:
         hicache-size: 120
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8', '16', '24', '32', '48', '64']
+      CONC: ['1', '2', '4', '8', '32', '48', '64']
+      KV_OFFLOADING: dram
+
+zip_override_tp8_hicache_mid:
+  roles:
+    agg:
+      args:
+        max-running-requests: [32, 48]
+        cuda-graph-max-bs-decode: [32, 48]
+        mem-fraction-static: 0.90
+        swa-full-tokens-ratio: 0.1
+        enable-hierarchical-cache: true
+        hicache-size: 96
+        prefill-decode-interval: 16
+  benchmark:
+    env:
+      CONC: ['16', '24']
       KV_OFFLOADING: dram

@@ -72,6 +72,14 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 zip_override_gpu_kv:
+  roles:
+    agg:
+      args:
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        prefill-decode-interval: 64
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
     env:
       CONC: ['1', '2', '4', '8']
@@ -85,6 +93,8 @@ zip_override_hicache:
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
         hicache-size: [120, 216, 216, 216, 216, 216]
+        hicache-write-policy: [write_through, write_through, write_through, write_through, write_through, write_back]
+        prefill-decode-interval: [64, 64, 48, 32, 16, 4]
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
