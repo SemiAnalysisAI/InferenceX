@@ -48,6 +48,7 @@ base:
         PYTHONUNBUFFERED: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        HF_HUB_OFFLINE: '1'
   # Cold 533 GB weight loads from shared storage plus graph capture outlast the default.
   health_check:
     max_attempts: 1440
