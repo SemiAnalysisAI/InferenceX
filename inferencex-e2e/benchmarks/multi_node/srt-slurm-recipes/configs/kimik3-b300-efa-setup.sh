@@ -13,6 +13,12 @@ apt-get install -y -qq --no-install-recommends \
     libtool libxxhash-dev libyaml-cpp-dev libzstd-dev numactl patchelf pkg-config \
     protobuf-compiler python-is-python3 cuda-nvml-dev-13-0
 
+vllm_site_packages=$(python3 -c 'import importlib.util; from pathlib import Path; print(Path(importlib.util.find_spec("vllm").origin).parent.parent)')
+tail_patch="$(dirname "${BASH_SOURCE[0]}")/kimi-k3-latent-tail-opt-out.patch"
+if ! git -C "$vllm_site_packages" apply --reverse --check "$tail_patch" 2>/dev/null; then
+    git -C "$vllm_site_packages" apply "$tail_patch"
+fi
+
 task_dir=$(mktemp -d /tmp/kimi-k3-efa.XXXXXX)
 curl -fsSL --retry 3 --retry-all-errors \
     https://efa-installer.amazonaws.com/aws-efa-installer-1.50.0.tar.gz \
