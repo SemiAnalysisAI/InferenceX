@@ -19,6 +19,22 @@ def post(url, body, timeout=1800):
         return json.loads(response.read())
 
 
+def stream(url, body, on_first, timeout=1800):
+    """POST a streamed completion, calling on_first() at its first token; read it to the end."""
+    request = urllib.request.Request(url, data=json.dumps({**body, "stream": True}).encode(),
+                                     headers={"Content-Type": "application/json"})
+    first = True
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        for raw in response:
+            line = raw.decode(errors="replace").strip()
+            if not line.startswith("data:") or line == "data: [DONE]":
+                continue
+            if first:
+                first = False
+                on_first()
+    return {}
+
+
 def model_name(server):
     with urllib.request.urlopen(f"{server}/v1/models", timeout=60) as response:
         return json.loads(response.read())["data"][0]["id"]
@@ -42,11 +58,22 @@ def run_phase(name, server, model, conc, isl, osl, done, stats, phase_log):
     rng = random.Random(name)
     lock = threading.Lock()
     wave = threading.Barrier(conc)
+    decoding = [0]
+
+    def first_token():
+        with lock:
+            decoding[0] += 1
+            if decoding[0] == conc and osl > 1:
+                with open(phase_log, "a", buffering=1) as f:
+                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - synthetic_load - NOTICE - "
+                            f"Phase decode (decode) started | conc={conc}\n")
 
     def lane():
         while not done() and time.time() < deadline:
             try:
-                wave.wait(timeout=max(1.0, deadline - time.time()))
+                if wave.wait(timeout=max(1.0, deadline - time.time())) == 0:
+                    with lock:
+                        decoding[0] = 0
             except threading.BrokenBarrierError:
                 return
             with lock:
@@ -54,7 +81,7 @@ def run_phase(name, server, model, conc, isl, osl, done, stats, phase_log):
             body = {"model": model, "prompt": prompt, "max_tokens": osl, "min_tokens": osl,
                     "ignore_eos": True, "temperature": 0.0}
             try:
-                post(f"{server}/v1/completions", body)
+                stream(f"{server}/v1/completions", body, first_token)
                 key = "completed"
             except Exception as error:
                 key = "errors"

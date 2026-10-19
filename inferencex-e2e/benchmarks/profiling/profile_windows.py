@@ -14,6 +14,7 @@ import rate_probe
 
 PHASE_START = re.compile(r"Phase (\S+) \((\S+)\) started")
 POLL_S = 5.0
+WAVE_POLL_S = 0.5
 NO_LOG_FALLBACK_S = 900.0
 PHASE_TIMEOUT_S = 7200.0
 DECODE_SHARE = 0.9
@@ -112,7 +113,14 @@ def steady_decode(steps_dir: str) -> bool:
 def wait_for_decode(aiperf_log: str, steps_dir: str, started: float) -> tuple[float, str]:
     """Wall time steady decode was first seen after warmup began, else the measured-phase deadline."""
     wait_for_phase(aiperf_log, "warmup", started)
+    polls = 0
     while True:
+        if "decode" in phase_starts(aiperf_log):
+            return time.time(), "synthetic wave in decode"
+        polls += 1
+        if polls % int(POLL_S / WAVE_POLL_S):
+            time.sleep(WAVE_POLL_S)
+            continue
         if steady_decode(steps_dir):
             return time.time(), "steady decode"
         measured = phase_starts(aiperf_log).get("profiling")
@@ -120,7 +128,7 @@ def wait_for_decode(aiperf_log: str, steps_dir: str, started: float) -> tuple[fl
             return time.time(), "measured-phase deadline"
         if time.time() - started > PHASE_TIMEOUT_S:
             return time.time(), "decode never steady"
-        time.sleep(POLL_S)
+        time.sleep(WAVE_POLL_S)
 
 
 class StepCounter:
