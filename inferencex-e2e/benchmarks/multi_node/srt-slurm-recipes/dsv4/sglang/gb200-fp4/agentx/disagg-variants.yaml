@@ -297,7 +297,7 @@ override_1p1d_dep8_dep16_c128:
         dp-size: 8
         ep-size: 8
         # 0.80 caps prefill KV at 334k tokens, below the longest AgentX warmup prompts.
-        mem-fraction-static: 0.815
+        mem-fraction-static: 0.83
     decode:
       nodes: 4
       gpus: 16
