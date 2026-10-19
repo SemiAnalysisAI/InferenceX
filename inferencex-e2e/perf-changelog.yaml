@@ -10139,3 +10139,15 @@
     - "Re-sweep Muse Spark Open B200 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image and search space are unchanged."
     - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4291
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Track the updated GLM-5.2 standalone recipe (ROCm/ATOM PR 2632) on the MI355X ATOM AgentX config, on rocm/atom-dev:nightly_202610181506 (was nightly_202609211553)."
+    - "TP4 C1 and C2 run the GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) at 3 draft tokens, golden AL 2.99; C1 joins the TP4 arm. Every other point sets ATOM_MONO_ENABLE=0, which ATOM otherwise defaults on."
+    - "TP4 C4 and C8 stay at 5 draft tokens (AL 3.61) and C10 at 4 (AL 3.33) on the production path; the TP8 arm at C1, C2 and C4 is unchanged."
+    - "Restore the TP4+DCP4 arm at C16, C24, C32 and C40 (4 draft tokens, AL 3.33) and C48 (3 draft tokens, AL 2.99) with ATOM_DCP_PREFILL_QREP=1 and the LMCache DRAM tier (0.5.6.dev139+gf22dec28) at 256 GiB per rank through extra-kv-connectors."
+    - "dram-utilization 0.171 -> 0.74, so TOTAL_CPU_DRAM_GB is 1109 GB per TP4 server, covering the 4 x 256 GiB = 1099.5 GB LMCache tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
