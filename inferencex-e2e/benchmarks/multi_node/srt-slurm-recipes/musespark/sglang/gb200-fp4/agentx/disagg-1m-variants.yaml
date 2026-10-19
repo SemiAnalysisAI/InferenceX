@@ -162,3 +162,22 @@ override_1p1d_c8:
       args:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+
+override_1p1d_c8_mnnvl:
+  roles:
+    prefill:
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+      args:
+        disaggregation-transfer-backend: mooncake
+    decode:
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+      args:
+        disaggregation-transfer-backend: mooncake
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
