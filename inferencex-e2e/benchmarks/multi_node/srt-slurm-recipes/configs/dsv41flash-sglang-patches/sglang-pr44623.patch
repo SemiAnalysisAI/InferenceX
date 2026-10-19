@@ -1,0 +1,290 @@
+diff --git a/python/sglang/srt/arg_groups/deepseek_v4_hook.py b/python/sglang/srt/arg_groups/deepseek_v4_hook.py
+index e9e04ec..21c6054 100644
+--- a/python/sglang/srt/arg_groups/deepseek_v4_hook.py
++++ b/python/sglang/srt/arg_groups/deepseek_v4_hook.py
+@@ -295,7 +295,6 @@ def validate_deepseek_v41_features(server_args: ServerArgs) -> None:
+             # ROCm replays hits in a forward of their own, which only the hitting
+             # attention-DP ranks would enter; CUDA folds them into the extend.
+             ("DP attention on ROCm", get_platform().is_hip and attn_dp_enabled_of(cfg)),
+-            ("external cache linker", cfg.enable_unified_cache_external_linker),
+             ("unified memory", cfg.enable_unified_memory),
+             # Decode receives the last SWA window from prefill and never replays.
+             ("PD decode", cfg.disaggregation_mode == "decode"),
+diff --git a/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py b/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py
+index d552662..01219f7 100644
+--- a/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py
++++ b/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py
+@@ -794,14 +794,10 @@ def _dsv4_indexer_regions(kvcache: Any, page_size: int) -> list[_IndexerRegion]:
+     ]
+ 
+ 
+-def _dsv4_low_ratio_entries(
+-    kvcache: Any, page_size: int, num_host_pages: int, transfer_layer_id_max: int
+-):
+-    """Mirror each shared source once, in FULL-page units. Prefixes end on an even
+-    page boundary, so ratio-2's request-scoped ring is rebuilt, not cached."""
++def _dsv4_low_ratio_regions(kvcache: Any, page_size: int):
++    """Expose shared source KV and indexer buffers in FULL-page units."""
+     import torch
+ 
+-    entries = []
+     for ratio, names in (
+         (
+             1,
+@@ -852,24 +848,35 @@ def _dsv4_low_ratio_entries(
+                 )
+             regions.append((name, index_pool, rows))
+         for name, device_pool, buffers in regions:
+-            entries.append(
+-                build_pool_entry(
+-                    name=name,
+-                    host_pool=DeepSeekV4PagedHostPool(
+-                        pool_name=str(name),
+-                        device_buffers=buffers,
+-                        item_bytes=buffers[0].shape[1] * buffers[0].element_size(),
+-                        num_host_pages=num_host_pages,
+-                        slot_page_size=page_size,
+-                        layout=get_memory().hicache_mem_layout,
+-                        allocator_type=_get_allocator_type(),
+-                        page_aligned_only=True,
+-                    ),
+-                    device_pool=device_pool,
+-                    layer_mapping=layer_mapping,
+-                    transfer_layer_id_max=transfer_layer_id_max,
+-                )
++            yield name, device_pool, buffers, layer_mapping
++
++
++def _dsv4_low_ratio_entries(
++    kvcache: Any, page_size: int, num_host_pages: int, transfer_layer_id_max: int
++):
++    """Mirror shared KV; ratio-2 request state is rebuilt at page boundaries."""
++    entries = []
++    for name, device_pool, buffers, layer_mapping in _dsv4_low_ratio_regions(
++        kvcache, page_size
++    ):
++        entries.append(
++            build_pool_entry(
++                name=name,
++                host_pool=DeepSeekV4PagedHostPool(
++                    pool_name=str(name),
++                    device_buffers=buffers,
++                    item_bytes=buffers[0].shape[1] * buffers[0].element_size(),
++                    num_host_pages=num_host_pages,
++                    slot_page_size=page_size,
++                    layout=get_memory().hicache_mem_layout,
++                    allocator_type=_get_allocator_type(),
++                    page_aligned_only=True,
++                ),
++                device_pool=device_pool,
++                layer_mapping=layer_mapping,
++                transfer_layer_id_max=transfer_layer_id_max,
+             )
++        )
+     return entries
+ 
+ 
+diff --git a/python/sglang/srt/mem_cache/hybrid_cache/linker_pool_assembler.py b/python/sglang/srt/mem_cache/hybrid_cache/linker_pool_assembler.py
+index 9d66379..334f0df 100644
+--- a/python/sglang/srt/mem_cache/hybrid_cache/linker_pool_assembler.py
++++ b/python/sglang/srt/mem_cache/hybrid_cache/linker_pool_assembler.py
+@@ -264,6 +264,7 @@ def _build_deepseek_v4_device_pool_group(
+     from sglang.srt.mem_cache.hybrid_cache.hybrid_pool_assembler import (
+         _dsv4_compressed_region_buffers,
+         _dsv4_indexer_regions,
++        _dsv4_low_ratio_regions,
+         _require_single_row_dsv4_swa_pages,
+         _resolve_deepseek_v4_layer_mappings,
+     )
+@@ -273,8 +274,11 @@ def _build_deepseek_v4_device_pool_group(
+ 
+     mappings = _resolve_deepseek_v4_layer_mappings(kvcache)
+     is_unified_kv = getattr(kvcache, "_unified_kv", False)
++    # Encoder SWA replay keeps the target window per request; the draft SWA is
++    # dropped with it, a known draft accept-length cost.
++    has_paged_swa = not is_unified_kv and kvcache.swa_kv_pool is not None
+     entries = []
+-    if not is_unified_kv:
++    if has_paged_swa:
+         _require_single_row_dsv4_swa_pages(
+             logical_page_size=kvcache.swa_page_size,
+             physical_page_size=kvcache.swa_kv_pool.page_size,
+@@ -321,31 +325,36 @@ def _build_deepseek_v4_device_pool_group(
+                 )
+             )
+ 
+-    c4_buffers, _ = _dsv4_compressed_region_buffers(kvcache, 4)
+-    c128_buffers, _ = _dsv4_compressed_region_buffers(kvcache, 128)
+-
+-    add(
+-        PoolName.DEEPSEEK_V4_C4,
+-        PoolName.KV,
+-        kvcache.c4_kv_pool,
+-        c4_buffers,
+-        mappings.c4,
+-    )
+-    for region in _dsv4_indexer_regions(kvcache, page_size):
++    if mappings.c4:
++        c4_buffers, _ = _dsv4_compressed_region_buffers(kvcache, 4)
+         add(
+-            region.name,
++            PoolName.DEEPSEEK_V4_C4,
+             PoolName.KV,
+-            kvcache.c4_indexer_kv_pool,
+-            region.device_buffers,
++            kvcache.c4_kv_pool,
++            c4_buffers,
+             mappings.c4,
+         )
+-    add(
+-        PoolName.DEEPSEEK_V4_C128,
+-        PoolName.KV,
+-        kvcache.c128_kv_pool,
+-        c128_buffers,
+-        mappings.c128,
+-    )
++        for region in _dsv4_indexer_regions(kvcache, page_size):
++            add(
++                region.name,
++                PoolName.KV,
++                kvcache.c4_indexer_kv_pool,
++                region.device_buffers,
++                mappings.c4,
++            )
++    if mappings.c128:
++        c128_buffers, _ = _dsv4_compressed_region_buffers(kvcache, 128)
++        add(
++            PoolName.DEEPSEEK_V4_C128,
++            PoolName.KV,
++            kvcache.c128_kv_pool,
++            c128_buffers,
++            mappings.c128,
++        )
++    for name, device_pool, buffers, layer_mapping in _dsv4_low_ratio_regions(
++        kvcache, page_size
++    ):
++        add(name, PoolName.KV, device_pool, buffers, layer_mapping)
+ 
+     # fp8 two-pool unified_kv: one row index addresses both kv_buffer (fp8 nope) and
+     # kv_buffer_rope (bf16 rope), but unified_region_buffers() above returns the nope
+@@ -384,6 +393,13 @@ def _build_deepseek_v4_device_pool_group(
+             ),
+             mappings.c4_state,
+         )
++    if not has_paged_swa and any(
++        entry.indices_from_pool == PoolName.SWA for entry in entries
++    ):
++        raise ValueError(
++            "DeepSeek-V4 compress state pools take SWA page indices, which "
++            "encoder SWA replay does not keep."
++        )
+     return DevicePoolGroup(
+         entries,
+         mappings.transfer_layer_id_max,
+diff --git a/python/sglang/srt/mem_cache/storage/mooncake_store/mooncake_direct_linker.py b/python/sglang/srt/mem_cache/storage/mooncake_store/mooncake_direct_linker.py
+index f95b00a..3aca7d5 100644
+--- a/python/sglang/srt/mem_cache/storage/mooncake_store/mooncake_direct_linker.py
++++ b/python/sglang/srt/mem_cache/storage/mooncake_store/mooncake_direct_linker.py
+@@ -416,6 +416,9 @@ class MooncakeDirectLinker(UnifiedCacheLinker):
+     def pop_completed_offload(self) -> bool:
+         return self.offload_results.get_nowait()
+ 
++    def restores_swa(self) -> bool:
++        return PoolName.SWA in self.pools
++
+     def reset(self) -> None:
+         self.pending_loads.clear()
+         self.load_queue.join()
+diff --git a/python/sglang/srt/mem_cache/storage/umbp/umbp_direct_linker.py b/python/sglang/srt/mem_cache/storage/umbp/umbp_direct_linker.py
+index 204d533..5a74d32 100644
+--- a/python/sglang/srt/mem_cache/storage/umbp/umbp_direct_linker.py
++++ b/python/sglang/srt/mem_cache/storage/umbp/umbp_direct_linker.py
+@@ -65,20 +65,20 @@ def _ordered_layers(entry) -> list[int]:
+             f"UMBP pool {entry.name} components have different layer counts."
+         )
+     pool_layer_count = component_lengths.pop()
+-    if pool_layer_count != len(entry.layer_mapping):
+-        raise ValueError(
+-            f"UMBP pool {entry.name} has {pool_layer_count} buffers per component "
+-            f"but {len(entry.layer_mapping)} mapped layers."
+-        )
+-    by_buffer = {
+-        buffer_index: logical_layer
+-        for logical_layer, buffer_index in entry.layer_mapping.items()
+-    }
++    by_buffer = {}
++    for logical_layer, mapped in entry.layer_mapping.items():
++        indices = [mapped] if isinstance(mapped, int) else list(mapped)
++        for index in indices:
++            if index in by_buffer:
++                raise ValueError(
++                    f"UMBP pool {entry.name} maps buffer {index} more than once."
++                )
++            by_buffer[index] = logical_layer
+     if sorted(by_buffer) != list(range(pool_layer_count)):
+         raise ValueError(
+             f"UMBP pool {entry.name} layer mapping is not a contiguous bijection."
+         )
+-    return [by_buffer[index] for index in range(pool_layer_count)]
++    return list(dict.fromkeys(by_buffer[index] for index in range(pool_layer_count)))
+ 
+ 
+ @dataclass
+@@ -712,15 +712,17 @@ class UMBPDirectLinker(UnifiedCacheLinker):
+         entry = self.pools[plan.name]
+         items: list[list[tuple[int, int, int, int]]] = []
+         for logical_layer in layers:
+-            buffer_index = entry.layer_mapping.get(logical_layer)
+-            if buffer_index is None:
++            mapped = entry.layer_mapping.get(logical_layer)
++            if mapped is None:
+                 continue
++            indices = [mapped] if isinstance(mapped, int) else list(mapped)
+             items.append(
+                 [
+-                    (*component[buffer_index], offsets[buffer_index])
++                    (*component[index], offsets[index])
+                     for component, offsets in zip(
+                         entry.buffer_meta, entry._component_offsets
+                     )
++                    for index in indices
+                 ]
+             )
+         return items
+@@ -989,6 +991,9 @@ class UMBPDirectLinker(UnifiedCacheLinker):
+     def pop_completed_offload(self) -> bool:
+         return self._offload_results.get_nowait()
+ 
++    def restores_swa(self) -> bool:
++        return PoolName.SWA in self.pools
++
+     def reset(self) -> None:
+         self._pending.clear()
+         self._load_queue.join()
+diff --git a/python/sglang/srt/mem_cache/unified_cache/unified_cache_linker.py b/python/sglang/srt/mem_cache/unified_cache/unified_cache_linker.py
+index 3d31507..6661b8c 100644
+--- a/python/sglang/srt/mem_cache/unified_cache/unified_cache_linker.py
++++ b/python/sglang/srt/mem_cache/unified_cache/unified_cache_linker.py
+@@ -189,6 +189,10 @@ class UnifiedCacheLinker(ABC):
+     def close(self) -> None:
+         """Quiesce all transfers and release backend resources."""
+ 
++    def restores_swa(self) -> bool:
++        """Whether the store carries SWA pages; False tombstones restored tails."""
++        return True
++
+ 
+ class ExternalCacheHitMarker(NamedTuple):
+     """What ``match`` found in the external store, consumed by ``load_back``.
+@@ -228,8 +232,9 @@ class UnifiedCacheLinkerWrapper:
+         self.cache = cache
+         self.cache_linker = cache_linker
+         swa = cache.components.get(ComponentType.SWA)
+-        self._skip_swa = swa is not None and is_swa_req_ring(
+-            cache.token_to_kv_pool_allocator
++        self._skip_swa = swa is not None and (
++            is_swa_req_ring(cache.token_to_kv_pool_allocator)
++            or not cache_linker.restores_swa()
+         )
+         self._components = tuple(
+             component

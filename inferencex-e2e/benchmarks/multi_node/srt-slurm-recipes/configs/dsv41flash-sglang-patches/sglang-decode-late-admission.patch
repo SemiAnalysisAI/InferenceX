@@ -1,0 +1,48 @@
+diff --git a/python/sglang/srt/disaggregation/decode.py b/python/sglang/srt/disaggregation/decode.py
+index 8fbeddb2df..1046c7516c 100644
+--- a/python/sglang/srt/disaggregation/decode.py
++++ b/python/sglang/srt/disaggregation/decode.py
+@@ -3084,6 +3084,8 @@ class SchedulerDisaggregationDecodeMixin:
+             tmp_batch, tmp_result = self.result_queue.popleft()
+             self.process_batch_result(tmp_batch, tmp_result)
+ 
++        late_admission = envs.SGLANG_ENABLE_DISAGG_DECODE_LATE_ADMISSION.get()
++
+         while True:
+             if self.gracefully_exit:
+                 break
+@@ -3097,7 +3099,8 @@ class SchedulerDisaggregationDecodeMixin:
+             if self._engine_paused:
+                 self._record_scheduler_state_for_paused_engine()
+                 continue
+-            self.process_decode_queue()
++            if not late_admission:
++                self.process_decode_queue()
+ 
+             # Get the next batch to run
+             plan = self.get_next_disagg_decode_batch_to_run(
+@@ -3126,6 +3129,11 @@ class SchedulerDisaggregationDecodeMixin:
+                 batch_result = None
+                 self._sched_idled = True
+ 
++            # Admit while the launched forward runs, so one rank's admission work
++            # does not hold every DP rank at the next MLP sync.
++            if late_admission:
++                self.process_decode_queue()
++
+             # Process the last batch
+             if self.last_batch:
+                 if not disable_overlap_for_batch:
+diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
+index 8b73503ecf..8ab999624c 100644
+--- a/python/sglang/srt/environ.py
++++ b/python/sglang/srt/environ.py
+@@ -677,6 +677,8 @@ class Envs:
+     SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH = EnvBool(False)
+     # Opt-in: keep receiving prefill requests while forward results are pending.
+     SGLANG_ENABLE_DISAGG_PREFILL_CONTINUOUS_INPUT_POLLING = EnvBool(False)
++    # Opt-in: admit transferred decode requests after launching the step's forward.
++    SGLANG_ENABLE_DISAGG_DECODE_LATE_ADMISSION = EnvBool(False)
+     # Override NVML Confidential Computing autodetection. None = autodetect.
+     SGLANG_FORCE_CONFIDENTIAL_COMPUTE = EnvBool(None)
+ 
