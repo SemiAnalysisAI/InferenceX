@@ -60,6 +60,11 @@ echo "$state"
     "scancel": r"""
 printf '%s\n' "$*" >> "$FAKE_LOG_DIR/scancel.log"
 [[ -n "${FAKE_ACTIVE:-}" ]] && rm -f "$FAKE_ACTIVE"
+# A slow cleanup: hold until the test removes the file, for at most a minute.
+if [[ -n "${FAKE_SCANCEL_HOLD:-}" ]]; then
+  touch "$FAKE_SCANCEL_HOLD"
+  for _ in {1..600}; do [[ -e "$FAKE_SCANCEL_HOLD" ]] || break; sleep 0.1; done
+fi
 exit 0
 """,
     "srun": r"""
@@ -150,8 +155,11 @@ with open(os.path.join(os.environ["FAKE_LOG_DIR"], "sbatch.log"), "a") as handle
 output = next(arg.split("=", 1)[1] for arg in args if arg.startswith("--output="))
 chdir = next(arg.split("=", 1)[1] for arg in args if arg.startswith("--chdir="))
 env = {**os.environ, "SLURM_JOB_ID": "4242"}
-with open(output, "w") as log:
-    rc = subprocess.run(["bash", args[-1]], cwd=chdir, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+if os.environ.get("FAKE_BATCH_LOST"):
+    rc = 1
+else:
+    with open(output, "w") as log:
+        rc = subprocess.run(["bash", args[-1]], cwd=chdir, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
 with open(os.path.join(os.environ["FAKE_LOG_DIR"], "batch-rc"), "w") as handle:
     handle.write(str(rc))
 print("4242")

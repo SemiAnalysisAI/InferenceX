@@ -278,6 +278,7 @@ jobs:
       - name: Collect AL matrix
         env:
           RUNNER_NAME: ${{ runner.name }}
+          INFERENCEX_TOOLING: ${{ github.workspace }}/.launch-tooling/inferencex-e2e
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
@@ -285,7 +286,8 @@ jobs:
           set -eo pipefail
           export GPU_COUNT="$TP"
           source benchmarks/runtime_settings.sh
-          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
+          source "$INFERENCEX_TOOLING/benchmarks/forward_signals.sh"
+          forward_signals "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ ! -f "speedbench-reference-al.yaml" ]; then
             echo "AL collection failed: speedbench-reference-al.yaml not produced." >&2

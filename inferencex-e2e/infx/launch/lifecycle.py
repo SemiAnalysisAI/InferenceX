@@ -25,8 +25,10 @@ class Lifecycle:
     """Runs a launch's cleanups LIFO on every exit path and owns its exit code and ``event``.
 
     The first nonzero recorded code wins; a failed cleanup turns 0 into 1 and never raises.
-    A signal during the body runs the cleanups, then raises ``SystemExit(128 + signum)``.
-    Signals arriving during the cleanups are held off until they finish, then dropped.
+    A signal during the body writes the interrupted launch's record at once, then runs the
+    cleanups and raises ``SystemExit(128 + signum)``: a runner that cancels a step kills it
+    about ten seconds after signalling it. Otherwise the record is checkpointed before the
+    cleanups. Signals arriving during the cleanups are held off until they finish, then dropped.
     """
 
     def __init__(self, event: JobEventBuilder | None = None) -> None:
@@ -73,6 +75,9 @@ class Lifecycle:
             return
         for sig in _SIGNALS:
             signal.signal(sig, signal.SIG_IGN)
+        # Unwinding can wait on child processes; the record must not wait with it.
+        self.event.interrupted(signum)
+        self.event.write(128 + signum)
         raise _Interrupted(signum)
 
     def __enter__(self) -> Self:
@@ -101,6 +106,9 @@ class Lifecycle:
         if self._signum:
             self.event.interrupted(self._signum)
             print(f"Received signal {self._signum}; running cleanups", file=sys.stderr)
+            self.event.write(128 + self._signum)
+        else:
+            self.event.checkpoint()
         try:
             self._stack.close()
         finally:

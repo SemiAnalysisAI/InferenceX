@@ -44,6 +44,7 @@ def _run(runner_config: Path | None) -> int:
         request = LaunchRequest.from_env()
         cluster = resolve_cluster(request.runner_name, runner_config)
         event.set(cluster=cluster.id)
+        event.checkpoint()
         rc = launch(cluster, request, event)
     except RequestError as error:
         event.error(error)

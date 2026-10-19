@@ -1,7 +1,7 @@
 """Join a sweep's per-job ``job_event.json`` records into one JSON Lines file.
 
-Given the run, each record also gains what only its finished GitHub job knows, failing if
-its job failed after the launcher succeeded, and every benchmark or eval job that left no
+Given the run, each record also gains what only its finished GitHub job knows, and fails with
+its job if its launcher succeeded or never finished; every benchmark or eval job that left no
 record gets one synthesized from the run's job listing.
 Given a summary file, the job counts and a table of the failed jobs are appended to it.
 Records are diagnostics: a listing that cannot be read leaves the records as they are, and a
@@ -28,6 +28,7 @@ FILENAME = "job_event.json"
 SCHEMA_VERSION = 2
 NO_RECORD = "NoLauncherRecord"
 STEP_FAILED = "StepFailed"
+INTERRUPTED = "Interrupted"
 # The names benchmark-tmpl.yml and benchmark-multinode-tmpl.yml give their jobs: an optional
 # klaud marker, the priority, model prefix, precision and runner, then the concurrency last.
 _BENCHMARK_JOB = re.compile(
@@ -60,7 +61,8 @@ def reconcile(
 ) -> list[dict[str, Any]]:
     """``events`` with their jobs' outcomes, then a record for each benchmark job without one.
 
-    A record whose launcher succeeded fails with its job, at the job's failed step.
+    A record whose launcher succeeded, or never finished and so has no outcome, fails with its
+    job at the job's failed step.
     """
     events = [dict(event) for event in events]
     synthesized = []
@@ -75,9 +77,11 @@ def reconcile(
         outcome = _outcome(job)
         if isinstance(event.get("github"), dict):
             event["github"] = {**event["github"], **outcome}
-        if event.get("outcome") == "success" and outcome["conclusion"] in _FAILED:
+        launched = event.get("outcome")
+        if launched != "failure" and outcome["conclusion"] in _FAILED:
             event["outcome"] = "failure"
-            event["error"] = event.get("error") or _failed_after_launch(outcome)
+            if not event.get("error"):
+                event["error"] = _job_error(outcome, launched=launched == "success")
     return [*events, *synthesized]
 
 
@@ -112,16 +116,25 @@ def _outcome(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _failed_after_launch(outcome: dict[str, Any]) -> dict[str, Any]:
-    """The error of a job that failed in a later step than its launcher, or outside any step."""
-    step = outcome["failed_step"]
+def _job_error(outcome: dict[str, Any], *, launched: bool) -> dict[str, Any]:
+    """The error of a failed job its record does not explain.
+
+    A later step failed a job whose launcher succeeded; a cancel, timeout or kill stopped one
+    whose launcher never finished.
+    """
+    conclusion, step = outcome["conclusion"], outcome["failed_step"]
     where = f" at step {step!r}" if step else ""
+    if launched:
+        kind, when, retriable = STEP_FAILED, "after the launcher succeeded", False
+    else:
+        kind, when = INTERRUPTED, "before the launcher finished"
+        retriable = True if conclusion in {"cancelled", "timed_out"} else None
     return {
         "stage": step or "runner",
-        "type": STEP_FAILED,
-        "message": f"job concluded {outcome['conclusion']}{where} after the launcher succeeded",
+        "type": kind,
+        "message": f"job concluded {conclusion}{where} {when}",
         "exit_code": None,
-        "retriable": False,
+        "retriable": retriable,
         "evidence": outcome["job_url"],
     }
 

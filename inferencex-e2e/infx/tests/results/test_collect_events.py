@@ -142,6 +142,38 @@ def test_a_job_that_fails_after_its_launcher_succeeded_fails_its_record_and_summ
     ]  # fmt: skip
 
 
+def test_a_record_its_launcher_never_finished_fails_with_its_cancelled_timed_out_or_failed_job(tmp_path, monkeypatch):
+    name = "single-node 1k1k / (img...) / p5.000 | dsr1 fp8 cluster:h200-dgxc sgl TP8    c{}"
+    jobs = [
+        job(31, name.format(1), "cancelled", [("Launch job script", "cancelled")]),
+        job(32, name.format(2), "timed_out", [("Launch job script", "cancelled")]),
+        job(33, name.format(4), "failure", [("Launch job script", "failure")]),
+        job(34, name.format(8), "success", [("Launch job script", "success")]),
+    ]  # fmt: skip
+    serve_jobs(tmp_path, monkeypatch, jobs)
+    recorded = {"stage": "run", "type": "JobNodeFail", "message": "lost", "exit_code": None, "retriable": True}
+    for artifact_name, job_id, error in (("a", 31, None), ("b", 32, recorded), ("c", 33, None), ("d", 34, None)):
+        artifact = tmp_path / "job_events" / f"job_event_{artifact_name}"
+        artifact.mkdir(parents=True)
+        record = {"outcome": None, "error": error, "stages": {"prepare": 4.5, "run": 0.0}, "github": {"job_id": job_id}}
+        (artifact / "job_event.json").write_text(json.dumps(record))
+    output = tmp_path / "events.jsonl"
+
+    assert main([str(tmp_path / "job_events"), str(output), "--run", "https://github.com", "o/r", "77"]) == 0
+
+    cancelled, timed_out, failed, succeeded = [json.loads(line) for line in output.read_text().splitlines()]
+    assert (cancelled["outcome"], cancelled["stages"]) == ("failure", {"prepare": 4.5, "run": 0.0})
+    assert cancelled["error"] == {
+        "stage": "Launch job script", "type": "Interrupted",
+        "message": "job concluded cancelled at step 'Launch job script' before the launcher finished",
+        "exit_code": None, "retriable": True, "evidence": f"{RUN}/job/31",
+    }  # fmt: skip
+    assert (timed_out["outcome"], timed_out["error"]) == ("failure", recorded)
+    assert (failed["outcome"], failed["error"]["type"], failed["error"]["retriable"]) == ("failure", "Interrupted", None)
+    assert (succeeded["outcome"], succeeded["error"]) == (None, None)
+    assert JobEvent.model_validate(cancelled).error.retriable is True
+
+
 def test_summary_counts_the_jobs_and_lists_failures_with_retriable_ones_last(tmp_path, monkeypatch):
     jobs = [
         job(11, "single-node 1k1k / (img...) / p5.000 | dsr1 fp8 cluster:h200-dgxc sgl TP8    c4", "success", []),
