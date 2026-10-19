@@ -19,9 +19,19 @@ Use the canonical generator, inferencex-e2e/configs/runners.yaml and public Open
 for all points, exact cluster routes and physical node demand; never invent aliases or
 substitute sibling clusters. The planner already owns the family claim; leave claim refs
 to the lifecycle helper. Recheck all open PRs before atomically creating the supplied
-exact candidate branch at its base SHA. An existing branch means stop, not takeover.
+exact candidate branch at its base SHA. An existing branch means stop, not takeover,
+unless KLAUD_RESUME=true.
 Create one draft PR after a real change, titled `[Klaud Cold] English / 简体中文`.
 Start its body with only `<!-- klaud-baseline -->`; the report helper fills it.
+
+When KLAUD_RESUME=true, an earlier session ended (ran out or was cancelled) before finishing
+this candidate and this session continues it in the same run. The branch, draft PR, frozen
+baseline (prepare-baseline returns it), attempt comments and runs are yours; never recreate
+them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt counter, repairs used
+and run IDs from your attempt comments; a commit pushed after the head of your last attempt
+comment, other than the perf-changelog entry, counts as a used repair. Inspect those runs
+(queued, running, preempted or finished) and continue. Repair budget, infrastructure-retry
+limits and failure rules carry over.
 
 Compare the actual old/new bundled engine source at its tags/commits in vLLM, SGLang,
 ATOM or TensorRT-LLM, including coupled dependencies and used flags/config parsers.
@@ -30,6 +40,8 @@ Release notes alone are insufficient; retain source links and provenance uncerta
 attempt comments. Pin mutable image tags by digest. Before GPU dispatch, inspect the
 actual launcher/recipe's effective image, staged weights/config/tokenizer and mount paths.
 Missing assets are readiness-blocked; never map to an older image or different weights.
+When the model checkpoint itself is not staged on the target cluster, add
+`reason-code: weights-missing` so the planner pauses that model and precision on that hardware.
 Check the exact selected launch path for existing engine patches as well as proposed ones.
 
 Edit only the family's master image and its already referenced, unshared recipe's
@@ -43,18 +55,22 @@ overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
 workspace permissions and artifact contracts; follow the CODEOWNER checklist.
 
-Before every PR/branch mutation or cancellation, re-read labels. `klaud-handoff` means
-maintainer ownership: leave PR/branch/labels/jobs intact, report handoff and stop.
-Never add or remove it yourself.
+Before every PR/branch mutation or cancellation, re-read labels. `klaud-abort` means a
+maintainer stopped this candidate: stop immediately without further changes; the job's
+cleanup cancels your runs and closes the PR. Never add or remove that label yourself.
 
-Check capacity before edits/branch/PR creation, every targeted dispatch, the final label
-transition and capacity-related recovery: `check-capacity --cluster NAME` (the runners.yaml
-cluster:NAME label without its prefix; repeat for ALL actual targets). It passes while the
-fresh scheduler snapshot shows running plus queued nodes at or below 200% of schedulable nodes.
-Queue eligible work with normal scheduler controls; no priority overrides.
-If the check fails, report capacity-deferred and call finish. A utilization increase after
-dispatch never justifies cancelling healthy work. A benchmark capacity error alone is
-insufficient: recheck capacity before deciding to defer.
+The planner checks capacity once, when it selects a candidate; never check or defer for
+capacity inside this session. Klaud runs at the lowest scheduler priority: dispatch every
+targeted attempt and the final sweep normally and let them wait at the back of the queue.
+Queue eligible work with normal scheduler controls; no priority overrides. A long queue or a
+benchmark capacity error is never a reason to stop.
+
+Preemption is expected. A run, attempt or job cancelled by anyone but you, including the
+scheduler, a maintainer's cancel-and-rerun and GitHub's 24-hour queue limit, is preempted
+work, not a failure. If someone else already started a rerun, wait for it and never cancel it.
+Otherwise rerun the cancelled jobs on the same run and head (`gh run rerun RUN --failed`).
+Preemption reruns use neither repairs nor infrastructure retries and never count toward the
+same failure twice. Fail-fast cancellations after a real failure are not preemption.
 
 Freeze the COMPLETE original public baseline point roster before attempts, using
 candidate.source.date, verified old-image producer IDs/SHAs and full recipe/workload/topology/
@@ -96,8 +112,9 @@ One initial update plus $MAX_REPAIRS repairs TOTAL, including final-sweep repair
 A confirmed transient client-download/runner/network retry does not consume a recipe
 repair: keep the same head and classify it as infrastructure-retry, at most two per attempt.
 Do not repeat deterministic failures as infrastructure retries. Stop after validation,
-exhausted repairs, failed capacity, or the same failure twice without progress.
-Benchmarks may take three hours. Do not cancel healthy work to fit the agent job limit.
+exhausted repairs, or the same failure twice without progress.
+Benchmarks may take three hours. Do not cancel healthy or queued work to fit the agent job
+limit; leave it queued when the session ends, and a later session resumes it.
 
 After smoke benchmarks AND selected evals pass, append one exact-family inferencex-e2e/perf-changelog.yaml
 entry at the physical tail with this PR URL, preserving every prior byte. Omit scenario,
@@ -107,9 +124,8 @@ one essential compatibility adjustment. Do not include evidence, benchmark resul
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
-Recheck capacity, keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label.
-Only use full-sweep-enabled for a documented infrastructure exception where healthy jobs
-must survive sibling failures. Never switch labels while owned jobs are active.
+Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
+sweep label. Never switch labels while owned jobs are active.
 Fail-fast cancels siblings within a matrix, not every matrix; wait for all owned jobs.
 Classify the first failure, not the resulting cancellations. Retry cancelled points too;
 for an infrastructure retry of a cancelled run, rerun the whole attempt on the same head.
@@ -135,7 +151,8 @@ legends, boilerplate, limitations and redundant milestones. Briefly note failure
 reasons; preserve sources and uncertainty. Report observations on material changes or after
 30 minutes waiting. Improvement is best effort; there is no regression rejection gate.
 
-On terminal resolve/baseline evidence, stop investigating. Finalize attempts, write
+On terminal resolve/baseline evidence, stop investigating. Finalize attempts; the final
+attempt's Next states why you stopped, because finish shows it as the closing reason. Write
 CandidateOutcome to $KLAUD_EVIDENCE/requested-outcome.json and run `finish --outcome-file
 "$KLAUD_EVIDENCE/requested-outcome.json"`. Only finish may mark ready after verifying complete
 artifacts and publishing the final report BEFORE reviews begin.

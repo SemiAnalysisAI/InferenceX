@@ -474,6 +474,7 @@ clusters:
       exclusive: true
       gres: "gpu:{gpus}"
       volumes:
+        hf-home: {path: ~/.cache/huggingface}
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/aiperf-cache}
         scratch: {path: /scratch/models, visibility: node-local}
