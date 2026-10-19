@@ -8547,6 +8547,22 @@ mimov2.6flash-fp4-b200-sglang-agentic:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
 
+mimov2.6flash-fp4-b200-vllm-agentic:
+  image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+  model: XiaomiMiMo/MiMo-V2.6-Flash-RL
+  model-prefix: mimov2.6flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: mimov2.6flash/vllm/b200-fp4
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 4], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 1, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+
 dsv41flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7
   model: deepseek-ai/DeepSeek-V4.1-Flash
