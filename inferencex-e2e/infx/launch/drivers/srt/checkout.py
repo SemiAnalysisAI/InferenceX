@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import shutil
@@ -9,8 +10,10 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
 
+from infx.bench.proc import echo
 from infx.config import repository_root
 from infx.launch import proc
 from infx.launch.context import LaunchError
@@ -91,6 +94,7 @@ def prepare_checkout(run: SrtRun, destination: Path, *, power: bool) -> Checkout
     if head != commit:
         raise LaunchError(f"srt-slurm checkout is at {head}, expected {commit}")
     print(f"Using srt-slurm revision {commit}", flush=True)
+    run.life.event.set_versions(srt_slurm_sha=head)
     sha_file = run.workspace / "srt-slurm-sha.txt"
     sha_file.write_text(f"{head}\n")
     if power:
@@ -146,10 +150,20 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
     run.prepend_path(venv / "bin")
     if shutil.which("srtctl", path=run.env["PATH"]) is None:
         raise LaunchError("Failed to install srtctl")
+    run.life.event.set_versions(srtctl_version=_installed_version(venv, "srtctl"))
+
+
+def _installed_version(venv: Path, name: str) -> str | None:
+    """The version of ``name`` installed in ``venv``, read from its metadata."""
+    paths = [str(path) for path in venv.glob("lib/python*/site-packages")]
+    with contextlib.suppress(OSError):
+        for distribution in metadata.distributions(name=name, path=paths):
+            return distribution.version
+    return None
 
 
 def _run_logged(argv: list[str], log: Path, *, env: dict[str, str], cwd: Path) -> int:
-    proc.echo(argv, env)
+    echo(argv, env)
     with log.open("a") as handle:
         return subprocess.run(
             argv, env=env, cwd=cwd, stdout=handle, stderr=subprocess.STDOUT, check=False
@@ -182,6 +196,8 @@ def run_setup(run: SrtRun, checkout: Checkout, *, cpu_power_exporter: bool = Fal
     ``cpu_power_exporter`` pins the cpu-power-exporter release, which makes its download fatal.
     """
     log = run.workspace / SETUP_LOG
+    event = run.life.event
+    event.evidence(log)
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
         argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
@@ -193,10 +209,11 @@ def run_setup(run: SrtRun, checkout: Checkout, *, cpu_power_exporter: bool = Fal
             return 0
         sys.stderr.write(log.read_text(errors="replace"))
         if not _discard_corrupt_archives(checkout.root / "configs"):
+            event.fail("SetupFailed", f"make setup exited {rc}")
             return rc
         if attempt < SETUP_ATTEMPTS:
             time.sleep(attempt * 5)
-    print(f"ERROR: srt-slurm setup failed after {SETUP_ATTEMPTS} attempts", file=sys.stderr)
+    event.fail("SetupFailed", f"srt-slurm setup failed after {SETUP_ATTEMPTS} attempts")
     return 1
 
 

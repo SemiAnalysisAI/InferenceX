@@ -310,6 +310,21 @@ class TestProcessResultScript:
         output_file = tmp_path / "agg_benchmark_result.json"
         assert output_file.exists()
 
+    def test_run_attempt_is_recorded_only_inside_actions(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars
+    ):
+        retried = run_script(
+            tmp_path, {**single_node_env_vars, "GITHUB_RUN_ATTEMPT": "3"}, sample_benchmark_result
+        )
+        assert retried.returncode == 0, retried.stderr
+        assert json.loads(retried.stdout)["run_attempt"] == 3
+
+        local = run_script(
+            tmp_path, {**single_node_env_vars, "GITHUB_RUN_ATTEMPT": ""}, sample_benchmark_result
+        )
+        assert local.returncode == 0, local.stderr
+        assert "run_attempt" not in json.loads(local.stdout)
+
     def test_multinode_processing(self, tmp_path, sample_benchmark_result, multinode_env_vars):
         """Test multinode result processing."""
         result = run_script(tmp_path, multinode_env_vars, sample_benchmark_result)

@@ -29,7 +29,7 @@ from pydantic import (
 
 from . import github
 from .github import VerificationError
-from .models import Contract, identity, normalized_image
+from .models import ABORT_LABEL, Contract, identity, normalized_image
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
@@ -544,13 +544,18 @@ def render_body(baseline: Baseline) -> str:
         + baseline_table(baseline, context=False)
         + "\n\n"
         + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
+        + f"\n\n**Stop:** Add the `{ABORT_LABEL}` label at any time to stop this candidate now; "
+        "Klaud cancels its runs, closes this PR and does not retry it. Remove the label to let "
+        "the planner pick it up again."
     )
     chinese = (
         f"**目标：**{baseline.goal.zh}  \n**基线：**{baseline.date} · `{baseline.image}`  \n"
         + meta.replace("Mean latency", "平均延迟")
         .replace("Median latency", "中位延迟")
         .replace("Sources:", "来源：")
-        + "；数值及异常说明见上表。"
+        + "；数值及异常说明见上表。  \n"
+        + f"**停止：**随时添加 `{ABORT_LABEL}` 标签即可立即停止该候选：Klaud 会取消其运行、"
+        "关闭此 PR 且不再重试。移除该标签后，规划器会在下次扫描时重新考虑它。"
     )
     return translated(english, chinese)
 
@@ -640,6 +645,24 @@ def decode[Record: Contract](
                 record[key].extend(data[key])
         value = record
     return model.model_validate(value)
+
+
+def latest_next(session: Session, pull: dict) -> Prose | None:
+    attempts = [
+        c
+        for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
+        if c["user"]["login"] == "Klaud-Cold"
+        and re.fullmatch(r"run-\d+-\d+", name := c["body"].split("\n", 1)[0].rpartition(":")[2])
+        and c["body"].startswith(marker(session, name))
+    ]
+    if not attempts:
+        return None
+    body = max(attempts, key=lambda c: c["id"])["body"]
+    try:
+        value = json.loads(body.split("\n", 1)[1].split("\n-->", 1)[0])
+        return Prose.model_validate(value.get("record", value)["next"])
+    except (ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return None
 
 
 def baseline_for(session: Session, pull: dict) -> Baseline | None:
@@ -869,8 +892,9 @@ def public_point(entry: dict) -> dict:
         "conc": int(entry["conc"]),
         "image": normalized_image(entry["image"]),
     }
+    aggregate = multi and not point["disagg"] and not entry["decode"].get("num-worker")
     for role in ("prefill", "decode"):
-        topology = entry[role] if multi else entry
+        topology = entry["prefill" if aggregate else role] if multi else entry
         point.update(
             {
                 f"{role}_tp": topology["tp"],
@@ -886,14 +910,20 @@ def _matches_public_point(row: dict, point: dict) -> bool:
     """Compare a public row with a generated identity using canonical image spelling."""
     from .models import normalized_image
 
-    for key, value in point.items():
-        observed = row.get(key)
-        if key == "image":
-            if not isinstance(observed, str) or normalized_image(observed) != value:
-                return False
-        elif observed != value:
-            return False
-    return True
+    encodings = [point]
+    if point["is_multinode"] and not point["disagg"] and point["prefill_num_workers"] == 1:
+        encodings.append(
+            {**point, "is_multinode": False, "prefill_num_workers": 0, "decode_num_workers": 0}
+        )
+    return any(
+        all(
+            isinstance(row.get(key), str) and normalized_image(row[key]) == value
+            if key == "image"
+            else row.get(key) == value
+            for key, value in encoding.items()
+        )
+        for encoding in encodings
+    )
 
 
 def matrix_points(matrix: dict) -> list[dict]:
