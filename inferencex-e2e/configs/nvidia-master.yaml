@@ -8991,7 +8991,7 @@ qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg:
 
 # Official 2026-10-14 CUDA 13 nightly, multiarch manifest pinned for B300.
 dsv41flash-fp4-b300-sglang-agentic-dspark:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261014-684fea8a@sha256:ddae0e399d3d94f7827f16183301cf8dac4cf0eae0ef25590b7dac5881d713d8
+  image: lmsysorg/sglang:nightly-dev-cu13-20261018-b234b5c3@sha256:bfef46e5a45a815f8c2f88a722980baf47b71a8689b89c6cc738f596ceeaf47c
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
