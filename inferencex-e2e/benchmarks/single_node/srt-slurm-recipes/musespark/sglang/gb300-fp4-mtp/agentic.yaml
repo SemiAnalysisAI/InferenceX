@@ -66,6 +66,8 @@ zip_override_tp4:
     agg:
       args:
         max-running-requests: [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32]
+        enable-hierarchical-cache: [null, null, null, null, null, true, true, true, true, true, true, true]
+        hicache-size: [null, null, null, null, null, 120, 120, 120, 120, 120, 120, 120]
   benchmark:
     env:
       CONC: ['1', '2', '3', '4', '6', '8', '10', '12', '16', '20', '24', '32']

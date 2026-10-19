@@ -10201,6 +10201,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4295
 
 - config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Enable 120 GB per-rank HiCache for Muse Spark Open GB300 at concurrency 8, 10, 12, 16, 20, 24, and 32; retain GPU-only KV at concurrency 1, 2, 3, 4, and 6."
+    - "Record DRAM HiCache offload with 0.80 DRAM utilization for the high-concurrency points; preserve the image, full AgentX corpus, and other serving settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4317
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
