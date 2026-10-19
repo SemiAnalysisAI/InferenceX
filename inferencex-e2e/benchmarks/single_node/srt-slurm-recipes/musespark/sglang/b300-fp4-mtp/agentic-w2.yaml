@@ -99,6 +99,7 @@ override_tp8_c112:
     agg:
       args:
         max-running-requests: 256
+        cuda-graph-max-bs-decode: 256
         swa-full-tokens-ratio: 0.3
         schedule-policy: hrrn
         enable-layernorm-sp: true
@@ -119,6 +120,7 @@ override_tp8_c128:
     agg:
       args:
         max-running-requests: 256
+        cuda-graph-max-bs-decode: 256
         swa-full-tokens-ratio: 0.2
         schedule-policy: hrrn
         enable-layernorm-sp: true
