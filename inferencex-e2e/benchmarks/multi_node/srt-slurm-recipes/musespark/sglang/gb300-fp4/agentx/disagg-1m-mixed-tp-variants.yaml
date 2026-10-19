@@ -204,3 +204,30 @@ override_1p1d_tp16_c16:
         enable-megamoe-for-layernorm-sp: null
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+
+override_1p1d_tp16_c20_v2mnnvl:
+  roles:
+    prefill:
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+      args:
+        disaggregation-transfer-backend: mooncake
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+      args:
+        disaggregation-transfer-backend: mooncake
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        enable-layernorm-sp: null
+        enable-megamoe-for-layernorm-sp: null
+        max-running-requests: 25
+        cuda-graph-max-bs-decode: 25
