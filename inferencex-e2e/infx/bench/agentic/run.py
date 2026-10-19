@@ -18,7 +18,7 @@ from infx.bench.agentic.replay import (
     ReplayConfig,
     replay_argv,
 )
-from infx.bench.agentic.venv import Runtime, bootstrap
+from infx.bench.agentic.venv import REQUIREMENTS, Runtime, bootstrap
 
 REQUIRED = (
     "RESULT_DIR",
@@ -120,6 +120,11 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
         "RESULT_FILENAME": plan.result_filename,
         "AGENTIC_OUTPUT_DIR": str(plan.output_dir),
         "PYTHONPATH": proc.pythonpath(environ),
+        "AIPERF_VERSION": next(
+            line
+            for line in REQUIREMENTS.read_text().splitlines()
+            if line.startswith("agentx-harness==")
+        ),
     }
     rc = _download_traces(cfg, runtime, env)
     if rc:
