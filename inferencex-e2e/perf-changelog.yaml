@@ -10227,3 +10227,13 @@
     - "Replace the TP4/EP4 concurrency 1-16 curve with seven points: TP2/EP2 at concurrency 1, 8, 12, 14 and 16, and TP4/EP4 at concurrency 1 and 8."
     - "Enable --enable-linear-replayssm-spec on the TP2/EP2 points at concurrency 8, 12, 14 and 16."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4272
+
+- config-keys:
+    - dsv41flash-fp4-b200-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash B200 FP4 Dynamo+SGLang AgentX DSpark aggregated and 2P1D disaggregated points on lmsysorg/sglang:nightly-dev-20260928-81f27fb3."
+    - "Aggregated and disaggregated points use separate config keys."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

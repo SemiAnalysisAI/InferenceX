@@ -1,0 +1,204 @@
+# AgentX dsv41flash sglang b200-fp4 aggregated recipes (Dynamo frontend with the
+# KV-aware router and session affinity + SGLang, DSpark K=5) on SGLang
+# nightly-dev-20260928-81f27fb3 pinned by digest: one override per measured point.
+# TP8/DP8 with DP attention and shortest-prefill-first scheduling covers the
+# throughput end (c240, c256); TP4/EP4 (c2, c48) and TP2/EP2 (c1, c10) single
+# workers cover the interactive end. The harness applies the golden acceptance
+# length (3.51 at K=5). Select one with
+# srt-recipe: agg-variants.yaml:override_<name>.
+
+schema: 2
+base:
+  name: dsv41flash-fp4-b200-dynamo-sglang-agentx-agg
+  model: {}
+  identity:
+    model:
+      revision: dba1be0a40aa45a94ad051997016db3960a90277
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20260929
+  slurm:
+    time_limit: '4:00:00'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  frontend:
+    type: dynamo
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: '3600'
+    enable_multiple_frontends: false
+    env:
+      DYN_NATS_REQUEST_TIMEOUT_SECS: '1800'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DSV41_REASONING_EFFORT: high
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        HF_HUB_CACHE: /hf_hub_cache
+      args:
+        context-length: 1048576
+        cuda-graph-max-bs-decode: 64
+        enable-metrics: true
+        reasoning-parser: auto
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        tool-call-parser: auto
+        trust-remote-code: true
+        watchdog-timeout: 3600
+  sbatch_directives:
+    mem: '0'
+    exclusive: ''
+  srun_options:
+    container-remap-root: ''
+    mem: '0'
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      PORT: '8000'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      PP_SIZE: '1'
+      PCP_SIZE: '1'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+override_tp8_dp8_c256:
+  name: agg-b200-tp8-dp8-c256
+  roles:
+    agg:
+      gpus: 8
+      args:
+        chunked-prefill-size: 131072
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        expert-parallel-size: 8
+        load-balance-method: total_tokens
+        max-running-requests: 256
+        mem-fraction-static: 0.74
+        prefill-decode-interval: 24
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 4096
+        tensor-parallel-size: 8
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+override_tp8_dp8_c240:
+  name: agg-b200-tp8-dp8-c240
+  roles:
+    agg:
+      gpus: 8
+      args:
+        chunked-prefill-size: 131072
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        expert-parallel-size: 8
+        load-balance-method: total_tokens
+        max-running-requests: 240
+        mem-fraction-static: 0.74
+        prefill-decode-interval: 28
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 4096
+        tensor-parallel-size: 8
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+override_tp4_c48:
+  name: agg-b200-tp4-c48
+  roles:
+    agg:
+      gpus: 4
+      args:
+        chunked-prefill-size: 16384
+        expert-parallel-size: 4
+        max-running-requests: 64
+        mem-fraction-static: 0.75
+        prefill-decode-interval: 16
+        swa-prefix-tails: 2048
+        tensor-parallel-size: 4
+override_tp2_c10:
+  name: agg-b200-tp2-c10
+  roles:
+    agg:
+      gpus: 2
+      args:
+        chunked-prefill-size: 8192
+        expert-parallel-size: 2
+        max-running-requests: 20
+        mem-fraction-static: 0.9
+        prefill-decode-interval: 64
+        swa-prefix-tails: 512
+        tensor-parallel-size: 2
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+override_tp2_c1:
+  name: agg-b200-tp2-c1
+  roles:
+    agg:
+      gpus: 2
+      args:
+        chunked-prefill-size: 8192
+        expert-parallel-size: 2
+        max-prefill-tokens: 8192
+        max-running-requests: 2
+        mem-fraction-static: 0.9
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        tensor-parallel-size: 2
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+override_tp4_c2:
+  name: agg-b200-tp4-c2
+  roles:
+    agg:
+      gpus: 4
+      args:
+        chunked-prefill-size: 8192
+        expert-parallel-size: 4
+        max-prefill-tokens: 8192
+        max-running-requests: 4
+        mem-fraction-static: 0.85
+        prefill-decode-interval: 16
+        swa-prefix-tails: 128
+        tensor-parallel-size: 4
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
