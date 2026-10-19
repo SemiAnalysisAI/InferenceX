@@ -10119,6 +10119,6 @@
     - agentic-coding
   description:
     - "Re-sweep Muse Spark Open H100 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; the image is unchanged."
-    - "The full corpus has 330k-480k-token inputs that exceeded the 258k-token GPU KV pool and aborted 10% of c4 requests. Cap the sweep at concurrency 2 (max-running-requests and decode graphs 2) and raise mem-fraction-static from 0.965 to 0.975 to grow the pool."
+    - "The full corpus has 330k-480k-token inputs that exceeded the 258k-token GPU KV pool and aborted 10% of c4 requests. Cap the sweep at concurrency 2 (max-running-requests and decode graphs 2) and raise mem-fraction-static from 0.965 to 0.97 to grow the pool; 0.975 left ~0.29 GiB free at serve start and a long warmup prefill hit CUDA OOM in the MoE."
     - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4289
