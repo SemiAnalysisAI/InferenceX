@@ -10139,3 +10139,13 @@
     - "Re-sweep Muse Spark Open B200 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image and search space are unchanged."
     - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4291
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add concurrency 2; the published set becomes [1, 2, 4, 14, 16, 48, 56, 72]. Concurrency 2 runs the 7-token DSpark draft at AL 3.84 with a 1-32 CUDA-graph ladder."
+    - "Serve concurrency 1 and 2 with ATOM mono decode (ATOM_MONO_ENABLE=1). Mono requires fp32 SSM state (ATOM_GDN_SSM_DTYPE=fp32) and BF16 in_proj, f_b_proj, o_proj and shared-expert projections, which are added to the online-quant exclude list. Every other point sets ATOM_MONO_ENABLE=0."
+    - "At concurrency 48, 56 and 72, enable on-demand state checkpoints (ATOM_STATE_CHECKPOINT_DEMAND=1), raise the per-rank LMCache pool to 224 GB, and cap retained state at 128 GB inside that pool (OFFLOAD_STATE_CPU_SIZE=128). dram-utilization 0.6 gives TOTAL_CPU_DRAM_GB 1799."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

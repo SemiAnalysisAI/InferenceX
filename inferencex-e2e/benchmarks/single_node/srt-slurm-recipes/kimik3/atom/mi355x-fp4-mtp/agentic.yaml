@@ -59,6 +59,8 @@ base:
         # Anchor-only state checkpointing.
         ATOM_STATE_CHECKPOINT_DEMAND: '0'
         ATOM_GDN_SSM_DTYPE: fp16
+        # ATOM defaults mono decode on; only concurrency 1 and 2 opt in.
+        ATOM_MONO_ENABLE: '0'
         # FlyDSL FP8 prefill attention; ATOM defaults it off.
         ATOM_USE_FLYDSL_FP8_PREFILL_ATTN: '1'
   benchmark:
@@ -79,9 +81,27 @@ override_tp8_c1:
     agg:
       args:
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
+        # Mono loads in_proj, f_b_proj, o_proj and the two shared-expert
+        # projections as plain BF16 and refuses them quantized.
+        online_quant_config: &mono_quant '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj","*self_attn.in_proj*","*self_attn.f_b_proj*","*self_attn.o_proj*","*shared_experts.gate_up_proj*","*shared_experts.down_proj*"]}'
+      env: &mono_env
+        ATOM_MONO_ENABLE: '1'
+        # The mono KDA kernel reads the SSM state pool as fp32 and refuses fp16.
+        ATOM_GDN_SSM_DTYPE: fp32
   benchmark:
     env:
       CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
+        online_quant_config: *mono_quant
+      env: *mono_env
+  benchmark:
+    env:
+      CONC: '2'
 
 override_tp8_c4:
   roles:
@@ -159,7 +179,11 @@ override_tp8_dcp8_c48_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '128'
+        # On-demand state checkpoints at shared-prefix targets. The state cap
+        # is a limit inside the shared LMCache pool, not a second pool.
+        ATOM_STATE_CHECKPOINT_DEMAND: '1'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '224'
+        OFFLOAD_STATE_CPU_SIZE: '128'
         ATOM_ENABLE_REPLAYSSM: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
         ATOM_PREFILL_DELAYER_MAX_QUEUE_MS: '5000'
@@ -168,7 +192,7 @@ override_tp8_dcp8_c48_lmcache:
       CONC: '48'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1028'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_dcp8_c56_lmcache:
   roles:
@@ -181,7 +205,9 @@ override_tp8_dcp8_c56_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        ATOM_STATE_CHECKPOINT_DEMAND: '1'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '224'
+        OFFLOAD_STATE_CPU_SIZE: '128'
         ATOM_ENABLE_REPLAYSSM: '1'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
@@ -191,7 +217,7 @@ override_tp8_dcp8_c56_lmcache:
       CONC: '56'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'
+      TOTAL_CPU_DRAM_GB: '1799'
 
 override_tp8_dcp8_c72_lmcache:
   roles:
@@ -204,7 +230,9 @@ override_tp8_dcp8_c72_lmcache:
         extra-kv-connectors: *lmcache_offload
       env:
         <<: *lmcache_env
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '192'
+        ATOM_STATE_CHECKPOINT_DEMAND: '1'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '224'
+        OFFLOAD_STATE_CPU_SIZE: '128'
         ATOM_ENABLE_REPLAYSSM: '1'
         AITER_REUSE_IDENTICAL_COMM_GROUPS: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '4'
@@ -214,4 +242,4 @@ override_tp8_dcp8_c72_lmcache:
       CONC: '72'
       SPEC_DECODING: mtp
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1538'
+      TOTAL_CPU_DRAM_GB: '1799'
