@@ -10120,4 +10120,4 @@
   description:
     - "Configure Muse Spark Open GB200 SGLang AgentX prefill graphs, scheduling, memory allocation, and draft attention per concurrency."
     - "Add concurrency 20 and 28 with matching request admission and decode graph batch limits."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4302
