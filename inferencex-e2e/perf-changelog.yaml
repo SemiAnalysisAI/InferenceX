@@ -10112,3 +10112,19 @@
     - "Default AgentX trace selection to the full corpus, retaining explicit 256k exceptions for dsr1, qwen3.5, and qwen3.8next."
     - "Move Muse Spark Open AgentX points from the 256k-capped corpus to semianalysis_cc_traces_weka_062126; preserve explicit loader overrides."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4287
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+    - musespark-fp4-b300-sglang-agentic-dflash
+    - musespark-fp4-b200-sglang-agentic-dflash
+    - musespark-fp4-h200-sglang-agentic-dflash
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "GB300 TP4: swa-full-tokens-ratio 0.3, HiCache 120 GB from C16, max-running-requests = conc, new C40/C48 with HiCache 140, decode graphs = conc and prefill-decode-interval 8."
+    - "B300 TP8: LN-SP + MegaMoE with prefill-decode-interval 64 at C1-C8, interval 64/64/48/32/16 at C16-C64, C128 interval 4 with HiCache write_back."
+    - "B200 TP8: LN-SP + MegaMoE with interval 64 at C4-C12, interval 64/64/48/32 at C16-C48, new C64 with interval 16."
+    - "H200 TP8 C16/C24: mem-fraction-static 0.90, swa-full-tokens-ratio 0.1, HiCache 96, interval 16."
+    - "MI355X TP4: new C24/C32 HiCache with swa-full-tokens-ratio 0.3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4296
