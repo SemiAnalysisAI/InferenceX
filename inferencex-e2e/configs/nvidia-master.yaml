@@ -614,13 +614,13 @@ dsr1-fp4-b300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp8-b300-dynamo-trt:
-  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.5.1
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: b300
   precision: fp8
   framework: dynamo-trt
-  router: { name: dynamo-router, version: "0.8.1.post1" }
+  router: { name: dynamo-router, version: "1.5.1" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
