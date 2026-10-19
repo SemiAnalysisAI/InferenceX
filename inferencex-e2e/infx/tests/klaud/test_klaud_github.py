@@ -3,6 +3,7 @@ import os
 import shlex
 import subprocess
 import sys
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,7 +12,7 @@ import yaml
 
 from infx.klaud import __main__ as klaud
 from infx.klaud import api, claims, github, lifecycle, reporting, validation
-from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, Ownership, identity
+from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, Ownership, identity, stamp
 from infx.tests.historical_revision import (
     FAMILY,
     KEY,
@@ -90,7 +91,7 @@ def test_recovery_errors_do_not_publish_raw_api_data(
     executable.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
-    monkeypatch.setattr(sys, "argv", ["klaud", "recover"])
+    monkeypatch.setattr(sys, "argv", ["klaud", "recover", "--max-resumes", "5"])
     assert klaud.main() == 1
     captured = capfd.readouterr()
     assert captured.out == f"::error::Klaud: {reason}.\n"
@@ -229,8 +230,8 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
     outcomes = {
         1: ("readiness-blocked", "targeted", None),
         2: ("capacity-deferred", "targeted", None),
-        4: ("capacity-deferred", "targeted", None),
-        5: ("failed", "targeted", None),
+        4: ("failed", "targeted", None),
+        5: ("capacity-deferred", "targeted", None),
         7: ("unexpected-error", "unknown", None),
         8: ("readiness-blocked", "targeted", "weights-missing"),
     }
@@ -248,13 +249,13 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
                 {"id": 40, "created_at": "2000-01-01T00:00:00Z", "head_sha": "c" * 40},
             ]
         run_artifacts = {
-            41: [(1, blocked), (3, unreadable), (5, superseded), (91, "plan")],
-            42: [(2, deferred), (4, superseded), (7, not_started), (8, weightless), (92, "plan")],
+            41: [(1, blocked), (3, unreadable), (4, superseded), (91, "plan")],
+            42: [(2, deferred), (5, superseded), (7, not_started), (8, weightless), (92, "plan")],
             40: [(6, untried)],
         }
         run_id = int(path.split("/")[2])
         return [
-            {"id": artifact, "expired": False,
+            {"id": artifact, "expired": False, "created_at": "9999-01-01T00:00:00Z",
              "name": "klaud-plan" if candidate == "plan" else f"klaud-candidate-{candidate}"}
             for artifact, candidate in run_artifacts[run_id]
         ]
@@ -291,6 +292,51 @@ def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferral
                                                       superseded, not_started)]
     assert [candidate["id"] for candidate in klaud.order_by_cooldown(candidates, recent)] == [
         untried, deferred, superseded, not_started]
+
+
+def test_cooldown_ages_each_candidates_newest_artifact_including_resumed_sessions(monkeypatch):
+    early, late, resumed = (f"{digit * 16}-{digit * 16}" for digit in "abc")
+    artifacts = {
+        # Started before the 24-hour cooldown began; a later wave resumed ``late``.
+        39: [(1, early, "2026-10-14T11:00:00Z"), (30, late, "2026-10-15T11:00:00Z")],
+        # The listing names ``resumed``'s first session before its second.
+        41: [(20, resumed, "2026-10-15T05:00:00Z"), (21, resumed, "2026-10-15T10:00:00Z")],
+    }
+    outcomes = {1: "failed", 30: "readiness-blocked", 20: "failed", 21: "capacity-deferred"}
+    queries = []
+
+    def items(_repository, path, _key):
+        if path.startswith("actions/workflows/klaud-plan.yml/runs?"):
+            queries.append(path)
+            return [{"id": 39, "created_at": "2026-10-14T06:00:00Z"},
+                    {"id": 41, "created_at": "2026-10-15T00:00:00Z"},
+                    {"id": 40, "created_at": "2026-10-13T11:59:59Z"}]
+        run_id = int(path.split("/")[2])
+        if run_id not in artifacts:
+            pytest.fail(f"listed artifacts of run {run_id}")
+        return [{"id": artifact, "expired": False, "created_at": created,
+                 "name": f"klaud-candidate-{candidate}"}
+                for artifact, candidate, created in artifacts[run_id]]
+
+    def download(_repository, artifact, destination):
+        record = {"outcome": outcomes[artifact["id"]], "phase": "targeted", "pull-request": None,
+                  "run-ids": [], "repairs-used": 0}
+        (destination / "candidate-diagnostics.json").write_text(
+            json.dumps({"candidate-outcome": record}))
+
+    class Clock(klaud.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return lifecycle.utc("2026-10-15T12:00:00Z")
+
+    monkeypatch.setattr(klaud, "datetime", Clock)
+    monkeypatch.setattr(klaud, "github_items", items)
+    monkeypatch.setattr(klaud, "download_json", download)
+
+    assert klaud.recent_candidate_outcomes("example/project", 24) == (
+        {late: "readiness-blocked", resumed: "capacity-deferred"}, set())
+    # The cooldown plus the waves in which an older planner run may still resume sessions.
+    assert queries == ["actions/workflows/klaud-plan.yml/runs?created=>=2026-10-13"]
 
 
 def test_overlap_index_drops_idle_prs_but_keeps_klaud_candidate_prs():
@@ -389,24 +435,23 @@ def test_recovery_lease_frees_once_the_holders_reconcile_job_ends(
 def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
     monkeypatch, other_recovery
 ):
-    names = ["dead", "session", "sweeping", "handoff", "human", "ready", "leftover",
+    names = ["dead", "session", "sweeping", "human", "ready", "leftover",
              "closed-by-human", "stale-claim", "live-claim"]  # fmt: skip
     ids = {name: f"{digit * 16}-{digit * 16}" for name, digit in zip(names, "123456789a")}
 
-    def pull(name, number, *, draft=True, labels=()):
+    def pull(name, number, *, draft=True):
         return {
             "number": number, "draft": draft, "user": {"login": "Klaud-Cold"},
             "head": {"ref": f"klaud/auto-{ids[name]}", "repo": {"full_name": "example/project"}},
-            "labels": [{"name": label} for label in labels], "created_at": "2026-10-15T00:00:00Z",
-            "merged_at": None,
+            "created_at": "2026-10-15T00:00:00Z", "merged_at": None,
         }  # fmt: skip
 
     open_pulls = [
-        pull("dead", 1), pull("session", 2), pull("sweeping", 3),
-        pull("handoff", 4, labels=["klaud-handoff"]), pull("human", 5), pull("ready", 6, draft=False),
+        pull("dead", 1), pull("session", 2), pull("sweeping", 3), pull("human", 5),
+        pull("ready", 6, draft=False),
     ]  # fmt: skip
     closed = {"leftover": (7, "Klaud-Cold"), "closed-by-human": (8, "maintainer")}
-    smoke = {"dead": 501, "handoff": 502}
+    smoke = {"dead": 501, "ready": 502}
 
     def items(_repository, path, _key=None):
         if path.startswith("actions/workflows/e2e-tests.yml/runs?status=queued"):
@@ -462,8 +507,7 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
 
     live = lifecycle.sweep_abandoned("example/project", set())
 
-    assert live == {ids[name] for name in
-                    ("session", "sweeping", "handoff", "human", "ready")}
+    assert live == {ids[name] for name in ("session", "sweeping", "human", "ready")}
     assert released == [(ids["stale-claim"], 1)]
     assert writes == [
         ("POST", "actions/runs/501/cancel"),
@@ -482,26 +526,74 @@ UNEXPECTED_ERROR = CandidateOutcome(
 
 
 def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelled", state="open",
-                        artifacts=()):
-    """Serve finished planner run 42 whose draft PR 7 has one final sweep, run 9, that ended
-    ``conclusion`` at attempt ``attempt`` on 2026-10-15 00:00 UTC with ``jobs`` (a
-    ``-timeout`` suffix marks a job GitHub stopped at its timeout); record GitHub writes,
-    finished outcomes and released family claims."""
+                        artifacts=(), sessions=("failure",) * lifecycle.MAX_SESSIONS,
+                        planner="failure", gated=True):
+    """Serve planner run 42 whose draft PR 7 has one final sweep, run 9, that ended
+    ``conclusion`` (``None`` while it runs) at attempt ``attempt`` on 2026-10-15 00:00 UTC with
+    ``jobs`` (a ``-timeout`` suffix marks a job GitHub stopped at its timeout).
+
+    Planner attempt N starts 6(N - 1) hours after 2026-10-14 00:00 UTC and lasts 6 hours; its
+    candidate job ended ``sessions[N - 1]`` (see ``planner_job``). By default every session ran,
+    so none is left to resume. Otherwise the run ended ``planner``; its candidate jobs have the
+    resume gate when ``gated``. Record GitHub writes, finished outcomes, released family claims
+    and posted PR comments; tests may add comments and replace reads."""
     candidate = OwnedCandidate(id=f"{identity(FAMILY)[:16]}-{'2' * 16}", family=FAMILY,
                                base="a" * 40)
     branch = f"klaud/auto-{candidate.id}"
+    start = lifecycle.utc("2026-10-14T00:00:00Z")
+    running = sessions[-1] is None
     parent = {"id": 42, "head_branch": "main", "path": ".github/workflows/klaud-plan.yml",
-              "event": "schedule", "status": "completed", "conclusion": "success",
-              "run_attempt": 1, "created_at": "2026-10-14T00:00:00Z",
-              "updated_at": "2026-10-14T06:00:00Z"}
+              "event": "schedule", "status": "in_progress" if running else "completed",
+              "conclusion": None if running else planner, "run_attempt": len(sessions),
+              "created_at": stamp(start),
+              "updated_at": stamp(start + timedelta(hours=6 * len(sessions)))}
     pull = {"number": 7, "state": state, "draft": True, "merged_at": None,
             "user": {"login": "Klaud-Cold"}, "created_at": "2026-10-14T01:00:00Z",
             "labels": [{"name": "full-sweep-fail-fast"}],
             "head": {"ref": branch, "sha": "c" * 40, "repo": {"full_name": "example/project"}}}
     sweep = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": attempt,
-             "status": "completed", "conclusion": conclusion, "actor": {"login": "Klaud-Cold"},
-             "created_at": "2026-10-14T02:00:00Z", "updated_at": "2026-10-15T00:00:00Z",
+             "status": "completed" if conclusion else "in_progress", "conclusion": conclusion,
+             "actor": {"login": "Klaud-Cold"}, "created_at": "2026-10-14T02:00:00Z",
+             "updated_at": "2026-10-15T00:00:00Z",
              "head_repository": {"full_name": "example/project"}, "pull_requests": [{"number": 7}]}
+
+    def planner_job(job_id, name, number, outcome):
+        """Attempt ``number``'s job ``name``, which concluded ``outcome``: ``None`` while it
+        runs, ``ungranted`` for a gate that failed it without a grant and ``gated-off`` for a
+        gate that let it end without a session. A ``-copied`` suffix marks a copy, which keeps
+        attempt 1's start."""
+        created = start + timedelta(hours=6 * (number - 1), minutes=20)
+        copied = bool(outcome) and outcome.endswith("-copied")
+        kind = outcome.removesuffix("-copied") if outcome else None
+        ended, gate, agent = {
+            None: (None, None, None),
+            "ungranted": ("failure", "failure", "skipped"),
+            "gated-off": ("success", "success", "skipped"),
+            "cancelled": ("cancelled", "success", "cancelled"),
+        }.get(kind, (kind, "success", "success"))
+        if copied:
+            began = start + timedelta(minutes=21)
+        else:
+            began = created if kind == "skipped" else created + timedelta(minutes=1)
+        steps = [] if kind == "skipped" else [
+            {"name": "Set up job", "conclusion": "success"},
+            *([{"name": lifecycle.GATE_STEP, "conclusion": gate}] if gated else []),
+            {"name": lifecycle.AGENT_STEP, "conclusion": agent},
+        ]
+        return {"id": job_id, "name": name, "run_attempt": number, "conclusion": ended,
+                "runner_name": "GitHub Actions 1", "steps": steps, "created_at": stamp(created),
+                "started_at": stamp(began)}
+
+    planner_jobs = [
+        job
+        for number, outcome in enumerate(sessions, 1)
+        for job in (
+            planner_job(1000 + number, f"Run candidate {candidate.id} / Klaud Cold", number,
+                        outcome),
+            planner_job(2000 + number, f"Run candidate {'3' * 16}-{'4' * 16} / Klaud Cold",
+                        number, "success" if number == 1 else "success-copied"),
+        )
+    ]
     attempt_jobs = [
         {"id": 100 + index, "conclusion": job.removesuffix("-timeout"), "runner_name": "gpu-0"}
         for index, job in enumerate(jobs)
@@ -516,13 +608,17 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
             for index, job in enumerate(jobs)
         },
         "actions/runs/9/artifacts?per_page=100": list(artifacts),
-        "pulls?state=open&per_page=100": [pull],
+        "pulls?state=open&per_page=100": [pull] if state == "open" else [],
         "pulls/7/commits?per_page=100": [{"committer": {"login": "github-actions[bot]"}}],
+        "actions/runs/42/jobs?filter=all&per_page=100": planner_jobs,
         "git/matching-refs/heads/klaud/recovery-": [
             {"ref": f"refs/heads/klaud/recovery-42-{candidate.id}"}],
         "git/matching-refs/heads/klaud/auto-": [
             {"ref": f"refs/heads/{branch}", "object": {"sha": "c" * 40}}],
+        f"git/matching-refs/heads/{branch}": [
+            {"ref": f"refs/heads/{branch}", "object": {"sha": "c" * 40}}],
     }
+    comments = []
 
     def items(_repository, path, _key=None):
         if path in listings:
@@ -531,21 +627,37 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
             return [pull]
         if path.startswith("actions/workflows/run-sweep.yml/runs?per_page=100&created="):
             return [sweep]
-        if path.startswith(("issues/7/comments?", "actions/workflows/", "actions/artifacts?")):
+        if path.startswith("issues/7/comments?"):
+            return comments
+        if path.startswith(("actions/workflows/", "actions/artifacts?")):
             return []
         raise AssertionError(path)
 
     reads = {"actions/runs/42": parent, "pulls/7": pull,
+             "issues/7": {"closed_by": {"login": "Klaud-Cold"}},
+             "actions/runs/42/attempts/1": {"updated_at": stamp(start + timedelta(hours=6))},
              f"actions/runs/9/attempts/{attempt}": {"run_started_at": "2026-10-14T20:00:00Z"}}
     world = SimpleNamespace(
         session=lifecycle.Session("example/project", parent, candidate, recovering=True),
-        writes=[], finished=[], released=[],
+        pull=pull, reads=reads, comments=comments, writes=[], finished=[], released=[],
     )
+
+    def write(_repository, path, method, payload=None):
+        world.writes.append((method, path))
+        if (method, path) == ("POST", "issues/7/comments"):
+            comments.append({"id": 100 + len(world.writes), "user": {"login": "Klaud-Cold"},
+                             "body": payload["body"]})
+            return comments[-1]
+        if method == "DELETE" and path.startswith("issues/comments/"):
+            comments[:] = [comment for comment in comments
+                           if path != f"issues/comments/{comment['id']}"]
+        return {}
+
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     monkeypatch.setattr(github, "items", items)
     monkeypatch.setattr(github, "read", lambda _r, path: (
         reads[path] if path in reads else pytest.fail(path)))
-    monkeypatch.setattr(github, "write", lambda _r, path, method, _payload=None: (
-        world.writes.append((method, path))))
+    monkeypatch.setattr(github, "write", write)
     monkeypatch.setattr(lifecycle.Session, "finish", lambda _session, outcome: (
         world.finished.append(outcome)))
     monkeypatch.setattr(claims, "family_owners", lambda _r: [
@@ -613,25 +725,33 @@ def test_recovery_retries_a_preempted_final_sweep_after_github_errors(
     assert world.finished == []
 
 
-def test_recovery_keeps_the_pr_claim_and_lease_of_a_rerun_final_sweep(monkeypatch, tmp_path):
-    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
-    summary = tmp_path / "summary.md"
+def recovery_pass(monkeypatch, tmp_path, max_resumes=5, now="2026-10-15T01:00:00Z"):
+    """Run planner run 1000's recovery at ``now``; return its step summary and output files."""
+    summary, output = tmp_path / "summary.md", tmp_path / "output"
     for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", "1000"),
-                        ("RUNNER_TEMP", str(tmp_path)), ("GITHUB_STEP_SUMMARY", str(summary))):
+                        ("RUNNER_TEMP", str(tmp_path)), ("GITHUB_STEP_SUMMARY", str(summary)),
+                        ("GITHUB_OUTPUT", str(output))):
         monkeypatch.setenv(name, value)
 
     class Clock(lifecycle.datetime):
         @classmethod
         def now(cls, tz=None):
-            return lifecycle.utc("2026-10-15T01:00:00Z")
+            return lifecycle.utc(now)
 
     monkeypatch.setattr(lifecycle, "datetime", Clock)
+    lifecycle.recover(max_resumes)
+    return summary, output
 
-    lifecycle.recover()
+
+def test_recovery_keeps_the_pr_claim_and_lease_of_a_rerun_final_sweep(monkeypatch, tmp_path):
+    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
+
+    summary, output = recovery_pass(monkeypatch, tmp_path)
 
     assert world.writes == [("POST", "actions/runs/9/rerun-failed-jobs")]
     assert world.finished == world.released == []
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+    assert output.read_text() == "resumed=0\n"
     assert summary.read_text() == (
         f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted final "
         "sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
@@ -649,6 +769,362 @@ def test_recovery_warns_why_a_passed_final_sweep_failed_validation(monkeypatch, 
         "validation: Manifest belongs to an earlier run attempt.\n")
     assert world.finished == [UNEXPECTED_ERROR]
     assert world.writes == []
+
+
+RESUME = ("POST", "actions/runs/42/rerun-failed-jobs")
+GRANT = ("POST", "issues/7/comments")
+NOW = lifecycle.utc("2026-10-15T01:00:00Z")
+
+
+def recorded(session, marker="klaud-outcome:"):
+    """A Klaud comment recording ``UNEXPECTED_ERROR`` under ``session``'s ``marker``."""
+    record = {"head": "c" * 40, "outcome": UNEXPECTED_ERROR.model_dump(by_alias=True)}
+    return {"id": 1, "user": {"login": "Klaud-Cold"}, "body": (
+        session.marker.replace("klaud-outcome:", marker) + json.dumps(record) + "\n-->\nDone.")}
+
+
+def grant_comment(world, attempt, author="Klaud-Cold"):
+    """A PR comment granting the world's session attempt ``attempt`` of planner run 42."""
+    return {"id": 50 + attempt, "user": {"login": author}, "body": (
+        lifecycle.resume_marker(42, world.session.candidate.id, attempt) + "\nResumed.")}
+
+
+def resume_check(tmp_path, monkeypatch, world, attempt):
+    """Run the resume gate of planner run 42's ``attempt`` for the world's candidate; return
+    its exit code and outputs."""
+    (tmp_path / "candidate.json").write_text(world.session.candidate.model_dump_json())
+    output = tmp_path / "gate-output"
+    for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", "42"),
+                        ("GITHUB_RUN_ATTEMPT", str(attempt)), ("KLAUD_EVIDENCE", str(tmp_path)),
+                        ("GITHUB_OUTPUT", str(output))):
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(sys, "argv", ["klaud", "resume-check"])
+    code = klaud.main()
+    return code, output.read_text()
+
+
+@pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
+@pytest.mark.parametrize(("sessions", "options", "started", "approved"), [
+    pytest.param(("failure",), {}, 1, True, id="first-session"),
+    pytest.param(("failure",) * 3, {}, 3, True, id="below-the-cap"),
+    pytest.param(("failure",) * 4, {}, 4, False, id="at-the-cap"),
+    pytest.param(("failure", "failure-copied", "failure", "failure"), {}, 3, True,
+                 id="copied-jobs-do-not-count"),
+    pytest.param(("failure",) + ("ungranted",) * 3, {}, 1, True,
+                 id="ungranted-reruns-do-not-count"),
+    pytest.param(("failure", "gated-off"), {}, 1, False, id="rerun-that-ended-without-a-session"),
+    pytest.param(("failure",), {"planner": "cancelled"}, 1, True,
+                 id="failed-job-in-a-cancelled-run"),
+    pytest.param(("cancelled",), {"planner": "cancelled"}, 1, True,
+                 id="cancelled-session-is-preempted"),
+    pytest.param(("failure",), {"gated": False}, 1, False, id="planner-run-predates-resumption"),
+    pytest.param(("failure", "skipped"), {"gated": False}, 1, False,
+                 id="rerun-of-a-planner-run-from-before-resumption"),
+])  # fmt: skip
+def test_recovery_approves_resuming_only_sessions_their_planner_run_can_continue(
+    monkeypatch, conclusion, sessions, options, started, approved
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=sessions, **options)
+
+    assert lifecycle.sessions_started(world.session) == started
+    if approved:
+        with pytest.raises(lifecycle.ResumeSession, match="approved to resume") as raised:
+            lifecycle.reconcile(world.session, NOW)
+        assert raised.value.pull is world.pull
+    elif conclusion is None:
+        with pytest.raises(lifecycle.PendingCleanup, match="Owned work is still running"):
+            lifecycle.reconcile(world.session, NOW)
+    else:
+        assert lifecycle.reconcile(world.session, NOW) is True
+    assert world.writes == world.released == []
+    assert world.finished == ([UNEXPECTED_ERROR] if conclusion and not approved else [])
+
+
+@pytest.mark.parametrize(("now", "approved"), [
+    pytest.param("2026-10-15T05:59:59Z", True, id="within-a-day"),
+    pytest.param("2026-10-15T06:00:00Z", False, id="a-day-later"),
+])  # fmt: skip
+def test_recovery_stops_resuming_a_day_after_the_planner_run_ended(monkeypatch, now, approved):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
+
+    if approved:
+        with pytest.raises(lifecycle.ResumeSession):
+            lifecycle.reconcile(world.session, lifecycle.utc(now))
+    else:
+        assert lifecycle.reconcile(world.session, lifecycle.utc(now)) is True
+    assert world.finished == ([] if approved else [UNEXPECTED_ERROR])
+
+
+@pytest.mark.parametrize("change", [
+    "aborted", "closed", "outcome-recorded", "cleanup-pending",
+])  # fmt: skip
+def test_recovery_never_resumes_an_aborted_closed_or_recorded_pr(monkeypatch, change):
+    world = ended_session_sweep(monkeypatch, state="closed" if change == "closed" else "open",
+                                sessions=("failure",))
+    if change == "aborted":
+        world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
+    elif change != "closed":
+        world.comments.append(recorded(
+            world.session, "klaud-cleanup:" if change == "cleanup-pending" else "klaud-outcome:"))
+
+    lifecycle.resume(world.session, world.pull, NOW)
+
+    assert world.writes == []
+
+
+@pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
+def test_klaud_abort_closes_the_candidate_pr_as_aborted(monkeypatch, conclusion):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
+    world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
+
+    assert lifecycle.reconcile(world.session, NOW) is True
+    assert [outcome.outcome for outcome in world.finished] == ["aborted"]
+    assert world.writes == []
+
+
+def test_an_aborted_session_may_stop_without_its_own_outcome(tmp_path, monkeypatch):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=(None,))
+    world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
+    monkeypatch.setattr(lifecycle, "current_session", lambda: world.session)
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path))
+
+    assert klaud.check_stop() == {}
+    world.pull["labels"].pop()
+    assert klaud.check_stop()["decision"] == "block"
+
+
+def test_a_resumed_planner_run_never_adopts_a_newer_runs_pr_on_its_branch(tmp_path, monkeypatch):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure", "failure"))
+    # A newer planner run opened this PR on the candidate branch after attempt 1 of run 42 ended.
+    world.pull["created_at"] = "2026-10-14T07:00:00Z"
+    world.comments.append(grant_comment(world, 3))
+
+    assert lifecycle.reconcile(world.session, NOW) is False
+    assert world.writes == world.finished == world.released == []
+    assert resume_check(tmp_path, monkeypatch, world, 3) == (0, "run=false\nresume=false\n")
+
+
+def test_resumes_go_to_whole_planner_runs_strictly_oldest_first_within_the_wave_budget():
+    approved = {44: ["a", "b"], 42: ["c"], 43: ["d", "e", "f"]}
+
+    assert lifecycle.allot(approved, 6) == [42, 43, 44]
+    assert lifecycle.allot(approved, 5) == [42, 43]
+    # Run 44 would fit, but it never overtakes the older run 43.
+    assert lifecycle.allot(approved, 3) == [42]
+    assert lifecycle.allot(approved, 0) == []
+
+
+@pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
+def test_recovery_grants_an_unfinished_session_the_next_attempt_of_its_planner_run(
+    monkeypatch, tmp_path, conclusion
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
+    candidate = world.session.candidate.id
+    link = "https://github.com/example/project/actions/runs/42"
+
+    summary, output = recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == [GRANT, RESUME]
+    assert [comment["body"] for comment in world.comments] == [
+        f"<!-- klaud-resume:42:{candidate}:attempt-2 -->\n" + reporting.translated(
+            f"**resumed** · The session ended before finishing; attempt 2 of [its planner run]"
+            f"({link}) continues it.",
+            f"**resumed** · 会话未完成即已结束；[其规划运行]({link})的第 2 次尝试将继续该会话。",
+        )
+    ]
+    assert world.finished == world.released == []
+    assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+    assert output.read_text() == "resumed=1\n"
+    assert summary.read_text() == (
+        f"Klaud `{candidate}`: resumed / 已恢复 (attempt 2). [Parent run / 父运行]({link})\n\n")
+    assert resume_check(tmp_path, monkeypatch, world, 2) == (0, "run=true\nresume=true\n")
+
+
+def test_recovery_keeps_an_approved_session_without_a_resume_slot_for_the_next_wave(
+    monkeypatch, tmp_path
+):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
+
+    summary, output = recovery_pass(monkeypatch, tmp_path, max_resumes=0)
+
+    assert world.writes == world.finished == world.released == []
+    assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+    assert output.read_text() == "resumed=0\n"
+    assert summary.read_text() == (
+        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (resume deferred: no slot "
+        "left in this wave). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
+        "\n\n")
+
+
+def test_recovery_keeps_a_session_whose_rerun_request_failed_without_leaving_its_grant(
+    monkeypatch, tmp_path, capsys
+):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
+    recording = github.write
+
+    def flaky(repository, path, method, payload=None):
+        if (method, path) == RESUME:
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return recording(repository, path, method, payload)
+
+    monkeypatch.setattr(github, "write", flaky)
+    summary, output = recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == [GRANT, ("DELETE", "issues/comments/101")]
+    assert world.comments == []
+    assert world.finished == world.released == []
+    assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+    assert capsys.readouterr().out == (
+        "::warning::Klaud: resuming planner run 42 failed: state unavailable or invalid.\n")
+    assert summary.read_text() == (
+        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (resume failed, retrying "
+        "next pass: state unavailable or invalid). [Parent run / 父运行]"
+        "(https://github.com/example/project/actions/runs/42)\n\n")
+
+    monkeypatch.setattr(github, "write", recording)
+    recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes[2:] == [GRANT, RESUME]
+    assert [comment["body"].split("\n", 1)[0] for comment in world.comments] == [
+        lifecycle.resume_marker(42, world.session.candidate.id, 2)]
+    assert output.read_text() == "resumed=0\nresumed=1\n"
+
+
+def test_recovery_grants_nothing_in_a_planner_run_someone_else_reran_meanwhile(
+    monkeypatch, tmp_path, capsys
+):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
+    reconcile = lifecycle.reconcile
+
+    def rerun_meanwhile(session, now):
+        try:
+            return reconcile(session, now)
+        finally:
+            world.reads["actions/runs/42"] = {
+                **world.session.parent, "status": "queued", "conclusion": None, "run_attempt": 2,
+            }
+
+    monkeypatch.setattr(lifecycle, "reconcile", rerun_meanwhile)
+    _, output = recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == world.finished == world.released == []
+    assert output.read_text() == "resumed=0\n"
+    assert capsys.readouterr().out == (
+        "::warning::Klaud: resuming planner run 42 failed: Planner run changed after recovery "
+        "read it.\n")
+
+
+@pytest.mark.parametrize(("now", "state", "kept"), [
+    pytest.param("2026-10-15T23:59:59Z", "open", True, id="open-draft-within-a-day"),
+    pytest.param("2026-10-16T00:00:00Z", "open", False, id="open-draft-a-day-later"),
+    pytest.param("2026-10-15T23:59:59Z", "closed", False, id="closed-pr"),
+])  # fmt: skip
+def test_recovery_keeps_an_open_draft_it_could_not_reconcile_for_a_day(
+    monkeypatch, tmp_path, now, state, kept
+):
+    world = ended_session_sweep(monkeypatch, state=state)
+    serve = github.items
+
+    def unavailable(repository, path, key=None):
+        if path.startswith("actions/workflows/run-sweep.yml/runs?per_page=100&created="):
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return serve(repository, path, key)
+
+    monkeypatch.setattr(github, "items", unavailable)
+    recovery_pass(monkeypatch, tmp_path, now=now)
+
+    candidate = world.session.candidate.id
+    lease = ("DELETE", f"git/refs/heads/klaud/recovery-42-{candidate}")
+    branch = ("DELETE", f"git/refs/heads/klaud/auto-{candidate}")
+    closed = [("POST", "issues/7/comments"), ("PATCH", "pulls/7")] if state == "open" else []
+    assert world.writes == ([] if kept else [lease, *closed, branch])
+    assert world.released == ([] if kept else [(candidate, 42)])
+
+
+@pytest.mark.parametrize(("sessions", "kept"), [
+    pytest.param((None,), True, id="below-the-cap"),
+    pytest.param(("failure",) * 3 + (None,), False, id="last-session"),
+])  # fmt: skip
+def test_an_unfinished_session_keeps_its_pr_and_claim_for_a_later_resume(
+    monkeypatch, sessions, kept
+):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=sessions)
+    own = lifecycle.Session("example/project", world.session.parent, world.session.candidate)
+    monkeypatch.setattr(lifecycle, "current_session", lambda: own)
+    monkeypatch.setattr(sys, "argv", ["klaud", "recover-current"])
+
+    if kept:
+        with pytest.raises(lifecycle.PendingCleanup, match="Unfinished session kept for a later"):
+            lifecycle.reconcile(own, NOW)
+    assert klaud.main() == 0
+    assert world.finished == ([] if kept else [UNEXPECTED_ERROR])
+    assert world.released == ([] if kept else [(own.candidate.id, 42)])
+    assert world.writes == []
+
+
+def test_a_planner_job_runs_its_first_session_without_reading_github(
+    tmp_path, monkeypatch, capsys
+):
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    for name in ("read", "items", "write"):
+        monkeypatch.setattr(github, name, lambda *_args: pytest.fail("GitHub API call"))
+    monkeypatch.setattr(sys, "argv", ["klaud", "resume-check"])
+
+    assert klaud.main() == 0
+    assert output.read_text() == capsys.readouterr().out == "run=true\nresume=false\n"
+
+
+@pytest.mark.parametrize(("sessions", "change", "resumes", "code"), [
+    pytest.param(("failure", None), None, True, 0, id="granted"),
+    pytest.param(("failure",) * 3 + (None,), None, True, 0, id="last-session"),
+    pytest.param(("failure", "failure-copied", "failure", "failure", None), None, True, 0,
+                 id="copied-job-not-counted"),
+    pytest.param(("failure", "ungranted", "failure", "ungranted", "failure", None), None, True,
+                 0, id="ungranted-reruns-not-counted"),
+    pytest.param(("failure",) * 4 + (None,), None, False, 0, id="over-the-cap"),
+    pytest.param(("failure", None), "outcome-recorded", False, 0, id="outcome-recorded"),
+    pytest.param(("failure", None), "aborted", False, 0, id="aborted-despite-a-grant"),
+    pytest.param(("failure", None), "ungranted", False, 1, id="no-grant"),
+    pytest.param(("failure", None), "other-attempt", False, 1, id="grant-for-another-attempt"),
+    pytest.param(("failure", None), "forged", False, 1, id="grant-from-someone-else"),
+])  # fmt: skip
+def test_a_rerun_planner_job_runs_only_a_session_recovery_granted_to_it(
+    tmp_path, monkeypatch, sessions, change, resumes, code
+):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=sessions)
+    attempt = len(sessions)
+    if change != "ungranted":
+        world.comments.append(grant_comment(
+            world, attempt * 10 if change == "other-attempt" else attempt,
+            author="maintainer" if change == "forged" else "Klaud-Cold"))
+    if change == "outcome-recorded":
+        world.comments.append(recorded(world.session))
+    if change == "aborted":
+        world.pull["labels"].append({"name": lifecycle.ABORT_LABEL})
+
+    decision = str(resumes).lower()
+    assert resume_check(tmp_path, monkeypatch, world, attempt) == (
+        code, f"run={decision}\nresume={decision}\n")
+    assert world.writes == []
+
+
+def test_an_ungranted_rerun_fails_so_a_later_pass_can_still_resume_its_session(
+    tmp_path, monkeypatch, capsys
+):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=("failure", None))
+
+    assert resume_check(tmp_path, monkeypatch, world, 2) == (1, "run=false\nresume=false\n")
+    assert capsys.readouterr().out == (
+        "run=false\nresume=false\n::notice::Klaud: no resume grant for this attempt; a later "
+        "rerun of the planner run may still resume the session.\n")
+
+    # That job ends failed without starting its agent, so the next pass approves it again.
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=("failure", "ungranted"))
+    assert lifecycle.sessions_started(world.session) == 1
+    with pytest.raises(lifecycle.ResumeSession):
+        lifecycle.reconcile(world.session, NOW)
 
 
 def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch):
@@ -766,6 +1242,58 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
     assert selection["capacity-deferred-candidates"] == [ids[name] for name in deferred]
 
 
+@pytest.mark.parametrize(("resumed", "selected", "note"), [
+    pytest.param(0, 3, "", id="none-resumed"),
+    pytest.param(1, 2, " 1 resumed sessions leave 2 of 3 slots.", id="cap-reduced"),
+    pytest.param(3, 0, " 3 resumed sessions leave no slot for new candidates.", id="cap-filled"),
+    pytest.param(4, 0, " 4 resumed sessions leave no slot for new candidates.", id="over-the-cap"),
+])  # fmt: skip
+def test_select_leaves_the_slots_of_resumed_sessions_to_them(
+    tmp_path, monkeypatch, resumed, selected, note
+):
+    ids = [f"{digit * 16}-{digit * 16}" for digit in "123"]
+    contexts = [
+        {"id": candidate_id, "family": f"configs/nvidia-master.yaml:family-{digit}",
+         "base": "a" * 40, "source": {}, "clusters": ["cluster-a"], "node-demand": 1}
+        for candidate_id, digit in zip(ids, "123", strict=True)
+    ]  # fmt: skip
+    (tmp_path / "candidates.json").write_text(json.dumps(contexts))
+    (tmp_path / "producers.json").write_text("{}\n")
+    review = {"decisions": [
+        {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
+         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+        for context in contexts
+    ]}  # fmt: skip
+
+    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+        return reporting.Baseline(
+            family=candidate.family, date="2026-09-19", image="example/image:1",
+            goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
+            sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"], points=[],
+        )  # fmt: skip
+
+    claimed = []
+    summary = tmp_path / "summary.md"
+    for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", "42"),
+                        ("KLAUD_PR_REVIEW", json.dumps(review)),
+                        ("GITHUB_STEP_SUMMARY", str(summary))):
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 3})
+    monkeypatch.setattr(reporting, "resolve_baseline", resolve)
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
+    monkeypatch.setattr(claims, "claim_family", lambda _r, owned, _run: (
+        claimed.append(owned.id) or True))
+
+    klaud.select(tmp_path, 3, resumed=resumed)
+
+    assert json.loads((tmp_path / "selection.json").read_text())["candidates"] == ids[:selected]
+    assert claimed == ids[:selected]
+    assert summary.read_text() == (
+        f"Klaud Cold: selected {selected} of 3 eligible candidates.{note}\n\n"
+        "See selection.json and review-diagnostics.json in the klaud-plan artifact.\n")
+
+
 def test_prepare_baseline_uses_bound_preflight_and_rejects_source_drift(
     tmp_path, monkeypatch
 ):
@@ -820,6 +1348,49 @@ def test_prepare_baseline_uses_bound_preflight_and_rejects_source_drift(
     (tmp_path / "baseline-preflight.json").unlink()
     with pytest.raises(github.VerificationError, match="artifact is missing"):
         reporting.prepare_baseline(session, context, "Model", goal)
+
+
+@pytest.mark.parametrize("frozen", [True, False], ids=["resumed-session", "first-session"])
+def test_prepare_baseline_keeps_the_baseline_the_candidate_pr_froze(tmp_path, monkeypatch, frozen):
+    candidate = OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+    source = {"date": "2026-09-19", "image": "example/image:1"}
+    preflight = reporting.Baseline(
+        family=FAMILY, date=source["date"], image=source["image"],
+        goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
+        sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"],
+        points=[reporting.Point(
+            key="b" * 64, label="8k/1k c4", conc=4, scenario="fixed-seq-len",
+            values=reporting.Values(total_tps_gpu=42), result="passed",
+        )],
+    )  # fmt: skip
+    published = preflight.model_copy(update={"goal": reporting.Prose(
+        en="Update the image to 2.", zh="将镜像更新为 2。")})
+    goal = reporting.Prose(en="Update the image to 3.", zh="将镜像更新为 3。")
+    if not frozen:
+        (tmp_path / "goal.json").write_text(goal.model_dump_json())
+    (tmp_path / "candidate.json").write_text(json.dumps({"source": source}))
+    (tmp_path / "baseline-preflight.json").write_text(reporting.BaselinePreflight(
+        candidate_id=CANDIDATE_ID, base="a" * 40, baseline_model="Model",
+        source_identity=identity(source), baseline=preflight,
+    ).model_dump_json(by_alias=True))  # fmt: skip
+    pull = {"number": 7, "body": (
+        reporting.baseline_marker(published) if frozen else "<!-- klaud-baseline -->")}
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path))
+    monkeypatch.setattr(lifecycle, "current_session", lambda: SimpleNamespace(
+        repository="example/project", parent={"id": 42}, candidate=candidate,
+        pulls=lambda: [pull], refresh=lambda _pull: pull,
+    ))
+    monkeypatch.setattr(github, "items", lambda _repository, path, _key=None: (
+        [] if path == "issues/7/comments?per_page=100" else pytest.fail(path)))
+    output = tmp_path / "baseline.json"
+    monkeypatch.setattr(sys, "argv", [
+        "klaud", "prepare-baseline", "--model", "Model", "--goal-file",
+        str(tmp_path / "goal.json"), "--output", str(output),
+    ])  # fmt: skip
+
+    assert klaud.main() == 0
+    assert reporting.Baseline.model_validate_json(output.read_text()) == (
+        published if frozen else preflight.model_copy(update={"goal": goal}))
 
 
 def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
@@ -1654,6 +2225,7 @@ STOP = ("Stop as uncertain: the new image stalls every deployment.",
                  id="raw-log"),
     pytest.param("validated", STOP, False, False, False, id="validated"),
     pytest.param("uncertain", STOP, False, True, False, id="recovered-session"),
+    pytest.param("aborted", STOP, False, False, False, id="aborted-by-label"),
 ])  # fmt: skip
 def test_closing_report_states_why_from_the_latest_own_attempt(
     monkeypatch, outcome, latest, chunked, recovering, shown
@@ -1675,9 +2247,13 @@ def test_closing_report_states_why_from_the_latest_own_attempt(
     runs = "[9](https://github.com/example/project/actions/runs/9)"
     done = {
         "uncertain": ("PR closed; branch deleted for retry.", "PR 已关闭；分支已删除，可重新尝试。"),
+        "aborted": ("PR closed; branch deleted for retry.", "PR 已关闭；分支已删除，可重新尝试。"),
         "validated": ("Full sweep verified; ready for review.", "完整 sweep 已验证；已就绪，等待审查。"),
     }[outcome]
     why = (f"**Reason:** {latest[0]}  \n", f"**原因：**{latest[1]}  \n") if shown else ("", "")
+    if outcome == "aborted":
+        why = ("**Reason:** Stopped by the klaud-abort label.  \n",
+               "**原因：**已由 klaud-abort 标签停止。  \n")
 
     assert finish_report(monkeypatch, outcome, comments, recovering) == (
         f"**{outcome}** · Repairs: 0 · Runs: {runs}  \n{why[0]}All owned runs ended. {done[0]}"
@@ -1685,6 +2261,69 @@ def test_closing_report_states_why_from_the_latest_own_attempt(
         f"**{outcome}** · 修复次数：0 · 运行：{runs}  \n{why[1]}所有自有运行均已结束。{done[1]}"
         "\n\n</details>"
     )
+
+
+def test_every_candidate_pr_body_says_how_to_stop_the_candidate(monkeypatch):
+    body = reporting.render_body(frozen_dsr1_baseline(monkeypatch))
+    english, chinese = body.split("<summary>中文</summary>")
+
+    assert ("**Stop:** Add the `klaud-abort` label at any time to stop this candidate now; Klaud "
+            "cancels its runs, closes this PR and does not retry it. Remove the label to let the "
+            "planner pick it up again.") in english
+    assert ("**停止：**随时添加 `klaud-abort` 标签即可立即停止该候选：Klaud 会取消其运行、关闭此 PR "
+            "且不再重试。移除该标签后，规划器会在下次扫描时重新考虑它。") in chinese
+
+
+def test_the_planner_skips_aborted_candidates_until_the_label_is_removed(monkeypatch):
+    aborted, other = "1" * 16 + "-" + "2" * 16, "3" * 16 + "-" + "4" * 16
+    issues = [
+        {"number": 7, "user": {"login": "Klaud-Cold"}, "pull_request": {}},
+        {"number": 8, "user": {"login": "maintainer"}, "pull_request": {}},
+        {"number": 9, "user": {"login": "Klaud-Cold"}},
+    ]
+    heads = {"pulls/7": f"klaud/auto-{aborted}", "pulls/8": f"klaud/auto-{other}"}
+    monkeypatch.setattr(klaud, "github_items", lambda _repository, path, _key=None: (
+        issues if path == "issues?labels=klaud-abort&state=all&per_page=100"
+        else pytest.fail(path)))
+    monkeypatch.setattr(klaud, "github_read", lambda _repository, path: (
+        {"head": {"ref": heads[path]}}))
+
+    assert klaud.aborted_candidates("example/project") == {aborted}
+
+
+@pytest.mark.parametrize(("labels", "outcome", "released"), [
+    pytest.param([], "aborted", True, id="label-removed"),
+    pytest.param(["klaud-abort"], "aborted", False, id="still-labeled"),
+    pytest.param([], "uncertain", False, id="closed-for-another-reason"),
+])  # fmt: skip
+def test_removing_klaud_abort_lifts_the_cooldown_of_an_aborted_candidate(
+    monkeypatch, labels, outcome, released
+):
+    candidate = "1" * 16 + "-" + "2" * 16
+    record = {"head": "c" * 40, "outcome": {**UNEXPECTED_ERROR.model_dump(by_alias=True),
+                                            "outcome": outcome}}
+    comments = [
+        {"id": 1, "user": {"login": "Klaud-Cold"}, "body": f"<!-- klaud-outcome:41:{candidate}\n"
+         + json.dumps({**record, "outcome": {**record["outcome"], "outcome": "uncertain"}})
+         + "\n-->\nOlder."},
+        {"id": 2, "user": {"login": "Klaud-Cold"},
+         "body": f"<!-- klaud-outcome:42:{candidate}\n{json.dumps(record)}\n-->\nLatest."},
+    ]
+    pulls = [{"number": 7, "user": {"login": "Klaud-Cold"}, "created_at": "2026-10-15T00:00:00Z",
+              "labels": [{"name": name} for name in labels]}]
+
+    def items(_repository, path, _key=None):
+        if path.startswith("pulls?state=closed&head=example%3Aklaud%2Fauto-"):
+            return pulls
+        if path == "issues/7/comments?per_page=100":
+            return comments
+        raise AssertionError(path)
+
+    monkeypatch.setattr(klaud, "github_items", items)
+
+    assert klaud.abort_released("example/project", candidate) is released
+    assert [c["id"] for c in klaud.order_by_cooldown([{"id": candidate}], {candidate: "aborted"})] \
+        == [candidate]
 
 
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):
