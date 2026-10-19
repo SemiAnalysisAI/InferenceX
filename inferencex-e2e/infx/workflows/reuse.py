@@ -142,9 +142,6 @@ def find_latest_successful_pr_run(
     if not head_branch or not valid_shas:
         return None
     runs = completed_pr_runs(repo, workflow_id, head_branch, token)
-    # GitHub returns runs newest-first.  Skip gated no-op runs (synchronize
-    # events suppressed by a /reuse-sweep-run comment) which complete as
-    # "success" but produce no benchmark or eval artifacts.
     for run in runs:
         if run.get("conclusion") != "success":
             continue
@@ -178,8 +175,6 @@ def validate_reusable_run(
         raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
     if run.get("status") != "completed":
         raise RuntimeError(f"Reusable source run {run_id} is not completed.")
-    # Maintainers may pin incomplete sweeps; ingestion keeps only completed points.
-    # Fail-fast can mark the run cancelled even when its benchmark jobs passed.
     allowed_conclusions = {"success", "failure", "cancelled"} if allow_failed else {"success"}
     if run.get("conclusion") not in allowed_conclusions:
         expected = "success, failure, or cancelled" if allow_failed else "success"

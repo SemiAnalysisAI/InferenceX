@@ -1,0 +1,88 @@
+base:
+  schema: 2
+  name: musespark-fp4-h100-sglang-agentic
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        quantization: modelopt_fp4
+        moe-runner-backend: marlin
+        fp4-gemm-backend: marlin
+        attention-backend: fa3
+        kv-cache-dtype: fp8_e4m3
+        # Loaded target and draft weights require a static fraction above 0.94.
+        mem-fraction-static: 0.97
+        # Bound prefill activations while retaining the full request context.
+        chunked-prefill-size: 1024
+        # Full-attention KV must fit 256k prompts; SWA retains its 2048-token window.
+        swa-full-tokens-ratio: 0.1
+        disable-prefill-cuda-graph: true
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: fa4
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Eager sampling supports admission above the captured graph batch size.
+        SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable to the client; use the staged checkpoint.
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+# The GPU KV pool is a few GB per rank, so agentic prefixes evict between turns;
+# HiCache keeps them in host DRAM instead of recomputing them.
+zip_override_tp8_hicache:
+  roles:
+    agg:
+      args:
+        # Eager batches above the decode graphs OOM in the MoE with ~1 GB free.
+        max-running-requests: [2, 4, 8, 8]
+        # Each graph slot reserves seven full-context int32 page tables, and
+        # bs=16 graphs leave too little headroom for the vision encoder.
+        cuda-graph-max-bs-decode: [2, 4, 8, 8]
+        enable-hierarchical-cache: true
+        hicache-size: 160
+        # 0.97 left ~1.3 GB free and HiCache's serving buffers OOMed it at c4; 0.95
+        # shrank the GPU KV pool to ~98k tokens, below the trace's ~196k-token
+        # inputs. 0.965 keeps ~1.8 GB free and a ~250k-token pool.
+        mem-fraction-static: 0.965
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8']
+      KV_OFFLOADING: dram

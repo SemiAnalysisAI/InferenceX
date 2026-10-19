@@ -152,7 +152,6 @@ def test_power_cli_preserves_energy_and_audit_contract(power_artifacts):
     result = _run_power_cli(case)
     assert result.returncode == 0, result.stderr
     assert result.stderr == ""
-    # Four GPUs average 350 W for 60 s: 84,000 J, or 10,500 J per completed query.
     aggregate = case["package"].agg()
     assert aggregate["avg_power_w"] == 350
     assert aggregate["total_gpu_energy_j"] == 84000
@@ -261,7 +260,6 @@ def test_packaged_power_runs_from_isolated_package(power_artifacts, tmp_path):
 
 @pytest.mark.parametrize("quantile", [0.75, 0.9])
 def test_power_percentiles_use_synchronized_total_not_device_percentiles(quantile):
-    # Opposing device ramps keep the fleet draw constant at 600 W.
     devices = [[(0, 100), (1, 500)], [(0, 500), (1, 100)]]
     assert _percentile_total_power(
         devices, start_unix=0, end_unix=1, quantile=quantile
@@ -270,7 +268,6 @@ def test_power_percentiles_use_synchronized_total_not_device_percentiles(quantil
 
 @pytest.mark.parametrize(("quantile", "expected"), [(0.75, 225), (0.9, 240)])
 def test_power_percentiles_weight_time_and_clip_the_validated_window(quantile, expected):
-    # Dense readings must not bias the uniform 150-250 W ramp inside the window.
     device = [(0, 100), (1, 200), (1.9, 290), (2, 300)]
     assert _percentile_total_power(
         [device], start_unix=0.5, end_unix=1.5, quantile=quantile
@@ -279,7 +276,6 @@ def test_power_percentiles_weight_time_and_clip_the_validated_window(quantile, e
 
 @pytest.mark.parametrize("quantile", [0.75, 0.9])
 def test_power_percentiles_align_asynchronous_gpu_samples(quantile):
-    # 100 + 200t and 500 - 200t sum to a constant 600 W on unaligned sample clocks.
     devices = [[(0, 100), (1, 300)], [(-0.5, 600), (0.5, 400), (1.5, 200)]]
     assert _percentile_total_power(
         devices, start_unix=0, end_unix=1, quantile=quantile

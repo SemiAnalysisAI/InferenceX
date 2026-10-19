@@ -14,7 +14,7 @@ from infx.bench import env, proc, uv
 from infx.bench.eval.context import EvalContext, EvalOutcome
 
 REPOSITORY = "https://github.com/EleutherAI/lm-evaluation-harness"
-REF = "b315ef3b05176acc9732bb7fdec116abe1ecc476"  # installed over the lm-eval[api] release
+REF = "b315ef3b05176acc9732bb7fdec116abe1ecc476"
 DEFAULT_TASKS = "infx/evals/gsm8k.yaml"
 PATCH = "infx/evals/patches/lm_eval_sitecustomize.py"
 FALLBACK_CONTEXT = 16384
@@ -30,7 +30,6 @@ def install(environ: Mapping[str, str]) -> None:
     except env.BenchError as error:
         print(f"WARN: {error}", file=sys.stderr)
         return
-    # torchvision causes circular imports in ATOM; TRT-LLM/SGLang need it at module level.
     if "atom" in environ.get("IMAGE", ""):
         _pip(environ, "uninstall", "torchvision")
     _pip(environ, "install", "lm-eval[api]")
@@ -51,7 +50,6 @@ def _pip(environ: Mapping[str, str], command: str, *args: str) -> bool:
 
 def native_context_length(model: str) -> int:
     """The model config's maximum sequence length, or 0 when it cannot be read."""
-    # A local config.json works even when transformers does not know the model type yet.
     try:
         config = json.loads((Path(model) / "config.json").read_text())
     except (OSError, ValueError):
@@ -62,10 +60,10 @@ def native_context_length(model: str) -> int:
             if type(value) is int and value > 0:
                 return value
     try:
-        from transformers import AutoConfig  # the serving image's copy, loaded only here
+        from transformers import AutoConfig
 
         config = AutoConfig.from_pretrained(model, trust_remote_code=True)
-    except Exception:  # noqa: BLE001 - any failure leaves the native maximum unknown
+    except Exception:  # noqa: BLE001
         return 0
     for name in CONTEXT_FIELDS:
         if hasattr(config, name):
@@ -79,9 +77,8 @@ def context_length(environ: Mapping[str, str]) -> int:
     explicit = env.optional("EVAL_MAX_MODEL_LEN", env=environ)
     if explicit is not None:
         return env.parse_positive_int("EVAL_MAX_MODEL_LEN", explicit)
-    benchmark = env.optional("MAX_MODEL_LEN", env=environ) or "0"  # 0: the native maximum
+    benchmark = env.optional("MAX_MODEL_LEN", env=environ) or "0"
     benchmark_length = 0 if benchmark == "0" else env.parse_positive_int("MAX_MODEL_LEN", benchmark)
-    # MODEL can be a served alias that is neither a repo id nor a path (deepseek-r1-fp4 on B300).
     local = env.optional("MODEL_PATH", env=environ)
     model = local if local and Path(local).is_dir() else env.require("MODEL", env=environ)["MODEL"]
     native = native_context_length(model)
@@ -145,6 +142,5 @@ def run(ctx: EvalContext) -> EvalOutcome:
     with tempfile.TemporaryDirectory(prefix="lm-eval-patch-") as patch:
         shutil.copyfile(proc.REPO_ROOT / PATCH, Path(patch, "sitecustomize.py"))
         pythonpath = os.pathsep.join([patch, proc.pythonpath(ctx.env)])
-        # Relative task paths resolve against the checkout, whatever the image WORKDIR.
         rc = proc.call(argv, {**ctx.env, "PYTHONPATH": pythonpath}, cwd=proc.REPO_ROOT)
     return EvalOutcome(rc, suite(ctx.env))

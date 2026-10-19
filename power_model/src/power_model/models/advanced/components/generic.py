@@ -30,6 +30,10 @@ class CPU(FixedPowerComponent):
     """CPU power under the caller's stated component boundary."""
 
 
+class CPUAndDRAM(FixedPowerComponent):
+    """Measured CPU and attached DRAM power for one socket."""
+
+
 class X86CPU(CPU):
     """One x86 CPU with fixed state power, excluding separately modeled DIMMs."""
 
