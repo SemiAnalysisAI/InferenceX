@@ -10114,6 +10114,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4287
 
 - config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Muse Spark Open GB200 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image and search space are unchanged."
+    - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4293
+
+- config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
