@@ -12,7 +12,7 @@ permissions:
   pull-requests: read # Read PR metadata.
 
 env:
-  # Total candidates per invocation; selected candidates run in parallel.
+  # Total candidates per invocation, resumed sessions included; they run in parallel.
   MAX_CANDIDATES_PER_RUN: '5'
 
 jobs:
@@ -30,6 +30,8 @@ jobs:
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       blocked-families: ${{ steps.recover.outputs.blocked-families }}
+      # Unfinished sessions recovery reran in their planner runs; they share this wave's cap.
+      resumed: ${{ steps.recover.outputs.resumed }}
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -69,7 +71,7 @@ jobs:
           # Repository automation credential; the planner runs only on main.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
-          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-resumes "$MAX_CANDIDATES_PER_RUN"
           echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
 
   review:
@@ -80,6 +82,7 @@ jobs:
       contents: read
       actions: read # Read workflow runs and artifacts.
       pull-requests: read # Read PR metadata.
+      issues: read # Read klaud-abort labels and Klaud outcome comments.
     env:
       REVIEW_BATCH_SIZE: '64'
       CANDIDATE_COOLDOWN_HOURS: '24'
@@ -278,7 +281,8 @@ jobs:
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
           KLAUD_PR_REVIEW: ${{ needs.review.outputs.review }}
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
-        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
+          KLAUD_RESUMED: ${{ needs.recover.outputs.resumed }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --resumed "${KLAUD_RESUMED:-0}" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-ownership
