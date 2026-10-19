@@ -203,6 +203,8 @@ override_tp2_c4:
 # all-rank lookup, sized at TOTAL_CPU_DRAM_GB / TP (257 GB) per rank.
 # PYTHONHASHSEED keeps every rank's chunk keys identical; without it the
 # offload hit rate is zero.
+# TP2 uses gluon decode: the FlyDSL reduce reads KFD topology nodes outside
+# the job's GPU cgroup and fails with EPERM.
 override_tp2_c20_lmcache:
   roles:
     agg:
@@ -213,6 +215,7 @@ override_tp2_c20_lmcache:
           - kv_connector: lmcache_offload
             kv_role: offload
       env:
+        ATOM_PA_FLYDSL: '0'
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
@@ -237,6 +240,7 @@ override_tp2_c25_lmcache:
           - kv_connector: lmcache_offload
             kv_role: offload
       env:
+        ATOM_PA_FLYDSL: '0'
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
@@ -261,6 +265,7 @@ override_tp2_c30_lmcache:
           - kv_connector: lmcache_offload
             kv_role: offload
       env:
+        ATOM_PA_FLYDSL: '0'
         PYTHONHASHSEED: '0'
         LMCACHE_LOCAL_CPU: 'True'
         LMCACHE_MAX_LOCAL_CPU_SIZE: '257'
