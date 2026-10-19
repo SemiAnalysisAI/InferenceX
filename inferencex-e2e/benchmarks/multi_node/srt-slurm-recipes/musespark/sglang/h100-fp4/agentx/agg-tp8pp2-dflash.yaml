@@ -41,6 +41,8 @@ roles:
       SGLANG_TIMEOUT_KEEP_ALIVE: "900"
       # Serve from the pre-seeded shared HF cache with no Hub API calls.
       HF_HUB_OFFLINE: "1"
+      HF_HUB_CACHE: "/hf_hub_cache"
+      HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
       # Only stage-boundary activations cross nodes. The container has no EFA
       # NCCL plugin, so keep NCCL off the EFA verbs devices and on sockets.
       NCCL_IB_DISABLE: "1"
