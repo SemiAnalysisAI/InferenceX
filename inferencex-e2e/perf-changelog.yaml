@@ -10205,6 +10205,7 @@
   scenario-type:
     - agentic-coding
   description:
+    - "Move the image from rocm/atom-dev:nightly_202610131505 (ATOM 661ef7661) to rocm/atom-dev:nightly_202610191501 (ATOM 53e4fb524), and pin the recipe frontend to that tag's digest sha256:566aa3dc9d5d98a737f9f5c1b775a651e44dfd8e878ab77f2536a76df21f687e. The new image adds Kimi-K3 mono decode and the one-token f_b_proj fix it depends on (ROCm/ATOM#2626)."
     - "Add concurrency 2; the published set becomes [1, 2, 4, 14, 16, 48, 56, 72]. Concurrency 2 runs the 7-token DSpark draft at AL 3.84 with a 1-32 CUDA-graph ladder."
     - "Serve concurrency 1 and 2 with ATOM mono decode (ATOM_MONO_ENABLE=1). Mono requires fp32 SSM state (ATOM_GDN_SSM_DTYPE=fp32) and BF16 in_proj, f_b_proj, o_proj and shared-expert projections, which are added to the online-quant exclude list. Every other point sets ATOM_MONO_ENABLE=0."
     - "At concurrency 48, 56 and 72, enable on-demand state checkpoints (ATOM_STATE_CHECKPOINT_DEMAND=1), raise the per-rank LMCache pool to 224 GB, and cap retained state at 128 GB inside that pool (OFFLOAD_STATE_CPU_SIZE=128). dram-utilization 0.6 gives TOTAL_CPU_DRAM_GB 1799."
