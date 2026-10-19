@@ -10201,4 +10201,4 @@
     - "Enable SGLANG_HIP_DSV4_C4_INDEXER_ROWGROUP=1 on all points."
     - "Raise DP chunked-prefill-size from 65536 to 131072 (16384 tokens per rank)."
     - "MegaMoE: raise FlyDSL MTPR to 16384, add decode MTPR / fixed-slot caps, EPLB P2P batch chunk size 7."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4245
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4315
