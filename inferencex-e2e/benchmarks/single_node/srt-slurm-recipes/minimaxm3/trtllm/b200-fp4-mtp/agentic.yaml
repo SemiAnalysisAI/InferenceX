@@ -14,9 +14,6 @@ base:
   engine:
     type: trtllm
     served_model_name: nvidia/MiniMax-M3-NVFP4
-  # Keep Prometheus without rc23's per-step timing collector and accept BFCL's
-  # store=false field.
-  setup_script: minimaxm3-trtllm-agentx.sh
   # TP8 loads, autotunes and captures graphs past the 30-minute default.
   health_check:
     max_attempts: 1440
@@ -52,7 +49,8 @@ base:
         kv_cache_config:
           free_gpu_memory_fraction: 0.94
           enable_block_reuse: true
-          block_reuse_policy: per_conversation
+          block_reuse_config:
+            policy: per_conversation
           tokens_per_block: 128
           use_kv_cache_manager_v2: true
           dtype: fp8
