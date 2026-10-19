@@ -10528,3 +10528,63 @@ musespark-fp4-h100-sglang-agentic-dflash:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8], srt-recipe: agentic.yaml }
+
+musespark-fp4-h100-dynamo-sglang-agentic-agg-tp16-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:h100-dsxe
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.5.0.dev20260914" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/sglang/h100-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: draft_model
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-tp16-variants.yaml:override_tp16_c1
+        worker:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [2]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-tp16-variants.yaml:override_tp16_c2
+        worker:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [4]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-tp16-variants.yaml:override_tp16_c4
+        worker:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [8]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 2
+        srt-recipe: agg-1m-tp16-variants.yaml:override_tp16_c8
+        worker:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
