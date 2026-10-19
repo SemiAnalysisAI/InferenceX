@@ -538,7 +538,7 @@ clusters:
       partition: batch_1
       account: benchmark
       exclusive: true
-      exclude: [dsxe-sa-b300-prd0-gpu-16]
+      exclude: [dsxe-sa-b300-prd0-gpu-08, dsxe-sa-b300-prd0-gpu-16]
       gres: "gpu:{gpus}"
       cpus-per-gpu: 24
       salloc-args: [--mem=0]
