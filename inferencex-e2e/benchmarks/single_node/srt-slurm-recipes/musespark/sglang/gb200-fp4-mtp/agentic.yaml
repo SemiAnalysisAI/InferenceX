@@ -89,6 +89,10 @@ override_tp4_c4:
       args:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
   benchmark:
     env:
       CONC: '4'
@@ -99,6 +103,10 @@ override_tp4_c6:
       args:
         max-running-requests: 12
         cuda-graph-max-bs-decode: 12
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
   benchmark:
     env:
       CONC: '6'
@@ -109,6 +117,10 @@ override_tp4_c8:
       args:
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
   benchmark:
     env:
       CONC: '8'
@@ -119,6 +131,16 @@ override_tp4_c10:
       args:
         max-running-requests: 20
         cuda-graph-max-bs-decode: 20
+        mem-fraction-static: 0.95
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        speculative-draft-attention-backend: null
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
   benchmark:
     env:
       CONC: '10'
@@ -129,6 +151,17 @@ override_tp4_c12:
       args:
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
+        mem-fraction-static: 0.95
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 16
+        speculative-draft-attention-backend: null
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
   benchmark:
     env:
       CONC: '12'
@@ -139,9 +172,41 @@ override_tp4_c16:
       args:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
+        mem-fraction-static: 0.95
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 16
+        speculative-draft-attention-backend: null
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
   benchmark:
     env:
       CONC: '16'
+
+override_tp4_c20:
+  roles:
+    agg:
+      args:
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        mem-fraction-static: 0.95
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        speculative-draft-attention-backend: null
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  benchmark:
+    env:
+      CONC: '20'
 
 override_tp4_c24:
   roles:
@@ -149,9 +214,34 @@ override_tp4_c24:
       args:
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.95
+        disable-prefill-cuda-graph: null
+        cuda-graph-backend-prefill: breakable
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        speculative-draft-attention-backend: null
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
   benchmark:
     env:
       CONC: '24'
+
+override_tp4_c28:
+  roles:
+    agg:
+      args:
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        prefill-decode-interval: 16
+        speculative-draft-attention-backend: null
+      env:
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  benchmark:
+    env:
+      CONC: '28'
 
 override_tp4_c32:
   roles:
@@ -159,6 +249,13 @@ override_tp4_c32:
       args:
         max-running-requests: 64
         cuda-graph-max-bs-decode: 64
+        mem-fraction-static: 0.9
+        prefill-decode-interval: 16
+        speculative-draft-attention-backend: null
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
   benchmark:
     env:
       CONC: '32'
