@@ -96,6 +96,8 @@ override_tp16_dspark5:
       args:
         tensor-parallel-size: 16
         decode-context-parallel-size: 16
+        # Specialized decode requires multicast across the whole TP group.
+        additional-config: '{"decode_backend":"auto"}'
         max-cudagraph-capture-size: 48
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,10,12,20,24,40,48]}'
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
