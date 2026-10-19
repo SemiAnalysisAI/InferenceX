@@ -199,3 +199,97 @@ override_1p1d_tp16_c20_v2mnnvl:
         enable-megamoe-for-layernorm-sp: null
         max-running-requests: 25
         cuda-graph-max-bs-decode: 25
+
+override_1p1d_tp16_c24_v2mnnvl_hic120:
+  roles:
+    prefill:
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+      args:
+        disaggregation-transfer-backend: mooncake
+        hicache-size: 120
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+      args:
+        disaggregation-transfer-backend: mooncake
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        enable-layernorm-sp: null
+        enable-megamoe-for-layernorm-sp: null
+        max-running-requests: 30
+        cuda-graph-max-bs-decode: 30
+
+override_1p8_2d16_c40_v2mnnvl:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+      args:
+        disaggregation-transfer-backend: mooncake
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+    decode:
+      nodes: 8
+      workers: 2
+      gpus: 16
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+      args:
+        disaggregation-transfer-backend: mooncake
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        enable-layernorm-sp: null
+        enable-megamoe-for-layernorm-sp: null
+        max-running-requests: 25
+        cuda-graph-max-bs-decode: 25
+
+override_1p8_3d16_c52_v2mnnvl:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+      args:
+        disaggregation-transfer-backend: mooncake
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+    decode:
+      nodes: 12
+      workers: 3
+      gpus: 16
+      env:
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        UCX_TLS: null
+        PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+      args:
+        disaggregation-transfer-backend: mooncake
+        tensor-parallel-size: 16
+        expert-parallel-size: 16
+        enable-layernorm-sp: null
+        enable-megamoe-for-layernorm-sp: null
+        max-running-requests: 22
+        cuda-graph-max-bs-decode: 22

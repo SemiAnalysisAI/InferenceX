@@ -8825,7 +8825,7 @@ musespark-fp4-gb200-dynamo-sglang-agentic-disagg-1m-mixed-tp-mnnvl:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: draft_model
-        conc-list: [20]
+        conc-list: [8, 12, 16, 20]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1m-mixed-tp-variants.yaml:override_1p1d_tp16_c20_v2mnnvl
@@ -8836,6 +8836,51 @@ musespark-fp4-gb200-dynamo-sglang-agentic-disagg-1m-mixed-tp-mnnvl:
           dp-attn: false
         decode:
           num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [24]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-1m-mixed-tp-variants.yaml:override_1p1d_tp16_c24_v2mnnvl_hic120
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [36, 40]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-1m-mixed-tp-variants.yaml:override_1p8_2d16_c40_v2mnnvl
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 2
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [48, 52]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-1m-mixed-tp-variants.yaml:override_1p8_3d16_c52_v2mnnvl
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 3
           tp: 16
           ep: 16
           dp-attn: false
@@ -10296,7 +10341,7 @@ musespark-fp4-gb300-dynamo-sglang-agentic-disagg-1m-mixed-tp-mnnvl:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: draft_model
-        conc-list: [20]
+        conc-list: [16, 20]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         srt-recipe: disagg-1m-mixed-tp-variants.yaml:override_1p1d_tp16_c20_v2mnnvl
@@ -10307,6 +10352,36 @@ musespark-fp4-gb300-dynamo-sglang-agentic-disagg-1m-mixed-tp-mnnvl:
           dp-attn: false
         decode:
           num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [20, 24, 28]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-1m-mixed-tp-variants.yaml:override_1p2d_tp16_c28_v2mnnvl
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+        decode:
+          num-worker: 2
+          tp: 16
+          ep: 16
+          dp-attn: false
+      - spec-decoding: draft_model
+        conc-list: [48, 60]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-1m-mixed-tp-variants.yaml:override_1p8_3d16_c60_v2mnnvl
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 3
           tp: 16
           ep: 16
           dp-attn: false
