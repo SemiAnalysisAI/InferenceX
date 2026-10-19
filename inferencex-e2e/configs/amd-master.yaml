@@ -760,7 +760,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [2, 4, 10, 16, 24, 32, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610070333
+  image: rocm/atom-dev:nightly_202610190554@sha256:9765777e2f56c5c17fefc9e141b37c51f1ab2dea009b158bcf1823f10030cea3
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds

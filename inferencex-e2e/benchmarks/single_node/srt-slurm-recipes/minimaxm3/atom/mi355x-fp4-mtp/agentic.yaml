@@ -40,7 +40,6 @@ base:
         AITER_FLYDSL_STAGE2_FP8: '1'
         ATOM_FORCE_ATTN_TRITON: '1'
         ATOM_PA_FLYDSL: '1'
-        ATOM_PA_FLYDSL_PLAN: '1'
   benchmark:
     env:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
