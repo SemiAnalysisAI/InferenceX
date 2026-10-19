@@ -53,6 +53,10 @@ base:
         SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Serve from the pre-seeded shared HF cache with no Hub API calls: every
+        # rank's revision lookup otherwise trips the 1000-per-5-min 429 limit
+        # when several points start together.
+        HF_HUB_OFFLINE: '1'
   health_check:
     max_attempts: 1440
     interval_seconds: 5
@@ -72,17 +76,20 @@ zip_override_tp8_hicache:
     agg:
       args:
         # Eager batches above the decode graphs OOM in the MoE with ~1 GB free.
-        max-running-requests: [2, 4, 8, 8]
+        max-running-requests: [2, 2]
         # Each graph slot reserves seven full-context int32 page tables, and
         # bs=16 graphs leave too little headroom for the vision encoder.
-        cuda-graph-max-bs-decode: [2, 4, 8, 8]
+        cuda-graph-max-bs-decode: [2, 2]
         enable-hierarchical-cache: true
         hicache-size: 160
         # 0.97 left ~1.3 GB free and HiCache's serving buffers OOMed it at c4; 0.95
         # shrank the GPU KV pool to ~98k tokens, below the trace's ~196k-token
-        # inputs. 0.965 keeps ~1.8 GB free and a ~250k-token pool.
-        mem-fraction-static: 0.965
+        # inputs. 0.965 kept ~1.8 GB free and a ~258k-token pool, which aborts
+        # the full corpus's 330k-480k-token inputs. Capping the sweep at c2
+        # shrinks the decode graphs and HiCache buffers enough for 0.975 and a
+        # larger pool.
+        mem-fraction-static: 0.975
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8']
+      CONC: ['1', '2']
       KV_OFFLOADING: dram
