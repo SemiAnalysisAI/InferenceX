@@ -1,0 +1,198 @@
+base:
+  schema: 2
+  name: mimov2.6flash-fp4-b200-sglang-agentic
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: XiaomiMiMo/MiMo-V2.6-Flash-RL
+        trust-remote-code: true
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        # The default trtllm_mha rejects MiMoV2's asymmetric K/V head dims.
+        attention-backend: fa4
+        # Routed experts are packed MXFP4; v0.5.21's MiMo default picks the
+        # FP8 TRT-LLM runner, which cannot read them.
+        moe-runner-backend: flashinfer_mxfp4
+        # language-model-only rejects MiMoV2, so the vision/audio encoders load;
+        # run the ViT on FA4 like the decoder.
+        mm-attention-backend: fa4
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        # Parallel tokenization keeps 256k warmups within the client timeout.
+        tokenizer-worker-num: 6
+        reasoning-parser: mimo
+        tool-call-parser: mimo
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. Admission is 2x CONC for subagent fan-out and the
+# decode graph batch is CONC. Attention TP must divide the checkpoint's
+# TP4-interleaved fused QKV, so TP8 without DP attention is invalid.
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 64
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: none
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 1
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp2_c4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp2_c32:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 32
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
