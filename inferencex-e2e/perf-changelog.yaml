@@ -10193,6 +10193,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4291
 
 - config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Re-sweep Muse Spark Open MI355X AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image, recipe and search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4295
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
