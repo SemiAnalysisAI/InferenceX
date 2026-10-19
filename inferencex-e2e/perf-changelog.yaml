@@ -10112,6 +10112,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4208
 
 - config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh the GLM-5.2 NVFP4 B200 AgentX aggregate key on Dynamo (KV router) + SGLang: move it to the image and Dynamo build of glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4 (lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729, Dynamo 1.5.0.dev20260903) with one aggregated engine per point, EAGLE speculative decoding (5 steps, 6 draft tokens) and HiCache write-back host-DRAM offload."
+    - "Sweep six points in place of the three TP8 points: TP8 and TP4 at conc 1, TP4 at conc 4, 8 and 12, and TP8 MoE with DP8 attention at conc 32."
+    - "Cap admission and decode CUDA graphs at 2 for TP8 conc 1 and at 1 for TP4 conc 1, so fan-out subagents queue instead of widening the decode batch."
+    - "Use mem-fraction-static 0.85 and 170 GB of HiCache per rank, so the KV and DSA indexer host pools of the four ranks on each NUMA node (~836 GB) fit that node; dram-utilization 1.0 records each engine's full GPU share of host DRAM (1,073 GB at TP4, 2,146 GB at TP8) as its offload budget."
+    - "The DP8-attention point runs attention TP1 per rank with the DP LM head and the prefill delayer, mem-fraction-static 0.82, node totals of 65536 chunked-prefill tokens and 128 running requests (8192 and 16 per rank), and decode CUDA graphs up to batch 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4286
+
+- config-keys:
     - musespark-fp4-mi355x-sglang-agentic-dflash
     - musespark-fp4-gb200-sglang-agentic-dflash
     - musespark-fp4-b200-sglang-agentic-dflash
