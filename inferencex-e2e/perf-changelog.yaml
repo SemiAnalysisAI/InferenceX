@@ -10199,3 +10199,9 @@
   description:
     - "Re-sweep Muse Spark Open MI355X AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image, recipe and search space are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4295
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.12-rocm720-mi30x to v0.5.22-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4312
