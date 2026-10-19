@@ -51,8 +51,10 @@ def file_at(repository: str, head: str, path: str) -> bytes:
     return base64.b64decode(result["content"])
 
 
-def download_json(repository: str, artifact: dict, destination: Path) -> None:
-    """Read bounded JSON only; never extract archive paths or execute artifact code."""
+def download_json(
+    repository: str, artifact: dict, destination: Path, *, suffix: str = ".json"
+) -> None:
+    """Read bounded ``suffix`` JSON files only; never extract archive paths or execute code."""
     limit = 256 * 1024 * 1024
     if artifact["expired"] or not 0 < artifact["size_in_bytes"] <= limit:
         raise VerificationError("Artifact unavailable or too large")
@@ -66,7 +68,7 @@ def download_json(repository: str, artifact: dict, destination: Path) -> None:
     )
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as source:
-            members = [item for item in source.infolist() if item.filename.endswith(".json")]
+            members = [item for item in source.infolist() if item.filename.endswith(suffix)]
             if not members or sum(item.file_size for item in members) > limit:
                 raise VerificationError("Invalid artifact JSON size")
             for member in members:

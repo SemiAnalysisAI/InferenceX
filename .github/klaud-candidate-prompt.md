@@ -107,6 +107,13 @@ comment immediately, before waiting. Use `gh run watch --interval 60`, resume af
 timeouts, and inspect jobs because queued workflows can contain active jobs and failed
 benchmarks can leave evals running. Diagnose the FIRST server error, not teardown symptoms.
 Empty aggregates or green collectors do not prove success.
+When a run fails or is cancelled, read its job records before any log with the helper's
+`job-failures --run-id RUN`: each failed job's recorded error type, stage, cause line and
+evidence log. `rerun: preempted` is preemption; `rerun: retriable` means every failure lost its
+job to the cluster or runner, so rerun the failed jobs on the same head as an
+infrastructure-retry. Other errors (RecipeBindFailed, SubmitFailed, ResultMissing, EvalFailed
+and the like) are real failures: start from their cause line and evidence log. Without records,
+inspect the job logs. Never paste record or log text into comments; describe it.
 
 One initial update plus $MAX_REPAIRS repairs TOTAL, including final-sweep repairs.
 A confirmed transient client-download/runner/network retry does not consume a recipe

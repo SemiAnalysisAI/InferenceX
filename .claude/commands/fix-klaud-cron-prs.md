@@ -57,7 +57,7 @@ git worktree add "$WT" "origin/$BRANCH"
 
 ### 2b. Identify and download the failing run's logs
 
-The `Run Sweep` workflow produces many matrix jobs. Find the failing job(s) on the PR's head SHA, then download just the failing step logs to keep context small:
+The `Run Sweep` workflow produces many matrix jobs. Find the failing job(s) on the PR's head SHA, read their job records, then download just the failing step logs to keep context small:
 
 ```bash
 HEAD_SHA=$(gh pr view "$PR" --repo SemiAnalysisAI/InferenceX --json headRefOid --jq .headRefOid)
@@ -65,6 +65,10 @@ HEAD_SHA=$(gh pr view "$PR" --repo SemiAnalysisAI/InferenceX --json headRefOid -
 # Find the most recent Run Sweep run for this commit
 RUN_ID=$(gh run list --repo SemiAnalysisAI/InferenceX --workflow "Run Sweep" \
   --commit "$HEAD_SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+
+# Each failed job's recorded error type, stage, cause line and evidence log
+GITHUB_REPOSITORY=SemiAnalysisAI/InferenceX uv run --project inferencex-e2e --locked \
+  python -m infx.klaud job-failures --run-id "$RUN_ID" > /tmp/job_failures_$PR.json
 
 # Failing job IDs + names
 gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --json jobs \
@@ -77,7 +81,7 @@ gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed \
 wc -l /tmp/sweep_failed_log_$PR.txt
 ```
 
-If the log file is very large (>2000 lines), grep it for the actual error signatures before reading. Common patterns include `Error`, `Traceback`, `RuntimeError`, `CUDA`, `HIP`, `OOM`, `assert`, `KeyError`, `ModuleNotFound`, `connection refused`, `exit code`, and `failed to launch`. Read the surrounding context (~50 lines) around each hit.
+Start from the cause lines in `/tmp/job_failures_$PR.json`; it reports `"records": false` for runs without a `job_events` artifact. If the log file is very large (>2000 lines), grep it for the actual error signatures before reading. Common patterns include `Error`, `Traceback`, `RuntimeError`, `CUDA`, `HIP`, `OOM`, `assert`, `KeyError`, `ModuleNotFound`, `connection refused`, `exit code`, and `failed to launch`. Read the surrounding context (~50 lines) around each hit.
 
 ### 2c. Diagnose
 

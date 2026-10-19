@@ -1,8 +1,10 @@
+import io
 import json
 import os
 import shlex
 import subprocess
 import sys
+import zipfile
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +15,8 @@ import yaml
 from infx.klaud import __main__ as klaud
 from infx.klaud import api, claims, github, lifecycle, reporting, validation
 from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, Ownership, identity, stamp
+from infx.launch.event import GitHub, JobError, JobEvent
+from infx.results import collect_events
 from infx.tests.historical_revision import (
     FAMILY,
     KEY,
@@ -525,12 +529,62 @@ UNEXPECTED_ERROR = CandidateOutcome(
 )
 
 
+JOB_LOST = {"type": "JobNodeFail", "stage": "run", "retriable": True,
+            "message": "Slurm job 7 ended with state=NODE_FAIL exit_code=0:0"}
+BIND_FAILED = {"type": "RecipeBindFailed", "stage": "prepare", "retriable": False,
+               "message": "single_node.py: error: Expected exactly one matching recipe"}
+
+
+def benchmark_job(index, outcome, attempt=1):
+    """Benchmark job ``100 + index`` of run 9's ``attempt`` that ended ``outcome``: a conclusion,
+    with a ``-setup`` suffix for a job that failed in host setup before its launcher step ran or
+    ``-timeout`` for one GitHub stopped at its timeout."""
+    conclusion = outcome.removesuffix("-timeout").removesuffix("-setup")
+    setup, launch = ("failure", "skipped") if outcome.endswith("-setup") else (
+        "success", conclusion)
+    return {"id": 100 + index, "run_id": 9, "run_attempt": attempt, "conclusion": conclusion,
+            "name": "single-node 1k1k / klaud | p3 | dsr1 fp8 cluster:b200-dgxc sgl TP8 "
+                    f"c{index + 1}",
+            "runner_name": "gpu-0", "started_at": "2026-10-14T21:00:00Z",
+            "completed_at": "2026-10-14T23:00:00Z",
+            "steps": [{"name": "Set up job", "conclusion": "success"},
+                      {"name": "Slurm cleanup (pre-run)", "conclusion": setup},
+                      {"name": "Launch job script", "conclusion": launch}]}
+
+
+def serve_job_events(monkeypatch, jobs, errors, *, stale=False):
+    """Serve run 9's job_events artifact as collect-job-events writes it for ``jobs``, whose
+    launchers recorded ``errors`` by job id, and return the artifact. ``stale`` records describe
+    an earlier attempt's jobs."""
+    if stale:
+        jobs = [{**job, "id": job["id"] + 50} for job in jobs]
+        errors = {job_id + 50: error for job_id, error in errors.items()}
+    launched = [
+        JobEvent(run_id="9", github=GitHub(job_id=job_id), outcome="failure",
+                 error=JobError(exit_code=1, **error)).model_dump(mode="json")
+        for job_id, error in errors.items()
+    ]
+    events = collect_events.reconcile(
+        launched, jobs, run_url="https://github.com/example/project/actions/runs/9")
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("events.jsonl", "".join(json.dumps(event) + "\n" for event in events))
+    command = ["gh", "api", "repos/example/project/actions/artifacts/77/zip"]
+    monkeypatch.setattr(github.subprocess, "check_output", lambda args, **_: (
+        archive.getvalue() if args == command else pytest.fail(" ".join(args))))
+    return {"id": 77, "name": "job_events", "expired": False,
+            "size_in_bytes": archive.getbuffer().nbytes, "created_at": "2026-10-15T00:00:00Z",
+            "workflow_run": {"id": 9, "head_sha": "c" * 40}}
+
+
 def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelled", state="open",
-                        artifacts=(), sessions=("failure",) * lifecycle.MAX_SESSIONS,
-                        planner="failure", gated=True):
+                        artifacts=(), records=None, stale=False, earlier=(),
+                        sessions=("failure",) * lifecycle.MAX_SESSIONS, planner="failure",
+                        gated=True):
     """Serve planner run 42 whose draft PR 7 has one final sweep, run 9, that ended
     ``conclusion`` (``None`` while it runs) at attempt ``attempt`` on 2026-10-15 00:00 UTC with
-    ``jobs`` (a ``-timeout`` suffix marks a job GitHub stopped at its timeout).
+    ``jobs`` (see ``benchmark_job``). With ``records``, launcher errors by job index, the sweep
+    has a job_events artifact (see ``serve_job_events``); its earlier attempts ended ``earlier``.
 
     Planner attempt N starts 6(N - 1) hours after 2026-10-14 00:00 UTC and lasts 6 hours; its
     candidate job ended ``sessions[N - 1]`` (see ``planner_job``). By default every session ran,
@@ -594,10 +648,10 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
                         number, "success" if number == 1 else "success-copied"),
         )
     ]
-    attempt_jobs = [
-        {"id": 100 + index, "conclusion": job.removesuffix("-timeout"), "runner_name": "gpu-0"}
-        for index, job in enumerate(jobs)
-    ]
+    attempt_jobs = [benchmark_job(index, job, attempt) for index, job in enumerate(jobs)]
+    if records is not None:
+        errors = {100 + index: error for index, error in records.items()}
+        artifacts = [*artifacts, serve_job_events(monkeypatch, attempt_jobs, errors, stale=stale)]
     listings = {
         f"actions/runs/9/attempts/{attempt}/jobs?per_page=100": attempt_jobs,
         **{
@@ -633,9 +687,11 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
             return []
         raise AssertionError(path)
 
-    reads = {"actions/runs/42": parent, "pulls/7": pull,
+    reads = {"actions/runs/42": parent, "pulls/7": pull, "actions/runs/9": sweep,
              "issues/7": {"closed_by": {"login": "Klaud-Cold"}},
              "actions/runs/42/attempts/1": {"updated_at": stamp(start + timedelta(hours=6))},
+             **{f"actions/runs/9/attempts/{number}": {"conclusion": ended}
+                for number, ended in enumerate(earlier, 1)},
              f"actions/runs/9/attempts/{attempt}": {"run_started_at": "2026-10-14T20:00:00Z"}}
     world = SimpleNamespace(
         session=lifecycle.Session("example/project", parent, candidate, recovering=True),
@@ -703,8 +759,70 @@ def test_recovery_holds_a_preempted_final_sweep_and_reruns_it_after_the_grace_pe
     assert world.finished == ([] if waiting else [UNEXPECTED_ERROR])
 
 
+@pytest.mark.parametrize(("conclusion", "jobs", "records", "options", "rerun"), [
+    pytest.param("failure", ["success", "failure", "cancelled"], {1: JOB_LOST}, {}, True,
+                 id="retriable-failure"),
+    pytest.param("failure", ["success", "failure-setup"], {}, {}, True,
+                 id="no-record-after-failed-host-setup"),
+    pytest.param("failure", ["success", "failure"], {1: BIND_FAILED}, {}, False,
+                 id="recipe-bind-failed"),
+    pytest.param("failure", ["failure", "failure"], {0: JOB_LOST, 1: BIND_FAILED}, {}, False,
+                 id="beside-a-real-failure"),
+    pytest.param("failure", ["success", "failure"], {}, {}, False, id="no-record-from-launcher"),
+    pytest.param("failure", ["success", "failure"], None, {}, False, id="no-artifact"),
+    pytest.param("failure", ["success", "failure"], {1: JOB_LOST}, {"stale": True}, False,
+                 id="earlier-attempts-records"),
+    pytest.param("cancelled", ["failure", "cancelled"], {0: JOB_LOST}, {}, True,
+                 id="cancelled-after-a-retriable-failure"),
+    pytest.param("cancelled", ["failure", "cancelled-timeout"], {0: JOB_LOST}, {}, False,
+                 id="beside-a-timeout"),
+    pytest.param("failure", ["failure"], {0: JOB_LOST}, {"earlier": ("failure", "cancelled")},
+                 True, id="one-infrastructure-retry-used"),
+    pytest.param("failure", ["failure"], {0: JOB_LOST}, {"earlier": ("failure", "failure")},
+                 False, id="infrastructure-retries-used-up"),
+])  # fmt: skip
+def test_recovery_reruns_a_final_sweep_only_when_job_records_find_every_failure_retriable(
+    monkeypatch, conclusion, jobs, records, options, rerun
+):
+    world = ended_session_sweep(monkeypatch, attempt=len(options.get("earlier", ())) + 1,
+                                conclusion=conclusion, jobs=jobs, records=records, **options)
+    # Inside the grace period: only a preemption waits for whoever cancelled the run.
+    at = lifecycle.utc("2026-10-15T00:10:00Z")
+
+    if rerun:
+        with pytest.raises(lifecycle.AwaitingRerun,
+                           match="Reran final sweep after retriable job failures"):
+            lifecycle.reconcile(world.session, at)
+    else:
+        assert lifecycle.reconcile(world.session, at) is True
+    assert world.writes == ([("POST", "actions/runs/9/rerun-failed-jobs")] if rerun else [])
+    assert world.finished == ([] if rerun else [UNEXPECTED_ERROR])
+
+
+def test_the_agent_reads_each_failed_jobs_recorded_cause_privately(monkeypatch, capsys):
+    detail = "single_node.py: error: KV_OFFLOADING 'none' != 'dram'\n--- last 1 lines ---\nusage"
+    ended_session_sweep(monkeypatch, conclusion="failure", jobs=["success", "failure"], records={
+        1: {**BIND_FAILED, "evidence": "srt-bind.log", "detail": detail}})
+    monkeypatch.setattr(klaud, "github_read", github.read)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    monkeypatch.setattr(sys, "argv", ["klaud", "job-failures", "--run-id", "9"])
+
+    assert klaud.main() == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "run-id": 9, "run-attempt": 1, "conclusion": "failure", "records": True, "rerun": None,
+        "failed-jobs": [{
+            "job-id": 101, "conclusion": "failure", "recorded": True,
+            "name": "single-node 1k1k / klaud | p3 | dsr1 fp8 cluster:b200-dgxc sgl TP8 c2",
+            "failed-step": "Launch job script", "type": "RecipeBindFailed", "stage": "prepare",
+            "retriable": False, "message": BIND_FAILED["message"],
+            "cause": "single_node.py: error: KV_OFFLOADING 'none' != 'dram'",
+            "evidence": "srt-bind.log",
+        }],
+    }
+
+
 @pytest.mark.parametrize(("broken", "waiting"), [
-    ("items", "Preemption check unavailable; retrying next pass"),
+    ("items", "Rerun check unavailable; retrying next pass"),
     ("write", "Rerun request failed; retrying next pass"),
 ])  # fmt: skip
 def test_recovery_retries_a_preempted_final_sweep_after_github_errors(
@@ -2147,7 +2265,8 @@ def attempt_comment(number, en, zh, *, author="Klaud-Cold", parent=42, candidate
         f"<!-- klaud-report:{parent}:{candidate}:run-{run}-1\n{json.dumps(data)}\n-->\nRendered.")}
 
 
-def finish_report(monkeypatch, outcome, comments, recovering=False):
+def finish_report(monkeypatch, outcome, comments, recovering=False, conclusion=None,
+                  listings=None):
     session = lifecycle.Session(
         "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
         recovering=recovering,
@@ -2158,7 +2277,7 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
             "labels": [{"name": "full-sweep-fail-fast"}] if validated else []}
     run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
            "created_at": "2026-10-15T00:00:00Z", "status": "completed",
-           "conclusion": "success" if validated else "cancelled"}
+           "conclusion": conclusion or ("success" if validated else "cancelled")}
     posted = []
     monkeypatch.setattr(session, "pulls", lambda: [pull])
     monkeypatch.setattr(session, "runs", lambda: [run])
@@ -2167,7 +2286,7 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
     monkeypatch.setattr(reporting, "publish_final", lambda *_: None)
     monkeypatch.setattr(claims, "release_family", lambda *_: None)
     monkeypatch.setattr(github, "items", lambda _repository, path, _key=None: (
-        comments if path == "issues/7/comments?per_page=100" else []))
+        comments if path == "issues/7/comments?per_page=100" else (listings or {}).get(path, [])))
     monkeypatch.setattr(github, "write", lambda _repository, _path, _method, payload: (
         posted.append(payload["body"])))
 
@@ -2261,6 +2380,70 @@ def test_closing_report_states_why_from_the_latest_own_attempt(
         f"**{outcome}** · 修复次数：0 · 运行：{runs}  \n{why[1]}所有自有运行均已结束。{done[1]}"
         "\n\n</details>"
     )
+
+
+def test_closing_report_counts_recorded_failures_without_their_raw_text(monkeypatch):
+    jobs = [benchmark_job(0, "failure"), benchmark_job(1, "failure"),
+            benchmark_job(2, "failure-setup"), benchmark_job(3, "failure"),
+            benchmark_job(4, "cancelled")]
+    artifact = serve_job_events(monkeypatch, jobs, {
+        100: {**BIND_FAILED, "message": "error: ping @maintainer", "evidence": "/home/ci/bind.log",
+              "detail": "see <https://example.org/x>\n--- last 1 lines ---\ntail"},
+        101: BIND_FAILED,
+        103: {"type": "Job`Failed", "stage": "run\n@team", "retriable": False, "message": "boom"},
+    })
+    failed = ("**Failed jobs:** `RecipeBindFailed` in `prepare` ×2 · `NoLauncherRecord` in "
+              "`Slurm cleanup (pre-run)` ×1 · `other` in `other` ×1  \n",
+              "**失败作业：**`prepare` 阶段 `RecipeBindFailed` ×2 · `Slurm cleanup (pre-run)` 阶段 "
+              "`NoLauncherRecord` ×1 · `other` 阶段 `other` ×1  \n")
+    runs = "[9](https://github.com/example/project/actions/runs/9)"
+
+    assert finish_report(monkeypatch, "uncertain", [], conclusion="failure", listings={
+        "actions/runs/9/artifacts?per_page=100": [artifact],
+        "actions/runs/9/attempts/1/jobs?per_page=100": jobs,
+    }) == (
+        f"**uncertain** · Repairs: 0 · Runs: {runs}  \n{failed[0]}All owned runs ended. PR closed; "
+        "branch deleted for retry.\n\n<details>\n<summary>中文</summary>\n\n"
+        f"**uncertain** · 修复次数：0 · 运行：{runs}  \n{failed[1]}所有自有运行均已结束。PR 已关闭；"
+        "分支已删除，可重新尝试。\n\n</details>"
+    )
+
+
+@pytest.mark.parametrize("status", ["failed", "running"])
+def test_a_failed_attempt_report_counts_its_recorded_failures(monkeypatch, status):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40))
+    pull = {"number": 7, "head": {"sha": "c" * 40}, "body": ""}
+    jobs = [benchmark_job(0, "failure")]
+    listings = {
+        "actions/runs/9/artifacts?per_page=100": [
+            serve_job_events(monkeypatch, jobs, {100: BIND_FAILED})],
+        "actions/runs/9/attempts/1/jobs?per_page=100": jobs,
+    }
+    posted = []
+    monkeypatch.setattr(session, "pulls", lambda: [pull])
+    monkeypatch.setattr(session, "refresh", lambda _pull: pull)
+    monkeypatch.setattr(session, "runs", lambda: [{
+        "id": 9, "head_sha": "c" * 40, "run_attempt": 1, "status": "completed",
+        "conclusion": "failure"}])
+    monkeypatch.setattr(github, "items", lambda _repository, path, _key=None: (
+        listings.get(path, [])))
+    monkeypatch.setattr(github, "write", lambda _repository, _path, _method, payload: (
+        posted.append(payload["body"])))
+
+    reporting.publish(session, reporting.Attempt(
+        kind="initial", number=0, head="c" * 40, image="example/image:next", run_id=9,
+        run_attempt=1, status=status, change=reporting.Prose(en="Pin the image.", zh="固定镜像。"),
+        next=reporting.Prose(en="Repair the recipe.", zh="修复配方。"), benchmarks_expected=1,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=[],
+    ))
+
+    [body] = posted
+    shown = status == "failed"
+    assert ("**Failed jobs:** `RecipeBindFailed` in `prepare` ×1\n\n**Next:** Repair the recipe."
+            in body) is shown
+    assert ("**失败作业：**`prepare` 阶段 `RecipeBindFailed` ×1  \n**下一步：**修复配方。"
+            in body) is shown
 
 
 def test_every_candidate_pr_body_says_how_to_stop_the_candidate(monkeypatch):

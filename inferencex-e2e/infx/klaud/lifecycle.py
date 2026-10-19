@@ -10,13 +10,17 @@ import subprocess
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
-from . import claims, github
+from . import claims, events, github
 from .github import VerificationError
 from .models import ABORT_LABEL, CandidateOutcome, OwnedCandidate, Ownership, identity, utc
-from .reporting import Prose, latest_next, translated
+from .reporting import Prose, failed_jobs, latest_next, translated
 from .validation import verify_sweep
+
+if TYPE_CHECKING:
+    from infx.launch.event import JobEvent
 
 BOT = "Klaud-Cold"
 COMMITTER = "github-actions[bot]"
@@ -32,9 +36,11 @@ SWEEP_LABELS = {
 }
 # Leaves the scheduler time to rerun what it preempted before recovery reruns it.
 RERUN_GRACE_SECONDS = 30 * 60
-# Recovery stops waiting for a preempted final sweep that stayed cancelled this long.
+# Recovery stops rerunning a final sweep that stayed cancelled or failed this long.
 RERUN_GIVE_UP_SECONDS = 24 * 60 * 60
 MAX_SWEEP_ATTEMPTS = 10
+# The candidate prompt's infrastructure retries per attempt; earlier failed attempts count.
+MAX_INFRASTRUCTURE_RETRIES = 2
 # Sessions per candidate in its planner run: the planner's session plus three resumes.
 MAX_SESSIONS = 4
 # Planner waves start this often (klaud-plan.yml's schedule).
@@ -54,7 +60,7 @@ class PendingCleanup(VerificationError):  # noqa: N818
 
 
 class AwaitingRerun(PendingCleanup):
-    """A preempted final sweep will run again; keep its PR, branch, claim and lease."""
+    """A preempted or retriably failed final sweep reruns; keep its PR, branch, claim and lease."""
 
 
 class ResumeSession(PendingCleanup):
@@ -400,7 +406,8 @@ class Session:
                         {"state": "closed"},
                     )
                 self.delete_branch(pull)
-        outcome = outcome.model_copy(update={"run_ids": sorted(run["id"] for run in self.runs())})
+        runs = self.runs()
+        outcome = outcome.model_copy(update={"run_ids": sorted(run["id"] for run in runs)})
         self.verify(outcome, require_report=False)
         if pull:
             self.refresh(pull)
@@ -446,18 +453,27 @@ class Session:
                 )
                 why_en = f"**Reason:** {why.en}  \n" if why else ""
                 why_zh = f"**原因：**{why.zh}  \n" if why else ""
+                ran = [run for run in runs if run["conclusion"] != "skipped"]
+                latest = max(ran, key=lambda run: run["created_at"], default=None)
+                failed = (
+                    failed_jobs(self.repository, latest)
+                    if not proof and latest and latest["conclusion"] != "success"
+                    else None
+                )
+                failed_en = f"{failed[0]}  \n" if failed else ""
+                failed_zh = f"{failed[1]}  \n" if failed else ""
                 body = (
                     self.marker
                     + json.dumps(record)
                     + "\n-->\n"
                     + translated(
-                        f"**{outcome.outcome}**{reason_en} · Repairs: {repairs} · Runs: {links}  \n{why_en}All owned runs ended. "
+                        f"**{outcome.outcome}**{reason_en} · Repairs: {repairs} · Runs: {links}  \n{why_en}{failed_en}All owned runs ended. "
                         + (
                             "Full sweep verified; ready for review."
                             if proof
                             else "PR closed; branch deleted for retry."
                         ),
-                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs} · 运行：{links}  \n{why_zh}所有自有运行均已结束。"
+                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs} · 运行：{links}  \n{why_zh}{failed_zh}所有自有运行均已结束。"
                         + (
                             "完整 sweep 已验证；已就绪，等待审查。"
                             if proof
@@ -503,36 +519,69 @@ def hit_timeout(repository: str, job: dict) -> bool:
     )
 
 
-def preempted(repository: str, run: dict) -> bool:
-    """Cancelled by someone else: no job of its current attempt failed or hit its timeout."""
-    return run["conclusion"] == "cancelled" and not any(
-        job["conclusion"] in ("failure", "timed_out")
-        or (job["conclusion"] == "cancelled" and hit_timeout(repository, job))
-        for job in github.items(
-            repository,
-            f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
-            "jobs",
-        )
+def rerun_reason(
+    repository: str, run: dict, jobs: list[dict], found: dict[int, JobEvent] | None
+) -> str | None:
+    """Why rerunning the failed jobs of ``run``'s current attempt, ``jobs``, may pass.
+
+    ``preempted``: someone else cancelled the run and no job failed. ``retriable``: every failed
+    job's record in ``found`` is retriable. A job that timed out or hit its timeout rules out both.
+    """
+    if any(job["conclusion"] == "timed_out" for job in jobs):
+        return None
+    failed = [job for job in jobs if job["conclusion"] == "failure"]
+    if failed and (
+        found is None or not all(events.retriable(job, found.get(job["id"])) for job in failed)
+    ):
+        return None
+    if not failed and run["conclusion"] != "cancelled":
+        return None
+    if any(job["conclusion"] == "cancelled" and hit_timeout(repository, job) for job in jobs):
+        return None
+    return "retriable" if failed else "preempted"
+
+
+def infrastructure_retries(repository: str, run: dict) -> int:
+    """How many earlier attempts of ``run`` failed; the rerun after each retried infrastructure."""
+    return sum(
+        github.read(repository, f"actions/runs/{run['id']}/attempts/{attempt}")["conclusion"]
+        == "failure"
+        for attempt in range(1, run["run_attempt"])
     )
 
 
 def await_rerun(session: Session, pull: dict, run: dict, now: datetime) -> None:
-    """Keep a preempted final sweep's candidate alive until the sweep runs again."""
+    """Keep a preempted or retriably failed final sweep's candidate alive until it runs again."""
+    repository = session.repository
     try:
-        if not preempted(session.repository, run):
-            return
+        reason = rerun_reason(
+            repository, run, events.attempt_jobs(repository, run), events.records(repository, run)
+        )
+        if (
+            reason == "retriable"
+            and infrastructure_retries(repository, run) >= MAX_INFRASTRUCTURE_RETRIES
+        ):
+            reason = None
     except (OSError, subprocess.SubprocessError, VerificationError) as error:
-        raise AwaitingRerun("Preemption check unavailable; retrying next pass") from error
-    if now - utc(run["updated_at"]) < timedelta(seconds=RERUN_GRACE_SECONDS):
+        raise AwaitingRerun("Rerun check unavailable; retrying next pass") from error
+    if reason is None:
+        return
+    if reason == "preempted" and now - utc(run["updated_at"]) < timedelta(
+        seconds=RERUN_GRACE_SECONDS
+    ):
         raise AwaitingRerun("Preempted final sweep is waiting for its rerun")
     if run["run_attempt"] >= MAX_SWEEP_ATTEMPTS:
         return
     session.refresh(pull)
     try:
-        github.write(session.repository, f"actions/runs/{run['id']}/rerun-failed-jobs", "POST")
+        github.write(repository, f"actions/runs/{run['id']}/rerun-failed-jobs", "POST")
     except (OSError, subprocess.SubprocessError) as error:
         raise AwaitingRerun("Rerun request failed; retrying next pass") from error
-    raise AwaitingRerun("Reran preempted final sweep")
+    raise AwaitingRerun(
+        "Reran preempted final sweep"
+        if reason == "preempted"
+        else "Reran final sweep after retriable job failures"
+    )
 
 
 def unfinished_draft(session: Session, pull: dict | None) -> bool:
@@ -756,7 +805,7 @@ def reconcile(session: Session, now: datetime) -> bool:
         not pending
         and latest
         and pull["state"] == "open"
-        and latest["conclusion"] == "cancelled"
+        and latest["conclusion"] in ("cancelled", "failure")
         and now - utc(latest["updated_at"]) < timedelta(seconds=RERUN_GIVE_UP_SECONDS)
     ):
         await_rerun(session, pull, latest, now)
