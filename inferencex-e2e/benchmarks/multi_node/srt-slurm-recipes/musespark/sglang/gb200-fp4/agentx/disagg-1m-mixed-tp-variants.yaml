@@ -26,7 +26,7 @@ base:
       dyn-chat-processor: sglang
       trust-remote-code: true
   engine: sglang
-  setup_script: musespark-mixed-tp-disagg.sh
+  setup_script: musespark-mixed-tp-disagg-gb200.sh
   roles:
     prefill:
       nodes: 1

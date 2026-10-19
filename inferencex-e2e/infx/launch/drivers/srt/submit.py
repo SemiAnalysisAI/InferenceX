@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 from infx.bench.proc import echo
 from infx.launch.backends.slurm import srtctl_job_name
 from infx.launch.context import LaunchError
@@ -253,6 +255,7 @@ def multinode_arguments(
             "--tags",
             f"{run.srt.job_tag},{request.model_prefix},{request.precision},{workload},infmax-{stamp}",
         ]
-    if setup_script := lane.setup_scripts.get(request.framework):
+    bound = yaml.safe_load(Path(recipe).read_text()) or {}
+    if not bound.get("setup_script") and (setup_script := lane.setup_scripts.get(request.framework)):
         arguments += ["--setup-script", setup_script]
     return arguments
