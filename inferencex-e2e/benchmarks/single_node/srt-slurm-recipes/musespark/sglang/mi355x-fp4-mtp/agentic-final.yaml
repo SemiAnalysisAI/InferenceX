@@ -81,7 +81,7 @@ override_tp4_c16_hicache:
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
         swa-full-tokens-ratio: 0.2
-        chunked-prefill-size: 32768
+        chunked-prefill-size: 16384
         prefill-decode-interval: 64
         enable-hierarchical-cache: true
         hicache-size: 120
@@ -102,7 +102,7 @@ override_tp4_c24_hicache:
         cuda-graph-max-bs-decode: 24
         mem-fraction-static: 0.95
         swa-full-tokens-ratio: 0.2
-        chunked-prefill-size: 32768
+        chunked-prefill-size: 16384
         prefill-decode-interval: 16
         schedule-policy: shortest-prefill-first
         enable-hierarchical-cache: true
