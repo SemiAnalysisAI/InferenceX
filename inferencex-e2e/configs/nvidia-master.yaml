@@ -8870,6 +8870,21 @@ musespark-fp4-b200-sglang-agentic-dflash-draft-swa-1m:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 96], srt-recipe: agentic-1m-draft-swa.yaml }
 
+musespark-fp4-b200-sglang-agentic-dflash-hrrn-draft-swa-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.90
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [64, 80, 96], srt-recipe: agentic-1m-hrrn-draft-swa.yaml }
+
 musespark-fp4-b200-sglang-agentic-dflash-spf-1m:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
@@ -10758,6 +10773,21 @@ musespark-fp4-b300-sglang-agentic-dflash-draft-swa-1m:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [96, 128], srt-recipe: agentic-1m-draft-swa.yaml }
+
+musespark-fp4-b300-sglang-agentic-dflash-hrrn-draft-swa-1m:
+  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: musespark/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [96, 128], srt-recipe: agentic-1m-hrrn-draft-swa.yaml }
 
 musespark-fp4-b300-sglang-agentic-dflash-spf-1m:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
