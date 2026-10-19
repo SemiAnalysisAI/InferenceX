@@ -70,6 +70,11 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
     ("b300-dsxe", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
             PowerRule(
+                Match(any_of("kimik3"), any_of("fp4"), any_of("dynamo-vllm"), agentic=True),
+                agentx=True,
+                require=True,
+            ),
+            PowerRule(
                 Match(
                     any_of("dsv4"),
                     any_of("fp4"),
@@ -79,7 +84,7 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 agentx=False,
             ),
         ),
-        error="B300 dcgm-power is limited to fixed-sequence DSV4 FP4 dynamo-sglang/vllm",
+        error="B300 dcgm-power requires fixed-sequence DSV4 FP4 or Kimi-K3 AgentX dynamo-vllm",
     ),
     ("b200-nscale", LaunchPath.SRT_NATIVE): PowerLane(
         rules=(

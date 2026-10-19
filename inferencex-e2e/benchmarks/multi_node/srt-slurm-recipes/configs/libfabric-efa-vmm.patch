@@ -1,0 +1,251 @@
+diff --git a/configure.ac b/configure.ac
+index 1357bc0..93a416e 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -739,6 +739,7 @@ have_cuda=0
+ cuda_dlopen=0
+ have_cuda_dmabuf=0
+ have_cuda_dmabuf_mapping_type_pcie=0
++have_cuda_ctx_sync_memops=0
+ AC_ARG_ENABLE([cuda-dlopen],
+     [AS_HELP_STRING([--enable-cuda-dlopen],
+         [Enable dlopen of CUDA libraries @<:@default=no@:>@])
+@@ -794,6 +795,10 @@ AS_IF([test x"$with_cuda" != x"no"],
+ 			[],
+ 			[have_cuda_dmabuf_mapping_type_pcie=0],
+ 			[[#include <cuda.h>]])
++	AC_CHECK_DECL([CU_CTX_SYNC_MEMOPS],
++			[have_cuda_ctx_sync_memops=1],
++			[],
++			[[#include <cuda.h>]])
+       ])
+ 
+ AC_DEFINE_UNQUOTED([ENABLE_CUDA_DLOPEN], [$cuda_dlopen], [dlopen CUDA libraries])
+@@ -802,6 +807,7 @@ AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda"
+ 	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])])
+ 
+ AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
++AC_DEFINE_UNQUOTED([HAVE_CUDA_CTX_SYNC_MEMOPS], [$have_cuda_ctx_sync_memops], [CUDA context-wide sync memops support])
+ 
+ AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support])
+ 
+diff --git a/include/ofi_hmem.h b/include/ofi_hmem.h
+index 2150a64..a2027e5 100644
+--- a/include/ofi_hmem.h
++++ b/include/ofi_hmem.h
+@@ -71,6 +71,11 @@ cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
+ cudaError_t ofi_cudaHostUnregister(void *ptr);
+ cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
+ cudaError_t ofi_cudaFree(void *ptr);
++#if HAVE_CUDA_CTX_SYNC_MEMOPS
++CUresult ofi_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags,
++					int *active);
++CUresult ofi_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags);
++#endif
+ CUresult ofi_cuStreamCreate(CUstream *phStream, unsigned int flags);
+ CUresult ofi_cuStreamDestroy(CUstream hStream);
+ CUresult ofi_cuStreamSynchronize(CUstream hStream);
+diff --git a/prov/efa/src/efa_hmem.c b/prov/efa/src/efa_hmem.c
+index 3480dc3..4329868 100644
+--- a/prov/efa/src/efa_hmem.c
++++ b/prov/efa/src/efa_hmem.c
+@@ -9,6 +9,45 @@
+ 
+ struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
+ 
++int efa_hmem_set_sync_memops(void *ptr, uint64_t device)
++{
++#if HAVE_CUDA_CTX_SYNC_MEMOPS
++	CUresult cu_result;
++	CUdevice cu_device = (CUdevice) device;
++	unsigned int ctx_flags;
++	int active;
++	int ret;
++
++	ret = cuda_set_sync_memops(ptr);
++	if (ret != -FI_EOPNOTSUPP)
++		return ret;
++
++	cu_result = ofi_cuDevicePrimaryCtxGetState(cu_device, &ctx_flags, &active);
++	if (cu_result != CUDA_SUCCESS) {
++		EFA_WARN(FI_LOG_MR,
++			 "Failed to get CUDA device %d primary context flags: %d\n",
++			 cu_device, (int) cu_result);
++		return -FI_EINVAL;
++	}
++
++	if (ctx_flags & CU_CTX_SYNC_MEMOPS)
++		return FI_SUCCESS;
++
++	cu_result = ofi_cuDevicePrimaryCtxSetFlags(cu_device,
++						ctx_flags | CU_CTX_SYNC_MEMOPS);
++	if (cu_result == CUDA_SUCCESS)
++		return FI_SUCCESS;
++
++	EFA_WARN(FI_LOG_MR,
++		 "Failed to set CUDA device %d primary context flag "
++		 "CU_CTX_SYNC_MEMOPS: %d\n", cu_device, (int) cu_result);
++	return -FI_EINVAL;
++#else
++	(void) device;
++	return cuda_set_sync_memops(ptr);
++#endif
++}
++
+ // TODO double-check for ROCr
+ #if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR
+ static size_t efa_max_eager_msg_size_with_largest_header() {
+diff --git a/prov/efa/src/efa_hmem.h b/prov/efa/src/efa_hmem.h
+index e4d450f..780a3f3 100644
+--- a/prov/efa/src/efa_hmem.h
++++ b/prov/efa/src/efa_hmem.h
+@@ -63,6 +63,7 @@ extern struct efa_hmem_info	g_efa_hmem_info[OFI_HMEM_MAX];
+ 
+ int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t api_version);
+ int efa_hmem_info_initialize();
++int efa_hmem_set_sync_memops(void *ptr, uint64_t device);
+ int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size);
+ int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size);
+ ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, size_t buff_size, const struct iovec *hmem_iov, size_t iov_count);
+diff --git a/prov/efa/src/rdm/efa_rdm_ep.h b/prov/efa/src/rdm/efa_rdm_ep.h
+index b9da89e..998eb44 100644
+--- a/prov/efa/src/rdm/efa_rdm_ep.h
++++ b/prov/efa/src/rdm/efa_rdm_ep.h
+@@ -556,7 +556,8 @@ static inline int efa_rdm_attempt_to_sync_memops_iov(struct efa_rdm_ep *ep, stru
+ 		for (i = 0; i < num_desc; i++) {
+ 			efa_rdm_mr = (struct efa_rdm_mr *) desc[i];
+ 			if (efa_rdm_mr && efa_rdm_mr->needs_sync) {
+-				err = cuda_set_sync_memops(iov[i].iov_base);
++				err = efa_hmem_set_sync_memops(
++					iov[i].iov_base, efa_rdm_mr->device);
+ 				if (err) {
+ 					EFA_WARN(FI_LOG_MR,
+ 						 "Unable to set memops for "
+@@ -584,7 +585,8 @@ static inline int efa_rdm_attempt_to_sync_memops_ioc(struct efa_rdm_ep *ep, stru
+ 		for (i = 0; i < num_desc; i++) {
+ 			efa_rdm_mr = (struct efa_rdm_mr *) desc[i];
+ 			if (efa_rdm_mr && efa_rdm_mr->needs_sync) {
+-				err = cuda_set_sync_memops(ioc[i].addr);
++				err = efa_hmem_set_sync_memops(
++					ioc[i].addr, efa_rdm_mr->device);
+ 				if (err) {
+ 					EFA_WARN(FI_LOG_MR,
+ 						 "Unable to set memops for "
+diff --git a/src/hmem_cuda.c b/src/hmem_cuda.c
+index 3fdd116..3397b6b 100644
+--- a/src/hmem_cuda.c
++++ b/src/hmem_cuda.c
+@@ -54,6 +54,17 @@
+  * NVML API function names
+  */
+ 
++CUresult CUDAAPI cuDevicePrimaryCtxSetFlags_v2(CUdevice dev,
++					       unsigned int flags);
++
++#if HAVE_CUDA_CTX_SYNC_MEMOPS
++#define CUDA_DRIVER_OPTIONAL_FUNCS_DEF(_) \
++	_(cuDevicePrimaryCtxGetState) \
++	_(cuDevicePrimaryCtxSetFlags_v2)
++#else
++#define CUDA_DRIVER_OPTIONAL_FUNCS_DEF(_)
++#endif
++
+ #if HAVE_CUDA_DMABUF
+ #define CUDA_DRIVER_DMABUF_FUNCS_DEF(_) \
+   _(cuMemGetHandleForAddressRange)
+@@ -163,6 +174,11 @@ static struct {
+ 	CUresult (*cuDeviceGetAttribute)(int* pi,
+ 					 CUdevice_attribute attrib, CUdevice dev);
+ 	CUresult (*cuDeviceGet)(CUdevice* device, int ordinal);
++#if HAVE_CUDA_CTX_SYNC_MEMOPS
++	CUresult (*cuDevicePrimaryCtxGetState)(CUdevice dev,
++					       unsigned int *flags, int *active);
++	CUresult (*cuDevicePrimaryCtxSetFlags_v2)(CUdevice dev, unsigned int flags);
++#endif
+ 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
+ 					unsigned int flags);
+ 	cudaError_t (*cudaHostUnregister)(void *ptr);
+@@ -195,6 +211,7 @@ static struct {
+ #define CUDA_OPS_INIT(sym) .sym = sym,
+ = {
+ 	CUDA_DRIVER_FUNCS_DEF(CUDA_OPS_INIT)
++	CUDA_DRIVER_OPTIONAL_FUNCS_DEF(CUDA_OPS_INIT)
+ 	CUDA_RUNTIME_FUNCS_DEF(CUDA_OPS_INIT)
+ 	NVML_FUNCS_DEF(CUDA_OPS_INIT)
+ }
+@@ -280,7 +297,8 @@ CUresult ofi_cuPointerGetAttributes(unsigned int num_attributes,
+  * the data consistency for CUDA IPC.
+  *
+  * @param ptr the cuda ptr
+- * @return int 0 on success, -FI_EINVAL on failure.
++ * @return int 0 on success, -FI_EOPNOTSUPP for an unsupported pointer
++ * attribute, or -FI_EINVAL on other failures.
+  */
+ int cuda_set_sync_memops(void *ptr)
+ {
+@@ -295,6 +313,9 @@ int cuda_set_sync_memops(void *ptr)
+ 	if (cu_result == CUDA_SUCCESS)
+ 		return FI_SUCCESS;
+ 
++	if (cu_result == CUDA_ERROR_NOT_SUPPORTED)
++		return -FI_EOPNOTSUPP;
++
+ 	ofi_cuGetErrorName(cu_result, &cu_error_name);
+ 	ofi_cuGetErrorString(cu_result, &cu_error_str);
+ 	FI_WARN(&core_prov, FI_LOG_CORE,
+@@ -303,6 +324,23 @@ int cuda_set_sync_memops(void *ptr)
+ 	return -FI_EINVAL;
+ }
+ 
++#if HAVE_CUDA_CTX_SYNC_MEMOPS
++CUresult ofi_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags,
++					int *active)
++{
++	if (!cuda_ops.cuDevicePrimaryCtxGetState)
++		return CUDA_ERROR_NOT_SUPPORTED;
++	return cuda_ops.cuDevicePrimaryCtxGetState(dev, flags, active);
++}
++
++CUresult ofi_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags)
++{
++	if (!cuda_ops.cuDevicePrimaryCtxSetFlags_v2)
++		return CUDA_ERROR_NOT_SUPPORTED;
++	return cuda_ops.cuDevicePrimaryCtxSetFlags_v2(dev, flags);
++}
++#endif
++
+ CUresult ofi_cuMemGetAddressRange(CUdeviceptr* pbase, size_t* psize, CUdeviceptr dptr)
+ {
+ 	return cuda_ops.cuMemGetAddressRange(pbase, psize, dptr);
+@@ -558,6 +596,14 @@ int cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
+ #define CUDA_RUNTIME_FUNCS_DLOPEN(sym) CUDA_FUNCS_DLOPEN(runtime, sym)
+ #define NVML_LIB_FUNCS_DLOPEN(sym) CUDA_FUNCS_DLOPEN(nvml, sym)
+ 
++#define CUDA_DRIVER_OPTIONAL_FUNCS_DLOPEN(sym) \
++	do { \
++		cuda_ops.sym = dlsym(cuda_attr.driver_handle, #sym); \
++		if (!cuda_ops.sym) \
++			FI_INFO(&core_prov, FI_LOG_CORE, \
++				"Optional CUDA symbol " #sym " is unavailable\n"); \
++	} while (0);
++
+ static int cuda_hmem_dl_init(void)
+ {
+ #if ENABLE_CUDA_DLOPEN
+@@ -585,6 +631,7 @@ static int cuda_hmem_dl_init(void)
+ 	}
+ 
+ 	CUDA_DRIVER_FUNCS_DEF(CUDA_DRIVER_FUNCS_DLOPEN)
++	CUDA_DRIVER_OPTIONAL_FUNCS_DEF(CUDA_DRIVER_OPTIONAL_FUNCS_DLOPEN)
+ 	CUDA_RUNTIME_FUNCS_DEF(CUDA_RUNTIME_FUNCS_DLOPEN)
+ 	if (cuda_attr.nvml_handle) {
+ 		NVML_FUNCS_DEF(NVML_LIB_FUNCS_DLOPEN)
+@@ -948,7 +995,7 @@ bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
+ 	CUresult cuda_ret;
+ 	unsigned int mem_type;
+ 	unsigned int is_managed;
+-	uint64_t device_ord;
++	int device_ord;
+ 
+ 	/* Each pointer in 'data' needs to have the same array index
+ 		as the corresponding attribute in 'cuda_attributes' */

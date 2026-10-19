@@ -40,6 +40,7 @@ CASES = [
     ("gb300-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", DCGM),
     ("gb300-nv", MULTI, "0", "qwen3.5", "fp8", "dynamo-trt", ERR),
     ("b300-dsxe", MULTI, "0", "dsv4", "fp4", "dynamo-vllm", DCGM),
+    ("b300-dsxe", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
     ("b300-dsxe", MULTI, "0", "dsv4", "fp8", "dynamo-sglang", ERR),
     ("b300-dsxe", MULTI, "1", "dsv4", "fp4", "dynamo-sglang", ERR),
     ("b200-nscale", NATIVE, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
@@ -73,7 +74,9 @@ def test_power_eligibility_of_each_cluster_lane(
     assert (decision.dcgm, decision.agentx, decision.adapter) == (
         True, expected == AGENTX, expected == ADAPTER,
     )  # fmt: skip
-    assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv"))
+    assert decision.require is (
+        prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv", "b300-dsxe")
+    )
     assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
 
 
