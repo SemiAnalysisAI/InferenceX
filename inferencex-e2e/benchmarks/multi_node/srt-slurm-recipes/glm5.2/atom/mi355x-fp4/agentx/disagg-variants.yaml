@@ -41,9 +41,9 @@ base:
           MAX_JOBS: "16"
           HSA_ENABLE_IPC_MODE_LEGACY: "1"
           MC_DISABLE_HIP: "1"
-          # Rail-isolated RDMA: each transfer uses the same rail on both ends.
           MC_GID_INDEX: "@fabric.rdma-gid-index"
-          ATOM_MOONCAKE_MATCHED_RAILS: auto
+          # As in ATOM's CI: a transfer prefers the peer NIC named like the local one, P/D included.
+          MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
           NCCL_IB_DISABLE: "1"
         VLLM_PP_LAYER_PARTITION: "20,20,20,18"
         OFFLOAD_PROFILE: "1"
@@ -93,6 +93,9 @@ base:
       TRANSFORMERS_VERBOSITY: error
 
 override_1p1d_mcstore:
+  sbatch_directives:
+    # mia1-p01-g14 and g18 hold 5-7 GB more VRAM per GPU and run prefill about 8% slower.
+    exclude: mia1-p01-g14,mia1-p01-g18
   host_setup:
     nodes: all
     timeout_seconds: 1800
@@ -138,8 +141,8 @@ override_1p1d_mcstore:
     - &owner
       <<: *master
       name: mc-owner-numa0
-      # Each owner registers on rdma0-3, so every stage reaches it on its own rail.
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma0,rdma1,rdma2,rdma3", --global_segment_size=824633720832, --local_buffer_size=0, --threads=4]
+      # As in ATOM's CI, the owners use the decode-side NICs, apart from the prefill stages' rdma0-3.
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma4,rdma5", --global_segment_size=824633720832, --local_buffer_size=0, --threads=4]
       env:
         <<: *store_env
         # Back the segment with the reserved 2 MiB pages; the NIC cannot register 64 GiB regions of 4 KiB pages.
@@ -155,7 +158,7 @@ override_1p1d_mcstore:
         interval_seconds: 5
     - <<: *owner
       name: mc-owner-numa1
-      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma0,rdma1,rdma2,rdma3", --global_segment_size=824633720832, --local_buffer_size=0, --threads=4]
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma6,rdma7", --global_segment_size=824633720832, --local_buffer_size=0, --threads=4]
   roles:
     prefill:
       env:
@@ -165,8 +168,6 @@ override_1p1d_mcstore:
           MC_NUM_QP_PER_EP: "1"
           # Registers the worker's HBM transfer pool in 1 GiB regions.
           MC_MAX_MR_SIZE: "1073741824"
-        # Every owner sits on rdma0-3 and this fabric is rail-isolated, so each stage must reach an owner through the NIC of its own name.
-        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
       args:
         num-speculative-tokens: 3
         # One pool shared by all four stages, as in ATOM's CI; each client still uses its GPU's NIC.
