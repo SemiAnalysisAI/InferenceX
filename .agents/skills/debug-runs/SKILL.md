@@ -90,7 +90,8 @@ record for every benchmark or eval job that wrote none (runner setup, checkout, 
 cancelled run keeps only the per-job artifacts. A failure's `error` names the first failing
 stage and type, marks likely infrastructure faults `retriable` (a hint, not a diagnosis),
 points `evidence` at the log to open first, and quotes that log's likeliest cause line and
-last lines in `detail`.
+last lines in `detail`. The run's summary page counts the jobs by outcome and tables each
+failure's cluster, stage, type, retriability and cause line, with the retriable failures last.
 
 ```bash
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX -n job_events
