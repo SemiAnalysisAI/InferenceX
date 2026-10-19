@@ -611,6 +611,48 @@ def check_stop() -> dict:
     return {}
 
 
+def job_failures(repository: str, run_id: int) -> dict:
+    """``run_id``'s failed jobs with their recorded errors, for the agent's private context.
+
+    Messages, cause lines and evidence paths are raw log content: never publish them.
+    """
+    from . import events
+    from .lifecycle import rerun_reason, terminal
+
+    run = github_read(repository, f"actions/runs/{run_id}")
+    jobs = events.attempt_jobs(repository, run)
+    found = events.records(repository, run)
+    failed = []
+    for job in jobs:
+        if job["conclusion"] not in (*events.FAILED, "cancelled"):
+            continue
+        record = found.get(job["id"]) if found else None
+        error = record.error if record else None
+        failed.append(
+            {
+                "job-id": job["id"],
+                "name": job["name"],
+                "conclusion": job["conclusion"],
+                "recorded": record is not None,
+                "failed-step": record.github.failed_step if record else None,
+                "type": error.type if error else None,
+                "stage": error.stage if error else None,
+                "retriable": events.retriable(job, record),
+                "message": error.message if error else None,
+                "cause": error.detail.partition("\n")[0] if error and error.detail else None,
+                "evidence": error.evidence if error else None,
+            }
+        )
+    return {
+        "run-id": run["id"],
+        "run-attempt": run["run_attempt"],
+        "conclusion": run["conclusion"],
+        "records": found is not None,
+        "rerun": rerun_reason(repository, run, jobs, found) if terminal(run) else None,
+        "failed-jobs": failed,
+    }
+
+
 def resume_check() -> tuple[dict[str, bool], bool]:
     """The session gate's outputs, and whether its job must fail to stay re-runnable.
 
@@ -1046,6 +1088,11 @@ def main() -> int:
         "check-stop",
         help="Claude Stop hook: require finished runs and validated or closed PRs",
     )
+    failures = commands.add_parser(
+        "job-failures",
+        help="Print a run's failed jobs with their recorded errors; agent-private, never publish",
+    )
+    failures.add_argument("--run-id", type=int, required=True)
     recovery = commands.add_parser(
         "recover", help="Reconcile interrupted sessions from completed autosweeps"
     )
@@ -1213,6 +1260,9 @@ def main() -> int:
             return 0
         if args.command == "check-stop":
             print(json.dumps(check_stop()))
+            return 0
+        if args.command == "job-failures":
+            print(json.dumps(job_failures(os.environ["GITHUB_REPOSITORY"], args.run_id)))
             return 0
         if args.command == "diagnostics":
             return (

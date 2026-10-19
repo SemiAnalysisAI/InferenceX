@@ -11,7 +11,9 @@ import base64
 import json
 import os
 import re
+import subprocess
 import zlib
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -27,7 +29,7 @@ from pydantic import (
     model_validator,
 )
 
-from . import github
+from . import events, github
 from .github import VerificationError
 from .models import ABORT_LABEL, Contract, identity, normalized_image
 
@@ -39,6 +41,8 @@ if TYPE_CHECKING:
 Number = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 SHA = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 SCENARIO_NAME = r"[A-Za-z0-9][A-Za-z0-9 ._/-]{0,59}"
+# Comments show a recorded error type or stage only as such a token, never record free text.
+RECORD_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()-]{0,79}")
 
 
 def public_prose(value: str) -> str:
@@ -560,7 +564,42 @@ def render_body(baseline: Baseline) -> str:
     return translated(english, chinese)
 
 
-def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) -> str:
+def failed_jobs(repository: str, run: dict) -> tuple[str, str] | None:
+    """English and Chinese lines counting ``run``'s failed jobs by recorded error type and stage.
+
+    Record messages, cause lines and evidence paths are raw log content for the agent's private
+    context only. None when no failed job of the run's current attempt has a recorded error.
+    """
+    try:
+        found = events.records(repository, run)
+        jobs = events.attempt_jobs(repository, run) if found else []
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return None
+    counts: Counter[tuple[str, str]] = Counter()
+    for job in jobs:
+        record = found.get(job["id"]) if job["conclusion"] in events.FAILED else None
+        error = record.error if record else None
+        if error:
+            kind = error.type if RECORD_TOKEN.fullmatch(error.type) else "other"
+            stage = error.stage if RECORD_TOKEN.fullmatch(error.stage) else "other"
+            counts[kind, stage] += 1
+    if not counts:
+        return None
+    groups = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return (
+        "**Failed jobs:** "
+        + " · ".join(f"`{kind}` in `{stage}` ×{count}" for (kind, stage), count in groups),
+        "**失败作业：**"
+        + " · ".join(f"`{stage}` 阶段 `{kind}` ×{count}" for (kind, stage), count in groups),
+    )
+
+
+def render_attempt(
+    record: Attempt,
+    baseline: Baseline | None,
+    repository: str,
+    failed: tuple[str, str] | None = None,
+) -> str:
     titles = {
         "initial": ("Initial attempt", "初次尝试"),
         "repair": (f"Repair {record.number}/5", f"修复 {record.number}/5"),
@@ -602,12 +641,15 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
         f"**{title} · {record.status.capitalize()}** · {link} · {timestamp}  \n"
         f"{meta}  \n**Change:** {record.change.en}\n\n"
         + (results + "\n\n" if results else "")
+        + (failed[0] + "\n\n" if failed else "")
         + f"**Next:** {record.next.en}"
     )
     chinese = (
         f"**{title_zh} · {status_zh}** · {link} · {timestamp}  \n"
         + meta.replace("Mean latency", "平均延迟").replace("Median latency", "中位延迟")
-        + f"  \n**变更：**{record.change.zh}实测数值及异常说明见上表。  \n**下一步：**{record.next.zh}"
+        + f"  \n**变更：**{record.change.zh}实测数值及异常说明见上表。  \n"
+        + (failed[1] + "  \n" if failed else "")
+        + f"**下一步：**{record.next.zh}"
     )
     return translated(english, chinese)
 
@@ -746,7 +788,12 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
         )
     name = f"run-{record.run_id}-{record.run_attempt}"
     previous = stored(session, pull, name)
-    text = render_attempt(record, baseline_for(session, pull), session.repository)
+    failed = (
+        failed_jobs(session.repository, runs[0])
+        if record.status in ("failed", "cancelled")
+        else None
+    )
+    text = render_attempt(record, baseline_for(session, pull), session.repository, failed)
     packed = record.model_dump(by_alias=True)
     chunks = []
     if len(record.points) > 20 or len(record.evals) > 20:
@@ -772,6 +819,7 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
             record.model_copy(update={"points": [], "evals": []}),
             baseline_for(session, pull),
             session.repository,
+            failed,
         )
         note = "\n\nResults continue in numbered report comments."
         text = (
