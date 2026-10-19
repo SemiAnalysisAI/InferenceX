@@ -10112,3 +10112,16 @@
     - "Default AgentX trace selection to the full corpus, retaining explicit 256k exceptions for dsr1, qwen3.5, and qwen3.8next."
     - "Move Muse Spark Open AgentX points from the 256k-capped corpus to semianalysis_cc_traces_weka_062126; preserve explicit loader overrides."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4287
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move both GB300 GLM-5.2 NVFP4 Dynamo + SGLang AgentX keys to lmsysorg/sglang:nightly-dev-20261016-a93f16f0, pinned by digest. Aggregated points run the ai-dynamo 1.6.0.dev20261015 bundled in the image; disaggregated points install the ai-dynamo 1.6.0.dev20261016 wheel."
+    - "Aggregated: replace TP8 c1, c2 and c4 with TP4 c1 (MTP 4 steps, fp8 KV cache, cutedsl BF16 GEMM, 8 running requests and decode graphs) and TP8 c1 (MTP 5 steps, 2 running requests and decode graphs), both with 100 GB per rank of HiCache write_back."
+    - "Disaggregated: replace the DEP4-prefill 1P2D, 1P4D and 1P6D points and the DEP8/DEP16 2P1D point with PP4 prefill workers (one node each, HiCache write_back, MTP 5 steps) feeding TP4 decode at 1P5D c30 and 1P3D c40, DEP8 decode at 1P1D c56, 3P1D c216 and 3P1D c264, and DEP16 decode at 4P1D c256."
+    - "c216 and c264 split the PP4 prefill layers 20,20,20,18; c56 and c264 prefill with 8k chunks. Prefill HiCache is 100 GB per rank at c30 and c40, 185 GB per rank at c264 (dram-utilization 0.85) and the default ratio elsewhere. Prefill workers advertise a 3600 s session-affinity TTL to the prefill router and decode workers an active-request weight of 8192 to the decode router."
+    - "Tachometer and the Dynamo OTel collector are off. Acceptance follows the golden GLM-5.2 thinking-on AL: 3.33 at 4 MTP steps, 3.61 at 5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
