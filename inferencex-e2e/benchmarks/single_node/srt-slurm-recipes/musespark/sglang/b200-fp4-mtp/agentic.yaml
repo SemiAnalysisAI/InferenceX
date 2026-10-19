@@ -54,9 +54,6 @@ base:
         OMP_NUM_THREADS: '8'
         SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN: '1'
         SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
-        # Serve from the pre-seeded shared HF cache with no Hub API calls: every
-        # rank's revision lookup otherwise trips the 1000-per-5-min 429 limit
-        # when several points start together.
         HF_HUB_OFFLINE: '1'
   health_check:
     max_attempts: 1440
