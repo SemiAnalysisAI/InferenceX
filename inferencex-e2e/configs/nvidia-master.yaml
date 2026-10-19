@@ -6470,7 +6470,7 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.5.0.dev20260910" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261014" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

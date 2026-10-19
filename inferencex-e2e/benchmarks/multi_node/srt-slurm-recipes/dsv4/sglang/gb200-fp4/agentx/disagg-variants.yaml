@@ -9,7 +9,7 @@ base:
   dynamo:
     install: true
     source:
-      wheel: "1.5.0.dev20260910"
+      wheel: "1.6.0.dev20261014"
 
   health_check:
     max_attempts: 1440
@@ -261,7 +261,7 @@ base:
 override_1p1d_dep8_dep16_c64:
   identity:
     frameworks:
-      dynamo: "1.5.0.dev20260910"
+      dynamo: "1.6.0.dev20261014"
   roles:
     prefill:
       nodes: 2
@@ -286,7 +286,7 @@ override_1p1d_dep8_dep16_c64:
 override_1p1d_dep8_dep16_c128:
   identity:
     frameworks:
-      dynamo: "1.5.0.dev20260910"
+      dynamo: "1.6.0.dev20261014"
   roles:
     prefill:
       nodes: 2
@@ -296,7 +296,8 @@ override_1p1d_dep8_dep16_c128:
         tp-size: 8
         dp-size: 8
         ep-size: 8
-        mem-fraction-static: 0.80
+        # 0.80 caps prefill KV at 334k tokens, below the longest AgentX warmup prompts.
+        mem-fraction-static: 0.815
     decode:
       nodes: 4
       gpus: 16
