@@ -10208,3 +10208,13 @@
     - "Enable 120 GB per-rank HiCache for Muse Spark Open GB300 at concurrency 8, 10, 12, 16, 20, 24, and 32; retain GPU-only KV at concurrency 1, 2, 3, 4, and 6."
     - "Record DRAM HiCache offload with 0.80 DRAM utilization for the high-concurrency points; preserve the image, full AgentX corpus, and other serving settings."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4317
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from nightly-rocm100-5555a2d8f7116b2b4877f66516f4128176cf722a to nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f (digest sha256:520e098f54ec96837228aaddea0a833cbf6374dbdffd480c1d65f26ffab7701b), the 2026-10-19 ROCm nightly. ROCm 10.0 is now the default nightly build: the plain nightly tag has the same digest as nightly-rocm100-e68efc685ab1e6f1eda004ced7157e3ca411da2f."
+    - "The image carries vllm-project/vllm#62131: --monokernel now also runs the three DSpark draft layers as the two persistent mono decode launches (128 experts / top-3, window-only attention over the block's non-causal SWA rows) instead of vLLM's regular path. The step limit is unchanged at 48 rows, i.e. concurrency 1-8 with five DSpark drafts."
+    - "No recipe or point changes: concurrency 1, 2, 4, 8, 16, 32 and 64 on TP2 and TP4 (14 points), all re-measured on the new image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
