@@ -1,8 +1,28 @@
 name: Klaud Cold auto-sweep
+# lifecycle.resume_title matches the resume runs' names.
+run-name: >-
+  ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
+  inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
+  || 'Klaud Cold auto-sweep' }}
 
 # Overlapping waves are intentional; candidate ownership claims prevent duplicate work.
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
+    # Recovery dispatches a resume run with these to continue an unfinished session; a manual
+    # dispatch leaves them empty and runs a normal wave.
+    inputs:
+      resume-parent:
+        description: Planner run that owns the session to resume
+        type: string
+        default: ''
+      resume-candidate:
+        description: Candidate whose session resumes
+        type: string
+        default: ''
+      resume-session:
+        description: Number of the resumed session
+        type: string
+        default: ''
   schedule:
     - cron: '0 */6 * * *'
 
@@ -21,7 +41,7 @@ jobs:
   # temp directory or tool caches and only consume its validated structured output as data.
   recover:
     name: Reconcile interrupted candidates
-    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent == ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,7 +50,7 @@ jobs:
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       blocked-families: ${{ steps.recover.outputs.blocked-families }}
-      # Unfinished sessions recovery reran in their planner runs; they share this wave's cap.
+      # Unfinished sessions recovery resumed in new runs; they share this wave's cap.
       resumed: ${{ steps.recover.outputs.resumed }}
     steps:
       - id: checkout
@@ -315,6 +335,24 @@ jobs:
     with:
       candidate: ${{ matrix.candidate }}
       tooling-ref: ${{ needs.select.outputs.tooling-ref }}
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AGENT_PAT: ${{ secrets.AGENT_PAT }}
+      DASH_API_KEY: ${{ secrets.DASH_API_KEY }}
+
+  # A resume run continues one unfinished session. Only recovery, as Klaud-Cold, starts one, and
+  # klaud-candidate.yml's gate starts its agent only with recovery's grant for that session.
+  resume:
+    name: Run candidate ${{ inputs.resume-candidate }}
+    if: >-
+      github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent != ''
+      && github.actor == 'Klaud-Cold'
+    uses: $/.github/workflows/klaud-candidate.yml
+    with:
+      candidate: ${{ inputs.resume-candidate }}
+      tooling-ref: ${{ github.sha }}
+      parent-run: ${{ inputs.resume-parent }}
+      session: ${{ inputs.resume-session }}
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AGENT_PAT: ${{ secrets.AGENT_PAT }}
