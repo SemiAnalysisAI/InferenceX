@@ -23,6 +23,9 @@ base:
         expert-parallel-size: 1
         # The default trtllm_mha rejects MiMoV2's asymmetric K/V head dims.
         attention-backend: fa4
+        # Routed experts are packed MXFP4; v0.5.21's MiMo default picks the
+        # FP8 TRT-LLM runner, which cannot read them.
+        moe-runner-backend: flashinfer_mxfp4
         # AgentX is text-only; skipping the vision/audio towers frees HBM for KV.
         language-model-only: true
         chunked-prefill-size: 16384
