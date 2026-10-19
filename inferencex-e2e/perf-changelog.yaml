@@ -10139,3 +10139,13 @@
     - "Re-sweep Muse Spark Open B200 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; image and search space are unchanged."
     - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4291
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-disagg-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add native Kimi-K3 MI355X ATOM P/D AgentX points behind AToMesh with Mooncake P->D transfer: 1P1D TP8 DSpark7 c1, 1P2D TP8+DCP8 DSpark7 c16, 1P1D TP8+DCP8 DSpark4 c48/c72/c88 and 1P2D TP8+DCP8 DSpark4 c48."
+    - "Prefill keeps the paged KV and the KDA state images in an LMCache CPU tier (lmcache_offload): 224 GB per rank with the state images capped at 128 GB and on-demand checkpoints for the DSpark4 points, 128 GB per rank for c16. The c1 point is GPU-resident."
+    - "The DSpark draft stays BF16: the ATOM online_quant_config exclusions cover every draft layer."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
