@@ -57,9 +57,11 @@ roles:
       SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
       SGLANG_DISAGGREGATION_NIXL_BACKEND: LIBFABRIC
-      # NIXL only disables the EFA provider's unsolicited write recv when built
-      # against libfabric >= 2.3; with the image's libfabric 2.6 it stays on, and
-      # KV-transfer completions to a busy decode rank get lost at high concurrency.
+      # NIXL's LIBFABRIC plugin turns off the EFA provider's unsolicited write recv
+      # only if the plugin was compiled against libfabric >= 2.3 headers. The PyPI
+      # NIXL wheel in this image was not, so at run time, with the image's libfabric
+      # 2.6 (where the feature defaults to on), it stays on, and KV-transfer
+      # completions to a busy decode rank get lost at high concurrency.
       FI_EFA_USE_UNSOLICITED_WRITE_RECV: "0"
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PYTHONUNBUFFERED: '1'
@@ -115,9 +117,11 @@ roles:
     env:
       SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
       SGLANG_DISAGGREGATION_NIXL_BACKEND: LIBFABRIC
-      # NIXL only disables the EFA provider's unsolicited write recv when built
-      # against libfabric >= 2.3; with the image's libfabric 2.6 it stays on, and
-      # KV-transfer completions to a busy decode rank get lost at high concurrency.
+      # NIXL's LIBFABRIC plugin turns off the EFA provider's unsolicited write recv
+      # only if the plugin was compiled against libfabric >= 2.3 headers. The PyPI
+      # NIXL wheel in this image was not, so at run time, with the image's libfabric
+      # 2.6 (where the feature defaults to on), it stays on, and KV-transfer
+      # completions to a busy decode rank get lost at high concurrency.
       FI_EFA_USE_UNSOLICITED_WRITE_RECV: "0"
       PIP_BREAK_SYSTEM_PACKAGES: '1'
       PYTHONUNBUFFERED: '1'
