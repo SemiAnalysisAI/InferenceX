@@ -85,10 +85,10 @@ zip_override_hicache:
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
-        hicache-size: [120, 216, 216, 216, 216, 216]
+        hicache-size: [120, 120, 120, 216, 216, 216, 216, 216]
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
   benchmark:
     env:
-      CONC: ['16', '24', '32', '48', '64', '128']
+      CONC: ['1', '4', '16', '24', '32', '48', '64', '128']
       KV_OFFLOADING: dram

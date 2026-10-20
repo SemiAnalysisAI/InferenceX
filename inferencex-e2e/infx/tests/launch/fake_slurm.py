@@ -127,6 +127,9 @@ elif mode == "agentic":
     for conc in os.environ["CONC_LIST"].split():
         (workspace / f"{result}_conc{conc}.json").write_text(json.dumps({"conc": int(conc)}))
         (logs / "agentic" / f"conc_{conc}").mkdir(parents=True)
+if os.environ.get("FAKE_PROFILE"):
+    (logs / "infx_profile" / "steps").mkdir(parents=True)
+    (logs / "infx_profile" / "steps" / "dp0_tp0.jsonl").write_text('{"step": 0}\n')
 if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true":
     (logs / "eval_results").mkdir()
     (logs / "eval_results" / "results_gsm8k.json").write_text("{}")

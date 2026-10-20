@@ -91,6 +91,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
+            profile:
+                description: "Op-attribution profiling settings (JSON) for AgentX points; empty disables"
+                required: false
+                type: string
+                default: ""
     workflow_call:
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
@@ -179,6 +184,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
+            profile:
+                description: "Op-attribution profiling settings (JSON) for AgentX points; empty disables"
+                required: false
+                type: string
+                default: ""
 
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
@@ -408,6 +418,7 @@ jobs:
             agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
             scenario-type: agentic-coding
+            profile: ${{ inputs.profile }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
             test-name: ${{ inputs.test-name }}
 

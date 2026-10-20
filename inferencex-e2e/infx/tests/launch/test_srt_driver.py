@@ -192,6 +192,17 @@ def test_single_node_point_stages_workflow_artifacts(harness):
     assert "recipe.yaml" not in event["artifacts"]
 
 
+def test_single_node_profile_stages_its_own_archive(harness):
+    workspace = harness.workspace
+    env = {**single_node_env(harness, "h100-cw"), "FAKE_PROFILE": "1"}
+    assert_ok(launch(env, harness.config, workspace))
+
+    with tarfile.open(workspace / "infx-profile.tar") as archive:
+        assert "infx_profile/steps/dp0_tp0.jsonl" in archive.getnames()
+    with tarfile.open(workspace / "srt-single-node-logs.tar.gz") as logs:
+        assert not any("infx_profile" in name for name in logs.getnames())
+
+
 @pytest.mark.parametrize("require_power", ["0", "1"])
 @pytest.mark.parametrize(("cluster_id", "kind", "port"), [
     ("mi355x-amds", "custom", 19500), ("h100-cw", "dcgm", 9401),

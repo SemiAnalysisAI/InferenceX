@@ -1,0 +1,109 @@
+base:
+  schema: 2
+  name: dsv4-fp4-gb300-sglang-agentic
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-dense-tp-size: 1
+        moe-a2a-backend: megamoe
+        enable-deepseek-v4-fp4-indexer: true
+        disable-flashinfer-autotune: true
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.075
+        allow-auto-truncate: true
+        chunked-prefill-size: 16384
+        cuda-graph-max-bs-decode: 256
+        tool-call-parser: deepseekv4
+        reasoning-parser: deepseek-v4
+        chat-template: /infmax-workspace/benchmarks/single_node/chat_templates/deepseek_v4_thinking.jinja
+        watchdog-timeout: 3600
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 6
+        speculative-num-steps: 1
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 7
+        attention-backend: compressed
+        page-size: 256
+        disable-shared-experts-fusion: true
+        stream-interval: 20
+        enable-metrics: true
+        enable-cache-report: true
+        model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+        SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+        SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
+        SGLANG_OPT_USE_JIT_NORM: '1'
+        SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
+        SGLANG_OPT_USE_TOPK_V2: '1'
+        SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE: '1'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4224'
+        SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      KV_OFFLOADING: none
+
+override_dep4_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 64
+  benchmark:
+    env:
+      CONC: '32'
+
+override_dep4_c64:
+  roles:
+    agg:
+      args:
+        max-running-requests: 128
+  benchmark:
+    env:
+      CONC: '64'
+
+override_dep4_c128:
+  roles:
+    agg:
+      args:
+        max-running-requests: 256
+  benchmark:
+    env:
+      CONC: '128'

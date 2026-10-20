@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -148,13 +150,303 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             raise ValueError(f"Single-node SRT {name}: recipe/matrix {actual!r} != {wanted!r}")
 
 
+PROFILE_DIR = "/logs/infx_profile"
+PROFILE_DEFAULTS: dict[str, Any] = {
+    "windows": [["warmup", 0, 32], ["decode", 0, 32]],
+    "capture_ranks": None,
+    "capture_graphs_per_file": 0,
+    "host_headroom_gib": 128,
+    "mode": "agentic",
+    "isl": 8192,
+    "osl": 4096,
+    "engine_args": {},
+}
+PROFILE_MODES = ("agentic", "synthetic")
+PROFILE_PHASES = ("warmup", "decode", "profiling")
+PROFILE_MEASURED_CAP_SECONDS = 600
+
+
+def offload_headroom_arguments(role_args: Mapping[str, Any], headroom_gib: float) -> list[str]:
+    """Shrink a CPU KV-offload pool so profiling leaves the host headroom_gib free."""
+    raw = role_args.get("kv-transfer-config")
+    if not raw or headroom_gib <= 0:
+        return []
+    transfer = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    extra = transfer.get("kv_connector_extra_config") or {}
+    per_rank = extra.get("cpu_bytes_to_use_per_rank")
+    if per_rank is None:
+        return []
+    ranks = int(role_args.get("data-parallel-size", 1)) * int(
+        role_args.get("tensor-parallel-size", 1)
+    )
+    shrunk = int(per_rank) - int(headroom_gib * 2**30 / ranks)
+    if shrunk <= 0:
+        raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's CPU offload pool")
+    transfer["kv_connector_extra_config"] = {**extra, "cpu_bytes_to_use_per_rank": shrunk}
+    return ["--set", f"roles.agg.args.kv-transfer-config={json.dumps(transfer)}"]
+
+
+def mooncake_headroom_arguments(
+    recipe: Mapping[str, Any], role_args: Mapping[str, Any], headroom_gib: float
+) -> list[str]:
+    """Shrink an embedded Mooncake store's per-rank segment so profiling leaves the host headroom_gib.
+
+    Each TP rank registers global_segment_size of host memory for RDMA; with the
+    profiler's buffers on top, B300 Kimi K3 ran out registering it.
+    """
+    if headroom_gib <= 0:
+        return []
+    ranks = int(role_args.get("data-parallel-size", 1)) * int(
+        role_args.get("tensor-parallel-size", 1)
+    )
+    services = copy.deepcopy(list(recipe.get("services") or []))
+    changed = False
+    for service in services:
+        if not isinstance(service, Mapping) or service.get("type") != "mooncake-master":
+            continue
+        store = (service.get("options") or {}).get("store_config") or {}
+        match = re.fullmatch(
+            r"(\d+(?:\.\d+)?)\s*([KMGT]?B)",
+            str(store.get("global_segment_size") or ""),
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        scale = {"KB": 1 / 2**20, "MB": 1 / 2**10, "GB": 1, "TB": 2**10}[match.group(2).upper()]
+        shrunk = float(match.group(1)) * scale - headroom_gib / ranks
+        if shrunk <= 0:
+            raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's Mooncake segment")
+        store["global_segment_size"] = f"{int(shrunk)}GB"
+        changed = True
+    return ["--set", f"services={json.dumps(services)}"] if changed else []
+
+
+def _recipe_env_int(recipe: Mapping[str, Any] | None, name: str) -> int:
+    """An integer the recipe's agg role (or the whole recipe) sets in its environment, else 0."""
+    for env in (
+        ((recipe or {}).get("roles") or {}).get("agg", {}).get("env") or {},
+        (recipe or {}).get("environment") or {},
+    ):
+        try:
+            return int(env[name])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return 0
+
+
+def _set(path: str, value: Any) -> list[str]:
+    return ["--set", f"{path}={json.dumps(value)}"]
+
+
+@dataclass(frozen=True)
+class ProfileRequest:
+    """One profiled point: INFX_PROFILE's settings and the selected recipe variant."""
+
+    settings: Mapping[str, Any]
+    role_args: Mapping[str, Any]
+    recipe: Mapping[str, Any]
+
+    @property
+    def headroom_gib(self) -> float:
+        return float(self.settings["host_headroom_gib"])
+
+
+class ProfiledEngine:
+    """How one engine is profiled: its hooks, how windows open, and the recipe changes that needs.
+
+    Every engine loads the infx_prof hooks through PYTHONPATH (sitecustomize);
+    INFX_PROF_ENGINE picks its adapter. `control` is how the window client
+    opens windows: "http" (the engine's own profiler endpoint) or "file"
+    (control/windows.jsonl, read by the hooks at step boundaries).
+    """
+
+    name = ""
+    control = "file"
+    attention_dp_arg = ""
+
+    def worker_env(self, profile: ProfileRequest) -> dict[str, str]:
+        return {
+            "INFX_PROF_DIR": PROFILE_DIR,
+            "INFX_PROF_ENGINE": self.name,
+            "INFX_PROF_CAPTURE_GRAPHS_PER_FILE": str(
+                int(profile.settings["capture_graphs_per_file"])
+            ),
+            "INFX_PROF_CAPTURE_RANKS": profile.settings["capture_ranks"]
+            or self.capture_ranks(profile),
+            "PYTHONPATH": "/infmax-workspace/benchmarks/profiling",
+            "TORCHINDUCTOR_FX_GRAPH_CACHE": "0",
+            "TORCHINDUCTOR_AUTOGRAD_CACHE": "0",
+        }
+
+    def role_arguments(self, profile: ProfileRequest) -> list[str]:
+        """--set overrides of the engine's arguments (and services) for a profiled run."""
+        raise NotImplementedError
+
+    def capture_ranks(self, profile: ProfileRequest) -> str:
+        """Workers whose graph capture is profiled when INFX_PROFILE does not say: every rank
+        under attention DP (SGLang / TRT-LLM ranks capture different graphs: per-rank
+        buffers change copy kernels), else dp0_tp0."""
+        dp = self.attention_dp_arg and profile.role_args.get(self.attention_dp_arg)
+        return "all" if dp else "dp0_tp0"
+
+
+class VllmProfiling(ProfiledEngine):
+    name = "vllm"
+    control = "http"
+
+    def worker_env(self, profile: ProfileRequest) -> dict[str, str]:
+        timeout = max(1800, _recipe_env_int(profile.recipe, "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS"))
+        ready = max(3600, _recipe_env_int(profile.recipe, "VLLM_ENGINE_READY_TIMEOUT_S"))
+        return {
+            **super().worker_env(profile),
+            "VLLM_RPC_TIMEOUT": "1800000",
+            "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": str(timeout),
+            "VLLM_ENGINE_READY_TIMEOUT_S": str(ready),
+            "VLLM_DISABLE_COMPILE_CACHE": "1",
+        }
+
+    def role_arguments(self, profile: ProfileRequest) -> list[str]:
+        profiler_config = {
+            "profiler": "torch",
+            "torch_profiler_dir": f"{PROFILE_DIR}/torch",
+            "torch_profiler_record_shapes": True,
+            "torch_profiler_with_stack": False,
+            "torch_profiler_dump_cuda_time_total": False,
+            "ignore_frontend": True,
+            "max_iterations": max(int(w[2]) for w in profile.settings["windows"]),
+        }
+        return [
+            "--set",
+            f"roles.agg.args.profiler-config={json.dumps(profiler_config)}",
+            *offload_headroom_arguments(profile.role_args, profile.headroom_gib),
+            *mooncake_headroom_arguments(profile.recipe, profile.role_args, profile.headroom_gib),
+        ]
+
+
+class SglangProfiling(ProfiledEngine):
+    name = "sglang"
+
+    attention_dp_arg = "enable-dp-attention"
+
+    TIMEOUT_SECONDS = 1800
+
+    def role_arguments(self, profile: ProfileRequest) -> list[str]:
+        args = profile.role_args
+        overrides = []
+        for flag in ("watchdog-timeout", "dist-timeout"):
+            overrides += _set(
+                f"roles.agg.args.{flag}", max(self.TIMEOUT_SECONDS, int(args.get(flag) or 0))
+            )
+        size = args.get("hicache-size")
+        if args.get("enable-hierarchical-cache") and size and profile.headroom_gib > 0:
+            shrunk = int(
+                float(size) - profile.headroom_gib / int(args.get("tensor-parallel-size", 1))
+            )
+            if shrunk <= 0:
+                raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's HiCache pool")
+            overrides += _set("roles.agg.args.hicache-size", shrunk)
+        return overrides
+
+
+class TrtllmProfiling(ProfiledEngine):
+    name = "trtllm"
+
+    attention_dp_arg = "enable_attention_dp"
+
+    def role_arguments(self, profile: ProfileRequest) -> list[str]:
+        args = profile.role_args
+        size = (args.get("kv_cache_config") or {}).get("host_cache_size")
+        if not size or profile.headroom_gib <= 0:
+            return []
+        ranks = int(args.get("tensor_parallel_size", 1)) * int(
+            args.get("pipeline_parallel_size", 1)
+        )
+        shrunk = int(size) - int(profile.headroom_gib * 2**30 / ranks)
+        if shrunk <= 0:
+            raise ValueError("INFX_PROFILE host_headroom_gib exceeds the recipe's KV host cache")
+        return _set("roles.agg.args.kv_cache_config.host_cache_size", shrunk)
+
+
+PROFILED_ENGINES = {
+    engine.name: engine for engine in (VllmProfiling(), SglangProfiling(), TrtllmProfiling())
+}
+
+
+def profiling_arguments(
+    environment: Mapping[str, str],
+    role_args: Mapping[str, Any] | None = None,
+    recipe: Mapping[str, Any] | None = None,
+) -> list[str]:
+    """Op-attribution profiling: capture hooks, step log and torch windows.
+
+    INFX_PROFILE is a JSON object overriding PROFILE_DEFAULTS; empty disables.
+    Everything lands in PROFILE_DIR, which the launcher uploads as its own artifact.
+    """
+    raw = environment.get("INFX_PROFILE", "")
+    if not raw:
+        return []
+    engine = PROFILED_ENGINES.get(SINGLE_NODE_ENGINES.get(environment["FRAMEWORK"], ""))
+    if engine is None:
+        raise ValueError(f"INFX_PROFILE supports {sorted(PROFILED_ENGINES)} recipes")
+    settings = {**PROFILE_DEFAULTS, **json.loads(raw)}
+    windows = settings["windows"]
+    if not windows or any(
+        len(window) != 3
+        or window[0] not in PROFILE_PHASES
+        or int(window[1]) < 0
+        or int(window[2]) <= 0
+        for window in windows
+    ):
+        raise ValueError(
+            f"INFX_PROFILE windows must be [phase in {PROFILE_PHASES}, delay_seconds, iterations]"
+        )
+    if [PROFILE_PHASES.index(w[0]) for w in windows] != sorted(
+        PROFILE_PHASES.index(w[0]) for w in windows
+    ):
+        raise ValueError("INFX_PROFILE windows must be ordered by phase")
+    profile = ProfileRequest(settings, role_args or {}, recipe or {})
+    overrides = engine.role_arguments(profile)
+    for flag, value in (settings.get("engine_args") or {}).items():
+        overrides += _set(f"roles.agg.args.{flag}", value)
+    for name, value in engine.worker_env(profile).items():
+        overrides += _set(f"roles.agg.env.{name}", value)
+    measured = [int(w[1]) for w in windows if w[0] == "profiling"]
+    duration = int(
+        settings.get("duration") or max(measured, default=0) + PROFILE_MEASURED_CAP_SECONDS
+    )
+    for name, value in (
+        ("INFX_PROFILE_DURATION", str(duration)),
+        ("INFX_PROFILE_WINDOWS", json.dumps(windows)),
+        ("INFX_PROF_DIR", PROFILE_DIR),
+        ("INFX_PROF_CONTROL", engine.control),
+    ):
+        overrides += _set(f"benchmark.env.{name}", value)
+    if settings["mode"] not in PROFILE_MODES:
+        raise ValueError(f"INFX_PROFILE mode must be one of {PROFILE_MODES}")
+    if settings["mode"] == "synthetic":
+        for name in ("isl", "osl"):
+            if not isinstance(settings[name], int) or settings[name] <= 0:
+                raise ValueError(f"INFX_PROFILE {name} must be a positive integer")
+        for name, value in (
+            ("INFX_PROFILE_MODE", "synthetic"),
+            ("INFX_SYNTH_ISL", settings["isl"]),
+            ("INFX_SYNTH_OSL", settings["osl"]),
+        ):
+            overrides += _set(f"benchmark.env.{name}", str(value))
+    for name in ("AIPERF_FAILED_REQUEST_THRESHOLD", "AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"):
+        overrides += _set(f"benchmark.env.{name}", "1.0")
+    overrides += _set("benchmark.env.AIPERF_REQUIRED_SERVER_METRIC_PREFIX", "")
+    return overrides
+
+
 def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
     """Bind only runtime-owned values after validating the selected recipe."""
-    select_recipe(config, environment)
+    _, recipe = select_recipe(config, environment)
     for name in ("RUN_EVAL", "EVAL_ONLY", "DP_ATTENTION"):
         if environment[name] not in {"true", "false"}:
             raise ValueError(f"{name} must be true or false")
     overrides = ["--set", f"srun_options.gpus-per-node={json.dumps(environment['GPU_COUNT'])}"]
+    overrides += profiling_arguments(environment, recipe["roles"]["agg"]["args"], recipe)
     if environment.get("SRT_SRUN_OPTIONS"):
         options = json.loads(environment["SRT_SRUN_OPTIONS"])
         if not isinstance(options, dict) or any(

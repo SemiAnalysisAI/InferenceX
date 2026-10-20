@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 from infx.bench import env as inputs, proc, server
+from infx.bench.agentic import profile
 from infx.bench.agentic.replay import (
     REQUIRED as REPLAY_REQUIRED,
     ReplayConfig,
@@ -121,6 +122,10 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
         "AGENTIC_OUTPUT_DIR": str(plan.output_dir),
         "PYTHONPATH": proc.pythonpath(environ),
     }
+    if profile.synthetic(env):
+        return profile.run_synthetic(
+            env, cfg.url, cfg.concurrency, plan.output_dir / f"{plan.result_filename}.json"
+        )
     rc = _download_traces(cfg, runtime, env)
     if rc:
         return rc
@@ -136,8 +141,14 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     argv = replay_argv(cfg, runtime.agentx)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
-    with proc.DeferSignals() as signals:
-        replay_rc = 0 if signals.received else proc.tee(argv, log, env)
+    windows = profile.start_windows(
+        env, cfg.url, cfg.concurrency, cfg.artifact_dir / "logs" / "aiperf.log"
+    )
+    try:
+        with proc.DeferSignals() as signals:
+            replay_rc = 0 if signals.received else proc.tee(argv, log, env)
+    finally:
+        profile.stop_windows(windows)
     if signals.received:
         return 128 + signals.received
     return _score(plan, python, env, replay_rc)
