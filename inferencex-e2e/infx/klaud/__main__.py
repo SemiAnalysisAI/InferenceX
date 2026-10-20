@@ -199,7 +199,7 @@ def weights_key(source: dict) -> tuple:
 def recent_candidate_outcomes(
     repository: str, cooldown_hours: int
 ) -> tuple[dict[str, str | None], set[tuple]]:
-    from .lifecycle import MAX_SESSIONS, WAVE_HOURS
+    from .lifecycle import MAX_SESSIONS, WAVE_HOURS, resume_parent
 
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     # Resumed sessions of an older planner run record their outcomes in later waves.
@@ -214,11 +214,16 @@ def recent_candidate_outcomes(
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
         return {}, set()
     dated = []
+    plans: dict[int, int] = {}
     for run in runs:
         try:
             created = utc(run["created_at"])
             if created >= since:
                 dated.append((created, int(run["id"])))
+                # A resume run's candidates come from its planner run's plan.
+                plans[int(run["id"])] = resume_parent(run.get("display_title") or "") or int(
+                    run["id"]
+                )
         except (AttributeError, KeyError, TypeError, ValueError):
             continue
     listings: dict[int, list[dict]] = {}
@@ -251,13 +256,21 @@ def recent_candidate_outcomes(
     for candidate, (artifact, run_id) in latest.items():
         result[candidate] = recorded_outcome(repository, artifact)
         if result[candidate] == "weights-missing":
-            blocked.setdefault(run_id, set()).add(candidate)
-    missing_weights = {
-        weights_key(planned["source"])
-        for run_id, candidates in blocked.items()
-        for planned in planned_candidates(repository, listings[run_id])
-        if planned.get("id") in candidates
-    }
+            blocked.setdefault(plans[run_id], set()).add(candidate)
+    missing_weights = set()
+    for plan_run, candidates in blocked.items():
+        if plan_run not in listings:
+            try:
+                listings[plan_run] = github_items(
+                    repository, f"actions/runs/{plan_run}/artifacts?per_page=100", "artifacts"
+                )
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                continue
+        missing_weights.update(
+            weights_key(planned["source"])
+            for planned in planned_candidates(repository, listings[plan_run])
+            if planned.get("id") in candidates
+        )
     return result, missing_weights
 
 
@@ -611,26 +624,48 @@ def check_stop() -> dict:
     return {}
 
 
-def resume_check() -> tuple[dict[str, bool], bool]:
-    """The session gate's outputs, and whether its job must fail to stay re-runnable.
+def resume_check() -> dict[str, bool]:
+    """The session gate's outputs.
 
-    A planner run's first attempt runs its session. A rerun runs only a session that recovery
-    granted to this attempt; a resumable session without that grant fails its job, so a later
-    rerun of the planner run can still resume it.
+    A planner run's job runs its session in the run's first attempt only. A resume run runs the
+    session recovery granted it, once: only in its first attempt, only if recovery dispatched it
+    for that later session, and never after another run already started that session.
     """
+    no = {"run": False, "resume": False}
+    run = os.environ.get("GITHUB_RUN_ID")
     attempt = int(os.environ.get("GITHUB_RUN_ATTEMPT", "1"))
-    if attempt == 1:
-        return {"run": True, "resume": False}, False
-    from .lifecycle import MAX_SESSIONS, current_session, granted, resumable, sessions_started
+    if (os.environ.get("KLAUD_PARENT_RUN") or run) == run:
+        return {"run": attempt == 1, "resume": False}
+    number = int(os.environ.get("KLAUD_SESSION") or "0")
+    if attempt != 1 or number < 2:
+        return no
+    from .lifecycle import (
+        MAX_SESSIONS,
+        candidate_jobs,
+        current_session,
+        granted,
+        resumable,
+        resume_title,
+        started_session,
+    )
 
     session = current_session()
+    title = resume_title(session.parent["id"], session.candidate.id, number)
+    same = {resume["id"] for resume in session.resume_runs() if resume["display_title"] == title}
+    if run is None or int(run) not in same:
+        return no
+    jobs = [job for job in candidate_jobs(session) if started_session(job)]
+    # This job's own session is already one of the started ones.
+    if len(jobs) > MAX_SESSIONS or any(
+        job["run_id"] in same and job["run_id"] != int(run) for job in jobs
+    ):
+        return no
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
-    # This job's own session is already one of the started ones.
-    if not resumable(session, pull) or sessions_started(session) > MAX_SESSIONS:
-        return {"run": False, "resume": False}, False
-    resume = granted(session, pull, attempt)
-    return {"run": resume, "resume": resume}, not resume
+    if not resumable(session, pull):
+        return no
+    resume = granted(session, pull, number)
+    return {"run": resume, "resume": resume}
 
 
 def save_diagnostics(
@@ -1061,7 +1096,7 @@ def main() -> int:
     )
     commands.add_parser(
         "resume-check",
-        help="Gate a rerun candidate job: run only a granted session, fail an ungranted resumable one",
+        help="Gate a candidate job: run the planner's session or a resume run's granted session",
     )
     preflight = commands.add_parser(
         "check-final",
@@ -1173,18 +1208,13 @@ def main() -> int:
                 )
             return 0
         if args.command == "resume-check":
-            decision, ungranted = resume_check()
-            outputs = "".join(f"{key}={str(value).lower()}\n" for key, value in decision.items())
+            outputs = "".join(
+                f"{key}={str(value).lower()}\n" for key, value in resume_check().items()
+            )
             print(outputs, end="")
             if filename := os.environ.get("GITHUB_OUTPUT"):
                 with open(filename, "a") as output:
                     output.write(outputs)
-            if ungranted:
-                print(
-                    "::notice::Klaud: no resume grant for this attempt; a later rerun of the "
-                    "planner run may still resume the session."
-                )
-                return 1
             return 0
         if args.command == "recover":
             from .lifecycle import recover
