@@ -10257,9 +10257,11 @@
 
 - config-keys:
     - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
   scenario-type:
     - agentic-coding
   description:
     - "Append two higher-throughput GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX points, both DEP2 prefill with DEP32 decode: 20P1D at c16800 with max-num-seqs 152, and 18P1D at c14500 with max-num-seqs 126 (MegaAttn wave boundaries), with 70 GiB of CPU KV offload per prefill rank."
+    - "Append TP4 at concurrency 1 (max-num-seqs 1) and 16 (max-num-seqs 32, prefill-schedule-interval 128) to the aggregated curve, with capture size 5 for the one-request DSpark draft graph."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4337
   append-only: true
