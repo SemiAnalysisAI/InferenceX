@@ -9126,11 +9126,11 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
       search-space:
       - spec-decoding: mtp
         conc-list: [1228]
-        srt-recipe: disagg-variants.yaml:override_4p1d_dep2_dep16_c1228
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep2_dep16_c1228
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         prefill:
-          num-worker: 4
+          num-worker: 3
           tp: 2
           ep: 2
           dp-attn: true
@@ -9146,6 +9146,21 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         prefill:
           num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [4096]
+        srt-recipe: disagg-variants.yaml:override_7p1d_dep2_dep16_c4096
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
+        prefill:
+          num-worker: 7
           tp: 2
           ep: 2
           dp-attn: true
