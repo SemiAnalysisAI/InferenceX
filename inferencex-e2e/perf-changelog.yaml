@@ -10298,6 +10298,5 @@
     - "Move the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated and aggregated AgentX curves to vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
     - "Disaggregated: one DEP2 prefill / DEP16 decode point, 10P1D at c7888 with max-num-seqs 152, with 70 GiB of CPU KV offload per prefill rank, per-rank THP-backed prefill Engram host tables (use_thp true, dp_shared_memory false) and HBM decode Engram tables."
     - "Configure decode worker selection by active request count with soft session affinity."
-    - "Disaggregated jobs exclude GB300 nodes r01-c001, c002, c004, c005, c010, c011 and r03-c001, c002, where prefill Engram host-table allocation hit CUDA_ERROR_OUT_OF_MEMORY."
     - "Aggregated: TP4 at concurrency 1 (max-num-seqs 1) and 16 (max-num-seqs 32, prefill-schedule-interval 128), with CUDA graph capture sizes matching the B300 Dynamo vLLM TP4 recipes (5, 10, 15, 20, 25, 35 and 40 added at concurrency 1) and Engram host tables in pinned memory (use_thp false): on this image, THP-registered tables hang the first prefill forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4345
