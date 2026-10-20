@@ -70,6 +70,8 @@ base:
         max-num-batched-tokens: 16384
         additional-config: '{"decode_backend":"latency_specialized"}'
   sbatch_directives:
+    # A hung worker can take its host down; never requeue onto fresh nodes.
+    no-requeue: ""
     mem: '0'
     comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
   srun_options:
@@ -95,6 +97,9 @@ override_tp16_dspark5:
         VLLM_USE_DIRECT_DCP_A2A: '0'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        # Cross-node NCCL runs over EFA; EFA DMA into cuMem (CUDA VMM) buffers
+        # froze B300 hosts, so keep NCCL buffers on cudaMalloc.
+        NCCL_CUMEM_ENABLE: '0'
       args:
         tensor-parallel-size: 16
         decode-context-parallel-size: 16
