@@ -45,9 +45,10 @@ base:
         # indexer does not support.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
-        # Mono decode kernels (vllm-project/vllm#60397, #61082): two persistent
-        # launches a layer on all 40 backbone layers for decode steps of up to
-        # 48 rows (c8 with five drafts); larger steps take the regular path.
+        # Mono decode kernels (vllm-project/vllm#60397, #61082, #62131): two
+        # persistent launches a layer on all 40 backbone layers and the three
+        # DSpark draft layers for decode steps of up to 48 rows (c8 with five
+        # drafts); larger steps take the regular path.
         monokernel: true
         disable-uvicorn-access-log: true
       env:

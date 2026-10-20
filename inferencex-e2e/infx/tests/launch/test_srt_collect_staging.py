@@ -10,6 +10,7 @@ import pytest
 
 from infx.launch.drivers.srt import collect
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
+from infx.launch.lifecycle import Lifecycle
 
 
 class _Backend:
@@ -35,7 +36,7 @@ def _point(tmp_path: Path, *, require_power: bool) -> tuple[SimpleNamespace, Sim
     for name in (EXPORTER_PROVENANCE, "power-producer-sha.txt"):
         (workspace / name).write_text(f"{name}\n")
     request = SimpleNamespace(eval_only=False, require_power=require_power, result_filename="point")
-    run = SimpleNamespace(backend=_Backend(output), request=request, workspace=workspace)
+    run = SimpleNamespace(backend=_Backend(output), request=request, workspace=workspace, life=Lifecycle())
     submitted = SimpleNamespace(recover=lambda backend: object())
     return run, submitted, workspace
 
@@ -57,6 +58,11 @@ def test_power_package_copy_failure_fails_the_point_only_when_power_is_required(
     assert (workspace / "point.json").read_text() == '{"completed": 2}\n'
     level = "ERROR" if require_power else "WARNING"
     assert f"{level}: failed to stage the native power package" in capsys.readouterr().err
+    error = run.life.event.finish(rc).error
+    if require_power:
+        assert (error.stage, error.type) == ("collect", "ArtifactError")
+    else:
+        assert error is None
 
 
 def test_power_package_is_staged_beside_the_result(tmp_path: Path) -> None:
