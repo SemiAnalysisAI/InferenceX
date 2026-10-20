@@ -10260,6 +10260,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
 
 - config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image from vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7 to vllm/vllm-openai:cu134-nightly-x86_64-dev-20261019-mk, pinned by digest."
+    - "TP4: run concurrency 1, 8 and 16 with decode_backend=latency_specialized; prefill-schedule-interval 160 and 128 at concurrency 8 and 16; max-num-seqs 1 at concurrency 1; drop concurrency 4; add capture size 5."
+    - "DEP2: set prefill-schedule-interval 80, 80, 80, 56, 32 and 32 and max-num-batched-tokens 16384, 16384, 16384, 32768, 16384 and 16384 at concurrency 8, 16, 32, 64, 128 and 192."
+    - "DEP2 concurrency 128 and 192: offload KV blocks to DRAM with SimpleCPUOffloadConnector (lazy, 50 GiB per rank)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4332
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open B200 curve to lmsysorg/sglang:nightly-dev-20261019-3c560089, retaining the full AgentX trace corpus selected on main."
+    - "Set swa-full-tokens-ratio to 0.2 for every Muse Spark Open B200 SGLang AgentX concurrency point."
+    - "Add TP8/EP8 concurrency 64 with layernorm sequence parallelism, MegaMoE, and HiCache DRAM offload, using 8192 MegaMoE tokens per rank and 160 GB of HiCache per rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4334
+
+- config-keys:
     - dsv41flash-fp4-h200-sglang-agentic-dspark
   scenario-type:
     - agentic-coding
@@ -10288,6 +10309,18 @@
     - "The image carries vllm-project/vllm#62131: --monokernel now also runs the three DSpark draft layers as the two persistent mono decode launches (128 experts / top-3, window-only attention over the block's non-causal SWA rows) instead of vLLM's regular path. The step limit is unchanged at 48 rows, i.e. concurrency 1-8 with five DSpark drafts."
     - "No recipe or point changes: concurrency 1, 2, 4, 8, 16, 32 and 64 on TP2 and TP4 (14 points), all re-measured on the new image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4319
+
+- config-keys:
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
+    - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
+    - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
+    - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4231
 
 - config-keys:
     - musespark-fp4-gb300-dynamo-sglang-agentic-dflash
