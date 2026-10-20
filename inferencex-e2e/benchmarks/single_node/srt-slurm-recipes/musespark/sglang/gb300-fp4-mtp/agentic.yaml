@@ -175,6 +175,7 @@ override_tp4_c24:
         prefill-decode-interval: 32
         enable-hierarchical-cache: true
         hicache-size: 120
+        hicache-write-policy: write_through
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
   benchmark:
@@ -196,6 +197,7 @@ override_tp4_c34:
         prefill-decode-interval: 48
         enable-hierarchical-cache: true
         hicache-size: 150
+        hicache-write-policy: write_through
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
