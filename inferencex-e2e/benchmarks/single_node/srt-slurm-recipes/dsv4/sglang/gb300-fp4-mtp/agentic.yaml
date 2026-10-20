@@ -31,11 +31,11 @@ base:
         moe-a2a-backend: megamoe
         enable-deepseek-v4-fp4-indexer: true
         disable-flashinfer-autotune: true
-        mem-fraction-static: 0.9
+        mem-fraction-static: 0.96
         swa-full-tokens-ratio: 0.075
         allow-auto-truncate: true
         chunked-prefill-size: 32768
-        cuda-graph-max-bs-decode: 544
+        cuda-graph-max-bs-decode: 256
         tool-call-parser: deepseekv4
         reasoning-parser: deepseek-v4
         chat-template: /infmax-workspace/benchmarks/single_node/chat_templates/deepseek_v4_thinking.jinja
