@@ -90,6 +90,31 @@ python3 -m pip uninstall -y \
 python3 -m pip install --no-deps "$cache/"*.whl
 flock -u 9
 
+# Dynamo's source install pulls aiconfigurator-core, a placeholder sdist that
+# downloads its real wheel from pypi.nvidia.com at install time and fails
+# intermittently on these nodes. Install the same wheel first, verified against
+# its published SHA256, so the Dynamo install finds the requirement satisfied.
+aic_wheel=aiconfigurator_core-0.11.0.dev20260728-cp310-abi3-manylinux_2_28_x86_64.whl
+aic_sha256=cfd724c6cce142ffc3df150785614245b8a9e0fb70cacb071b4ab58f01bd19c7
+aic_dir="$KIMI_EFA_BUILD_CACHE/wheels"
+mkdir -p "$aic_dir"
+for attempt in 1 2 3 4 5; do
+    if printf '%s  %s\n' "$aic_sha256" "$aic_dir/$aic_wheel" | sha256sum -c --status - 2>/dev/null; then
+        break
+    fi
+    curl -fsSL --retry 3 --retry-all-errors \
+        "https://pypi.nvidia.com/aiconfigurator-core/$aic_wheel" -o "$task_dir/$aic_wheel" || true
+    if printf '%s  %s\n' "$aic_sha256" "$task_dir/$aic_wheel" | sha256sum -c --status -; then
+        mv -f "$task_dir/$aic_wheel" "$aic_dir/$aic_wheel.tmp.$$"
+        mv -f "$aic_dir/$aic_wheel.tmp.$$" "$aic_dir/$aic_wheel"
+    else
+        echo "aiconfigurator-core wheel failed SHA256 check (attempt $attempt)" >&2
+        sleep $((attempt * 10))
+    fi
+done
+printf '%s  %s\n' "$aic_sha256" "$aic_dir/$aic_wheel" | sha256sum -c -
+python3 -m pip install --no-deps "$aic_dir/$aic_wheel"
+
 /opt/amazon/efa/bin/fi_info --version
 /opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM
 python3 - <<'PY'

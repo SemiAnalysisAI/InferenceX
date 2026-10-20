@@ -99,7 +99,9 @@ base:
         VLLM_RPC_TIMEOUT: "600000"
         TILELANG_CLEANUP_TEMP_FILES: "1"
         VLLM_USE_NCCL_SYMM_MEM: "0"
-        NCCL_CUMEM_ENABLE: "1"
+        # EFA DMA into CUDA VMM (cumem) memory froze B300 hosts; keep NCCL
+        # buffers and the KV cache Mooncake/NIXL register on cudaMalloc.
+        NCCL_CUMEM_ENABLE: "0"
         NCCL_MNNVL_ENABLE: "0"
         NCCL_NVLS_ENABLE: "1"
         VLLM_SERVER_DEV_MODE: "1"
@@ -133,7 +135,6 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        enable-cumem-allocator: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10
@@ -165,7 +166,6 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        enable-cumem-allocator: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10
@@ -176,6 +176,8 @@ base:
         max-num-seqs: 128
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   sbatch_directives:
+    # A hung worker can take its host down; never requeue onto fresh nodes.
+    no-requeue: ""
     mem: "0"
     comment: >-
       '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will
