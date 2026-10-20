@@ -10247,6 +10247,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019."
+    - "Enable SGLANG_HIP_DSV4_C4_INDEXER_ROWGROUP=1 on all points."
+    - "Raise DP chunked-prefill-size from 65536 to 131072 (16384 tokens per rank)."
+    - "MegaMoE: raise FlyDSL MTPR to 16384, add decode MTPR / fixed-slot caps, EPLB P2P batch chunk size 7."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4315
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
