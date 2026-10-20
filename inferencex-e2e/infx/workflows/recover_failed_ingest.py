@@ -28,8 +28,6 @@ from .validate_perf_changelog import (
 )
 
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
-# Merge-time publication workflow; run-sweep.yml owned it before the cutover
-# and its historical push runs remain valid recovery targets.
 TARGET_WORKFLOW_PATHS = (
     ".github/workflows/merge-ingest.yml",
     ".github/workflows/run-sweep.yml",

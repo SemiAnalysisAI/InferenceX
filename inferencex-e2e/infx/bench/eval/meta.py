@@ -57,8 +57,6 @@ def build(
     multinode = env.flag("IS_MULTINODE", env=environ)
     values = dict(environ)
     if multinode:
-        # Only here: the bridge resets unset per-phase DP flags, which would overwrite a
-        # single-node job's real DP_ATTENTION.
         values.update(_disaggregated(values))
 
     def size(field: str, *names: str) -> int:
@@ -98,6 +96,11 @@ def build(
         "prefill_pp": size("prefill_pp", "PREFILL_PP_SIZE", "PP_SIZE"),
         "prefill_dcp_size": size("prefill_dcp_size", "PREFILL_DCP_SIZE", "DCP_SIZE"),
         "prefill_pcp_size": size("prefill_pcp_size", "PREFILL_PCP_SIZE", "PCP_SIZE"),
+        **(
+            {"prefill_dwdp_size": size("prefill_dwdp_size", "PREFILL_DWDP_SIZE")}
+            if size("prefill_dwdp_size", "PREFILL_DWDP_SIZE") > 1
+            else {}
+        ),
         "prefill_ep": size("prefill_ep", "PREFILL_EP", "EP_SIZE"),
         "prefill_dp_attention": dp("PREFILL_DP_ATTENTION", "DP_ATTENTION"),
         "prefill_num_workers": size("prefill_num_workers", "PREFILL_NUM_WORKERS"),

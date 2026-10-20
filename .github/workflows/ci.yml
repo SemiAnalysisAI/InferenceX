@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: &python-paths
       - '**/*.py'
+      - 'collectivex/**'
       - '.github/scripts/**'
       - '.github/workflows/ci.yml'
       - 'inferencex-e2e/pyproject.toml'

@@ -427,7 +427,7 @@ def execute(args) -> None:
         ):
             if profile.get(field):
                 allocation.append(f"--{flag}={profile[field]}")
-        if cell["pool"] in ("b200-nscale", "b300", "gb200", "gb300"):
+        if cell["pool"] in ("b200-nscale", "b300", "h100-dgxc", "gb200", "gb300"):
             allocation.append("--mem=0")
         if cell["pool"] in ("gb200", "gb300"):
             allocation.append("--cpus-per-task=35")
@@ -508,9 +508,10 @@ def execute(args) -> None:
             "--container-writable",
             "--export=ALL",
         ]
-        if cell["pool"] in {"h200-dgxc", "b300", "gb200", "gb300"} | AMD_POOLS:
+        if cell["pool"] in {"h200-dgxc", "b300", "h100-dgxc", "gb200", "gb300"} | AMD_POOLS:
             run.append("--container-remap-root")
-        if cell["pool"] == "b300":
+        # The AWS dsxe pools (b300, h100-dgxc) share one Slurm and pyxis setup.
+        if cell["pool"] in ("b300", "h100-dgxc"):
             run.append("--mpi=none")
         # The Python entrypoint preserves the allocated GPU mask without a shell.
         run += ["python3", "-m", "operatorx.ci", "rank"]
