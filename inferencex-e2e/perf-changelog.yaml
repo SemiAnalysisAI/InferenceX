@@ -10321,3 +10321,12 @@
     - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
     - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4231
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Raise dram-utilization from 0.75 to 1.0 so the TP8 Mooncake DRAM tier takes the full 3 TB AgentX ceiling (total-cpu-dram-gb 2249 -> 2999, global_segment_size 281GB -> 374GB per rank) at every point."
+    - "Sweep concurrency 1 to 64: replace the conc 70 point with conc 64 (max-num-seqs 128)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
