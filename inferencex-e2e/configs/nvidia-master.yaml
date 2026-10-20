@@ -6568,6 +6568,20 @@ dsv4-fp4-gb200-dynamo-sglang-agentic-disagg:
           tp: 32
           ep: 32
           dp-attn: true
+dsv4-fp4-gb300-sglang-agentic-dspark:
+  image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
+  model: deepseek-ai/DeepSeek-V4-Pro-0813
+  model-prefix: dsv4
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: dsv4/sglang/gb300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [32, 64, 128], srt-recipe: agentic.yaml }
+
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:v0.5.19-cu130@sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9
   model: deepseek-ai/DeepSeek-V4-Pro-0813
