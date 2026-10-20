@@ -428,6 +428,19 @@ class TestAgenticMatrixEntries:
                 }],
             })
 
+    def test_dram_kv_offload_rejects_per_worker_hardware(self):
+        with pytest.raises(ValidationError, match="per-worker 'hardware'"):
+            AgenticCodingConfig(**{
+                "dram-utilization": 0.80,
+                "search-space": [{
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": {"name": "mooncake"},
+                    "prefill": {"hardware": "gb200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                    "decode": {"hardware": "b200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                    "conc-list": [16],
+                }],
+            })
+
     def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
         with pytest.raises(ValidationError, match="total-cpu-dram-gb"):
             AgenticCodingSearchSpaceEntry(**{
@@ -1335,6 +1348,17 @@ class TestMultiNodeAgenticMatrixEntry:
         with pytest.raises(ValueError):
             validate_agentic_matrix_entry(without_prefill)
 
+    def test_smoke_rows_satisfy_the_dispatch_schema(self):
+        from infx.matrix.generate import smoke_entries
+
+        row = {**MULTINODE_AGENTIC_EVAL_ROW, "conc": [8, 32]}
+        del row["eval-only"]
+        rows = smoke_entries([row])
+
+        assert [(entry["conc"], entry.get("eval-only", False)) for entry in rows] == [
+            ([8], False), ([32], True)]
+        for entry in rows:
+            validate_agentic_matrix_entry(entry)
 
 
 class TestLoadConfigFiles:

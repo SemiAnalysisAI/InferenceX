@@ -1,9 +1,3 @@
-"""Recipe fingerprints: a matrix row's identity plus the concrete recipe its job runs.
-
-Concurrency, the job name and cluster facts stay out, so a recipe keeps one fingerprint across
-concurrencies and clusters.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -39,7 +33,6 @@ def _row_identity(entry: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def row_fingerprint(entry: Mapping[str, Any]) -> str:
-    """The generated row alone: for rows without an srt-slurm recipe, and older revisions."""
     return _digest(_row_identity(entry))
 
 
@@ -55,7 +48,6 @@ def _without(block: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
 
 
 def _concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
-    """The variant the launcher submits for ``entry`` under ``root``, minus point-level keys."""
     power_port = EXPORTER_PORT if entry.get("power") else None
     _, recipe = bound_variant(
         entry, point_environment(entry), root, expand=expand_variants, power_port=power_port
@@ -66,7 +58,6 @@ def _concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, An
 
 
 def recipe_fingerprint(entry: Mapping[str, Any], root: Path) -> str:
-    """Hash ``entry``'s identity with its concrete recipe; recipes resolve under ``root``."""
     if not entry.get("srt-recipe"):
         return row_fingerprint(entry)
     try:
@@ -78,10 +69,6 @@ def recipe_fingerprint(entry: Mapping[str, Any], root: Path) -> str:
 
 
 def main() -> None:
-    """Print the fingerprints of the JSON matrix rows on stdin, resolved under this checkout.
-
-    Later revisions run this through ``revision.Revision.fingerprints``: keep the interface.
-    """
     root = repository_root()
     print(json.dumps([recipe_fingerprint(row, root) for row in json.load(sys.stdin)]))
 

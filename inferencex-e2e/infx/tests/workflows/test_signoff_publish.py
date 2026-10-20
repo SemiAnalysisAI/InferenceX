@@ -64,6 +64,7 @@ def verdict(
         )
     else:
         rows.append("➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.")
+    rows.append("➖ Check 17 (Metrics publication): N/A — No affected serving paths.")
     return (
         header
         + "\n\n"
@@ -235,7 +236,13 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
             True,
         ),
         (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
-        (verdict() + "\n✅ Check 17 (Unknown): PASS — extra", True),
+        (verdict() + "\n✅ Check 18 (Unknown): PASS — extra", True),
+        (
+            verdict().replace(
+                "➖ Check 17 (Metrics publication): N/A — No affected serving paths.\n", ""
+            ),
+            True,
+        ),
         (verdict(PASS, nvidia_warning=True), True),
         (verdict(REJECT, nvidia_warning=True), True),
         (
@@ -384,3 +391,24 @@ def test_listed_nvidia_pair_passes_without_warning_banner(publish):
 def test_invalid_signoff_key_is_rejected_before_github_write(publish, key):
     with pytest.raises(ValueError, match="sign-off key"):
         publish(verdict(), signoff_key=key)
+
+
+@pytest.mark.parametrize(
+    "status,emoji,reason,header,expected_status",
+    [
+        ("PASS", "✅", "Pinned worker publishes metrics.", PASS, "success"),
+        ("FAIL", "❌", "Iteration statistics are disabled.", REJECT, "failure"),
+    ],
+)
+def test_metrics_check_is_published_independently_of_architecture(
+    publish, status, emoji, reason, header, expected_status
+):
+    content = verdict(header).replace(
+        "➖ Check 17 (Metrics publication): N/A — No affected serving paths.",
+        f"{emoji} Check 17 (Metrics publication): {status} — {reason}",
+    )
+    body, actual_status = signoff_publish.verdict_body(content, SHA, KEY)
+    assert actual_status == expected_status
+    assert body == marker() + "\n" + content + f"\n\nAssessed commit: `{SHA}`.\n"
+    result = publish(content)
+    assert result["comments"][0]["body"] == body

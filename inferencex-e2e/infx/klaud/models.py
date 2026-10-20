@@ -9,6 +9,9 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+# A maintainer label that stops a candidate now and keeps the planner from retrying it while set.
+ABORT_LABEL = "klaud-abort"
+
 
 def utc(value: str | datetime) -> datetime:
     result = (
@@ -50,13 +53,13 @@ class Policy(Contract):
     response_max_age_seconds: int = Field(default=120, gt=0, le=120)
     public_max_age_seconds: int = Field(default=7200, gt=0)
     clock_skew_seconds: int = Field(default=5, ge=0, le=30)
+    scheduler_max_age_seconds: int = Field(default=300, gt=0, le=900)
 
 
 class CandidateReview(Contract):
     candidate_id: str = Field(pattern=r"^[0-9a-f]{16}-[0-9a-f]{16}$")
     decision: Literal["proceed", "duplicate", "uncertain"]
     family: str | None = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
-    telemetry_clusters: list[Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._+-]{0,63}$")]]
     pull_requests: list[Annotated[int, Field(gt=0)]]
     baseline_model: str | None = Field(default=None, min_length=1)
     reason: str = Field(min_length=1)
@@ -64,16 +67,11 @@ class CandidateReview(Contract):
     @model_validator(mode="after")
     def consistent_decision(self) -> CandidateReview:
         if self.decision == "proceed" and (
-            not self.family
-            or not self.telemetry_clusters
-            or self.pull_requests
-            or not self.baseline_model
+            not self.family or self.pull_requests or not self.baseline_model
         ):
             raise ValueError(
-                "proceed requires a resolved family, baseline model, exact telemetry clusters and no overlapping PRs"
+                "proceed requires a resolved family, baseline model and no overlapping PRs"
             )
-        if len(set(self.telemetry_clusters)) != len(self.telemetry_clusters):
-            raise ValueError("telemetry clusters must be distinct")
         if self.decision == "duplicate" and not self.pull_requests:
             raise ValueError("duplicate requires an overlapping PR number")
         return self
@@ -105,7 +103,7 @@ class CandidateOutcome(Contract):
         "already-updated",
         "uncertain",
         "failed",
-        "handoff",
+        "aborted",
         "unexpected-error",
     ]
     phase: Literal["resolve", "baseline", "targeted", "final-sweep", "cleanup", "unknown"]
@@ -120,6 +118,7 @@ class CandidateOutcome(Contract):
             "baseline-eval-unverified",
             "baseline-api-unavailable",
             "baseline-other",
+            "weights-missing",
         ]
         | None
     ) = None
@@ -128,13 +127,18 @@ class CandidateOutcome(Contract):
     def consistent_outcome(self) -> CandidateOutcome:
         if self.outcome != "unexpected-error" and self.phase == "unknown":
             raise ValueError("Completed outcomes require a known phase")
-        if self.outcome in ("validated", "handoff") and self.pull_request is None:
+        if self.outcome in ("validated", "aborted") and self.pull_request is None:
             raise ValueError("This outcome requires a PR")
         if self.outcome == "validated" and (not self.run_ids or self.phase != "final-sweep"):
             raise ValueError("Validated requires final-sweep evidence")
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Run IDs must be distinct")
-        if self.reason_code is not None and (self.outcome != "failed" or self.phase != "baseline"):
+        if self.reason_code == "weights-missing":
+            if self.outcome != "readiness-blocked":
+                raise ValueError("weights-missing requires a readiness-blocked outcome")
+        elif self.reason_code is not None and (
+            self.outcome != "failed" or self.phase != "baseline"
+        ):
             raise ValueError("Baseline reason codes require a failed baseline outcome")
         return self
 
