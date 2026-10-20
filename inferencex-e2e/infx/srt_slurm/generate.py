@@ -56,18 +56,17 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             if agentic and point.get("kv-offload-backend")
             else ""
         ),
+        "TOTAL_CPU_DRAM_GB": str(point.get("total-cpu-dram-gb", 0)),
     }
     if agentic:
-        environment.update(
-            KV_OFFLOADING=str(point["kv-offloading"]),
-            TOTAL_CPU_DRAM_GB=str(point["total-cpu-dram-gb"]),
-        )
+        environment["KV_OFFLOADING"] = str(point["kv-offloading"])
     if "prefill" in point:
         environment.update(
             IS_MULTINODE="true",
             SRT_RECIPE=point["srt-recipe"],
             POWER="1" if point.get("power") else "0",
             CONC_LIST=" ".join(map(str, point["conc"])),
+            DECODE_CPU_DRAM_GB=str(point.get("decode-cpu-dram-gb", 0)),
         )
         if agentic:
             environment["CONC"] = str(point["conc"][0])

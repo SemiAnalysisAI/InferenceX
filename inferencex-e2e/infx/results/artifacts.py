@@ -184,12 +184,33 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
 
 
 def agentic_point_files(artifacts_dir: Path) -> list[Path]:
-    """Return downloaded bmk_agentic point-result JSON files."""
-    paths: list[Path] = []
+    """Return downloaded bmk_agentic point-result JSON files, latest run attempt only."""
+    paths: set[Path] = set()
     for artifact_dir in artifacts_dir.glob("bmk_agentic_*"):
         if artifact_dir.is_dir():
-            paths.extend(artifact_dir.rglob("*.json"))
-    return sorted(set(paths))
+            paths.update(artifact_dir.rglob("*.json"))
+    return sorted(paths - superseded_attempt_files(paths))
+
+
+def superseded_attempt_files(paths: Iterable[Path]) -> set[Path]:
+    """Files whose every row is a point rerun by a later run_attempt elsewhere."""
+    attempts: dict[Path, list[tuple[tuple[Any, ...], int]]] = {}
+    latest: dict[tuple[Any, ...], int] = {}
+    for path in paths:
+        try:
+            rows = [row for _, row in json_rows([path])]
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not rows or not all(isinstance(row.get("run_attempt"), int) for row in rows):
+            continue
+        attempts[path] = [(agentic_key(row), row["run_attempt"]) for row in rows]
+        for key, attempt in attempts[path]:
+            latest[key] = max(attempt, latest.get(key, attempt))
+    return {
+        path
+        for path, rows in attempts.items()
+        if all(attempt < latest[key] for key, attempt in rows)
+    }
 
 
 def agentic_keys_from_paths(paths: Iterable[Path]) -> list[tuple[Any, ...]]:
