@@ -7,30 +7,22 @@ bash "$(dirname "${BASH_SOURCE[0]}")/vllm-mooncake.sh"
 # every rank uses one rail. mlx5_0 is down on some nodes, and topology discovery
 # then finds no HCA, so take the first active rail at runtime. DSXE nodes name
 # their rails rdmap*.
-# Mooncake's rdma transport opens RC queue pairs, which EFA (rdmap*) devices reject, so the first ACTIVE
-# InfiniBand HCA comes before the list below.
+# Mooncake's rdma transport opens RC queue pairs, which EFA (rdmap*) devices reject. This row
+# (+x1lr-rail-ib) runs only on an ACTIVE, LinkUp InfiniBand HCA and refuses to start without one
+# instead of falling back to another rail.
 rail=""
 for device in $(ls /sys/class/infiniband 2>/dev/null | sort -V); do
-    if [[ "$(cat "/sys/class/infiniband/$device/ports/1/link_layer" 2>/dev/null)" == InfiniBand ]] &&
-        grep -q ACTIVE "/sys/class/infiniband/$device/ports/1/state" 2>/dev/null; then
+    port="/sys/class/infiniband/$device/ports/1"
+    layer=$(cat "$port/link_layer" 2>/dev/null || echo absent)
+    state=$(cat "$port/state" 2>/dev/null || echo absent)
+    phys=$(cat "$port/phys_state" 2>/dev/null || echo absent)
+    echo "Mooncake rail candidate: $device link_layer=$layer state=$state phys_state=$phys"
+    if [[ -z "$rail" && "$layer" == InfiniBand && "$state" == *ACTIVE* && "$phys" == *LinkUp* ]]; then
         rail="$device"
-        break
-    fi
-done
-for device in mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_8 mlx5_9 \
-              mlx5_10 mlx5_11 mlx5_16 mlx5_17 mlx5_20 mlx5_21 mlx5_22 mlx5_23 \
-              $(ls /sys/class/infiniband 2>/dev/null | grep '^rdmap' | sort -V); do
-    [[ -n "$rail" ]] && break
-    if grep -q ACTIVE "/sys/class/infiniband/$device/ports/1/state" 2>/dev/null; then
-        rail="$device"
-        break
     fi
 done
 if [[ -z "$rail" ]]; then
-    echo "Error: no active RDMA rail on $(hostname); Mooncake cannot initialise" >&2
-    for state in /sys/class/infiniband/*/ports/*/state; do
-        echo "$state: $(cat "$state" 2>&1)" >&2
-    done
+    echo "Error: no ACTIVE LinkUp InfiniBand HCA on $(hostname); the +x1lr-rail-ib row does not fall back to EFA" >&2
     exit 1
 fi
 config="${MOONCAKE_CONFIG_PATH:-/logs/mooncake_store_config.json}"

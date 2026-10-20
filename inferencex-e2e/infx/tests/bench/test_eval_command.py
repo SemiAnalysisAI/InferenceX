@@ -1,17 +1,18 @@
 """The ``eval`` command and its srt-slurm shims against a fake OpenAI server, uv, and lm-eval."""
 
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from infx.bench import uv
-from infx.bench.env import BenchError, InputError
+from infx.bench.env import InputError
 from infx.bench.eval import FRAMEWORKS, evaluate, lm_eval
 from infx.bench.eval.context import EvalOutcome
 from infx.evals.validate_scores import validate_batch_manifest
@@ -34,6 +35,7 @@ model_args = dict(item.split("=", 1) for item in args[args.index("--model_args")
 with open(os.environ["STUB_LM_EVAL_TRACE"], "a") as trace:
     trace.write(json.dumps({
         "argv": args,
+        "client": os.environ.get("STUB_CLIENT"),
         "tasks_found": Path(args[args.index("--tasks") + 1]).is_file(),
         "patched": getattr(TemplateAPI, "apply_chat_template", None) is not None,
     }) + "\\n")
@@ -63,10 +65,54 @@ exec "{sys.executable}" "$@"
 """
 
 UV = f"""#!{sys.executable}
-import json, os, sys
+import json, os, re, sys, time
+from pathlib import Path
+
+
+def dist_info(site, name, version, direct_url=None):
+    info = site / f"{{name.replace('-', '_')}}-{{version}}.dist-info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "METADATA").write_text(f"Metadata-Version: 2.1\\nName: {{name}}\\nVersion: {{version}}\\n")
+    if direct_url:
+        (info / "direct_url.json").write_text(json.dumps(direct_url))
+
+
+args = sys.argv[1:]
 with open(os.environ["STUB_UV_TRACE"], "a") as trace:
-    trace.write(json.dumps(sys.argv[1:]) + "\\n")
-sys.exit(1 if os.environ.get("STUB_UV_FAIL", "\\0") in " ".join(sys.argv[1:]) else 0)
+    trace.write(json.dumps({{"argv": args, "cwd": os.getcwd(), "env": sorted(os.environ)}}) + "\\n")
+if re.search(os.environ.get("STUB_UV_FAIL", "(?!)"), " ".join(args)):
+    sys.exit(1)
+if args == ["--version"]:
+    print("uv " + os.environ.get("STUB_UV_VERSION", "{lm_eval.CLIENT_UV}"))
+elif args[0] == "venv":
+    if os.environ.get("STUB_UV_HOLD"):
+        hold = Path(os.environ["STUB_UV_HOLD"])
+        (hold / "building").touch()
+        deadline = time.monotonic() + 30
+        while not (hold / "release").exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+    root = Path(args[-1])
+    (root / "site-packages").mkdir(parents=True)
+    (root / "bin").mkdir()
+    (root / "bin" / "python").write_text(
+        "#!/bin/sh\\n"
+        'export STUB_CLIENT="${{0%/bin/*}}" PYTHONPATH="${{0%/bin/*}}/site-packages${{PYTHONPATH:+:$PYTHONPATH}}"\\n'
+        'exec "{sys.executable}" "$@"\\n'
+    )
+    (root / "bin" / "python").chmod(0o755)
+else:
+    site = Path(args[args.index("--python") + 1]).parent.parent / "site-packages"
+    skew = dict(pin.split("==") for pin in os.environ.get("STUB_UV_SKEW", "").split())
+    if "-r" in args:
+        for line in Path(args[args.index("-r") + 1]).read_text().splitlines():
+            pinned = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)==(\\S+)", line)
+            if pinned:
+                dist_info(site, pinned[1], skew.get(pinned[1], pinned[2]))
+    elif args[-1].startswith("git+"):
+        url, commit = args[-1][len("git+"):].rsplit("@", 1)
+        dist_info(site, "lm-eval", "0.4.9.2", {{"url": url, "vcs_info": {{"vcs": "git", "commit_id": commit}}}})
+    else:
+        dist_info(site, "lm-eval", "0.4.9.2", {{"url": args[-1], "archive_info": {{}}}})
 """
 
 MULTI_NODE = {
@@ -78,11 +124,13 @@ MULTI_NODE = {
 
 @pytest.fixture(autouse=True)
 def recording_uv(tmp_path, monkeypatch):
-    """Put the recording uv first on PATH, so no test installs into this interpreter."""
+    """Put the recording uv first on PATH and the client environment under tmp_path."""
     bin_dir = tmp_path / "uv-bin"
     bin_dir.mkdir()
     executable(bin_dir / "uv", UV)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    (tmp_path / "tmp").mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "tmp"))
 
 
 @pytest.fixture
@@ -111,6 +159,7 @@ def base_env(tmp_path):
     return {
         "PATH": os.environ["PATH"],
         "HOME": str(tmp_path),
+        "TMPDIR": str(tmp_path / "tmp"),
         "PYTHONPATH": str(stubs),
         "HF_HUB_OFFLINE": "1",
         "STUB_UV_TRACE": str(tmp_path / "uv.jsonl"),
@@ -135,7 +184,7 @@ def checkpoint(tmp_path):
 
 @pytest.fixture
 def checkout(tmp_path):
-    """A checkout whose benchmarks/ are copies of the real shims, so staging stays in tmp."""
+    """A checkout whose benchmarks/ are copies of the real shims, so staging stays in tmp, and a stub git."""
     root = tmp_path / "checkout"
     for script in ("check_env.sh", "single_node/srt_eval.sh", "multi_node/srt_eval.sh"):
         (root / "benchmarks" / script).parent.mkdir(parents=True, exist_ok=True)
@@ -143,6 +192,7 @@ def checkout(tmp_path):
     (root / "infx").symlink_to(REPO_ROOT / "infx")
     (tmp_path / "bin").mkdir()
     executable(tmp_path / "bin/python3", PYTHON3)
+    executable(tmp_path / "bin/git", "#!/bin/sh\n")
     return root
 
 
@@ -189,11 +239,21 @@ def test_single_node_shim_stages_the_eval_in_the_checkout_and_records_its_status
     assert result.returncode == 0, result.stdout + result.stderr
     assert status.read_text() == "0\n"
     staged = sorted(path.name for path in checkout.iterdir() if path.is_file())
-    assert staged == ["meta_env.json", "results_stub.json", "samples_gsm8k_stub.jsonl"]
+    assert staged == [
+        "eval_client.json", "meta_env.json", "results_stub.json", "samples_gsm8k_stub.jsonl",
+    ]  # fmt: skip
     assert json.loads((checkout / "results_stub.json").read_text()) == {"answer": "42"}
     assert openai.requests == [("POST", "/v1/chat/completions")]
-    assert [uv_step(argv) for argv in trace(tmp_path / "uv.jsonl")][:1] == ["install lm-eval[api]"]
+    assert [uv_step(call) for call in trace(tmp_path / "uv.jsonl")] == [
+        "version", "venv", "lock lm_eval_client_torch.lock", "lock lm_eval_client.lock", "git pin",
+    ]  # fmt: skip
+    client = json.loads((checkout / "eval_client.json").read_text())
+    root = Path(client["python"]).parent.parent
+    assert (client["verified"], client["isolated"], client["lm_eval_source"]) == (True, True, lm_eval.REF)
+    assert (root.parent, client["receipt"]) == (tmp_path / "tmp", str(root / lm_eval.RECEIPT))
+    assert hashlib.sha256((root / lm_eval.RECEIPT).read_bytes()).hexdigest() == client["receipt_sha256"]
     [run] = trace(tmp_path / "lm_eval.jsonl")
+    assert run["client"] == str(root)
     assert run["tasks_found"] and run["patched"]
     assert {"model=served-model", "num_concurrent=8", "max_length=8192"} <= set(model_args(run))
     assert run["argv"][run["argv"].index("--gen_kwargs") + 1].startswith("max_tokens=4096,")
@@ -220,6 +280,8 @@ def test_multi_node_shim_stages_a_batched_eval_in_the_logs_mount(
     assert result.returncode == 0, result.stdout + result.stderr
     staged = tmp_path / "logs/eval_results"
     assert sorted(path.name for path in staged.iterdir()) == [
+        "eval_client_conc1.json",
+        "eval_client_conc2.json",
         "meta_env.json",
         "results_stub_conc1.json",
         "results_stub_conc2.json",
@@ -264,6 +326,9 @@ def test_batched_lm_eval_defers_a_failed_concurrency_to_score_validation(
         ["num_concurrent=1"], ["num_concurrent=4"], ["num_concurrent=8"],
     ]  # fmt: skip
     assert sorted(path.name for path in staged.iterdir()) == [
+        "eval_client_conc1.json",
+        "eval_client_conc4.json",
+        "eval_client_conc8.json",
         "meta_env.json",
         "results_stub_conc1.json",
         "results_stub_conc8.json",
@@ -396,45 +461,60 @@ def test_request_budget_is_the_benchmark_context_capped_at_the_checkpoint(
     assert lm_eval.max_output_tokens(context) == max_tokens
 
 
-def uv_step(argv: list[str]) -> str:
-    """Name one recorded ``uv`` call of the lm-eval install into this interpreter."""
-    assert argv[0] == "pip" and argv[-2:] == ["--python", sys.executable]
-    assert "--break-system-packages" in argv
-    spec = argv[-3]
-    if argv[1] == "uninstall":
-        return f"uninstall {spec}"
-    if {"--no-deps", "--reinstall"} <= set(argv):
-        return "git pin" if spec.startswith("git+") else "archive pin"
-    return f"install {spec}"
+def uv_step(call: dict) -> str:
+    """Name one recorded ``uv`` call of the isolated client's install; none targets this interpreter."""
+    argv = call["argv"]
+    if argv == ["--version"]:
+        return "version"
+    assert "--no-config" in argv
+    if argv[0] == "venv":
+        return "venv"
+    assert argv[:2] == ["pip", "install"] and "--no-deps" in argv
+    assert argv[argv.index("--python") + 1] != sys.executable
+    if "-r" in argv:
+        assert "--require-hashes" in argv
+        return f"lock {Path(argv[argv.index('-r') + 1]).name}"
+    return "git pin" if argv[-1].startswith("git+") else "archive pin"
 
 
-@pytest.mark.parametrize(("image", "git", "failing", "expected"), [
-    ("rocm/atom:latest", True, "git+", ["uninstall torchvision", "install lm-eval[api]", "git pin", "archive pin"]),
-    ("lmsysorg/sglang:latest", True, None, ["install lm-eval[api]", "git pin"]),
-    ("lmsysorg/sglang:latest", False, None, ["install lm-eval[api]", "archive pin"]),
+ARCHIVE = f"{lm_eval.REPOSITORY}/archive/{lm_eval.REF}.tar.gz"
+
+
+@pytest.mark.parametrize(("git", "failing", "pins", "source"), [
+    (True, None, ["git pin"], lm_eval.REF),
+    (True, r"git\+", ["git pin", "archive pin"], ARCHIVE),
+    (False, None, ["archive pin"], ARCHIVE),
 ])  # fmt: skip
-def test_lm_eval_install_drops_torchvision_on_atom_and_falls_back_to_the_archive(
-    base_env, tmp_path, image, git, failing, expected
+def test_the_isolated_client_pins_lm_eval_from_git_else_the_archive(
+    base_env, tmp_path, git, failing, pins, source
 ):
     bin_dir = tmp_path / "path"
     bin_dir.mkdir()
     if git:
         executable(bin_dir / "git", "#!/bin/sh\n")
-    env = {**base_env, "PATH": str(bin_dir), "IMAGE": image}
+    env = {**base_env, "PATH": f"{bin_dir}{os.pathsep}{tmp_path / 'uv-bin'}"}
     if failing:
         env["STUB_UV_FAIL"] = failing
 
     lm_eval.install(env)
 
-    assert [uv_step(argv) for argv in trace(tmp_path / "uv.jsonl")] == expected
+    assert [uv_step(call) for call in trace(tmp_path / "uv.jsonl")] == [
+        "version", "venv", "lock lm_eval_client_torch.lock", "lock lm_eval_client.lock", *pins,
+    ]  # fmt: skip
+    receipt = json.loads(env[lm_eval.CLIENT_RECEIPT])
+    assert (receipt["python"], receipt["lm_eval_source"]) == (env[lm_eval.CLIENT_PYTHON], source)
 
 
-def test_lm_eval_install_only_warns_when_uv_is_unavailable(base_env, monkeypatch, capfd):
-    def unavailable() -> str:
-        raise BenchError("uv installation did not create /scratch/uv")
+def test_an_eval_whose_client_cannot_be_installed_fails_before_any_request(
+    checkout, single_node_env, openai, tmp_path
+):
+    status = tmp_path / "infx-eval-exit-code"
+    env = {**single_node_env, "STUB_UV_FAIL": r"lm_eval_client\.lock"}
 
-    monkeypatch.setattr(uv, "find", unavailable)
+    result = shim(checkout, "single", env, openai.url, str(status))
 
-    lm_eval.install(base_env)
-
-    assert "WARN: uv installation did not create /scratch/uv" in capfd.readouterr().err
+    assert (result.returncode, status.read_text()) == (1, "1\n")
+    assert "ERROR: installing infx/evals/lm_eval_client.lock failed" in result.stderr
+    assert openai.requests == []
+    assert trace(tmp_path / "lm_eval.jsonl") == []
+    assert [path.name for path in checkout.iterdir() if path.is_file()] == []
