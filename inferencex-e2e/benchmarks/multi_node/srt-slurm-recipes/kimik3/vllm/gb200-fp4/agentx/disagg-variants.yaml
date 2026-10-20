@@ -99,6 +99,9 @@ base:
         UCX_RCACHE_MAX_UNRELEASED: "1024"
         UCX_TCP_AF_PRIO: "inet"
         VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+        # The prefill MoE workspace (about 3.3 GiB at 16384 tokens) failed to allocate with 7 GiB
+        # reserved but fragmented; blocks above 512 MiB are not split.
+        PYTORCH_CUDA_ALLOC_CONF: "max_split_size_mb:512"
       args:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"compact_group_io":true,"max_load_batch_keys":2,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3"

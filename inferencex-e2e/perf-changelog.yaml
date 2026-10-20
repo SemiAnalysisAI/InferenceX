@@ -10237,6 +10237,6 @@
     - "Use one image, vllm/vllm-openai:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f pinned by digest, for both the GB200 aggregated TP8 PP2 DCP8 and the disaggregated 1P1D TP16 DCP16 Kimi-K3 configurations."
     - "Aggregated: DSpark depth 7 at concurrency 1, 4 and 8, and depth 4 at concurrency 24, 32, 48 and 56, with bfloat16 mamba SSM cache and Mooncake DRAM KV offload."
     - "Disaggregated: add GB200 Kimi-K3 FP4 Dynamo and vLLM AgentX serving with one TP16 DCP16 prefill role and one TP16 DCP16 decode role at concurrency 16, 32 and 48, NIXL for prefill-to-decode KV transfer, Mooncake DRAM KV offload and DSpark depth 4."
-    - "Disaggregated: bfloat16 mamba SSM cache on both roles, FlashInfer autotune on, and decode max-num-batched-tokens 1024 so the autotune stops at the token counts decode can reach."
+    - "Disaggregated: bfloat16 mamba SSM cache on both roles, FlashInfer autotune on, decode max-num-batched-tokens 1024 so the autotune stops at the token counts decode can reach, and PYTORCH_CUDA_ALLOC_CONF max_split_size_mb:512 so the prefill MoE workspace does not fail on fragmented memory."
     - "Disaggregated: Dynamo ffbbaaa6c44370e798687881317535ac17d66a76; eval runs add the Kimi K3 tool and reasoning parsers with structural tags."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4322
