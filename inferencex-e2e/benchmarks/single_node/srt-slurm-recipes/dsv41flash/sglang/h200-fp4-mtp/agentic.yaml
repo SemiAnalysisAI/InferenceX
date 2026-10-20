@@ -1,13 +1,6 @@
-# DeepSeek-V4.1-Flash AgentX on H200 with SGLang native DSpark, following the
-# published vLLM baseline topologies TP4/EP1 and TP8/EP1. The KV cache is
-# GPU-resident. https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 base:
   schema: 2
   name: dsv41flash-fp4-h200-sglang-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17
-    precision: fp4
   resources:
     gpu_type: h200
     gpus_per_node: 8
@@ -69,17 +62,12 @@ base:
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
         SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC, capped at the decode graph batch;
-# saturation points carry a larger in-flight working set than the 30-minute
-# warmup drain allows.
+# One variant per point. Admission is 2x CONC, capped at the decode graph batch.
 override_tp4_c1:
   roles:
     agg:
@@ -98,7 +86,7 @@ override_tp4_c2:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-running-requests: 4
+        max-running-requests: 2
   benchmark:
     env:
       CONC: '2'
@@ -139,42 +127,6 @@ override_tp4_c16:
     env:
       CONC: '16'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp4_c32:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '32'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp4_c64:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '64'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp4_c128:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '128'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 override_tp8_c1:
   roles:
@@ -235,39 +187,3 @@ override_tp8_c16:
     env:
       CONC: '16'
       AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-
-override_tp8_c32:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '32'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp8_c64:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '64'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
-
-override_tp8_c128:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        max-running-requests: 64
-  benchmark:
-    env:
-      CONC: '128'
-      AGENTIC_WARMUP_GRACE_PERIOD: '3600'

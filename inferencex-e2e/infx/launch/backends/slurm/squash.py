@@ -41,6 +41,8 @@ class ImageError(BackendError):
 class _PermanentImageError(ImageError):
     """A failure that retrying cannot fix (lock timeout, missing pre-staged image)."""
 
+    retriable = False
+
 
 def squash_key(image: str) -> str:
     """Filesystem-safe image key: ``/ : @ #`` become ``_``."""

@@ -94,15 +94,20 @@ on:
         type: boolean
         required: false
         default: false
-      total-cpu-dram-gb:
-        description: "Total CPU DRAM in GB for KV offloading"
-        required: false
-        type: string
-        default: '600'
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      pr-number:
+        description: "Pull request whose sweep runs this job; empty for other triggers"
+        required: false
+        type: string
+        default: ""
+      test-name:
+        description: "Name of the dispatched test run; empty for other triggers"
+        required: false
+        type: string
+        default: ""
 
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
@@ -123,6 +128,8 @@ env:
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   EXP_NAME: ${{ fromJSON(inputs.config).exp-name }}
   RECIPE_FINGERPRINT: ${{ fromJSON(inputs.config)['recipe-fingerprint'] || '' }}
+  SRT_RECIPE: ${{ fromJSON(inputs.config)['srt-recipe'] || '' }}
+  EVAL_SRT_RECIPE: ${{ fromJSON(inputs.config)['eval-srt-recipe'] || '' }}
   IMAGE: ${{ fromJSON(inputs.config).image }}
   THINKING_MODE: thinking_on
   MODEL_PREFIX: ${{ fromJSON(inputs.config).model-prefix }}
@@ -143,6 +150,7 @@ env:
   EVAL_SUITE: ${{ inputs.eval-suite }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
+  POWER: ${{ fromJSON(inputs.config).power && '1' || '0' }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
@@ -157,15 +165,22 @@ env:
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config)['kv-offload-backend'] && toJSON(fromJSON(inputs.config)['kv-offload-backend']) || '' }}
   ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config)['kv-p2p-transfer'] || '' }}
-  TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  TOTAL_CPU_DRAM_GB: ${{ fromJSON(inputs.config)['total-cpu-dram-gb'] || '0' }}
+  DECODE_CPU_DRAM_GB: ${{ fromJSON(inputs.config)['decode-cpu-dram-gb'] || '0' }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  NODE_COUNT: ${{ inputs.node-count }}
+  BENCHMARK_REF: ${{ inputs.ref || github.sha }}
+  PR_NUMBER: ${{ inputs.pr-number }}
+  TEST_NAME: ${{ inputs.test-name }}
 
   PREFILL_NUM_WORKERS: ${{ fromJSON(inputs.config).prefill.num-worker }}
   PREFILL_TP: ${{ fromJSON(inputs.config).prefill.tp }}
   PREFILL_PP_SIZE: ${{ fromJSON(inputs.config).prefill.pp }}
   PREFILL_DCP_SIZE: ${{ fromJSON(inputs.config).prefill.dcp-size }}
   PREFILL_PCP_SIZE: ${{ fromJSON(inputs.config).prefill.pcp-size }}
+  PREFILL_DWDP_SIZE: ${{ fromJSON(inputs.config).prefill.dwdp-size || 1 }}
+  DWDP_ARTIFACT_SUFFIX: ${{ fromJSON(inputs.config).prefill.dwdp-size > 1 && format('-dwdp{0}', fromJSON(inputs.config).prefill.dwdp-size) || '' }}
   PREFILL_EP: ${{ fromJSON(inputs.config).prefill.ep }}
   PREFILL_DP_ATTN: ${{ fromJSON(inputs.config).prefill.dp-attn }}
 
@@ -182,7 +197,7 @@ permissions:
 
 jobs:
   benchmark:
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
@@ -230,38 +245,26 @@ jobs:
             done
           fi
 
-      - name: Repair stale git state (pre-run)
-        run: |
-          # Interrupted runs leave index.lock files and corrupt submodule git
-          # dirs behind in the persistent self-hosted workspace, and both make
-          # actions/checkout fail before any benchmark starts. The runner
-          # executes one job at a time, so any lock found here is stale by
-          # definition. Grouping dirs (e.g. .git/modules/utils) hold only
-          # nested module dirs, so any dir carrying top-level files is a
-          # module git dir — a truncated clone may lack HEAD entirely, and a
-          # git dir whose HEAD does not resolve to a commit is dropped
-          # together with its worktree so checkout re-clones it.
-          repo_dir="${GITHUB_WORKSPACE}"
-          if [ -d "${repo_dir}/.git" ]; then
-            find "${repo_dir}/.git" -name index.lock -type f -delete || true
-            for gitdir in "${repo_dir}"/.git/modules/* "${repo_dir}"/.git/modules/*/*; do
-              [ -d "${gitdir}" ] || continue
-              [ -n "$(find "${gitdir}" -maxdepth 1 -type f -print -quit)" ] || continue
-              if ! git --git-dir="${gitdir}" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1; then
-                rel="${gitdir##*/.git/modules/}"
-                echo "[git-repair] Removing corrupt submodule state: ${rel}"
-                rm -rf "${gitdir}" "${repo_dir:?}/${rel}" "${repo_dir:?}/inferencex-e2e/${rel}"
-              fi
-            done
-          fi
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+      # A cancelled or crashed job can leave git state in this persistent
+      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
+      - id: checkout
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: &checkout-inputs
           fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
           persist-credentials: false
+
+      - name: Wipe workspace after failed checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Retry checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: *checkout-inputs
 
       - name: Checkout result tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -290,7 +293,7 @@ jobs:
       - name: Prepare launcher Python
         env: *uv-setup-env
         run: |
-          launch_venv="$RUNNER_TEMP/infx-launch-venv"
+          launch_venv="$(mktemp -d "$RUNNER_TEMP/infx-launch-venv.XXXXXX")"
           uv venv --quiet --python 3.12 "$launch_venv"
           uv pip install --quiet --exclude-newer PT12H --python "$launch_venv/bin/python" \
             -r "$GITHUB_WORKSPACE/.result-tooling/inferencex-e2e/pyproject.toml"
@@ -308,7 +311,8 @@ jobs:
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+          JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_a${{ github.run_attempt }}_${{ runner.name }}
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           export GITHUB_WORKSPACE="$PWD"
@@ -455,6 +459,16 @@ jobs:
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/multinode_server_logs.tar.gz
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-bind.log
+          if-no-files-found: ignore
+
+      - name: Upload job event
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: job_event_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/job_event.json
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result
@@ -545,7 +559,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
@@ -570,7 +584,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
@@ -593,7 +607,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
+          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results*.json

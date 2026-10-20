@@ -81,7 +81,20 @@ each as it lands. Never declare success from absence of output.
 
 ### 3. Root-cause a failure
 
+Read a failed job's launch record before its logs. Every `python -m infx.launch run` writes
+`job_event.json` ([schema](../../../inferencex-e2e/infx/launch/event.py)), uploaded as
+`job_event_<RESULT_FILENAME>`. Once every benchmark and eval job has finished,
+`collect-job-events.yml` joins the records into `events.jsonl` in the `job_events` artifact,
+adds each job's GitHub `conclusion` and `failed_step`, and synthesizes a `NoLauncherRecord`
+record for every benchmark or eval job that wrote none (runner setup, checkout, node prep); a
+cancelled run keeps only the per-job artifacts. A failure's `error` names the first failing
+stage and type, marks likely infrastructure faults `retriable` (a hint, not a diagnosis),
+points `evidence` at the log to open first, and quotes that log's likeliest cause line and
+last lines in `detail`.
+
 ```bash
+gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX -n job_events
+jq -r 'select(.outcome == "failure") | [.error.stage, .error.type, .result_filename, (.error.detail // "" | split("\n")[0])] | @tsv' events.jsonl
 gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --json jobs \
   --jq '.jobs[] | select(.conclusion=="failure") | "\(.databaseId)\t\(.name)"'
 gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed > /tmp/sweep_failed.txt
@@ -109,11 +122,12 @@ Steps:
    the canvas, then SSH in with `ssh -A` when a jumpbox or agent forwarding is involved.
 2. Reproduce the exact benchmark the launcher runs. Single-node jobs go through the srt driver
    of `python -m infx.launch run` (`inferencex-e2e/infx/launch/drivers/srt/`): it binds the
-   master row's `srt-recipe:` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/<engine>/<sku>-<precision>[-mtp]/<scenario>.yaml`)
+   matrix row's `srt-recipe` (`inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<srt-recipe-dir>/<srt-recipe>`)
    with `python -m infx.srt_slurm.single_node prepare`, renders the job-local `srtslurm.yaml`
-   from the cluster's record, then submits it through srtctl. Read the recipe for the image
-   (`model.container`), server args and env, and the cluster record for mounts and the job env
-   (`IMAGE`, `TP`, `PRECISION`, `SPEC_DECODING`, `CONC`, …). On Slurm clusters, use
+   from the cluster's record, then submits it through srtctl. Read the bound `recipe.yaml` that
+   `prepare` writes for the image (`model.container`, the master `image`), server args and env,
+   and the cluster record for mounts and the job env (`IMAGE`, `TP`, `PRECISION`,
+   `SPEC_DECODING`, `CONC`, …). On Slurm clusters, use
    `salloc` or `srun` with the squash image. On the **bare-metal `-tw` pools, use `docker run`**
    on the node directly without `srun`.
 3. **Always diff against a working node or working SKU** for reference. Most node failures
