@@ -10288,3 +10288,12 @@
     - "The image carries vllm-project/vllm#62131: --monokernel now also runs the three DSpark draft layers as the two persistent mono decode launches (128 experts / top-3, window-only attention over the block's non-causal SWA rows) instead of vLLM's regular path. The step limit is unchanged at 48 rows, i.e. concurrency 1-8 with five DSpark drafts."
     - "No recipe or point changes: concurrency 1, 2, 4, 8, 16, 32 and 64 on TP2 and TP4 (14 points), all re-measured on the new image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4319
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune Muse Spark Open GB300 SGLang AgentX per concurrency (1, 5, 8, 10, 15, 16, 20, 24, 34, 40): scheduling, memory allocation, request admission and decode graph limits, tokenizer workers, and draft attention."
+    - "Use 120-150 GB per-rank HiCache (write_through, 0.80 DRAM utilization) at concurrency 16 to 40; set SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS=4 at concurrency 34 and 40."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
