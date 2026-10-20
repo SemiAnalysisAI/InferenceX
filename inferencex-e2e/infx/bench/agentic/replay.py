@@ -21,6 +21,21 @@ REQUIRED = (
     "AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING",
 )
 
+SCENARIO = "inferencex-agentx-mvp"
+# AIPerf's scenario locks invariants but leaves these to the caller.
+PRESET_FLAGS = (
+    "--endpoint-type", "chat", "--streaming", "--stats-interval", "30", "--random-seed", "42",
+    "--trajectory-start-min-ratio", "0.25", "--trajectory-start-max-ratio", "0.75",
+    "--trace-idle-gap-cap-seconds", "300", "--use-server-token-count", "--no-gpu-telemetry",
+    "--num-dataset-entries", "393", "--slice-duration", "1.0",
+)  # fmt: skip
+PRESET_ENVIRONMENT = {
+    "AIPERF_DATASET_CONFIGURATION_TIMEOUT": "1800",
+    "AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT": "1800",
+    "AIPERF_UI_REALTIME_METRICS_ENABLED": "true",
+    "AIPERF_HTTP_TCP_USER_TIMEOUT": "900000",
+}
+
 MIN_SCENARIO_DURATION_S = 900
 FAST_DURATION_S = 1200
 FAST_WARMUP_REQUESTS_PER_LANE = "1"
@@ -135,17 +150,20 @@ def _server_metrics_urls(env: Mapping[str, str]) -> tuple[str, ...]:
     return tuple(parts)
 
 
+def replay_environ(environ: Mapping[str, str]) -> dict[str, str]:
+    """``environ`` over the preset's AIPerf runtime settings; the caller's values win."""
+    return {**PRESET_ENVIRONMENT, **environ}
+
+
 def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
-    """The ``agentx profile`` argv for ``cfg``; ``cli`` is the ``agentx`` executable."""
-    argv = [str(cli), "profile", "--url", cfg.url]
+    """The ``aiperf profile`` argv for ``cfg``; ``cli`` is the ``aiperf`` executable."""
+    argv = [str(cli), "profile", "--scenario", SCENARIO, "--url", cfg.url]
     argv += ["--model", cfg.model, "--tokenizer", cfg.tokenizer]
     argv += ["--concurrency", str(cfg.concurrency), "--benchmark-duration", str(cfg.duration)]
-    if cfg.live_failed_request_threshold is not None:
-        argv += ["--failed-request-threshold", cfg.live_failed_request_threshold]
-    if cfg.warmup_requests_per_lane is not None:
-        argv += ["--warmup-requests-per-lane", cfg.warmup_requests_per_lane]
-    if cfg.warmup_grace_period is not None:
-        argv += ["--warmup-grace-period", cfg.warmup_grace_period]
+    argv += PRESET_FLAGS
+    argv += ["--failed-request-threshold", cfg.live_failed_request_threshold or "0.10"]
+    argv += ["--warmup-requests-per-lane", cfg.warmup_requests_per_lane or "10"]
+    argv += ["--warmup-grace-period", cfg.warmup_grace_period or "1800"]
     if cfg.extra_inputs:
         argv += ["--extra-inputs", *cfg.extra_inputs]
     if cfg.dynamo_session_timeout is not None:

@@ -17,6 +17,7 @@ from infx.bench.agentic.replay import (
     REQUIRED as REPLAY_REQUIRED,
     ReplayConfig,
     replay_argv,
+    replay_environ,
 )
 from infx.bench.agentic.venv import Runtime, bootstrap
 
@@ -133,11 +134,11 @@ def execute(plan: Plan, runtime: Runtime, environ: Mapping[str, str]) -> int:
     rc = _open_power_window(plan, python, env)
     if rc:
         return rc
-    argv = replay_argv(cfg, runtime.agentx)
+    argv = replay_argv(cfg, runtime.aiperf)
     (plan.result_dir / "benchmark_command.txt").write_text(f"{shlex.join(argv)}\n")
     log = plan.result_dir / "benchmark.log"
     with proc.DeferSignals() as signals:
-        replay_rc = 0 if signals.received else proc.tee(argv, log, env)
+        replay_rc = 0 if signals.received else proc.tee(argv, log, replay_environ(env))
     if signals.received:
         return 128 + signals.received
     return _score(plan, python, env, replay_rc)
@@ -247,7 +248,7 @@ def main(argv: list[str]) -> int:
     plan = Plan.from_env(os.environ)
     runtime = Runtime.for_job(os.environ)
     if not runtime.active():
-        print(f"Preparing the AgentX runtime in {runtime.venv}", flush=True)
+        print(f"Preparing the AIPerf runtime in {runtime.venv}", flush=True)
         rc = bootstrap(runtime)
         if rc:
             return rc

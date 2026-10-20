@@ -28,7 +28,7 @@ from infx.results.collect_events import FILENAME, SCHEMA_VERSION
 AGENTIC = "agentic-coding"
 _SHA = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _PINNED = re.compile(r"@(sha256:[0-9a-f]{64})$")
-_HARNESS = re.compile(r"^agentx-harness==(\S+)", re.MULTILINE)
+_AIPERF = re.compile(r"^aiperf @ \S+/archive/([0-9a-f]{40})\.tar\.gz$", re.MULTILINE)
 _RESULT_GPUS = re.compile(r"_gpus_([0-9]+)")
 
 
@@ -71,6 +71,7 @@ class Versions(_Record):
     srt_slurm_sha: str | None = None
     srtctl_version: str | None = None
     agentx_harness: str | None = None
+    aiperf_sha: str | None = None
     image_digest: str | None = None
 
 
@@ -513,15 +514,15 @@ def _versions(env: Mapping[str, str], *, agentx: bool) -> Versions:
         head = _git_head(repository_root())
     workflow = _text(env, "GITHUB_SHA")
     pinned = _PINNED.search(env.get("IMAGE", ""))
-    harness = None
+    aiperf = None
     if agentx:
         with contextlib.suppress(OSError):
-            match = _HARNESS.search(REQUIREMENTS.read_text())
-            harness = match.group(1) if match else None
+            match = _AIPERF.search(REQUIREMENTS.read_text())
+            aiperf = match.group(1) if match else None
     return Versions(
         inferencex_sha=head,
         workflow_sha=workflow if workflow != head else None,
-        agentx_harness=harness,
+        aiperf_sha=aiperf,
         image_digest=pinned.group(1) if pinned else None,
     )
 

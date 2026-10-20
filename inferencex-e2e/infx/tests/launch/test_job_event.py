@@ -23,7 +23,10 @@ def test_annotation_escapes_workflow_command_data_and_title():
 
 def test_an_agentic_point_records_no_sequence_lengths_and_its_pinned_versions(tmp_path, monkeypatch):
     requirements = tmp_path / "requirements.txt"
-    requirements.write_text("agentx-harness==9.8.7\ndatasets>=4.7.0\n")
+    sha = "0123456789abcdef" * 2 + "01234567"
+    requirements.write_text(
+        f"aiperf @ https://github.com/ai-dynamo/aiperf/archive/{sha}.tar.gz\ndatasets>=4.7.0\n"
+    )
     monkeypatch.setattr(job_event, "REQUIREMENTS", requirements)
     digest = "sha256:" + "ab" * 32
     env = {
@@ -35,7 +38,7 @@ def test_an_agentic_point_records_no_sequence_lengths_and_its_pinned_versions(tm
     }  # fmt: skip
     record = JobEventBuilder.begin(env).event
     assert (record.isl, record.osl) == (None, None)
-    assert (record.versions.agentx_harness, record.versions.image_digest) == ("9.8.7", digest)
+    assert (record.versions.aiperf_sha, record.versions.image_digest) == (sha, digest)
     assert record.topology.model_dump() == {
         "tp": None, "ep": None, "pp": None, "dp_attn": None, "gpu_count": None, "node_count": 3,
         "prefill": {"num_workers": 2, "tp": 4, "ep": 4, "dp_attn": True},
@@ -44,7 +47,7 @@ def test_an_agentic_point_records_no_sequence_lengths_and_its_pinned_versions(tm
     assert (record.github.pr_number, record.github.event_name) == (3807, "pull_request")
 
     fixed = JobEventBuilder.begin({**env, "SCENARIO_TYPE": "fixed-seq-len", "ISL": "8192"}).event
-    assert (fixed.isl, fixed.versions.agentx_harness) == (8192, None)
+    assert (fixed.isl, fixed.versions.aiperf_sha) == (8192, None)
 
 
 FIXED = {

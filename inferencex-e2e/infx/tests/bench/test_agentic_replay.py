@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from infx.bench.agentic import traces
-from infx.bench.agentic.replay import ReplayConfig, replay_argv
+from infx.bench.agentic.replay import ReplayConfig, replay_argv, replay_environ
 from infx.bench.env import InputError
 
 BASE_ENV = {
@@ -27,21 +27,44 @@ BASE_ENV = {
 
 def _argv(**overrides: str | None) -> list[str]:
     env = {name: value for name, value in {**BASE_ENV, **overrides}.items() if value is not None}
-    return replay_argv(ReplayConfig.from_env(env, Path("/results")), "/venv/bin/agentx")
+    return replay_argv(ReplayConfig.from_env(env, Path("/results")), "/venv/bin/aiperf")
 
 
 def _value(argv: list[str], flag: str) -> str | None:
     return argv[argv.index(flag) + 1] if flag in argv else None
 
 
-def test_default_point_leaves_the_replay_policy_to_the_scenario():
+PRESET = [
+    "--endpoint-type", "chat", "--streaming", "--stats-interval", "30", "--random-seed", "42",
+    "--trajectory-start-min-ratio", "0.25", "--trajectory-start-max-ratio", "0.75",
+    "--trace-idle-gap-cap-seconds", "300", "--use-server-token-count", "--no-gpu-telemetry",
+    "--num-dataset-entries", "393", "--slice-duration", "1.0",
+]  # fmt: skip
+
+
+def test_default_point_spells_out_the_agentx_preset_on_the_upstream_scenario():
     assert _argv(MAX_MODEL_LEN="131072") == [
-        "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
+        "/venv/bin/aiperf", "profile", "--scenario", "inferencex-agentx-mvp",
+        "--url", "http://localhost:8000",
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
-        "--concurrency", "8", "--benchmark-duration", "3600", "--tokenizer-trust-remote-code",
+        "--concurrency", "8", "--benchmark-duration", "3600", *PRESET,
+        "--failed-request-threshold", "0.10", "--warmup-requests-per-lane", "10",
+        "--warmup-grace-period", "1800", "--tokenizer-trust-remote-code",
         "--output-artifact-dir", "/results/aiperf_artifacts",
         "--public-dataset", "semianalysis_cc_traces_weka_062126",
     ]  # fmt: skip
+
+
+def test_preset_environment_fills_only_what_the_caller_left_unset():
+    environ = replay_environ({"AIPERF_HTTP_TCP_USER_TIMEOUT": "60000", "PATH": "/bin"})
+
+    assert environ == {
+        "AIPERF_DATASET_CONFIGURATION_TIMEOUT": "1800",
+        "AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT": "1800",
+        "AIPERF_UI_REALTIME_METRICS_ENABLED": "true",
+        "AIPERF_HTTP_TCP_USER_TIMEOUT": "60000",
+        "PATH": "/bin",
+    }
 
 
 def test_a_recipe_tokenizer_replaces_the_model_id_as_tokenizer_only():
@@ -65,10 +88,12 @@ def test_opt_in_inputs_add_their_flags_in_place():
     )
 
     assert argv == [
-        "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
+        "/venv/bin/aiperf", "profile", "--scenario", "inferencex-agentx-mvp",
+        "--url", "http://localhost:8000",
         "--model", "DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
-        "--concurrency", "8", "--benchmark-duration", "3600",
-        "--failed-request-threshold", "0.25", "--warmup-grace-period", "3600",
+        "--concurrency", "8", "--benchmark-duration", "3600", *PRESET,
+        "--failed-request-threshold", "0.25", "--warmup-requests-per-lane", "10",
+        "--warmup-grace-period", "3600",
         "--extra-inputs", "temperature:0.7", "top_p:0.9",
         "--use-dynamo-conv-aware-routing", "--dynamo-session-timeout-seconds", "14400",
         "--tokenizer-trust-remote-code",
@@ -83,8 +108,8 @@ def test_opt_in_inputs_add_their_flags_in_place():
 @pytest.mark.parametrize(
     ("overrides", "duration", "warmup", "unsafe"),
     [
-        ({"DURATION": "899"}, "899", None, True),
-        ({"DURATION": "900"}, "900", None, False),
+        ({"DURATION": "899"}, "899", "10", True),
+        ({"DURATION": "900"}, "900", "10", False),
         ({"AIPERF_EXPERIMENTAL_FAST": "1", "DURATION": "300"}, "1200", "1", False),
     ],
 )
@@ -201,4 +226,4 @@ def test_corpus_is_uncapped_unless_explicitly_capped_or_pinned(prefix, override,
     config = ReplayConfig.from_env(env, Path("/results"))
 
     assert (config.loader, config.dataset) == (loader, dataset)
-    assert _value(replay_argv(config, "/venv/bin/agentx"), "--public-dataset") == loader
+    assert _value(replay_argv(config, "/venv/bin/aiperf"), "--public-dataset") == loader

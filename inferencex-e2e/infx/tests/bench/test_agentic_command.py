@@ -108,7 +108,7 @@ def _point(tmp_path: Path, **overrides: str | None) -> dict[str, str]:
 def _runtime(tmp_path: Path) -> Runtime:
     runtime = Runtime(tmp_path / "runtime")
     runtime.python.parent.mkdir(parents=True)
-    stubs = {runtime.python: FAKE_PYTHON, runtime.agentx: FAKE_AIPERF, runtime.hf: FAKE_HF}
+    stubs = {runtime.python: FAKE_PYTHON, runtime.aiperf: FAKE_AIPERF, runtime.hf: FAKE_HF}
     for path, text in stubs.items():
         executable(path, text)
     return runtime
@@ -350,6 +350,7 @@ argv = sys.argv[1:]
 out = pathlib.Path(argv[argv.index("--output-artifact-dir") + 1])
 out.mkdir(parents=True, exist_ok=True)
 pathlib.Path(os.environ["REPLAY_ARGV"]).write_text(shlex.join([sys.argv[0], *argv]))
+print("fake aiperf: configure timeout", os.environ.get("AIPERF_DATASET_CONFIGURATION_TIMEOUT"))
 with open(os.environ["EVENTS"], "a") as events:
     events.write("replay\n")
 record = {
@@ -379,10 +380,10 @@ case "$1" in
     venv) for target; do :; done; exec "$REAL_PYTHON" -m venv --without-pip "$target" ;;
     pip)
         bin="$(dirname "$4")"
-        printf '#!%s\n' "$bin/python" > "$bin/agentx"
-        cat "$FAKE_AIPERF_SCRIPT" >> "$bin/agentx"
+        printf '#!%s\n' "$bin/python" > "$bin/aiperf"
+        cat "$FAKE_AIPERF_SCRIPT" >> "$bin/aiperf"
         printf '#!/bin/sh\necho "hf $*" >> "$EVENTS"\n' > "$bin/hf"
-        chmod +x "$bin/agentx" "$bin/hf" ;;
+        chmod +x "$bin/aiperf" "$bin/hf" ;;
 esac
 """
 
@@ -433,8 +434,9 @@ def test_srt_shim_builds_the_runtime_waits_for_the_server_and_writes_the_point(
     results = tmp_path / "results"
     command = (results / "benchmark_command.txt").read_text()
     assert command == (tmp_path / "replay-argv").read_text() + "\n"
-    assert shlex.split(command)[0] == str(tmp_path / "runtime/venv/bin/agentx")
+    assert shlex.split(command)[0] == str(tmp_path / "runtime/venv/bin/aiperf")
     assert "fake aiperf: profiled 1 request" in (results / "benchmark.log").read_text()
+    assert "fake aiperf: configure timeout 1800" in result.stdout
     assert "fake aiperf: profiled 1 request" in result.stdout
     aggregate = json.loads((tmp_path / "agentx.json").read_text())
     assert (aggregate["conc"], aggregate["num_requests_total"]) == (8, 1)

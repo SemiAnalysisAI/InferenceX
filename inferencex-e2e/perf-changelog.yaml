@@ -10245,3 +10245,13 @@
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#57392 (AITER Gluon KDA kernels for decode and spec decode), #61207 (stage fused KDA decode weights after loading), #61654 (MLA wrapper no longer reads W_UK_T before weight loading), #61895 (any-shape low-latency MoE router GEMM on MI355), #59406 (preshuffled FP4 GEMM config probed by logical K), #58381 (lighter MLA metadata build), #59070 (DCP prefill context kept in FP8 through AllGather), #59468 (DSpark draft slots no longer reserved in the scheduler token budget) and #61230 (AITER v0.1.25 base)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: the checkpoint is all BF16 with no quantization_config, and at both images the draft takes its own quantization config (get_draft_quant_config()), so the target quantization-config does not reach it. The draft runs BF16 weights with an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
+
+- config-keys:
+    - "*"
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the agentx-harness 1.0.12 client (SemiAnalysisAI/agentx-harness fork of AIPerf) with upstream ai-dynamo/aiperf at commit 8aa7039f872cd029f05a4c313fb8759e9a482cd3, run as aiperf profile --scenario inferencex-agentx-mvp."
+    - "The fork's agentx preset is passed explicitly: chat endpoint, streaming, stats interval 30 s, random seed 42, trajectory start ratios 0.25-0.75, trace idle-gap cap 300 s, server token counts, no GPU telemetry, 393 dataset entries, 1 s slices, failed-request threshold 0.10, 10 warmup requests per lane and a 1800 s warmup grace period, plus AIPERF_DATASET_CONFIGURATION_TIMEOUT=1800, AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800, AIPERF_UI_REALTIME_METRICS_ENABLED=true and AIPERF_HTTP_TCP_USER_TIMEOUT=900000. Explicit recipe and workflow inputs still override them; the resolved benchmark configuration matches 1.0.12."
+    - "Upstream behavior that differs from 1.0.12: a SPAWN subagent's first turn keeps the parent's messages (ai-dynamo/aiperf#1555), every request also carries X-Session-Affinity with the correlation ID, a stall watchdog no longer cancels streaming requests (#1568) and a stalled benchmark fails instead of waiting indefinitely (#1501). The fork's SPAWN rollback at the sending cutoff and per-subagent sticky routing are upstream as #1540 and #1567."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

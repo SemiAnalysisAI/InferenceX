@@ -1,2 +1,2 @@
-agentx-harness==1.0.12
+aiperf @ https://github.com/ai-dynamo/aiperf/archive/8aa7039f872cd029f05a4c313fb8759e9a482cd3.tar.gz
 datasets>=4.7.0

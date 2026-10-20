@@ -93,8 +93,8 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 维护者与 Agent 请从 [`AGENTS.md`](AGENTS.md) 开始阅读，其中链接了配置、Workflow、评估与恢复操作参考。
 
 无需 CI 或 Slurm 即可对已有服务进行基准测试，请参阅
-[独立运行 AgentX-Harness](inferencex-e2e/docs/agentx-standalone.md)，
-其中包含客户端安装步骤和直接执行的 `agentx profile` 命令。
+[使用 AIPerf 独立运行 AgentX](inferencex-e2e/docs/agentx-standalone.md)，
+其中包含客户端安装步骤和直接执行的 `aiperf profile` 命令。
 
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
