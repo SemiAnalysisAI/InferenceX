@@ -10413,6 +10413,53 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4268
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated and aggregated AgentX curves to vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
+    - "Disaggregated: 9P1D DEP2 prefill / DEP16 decode at c7480 with max-num-seqs 126 (a MegaAttn wave boundary), with 70 GiB of CPU KV offload per prefill rank, pinned prefill Engram tables and HBM decode Engram tables."
+    - "Configure decode worker selection by active request count with soft session affinity."
+    - "Disaggregated jobs exclude GB300 nodes r01-c001, c002, c004, c005, c010, c011 and r03-c001, c002, where prefill Engram host-table allocation hit CUDA_ERROR_OUT_OF_MEMORY."
+    - "Aggregated: TP4 at concurrency 1 (max-num-seqs 1) and 16 (max-num-seqs 32, prefill-schedule-interval 128), with CUDA graph capture sizes matching the B300 Dynamo vLLM TP4 recipes (5, 10, 15, 20, 25, 35 and 40 added at concurrency 1) and Engram host tables in pinned memory (use_thp false): on this image, THP-registered tables hang the first prefill forward."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4336
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DEP2 prefill / DEP32 decode points 16P1D at c10888 and 6P1D at c3018 to the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX disaggregated curve on vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
+    - "Results reuse run 39207089292, which measured these points before #4336 with default decode worker selection and 80 GiB of CPU KV offload per prefill rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4266
+  append-only: true
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Update SGLang image to v0.5.21-cu130 and rename the TP memory-imbalance check env to its new enable form."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3672
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-rocm700-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3814
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-atom
+  description:
+    - "Bump ATOM image from atom0.1.2.post to rocm/atom-dev:nightly_202610080328 (ATOM v0.1.7)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3913
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update ATOM image from v0.1.3 to the v0.1.7 release build (rocm/atom-dev:nightly_202610080328, digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3915
+
+- config-keys:
     - dsv41flash-fp4-b200-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
