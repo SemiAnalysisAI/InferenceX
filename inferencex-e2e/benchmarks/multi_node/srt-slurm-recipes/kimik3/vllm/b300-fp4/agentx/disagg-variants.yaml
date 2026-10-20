@@ -102,6 +102,11 @@ base:
         # EFA DMA into CUDA VMM (cumem) memory froze B300 hosts; keep NCCL
         # buffers and the KV cache Mooncake/NIXL register on cudaMalloc.
         NCCL_CUMEM_ENABLE: "0"
+        # Register each GPU buffer with Mooncake only on the two EFA NICs on that
+        # GPU's PCIe switch (as NIXL does). By default Mooncake registers GPU KV
+        # memory on all 16 NICs and retried slices may DMA it from a NIC on the
+        # other socket; disaggregated prefill hosts froze without this.
+        MC_EFA_NIC_SELECTION: "local"
         NCCL_MNNVL_ENABLE: "0"
         NCCL_NVLS_ENABLE: "1"
         VLLM_SERVER_DEV_MODE: "1"
