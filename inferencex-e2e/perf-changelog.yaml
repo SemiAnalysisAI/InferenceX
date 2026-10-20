@@ -10253,4 +10253,4 @@
   description:
     - "Update the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated AgentX configuration to the CUDA 13.4 nightly image, DEP2 prefill with DEP16/DEP32 decode, and revised topology and concurrency settings."
     - "Configure decode worker selection by active request count with soft session affinity, set the prefill host KV cache budget, and use pinned prefill Engram tables and HBM decode Engram tables."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4336
