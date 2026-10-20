@@ -38,26 +38,28 @@ SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
 # Dispatch precisions each backend realizes. BF16 is the universal control; FP8 is a
-# caller-prequantized dispatch (DeepEP blockwise e4m3fn; MoRI per-SKU e4m3 tensor cast).
+# caller-prequantized dispatch (per-128-block e4m3 with FP32 scales; e4m3fnuz on gfx942).
 # A precision the backend does not list is gated out at generation (no case emitted).
 BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
     "uccl-ep": ("bf16", "fp8"),
-    # FP8 dispatch is enabled for low-latency decode only (see the mode/phase gate below).
+    # Native DS_FP8E3M4 dispatch, low-latency decode only (the mode/phase gate below), and off
+    # every deployed path -- see OFF_PATH_PRECISIONS.
     "nccl-ep": ("bf16", "fp8"),
     # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
     # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
-    # comparable. Realizable, but off every deployed path -- see OFF_PATH_PRECISIONS.
+    # comparable. vLLM selects it on this transport for DeepSeek blockwise FP8 from v0.29.0.
     "flashinfer-ep": ("bf16", "fp8"),
 }
 # Precisions a backend REALIZES but that no serving engine can select on that transport. Kept
 # out of the default matrix so a production sweep measures deployable configurations, and still
 # reachable by naming the precision explicitly (`--precisions fp8`) for transport comparison.
-# vLLM accepts only nvfp4/mxfp8/bf16 on FlashInfer's one-sided all-to-all, so its FP8 row
-# measures the collective off any path an engine selects. Declared here rather than on the
-# adapter because this generator must resolve the matrix with no vendor imports.
-OFF_PATH_PRECISIONS = {"flashinfer-ep": ("fp8",)}
+# TensorRT-LLM, the one engine with an NCCL EP selector, never asks NCCL EP to quantize: its NcclEP
+# sends DeepSeek-FP8 activations in BF16 (`uses_internal_fp8_dispatch = False`), so nccl-ep's
+# DS_FP8E3M4 row is the library's. Declared here rather than on the adapter because this
+# generator must resolve the matrix with no vendor imports.
+OFF_PATH_PRECISIONS = {"nccl-ep": ("fp8",)}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
 _MODE_SLUG = {"low-latency": "ll"}
@@ -188,7 +190,7 @@ def resolve_matrix(
     suites: str = "ep",
     swap_profile: str = "smoke",
 ) -> dict[str, Any]:
-    """Resolve the selected suites into allocation-sized workflow shards."""
+    """Resolve the selected suites into allocation-sized shards."""
     selected_suites = _comma_subset("suites", suites, SUITES)
     if not selected_suites:
         raise SystemExit("--suites selects no suite")
@@ -322,8 +324,6 @@ def resolve_matrix(
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
     for (sku, target, mode, nodes, precision), cases in sorted(shards.items()):
-        # Normal-mode shard IDs are unchanged (no mode segment) so existing references
-        # stay valid; a non-normal mode inserts a short slug (low-latency -> "ll").
         mode_segment = "" if mode == "normal" else f"-{_MODE_SLUG[mode]}"
         shards_by_sku.setdefault(sku, []).append(_shard(
             sku, f"{sku}-{target}{mode_segment}-{precision}-n{nodes}", target, cases, mode=mode,
@@ -364,7 +364,7 @@ def extract_shard(matrix_path: str, shard_id: str, output_path: str) -> dict[str
 def main() -> int:
     parser = argparse.ArgumentParser(description="CollectiveX matrix resolver")
     parser.add_argument("--backend", default="all")
-    parser.add_argument("--only-sku", default="")
+    parser.add_argument("--only-sku", "--sku", dest="only_sku", default="")
     parser.add_argument("--exclude-skus", default="")
     parser.add_argument("--ep-sizes", default="")
     parser.add_argument("--precisions", default="",
@@ -379,6 +379,8 @@ def main() -> int:
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--out", default="")
+    parser.add_argument("--cases-json", default="", metavar="PATH",
+                        help="also write {version, requested_cases}, the dashboard's coverage")
     args = parser.parse_args()
 
     if args.extract_from:
@@ -404,6 +406,10 @@ def main() -> int:
             json.dumps(matrix, sort_keys=True, separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
+    if args.cases_json:
+        cases = {key: matrix[key] for key in ("version", "requested_cases")}
+        Path(args.cases_json).write_text(json.dumps(cases, indent=1, sort_keys=True) + "\n",
+                                         encoding="utf-8")
     runnable = sum(item["disposition"] == "runnable" for item in matrix["requested_cases"])
     unsupported = len(matrix["requested_cases"]) - runnable
     print(
