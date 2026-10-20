@@ -9933,43 +9933,45 @@ kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           dp-attn: false
 
 
-kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-1b2a666391f2a24228a1436b64d547c34cc6b6ce
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:b300-dsxe
-  precision: fp4
-  framework: dynamo-vllm
-  multinode: true
-  disagg: false
-  srt-recipe-dir: kimik3/vllm/b300-fp4/agentx
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list:
-        - 1
-        num-nodes: 2
-        srt-recipe: agg-megakernel-variants.yaml:override_tp16_dspark5
-        power: true
-        worker:
-          num-worker: 1
-          tp: 16
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list:
-        - 2
-        - 4
-        num-nodes: 1
-        srt-recipe: agg-megakernel-variants.yaml:override_tp8_dspark7
-        power: true
-        worker:
-          num-worker: 1
-          tp: 8
-          dcp-size: 8
-          ep: 1
-          dp-attn: false
+# Aggregated TP16 c1 / TP8 c2,c4 runs already passed (sweep 39476119630); disabled to keep
+# reruns focused on the disaggregated Mooncake configs.
+# kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
+#   image: vllm/vllm-openai:nightly-1b2a666391f2a24228a1436b64d547c34cc6b6ce
+#   model: moonshotai/Kimi-K3
+#   model-prefix: kimik3
+#   runner: cluster:b300-dsxe
+#   precision: fp4
+#   framework: dynamo-vllm
+#   multinode: true
+#   disagg: false
+#   srt-recipe-dir: kimik3/vllm/b300-fp4/agentx
+#   scenarios:
+#     agentic-coding:
+#     - search-space:
+#       - spec-decoding: mtp
+#         kv-offloading: none
+#         conc-list:
+#         - 1
+#         num-nodes: 2
+#         srt-recipe: agg-megakernel-variants.yaml:override_tp16_dspark5
+#         power: true
+#         worker:
+#           num-worker: 1
+#           tp: 16
+#           dcp-size: 16
+#           ep: 1
+#           dp-attn: false
+#       - spec-decoding: mtp
+#         kv-offloading: none
+#         conc-list:
+#         - 2
+#         - 4
+#         num-nodes: 1
+#         srt-recipe: agg-megakernel-variants.yaml:override_tp8_dspark7
+#         power: true
+#         worker:
+#           num-worker: 1
+#           tp: 8
+#           dcp-size: 8
+#           ep: 1
+#           dp-attn: false
