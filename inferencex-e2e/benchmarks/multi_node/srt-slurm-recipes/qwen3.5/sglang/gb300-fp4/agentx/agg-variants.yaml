@@ -1,4 +1,3 @@
-
 schema: 2
 
 base:
@@ -9,59 +8,137 @@ base:
     interval_seconds: 10
   resources:
     gpu_type: gb300
-    gpus_per_node: 2
+    gpus_per_node: 4
   frontend:
     type: sglang-router
+    enable_multiple_frontends: false
   engine: sglang
   roles:
     agg:
-      nodes: 1
-      workers: 1
-      gpus: 2
       env:
-        NCCL_NVLS_ENABLE: '1'
-        PYTHONNOUSERSITE: '1'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        NO_COLOR: '1'
+        PYTHONUNBUFFERED: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '0'
+        MC_FORCE_MNNVL: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
+        MC_TE_METRIC: 'true'
+        SGLANG_ENABLE_SPEC_V2: '1'
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-        SGL_ENABLE_JIT_DEEPGEMM: 'false'
-        TORCH_CUDA_ARCH_LIST: '10.0'
+        SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
+        SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+        SGLANG_MOE_NVFP4_DISPATCH: '1'
+        SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
+        SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+        FLASHINFER_DISABLE_VERSION_CHECK: '1'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
+        SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+        SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
+        SGLANG_FLASHINFER_MOE_FUSED_FINALIZE: '1'
+        SGLANG_Q35MF_GDN_VIEWS: '1'
+        SGLANG_Q35MF_GDN_LAZY_VALID: '1'
+        SGLANG_Q35MF_GDN_CONV_TILE: '1'
+        SGLANG_Q35MF_GDN_TILED_VERIFY: '1'
+        SGLANG_Q35MF_GDN_NORM_FP8: '1'
+        SGLANG_Q35MF_ATTN_FRONT: '1'
+        SGLANG_Q35MF_ATTN_GATE_QUANT: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_ENABLE_METADATA_GLUE_GRAPH: '1'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_GRAPH: '1'
+        SGLANG_Q35MF_EDGE_CHAIN_TREE: '1'
+        SGLANG_Q35MF_GDN_PDL: '1'
+        SGLANG_Q35MF_ROUTE_FUSED: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_COPY: '1'
+        SGLANG_Q35MF_ARRIVE_D2H_RING: '1'
+        SGLANG_Q35MF_ARRIVE_SKIP_REGATHER: '1'
+        SGLANG_Q35MF_ARRIVE_DECODE_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_SEQ_LENS_SELECT: '1'
+        SGLANG_Q35MF_ARRIVE_COPY_PLAN: '1'
+        SGLANG_Q35MF_DRAFT_ARGMAX_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_EXTEND_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_MOE_GEMV: '1'
+        SGLANG_Q35MF_DRAFT_MOE_ROUTER: '1'
+        SGLANG_Q35MF_DRAFT_FC_SPLIT: '1'
+        SGLANG_Q35MF_DRAFT_FC_GEMV: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_EDGE_SIDE_STREAM_COMMIT: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_ATTN_SPLIT_KV: '1'
+        SGLANG_Q35MF_ROUTE_SHARED: '1'
+        SGLANG_Q35MF_DRAFT_MNNVL_AR: '1'
+        SGLANG_Q35MF_BK_DRAFT_META: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_BK_STASH_SCATTER: '1'
+        SGLANG_Q35MF_BK_EXTEND_ARGMAX: '1'
+        SGLANG_Q35MF_K4_LOCAL_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_MKH_HOP: '1'
+        SGLANG_Q35MF_MKH_OPROJ: '1'
+        SGLANG_Q35MF_MKD_XCHG: '1'
+        SGLANG_Q35MF_MKD_TTABLE: '1'
+        SGLANG_Q35MF_MKD_EXTEND_FC: '1'
+        SGLANG_Q35MF_MKD_MOE1: '1'
+        SGLANG_Q35MF_MKA_FUSED: '1'
+        SGLANG_Q35MF_MKM_FUSED: '1'
       args:
         served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
-        enable-cache-report: true
-        enable-metrics: true
         model-path: /model/
+        enable-cache-report: true
         trust-remote-code: true
-        tensor-parallel-size: 2
-        data-parallel-size: 1
-        expert-parallel-size: 1
-        enable-symm-mem: true
         quantization: modelopt_fp4
         kv-cache-dtype: fp8_e4m3
-        mamba-ssm-dtype: bfloat16
-        mamba-scheduler-strategy: extra_buffer
+        pipeline-parallel-size: 1
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        moe-a2a-backend: none
+        load-balance-method: round_robin
+        mamba-radix-cache-strategy: extra_buffer
         mamba-track-interval: 8192
+        mamba-max-states-per-path: 3
+        mamba-ssm-dtype: bfloat16
+        max-mamba-cache-size: 1536
+        context-length: 262144
+        page-size: 64
         attention-backend: trtllm_mha
         moe-runner-backend: flashinfer_trtllm
+        linear-attn-decode-backend: triton
+        disable-shared-experts-fusion: true
         speculative-algorithm: NEXTN
-        speculative-num-steps: 3
+        speculative-num-steps: 6
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 4
-        cuda-graph-max-bs: 80
-        max-running-requests: 72
-        max-prefill-tokens: 16384
+        speculative-num-draft-tokens: 7
+        speculative-moe-runner-backend: flashinfer_cutedsl
+        speculative-moe-a2a-backend: none
         chunked-prefill-size: 16384
-        mem-fraction-static: 0.75
-        max-mamba-cache-size: 360
-        allow-auto-truncate: true
-        stream-interval: 50
-        scheduler-recv-interval: 10
-        tokenizer-worker-num: 6
-        page-size: 64
+        max-prefill-tokens: 16384
+        mem-fraction-static: 0.85
+        prefill-max-requests: 1
+        stream-interval: 20
+        decode-log-interval: 10
+        watchdog-timeout: 1000000
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-prefetch-num-threads: 4
         enable-hierarchical-cache: true
-        hicache-ratio: 0.9
+        hicache-write-policy: write_back
         hicache-io-backend: kernel
         hicache-mem-layout: page_first_direct
-        hicache-write-policy: write_back
-        mamba-max-states-per-path: 1
+        hicache-size: 32
+        enable-metrics: true
+        enable-linear-replayssm-spec: true
+        disable-attn-tp-gather: true
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-max-bs-prefill: 16384
+        enable-symm-mem: true
+        flashinfer-allreduce-fusion-backend: cutedsl
   sbatch_directives:
     mem: '0'
     cpus-per-task: '144'
@@ -74,23 +151,199 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-override_c1:
-  name: agg-gb300-tp2-c1-mtp-hicache-jid2530006
+override_tp4_mrr8:
+  name: agg-gb300-tp4-mrr8-mtp-hicache
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        SGLANG_Q35MF_MKM_FUSED_M16: '1'
+        SGLANG_Q35MF_MKM_FUSED_M21: '1'
+        SGLANG_Q35MF_MKH_PF_GRAPH: '1'
+        SGLANG_GDN_CHUNK_H_BV: '16'
+        SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
+        SGLANG_Q35MF_MKH_HT_REDUCTION_WARPS: '4'
+        SGLANG_Q35MF_DRAFT_EXCHANGE_STEP_ROWS: '8'
+      args:
+        tensor-parallel-size: 4
+        moe-dense-tp-size: 4
+        max-running-requests: 8
+        pp-max-micro-batch-size: 8
+        cuda-graph-max-bs-decode: 8
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
 
-override_c24:
-  name: agg-gb300-tp2-c24-mtp-hicache-jid2530012
+override_tp4_mrr8_c8:
+  name: agg-gb300-tp4-mrr8-c8-mtp-hicache
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        moe-dense-tp-size: 4
+        max-running-requests: 8
+        pp-max-micro-batch-size: 8
+        cuda-graph-max-bs-decode: 8
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
 
-override_c32:
-  name: agg-gb300-tp2-c32-mtp-hicache-jid2530013
+override_tp4_mrr3_k48:
+  name: agg-gb300-tp4-mrr3-k48-mtp-hicache
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        SGLANG_Q35MF_MKM_FUSED_M16: '1'
+        SGLANG_Q35MF_MKM_FUSED_M21: '1'
+        SGLANG_Q35MF_MKH_PF_GRAPH: '1'
+        SGLANG_GDN_CHUNK_H_BV: '16'
+        SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
+        SGLANG_Q35MF_MKH_HT_REDUCTION_WARPS: '4'
+        SGLANG_Q35MF_MKH_PREP_NOSYNC: '1'
+        SGLANG_Q35MF_DRAFT_EXCHANGE_STEP_ROWS: '8'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_MAX_BS: '8'
+      args:
+        tensor-parallel-size: 4
+        moe-dense-tp-size: 4
+        max-running-requests: 3
+        pp-max-micro-batch-size: 3
+        cuda-graph-max-bs-decode: 3
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+        prefill-decode-interval: 48
 
-override_c40:
-  name: agg-gb300-tp2-c40-mtp-hicache-jid2530015
+override_tp4_mrr2_k64:
+  name: agg-gb300-tp4-mrr2-k64-mtp-hicache
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        SGLANG_Q35MF_MKM_FUSED_M16: '1'
+        SGLANG_Q35MF_MKM_FUSED_M21: '1'
+        SGLANG_Q35MF_MKH_PF_GRAPH: '1'
+        SGLANG_GDN_CHUNK_H_BV: '16'
+        SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
+        SGLANG_Q35MF_MKH_HT_REDUCTION_WARPS: '4'
+      args:
+        tensor-parallel-size: 4
+        moe-dense-tp-size: 4
+        max-running-requests: 2
+        pp-max-micro-batch-size: 2
+        cuda-graph-max-bs-decode: 2
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+        prefill-decode-interval: 64
 
-override_c48:
-  name: agg-gb300-tp2-c48-mtp-hicache-jid2530017
+override_tp4_mrr2_k32:
+  name: agg-gb300-tp4-mrr2-k32-mtp-hicache
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        SGLANG_Q35MF_MKM_FUSED_M16: '1'
+        SGLANG_Q35MF_MKM_FUSED_M21: '1'
+        SGLANG_Q35MF_MKH_PF_GRAPH: '1'
+        SGLANG_GDN_CHUNK_H_BV: '16'
+        SGLANG_GDN_CHUNK_H_NUM_STAGES: '3'
+        SGLANG_Q35MF_MKH_HT_REDUCTION_WARPS: '4'
+      args:
+        tensor-parallel-size: 4
+        moe-dense-tp-size: 4
+        max-running-requests: 2
+        pp-max-micro-batch-size: 2
+        cuda-graph-max-bs-decode: 2
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+        prefill-decode-interval: 32
 
-override_c52:
-  name: agg-gb300-tp2-c52-mtp-hicache-jid2527406
+override_tp4_mrr1:
+  name: agg-gb300-tp4-mrr1-mtp-hicache
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        SGLANG_Q35MF_MKA_SKV2: '1'
+        SGLANG_Q35MF_MKA_PUSH: '1'
+        SGLANG_Q35MF_MKD_HEAD: '1'
+        SGLANG_EAGER_INPUT_NO_COPY: '1'
+        SGLANG_Q35MF_MKA_SKV2_VERIFY_MIN_LENGTH: '8192'
+        SGLANG_Q35MF_MKG_TP4_MIDDLE: '1'
+        SGLANG_Q35MF_MKD_HOP: '1'
+        SGLANG_Q35MF_MKA_Q1: '1'
+        SGLANG_Q35MF_MKD_HOP_PUSH: '1'
+        SGLANG_Q35MF_MKD_HOP_EARLY: '1'
+        SGLANG_Q35MF_MKH_PF_GRAPH: '1'
+        SGLANG_Q35MF_MKH_N3B: '1'
+        SGLANG_Q35MF_MKH_N3C: '1'
+      args:
+        tensor-parallel-size: 4
+        moe-dense-tp-size: 4
+        max-running-requests: 1
+        pp-max-micro-batch-size: 1
+        cuda-graph-max-bs-decode: 1
+        cuda-graph-bs-decode:
+          - 1
 
-override_c64:
-  name: agg-gb300-tp2-c64-mtp-hicache-jid2527410
+override_tp8_mrr1:
+  name: agg-gb300-tp8-mrr1-mtp-hicache
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_Q35MF_EDGE_SHM_SYNC_MULTIHOST: '1'
+        SGLANG_Q35MF_EDGE_MULTIHOST_TCP: '1'
+        SGLANG_Q35MF_MKG_FUSED: '1'
+        SGLANG_Q35MF_MKA_SKV2: '1'
+        SGLANG_Q35MF_MKA_PUSH: '1'
+        SGLANG_Q35MF_MKD_HEAD: '1'
+        SGLANG_EAGER_INPUT_NO_COPY: '1'
+        SGLANG_Q35MF_MKA_SKV2_VERIFY_MIN_LENGTH: '8192'
+        SGLANG_Q35MF_MKD_HOP: '1'
+        SGLANG_Q35MF_MKA_Q1: '1'
+        SGLANG_Q35MF_MKD_GEMV: '1'
+        SGLANG_Q35MF_MKG_BA_TC: '1'
+        SGLANG_Q35MF_MKD_HOP_EARLY: '1'
+        SGLANG_Q35MF_MKM_GDN_FRONT: '1'
+        SGLANG_Q35MF_MKH_N3B: '1'
+        SGLANG_Q35MF_MKH_N3C: '1'
+        SGLANG_Q35MF_MKH_PF_GRAPH: '1'
+      args:
+        tensor-parallel-size: 8
+        moe-dense-tp-size: 8
+        max-running-requests: 1
+        pp-max-micro-batch-size: 1
+        cuda-graph-max-bs-decode: 1
+        cuda-graph-bs-decode:
+          - 1

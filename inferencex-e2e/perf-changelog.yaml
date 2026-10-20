@@ -10245,3 +10245,17 @@
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#57392 (AITER Gluon KDA kernels for decode and spec decode), #61207 (stage fused KDA decode weights after loading), #61654 (MLA wrapper no longer reads W_UK_T before weight loading), #61895 (any-shape low-latency MoE router GEMM on MI355), #59406 (preshuffled FP4 GEMM config probed by logical K), #58381 (lighter MLA metadata build), #59070 (DCP prefill context kept in FP8 through AllGather), #59468 (DSpark draft slots no longer reserved in the scheduler token budget) and #61230 (AITER v0.1.25 base)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: the checkpoint is all BF16 with no quantization_config, and at both images the draft takes its own quantization config (get_draft_quant_config()), so the target quantization-config does not reach it. The draft runs BF16 weights with an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move both configs to lmsysorg/sglang:dev-qwen35-agentx-gb300-42ad537de600, pinned by digest, and replace all of their previous points with 21 points in 17 recipe overrides."
+    - "Disaggregated, Dynamo b208989fbe: three PP4 prefill workers with one DEP8 decode worker capped at 32 requests per attention-DP rank (20 GPUs) at concurrency 704; three PP4 prefill workers with one DEP16 decode worker capped at 12 requests per rank (28 GPUs) at concurrency 660, 760 and 840, or at 9 requests per rank at concurrency 530; two PP4 prefill workers with one DEP16 decode worker capped at 6 requests per rank (24 GPUs) at concurrency 488."
+    - "Disaggregated, small: one TP1 prefill worker with one colocated TP2 decode worker (3 GPUs), with decode max-running-requests 10, 4, 5 and 12 at concurrency 20, 26, 36 and 38; one TP1 prefill worker with two TP2 decode workers on a second node, each with max-running-requests 3 (5 GPUs), at concurrency 48."
+    - "Aggregated: TP4 with max-running-requests 8 at concurrency 8, 9, 12 and 18, 3 at concurrency 23, 2 at concurrency 16 and 20, and 1 at concurrency 13; TP8 across two nodes with max-running-requests 1 at concurrency 11 and 18."
+    - "MTP runs six draft steps with the checkpoint's shipped BF16 draft head: no speculative-draft-model-quantization and no SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE."
+    - "Retire qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto and qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto and their recipes; the points above supersede them."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
