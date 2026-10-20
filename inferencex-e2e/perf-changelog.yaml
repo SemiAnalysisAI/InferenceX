@@ -10435,4 +10435,4 @@
     - "TEP decode uses the TRTLLM MoE backend with MoE TP2/EP4; TEP prefill runs MTP with max_draft_len 1, TWOSHOT allreduce, max_num_tokens 16384 and the TRTLLM_Q35 prefill graph, context-attention and GDN switches."
     - "Decode enables the TRTLLM_Q35 attention context-parallel, fused allreduce, GDN, MoE GEMM and sampler optimizations, TRTLLM_DISAGG_GEN_EMIT_FIRST_STEP and TRTLLM_OVERLAP_LOOP_ON_EXECUTION_STREAM; prefill enables TRTLLM_CTX_SCHED_SRPT and TRTLLM_MAMBA_INFORWARD_SNAPSHOT."
     - "Workers bind CPUs to the GPU's NUMA node (numa_cpu_bind), and the Dynamo frontend sets DYN_TOKEN_IDS_AS_BYTES=1."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4356
