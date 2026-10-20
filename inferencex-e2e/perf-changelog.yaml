@@ -10431,4 +10431,4 @@
     - agentic-coding
   description:
     - "Add the 10P1D DEP2 prefill / DEP16 decode point at c8400 with max-num-seqs 152 (a MegaAttn wave boundary) and 70 GiB of CPU KV offload per prefill rank."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4352
