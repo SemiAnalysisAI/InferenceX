@@ -10430,6 +10430,7 @@
     - kimik3-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
   scenario-type:
     - agentic-coding
+  no-evals: true
   description:
     - "Add B300 Kimi K3 DSpark DCP disaggregated and low-latency aggregate configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4304
