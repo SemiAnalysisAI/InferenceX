@@ -25,11 +25,18 @@ on: # zizmor: ignore[concurrency-limits]
         required: false
         type: string
         default: 'dsv4'
+      framework:
+        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>.sh collector"
+        required: false
+        type: choice
+        options: [vllm, sglang]
+        default: 'vllm'
       image:
-        description: "vLLM container image"
+        # vLLM collectors need vLLM >= 0.30: thinking-on cells rely on --chat-template-kwargs (vllm-project/vllm#44244).
+        description: "Container image (vLLM >= 0.30 for vLLM collectors)"
         required: false
         type: string
-        default: 'vllm/vllm-openai:v0.21.0'
+        default: 'vllm/vllm-openai:v0.30.0'
       mtp-list:
         description: "Space-separated MTP levels (num_speculative_tokens)"
         required: false
@@ -82,28 +89,25 @@ env:
   DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
   MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
-  GPU_MONITOR_INTERVAL: '1'
-  GPU_METRICS_CSV: 'gpu_metrics.csv'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
   EVAL_ONLY: 'false'
   RUN_EVAL: 'false'
   IS_AGENTIC: '0'
-  REQUIRE_POWER: '0'
   SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   MODEL: ${{ inputs.model }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}
   PRECISION: fp4
-  FRAMEWORK: vllm
+  FRAMEWORK: ${{ inputs.framework }}
   EXP_NAME: ${{ inputs.model-prefix }}_speedbench
   IMAGE: ${{ inputs.image }}
   TP: '8'
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
+  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_${{ inputs.framework }}.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
   MTP_LIST: ${{ inputs.mtp-list }}
@@ -145,9 +149,10 @@ jobs:
           entry=$(jq -cn \
             --arg runner "$RUNNER" \
             --arg model_prefix "$MODEL_PREFIX" \
+            --arg framework "$FRAMEWORK" \
             '[{
               runner: $runner,
-              framework: "vllm",
+              framework: $framework,
               "model-prefix": $model_prefix,
               precision: "fp4",
               "spec-decoding": "mtp"
@@ -161,7 +166,7 @@ jobs:
 
   collect-al:
     needs: setup
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; workflow_dispatch only
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
@@ -212,19 +217,31 @@ jobs:
           rm -rf "${GITHUB_WORKSPACE}/speedbench_results" \
             "${GITHUB_WORKSPACE}/inferencex-e2e/speedbench_results" 2>/dev/null || true
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+      # A cancelled or crashed job can leave git state in this persistent
+      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
+      - id: checkout
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: &checkout-inputs
           fetch-depth: 1
           ref: ${{ inputs.ref || github.sha }}
           clean: true
           submodules: true
           persist-credentials: false
 
+      - name: Wipe workspace after failed checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        run: find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Retry checkout
+        if: ${{ steps.checkout.outcome == 'failure' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: *checkout-inputs
+
       - name: Cleanup stale outputs (pre-run)
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f speedbench-reference-al.yaml || true
-          rm -f gpu_metrics.csv || true
           rm -rf speed_bench_data || true
 
       - name: Checkout launch tooling

@@ -41,9 +41,9 @@ def test_counts_frontier_not_raw_jobs_and_keeps_input_coordinates():
     points = [
         {"x": 3, "y": 300},
         {"x": 1, "y": 100},
-        {"x": 2, "y": 90},  # dominated by lower-latency point
-        {"x": 3, "y": 200},  # same-latency lower throughput
-        {"x": 3, "y": 300},  # exact duplicate
+        {"x": 2, "y": 90},
+        {"x": 3, "y": 200},
+        {"x": 3, "y": 300},
         {"x": 4, "y": 400},
     ]
     result = assess([curve(points)])[0]
@@ -125,3 +125,16 @@ def test_counter_does_not_reorder_input_and_requires_literal_canonical_true():
     result = assess_coverage([curve(points)])[0]
     assert [point["x"] for point in points] == [3, 1, 2]
     assert result["frontier"] == [points[0]]
+
+
+def test_agg_and_disagg_configs_on_one_app_series_form_one_curve():
+    agg = [{"x": 17.66609, "y": 2506.58096}, {"x": 13.85062, "y": 3800.67592}]
+    disagg = [
+        {"x": 20.51395, "y": 26304.25743}, {"x": 35.52751, "y": 85649.41766},
+        {"x": 44.64737, "y": 115825.02923}, {"x": 54.69959, "y": 123251.45871},
+        {"x": 83.99143, "y": 127047.36369},
+    ]
+    combined = assess([curve(agg + disagg, "dsv4/agentic/gb300_dynamo-sglang/fp4/37270628136/p90")])[0]
+    assert combined["frontierPoints"] == 6
+    assert combined["status"] == "PASS"
+    assert assess([curve(agg)])[0]["frontierPoints"] == 1

@@ -16,7 +16,7 @@ OPERATOR_FIELDS = {
 NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
     "rdma_traffic_class", "rail_isolated", "single_node_rdma_devices", "rdma_fabric",
-    "rdma_relaxed_ordering",
+    "rdma_relaxed_ordering", "rdma_gbs",
 }
 # Timing knobs, in the order the legacy colon-string encoded them, paired with the run_ep flag
 # each one drives. The names match configs/sweep.json so a case's timing block is readable
@@ -77,7 +77,7 @@ def _network_overlay(runner: str) -> dict[str, object]:
     """Repo-tracked per-SKU scale-out RDMA selectors — the `network` block of the
     SKU's configs/platform_config.json entry — overlaid onto the base operator
     config. Only NETWORK_FIELDS are taken, so identity keys and notes are ignored;
-    a missing/invalid file is a no-op fallback to the base/secret network fields."""
+    a missing/invalid file is a no-op fallback to the base network fields."""
     try:
         block = _platforms().get(runner, {}).get("network", {})
     except (KeyError, OSError, TypeError, json.JSONDecodeError):
@@ -88,17 +88,15 @@ def _network_overlay(runner: str) -> dict[str, object]:
 def operator_config(path: str, runner: str) -> None:
     try:
         platform = _platforms()[runner]
-        # The registry's tracked per-SKU `operator` block is the baseline
-        # (de-secreted by operator decision); an operator config document, when
-        # provided, overrides it per field. Path "-" means registry-only.
+        # The registry's tracked per-SKU `operator` block is the baseline; an operator config
+        # document, when provided, overrides it per field. Path "-" means registry-only.
         selected = dict(platform.get("operator", {}))
         if path != "-":
             with open(path, encoding="utf-8") as stream:
                 document = json.load(stream)
             selected.update(document["runners"].get(runner, {}))
         # Overlay repo-tracked scale-out RDMA selectors onto the base runner config;
-        # SKUs without a platform_config.json network block keep their base/secret
-        # network fields.
+        # SKUs without a platform_config.json network block keep their base network fields.
         selected.update(_network_overlay(runner))
         allowed = OPERATOR_FIELDS | NETWORK_FIELDS | {"storage_roots"}
         if set(selected) - allowed:
@@ -165,10 +163,11 @@ def _ep_argv(case: dict, version: object, runner: str) -> list[str]:
 
 
 def _swap_argv(case: dict, version: object, runner: str) -> list[str]:
-    argv = []
+    argv = ["--sku", runner]
     for field in ("directions", "block_bytes", "num_blocks"):  # nargs="+" lists
         argv += [_flag(field), *str(case[field]).split()]
-    return argv + _flag_pairs(case, "layout seed device max_payload_bytes warmup iterations")
+    return argv + _flag_pairs(
+        case, "case_id profile layout seed device max_payload_bytes warmup iterations")
 
 
 # suite -> (bench/<entrypoint>.py, argv codec, output flag). The rank wrapper in
@@ -179,22 +178,22 @@ _SUITES = {
 }
 
 
-def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
+def _emit_argv(case: dict, version: object, runner: str) -> None:
     """Emit one null-delimited benchmark argv — the only case-to-invocation codec."""
     if case.get("suite") not in _SUITES:
         print(f"unknown suite {case.get('suite')!r}", file=sys.stderr)
         raise SystemExit(1)
     entrypoint, codec, out_flag = _SUITES[case["suite"]]
     # case_id is the canonical identity, so a new identity axis cannot be omitted from the
-    # filename the way mode once was. ts + the per-shard case index disambiguate legs that share
-    # one results/ directory.
-    out = f"results/{case['case_id']}_{ts}-c{index:03d}.json"
+    # filename. One committed file per case: a re-run replaces it, and git history keeps the
+    # result it replaced.
+    out = f"results/{runner}/{case['case_id']}.json"
     argv = ["--entrypoint", entrypoint, *codec(case, version, runner), out_flag, out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 
 
 def case_args(
-    path: str, index: int, runner: str, ts: str,
+    path: str, index: int, runner: str,
     ngpus: str, nodes: str, gpus_per_node: str, scale_up_domain: str,
 ) -> None:
     document = load(path)
@@ -211,7 +210,7 @@ def case_args(
     if placement != (ngpus, nodes, gpus_per_node, scale_up_domain):
         print(f"case placement {placement} differs from the allocation", file=sys.stderr)
         raise SystemExit(1)
-    _emit_argv(case, document["version"], runner, ts, index)
+    _emit_argv(case, document["version"], runner)
 
 
 def main() -> None:
@@ -220,7 +219,7 @@ def main() -> None:
     for name, names in {
         "operator-config": ("path", "runner"),
         "case-count": ("path",),
-        "case-args": ("path", "index", "runner", "ts",
+        "case-args": ("path", "index", "runner",
                       "ngpus", "nodes", "gpus_per_node", "scale_up_domain"),
     }.items():
         command = commands.add_parser(name)
@@ -229,7 +228,7 @@ def main() -> None:
     if args.command == "operator-config": operator_config(args.path, args.runner)
     elif args.command == "case-count": case_count(args.path)
     elif args.command == "case-args":
-        case_args(args.path, int(args.index), args.runner, args.ts,
+        case_args(args.path, int(args.index), args.runner,
                   args.ngpus, args.nodes, args.gpus_per_node, args.scale_up_domain)
 
 

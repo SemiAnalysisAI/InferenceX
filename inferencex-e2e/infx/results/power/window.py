@@ -33,7 +33,6 @@ def write_window(result: Path, concurrency: int, windows: Path) -> None:
     """Publish the client's measured boundary as a ``custom`` benchmark window."""
     data = json.loads(result.read_text())
     window = MeasurementWindow(
-        # srt-slurm resolves this against the log directory, <log dir>/<power dir>/windows/../..
         result_path=result.relative_to(windows.parent.parent).as_posix(),
         concurrency=concurrency,
         benchmark_start_time_unix=data["benchmark_start_time_unix"],

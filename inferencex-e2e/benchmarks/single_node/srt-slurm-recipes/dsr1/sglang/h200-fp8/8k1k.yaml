@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: dsr1-fp8-h200-sglang-8k1k
-  model:
-    path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: lmsysorg/sglang:v0.5.12-cu130
-    precision: fp8
   resources:
     gpu_type: h200
     gpus_per_node: 8
@@ -40,15 +36,6 @@ base:
       env:
         TORCH_CUDA_ARCH_LIST: '9.0'
         PYTHONNOUSERSITE: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: deepseek-ai/DeepSeek-R1-0528
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'false'
 zip_override_concurrency:
   benchmark:
     env:

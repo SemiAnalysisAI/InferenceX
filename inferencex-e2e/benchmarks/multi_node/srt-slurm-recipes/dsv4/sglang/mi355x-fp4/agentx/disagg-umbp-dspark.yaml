@@ -1,13 +1,6 @@
-# DeepSeek-V4-Pro-0813 AgentX on MI355X: 1P1D SGLang disaggregation over MoRI
-# with DSpark. Every arm offloads prefill KV to UMBP as a direct external store
-# for the unified radix tree (no host cache tier), backed by a 1.5 TB
-# hugepage DRAM tier on the prefill node.
+schema: 2
 base:
   name: mi355x-dsv4-pro-0813-agentx-umbp
-  model:
-    path: DeepSeek-V4-Pro-0813
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi35x-20261001
-    precision: fp4
   slurm:
     time_limit: "08:00:00"
   resources:
@@ -89,14 +82,11 @@ base:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache/hub
         HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
-        PYTHONDONTWRITEBYTECODE: "1"
         PYTHONUNBUFFERED: "1"
         PYTHONPATH: /sgl-workspace/aiter
-        TORCH_NCCL_BLOCKING_WAIT: "1"
-        NCCL_BLOCKING_WAIT: "1"
         NCCL_IB_HCA: rdma3,rdma0,rdma2,rdma1,rdma7,rdma4,rdma6,rdma5
-        GLOO_SOCKET_IFNAME: eno0
-        NCCL_SOCKET_IFNAME: eno0
+        GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+        NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
         AITER_LOG_LEVEL: ERROR
         HSA_NO_SCRATCH_RECLAIM: "0"
         GPU_MAX_HW_QUEUES: "2"
@@ -111,22 +101,16 @@ base:
         SGLANG_USE_AITER: "1"
         SGLANG_USE_ROCM700A: "0"
         SGLANG_HACK_FLASHMLA_BACKEND: unified_kv_triton
-        SGLANG_OPT_USE_AITER_INDEXER: "true"
         SGLANG_OPT_FP8_WO_A_FUSED_INVROPE: "1"
         SGLANG_OPT_USE_AITER_BATCHED_GEMM: "1"
         AITER_BF16_FP8_MOE_BOUND: "0"
         TORCH_BLAS_PREFER_HIPBLASLT: "1"
         IBDEVICES: rdma3,rdma0,rdma2,rdma1,rdma7,rdma4,rdma6,rdma5
-        MORI_RDMA_TC: "104"
-        MORI_IO_TC: "104"
-        MORI_IO_SQ_BACKOFF_TIMEOUT_US: "500000"
+        MORI_RDMA_TC: "@fabric.rdma-tc"
+        MORI_IO_TC: "@fabric.rdma-tc"
         MORI_IO_QP_MAX_SEND_WR: "32767"
-        MORI_IO_QP_MAX_CQE: "32768"
-        MORI_IO_QP_MAX_SGE: "2"
-        MORI_IO_TC_DISABLE: "0"
         MORI_SHMEM_MODE: ISOLATION
         MORI_EP_LAUNCH_CONFIG_MODE: AUTO
-        MORI_APP_LOG_LEVEL: WARNING
         SGLANG_MORI_COMBINE_DTYPE: auto
         SGLANG_MORI_QP_PER_TRANSFER: "4"
         SGLANG_MORI_NUM_WORKERS: "4"
@@ -139,7 +123,6 @@ base:
         SGLANG_ENABLE_OVERLAP_PLAN_STREAM: "0"
         SGLANG_LOG_MS: "true"
         SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS: "32"
-        SGLANG_ROUTER_STDOUT_LOGS: "0"
         UMBP_STANDALONE_ADDRESS: unix:///logs/umbp.sock
       args: &server
         served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
@@ -208,19 +191,11 @@ base:
     max_attempts: 720
     interval_seconds: 5
   benchmark:
-    type: custom
     container_image: lmsysorg/sglang-rocm:v0.5.19-rocm720-mi35x-20260907
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      # The MI355X launcher collects results from the job workspace.
-      RESULT_DIR: /infmax-workspace/LOGS/agentic
-      AGENTIC_OUTPUT_DIR: /infmax-workspace
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-      AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
-      HF_HUB_CACHE: /hf_hub_cache/hub
       TOKENIZERS_PARALLELISM: "false"
       TRANSFORMERS_VERBOSITY: error
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
 
 # One variant per point; each point runs in its own allocation. Admission is
 # 2x CONC on both roles. Decode captures graphs up to 2x CONC, or CONC/4 per
@@ -261,9 +236,6 @@ override_c4:
           - 8
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
-  benchmark:
-    env:
-      CONC: '4'
 
 override_c16:
   roles:
@@ -319,9 +291,6 @@ override_c16:
           - 32
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
-  benchmark:
-    env:
-      CONC: '16'
 
 override_c32:
   roles:
@@ -409,9 +378,6 @@ override_c32:
           - 64
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
-  benchmark:
-    env:
-      CONC: '32'
 
 override_c48:
   roles:
@@ -531,9 +497,6 @@ override_c48:
           - 96
         speculative-dspark-block-size: 3
         speculative-num-draft-tokens: 4
-  benchmark:
-    env:
-      CONC: '48'
 
 override_c192:
   roles:
@@ -671,7 +634,6 @@ override_c192:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '192'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
 override_c256:
@@ -826,7 +788,6 @@ override_c256:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '256'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
 # MegaMoE prefill on the DP-attention arm, with the fp8 unified KV pool, at
@@ -1028,7 +989,6 @@ override_c384:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '384'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
 
 override_c512:
@@ -1255,5 +1215,4 @@ override_c512:
         speculative-num-draft-tokens: 4
   benchmark:
     env:
-      CONC: '512'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'

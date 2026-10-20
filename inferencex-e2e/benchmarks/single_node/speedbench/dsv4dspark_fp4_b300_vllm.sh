@@ -15,7 +15,8 @@
 # Required collection settings come from speedbench-al.yml.
 
 set -o pipefail
-source "$(dirname "$0")/../../benchmark_lib.sh"
+repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$repo_root/benchmarks/check_env.sh"
 check_env_vars \
     CATEGORY CHAT_TEMPLATE_KWARGS_ON DRAFT_SAMPLE_METHOD MODEL MODEL_PATH MTP_LIST \
     OUT_YAML PORT SPEEDBENCH_OUTPUT_LEN THINKING_MODES TP
@@ -90,52 +91,6 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# speed_bench/CustomDataset renders the chat template client-side and posts to
-# /v1/completions, so thinking mode must reach apply_chat_template via
-# --chat-template-kwargs (native since vllm-project/vllm#44244). Assert rather than
-# assume: if the CLI option exists but speed_bench does not forward it, the flag is
-# silently ignored and every thinking_on cell reports a non-thinking AL.
-assert_chat_template_kwargs_support() {
-    echo "=== Checking vLLM benchmark --chat-template-kwargs support ==="
-    python3 - <<'PYEOF'
-import sys
-import vllm.benchmarks.serve as S
-import vllm.benchmarks.datasets.datasets as D
-
-def read(mod):
-    with open(mod.__file__) as fh:
-        return fh.read()
-
-s_src, d_src = read(S), read(D)
-
-missing = []
-if '"--chat-template-kwargs"' not in s_src:
-    missing.append(f"CLI option in {S.__file__}")
-if ('chat_template_kwargs=getattr(args' not in d_src
-        and 'chat_template_kwargs=args.chat_template_kwargs' not in d_src):
-    missing.append(f"speed_bench forward in {D.__file__}")
-if '**(chat_template_kwargs or {})' not in d_src:
-    missing.append(f"apply_chat_template unpack in {D.__file__}")
-
-if missing:
-    print("CRITICAL: this image lacks native --chat-template-kwargs support:")
-    for item in missing:
-        print("  missing:", item)
-    print("thinking_on cells would silently measure a non-thinking AL. Use an")
-    print("image that contains vllm-project/vllm#44244.")
-    sys.exit(1)
-
-print("native --chat-template-kwargs support confirmed")
-PYEOF
-}
-
-if [[ " $THINKING_MODES " == *" on "* ]]; then
-    if ! assert_chat_template_kwargs_support; then
-        echo "CRITICAL: --chat-template-kwargs preflight failed — aborting"
-        exit 1
-    fi
-fi
-
 # TEP8 as in the published B300 DSpark recipe (vllm-project/recipes). Hard-coded
 # rather than driven by EP_SIZE / DP_ATTENTION because speedbench-al.yml exports
 # EP_SIZE=1 and DP_ATTENTION=false for every model, which silently turned the recipe
@@ -192,8 +147,6 @@ cleanup_server() {
 }
 trap 'cleanup_server' EXIT
 
-start_gpu_monitor
-
 declare -A AL_RESULT
 
 run_cell() {
@@ -236,9 +189,8 @@ run_cell() {
     vllm serve "$SERVE_MODEL" "${serve_args[@]}" > "$server_log" 2>&1 &
     SERVER_PID=$!
 
-    # wait_for_server_ready exits the shell (rather than returning) when the server
-    # dies; the subshell keeps that exit local so one bad cell does not abort the matrix.
-    if ! (wait_for_server_ready --port "$PORT" --server-log "$server_log" --server-pid "$SERVER_PID"); then
+    if ! PYTHONSAFEPATH=1 PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench wait \
+            --url "http://0.0.0.0:${PORT}/health" --pid "$SERVER_PID" --log "$server_log"; then
         echo "  -> server failed to start (thinking=$mode dspark=$mtp), recording N/A"
         AL_RESULT["${mode}_${mtp}"]="N/A"
         cleanup_server
@@ -289,8 +241,6 @@ for mode in $THINKING_MODES; do
         run_cell "$mode" "$mtp"
     done
 done
-
-stop_gpu_monitor
 
 emit_mode_block() {
     local mode="$1"
