@@ -538,11 +538,11 @@ clusters:
       partition: batch_1
       account: benchmark
       exclusive: true
-      # 06, 09, 10, 14-17 have run since Oct 6-14 and their EFA devices carry failed
-      # memory registrations that freeze hosts under RDMA load; exclude until rebooted.
-      exclude: [dsxe-sa-b300-prd0-gpu-06, dsxe-sa-b300-prd0-gpu-08, dsxe-sa-b300-prd0-gpu-09,
+      # 06, 10, 14, 15 and 16 have run since Oct 6-14 without a reboot, and 02 reports
+      # failed EFA memory registrations; 08 has a task-launch failure. Exclude until rebooted.
+      exclude: [dsxe-sa-b300-prd0-gpu-02, dsxe-sa-b300-prd0-gpu-06, dsxe-sa-b300-prd0-gpu-08,
                 dsxe-sa-b300-prd0-gpu-10, dsxe-sa-b300-prd0-gpu-14, dsxe-sa-b300-prd0-gpu-15,
-                dsxe-sa-b300-prd0-gpu-16, dsxe-sa-b300-prd0-gpu-17]
+                dsxe-sa-b300-prd0-gpu-16]
       gres: "gpu:{gpus}"
       cpus-per-gpu: 24
       salloc-args: [--mem=0]

@@ -102,6 +102,11 @@ base:
         # EFA DMA into CUDA VMM (cumem) memory froze B300 hosts; keep NCCL
         # buffers and the KV cache Mooncake/NIXL register on cudaMalloc.
         NCCL_CUMEM_ENABLE: "0"
+        # Mooncake places KV on same-node segments too; libfabric serves those
+        # through its SHM path (CUDA IPC copies), which with NVLink peer and
+        # multicast traffic poisoned GPU data (Xid 94) and froze B300 hosts.
+        # Route same-node EFA transfers through the NIC instead.
+        FI_EFA_ENABLE_SHM_TRANSFER: "0"
         NCCL_MNNVL_ENABLE: "0"
         NCCL_NVLS_ENABLE: "1"
         VLLM_SERVER_DEV_MODE: "1"
