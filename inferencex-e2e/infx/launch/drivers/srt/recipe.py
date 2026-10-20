@@ -67,8 +67,8 @@ def eval_overrides(recipes: Path, lane: SrtLane, request: LaunchRequest) -> list
     overrides: list[str] = []
     if request.eval_only and lane.real_verification is not None and lane.real_verification(request):
         strip_forced_acceptance(recipes)
-    if request.eval_only and lane.head_frontend is not None and lane.head_frontend(request):
-        overrides += ["--set", "frontend.placement.node=head"]
+        if lane.head_frontend is not None and lane.head_frontend(request):
+            overrides += ["--set", "frontend.placement.node=head"]
     if request.run_eval or request.eval_only:
         for key in lane.eval_unsets:
             overrides += ["--unset", key]
