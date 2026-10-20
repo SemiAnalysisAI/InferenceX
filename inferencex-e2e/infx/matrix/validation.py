@@ -1,9 +1,12 @@
 import pprint
+import re
 from enum import Enum
-from typing import Any, Literal, Self
+from pathlib import Path, PurePosixPath
+from typing import Annotated, Any, Literal, Self
 
 import yaml
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -15,15 +18,13 @@ from pydantic import (
 from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
-
-"""
-    The below class defines the field names expected to be present in the JSON entries
-    for both single-node and multi-node configurations.
-"""
+SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
+MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
+LLMD_FRAMEWORK = "llmd-vllm"
+RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
 
 
 class Fields(Enum):
-    # Top-level config fields
     IMAGE = "image"
     MODEL = "model"
     MODEL_PREFIX = "model-prefix"
@@ -34,18 +35,17 @@ class Fields(Enum):
     SCENARIOS = "scenarios"
     MULTINODE = "multinode"
 
-    # Scenario type keys
     FIXED_SEQ_LEN = "fixed-seq-len"
     AGENTIC_CODING = "agentic-coding"
 
-    # Seq-len-config fields
     ISL = "isl"
     OSL = "osl"
     SEARCH_SPACE = "search-space"
 
-    # Search-space/benchmark fields
     TP = "tp"
     SRT_RECIPE = "srt-recipe"
+    SRT_RECIPE_DIR = "srt-recipe-dir"
+    EVAL_SRT_RECIPE = "eval-srt-recipe"
     PP = "pp"
     DCP_SIZE = "dcp-size"
     PCP_SIZE = "pcp-size"
@@ -56,7 +56,6 @@ class Fields(Enum):
     EP = "ep"
     DP_ATTN = "dp-attn"
 
-    # Multinode-specific fields (when MULTINODE = true)
     SPEC_DECODING = "spec-decoding"
     WORKER = "worker"
     PREFILL = "prefill"
@@ -66,12 +65,12 @@ class Fields(Enum):
     MAX_NUM_TOKENS = "max-num-tokens"
     ADDITIONAL_SETTINGS = "additional-settings"
 
-    # Agentic coding fields
     KV_OFFLOADING = "kv-offloading"
     KV_OFFLOAD_BACKEND = "kv-offload-backend"
     ROUTER = "router"
     KV_P2P_TRANSFER = "kv-p2p-transfer"
     TOTAL_CPU_DRAM_GB = "total-cpu-dram-gb"
+    DECODE_CPU_DRAM_GB = "decode-cpu-dram-gb"
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
     DRAM_UTILIZATION = "dram-utilization"
     GPUS_PER_NODE = "gpus-per-node"
@@ -79,8 +78,8 @@ class Fields(Enum):
     NODE_COUNT = "node-count"
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
+    POWER = "power"
 
-    # Matrix entry fields
     CONC = "conc"
     MAX_MODEL_LEN = "max-model-len"
     EXP_NAME = "exp-name"
@@ -88,7 +87,6 @@ class Fields(Enum):
     DISAGG = "disagg"
     SCENARIO_TYPE = "scenario-type"
 
-    # Eval
     RUN_EVAL = "run-eval"
     EVAL_ONLY = "eval-only"
     EVAL_CONC = "eval-conc"
@@ -97,19 +95,7 @@ class Fields(Enum):
     EVAL_SUITE = "eval-suite"
 
 
-"""
-    Below is the validation logic for the OUTPUT of infx.matrix.generate, i.e.,
-    the input to the actual workflow files. The validation enforces a strict set of rules on the structure
-    of the generated matrix entries to ensure correctness before proceeding with benchmarking. This ensures
-    that no validation has to happen in the workflow itself, i.e., at runtime, it is assumed that all inputs
-    are valid. Threfore, there should not be any default values set in these Pydantic models. Any missing value
-    should raise a validation error.
-"""
-
-
 class ComponentMetadata(BaseModel):
-    """Strict name and version metadata for an optional runtime component."""
-
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
@@ -118,7 +104,6 @@ class ComponentMetadata(BaseModel):
     @field_validator("version")
     @classmethod
     def validate_component_version(cls, version: str) -> str:
-        """Require the component's own version rather than its image provenance."""
         if version.startswith("image:"):
             raise ValueError(
                 "component version must be a release, package version, or "
@@ -128,8 +113,6 @@ class ComponentMetadata(BaseModel):
 
 
 class KVOffloadBackendMetadata(BaseModel):
-    """KV offload backend metadata with an optional independent version."""
-
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
@@ -138,7 +121,6 @@ class KVOffloadBackendMetadata(BaseModel):
     @field_validator("version")
     @classmethod
     def validate_component_version(cls, version: str | None) -> str | None:
-        """Reject image provenance when an independent version is available."""
         if version is not None and version.startswith("image:"):
             raise ValueError(
                 "component version must be a release, package version, or "
@@ -148,7 +130,6 @@ class KVOffloadBackendMetadata(BaseModel):
 
 
 def _validate_tp_context_topology(self: Any) -> Any:
-    """Validate TP/DCP topology shared by single-node and worker schemas."""
     if self.tp % self.dcp_size != 0:
         raise ValueError(
             f"'{Fields.TP.value}' ({self.tp}) must be divisible by "
@@ -158,9 +139,6 @@ def _validate_tp_context_topology(self: Any) -> Any:
 
 
 class SingleNodeMatrixEntry(BaseModel):
-    """Pydantic model for validating single node matrix entry structure.
-    This validates the input that should be expected to .github/workflows/benchmark-tmpl.yml"""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
@@ -200,8 +178,6 @@ class SingleNodeMatrixEntry(BaseModel):
 
 
 class WorkerConfig(BaseModel):
-    """Pydantic model for validating worker configuration in multinode entries."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     num_worker: int = Field(alias=Fields.NUM_WORKER.value)
@@ -231,8 +207,6 @@ class WorkerConfig(BaseModel):
 
 
 class AggregateWorkerConfig(BaseModel):
-    """Topology for the aggregate worker role serving prefill and decode."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
@@ -253,7 +227,6 @@ class AggregateWorkerConfig(BaseModel):
 
 
 def _validate_worker_hardware_pair(self: Any) -> Any:
-    """Require prefill and decode workers to declare hardware together."""
     if self.decode.dwdp_size > 1:
         raise ValueError("DWDP is supported only on prefill workers")
     if bool(self.prefill.hardware) != bool(self.decode.hardware):
@@ -265,9 +238,6 @@ def _validate_worker_hardware_pair(self: Any) -> Any:
 
 
 class MultiNodeMatrixEntry(BaseModel):
-    """Pydantic model for validating multinode matrix entry structure.
-    This validates the input that should be expected to .github/workflows/benchmark-multinode-tmpl.yml"""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
@@ -277,10 +247,15 @@ class MultiNodeMatrixEntry(BaseModel):
     framework: str
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
     isl: int
     osl: int
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
+    power: bool = Field(default=False, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -315,8 +290,6 @@ class MultiNodeMatrixEntry(BaseModel):
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
-    """Pydantic model for validating single-node agentic coding matrix entries."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
@@ -345,8 +318,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows carry selection and evaluator metadata. Benchmark-only
-    # rows omit them, and exclude_none keeps them out of dumped matrix output.
     run_eval: bool | None = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: bool | None = Field(default=None, alias=Fields.EVAL_ONLY.value)
     eval_framework: str | None = Field(default=None, alias=Fields.EVAL_FRAMEWORK.value)
@@ -367,8 +338,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
-    """Pydantic model for validating multinode agentic coding matrix entries."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
@@ -378,7 +347,12 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     framework: str
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(alias=Fields.SPEC_DECODING.value)
     runner: str
+    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    eval_srt_recipe: str | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value, min_length=1
+    )
     node_count: int = Field(alias=Fields.NODE_COUNT.value, gt=0, strict=True)
+    power: bool = Field(default=False, strict=True)
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -391,14 +365,11 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
+    decode_cpu_dram_gb: int = Field(default=0, alias=Fields.DECODE_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows carry selection, concurrency, and evaluator metadata.
-    # Benchmark-only rows omit them, and exclude_none keeps them out of dumped
-    # matrix output. Multi-node agentic evals run one selected concurrency per
-    # job, so they do not use eval-all-concs.
     run_eval: bool | None = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: bool | None = Field(default=None, alias=Fields.EVAL_ONLY.value)
     eval_conc: int | None = Field(default=None, alias=Fields.EVAL_CONC.value)
@@ -429,7 +400,6 @@ AgenticMatrixEntry = SingleNodeAgenticMatrixEntry | MultiNodeAgenticMatrixEntry
 
 
 def validate_agentic_matrix_entry(entry: dict) -> dict:
-    """Validate that an agentic matrix entry matches the expected structure."""
     try:
         if Fields.PREFILL.value in entry:
             MultiNodeAgenticMatrixEntry(**entry)
@@ -443,11 +413,6 @@ def validate_agentic_matrix_entry(entry: dict) -> dict:
 
 
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
-    """Validate that matrix_values entries match the expected structure.
-
-    Raises ValueError if any entry fails validation.
-    Returns the original list if all entries are valid.
-    """
     try:
         if is_multinode:
             MultiNodeMatrixEntry(**entry)
@@ -460,16 +425,7 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
     return entry
 
 
-"""
-    Below is the validation logic for the INPUT to infx.matrix.generate, i.e.,
-    the master configuration files found in configs. The validation enforces a strict set of
-    rules on the structure of the master configuration files to ensure correctness before proceeding
-    with matrix generation.
-"""
-
-
 def _validate_conc_fields(self: Any) -> Any:
-    """Ensure either (conc_start AND conc_end) OR conc_list is provided, but not both."""
     has_range = self.conc_start is not None and self.conc_end is not None
     has_list = self.conc_list is not None and len(self.conc_list) > 0
 
@@ -542,13 +498,38 @@ def _validate_kv_offload_fields(self: Any) -> Any:
     return self
 
 
-class SingleNodeSearchSpaceEntry(BaseModel):
-    """Single node search space configuration."""
+def _recipe_path(value: str) -> str:
+    path = PurePosixPath(value)
+    if (
+        not path.parts
+        or path.is_absolute()
+        or ".." in path.parts
+        or ":" in value
+        or path.as_posix() != value
+    ):
+        raise ValueError(f"{value!r} must be a normalized relative path")
+    return value
 
+
+def _recipe_reference(value: str) -> str:
+    path, separator, selector = value.partition(":")
+    _recipe_path(path)
+    if separator and not RECIPE_SELECTOR.fullmatch(selector):
+        raise ValueError(
+            f"{value!r} must select base, override_<name> or zip_override_<name>[<index>]"
+        )
+    return value
+
+
+RecipeDir = Annotated[str, AfterValidator(_recipe_path)]
+RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
+
+
+class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     tp: int
-    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -572,8 +553,6 @@ class SingleNodeSearchSpaceEntry(BaseModel):
 
 
 class MultiNodeSearchSpaceEntry(BaseModel):
-    """Multinode search space configuration."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
@@ -582,6 +561,11 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     worker: AggregateWorkerConfig | None = None
     prefill: WorkerConfig | None = None
     decode: WorkerConfig | None = None
+    srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
+    eval_srt_recipe: RecipeReference | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value
+    )
+    power: bool = Field(default=False, strict=True)
     num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
@@ -613,8 +597,6 @@ class MultiNodeSearchSpaceEntry(BaseModel):
 
 
 class SingleNodeSeqLenConfig(BaseModel):
-    """Single node sequence length configuration."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     isl: int
@@ -623,8 +605,6 @@ class SingleNodeSeqLenConfig(BaseModel):
 
 
 class MultiNodeSeqLenConfig(BaseModel):
-    """Multinode sequence length configuration."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     isl: int
@@ -634,12 +614,14 @@ class MultiNodeSeqLenConfig(BaseModel):
 
 
 class AgenticCodingSearchSpaceEntry(BaseModel):
-    """Agentic coding search space configuration."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     tp: int | None = None
-    srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
+    srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
+    eval_srt_recipe: RecipeReference | None = Field(
+        default=None, alias=Fields.EVAL_SRT_RECIPE.value
+    )
+    power: bool = Field(default=False, strict=True)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -698,6 +680,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     f"Single-node agentic search-space entries must specify "
                     f"{Fields.KV_OFFLOADING.value}"
                 )
+            if self.power:
+                raise ValueError(
+                    f"Only multinode entries measure DCGM power; remove {Fields.POWER.value}"
+                )
             _validate_tp_context_topology(self)
         if has_aggregate_worker or has_complete_multinode:
             explicitly_single_node_fields = {
@@ -724,8 +710,6 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
 
 class AgenticCodingConfig(BaseModel):
-    """Agentic coding scenario configuration for trace replay benchmarks."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
@@ -743,12 +727,15 @@ class AgenticCodingConfig(BaseModel):
                     f"{Fields.KV_OFFLOADING.value}='dram' requires "
                     f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
                 )
+            if entry.prefill is not None and entry.prefill.hardware is not None:
+                raise ValueError(
+                    f"{Fields.KV_OFFLOADING.value}='dram' does not support per-worker "
+                    f"'{Fields.HARDWARE.value}'"
+                )
         return self
 
 
 class SingleNodeScenarios(BaseModel):
-    """Scenarios wrapper for single-node configs."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     fixed_seq_len: list[SingleNodeSeqLenConfig] | None = Field(
@@ -766,8 +753,6 @@ class SingleNodeScenarios(BaseModel):
 
 
 class MultiNodeScenarios(BaseModel):
-    """Scenarios wrapper for multinode configs."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     fixed_seq_len: list[MultiNodeSeqLenConfig] | None = Field(
@@ -785,7 +770,6 @@ class MultiNodeScenarios(BaseModel):
 
 
 def _master_search_space_entries(self: BaseModel) -> list[BaseModel]:
-    """Return every search-space entry in a master config."""
     return [
         entry
         for scenario_configs in (
@@ -798,7 +782,6 @@ def _master_search_space_entries(self: BaseModel) -> list[BaseModel]:
 
 
 def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
-    """Require unambiguous component metadata across a master config."""
     search_space_entries = _master_search_space_entries(self)
 
     for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
@@ -840,7 +823,6 @@ def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
 
 
 def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
-    """Match each search-space topology to its master serving mode."""
     search_space_entries = _master_search_space_entries(self)
     for entry in search_space_entries:
         worker = getattr(entry, "worker", None)
@@ -885,9 +867,36 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
     return self
 
 
-class SingleNodeMasterConfigEntry(BaseModel):
-    """Top-level single node master configuration entry."""
+_RECIPE_SETTINGS = {"CONFIG_FILE": Fields.SRT_RECIPE, "EVAL_CONFIG_FILE": Fields.EVAL_SRT_RECIPE}
 
+
+def _validate_srt_recipes(self: Any) -> Any:
+    entries = _master_search_space_entries(self)
+    if self.multinode and self.framework == LLMD_FRAMEWORK:
+        if self.srt_recipe_dir is not None or any(
+            entry.srt_recipe or entry.eval_srt_recipe for entry in entries
+        ):
+            raise ValueError(f"{LLMD_FRAMEWORK} selects recipes with CONFIG_FILE, not srt-recipe")
+        return self
+    if self.srt_recipe_dir is None:
+        raise ValueError(f"srt-slurm configs require {Fields.SRT_RECIPE_DIR.value}")
+    for entry in entries:
+        if entry.srt_recipe is None:
+            raise ValueError(f"Every search-space entry requires {Fields.SRT_RECIPE.value}")
+        if not self.multinode and getattr(entry, "eval_srt_recipe", None) is not None:
+            raise ValueError(f"{Fields.EVAL_SRT_RECIPE.value} is only valid for multinode configs")
+        workers = (getattr(entry, role, None) for role in ("worker", "prefill", "decode"))
+        for worker in filter(None, workers):
+            for setting in worker.additional_settings or []:
+                name = setting.partition("=")[0]
+                if name in _RECIPE_SETTINGS:
+                    raise ValueError(
+                        f"{name} is not an additional-setting; use {_RECIPE_SETTINGS[name].value}"
+                    )
+    return self
+
+
+class SingleNodeMasterConfigEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
@@ -899,6 +908,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
     multinode: Literal[False]
     disagg: Literal[False] = Field(default=False)
     router: ComponentMetadata | None = None
+    srt_recipe_dir: RecipeDir = Field(alias=Fields.SRT_RECIPE_DIR.value)
     scenarios: SingleNodeScenarios
 
     @model_validator(mode="after")
@@ -914,10 +924,12 @@ class SingleNodeMasterConfigEntry(BaseModel):
     def validate_multinode_entry_scope(self) -> Self:
         return _validate_multinode_entry_scope(self)
 
+    @model_validator(mode="after")
+    def validate_srt_recipes(self) -> Self:
+        return _validate_srt_recipes(self)
+
 
 class MultiNodeMasterConfigEntry(BaseModel):
-    """Top-level multinode master configuration entry."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     image: str
@@ -932,6 +944,7 @@ class MultiNodeMasterConfigEntry(BaseModel):
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
+    srt_recipe_dir: RecipeDir | None = Field(default=None, alias=Fields.SRT_RECIPE_DIR.value)
     scenarios: MultiNodeScenarios
 
     @model_validator(mode="after")
@@ -947,23 +960,79 @@ class MultiNodeMasterConfigEntry(BaseModel):
     def validate_multinode_entry_scope(self) -> Self:
         return _validate_multinode_entry_scope(self)
 
+    @model_validator(mode="after")
+    def validate_srt_recipes(self) -> Self:
+        return _validate_srt_recipes(self)
 
-def validate_master_config(master_configs: dict) -> list[dict]:
-    """Validate input master configuration structure."""
-    for key, entry in master_configs.items():
-        is_multinode = entry.get("multinode", False)
 
+def srt_recipe_path(multinode: bool, directory: str, reference: str) -> str:
+    return f"{MULTI_NODE_RECIPES if multinode else SINGLE_NODE_RECIPES}/{directory}/{reference}"
+
+
+def _zip_length(group: Any) -> int:
+    if isinstance(group, list):
+        return len(group)
+    if isinstance(group, dict):
+        return max(map(_zip_length, group.values()), default=0)
+    return 0
+
+
+def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> None:
+    path, _, selector = reference.partition(":")
+    if path not in recipes:
+        if not (root / path).is_file():
+            raise ValueError(f"{reference} does not exist")
         try:
-            if is_multinode:
-                MultiNodeMasterConfigEntry(**entry)
-            else:
-                SingleNodeMasterConfigEntry(**entry)
+            recipes[path] = yaml.safe_load((root / path).read_text())
+        except yaml.YAMLError as error:
+            raise ValueError(f"{path} is not valid YAML") from error
+    recipe = recipes[path]
+    if not selector:
+        return
+    if not isinstance(recipe, dict) or "base" not in recipe:
+        raise ValueError(f"{reference}: only an override bundle with a base takes a selector")
+    group, _, index = selector.removesuffix("]").partition("[")
+    if group not in recipe or (index and int(index) >= _zip_length(recipe[group])):
+        raise ValueError(f"{reference}: {path} has no variant {selector}")
+
+
+def config_root(config_files: list[str]) -> Path:
+    roots = {Path(config_file).resolve().parent.parent for config_file in config_files}
+    if len(roots) != 1:
+        raise ValueError(f"Master configs must share one project directory: {sorted(roots)}")
+    return roots.pop()
+
+
+def srt_recipe_references(master_configs: dict) -> dict[str, list[str]]:
+    references = {}
+    for key, entry in master_configs.items():
+        model = (
+            MultiNodeMasterConfigEntry
+            if entry.get("multinode", False)
+            else SingleNodeMasterConfigEntry
+        )
+        try:
+            config = model(**entry)
         except ValidationError as e:
             raise ValueError(f"Master config entry '{key}' failed validation:\n{e}") from e
+        references[key] = [
+            srt_recipe_path(config.multinode, config.srt_recipe_dir, reference)
+            for row in _master_search_space_entries(config)
+            for reference in (row.srt_recipe, getattr(row, "eval_srt_recipe", None))
+            if reference is not None
+        ]
+    return references
+
+
+def validate_master_config(master_configs: dict, root: Path) -> dict:
+    recipes: dict[str, Any] = {}
+    for key, references in srt_recipe_references(master_configs).items():
+        for reference in references:
+            try:
+                _check_srt_recipe(root, reference, recipes)
+            except ValueError as e:
+                raise ValueError(f"Master config entry '{key}' failed validation:\n{e}") from e
     return master_configs
-
-
-# Runner Config Validation
 
 
 def _validate_runner_labels(labels: dict) -> None:
@@ -981,7 +1050,6 @@ def _validate_runner_labels(labels: dict) -> None:
 
 
 def validate_runner_config(runner_configs: dict) -> dict:
-    """Validate runner labels plus the ``clusters:`` records they resolve to."""
     labels = runner_configs.get("labels")
     if not isinstance(labels, dict):
         raise ValueError("Runner config must define a labels mapping")
@@ -993,16 +1061,7 @@ def validate_runner_config(runner_configs: dict) -> dict:
     return runner_configs
 
 
-"""
-    Below is the validation logic for the changelog entries found in perf-changelog.yaml.
-    This ensures that the changelog entries conform to the expected structure before
-    proceeding with processing.
-"""
-
-
 class ChangelogEntry(BaseModel):
-    """Pydantic model for validating changelog entry structure."""
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     config_keys: list[str] = Field(alias="config-keys", min_length=1)
@@ -1037,7 +1096,6 @@ class ChangelogEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_append_only_mode(self) -> Self:
-        """Append-only entries are throughput deltas, never eval-only requests."""
         if self.no_evals and (
             self.evals_only or self.all_evals or self.eval_min_prefill_ep is not None
         ):
@@ -1050,8 +1108,6 @@ class ChangelogEntry(BaseModel):
 
 
 class ChangelogMetadata(BaseModel):
-    """Pydantic model for validating changelog metadata structure."""
-
     model_config = ConfigDict(extra="forbid")
 
     base_ref: str
@@ -1060,11 +1116,6 @@ class ChangelogMetadata(BaseModel):
 
 
 class ChangelogMatrixEntry(BaseModel):
-    """Pydantic model for validating final changelog matrix entry structure.
-    This imposes a strict contract on the output of infx.matrix.plan, dictated by
-    the expected input to the run-sweep.yml workflow file.
-    """
-
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     single_node: dict[str, list[SingleNodeMatrixEntry | SingleNodeAgenticMatrixEntry]] = Field(
@@ -1074,19 +1125,13 @@ class ChangelogMatrixEntry(BaseModel):
         default_factory=dict
     )
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
-    # Each bucket maps to a run-sweep.yml job with fixed inputs. Separate
-    # AgentX rows so they cannot dispatch the fixed-sequence benchmark.
     agentic_evals: list[SingleNodeAgenticMatrixEntry] = Field(default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
     multinode_agentic_evals: list[MultiNodeAgenticMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 
 
-# File Loading Functions
-
-
 def load_config_files(config_files: list[str], validate: bool = True) -> dict:
-    """Merge YAML configs, rejecting missing files, non-mappings and duplicate keys."""
     all_config_data = {}
     for config_file in config_files:
         try:
@@ -1095,8 +1140,6 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
                 if not isinstance(config_data, dict):
                     raise ValueError(f"Config file '{config_file}' must contain a dictionary")
 
-                # Don't allow '*' wildcard in master config keys as we need to reserve these
-                # for expansion in infx.matrix.plan
                 for key in config_data:
                     if not isinstance(key, str):
                         raise ValueError(
@@ -1118,13 +1161,12 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
             raise ValueError(f"Input file '{config_file}' does not exist.") from e
 
     if validate:
-        validate_master_config(all_config_data)
+        validate_master_config(all_config_data, config_root(config_files))
 
     return all_config_data
 
 
 def load_runner_file(runner_file: str, validate: bool = True) -> dict:
-    """Load runner YAML, optionally validating its schema."""
     try:
         with open(runner_file) as f:
             runner_config = yaml.safe_load(f)

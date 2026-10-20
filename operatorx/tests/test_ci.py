@@ -465,8 +465,11 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
         assert "--ntasks=1" in launched
-        if pool in ("gb200", "gb300", "b300", "mi300x", "mi355x"):
+        if pool in ("gb200", "gb300", "b300", "h100-dgxc", "mi300x", "mi355x"):
             assert "--container-remap-root" in launched
+        if pool in ("b300", "h100-dgxc"):
+            assert "--mpi=none" in launched
+            assert "--mem=0" in allocation
         if pool == "mi300x":
             mounts = next(
                 arg for arg in launched if arg.startswith("--container-mounts=")

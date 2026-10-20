@@ -27,6 +27,7 @@ adjustments:
     dynamo-sglang: 1.5
     dynamo-vllm: 1.5
   model-prefix:
+    musespark: 5.0
     dsv41flash: 0.5
     kimik3: 0.5
     glm5.2: 0.5

@@ -1,17 +1,10 @@
-# AgentX minimaxm3 vllm gb200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/minimaxm3/vllm/gb200-fp4/agentx/disagg-variants.yaml:override_<name>.
 
 schema: 2
 
 base:
-  model:
-    path: "minimax-m3-nvfp4"
-    container: "vllm/vllm-openai@sha256:b9104b7ef3048e42f79fba9ab5da06e5aff8164aca9968692ec2f569aaaf34c6"
-    precision: "fp4"
   identity:
-    model: {repo: "nvidia/MiniMax-M3-NVFP4"}
-    container: {image: "vllm/vllm-openai@sha256:b9104b7ef3048e42f79fba9ab5da06e5aff8164aca9968692ec2f569aaaf34c6"}
+    model: {}
+    container: {}
     frameworks: {dynamo: "1.5.0.dev20260819"}
   dynamo: {install: true, source: {wheel: "1.5.0.dev20260819"}}
   environment: {PYTHONHASHSEED: "0"}
@@ -38,7 +31,7 @@ base:
           global_segment_size: "150GB"
           local_buffer_size: "4GB"
           protocol: "rdma"
-          device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+          device_name: "@fabric.rdma-devices"
           mode: "embedded"
           enable_offload: true
   frontend:
@@ -72,7 +65,6 @@ base:
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
         TRANSFORMERS_CACHE: "/hf_hub_cache"
         DYN_TCP_CONNECT_TIMEOUT: "120"
-        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_FLOAT32_MATMUL_PRECISION: "high"
         VLLM_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
         VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
@@ -81,7 +73,7 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
-        NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         UCX_CUDA_IPC_ENABLE_MNNVL: "y"
         UCX_MEMTYPE_CACHE: "n"
         UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
@@ -132,7 +124,6 @@ base:
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
         TRANSFORMERS_CACHE: "/hf_hub_cache"
         DYN_TCP_CONNECT_TIMEOUT: "120"
-        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_FLOAT32_MATMUL_PRECISION: "high"
         VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
         VLLM_USE_NCCL_SYMM_MEM: "0"
@@ -140,7 +131,7 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
-        NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
         UCX_CUDA_IPC_ENABLE_MNNVL: "y"
         UCX_MEMTYPE_CACHE: "n"
         UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
@@ -176,23 +167,13 @@ base:
   sbatch_directives: {cpus-per-task: "144", mem: "0"}
   srun_options: {container-remap-root: ""}
   benchmark:
-    type: custom
-    command: "bash /infmax-workspace/benchmarks/srt_agentic.sh"
     env:
-      INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
-      RESULT_DIR: "/logs/agentic"
-      PORT: "8000"
-      IS_MULTINODE: "true"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
-      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "3600"
       AIPERF_EXTRA_INPUTS: "thinking:true"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
       AIPERF_SERVER_METRICS_COLLECTION_INTERVAL: "1.0"
-      AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
-      HF_HUB_CACHE: "/hf_hub_cache"
-      WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
 
 override_1p1d_tp8_c1:
   name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-tp8-c1-agentic"

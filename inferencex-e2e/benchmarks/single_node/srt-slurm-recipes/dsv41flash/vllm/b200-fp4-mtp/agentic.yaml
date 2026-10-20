@@ -1,13 +1,6 @@
-# DeepSeek-V4.1-Flash AgentX on B200 with vLLM native DSpark
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). Engram weights use
-# UVA DRAM; the KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-b200-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7
-    precision: fp4
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -57,10 +50,7 @@ base:
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # Native zip expansion creates one variant per concurrency.
@@ -102,7 +92,7 @@ zip_override_dep2:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 2
@@ -136,7 +126,7 @@ zip_override_dep4:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 4
@@ -146,12 +136,12 @@ zip_override_dep4:
         enable-expert-parallel: true
         kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
         engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
-        max-num-seqs: 128
-        prefill-schedule-interval: 48
+        max-num-seqs: [128]
+        prefill-schedule-interval: [48]
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
   benchmark:
     env:
-      CONC: '128'
+      CONC: ['128']
 
 # TP2 c1: the TP4 c1 settings on two GPUs.
 override_tp2_c1:

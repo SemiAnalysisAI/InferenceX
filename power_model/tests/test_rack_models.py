@@ -373,6 +373,19 @@ def test_measured_grace_socket_replaces_modeled_cpu_and_memory_once(system):
     assert measured.it_power_w - modeled.it_power_w < grace_delta < 0
 
 
+@pytest.mark.parametrize("system", ["gb200", "gb300"])
+def test_measured_cpu_only_replaces_grace_cpu_but_keeps_modeled_memory(system):
+    model = create_power_model(system=system)
+    modeled = model.estimate_breakdown(400)
+    measured = model.estimate_breakdown(400, cpu_measured_power_per_socket=180)
+    modeled_rack = modeled.components[0].children[0]
+    measured_rack = measured.components[0].children[0]
+    cpu = named(measured_rack, "GraceCPU")[0]
+    assert (cpu.quantity, cpu.power_w, cpu.provenance.kind) == (36, 6480, "measured")
+    assert named(measured_rack, "LPDDR5XMemory") == named(modeled_rack, "LPDDR5XMemory")
+    assert named(measured_rack, "Grace socket (measured)") == []
+
+
 @pytest.mark.parametrize("socket_w", [None, 98.066])
 def test_tray_air_heat_takes_the_workload_memory_share_but_no_grace_chip_heat(socket_w):
     tray = GB200ComputeTray(converter=ideal_converter())
@@ -396,7 +409,7 @@ def test_rack_cli_bom_marks_the_measured_grace_socket(capsys):
         ]
     )
     output = " ".join(capsys.readouterr().out.split())
-    assert "Grace socket input (measured): 98.07 W/socket" in output
+    assert "CPU+DRAM input (measured): 98.07 W/socket" in output
     assert "Grace socket (measured) 98.07 36 3,530.38" in output
     assert "GraceCPU" not in output
     assert "LPDDR5XMemory" not in output

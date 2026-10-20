@@ -22,6 +22,7 @@ def verdict(
     failure=False,
     warning=False,
     reuse_warning=False,
+    draft_warning=False,
     body_warning=False,
     nvidia_warning=False,
     prefix="",
@@ -31,6 +32,11 @@ def verdict(
     ]
     rows[13] = "➖ Check 13 (Draft precision): N/A — No speculative changes."
     expanded = []
+    if draft_warning:
+        rows.pop(13)
+        expanded.append(
+            "⚠️ Check 13 (Draft precision): WARN — Pinned draft implementation unavailable."
+        )
     if reuse_warning:
         rows.pop(4)
         expanded.append(
@@ -58,6 +64,7 @@ def verdict(
         )
     else:
         rows.append("➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.")
+    rows.append("➖ Check 17 (Metrics publication): N/A — No affected serving paths.")
     return (
         header
         + "\n\n"
@@ -229,7 +236,13 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
             True,
         ),
         (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
-        (verdict() + "\n✅ Check 17 (Unknown): PASS — extra", True),
+        (verdict() + "\n✅ Check 18 (Unknown): PASS — extra", True),
+        (
+            verdict().replace(
+                "➖ Check 17 (Metrics publication): N/A — No affected serving paths.\n", ""
+            ),
+            True,
+        ),
         (verdict(PASS, nvidia_warning=True), True),
         (verdict(REJECT, nvidia_warning=True), True),
         (
@@ -316,7 +329,9 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(
     "failure,coverage_warning",
     [(False, False), (True, False), (False, True), (True, True)],
 )
-@pytest.mark.parametrize("advisory_warning", ["reuse_warning", "body_warning", "nvidia_warning"])
+@pytest.mark.parametrize(
+    "advisory_warning", ["reuse_warning", "draft_warning", "body_warning", "nvidia_warning"]
+)
 def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     publish, failure, coverage_warning, advisory_warning
 ):
@@ -329,6 +344,9 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     assert body.startswith(marker() + "\n" + header)
     expected_warning = {
         "reuse_warning": "⚠️ Check 4 (Reuse command): WARN — No authorized reuse command.",
+        "draft_warning": (
+            "⚠️ Check 13 (Draft precision): WARN — Pinned draft implementation unavailable."
+        ),
         "body_warning": "⚠️ Check 15 (PR description): WARN — Body claims 16 GiB; recipe sets 8 GiB.",
         "nvidia_warning": (
             "⚠️ Check 16 (NVIDIA overview): WARN — Kimi-K3 / vLLM on B300: missing listing."
@@ -343,6 +361,17 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
     assert ("❌ Check 1 (Sweep): FAIL" in body) == failure
     assert "did not produce a valid verdict" not in body
     assert len(result["writes"]) == 1
+
+
+def test_confirmed_draft_violation_still_publishes_rejection(publish):
+    content = verdict(REJECT, draft_warning=True, body_warning=True).replace(
+        "⚠️ Check 13 (Draft precision): WARN — Pinned draft implementation unavailable.",
+        "❌ Check 13 (Draft precision): FAIL — BF16 draft converted to MXFP4.",
+    )
+    result = publish(content)
+    body = result["comments"][0]["body"]
+    assert body == marker() + "\n" + content + f"\n\nAssessed commit: `{SHA}`.\n"
+    assert "did not produce a valid verdict" not in body
 
 
 def test_listed_nvidia_pair_passes_without_warning_banner(publish):
@@ -362,3 +391,24 @@ def test_listed_nvidia_pair_passes_without_warning_banner(publish):
 def test_invalid_signoff_key_is_rejected_before_github_write(publish, key):
     with pytest.raises(ValueError, match="sign-off key"):
         publish(verdict(), signoff_key=key)
+
+
+@pytest.mark.parametrize(
+    "status,emoji,reason,header,expected_status",
+    [
+        ("PASS", "✅", "Pinned worker publishes metrics.", PASS, "success"),
+        ("FAIL", "❌", "Iteration statistics are disabled.", REJECT, "failure"),
+    ],
+)
+def test_metrics_check_is_published_independently_of_architecture(
+    publish, status, emoji, reason, header, expected_status
+):
+    content = verdict(header).replace(
+        "➖ Check 17 (Metrics publication): N/A — No affected serving paths.",
+        f"{emoji} Check 17 (Metrics publication): {status} — {reason}",
+    )
+    body, actual_status = signoff_publish.verdict_body(content, SHA, KEY)
+    assert actual_status == expected_status
+    assert body == marker() + "\n" + content + f"\n\nAssessed commit: `{SHA}`.\n"
+    result = publish(content)
+    assert result["comments"][0]["body"] == body
