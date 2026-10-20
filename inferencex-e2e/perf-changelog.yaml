@@ -10434,5 +10434,7 @@
     - "Replace the search space with seven points: 1P2D TEP4/TEP8 b16 at conc 128, 2P1D TEP2/TEP8 b64 at conc 192, 2P2D TEP2/TEP8 b32 at conc 176, 2P2D TEP4/TEP8 b32 at conc 264, 3P1D DEP4/DEP16 b12 at conc 600 and 700, and 3P2D DEP4/DEP4 b32 at conc 704. The 1P1D, 1P4D, 2P3D and 3P1D c565 points are removed."
     - "TEP decode uses the TRTLLM MoE backend with MoE TP2/EP4; TEP prefill runs MTP with max_draft_len 1, TWOSHOT allreduce, max_num_tokens 16384 and the TRTLLM_Q35 prefill graph, context-attention and GDN switches."
     - "Decode enables the TRTLLM_Q35 attention context-parallel, fused allreduce, GDN, MoE GEMM and sampler optimizations, TRTLLM_DISAGG_GEN_EMIT_FIRST_STEP and TRTLLM_OVERLAP_LOOP_ON_EXECUTION_STREAM; prefill enables TRTLLM_CTX_SCHED_SRPT and TRTLLM_MAMBA_INFORWARD_SNAPSHOT."
-    - "Workers bind CPUs to the GPU's NUMA node (numa_cpu_bind), and the Dynamo frontend sets DYN_TOKEN_IDS_AS_BYTES=1."
+    - "Workers run under numactl --cpunodebind and --preferred for the GPU's NUMA node (numa_cpu_bind with numa_memory_bind: preferred)."
+    - "The Dynamo frontend sets DYN_TOKEN_IDS_AS_BYTES=1; DEP points place it on the first decode node and TEP 2P1D/2P2D points run the benchmark client on the head node."
+    - "Bump srt-slurm from v2.59.1 to v2.60.1 for preferred NUMA memory binding and evals that follow the resolved frontend endpoint."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4356
