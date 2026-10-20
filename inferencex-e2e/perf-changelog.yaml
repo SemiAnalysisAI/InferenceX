@@ -10373,4 +10373,5 @@
     - "Replace the Mooncake RDMA store with vLLM SimpleCPUOffloadConnector for single-node host DRAM KV offload; Mooncake RDMA registration on the DSXE EFA rail failed with ENOMEM on every rank."
     - "Raise dram-utilization from 0.75 to 1.0 so the DRAM tier takes the full 3 TB AgentX ceiling (total-cpu-dram-gb 2249 -> 2999, cpu_bytes_to_use_per_rank 374875000000) at every point."
     - "Sweep concurrency 1, 4, 16, 24, 32, 40, 48, 56 and 64: drop conc 2, 8 and 70 and add conc 64 (max-num-seqs 128)."
+    - "Drop prefix-match-unit 128: SimpleCPUOffloadConnector asserts CPU cache hits are scheduler-block aligned, and 128-token KDA partial hits killed the engine (num_external_tokens=21760 not aligned to block_size=12288)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4348

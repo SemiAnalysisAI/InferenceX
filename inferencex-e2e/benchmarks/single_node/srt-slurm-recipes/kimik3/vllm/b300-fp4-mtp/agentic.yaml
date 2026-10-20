@@ -38,8 +38,9 @@ base:
         moe-backend: auto
         no-enable-flashinfer-autotune: true
         enable-cumem-allocator: true
+        # No prefix-match-unit: SimpleCPUOffloadConnector asserts CPU hits are
+        # scheduler-block aligned, and sub-block KDA hits trip it.
         enable-prefix-caching: true
-        prefix-match-unit: 128
         kv-cache-dtype: fp8
         stream-interval: 10
         attention-backend: TOKENSPEED_MLA
