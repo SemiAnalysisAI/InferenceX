@@ -10245,3 +10245,14 @@
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#57392 (AITER Gluon KDA kernels for decode and spec decode), #61207 (stage fused KDA decode weights after loading), #61654 (MLA wrapper no longer reads W_UK_T before weight loading), #61895 (any-shape low-latency MoE router GEMM on MI355), #59406 (preshuffled FP4 GEMM config probed by logical K), #58381 (lighter MLA metadata build), #59070 (DCP prefill context kept in FP8 through AllGather), #59468 (DSpark draft slots no longer reserved in the scheduler token budget) and #61230 (AITER v0.1.25 base)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: the checkpoint is all BF16 with no quantization_config, and at both images the draft takes its own quantization config (get_draft_quant_config()), so the target quantization-config does not reach it. The draft runs BF16 weights with an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
+
+- config-keys:
+    - dsv41flash-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image from vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7 to vllm/vllm-openai:cu134-nightly-x86_64-dev-20261019-mk, pinned by digest."
+    - "TP4: run concurrency 1, 8 and 16 with decode_backend=latency_specialized; prefill-schedule-interval 160 and 128 at concurrency 8 and 16; max-num-seqs 1 at concurrency 1; drop concurrency 4; add capture size 5."
+    - "DEP2: set prefill-schedule-interval 80, 80, 80, 56, 32 and 32 and max-num-batched-tokens 16384, 16384, 16384, 32768, 16384 and 16384 at concurrency 8, 16, 32, 64, 128 and 192."
+    - "DEP2 concurrency 128 and 192: offload KV blocks to DRAM with SimpleCPUOffloadConnector (lazy, 50 GiB per rank)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4332

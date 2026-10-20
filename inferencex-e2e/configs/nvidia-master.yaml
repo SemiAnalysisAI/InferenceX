@@ -8475,7 +8475,7 @@ musespark-fp4-h200-sglang-agentic-dflash:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7
+  image: vllm/vllm-openai:cu134-nightly-x86_64-dev-20261019-mk@sha256:2b9fc4b18d0aaabe4d5cad020d9270106472ebe65f5d3bc02c50526b8d9fd280
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -8487,12 +8487,13 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
+      # Engram weights use UVA DRAM; DEP2 at conc 128 and 192 also offloads KV blocks to DRAM.
       # TP4 covers low concurrency with FlashInfer attention and THP Engram tables.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 8, 16], srt-recipe: agentic.yaml }
       # DEP2 is native TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash vLLM
       # Router; FlashInfer attention up to conc 64, MegaAttention above.
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64, 128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7
