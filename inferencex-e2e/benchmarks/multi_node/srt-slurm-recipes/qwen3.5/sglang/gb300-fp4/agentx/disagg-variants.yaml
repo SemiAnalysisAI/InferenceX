@@ -1,11 +1,10 @@
-
 schema: 2
 
 base:
   dynamo:
     install: true
     source:
-      rev: 5a638087d82c990d35c69cb8e41c2c2582e9ef9a
+      rev: b208989fbe1cfbfde64d11334d8af4ff04fe1a99
   slurm:
     time_limit: '8:00:00'
   health_check:
@@ -17,148 +16,148 @@ base:
   services:
     - name: etcd
       type: etcd
-      placement:
-        node: dedicated
     - name: nats
       type: nats
-      placement:
-        node: dedicated
       options:
         max_payload_mb: 8
   frontend:
     type: dynamo
     nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
     enable_multiple_frontends: true
-    num_additional_frontends: 4
     env:
       PIP_BREAK_SYSTEM_PACKAGES: '1'
     args:
       router-mode: kv
-      router-session-affinity-ttl-secs: '3600'
       active-decode-blocks-threshold: None
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
-    nginx_session_affinity_header: X-Dynamo-Session-ID
+      router-replica-sync: true
+      router-queue-threshold: None
   engine: sglang
   roles:
     prefill:
-      nodes: 1
-      workers: 1
-      gpus: 4
       env:
-        FLASHINFER_DISABLE_VERSION_CHECK: '1'
-        FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache
-        MC_FORCE_MNNVL: '1'
-        NCCL_CUMEM_ENABLE: '1'
-        NCCL_MNNVL_ENABLE: '1'
-        NCCL_NVLS_ENABLE: '1'
-        NO_COLOR: '1'
-        PIP_BREAK_SYSTEM_PACKAGES: '1'
-        PYTHONUNBUFFERED: '1'
-        SGLANG_DG_CACHE_DIR: /configs/deepgemm-cache
-        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
-        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
-        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        PYTHONOPTIMIZE: '1'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_DISAGG_STAGING_BUFFER: '1'
-        SGLANG_DISAGG_STAGING_BUFFER_SIZE_MB: '1024'
-        SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
+        NO_COLOR: '1'
+        PYTHONUNBUFFERED: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '0'
+        MC_FORCE_MNNVL: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-        SGLANG_ENABLE_SPEC_V2: '1'
         SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+        FLASHINFER_DISABLE_VERSION_CHECK: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
         SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '8192'
+        SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
+        SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
+        SGLANG_FLASHINFER_AUTOTUNE_EXTEND: '1'
+        SGLANG_FLASHINFER_MOE_FUSED_FINALIZE: '1'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
       args:
         served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
-        enable-cache-report: true
-        enable-metrics: true
         model-path: /model/
+        enable-metrics: true
+        enable-cache-report: true
+        trust-remote-code: true
         quantization: modelopt_fp4
         kv-cache-dtype: fp8_e4m3
-        trust-remote-code: true
-        tensor-parallel-size: 4
+        tensor-parallel-size: 1
         data-parallel-size: 1
         expert-parallel-size: 1
-        enable-dp-attention: false
-        enable-dp-lm-head: false
+        disable-overlap-schedule: true
         mamba-ssm-dtype: bfloat16
+        mamba-radix-cache-strategy: extra_buffer
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
         disaggregation-mode: prefill
         disaggregation-bootstrap-port: 31000
         load-balance-method: round_robin
-        watchdog-timeout: 1000000
-        log-level: info
         page-size: 64
         attention-backend: trtllm_mha
-        moe-runner-backend: flashinfer_trtllm
-        linear-attn-decode-backend: flashinfer
-        mem-fraction-static: 0.8
-        chunked-prefill-size: 65536
-        disable-cuda-graph: true
-        mamba-scheduler-strategy: extra_buffer
-        mamba-track-interval: 2048
+        moe-runner-backend: flashinfer_cutedsl
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 6
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 7
+        linear-attn-decode-backend: triton
         enable-hierarchical-cache: true
         hicache-write-policy: write_back
-        mamba-max-states-per-path: 3
-        max-mamba-cache-size: 1100
         hicache-io-backend: kernel
-        hicache-mem-layout: page_first_direct
-        hicache-ratio: 0.9
+        watchdog-timeout: 1000000
+        log-level: info
+        nccl-port: 29500
+        scheduler-recv-interval: 1
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-prefetch-num-threads: 4
+        moe-dense-tp-size: 1
+        disable-shared-experts-fusion: true
+        moe-a2a-backend: none
+        speculative-moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        disable-cuda-graph: true
+        dist-timeout: 1800
     decode:
-      nodes: 1
-      workers: 1
-      gpus: 4
       env:
-        FLASHINFER_DISABLE_VERSION_CHECK: '1'
-        FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache
-        MC_FORCE_MNNVL: '1'
-        MC_TE_METRIC: 'true'
-        NCCL_CUMEM_ENABLE: '1'
-        NCCL_MNNVL_ENABLE: '1'
-        NCCL_NVLS_ENABLE: '1'
-        NO_COLOR: '1'
-        PIP_BREAK_SYSTEM_PACKAGES: '1'
-        PYTHONUNBUFFERED: '1'
-        SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
-        SGLANG_DECODE_BOOTSTRAP_TIMEOUT: '1000'
-        SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '256'
-        SGLANG_DG_CACHE_DIR: /configs/deepgemm-cache
-        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
-        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
-        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
-        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_DISAGG_STAGING_BUFFER: '1'
-        SGLANG_DISAGG_STAGING_BUFFER_SIZE_MB: '1024'
-        SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
-        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
-        SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
-        SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
-        SGLANG_ENABLE_SPEC_V2: '1'
-        SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
-        SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: '1'
-        SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
-        SGLANG_HEALTH_STARTING_OK: '1'
-        SGLANG_MOE_NVFP4_DISPATCH: '1'
-        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-        SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
-        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
-        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        NO_COLOR: '1'
+        PYTHONUNBUFFERED: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '0'
+        MC_FORCE_MNNVL: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
+        MC_TE_METRIC: 'true'
+        SGLANG_ENABLE_SPEC_V2: '1'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
+        SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+        SGLANG_MOE_NVFP4_DISPATCH: '1'
+        SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
+        SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+        FLASHINFER_DISABLE_VERSION_CHECK: '1'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+        SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
+        SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+        SGLANG_DISAGG_STAGING_POOL_SIZE_MB: '8192'
+        SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
+        SGLANG_FLASHINFER_MOE_FUSED_FINALIZE: '1'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
+        SGLANG_Q35MF_PDDEC_FENCE: '1'
+        SGLANG_Q35MF_PDDEC_DEFER_PREALLOC: '1'
+        SGLANG_Q35MF_PDDEC_NONBLOCKING_ADMIT: '1'
       args:
         served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
-        enable-cache-report: true
-        enable-metrics: true
         model-path: /model/
+        enable-metrics: true
+        enable-cache-report: true
         trust-remote-code: true
         quantization: modelopt_fp4
         kv-cache-dtype: fp8_e4m3
-        tensor-parallel-size: 4
-        data-parallel-size: 1
-        expert-parallel-size: 1
-        enable-dp-attention: false
-        enable-dp-lm-head: false
-        prefill-round-robin-balance: true
-        mamba-scheduler-strategy: no_buffer
+        pipeline-parallel-size: 1
+        load-balance-method: round_robin
         mamba-track-interval: 128
         mamba-ssm-dtype: bfloat16
         disaggregation-mode: decode
@@ -166,21 +165,22 @@ base:
         disaggregation-bootstrap-port: 31000
         page-size: 64
         attention-backend: trtllm_mha
-        moe-runner-backend: flashinfer_trtllm
-        linear-attn-decode-backend: flashinfer
+        linear-attn-decode-backend: triton
         disable-shared-experts-fusion: true
-        ep-dispatch-algorithm: static
-        eplb-algorithm: deepseek
         speculative-algorithm: NEXTN
-        speculative-num-steps: 3
+        speculative-num-steps: 6
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 4
+        speculative-num-draft-tokens: 7
         chunked-prefill-size: 4096
-        mem-fraction-static: 0.75
-        max-mamba-cache-size: 1024
-        max-running-requests: 512
+        mem-fraction-static: 0.85
+        stream-interval: 30
+        enable-linear-replayssm-spec: true
+        decode-log-interval: 30
         watchdog-timeout: 1000000
-        decode-log-interval: 10
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-prefetch-num-threads: 4
+        mamba-radix-cache-strategy: no_buffer
+        dist-timeout: 1800
   sbatch_directives:
     mem: '0'
     cpus-per-task: '144'
@@ -193,68 +193,865 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-override_tp4_tp4_c8:
-  name: disagg-gb300-1p1d-tp4-tp4-c8-mtp-hicache-session-jid2530030
-  roles:
-    decode:
-      args:
-        cuda-graph-max-bs: 64
-
-override_tp4_tp4_c16:
-  name: disagg-gb300-1p1d-tp4-tp4-c16-mtp-hicache-session-jid2530027
-  roles:
-    decode:
-      args:
-        cuda-graph-max-bs: 64
-
-override_tp4_tp4_c32:
-  name: disagg-gb300-1p1d-tp4-tp4-c32-mtp-hicache-session-jid2530028
-  roles:
-    decode:
-      args:
-        cuda-graph-max-bs: 64
-
-override_tp4_tp4_c64:
-  name: disagg-gb300-1p1d-tp4-tp4-c64-mtp-hicache-session-jid2530029
-  roles:
-    decode:
-      args:
-        cuda-graph-max-bs: 80
-
-override_tp4_tp4_c96:
-  name: disagg-gb300-1p1d-tp4-tp4-c96-mtp-hicache-session-jid2527409
-  roles:
-    decode:
-      args:
-        cuda-graph-max-bs: 128
-
-override_tp4_tp4_c128:
-  name: disagg-gb300-1p1d-tp4-tp4-c128-mtp-hicache-session-jid2527417
-  roles:
-    decode:
-      args:
-        cuda-graph-max-bs: 160
-
-override_tp2_tp2_c72:
-  name: disagg-gb300-1p1d-tp2-tp2-c72-mtp-hicache-session-jid2527415
-  resources:
-    gpus_per_node: 2
+override_3p1d_dep8_cap32:
+  name: disagg-gb300-3p1d-dep8-cap32-mtp-hicache
+  frontend:
+    num_additional_frontends: 1
+    worker_selection:
+      decode: dynamo-two-tier-cost-fn
+      instances:
+        - name: dynamo-two-tier-cost-fn
+          type: dynamo-two-tier-cost-fn
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-session-affinity-mode: soft
+      router-temperature: '1.0'
   roles:
     prefill:
-      gpus: 2
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        SGLANG_PP_LAYER_PARTITION: 16,16,16,12
+        SGLANG_Q35MF_GDN_PREFILL_SPLIT_CONV: '1'
       args:
-        speculative-algorithm: NEXTN
-        speculative-num-steps: 3
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 4
-        tensor-parallel-size: 2
-        max-mamba-cache-size: 320
-        mamba-max-states-per-path: 1
+        pipeline-parallel-size: 4
+        max-mamba-cache-size: 1536
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 0.9
+        pp-async-batch-depth: 1
     decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+        SGLANG_Q35MF_PDDEC_SPLIT_HOIST: '1'
+      args:
+        gc-warning-threshold-secs: 0.2
+        gc-threshold:
+          - 50000
+          - 50
+          - 1000
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        moe-dense-tp-size: 1
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-runner-backend: flashinfer_cutedsl
+        moe-a2a-backend: flashinfer
+        ep-dispatch-algorithm: static
+        eplb-algorithm: deepseek
+        speculative-moe-runner-backend: flashinfer_trtllm_routed
+        speculative-moe-a2a-backend: flashinfer
+        max-mamba-cache-size: 936
+        max-running-requests: 256
+        disaggregation-decode-extra-slots: 64
+        linear-replayssm-cache-len: 32
+        cuda-graph-max-bs-decode: 32
+        max-total-tokens: 12000000
+
+override_3p1d_dep16_cap12:
+  name: disagg-gb300-3p1d-dep16-cap12-mtp-hicache
+  frontend:
+    num_additional_frontends: 1
+    worker_selection:
+      decode: dynamo-two-tier-cost-fn
+      instances:
+        - name: dynamo-two-tier-cost-fn
+          type: dynamo-two-tier-cost-fn
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-session-affinity-mode: soft
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        SGLANG_PP_LAYER_PARTITION: 16,16,16,12
+        SGLANG_Q35MF_GDN_PREFILL_SPLIT_CONV: '1'
+        SGLANG_Q35MF_GDN_PREFILL_TILES: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NO_A_MEMSET: '1'
+        SGLANG_Q35MF_GDN_PREFILL_CONV_VEC: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NORM_FP8: '1'
+        SGLANG_Q35MF_K4_FI_CKPT_SPARSE: '1'
+      args:
+        pipeline-parallel-size: 4
+        max-mamba-cache-size: 1536
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 0.9
+        pp-async-batch-depth: 1
+        linear-attn-prefill-backend: flashinfer
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_Q35MF_K4_MLP_SYNC_SIDE_STREAM: '1'
+      args:
+        gc-threshold:
+          - 50000
+          - 50
+          - 1000
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        moe-dense-tp-size: 1
+        enable-dp-attention: true
+        moe-runner-backend: flashinfer_cutedsl
+        moe-a2a-backend: flashinfer
+        ep-dispatch-algorithm: static
+        eplb-algorithm: deepseek
+        speculative-moe-runner-backend: flashinfer_trtllm_routed
+        speculative-moe-a2a-backend: flashinfer
+        max-mamba-cache-size: 1872
+        max-running-requests: 192
+        linear-replayssm-cache-len: 32
+        cuda-graph-max-bs-decode: 12
+        max-total-tokens: 13000000
+
+override_3p1d_dep16_cap12_combine_split:
+  name: disagg-gb300-3p1d-dep16-cap12-combine-split-mtp-hicache
+  frontend:
+    num_additional_frontends: 1
+    worker_selection:
+      decode: dynamo-two-tier-cost-fn
+      instances:
+        - name: dynamo-two-tier-cost-fn
+          type: dynamo-two-tier-cost-fn
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-session-affinity-mode: soft
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        SGLANG_PP_LAYER_PARTITION: 16,16,16,12
+        SGLANG_Q35MF_GDN_PREFILL_SPLIT_CONV: '1'
+        SGLANG_Q35MF_GDN_PREFILL_TILES: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NO_A_MEMSET: '1'
+        SGLANG_Q35MF_GDN_PREFILL_CONV_VEC: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NORM_FP8: '1'
+        SGLANG_Q35MF_K4_FI_CKPT_SPARSE: '1'
+      args:
+        pipeline-parallel-size: 4
+        max-mamba-cache-size: 1536
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 0.9
+        pp-async-batch-depth: 1
+        linear-attn-prefill-backend: flashinfer
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_Q35MF_K4_MLP_SYNC_SIDE_STREAM: '1'
+        SGLANG_Q35MF_MIDQ_COMBINE_SPLIT: '2'
+      args:
+        gc-threshold:
+          - 50000
+          - 50
+          - 1000
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        moe-dense-tp-size: 1
+        enable-dp-attention: true
+        moe-runner-backend: flashinfer_cutedsl
+        moe-a2a-backend: flashinfer
+        ep-dispatch-algorithm: static
+        eplb-algorithm: deepseek
+        speculative-moe-runner-backend: flashinfer_trtllm_routed
+        speculative-moe-a2a-backend: flashinfer
+        max-mamba-cache-size: 1872
+        max-running-requests: 192
+        linear-replayssm-cache-len: 32
+        cuda-graph-max-bs-decode: 12
+        max-total-tokens: 13000000
+
+override_3p1d_dep16_cap9:
+  name: disagg-gb300-3p1d-dep16-cap9-mtp-hicache
+  frontend:
+    num_additional_frontends: 1
+    worker_selection:
+      decode: dynamo-two-tier-cost-fn
+      instances:
+        - name: dynamo-two-tier-cost-fn
+          type: dynamo-two-tier-cost-fn
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-session-affinity-mode: soft
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        SGLANG_PP_LAYER_PARTITION: 16,16,16,12
+        SGLANG_Q35MF_GDN_PREFILL_SPLIT_CONV: '1'
+        SGLANG_Q35MF_GDN_PREFILL_TILES: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NO_A_MEMSET: '1'
+        SGLANG_Q35MF_GDN_PREFILL_CONV_VEC: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NORM_FP8: '1'
+        SGLANG_Q35MF_K4_FI_CKPT_SPARSE: '1'
+        SGLANG_Q35MF_PPO: '1'
+      args:
+        pipeline-parallel-size: 4
+        max-mamba-cache-size: 1536
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 0.9
+        pp-async-batch-depth: 1
+        linear-attn-prefill-backend: flashinfer
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_Q35MF_K4_MLP_SYNC_SIDE_STREAM: '1'
+        SGLANG_Q35MF_MIDQ_COMBINE_SPLIT: '2'
+        SGLANG_Q35MF_K75P_LMHEAD: '1'
+      args:
+        gc-threshold:
+          - 50000
+          - 50
+          - 1000
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        moe-dense-tp-size: 1
+        enable-dp-attention: true
+        moe-runner-backend: flashinfer_cutedsl
+        moe-a2a-backend: flashinfer
+        ep-dispatch-algorithm: static
+        eplb-algorithm: deepseek
+        speculative-moe-runner-backend: flashinfer_trtllm_routed
+        speculative-moe-a2a-backend: flashinfer
+        max-mamba-cache-size: 1872
+        max-running-requests: 144
+        linear-replayssm-cache-len: 32
+        cuda-graph-max-bs-decode: 9
+        max-total-tokens: 13000000
+
+override_2p1d_dep16_cap6:
+  name: disagg-gb300-2p1d-dep16-cap6-mtp-hicache
+  frontend:
+    num_additional_frontends: 1
+    worker_selection:
+      decode: dynamo-two-tier-cost-fn
+      instances:
+        - name: dynamo-two-tier-cost-fn
+          type: dynamo-two-tier-cost-fn
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-session-affinity-mode: soft
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      gpus: 4
+      env:
+        SGLANG_PP_LAYER_PARTITION: 16,16,16,12
+        SGLANG_Q35MF_GDN_PREFILL_SPLIT_CONV: '1'
+        SGLANG_Q35MF_GDN_PREFILL_TILES: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NO_A_MEMSET: '1'
+        SGLANG_Q35MF_GDN_PREFILL_CONV_VEC: '1'
+        SGLANG_Q35MF_GDN_PREFILL_NORM_FP8: '1'
+        SGLANG_Q35MF_K4_FI_CKPT_SPARSE: '1'
+      args:
+        pipeline-parallel-size: 4
+        max-mamba-cache-size: 1536
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        max-prefill-tokens: 32768
+        chunked-prefill-size: 32768
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 0.9
+        pp-async-batch-depth: 1
+        linear-attn-prefill-backend: flashinfer
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_Q35MF_K4_MLP_SYNC_SIDE_STREAM: '1'
+        SGLANG_Q35MF_MIDQ_COMBINE_SPLIT: '2'
+      args:
+        gc-threshold:
+          - 50000
+          - 50
+          - 1000
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        moe-dense-tp-size: 1
+        enable-dp-attention: true
+        moe-runner-backend: flashinfer_cutedsl
+        moe-a2a-backend: flashinfer
+        ep-dispatch-algorithm: static
+        eplb-algorithm: deepseek
+        speculative-moe-runner-backend: flashinfer_trtllm_routed
+        speculative-moe-a2a-backend: flashinfer
+        max-mamba-cache-size: 1872
+        max-running-requests: 96
+        linear-replayssm-cache-len: 32
+        cuda-graph-max-bs-decode: 6
+        max-total-tokens: 13000000
+
+override_1p1d_tp2_cap10:
+  name: disagg-gb300-1p1d-tp2-cap10-mtp-hicache
+  frontend:
+    num_additional_frontends: 0
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      env:
+        SGLANG_Q35MF_K4_MROPE_GPU: '1'
+      args:
+        pipeline-parallel-size: 1
+        max-mamba-cache-size: 128
+        max-running-requests: 16
+        mem-fraction-static: 0.94
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        hicache-mem-layout: page_first
+        hicache-ratio: 12
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-max-bs-prefill: 8192
+    decode:
+      nodes: colocate
+      workers: 1
       gpus: 2
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
+        SGLANG_Q35MF_GDN_VIEWS: '1'
+        SGLANG_Q35MF_GDN_LAZY_VALID: '1'
+        SGLANG_Q35MF_GDN_CONV_TILE: '1'
+        SGLANG_Q35MF_GDN_TILED_VERIFY: '1'
+        SGLANG_Q35MF_GDN_NORM_FP8: '1'
+        SGLANG_Q35MF_ATTN_FRONT: '1'
+        SGLANG_Q35MF_ATTN_GATE_QUANT: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_ENABLE_METADATA_GLUE_GRAPH: '0'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_GRAPH: '1'
+        SGLANG_Q35MF_EDGE_CHAIN_TREE: '1'
+        SGLANG_Q35MF_ROUTE_FUSED: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_COPY: '1'
+        SGLANG_Q35MF_ARRIVE_D2H_RING: '1'
+        SGLANG_Q35MF_ARRIVE_SKIP_REGATHER: '1'
+        SGLANG_Q35MF_ARRIVE_DECODE_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_SEQ_LENS_SELECT: '1'
+        SGLANG_Q35MF_ARRIVE_COPY_PLAN: '1'
+        SGLANG_Q35MF_DRAFT_ARGMAX_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_EXTEND_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_FC_SPLIT: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_EDGE_SIDE_STREAM_COMMIT: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_GDN_DIRECT_SOLVE: '0'
+        SGLANG_Q35MF_GDN_EMPTY_HISTORY: '0'
+        SGLANG_Q35MF_ROUTE_PARQ: '1'
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
+        SGLANG_Q35MF_DRAFT_VOCAB_EXCHANGE_MAX_ROWS: '12'
+        SGLANG_Q35MF_GDN_VERIFY_BV64: '1'
+        SGLANG_Q35MF_GDN_PDL: '1'
+        SGLANG_Q35MF_BK_DRAFT_META: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_BK_STASH_SCATTER: '1'
+        SGLANG_Q35MF_BK_EXTEND_ARGMAX: '1'
+        SGLANG_Q35MF_CUTEDSL_LL_MAX_M: '96'
+        SGLANG_Q35MF_PDDEC_SHARDED_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_ROUTE_TABLES_MAX_TOKENS: '84'
+        SGLANG_Q35MF_FP8_BMM_TACTICS: /sgl-workspace/sglang/python/sglang/srt/layers/quantization/configs/fp8_bmm_tactics_gb300_tp2.json
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES: '1'
+        SGLANG_Q35MF_ROUTE2_EARLY_TRIGGER: '1'
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES_MIN_TOKENS: '1'
+        SGLANG_Q35MF_K4_SIDE_PRIO_MAX_TOKENS: '16'
+        SGLANG_Q35MF_KGDN_VERIFY_REG168: '1'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MAX_TOKENS: '84'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MIN_TOKENS: '17'
+        SGLANG_Q35MF_K4_PARQ_MAX_TOKENS: '84'
+        SGLANG_Q35MF_KDENSE_DRAFT_FC_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_ARGMAX_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_META_BRANCH: '1'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_MAX_BS: '10'
+        SGLANG_Q35MF_D2R_PVG_SHARDED: '1'
       args:
         tensor-parallel-size: 2
-        max-mamba-cache-size: 80
-        max-running-requests: 80
-        cuda-graph-max-bs: 128
-        mamba-max-states-per-path: -1
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        moe-dense-tp-size: 2
+        moe-runner-backend: flashinfer_trtllm
+        moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        max-mamba-cache-size: 936
+        max-running-requests: 10
+        cuda-graph-max-bs-decode: 10
+        flashinfer-allreduce-fusion-backend: cutedsl
+        disable-attn-tp-gather: true
+        pp-max-micro-batch-size: 10
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+
+override_1p1d_tp2_cap12:
+  name: disagg-gb300-1p1d-tp2-cap12-mtp-hicache
+  frontend:
+    num_additional_frontends: 0
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      env:
+        SGLANG_Q35MF_K4_MROPE_GPU: '1'
+      args:
+        pipeline-parallel-size: 1
+        max-mamba-cache-size: 128
+        max-running-requests: 16
+        mem-fraction-static: 0.94
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        hicache-mem-layout: page_first
+        hicache-ratio: 12
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-max-bs-prefill: 8192
+    decode:
+      nodes: colocate
+      workers: 1
+      gpus: 2
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
+        SGLANG_Q35MF_GDN_VIEWS: '1'
+        SGLANG_Q35MF_GDN_LAZY_VALID: '1'
+        SGLANG_Q35MF_GDN_CONV_TILE: '1'
+        SGLANG_Q35MF_GDN_TILED_VERIFY: '1'
+        SGLANG_Q35MF_GDN_NORM_FP8: '1'
+        SGLANG_Q35MF_ATTN_FRONT: '1'
+        SGLANG_Q35MF_ATTN_GATE_QUANT: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_ENABLE_METADATA_GLUE_GRAPH: '0'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_GRAPH: '1'
+        SGLANG_Q35MF_EDGE_CHAIN_TREE: '1'
+        SGLANG_Q35MF_ROUTE_FUSED: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_COPY: '1'
+        SGLANG_Q35MF_ARRIVE_D2H_RING: '1'
+        SGLANG_Q35MF_ARRIVE_SKIP_REGATHER: '1'
+        SGLANG_Q35MF_ARRIVE_DECODE_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_SEQ_LENS_SELECT: '1'
+        SGLANG_Q35MF_ARRIVE_COPY_PLAN: '1'
+        SGLANG_Q35MF_DRAFT_ARGMAX_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_EXTEND_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_FC_SPLIT: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_EDGE_SIDE_STREAM_COMMIT: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_GDN_DIRECT_SOLVE: '0'
+        SGLANG_Q35MF_GDN_EMPTY_HISTORY: '0'
+        SGLANG_Q35MF_ROUTE_PARQ: '1'
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
+        SGLANG_Q35MF_DRAFT_VOCAB_EXCHANGE_MAX_ROWS: '12'
+        SGLANG_Q35MF_GDN_VERIFY_BV64: '1'
+        SGLANG_Q35MF_GDN_PDL: '1'
+        SGLANG_Q35MF_BK_DRAFT_META: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_BK_STASH_SCATTER: '1'
+        SGLANG_Q35MF_BK_EXTEND_ARGMAX: '1'
+        SGLANG_Q35MF_CUTEDSL_LL_MAX_M: '96'
+        SGLANG_Q35MF_PDDEC_SHARDED_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_ROUTE_TABLES_MAX_TOKENS: '70'
+        SGLANG_Q35MF_FP8_BMM_TACTICS: /sgl-workspace/sglang/python/sglang/srt/layers/quantization/configs/fp8_bmm_tactics_gb300_tp2.json
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES: '1'
+        SGLANG_Q35MF_ROUTE2_EARLY_TRIGGER: '1'
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES_MIN_TOKENS: '1'
+        SGLANG_Q35MF_K4_SIDE_PRIO_MAX_TOKENS: '16'
+        SGLANG_Q35MF_KGDN_VERIFY_REG168: '1'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MIN_TOKENS: '17'
+        SGLANG_Q35MF_K4_PARQ_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KDENSE_DRAFT_FC_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_ARGMAX_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_META_BRANCH: '1'
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        moe-dense-tp-size: 2
+        moe-runner-backend: flashinfer_trtllm
+        moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        max-mamba-cache-size: 936
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+        flashinfer-allreduce-fusion-backend: cutedsl
+        disable-attn-tp-gather: true
+        pp-max-micro-batch-size: 12
+        cuda-graph-bs-decode:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+
+override_1p1d_tp2_cap5:
+  name: disagg-gb300-1p1d-tp2-cap5-mtp-hicache
+  frontend:
+    num_additional_frontends: 0
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      env:
+        SGLANG_Q35MF_K4_MROPE_GPU: '1'
+      args:
+        pipeline-parallel-size: 1
+        max-mamba-cache-size: 128
+        max-running-requests: 16
+        mem-fraction-static: 0.94
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        hicache-mem-layout: page_first
+        hicache-ratio: 12
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-max-bs-prefill: 8192
+    decode:
+      nodes: colocate
+      workers: 1
+      gpus: 2
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
+        SGLANG_Q35MF_GDN_VIEWS: '1'
+        SGLANG_Q35MF_GDN_LAZY_VALID: '1'
+        SGLANG_Q35MF_GDN_CONV_TILE: '1'
+        SGLANG_Q35MF_GDN_TILED_VERIFY: '1'
+        SGLANG_Q35MF_GDN_NORM_FP8: '1'
+        SGLANG_Q35MF_ATTN_FRONT: '1'
+        SGLANG_Q35MF_ATTN_GATE_QUANT: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_ENABLE_METADATA_GLUE_GRAPH: '0'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_GRAPH: '1'
+        SGLANG_Q35MF_EDGE_CHAIN_TREE: '1'
+        SGLANG_Q35MF_ROUTE_FUSED: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_COPY: '1'
+        SGLANG_Q35MF_ARRIVE_D2H_RING: '1'
+        SGLANG_Q35MF_ARRIVE_SKIP_REGATHER: '1'
+        SGLANG_Q35MF_ARRIVE_DECODE_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_SEQ_LENS_SELECT: '1'
+        SGLANG_Q35MF_ARRIVE_COPY_PLAN: '1'
+        SGLANG_Q35MF_DRAFT_ARGMAX_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_EXTEND_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_FC_SPLIT: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_EDGE_SIDE_STREAM_COMMIT: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_GDN_DIRECT_SOLVE: '0'
+        SGLANG_Q35MF_GDN_EMPTY_HISTORY: '0'
+        SGLANG_Q35MF_ROUTE_PARQ: '1'
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
+        SGLANG_Q35MF_DRAFT_VOCAB_EXCHANGE_MAX_ROWS: '12'
+        SGLANG_Q35MF_GDN_VERIFY_BV64: '1'
+        SGLANG_Q35MF_GDN_PDL: '1'
+        SGLANG_Q35MF_BK_DRAFT_META: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_BK_STASH_SCATTER: '1'
+        SGLANG_Q35MF_BK_EXTEND_ARGMAX: '1'
+        SGLANG_Q35MF_CUTEDSL_LL_MAX_M: '96'
+        SGLANG_Q35MF_PDDEC_SHARDED_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_ROUTE_TABLES_MAX_TOKENS: '70'
+        SGLANG_Q35MF_FP8_BMM_TACTICS: /sgl-workspace/sglang/python/sglang/srt/layers/quantization/configs/fp8_bmm_tactics_gb300_tp2.json
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES: '1'
+        SGLANG_Q35MF_ROUTE2_EARLY_TRIGGER: '1'
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES_MIN_TOKENS: '1'
+        SGLANG_Q35MF_K4_SIDE_PRIO_MAX_TOKENS: '16'
+        SGLANG_Q35MF_KGDN_VERIFY_REG168: '1'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MIN_TOKENS: '17'
+        SGLANG_Q35MF_K4_PARQ_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KDENSE_DRAFT_FC_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_ARGMAX_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_META_BRANCH: '1'
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        moe-dense-tp-size: 2
+        moe-runner-backend: flashinfer_trtllm
+        moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        max-mamba-cache-size: 936
+        max-running-requests: 5
+        cuda-graph-max-bs-decode: 8
+        flashinfer-allreduce-fusion-backend: cutedsl
+        disable-attn-tp-gather: true
+        pp-max-micro-batch-size: 8
+
+override_1p1d_tp2_cap4:
+  name: disagg-gb300-1p1d-tp2-cap4-mtp-hicache
+  frontend:
+    num_additional_frontends: 0
+    args:
+      router-session-affinity-ttl-secs: '3600'
+      router-temperature: '1.0'
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      env:
+        SGLANG_Q35MF_K4_MROPE_GPU: '1'
+      args:
+        pipeline-parallel-size: 1
+        max-mamba-cache-size: 128
+        max-running-requests: 16
+        mem-fraction-static: 0.94
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        hicache-mem-layout: page_first
+        hicache-ratio: 12
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-max-bs-prefill: 8192
+    decode:
+      nodes: colocate
+      workers: 1
+      gpus: 2
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
+        SGLANG_Q35MF_GDN_VIEWS: '1'
+        SGLANG_Q35MF_GDN_LAZY_VALID: '1'
+        SGLANG_Q35MF_GDN_CONV_TILE: '1'
+        SGLANG_Q35MF_GDN_TILED_VERIFY: '1'
+        SGLANG_Q35MF_GDN_NORM_FP8: '1'
+        SGLANG_Q35MF_ATTN_FRONT: '1'
+        SGLANG_Q35MF_ATTN_GATE_QUANT: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_ENABLE_METADATA_GLUE_GRAPH: '0'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_GRAPH: '1'
+        SGLANG_Q35MF_EDGE_CHAIN_TREE: '1'
+        SGLANG_Q35MF_ROUTE_FUSED: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_COPY: '1'
+        SGLANG_Q35MF_ARRIVE_D2H_RING: '1'
+        SGLANG_Q35MF_ARRIVE_SKIP_REGATHER: '1'
+        SGLANG_Q35MF_ARRIVE_DECODE_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_SEQ_LENS_SELECT: '1'
+        SGLANG_Q35MF_ARRIVE_COPY_PLAN: '1'
+        SGLANG_Q35MF_DRAFT_ARGMAX_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_EXTEND_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_FC_SPLIT: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_EDGE_SIDE_STREAM_COMMIT: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_GDN_DIRECT_SOLVE: '0'
+        SGLANG_Q35MF_GDN_EMPTY_HISTORY: '0'
+        SGLANG_Q35MF_ROUTE_PARQ: '1'
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
+        SGLANG_Q35MF_DRAFT_VOCAB_EXCHANGE_MAX_ROWS: '12'
+        SGLANG_Q35MF_GDN_VERIFY_BV64: '1'
+        SGLANG_Q35MF_GDN_PDL: '1'
+        SGLANG_Q35MF_BK_DRAFT_META: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_BK_STASH_SCATTER: '1'
+        SGLANG_Q35MF_BK_EXTEND_ARGMAX: '1'
+        SGLANG_Q35MF_CUTEDSL_LL_MAX_M: '96'
+        SGLANG_Q35MF_PDDEC_SHARDED_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_ROUTE_TABLES_MAX_TOKENS: '70'
+        SGLANG_Q35MF_FP8_BMM_TACTICS: /sgl-workspace/sglang/python/sglang/srt/layers/quantization/configs/fp8_bmm_tactics_gb300_tp2.json
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES: '1'
+        SGLANG_Q35MF_ROUTE2_EARLY_TRIGGER: '1'
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES_MIN_TOKENS: '1'
+        SGLANG_Q35MF_K4_SIDE_PRIO_MAX_TOKENS: '16'
+        SGLANG_Q35MF_KGDN_VERIFY_REG168: '1'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MIN_TOKENS: '17'
+        SGLANG_Q35MF_K4_PARQ_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KDENSE_DRAFT_FC_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_ARGMAX_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_META_BRANCH: '1'
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        moe-dense-tp-size: 2
+        moe-runner-backend: flashinfer_trtllm
+        moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        max-mamba-cache-size: 936
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        flashinfer-allreduce-fusion-backend: cutedsl
+        disable-attn-tp-gather: true
+        pp-max-micro-batch-size: 4
+
+override_1p2d_tp2_cap3:
+  name: disagg-gb300-1p2d-tp2-cap3-mtp-hicache
+  frontend:
+    num_additional_frontends: 0
+    args:
+      router-temperature: '0.0'
+      router-decode-active-request-weight: '8192'
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 1
+      env:
+        SGLANG_Q35MF_K4_MROPE_GPU: '1'
+      args:
+        pipeline-parallel-size: 1
+        max-mamba-cache-size: 128
+        max-running-requests: 16
+        mem-fraction-static: 0.94
+        max-prefill-tokens: 8192
+        chunked-prefill-size: 8192
+        hicache-mem-layout: page_first
+        hicache-ratio: 12
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-max-bs-prefill: 8192
+    decode:
+      nodes: 1
+      workers: 2
+      gpus: 2
+      env:
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
+        SGLANG_Q35MF_GDN_VIEWS: '1'
+        SGLANG_Q35MF_GDN_LAZY_VALID: '1'
+        SGLANG_Q35MF_GDN_CONV_TILE: '1'
+        SGLANG_Q35MF_GDN_TILED_VERIFY: '1'
+        SGLANG_Q35MF_GDN_NORM_FP8: '1'
+        SGLANG_Q35MF_ATTN_FRONT: '1'
+        SGLANG_Q35MF_ATTN_GATE_QUANT: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_ENABLE_METADATA_GLUE_GRAPH: '0'
+        SGLANG_Q35MF_EDGE_POST_VERIFY_GRAPH: '1'
+        SGLANG_Q35MF_EDGE_CHAIN_TREE: '1'
+        SGLANG_Q35MF_ROUTE_FUSED: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_COPY: '1'
+        SGLANG_Q35MF_ARRIVE_D2H_RING: '1'
+        SGLANG_Q35MF_ARRIVE_SKIP_REGATHER: '1'
+        SGLANG_Q35MF_ARRIVE_DECODE_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_DRAFT_PREP: '1'
+        SGLANG_Q35MF_ARRIVE_SEQ_LENS_SELECT: '1'
+        SGLANG_Q35MF_ARRIVE_COPY_PLAN: '1'
+        SGLANG_Q35MF_DRAFT_ARGMAX_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_EXTEND_EXCHANGE: '1'
+        SGLANG_Q35MF_DRAFT_FC_SPLIT: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_EDGE_SIDE_STREAM_COMMIT: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_GDN_DIRECT_SOLVE: '0'
+        SGLANG_Q35MF_GDN_EMPTY_HISTORY: '0'
+        SGLANG_Q35MF_ROUTE_PARQ: '1'
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
+        SGLANG_Q35MF_DRAFT_VOCAB_EXCHANGE_MAX_ROWS: '12'
+        SGLANG_Q35MF_GDN_VERIFY_BV64: '1'
+        SGLANG_Q35MF_GDN_PDL: '1'
+        SGLANG_Q35MF_BK_DRAFT_META: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_BK_STASH_SCATTER: '1'
+        SGLANG_Q35MF_BK_EXTEND_ARGMAX: '1'
+        SGLANG_Q35MF_CUTEDSL_LL_MAX_M: '96'
+        SGLANG_Q35MF_PDDEC_SHARDED_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_ROUTE_TABLES_MAX_TOKENS: '70'
+        SGLANG_Q35MF_FP8_BMM_TACTICS: /sgl-workspace/sglang/python/sglang/srt/layers/quantization/configs/fp8_bmm_tactics_gb300_tp2.json
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES: '1'
+        SGLANG_Q35MF_ROUTE2_EARLY_TRIGGER: '1'
+        SGLANG_Q35MF_ROUTE2_SMALL_TABLES_MIN_TOKENS: '1'
+        SGLANG_Q35MF_K4_SIDE_PRIO_MAX_TOKENS: '16'
+        SGLANG_Q35MF_KGDN_VERIFY_REG168: '1'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KTP2_SHARED_FUSED_MIN_TOKENS: '17'
+        SGLANG_Q35MF_K4_PARQ_MAX_TOKENS: '70'
+        SGLANG_Q35MF_KDENSE_DRAFT_FC_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_ARGMAX_XCHG: '1'
+        SGLANG_Q35MF_KDENSE_DRAFT_META_BRANCH: '1'
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 1
+        expert-parallel-size: 1
+        moe-dense-tp-size: 2
+        moe-runner-backend: flashinfer_trtllm
+        moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        max-mamba-cache-size: 936
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
+        flashinfer-allreduce-fusion-backend: cutedsl
+        disable-attn-tp-gather: true
+        pp-max-micro-batch-size: 3
