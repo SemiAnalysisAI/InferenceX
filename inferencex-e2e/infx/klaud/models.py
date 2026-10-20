@@ -9,6 +9,9 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+# A maintainer label that stops a candidate now and keeps the planner from retrying it while set.
+ABORT_LABEL = "klaud-abort"
+
 
 def utc(value: str | datetime) -> datetime:
     result = (
@@ -100,7 +103,7 @@ class CandidateOutcome(Contract):
         "already-updated",
         "uncertain",
         "failed",
-        "handoff",
+        "aborted",
         "unexpected-error",
     ]
     phase: Literal["resolve", "baseline", "targeted", "final-sweep", "cleanup", "unknown"]
@@ -124,7 +127,7 @@ class CandidateOutcome(Contract):
     def consistent_outcome(self) -> CandidateOutcome:
         if self.outcome != "unexpected-error" and self.phase == "unknown":
             raise ValueError("Completed outcomes require a known phase")
-        if self.outcome in ("validated", "handoff") and self.pull_request is None:
+        if self.outcome in ("validated", "aborted") and self.pull_request is None:
             raise ValueError("This outcome requires a PR")
         if self.outcome == "validated" and (not self.run_ids or self.phase != "final-sweep"):
             raise ValueError("Validated requires final-sweep evidence")
