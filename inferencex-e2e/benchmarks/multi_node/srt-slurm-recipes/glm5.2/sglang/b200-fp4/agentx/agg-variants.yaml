@@ -1,4 +1,3 @@
-
 schema: 2
 
 base:
@@ -7,86 +6,16 @@ base:
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
     container: {}
     frameworks:
-      dynamo: 1.5.0.dev20260909
-      sglang: 0.0.0.dev1+g008403017
+      dynamo: 1.5.0.dev20260903
   resources:
     gpu_type: b200
     gpus_per_node: 8
+  slurm:
+    time_limit: '4:00:00'
   dynamo:
-    install: false
-  engine: sglang
-  roles:
-    agg:
-      nodes: 1
-      workers: 1
-      gpus: 8
-      env:
-        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
-        PYTHONUNBUFFERED: '1'
-        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
-        MC_TE_METRIC: 'true'
-        NCCL_CUMEM_ENABLE: '1'
-        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
-        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
-        SGLANG_DEFAULT_THINKING: '1'
-        SGLANG_REASONING_EFFORT: max
-        SGLANG_HICACHE_DEBUG_LOG: '1'
-        SGLANG_HICACHE_DEBUG_SAMPLE_RATE: '16384'
-        SGLANG_MOE_NVFP4_DISPATCH: '1'
-        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
-        SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
-        PIP_BREAK_SYSTEM_PACKAGES: '1'
-      args:
-        served-model-name: nvidia/GLM-5.2-NVFP4
-        trust-remote-code: true
-        quantization: modelopt_fp4
-        kv-cache-dtype: fp8_e4m3
-        tensor-parallel-size: 8
-        data-parallel-size: 1
-        expert-parallel-size: 1
-        enable-dp-attention: false
-        enable-dp-lm-head: false
-        chunked-prefill-size: 8192
-        max-prefill-tokens: 8192
-        context-length: 1048576
-        speculative-algorithm: EAGLE
-        speculative-num-steps: 3
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 4
-        dsa-prefill-backend: trtllm
-        dsa-decode-backend: trtllm
-        moe-runner-backend: flashinfer_trtllm
-        fp4-gemm-backend: flashinfer_trtllm
-        disable-shared-experts-fusion: true
-        enable-flashinfer-allreduce-fusion: true
-        weight-loader-prefetch-checkpoints: true
-        model-loader-extra-config: '{"enable_multithread_load": true}'
-        mem-fraction-static: 0.8
-        enable-hierarchical-cache: true
-        hicache-write-policy: write_back
-        hicache-size: 110
-        hicache-io-backend: direct
-        watchdog-timeout: 1800
-        enable-metrics: true
-        enable-cache-report: true
-  benchmark:
-    env:
-      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-  health_check:
-    max_attempts: 1440
-    interval_seconds: 10
-  services:
-    - name: etcd
-      type: etcd
-      placement:
-        node: infra
-    - name: nats
-      type: nats
-      placement:
-        node: infra
-      options:
-        max_payload_mb: 64
+    install: true
+    source:
+      wheel: 1.5.0.dev20260903
   frontend:
     type: dynamo
     env:
@@ -97,32 +26,148 @@ base:
       active-prefill-tokens-threshold: None
       active-prefill-tokens-threshold-frac: None
       router-session-affinity-ttl-secs: 3600
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        quantization: modelopt_fp4
+        kv-cache-dtype: fp8_e4m3
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        bf16-gemm-backend: cutedsl
+        # GLM-5.2 emits the GLM-4.7 tool-call format.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        # TP4 weights take ~111 GiB per rank: ~0.7M-token KV pool, ~27 GiB activation headroom.
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        # SGLang membinds each rank to its GPU's NUMA node and GPUs 0-3 share node 0
+        # (~1,080 GB): 4 x (170 GB KV + 39 GB DSA indexer) pins ~836 GB of it.
+        enable-hierarchical-cache: true
+        hicache-size: 170
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        watchdog-timeout: 1800
+        enable-metrics: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AGENTIC_WARMUP_GRACE_PERIOD: '1800'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+      readiness:
+        port: 2379
+        timeout_seconds: 900
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 64
+      readiness:
+        port: 4222
+        timeout_seconds: 900
   sbatch_directives:
     mem: '0'
   srun_options:
     mem: '0'
     container-remap-root: ''
 
+override_tp8_c1:
+  name: glm52-b200-agg-tp8-c1-mtp
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        # Fan-out subagents queue instead of widening the decode batch past 2.
+        max-running-requests: 2
+        cuda-graph-max-bs: 2
+
 override_c1:
-  name: agg-b200-tp8-c1-mtp
+  name: glm52-b200-agg-tp4-c1-mtp
   roles:
     agg:
       args:
-        max-running-requests: 2
-        cuda-graph-max-bs-decode: 2
+        # Fan-out subagents queue behind the running request instead of sharing its decode steps.
+        max-running-requests: 1
+        cuda-graph-max-bs: 1
 
 override_c4:
-  name: agg-b200-tp8-c4-mtp
-  roles:
-    agg:
-      args:
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-
-override_c8:
-  name: agg-b200-tp8-c8-mtp
+  name: glm52-b200-agg-tp4-c4-mtp
   roles:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
+        cuda-graph-max-bs: 16
+
+override_c8:
+  name: glm52-b200-agg-tp4-c8-mtp
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+
+override_c12:
+  name: glm52-b200-agg-tp4-c12-mtp
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs: 32
+
+override_tp8_dp8attn_c32:
+  name: glm52-b200-agg-tp8-dp8attn-c32-mtp
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        # Aligns the DP ranks' prefills to cut idle time in the shared MoE passes.
+        enable-prefill-delayer: true
+        # Node totals under DP attention: 8192-token chunks and 16 requests per rank.
+        chunked-prefill-size: 65536
+        max-running-requests: 128
+        cuda-graph-max-bs: 16
+        # Unsplit attention weights per rank; leaves room for the DSA indexer's fp32 prefill logits.
+        mem-fraction-static: 0.82

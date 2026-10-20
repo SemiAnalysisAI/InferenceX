@@ -49,6 +49,7 @@ base:
         TRITON_HIP_USE_ASYNC_COPY: '0'
         ROCM_QUICK_REDUCE_QUANTIZATION: INT8
         SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL: 'true'
+        SGLANG_OPT_HIP_FLYDSL_MXFP8: '1'
         AITER_BF16_FP8_MOE_BOUND: '0'
         TORCH_BLAS_PREFER_HIPBLASLT: '1'
         HSA_NO_SCRATCH_RECLAIM: '0'
@@ -61,7 +62,8 @@ base:
 
 # One variant per point; the saturation point gets a longer warmup drain. A longer
 # prefill-decode interval trades TTFT for P90 ITL: 192 with lpm up to c8, 96 at c16
-# and 32 at c32. amd-master.yaml runs c32 and c64 on the DP2 variants only.
+# and 32 at c32. amd-master.yaml runs TP2 through c32, TP4 through c16; DP2 covers
+# c32 and c64.
 override_tp2_c1:
   roles:
     agg:
@@ -164,7 +166,7 @@ override_tp2_c64:
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.85
-        chunked-prefill-size: 4096
+        chunked-prefill-size: 16384
         prefill-decode-interval: 4
         swa-prefix-tails: 4096
         max-running-requests: 128
@@ -240,7 +242,7 @@ override_tp2_c64_dp:
         prefill-delayer-token-usage-low-watermark: 0.7
         load-balance-method: total_requests
         mem-fraction-static: 0.85
-        chunked-prefill-size: 8192
+        chunked-prefill-size: 32768
         prefill-decode-interval: 16
         swa-prefix-tails: 4096
         max-running-requests: 64

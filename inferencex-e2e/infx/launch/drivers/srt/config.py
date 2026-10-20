@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from infx.launch.request import SrtRequest
 
 NGINX_IMAGE = "nginx:1.27.4"
-DCGM_EXPORTER_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
 EXPORTER_PROVENANCE = "exporter-image.sha256"
 HEALTH_CHECK = {"max_attempts": HEALTH_ATTEMPTS, "interval_seconds": 10}
 
@@ -50,6 +49,7 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
+    mem_mib: int | None = None
 
 
 def pyxis_spelling(image: str) -> str:
@@ -119,7 +119,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     volume_mounts = {
         str(volume_path(cluster, name)): target for name, target in srt.volume_mounts.items()
     }
-    mounts = _mounts({**volume_mounts, **srt.mounts}, job.mounts)
+    workspace_mounts = {
+        str(job.workspace / source): target for source, target in srt.workspace_mounts.items()
+    }
+    mounts = _mounts({**volume_mounts, **srt.mounts, **workspace_mounts}, job.mounts)
     if mounts:
         config["default_mounts"] = mounts
     if srt.gpus_per_node_directive is not None:
@@ -135,6 +138,8 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     if settings.exclude:
         directives["exclude"] = ",".join(settings.exclude)
     directives.update(settings.cpu_directives())
+    if job.mem_mib is not None:
+        directives["mem"] = f"{job.mem_mib}M" if job.mem_mib else "0"
     if srt.gpus_per_node_directive is False and (gres := settings.gres_for(cluster.gpus_per_node)):
         directives["gres"] = gres
     if directives:
@@ -160,15 +165,33 @@ def write(path: Path, config: Mapping[str, Any]) -> None:
     path.write_text(yaml.safe_dump(dict(config), sort_keys=False))
 
 
-def srun_options(settings: SlurmSettings) -> str | None:
-    """SRT_SRUN_OPTIONS for the single-node binder: ``slurm.srun-args`` as a JSON mapping."""
-    if not settings.srun_args:
+def stage_gpu_exporter(run: SrtRun, *, single_node: bool = False) -> tuple[str, str]:
+    """Stage the cluster's GPU exporter image: its recipe name and the reference jobs start from."""
+    exporter = run.srt.extra.get("default_gpu_exporter")
+    if not isinstance(exporter, dict) or not exporter.get("container_image"):
+        raise LaunchError("native power requires a cluster GPU exporter")
+    image = exporter["container_image"]
+    staged = run.backend.stage_image(image, helper="dcgm-exporter", single_node=single_node)
+    (run.workspace / EXPORTER_PROVENANCE).write_text(f"{run.backend.image_provenance(staged)}\n")
+    return image, staged.reference
+
+
+def gpu_share_mib(cluster: Cluster, gpus: int) -> int | None:
+    """``gpus``' share of the node's ``available-cpu-dram-mib``; None where unmeasured."""
+    if cluster.available_cpu_dram_mib is None:
         return None
+    return cluster.available_cpu_dram_mib * gpus // cluster.gpus_per_node
+
+
+def srun_options(settings: SlurmSettings, mem_mib: int | None) -> str | None:
+    """SRT_SRUN_OPTIONS for the single-node binder: ``slurm.srun-args`` and the step mem cap."""
     options = {}
     for arg in settings.srun_args:
         name, _, value = arg.removeprefix("--").partition("=")
         options[name] = value
-    return json.dumps(options)
+    if mem_mib is not None:
+        options["mem"] = f"{mem_mib}M"
+    return json.dumps(options) if options else None
 
 
 def _create_dir(path: Path, *, world_writable: bool = False) -> None:
@@ -274,9 +297,9 @@ def write_lane_config(
         prefill_image = request.env["PREFILL_IMAGE"]
         containers[prefill_image] = backend.stage_image(prefill_image).reference
     if power.dcgm:
-        exporter = backend.stage_image(DCGM_EXPORTER_IMAGE, helper="dcgm-exporter")
-        (run.workspace / EXPORTER_PROVENANCE).write_text(f"{backend.image_provenance(exporter)}\n")
-        containers["dcgm-exporter"] = exporter.reference
+        image, reference = stage_gpu_exporter(run)
+        containers["dcgm-exporter"] = reference
+        containers[image] = reference
     create_volume_mounts(run)
     job = SrtJob(
         srtctl_root=checkout.root,

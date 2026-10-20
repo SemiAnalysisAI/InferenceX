@@ -1,8 +1,8 @@
-"""Validate and aggregate multinode srt-slurm DCGM power artifacts.
+"""Validate and aggregate srt-slurm GPU power artifacts.
 
 Consumes the srt-slurm ``dcgm-power`` artifact package (v1 wire contract:
 ``power/{manifest.json, samples.csv, windows/*.json}``) produced for
-multinode runs, re-validates it independently, and patches whole-deployment
+single- or multi-node runs, re-validates it independently, and patches whole-deployment
 energy metrics plus role-level metrics for disaggregated deployments into the
 aggregate JSON.
 
@@ -62,9 +62,7 @@ from .common import (
 
 SCHEMA_VERSION = 1
 PRODUCER = "srt-slurm.dcgm-power"
-POWER_METRIC = "DCGM_FI_DEV_POWER_USAGE"
 POWER_UNIT = "W"
-POWER_SCOPE = "gpu_device_board_as_reported_by_dcgm"
 CLOCK_SOURCE = "head_node_unix_clock"
 
 MANIFEST_FILENAME = "manifest.json"
@@ -83,8 +81,10 @@ SAMPLES_HEADER = (
 
 SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
 SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
+SAMPLES_HEADERS = {1: SAMPLES_HEADER, 2: SAMPLES_HEADER_V2, 3: SAMPLES_HEADER_V3}
 
 MAX_SAMPLE_GAP_SECONDS = 3.0
+MAX_TEMPERATURE_C = 200.0
 
 WORKER_ROLES = ("prefill", "decode", "agg")
 
@@ -274,13 +274,15 @@ def _check_wire_contract(manifest: dict) -> list[str]:
     for key, expected in (
         ("schema_version", SCHEMA_VERSION),
         ("producer", PRODUCER),
-        ("source_metric", POWER_METRIC),
         ("unit", POWER_UNIT),
-        ("power_scope", POWER_SCOPE),
         ("timestamp_source", CLOCK_SOURCE),
     ):
         if manifest.get(key) != expected:
             failures.append(f"{key} is {manifest.get(key)!r}, expected {expected!r}")
+    for key in ("source_metric", "power_scope"):
+        value = manifest.get(key)
+        if not (isinstance(value, str) and value):
+            failures.append(f"{key} is not a non-empty string")
 
     status = manifest.get("status")
     if status != STATUS_COMPLETE:
@@ -328,8 +330,7 @@ def _check_wire_contract(manifest: dict) -> list[str]:
 
 def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None:
     """Validate the selected CSV generation, including optional utilization and temperature."""
-    header = {1: SAMPLES_HEADER, 2: SAMPLES_HEADER_V2, 3: SAMPLES_HEADER_V3}[expected_version]
-    if len(raw) != len(header):
+    if len(raw) != len(SAMPLES_HEADERS[expected_version]):
         return None
     try:
         schema_version = int(raw[0])
@@ -345,7 +346,7 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
                         return None
         if expected_version == 3 and raw[9]:
             temperature = float(raw[9])
-            if not math.isfinite(temperature) or not -273.15 <= temperature < 0x7FFFFFF0:
+            if not math.isfinite(temperature) or not -273.15 <= temperature <= MAX_TEMPERATURE_C:
                 return None
     except ValueError:
         return None
@@ -376,13 +377,11 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
         with open(path, newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            if header == list(SAMPLES_HEADER):
-                expected_version = 1
-            elif header == list(SAMPLES_HEADER_V2):
-                expected_version = 2
-            elif header == list(SAMPLES_HEADER_V3):
-                expected_version = 3
-            else:
+            expected_version = next(
+                (version for version, names in SAMPLES_HEADERS.items() if header == list(names)),
+                None,
+            )
+            if expected_version is None:
                 return (), ("samples_csv_header_mismatch",)
             for raw in reader:
                 row = _parse_sample_row(raw, expected_version)
@@ -853,6 +852,18 @@ def _check_stored_evidence(
     ):
         if len(set(keys)) != len(keys):
             failures.append(f"{label} contains duplicate keys")
+
+    clock_sync_failures = manifest.get("clock_sync_failures", [])
+    if not isinstance(clock_sync_failures, list) or not all(
+        isinstance(node, str) for node in clock_sync_failures
+    ):
+        failures.append("clock_sync_failures is not a list of strings")
+    elif clock_sync_failures:
+        failures.append(
+            "clock_sync_unverified: "
+            + ", ".join(clock_sync_failures)
+            + " did not prove NTP synchronisation"
+        )
 
     return failures
 
