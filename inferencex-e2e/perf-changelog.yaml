@@ -10288,3 +10288,12 @@
     - "The image carries vllm-project/vllm#62131: --monokernel now also runs the three DSpark draft layers as the two persistent mono decode launches (128 experts / top-3, window-only attention over the block's non-causal SWA rows) instead of vLLM's regular path. The step limit is unchanged at 48 rows, i.e. concurrency 1-8 with five DSpark drafts."
     - "No recipe or point changes: concurrency 1, 2, 4, 8, 16, 32 and 64 on TP2 and TP4 (14 points), all re-measured on the new image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4319
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open GB300 AgentX on Dynamo + SGLang (KV router, session affinity, DFLASH) with TP4 points at concurrency 8, 16, 20, 32, and 40 and two-node TP8 points at concurrency 3, 4, 10, and 14."
+    - "Enable 120-175 GB per-rank HiCache with 0.80 DRAM utilization at concurrency 20, 32, and 40; set per-point prefill-decode interval, memory, SWA ratio, and admission limits in the variants file."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
