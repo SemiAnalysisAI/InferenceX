@@ -10248,18 +10248,12 @@
 
 - config-keys:
     - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
   scenario-type:
     - agentic-coding
   description:
-    - "Update the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated AgentX configuration to the CUDA 13.4 nightly image, DEP2 prefill with DEP16/DEP32 decode, and revised topology and concurrency settings."
-    - "Configure decode worker selection by active request count with soft session affinity, set the prefill host KV cache budget, and use pinned prefill Engram tables and HBM decode Engram tables."
+    - "Move the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated and aggregated AgentX curves to vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
+    - "Disaggregated: two DEP2 prefill / DEP32 decode points, 20P1D at c16800 with max-num-seqs 152 and 18P1D at c14500 with max-num-seqs 126 (MegaAttn wave boundaries), with 70 GiB of CPU KV offload per prefill rank, pinned prefill Engram tables and HBM decode Engram tables."
+    - "Configure decode worker selection by active request count with soft session affinity."
+    - "Aggregated: TP4 at concurrency 1 (max-num-seqs 1, capture size 5 for the one-request DSpark draft graph) and 16 (max-num-seqs 32, prefill-schedule-interval 128), with Engram host tables in pinned memory (use_thp false): on this image, THP-registered tables hang the first prefill forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4336
-
-- config-keys:
-    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Append two higher-throughput GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX points, both DEP2 prefill with DEP32 decode: 20P1D at c16800 with max-num-seqs 152, and 18P1D at c14500 with max-num-seqs 126 (MegaAttn wave boundaries), with 70 GiB of CPU KV offload per prefill rank."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4337
-  append-only: true
