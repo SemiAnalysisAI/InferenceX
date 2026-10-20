@@ -9109,13 +9109,13 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261019-3c560089@sha256:c1f4d9fc6fcf50c2269adbc757ce7b1778883af04155edb888fa9eea3b6648c0
+  image: lmsysorg/sglang:nightly-dev-cu13-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0.dev20261018" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261019" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
