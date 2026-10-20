@@ -31,10 +31,10 @@ base:
         moe-a2a-backend: megamoe
         enable-deepseek-v4-fp4-indexer: true
         disable-flashinfer-autotune: true
-        mem-fraction-static: 0.96
+        mem-fraction-static: 0.95
         swa-full-tokens-ratio: 0.075
         allow-auto-truncate: true
-        chunked-prefill-size: 32768
+        chunked-prefill-size: 16384
         cuda-graph-max-bs-decode: 256
         tool-call-parser: deepseekv4
         reasoning-parser: deepseek-v4
@@ -65,7 +65,7 @@ base:
         SGLANG_OPT_USE_TOPK_V2: '1'
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
         SGLANG_OPT_DEEPGEMM_MEGA_MOE: '1'
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4224'
         SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
         SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
         SGLANG_RAGGED_VERIFY_MODE: static
