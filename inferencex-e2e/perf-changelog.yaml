@@ -10470,3 +10470,12 @@
   description:
     - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4168
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM image to vllm/vllm-openai:nightly-ac68c3087215e0a4f3cdfa218508c6aada57235d (digest-pinned)."
+    - "Tune the B300 NVFP4 AgentX config-only curve: TP8 c1, TP4 c1 and c24, and TP4 c36 and c40 with DRAM offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4357
