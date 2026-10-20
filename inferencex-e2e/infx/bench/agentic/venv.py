@@ -1,4 +1,4 @@
-"""The isolated AIPerf runtime: a per-job uv venv with ``utils/aiperf`` installed editable."""
+"""The isolated AgentX runtime: a per-job uv venv with the pinned PyPI release."""
 
 from __future__ import annotations
 
@@ -14,15 +14,13 @@ from typing import NoReturn
 from infx.bench import proc, uv
 from infx.bench.env import BenchError
 
-# AIPerf dropped Python 3.10, which some ROCm images still ship; uv fetches a pinned build.
 PYTHON_VERSION = "3.11"
-# What the client needs beyond utils/aiperf's own dependencies.
 REQUIREMENTS = Path(__file__).with_name("requirements.txt")
 
 
 @dataclass(frozen=True)
 class Runtime:
-    """Paths of one job's AIPerf runtime directory."""
+    """Paths of one job's AgentX runtime directory."""
 
     root: Path
 
@@ -32,7 +30,6 @@ class Runtime:
         explicit = environ.get("AIPERF_RUNTIME_DIR")
         if explicit:
             return cls(Path(explicit).absolute())
-        # The process id survives the re-exec into the venv, so both phases agree.
         job = environ.get("SLURM_JOB_ID") or str(os.getpid())
         return cls(Path(tempfile.gettempdir()) / f"inferencex-agentic-{job}")
 
@@ -45,8 +42,8 @@ class Runtime:
         return self.venv / "bin" / "python"
 
     @property
-    def aiperf(self) -> Path:
-        return self.venv / "bin" / "aiperf"
+    def agentx(self) -> Path:
+        return self.venv / "bin" / "agentx"
 
     @property
     def hf(self) -> Path:
@@ -63,7 +60,7 @@ class Runtime:
         os.execve(self.python, [str(self.python), *args], environ)  # noqa: S606
 
 
-def bootstrap(runtime: Runtime, aiperf_source: Path) -> int:
+def bootstrap(runtime: Runtime) -> int:
     """Create ``runtime``'s venv from scratch; return ``uv venv``'s status, else 0."""
     uv_exe = uv.find(runtime.root / "uv" / "bin")
     shutil.rmtree(runtime.venv, ignore_errors=True)
@@ -74,14 +71,14 @@ def bootstrap(runtime: Runtime, aiperf_source: Path) -> int:
     if rc:
         return rc
     install = [uv_exe, "pip", "install", "--python", str(runtime.python)]
-    install += ["-r", str(REQUIREMENTS), "-e", str(aiperf_source)]
+    install += ["--no-config", "-r", str(REQUIREMENTS)]
     if proc.call(install, {**env, "UV_HTTP_TIMEOUT": "120", "UV_HTTP_RETRIES": "3"}):
         raise BenchError(
             "benchmark client dependency bootstrap failed; inspect network/package "
             "resolution before recipe repairs"
         )
-    if not (_executable(runtime.aiperf) and _executable(runtime.hf)):
-        raise BenchError(f"isolated AIPerf environment is incomplete at {runtime.venv}")
+    if not (_executable(runtime.agentx) and _executable(runtime.hf)):
+        raise BenchError(f"isolated AgentX environment is incomplete at {runtime.venv}")
     return 0
 
 

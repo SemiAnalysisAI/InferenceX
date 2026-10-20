@@ -56,16 +56,9 @@ def _redact_url(url: str) -> str:
 
 
 DEFAULT_ENV = "AGENTIC_PROXY_DB_URL"
-# Migration `013_add_subagent_label` ran at this UTC timestamp; rows
-# before this have NULL subagent_label and are unusable for trace replay.
 SUBAGENT_MIGRATION_TS = "2026-04-16T16:00:00+00:00"
-# gpt-5.x rows go through /proxy/responses (different shape) and are
-# intentionally excluded.
 ANTHROPIC_MODEL_LIKE = "claude-%"
 
-# Match label/header handling in semianalysis-claude-code-proxy's
-# packages/app/src/lib/subagent-runs.ts. Unlabelled Haiku calls become
-# subagents unless max_tokens is 1; missing/non-numeric values count as "not 1".
 EFFECTIVE_SUBAGENT_LABEL_EXPR = """
     CASE
         WHEN subagent_label IS NOT NULL THEN subagent_label
@@ -77,8 +70,6 @@ EFFECTIVE_SUBAGENT_LABEL_EXPR = """
     END
 """
 
-# Match getRequestThreadId priority using lowercase HTTP header names.
-# Empty strings are absent; x-codex-window-id stores "<id>:<msg>".
 THREAD_ID_EXPR = """
     COALESCE(
         NULLIF(request_headers->>'thread_id', ''),
@@ -88,25 +79,16 @@ THREAD_ID_EXPR = """
     )
 """
 
-# CLI >= 2.1.139 supplies a stable agent ID despite per-request label changes.
-# Without it, the converter falls back to label/thread-ID grouping.
 CLAUDE_CODE_AGENT_ID_EXPR = """
     NULLIF(request_headers->>'x-claude-code-agent-id', '')
 """
 
-# The converter uses CLI version to distinguish utility calls from subagents
-# lacking header coverage on older clients.
 CLI_VERSION_EXPR = """
     substring(request_headers->>'user-agent'
               from 'claude-cli/([0-9]+\\.[0-9]+\\.[0-9]+)')
 """
 
-# v1/v2 traces captured/anonymized images unreliably. IMAGE_CHECK_SQL rejects
-# sessions containing those rows, scanning only candidates from the cheap filters.
 
-# Classifier calls often have no label. Detect max_tokens <= 64 with no tools;
-# both fields survive anonymization. Keep the Security Monitor label/body
-# fallback because its calls can exceed 64 tokens.
 CLASSIFIER_SHAPE_PREDICATE = """
     (request_body->>'max_tokens') IS NOT NULL
     AND (request_body->>'max_tokens')::int <= 64
@@ -117,7 +99,6 @@ CLASSIFIER_SHAPE_PREDICATE = """
     )
 """
 
-# Includes classifiers as well as Security Monitor calls.
 SECURITY_MONITOR_FILTER_SQL = f"""
     NOT ({CLASSIFIER_SHAPE_PREDICATE})
     AND subagent_label IS DISTINCT FROM 'Security Monitor'
@@ -330,7 +311,6 @@ def parse_args() -> argparse.Namespace:
         if args.max_parallel_subagents is not None:
             if args.max_parallel_subagents < 0:
                 p.error("--max-parallel-subagents must be >= 0")
-            # Older clients lack agent IDs and collapse subagents into one NULL group.
             if not args.require_cli_min:
                 p.error(
                     "--max-parallel-subagents requires --require-cli-min "
@@ -338,7 +318,6 @@ def parse_args() -> argparse.Namespace:
                 )
             req_parts = args.require_cli_min.split(".")
             if len(req_parts) != 3 or not all(p.isdigit() for p in req_parts):
-                # leave the X.Y.Z format error to the existing encoder
                 pass
             else:
                 req_int = (
@@ -350,7 +329,6 @@ def parse_args() -> argparse.Namespace:
                         f">= 2.1.139 (got {args.require_cli_min})"
                     )
     else:
-        # --session-id short-circuits all session-discovery logic.
         ignored = [
             name
             for name, val in (
@@ -376,9 +354,6 @@ def get_db_url(args: argparse.Namespace) -> str:
     return url
 
 
-# Filter with cheap aggregates before scanning image content.
-# X * 1_000_000 + Y * 1_000 + Z preserves version ordering for 0-999 per segment.
-# --require-cli-min rejects sessions with any unknown CLI version.
 CLI_VERSION_INT_EXPR = r"""
     CASE
         WHEN request_headers->>'user-agent' ~ 'claude-cli/[0-9]+\.[0-9]+\.[0-9]+'
@@ -432,7 +407,6 @@ SELECT *
    )
 """  # noqa: S608
 
-# Scan image content only in candidate sessions, with a text-LIKE prefilter.
 IMAGE_CHECK_SQL = """
 SELECT DISTINCT session_id
   FROM requests
@@ -445,9 +419,6 @@ SELECT DISTINCT session_id
    )
 """
 
-# Count concurrent agent-ID spans from first request to last completion.
-# Order ends before starts at equal timestamps so touching spans do not overlap.
-# NULL durations count as zero.
 SUBAGENT_CONCURRENCY_SQL = f"""
 WITH subagent_spans AS (
     SELECT session_id,
@@ -503,7 +474,6 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
         seed = str(args.seed)
         rows = sorted(
             rows,
-            # Stable sampling order matching Postgres, not a security boundary.
             key=lambda r: hashlib.md5(
                 (r["session_id"] + seed).encode("utf-8"),
                 usedforsecurity=False,
@@ -607,7 +577,6 @@ def find_sessions(
                 )
                 for row in cur.fetchall():
                     peak_by_id[row["session_id"]] = row["max_parallel_subagents"]
-        # Sessions absent from peak_by_id have no subagents.
         kept = []
         for c in surviving:
             peak = peak_by_id.get(c["session_id"], 0)
@@ -633,8 +602,6 @@ def find_sessions(
     return _sort_and_limit(surviving, args)
 
 
-# Explicit session IDs bypass discovery filters, including image and migration
-# checks. Privacy mode and the model filter still apply.
 ONE_SESSION_SUMMARY_SQL = f"""
 SELECT session_id,
        count(*)                                                       AS req_count,
@@ -724,15 +691,7 @@ SELECT
 """  # noqa: S608
 
 
-# Dynamic-workflow subagent-label bug (Claude Code CLI < 2.1.174)
-# CLI < 2.1.174 omitted headers for dynamic-workflow subagents, interleaving
-# them with main turns and inflating apparent cache rollbacks. Detect overlapping
-# multi-turn trajectories; sequential context compaction does not overlap.
-# --exclude-dynamic-workflow-bug enables this heuristic.
 DYNAMIC_WORKFLOW_FIX_CLI = (2, 1, 174)
-# Tolerate up to this many trailing hash blocks differing when deciding whether
-# a request extends a trajectory (the per-turn ephemeral footer; see the weka
-# converter's small-tail handling).
 _DWBUG_TAIL_TOLERANCE = 6
 
 
@@ -764,9 +723,8 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
     clis = [c for c in (_parse_cli_tuple(r.get("cli_version")) for r in rows) if c]
     if not clis or max(clis) >= DYNAMIC_WORKFLOW_FIX_CLI:
         return False
-    # Dynamic-workflow subagents lack labels and appear in the main stream.
     main = [r for r in rows if not r.get("subagent_label")]
-    trajs: list[list] = []  # [head_hash_ids, [(start_s, dur_s), ...]]
+    trajs: list[list] = []
     for r in main:
         hash_ids = r.get("hash_ids") or []
         if not hash_ids:
@@ -776,8 +734,6 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
         best, bi = -1, -1
         for i, (head, _) in enumerate(trajs):
             lcp = _hash_lcp(head, hash_ids)
-            # Allow a differing ephemeral footer, but require at least one matching
-            # block so short, unrelated trajectories cannot merge.
             need = max(1, len(head) - _DWBUG_TAIL_TOLERANCE)
             if lcp >= need and lcp > best:
                 best, bi = lcp, i
@@ -786,8 +742,6 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
             trajs[bi][1].append((t, dur))
         else:
             trajs.append([hash_ids, [(t, dur)]])
-    # Only multi-turn trajectories (>=2 turns) count; single-shot utility
-    # calls are not interleaved subagents.
     spans = [(min(s for s, _ in rr), max(s + d for s, d in rr)) for _, rr in trajs if len(rr) >= 2]
     if not spans:
         return False
@@ -795,8 +749,6 @@ def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
     for start, end in spans:
         events.append((start, 1))
         events.append((end, -1))
-    # Ends before starts at equal timestamps (a trajectory starting exactly when
-    # another ends does not count as overlapping).
     events.sort(key=lambda x: (x[0], x[1]))
     cur = peak = 0
     for _, delta in events:
@@ -816,7 +768,6 @@ def fetch_session_rows(
         )
         rows = cur.fetchall()
     for row in rows:
-        # Recheck privacy before writing, independently of the SQL filter.
         if row["privacy_mode"] != privacy_mode:
             raise RuntimeError(
                 f"privacy_mode safety check failed for session "

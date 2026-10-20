@@ -22,7 +22,6 @@ def load_config(path: str) -> dict:
     try:
         import yaml
     except ModuleNotFoundError:
-        # Runner hosts may lack PyYAML.
         try:
             cfg = json.loads(text)
         except json.JSONDecodeError:
@@ -38,7 +37,6 @@ def load_config(path: str) -> dict:
     if not isinstance(cfg, dict):
         raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
-        # Legacy flat format: the whole object is the per-task default.
         return {"default": cfg, "models": {}}
     return {"default": cfg.get("default", {}), "models": cfg.get("models", {})}
 
@@ -217,7 +215,6 @@ def validate_batch_manifest(
 
 
 def main() -> int:
-    # Keep merged CI logs ordered.
     for _stream in (sys.stdout, sys.stderr):
         with contextlib.suppress(AttributeError, ValueError):
             _stream.reconfigure(line_buffering=True)

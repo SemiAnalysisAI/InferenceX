@@ -6,7 +6,6 @@ import fnmatch
 import shutil
 from pathlib import Path
 
-# The workflows upload exactly these names from the workspace root; collectors read them there.
 ARTIFACTS = (
     "results*.json",
     "*_report.json",
@@ -30,7 +29,6 @@ def copy(results_dir: Path, destination: Path, *, suffix: str = "") -> list[Path
 
 
 def _target(destination: Path, name: str, suffix: str) -> Path:
-    # Batched runs share one destination, so a suffixed name never replaces another.
     if not suffix:
         return destination / name
     extension = next(extension for extension in _EXTENSIONS if name.endswith(extension))

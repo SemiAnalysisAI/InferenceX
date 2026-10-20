@@ -101,7 +101,6 @@ def _percentile_total_power(
             slope_changes[left_t] = slope_changes.get(left_t, 0.0) + slope
             slope_changes[right_t] = slope_changes.get(right_t, 0.0) - slope
 
-    # The union of all device timestamps gives the exact knots of their sum.
     segments: list[tuple[float, float, float]] = []
     slope = 0.0
     times = sorted(slope_changes)
@@ -119,7 +118,6 @@ def _percentile_total_power(
     lower = min(low for low, _, _ in segments)
     upper = max(high for _, high, _ in segments)
     target_time = (end_unix - start_unix) * quantile
-    # Bisection includes point masses without averaging device percentiles.
     for _ in range(60):
         value = lower + (upper - lower) / 2
         time_below = sum(

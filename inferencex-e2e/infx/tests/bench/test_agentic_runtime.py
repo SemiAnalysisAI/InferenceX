@@ -25,9 +25,9 @@ elif [ "$1" = pip ]; then
     [ "$FAIL" = pip ] && exit 2
     [ "$FAIL" = incomplete ] && exit 0
     bin="$(dirname "$4")"
-    printf '#!/bin/sh\nexit 0\n' > "$bin/aiperf"
+    printf '#!/bin/sh\nexit 0\n' > "$bin/agentx"
     printf '#!/bin/sh\nexit 0\n' > "$bin/hf"
-    chmod +x "$bin/aiperf" "$bin/hf"
+    chmod +x "$bin/agentx" "$bin/hf"
 fi
 """
 
@@ -51,7 +51,6 @@ def tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     ("environ", "expected"),
     [
         ({"AIPERF_RUNTIME_DIR": "rt", "SLURM_JOB_ID": "77"}, "{cwd}/rt"),
-        # Jobs sharing a node never share, and so never rebuild, each other's venv.
         ({"SLURM_JOB_ID": "77"}, "{tmp}/inferencex-agentic-77"),
         ({}, "{tmp}/inferencex-agentic-{pid}"),
     ],
@@ -68,34 +67,29 @@ def test_runtime_lives_in_the_explicit_directory_else_one_per_job(
 
 
 @pytest.mark.parametrize("uv_on_path", [True, False])
-def test_bootstrap_builds_a_pinned_venv_with_the_client_requirements_and_editable_aiperf(
+def test_bootstrap_builds_a_fresh_venv_with_the_client_requirements(
     tmp_path: Path, tools: Path, uv_on_path: bool
 ):
     uv = executable(tmp_path / "uv", FAKE_UV)
     if uv_on_path:
         shutil.copy(uv, tools / "uv")
     else:
-        # Astral's installer, piped from curl to sh, drops uv into UV_INSTALL_DIR.
         installer = tmp_path / "install.sh"
         installer.write_text(f'mkdir -p "$UV_INSTALL_DIR" && cp {uv} "$UV_INSTALL_DIR/uv"\n')
         executable(tools / "curl", f"#!/bin/sh\ncat {installer}\n")
     runtime = Runtime(tmp_path / "runtime")
     runtime.venv.mkdir(parents=True)
     (runtime.venv / "stale").write_text("from an earlier point")
-    source = tmp_path / "checkout with spaces" / "utils" / "aiperf"
 
-    assert bootstrap(runtime, source) == 0
+    assert bootstrap(runtime) == 0
 
     calls = (tmp_path / "uv-calls").read_text().splitlines()
     venv = tmp_path / "runtime" / "venv"
-    # A uv-managed version, never the image's interpreter: some images still ship 3.10.
     assert (calls[:2], calls[3]) == (["venv", "--python"], str(venv))
     assert re.fullmatch(r"3\.\d+", calls[2])
     install = calls[4:]
     assert install[:4] == ["pip", "install", "--python", str(venv / "bin/python")]
-    assert install[install.index("-e") + 1] == str(source)
-    # The client requirements ship beside the module, so a moved file fails here.
-    assert Path(install[install.index("-r") + 1]).is_file()
+    assert "--no-config" in install
     assert not (venv / "stale").exists()
     caches = set((tmp_path / "uv-caches").read_text().splitlines())
     assert caches == {str(tmp_path / "runtime" / "uv-cache")}
@@ -107,7 +101,7 @@ def test_failed_venv_creation_returns_uv_status_without_installing(tmp_path, too
     executable(tools / "uv", FAKE_UV)
     monkeypatch.setenv("FAIL", "venv")
 
-    assert bootstrap(Runtime(tmp_path / "runtime"), tmp_path / "aiperf") == 3
+    assert bootstrap(Runtime(tmp_path / "runtime")) == 3
 
     assert "pip" not in (tmp_path / "uv-calls").read_text().splitlines()
 
@@ -116,8 +110,7 @@ def test_failed_venv_creation_returns_uv_status_without_installing(tmp_path, too
     ("failure", "message"),
     [
         ("pip", "benchmark client dependency bootstrap failed"),
-        ("incomplete", "isolated AIPerf environment is incomplete"),
-        # No uv on PATH, and Astral's installer does not produce one.
+        ("incomplete", "isolated AgentX environment is incomplete"),
         ("installer", "uv installation did not create"),
     ],
 )
@@ -129,4 +122,4 @@ def test_unusable_runtime_fails_with_the_reason(tmp_path, tools, monkeypatch, fa
         monkeypatch.setenv("FAIL", failure)
 
     with pytest.raises(BenchError, match=message):
-        bootstrap(Runtime(tmp_path / "runtime"), tmp_path / "aiperf")
+        bootstrap(Runtime(tmp_path / "runtime"))

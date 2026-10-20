@@ -30,12 +30,10 @@ def test_result_selection_filters_concurrency_before_ordering(tmp_path: Path) ->
     chosen = tmp_path / "results_2026-06-27T01-00-00_conc4.json"
     other = tmp_path / "results_2026-06-28T01-00-00_conc8.json"
     missing = tmp_path / "results_legacy_conc16.json"
-    # Timestamped candidates do not require stat; the legacy candidate does.
     assert select_latest_result(iter([other, missing, chosen]), concurrency=4) == chosen
     assert select_latest_result([other, missing, chosen], concurrency=32) is None
     with pytest.raises(FileNotFoundError):
         select_latest_result([missing], concurrency=16)
-    # Batch collection can retain an uncontested candidate without ranking it.
     assert select_latest_results([missing], batched=True) == [missing]
 
 
