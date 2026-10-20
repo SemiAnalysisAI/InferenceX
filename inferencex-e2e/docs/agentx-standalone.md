@@ -4,17 +4,16 @@ Run the AgentX client against an already-running OpenAI-compatible server.
 
 ## Install
 
-With Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed,
-clone the harness at the pinned `agentx-v1.0.6` release commit. Its CLI is named `aiperf`.
+Install the pinned PyPI release in a Python 3.11–3.13 virtual environment:
 
 ```bash
-git clone --filter=blob:none --no-checkout https://github.com/SemiAnalysisAI/agentx-harness.git
-cd agentx-harness
-git checkout --detach 89b21867872a5bbc4b0676bf5005c404da5e9f94
-uv venv --python 3.11 .venv-agentx
-uv pip install --python .venv-agentx/bin/python -e . 'datasets>=4.7.0'
+python3 -m venv .venv-agentx
 source .venv-agentx/bin/activate
+python -m pip install 'agentx-harness==1.0.12'
 ```
+
+The package version matches the `agentx-v1.0.12` GitHub release. The `agentx`
+command selects the `agentx` scenario by default.
 
 ## Run
 
@@ -28,8 +27,7 @@ CONC=8
 OUTPUT_DIR="$PWD/results/agentx-c${CONC}-$(date -u +%Y%m%dT%H%M%SZ)"
 
 mkdir -p "$OUTPUT_DIR"
-aiperf profile \
-  --scenario agentx \
+agentx profile \
   --url "$SERVER_URL" --endpoint /v1/chat/completions \
   --model "$SERVED_MODEL_NAME" --tokenizer "$TOKENIZER" \
   --tokenizer-trust-remote-code \
@@ -45,6 +43,14 @@ environment variables override preset defaults. Model, tokenizer, dataset,
 concurrency, and output remain caller inputs; `--tokenizer-trust-remote-code` is
 needed only for tokenizers with custom code.
 
+InferenceX's `python3 -m infx.bench agentic` wrapper defaults to the full,
+uncapped corpus (`semianalysis_cc_traces_weka_062126`). Model prefixes beginning
+with `dsr1`, `qwen3.5`, or `qwen3.8next` explicitly select the
+256k-capped corpus (`semianalysis_cc_traces_weka_062126_256k`). New model families
+use the full corpus unless added to `CAPPED_FAMILIES` in
+`infx/bench/agentic/traces.py`. `WEKA_LOADER_OVERRIDE` can pin either loader
+regardless of model family; it does not configure the standalone `agentx` CLI.
+
 The default random seed is **42**. Keep this seed when reproducing AgentX results,
 or pass `--random-seed 123` to use a different seed.
 
@@ -58,7 +64,7 @@ Add `--server-metrics "${SERVER_URL}/metrics"` if the server exposes metrics.
 ## Optional session-affinity flags
 
 For DP-attention runs requiring router affinity, export these before
-`aiperf profile`. They add headers without replacing `X-Correlation-ID`.
+`agentx profile`. They add headers without replacing `X-Correlation-ID`.
 
 ```bash
 # Adds X-Dynamo-Session-ID; subagents also get X-Dynamo-Parent-Session-ID.

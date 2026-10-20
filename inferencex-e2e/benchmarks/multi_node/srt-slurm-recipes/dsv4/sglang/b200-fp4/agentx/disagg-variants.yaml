@@ -1,19 +1,10 @@
-# AgentX dsv4 sglang b200-fp4 recipes: shared settings in base, one
-# override per benchmark configuration. Select one with
-# CONFIG_FILE=recipes/dsv4/sglang/b200-fp4/agentx/disagg-variants.yaml:override_<name>.
 
 schema: 2
 
 base:
-  model:
-    path: "deepseek-v4-pro-0813"
-    container: "dynamo-sglang"
-    precision: "fp4"
   identity:
-    model:
-      repo: "deepseek-ai/DeepSeek-V4-Pro-0813"
-    container:
-      image: "lmsysorg/sglang:nightly-dev-20260916-c9a8fba9"
+    model: {}
+    container: {}
     frameworks:
       dynamo: "1.5.0.dev20260914"
   dynamo:
@@ -110,7 +101,7 @@ base:
         disaggregation-transfer-backend: mooncake
         # Use the eight external HCAs. mlx5_6..9 are on a separate low-LID
         # fabric, while mlx5_bond_0 caused cross-fabric QP RTR timeouts.
-        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+        disaggregation-ib-device: '@fabric.rdma-devices'
         disaggregation-mode: prefill
         load-balance-method: total_tokens
         mem-fraction-static: 0.85
@@ -182,7 +173,7 @@ base:
         enable-deepseek-v4-fp4-indexer: true
         enable-w4a4-mxfp4-megamoe: true
         disaggregation-transfer-backend: mooncake
-        disaggregation-ib-device: mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11
+        disaggregation-ib-device: '@fabric.rdma-devices'
         disaggregation-mode: decode
         load-balance-method: total_tokens
         mem-fraction-static: 0.9
@@ -206,22 +197,11 @@ base:
     mem: "0"
     container-remap-root: ""
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
-      RESULT_DIR: /logs/agentic
-      PORT: "8000"
-      IS_MULTINODE: "true"
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
-      AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
-      HF_HUB_CACHE: "/hf_hub_cache"
 
-# B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (1P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 64.
-# Each DEP8 worker occupies one eight-GPU B200 node.
 override_1p1d_c64:
   name: "disagg-b200-1p1d-dep8-dep8-c64-mtp-kvoffload"
   roles:
@@ -229,9 +209,6 @@ override_1p1d_c64:
       args:
         max-running-requests: 128
 
-# B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (1P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 128.
-# Each DEP8 worker occupies one eight-GPU B200 node.
 override_1p1d_c128:
   name: "disagg-b200-1p1d-dep8-dep8-c128-mtp-kvoffload"
   roles:
@@ -239,9 +216,6 @@ override_1p1d_c128:
       args:
         max-running-requests: 256
 
-# B200 AgentX SGLang disaggregated recipe for DeepSeek-V4-Pro-0813
-# (2P x DEP8 / 1D x DEP8, bundled DSpark + HiCache KV offload), tuned for concurrency 256.
-# Each DEP8 worker occupies one eight-GPU B200 node.
 override_2p1d_c256:
   name: "disagg-b200-2p1d-dep8-dep8-c256-mtp-kvoffload"
   roles:

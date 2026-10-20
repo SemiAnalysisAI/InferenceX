@@ -100,7 +100,6 @@ def wait_chat_route(
         models = http_json(f"{base_url}/v1/models")
         entries = models.get("data", []) if isinstance(models, dict) else []
         served = any(isinstance(entry, dict) and entry.get("id") == model for entry in entries)
-        # A bare GET answering 401/403/405 proves the route is mounted.
         if served and http_status(chat_url) in {401, 403, 405}:
             break
         status = http_status(f"{base_url}/health")
@@ -108,7 +107,6 @@ def wait_chat_route(
             healthy_since = None
         elif healthy_since is None:
             healthy_since = now
-        # Some frontends list no model before the first request; sustained health counts.
         if healthy_since is not None and now - healthy_since >= stabilization_s:
             break
         elapsed = now - start
