@@ -464,7 +464,7 @@ override_2p2d_tep4_tep8_c264_b32:
       workers: 2
       gpus: 8
       env: *tep_decode_router_env
-      args: &tep8_b32_decode_args
+      args:
         cuda_graph_config:
           batch_sizes:
             - 1
@@ -514,17 +514,8 @@ override_2p2d_tep2_tep8_c176_b32:
         <<: *tep2_prefill_env
         DYN_ROUTER_MODE: kv
         DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
-      args:
-        <<: *tep2_prefill_args
-        # null removes the base value.
-        kv_cache_config:
-          iteration_stats_interval:
-    decode:
-      <<: *tep8_b32_decode
-      args:
-        <<: *tep8_b32_decode_args
-        kv_cache_config:
-          iteration_stats_interval:
+      args: *tep2_prefill_args
+    decode: *tep8_b32_decode
   benchmark:
     placement:
       node: head
