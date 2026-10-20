@@ -18,25 +18,6 @@ base:
   health_check:
     interval_seconds: 10
     max_attempts: 360
-  # Embedded Mooncake: each TP rank contributes TOTAL_CPU_DRAM_GB / 8 GB. The
-  # setup script installs the master config's Mooncake and fills in the node's
-  # active RDMA rail. DSXE rails are InfiniBand without a netdev, so the transfer
-  # engine picks its own GID (a RoCE v2 index 3 does not exist).
-  setup_script: kimik3-b300-mooncake.sh
-  services:
-    - name: mooncake-master
-      type: mooncake-master
-      preamble: bash /configs/vllm-mooncake.sh
-      args: ["--eviction_high_watermark_ratio=0.95", "--eviction_ratio=0.10"]
-      options:
-        store_config:
-          mode: embedded
-          metadata_server: P2PHANDSHAKE
-          global_segment_size: 349GB  # Mooncake GB is GiB: 2999 GB / 8
-          local_buffer_size: 4GB
-          protocol: rdma
-          device_name: ""
-          enable_offload: false
   roles:
     agg:
       nodes: 1
@@ -64,7 +45,8 @@ base:
         attention-backend: TOKENSPEED_MLA
         attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
         disable-uvicorn-access-log: true
-        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+        # TOTAL_CPU_DRAM_GB / 8 per TP rank.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":374875000000,"lazy_offload":false}}'
       env:
         VLLM_ALLREDUCE_USE_FLASHINFER: '1'
         VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
@@ -82,12 +64,6 @@ base:
         PYTHONHASHSEED: '42'
         # Outlast AIPerf's pooled-connection idle gaps.
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
-        MC_STORE_MEMCPY: '1'
-        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
-        MC_SLICE_SIZE: '1048576'
-        MC_WORKERS_PER_CTX: '4'
-        WITH_NVIDIA_PEERMEM: '0'
-        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
