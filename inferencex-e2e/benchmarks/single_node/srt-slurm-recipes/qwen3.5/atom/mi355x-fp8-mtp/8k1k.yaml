@@ -25,6 +25,7 @@ base:
         method: mtp
         num-speculative-tokens: 3
         trust-remote-code: true
+        no-enable_prefix_caching: true
       env:
         OMP_NUM_THREADS: '1'
   benchmark:
