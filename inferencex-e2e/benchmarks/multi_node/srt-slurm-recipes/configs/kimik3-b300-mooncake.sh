@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
-# Pin the worker's Mooncake client and point its store at one active RDMA rail.
-set -euo pipefail
-pip_install=(python3 -m pip install)
-if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
-    pip_install+=(--break-system-packages)
-fi
-"${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall \
-    mooncake-transfer-engine-cuda13==0.3.11.post1
-python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+# Install the worker's Mooncake client and point its store at one active RDMA rail.
+set -eo pipefail
+bash "$(dirname "${BASH_SOURCE[0]}")/vllm-mooncake.sh"
 
 # Rail-isolated nodes: two RNICs cannot reach each other even within a node, so
 # every rank uses one rail. mlx5_0 is down on some nodes, and topology discovery
