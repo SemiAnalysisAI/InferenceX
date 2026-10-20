@@ -97,9 +97,6 @@ override_tp16_dspark5:
         VLLM_USE_DIRECT_DCP_A2A: '0'
         VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
         VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
-        # Cross-node NCCL runs over EFA; EFA DMA into cuMem (CUDA VMM) buffers
-        # froze B300 hosts, so keep NCCL buffers on cudaMalloc.
-        NCCL_CUMEM_ENABLE: '0'
       args:
         tensor-parallel-size: 16
         decode-context-parallel-size: 16
