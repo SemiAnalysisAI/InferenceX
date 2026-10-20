@@ -139,6 +139,8 @@ override_tp4_c15_dram:
         tensor-parallel-size: 4
         max-num-seqs: 30
         max-cudagraph-capture-size: 120
+        # X1-LS observation overlay (both arms): usage reports cached prompt tokens.
+        enable-prompt-tokens-details: true
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'

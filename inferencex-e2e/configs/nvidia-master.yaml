@@ -5482,7 +5482,9 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
 # enabled by framework=dynamo-vllm.
 
 minimaxm3-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
+  # X1-LS (experiment row minimaxm3-fp4-b200-vllm-agentic-mtp+x1ls-img-5555a2d8-ptd): the frozen nightly-af7f9488
+  # image is no longer published; this is the digest the frozen catalog pins for the same model on B300.
+  image: vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:e5c9e6bb82f645e8fca04e4d395743ee5ed473a62b98942d65f83c35d0c69301
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
