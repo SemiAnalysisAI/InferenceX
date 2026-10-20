@@ -1,0 +1,7 @@
+# Native single-node benchmarks inherit the GPU exporter from the cluster record.
+# The binder sets `required` from REQUIRE_POWER.
+telemetry:
+  enabled: true
+  storage_subdir: power
+  # Cold AMD exporter image pulls can outlast srtctl's default readiness timeout.
+  startup_timeout_seconds: 300

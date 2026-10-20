@@ -1,14 +1,6 @@
-# GLM-5.2 NVFP4 AgentX on B300 with SGLang EAGLE off the checkpoint's nextn
-# head: the low-latency TP8 arm (fp8 KV, cutedsl bf16 GEMM). HiCache spills
-# evicted prefixes to host DRAM; without it the working set outgrows HBM past
-# c8 and the radix hit rate collapses.
 base:
   schema: 2
   name: glm5.2-fp4-b300-sglang-agentic
-  model:
-    path: hf:nvidia/GLM-5.2-NVFP4
-    container: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -58,10 +50,7 @@ base:
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/GLM-5.2-NVFP4
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
@@ -69,13 +58,16 @@ base:
       TOTAL_CPU_DRAM_GB: '2399'
 
 # One variant per point: admission is 2x CONC and the graph batch matches it,
-# capped at 64.
+# capped at 64. Use K=5 at c1/c4/c8/c20; retain K=3 elsewhere. The connector
+# selects the committed golden acceptance length for each variant.
 override_c1:
   roles:
     agg:
       args:
         max-running-requests: 2
         cuda-graph-max-bs: 2
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '1'
@@ -86,6 +78,8 @@ override_c4:
       args:
         max-running-requests: 8
         cuda-graph-max-bs: 8
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '4'
@@ -96,6 +90,8 @@ override_c8:
       args:
         max-running-requests: 16
         cuda-graph-max-bs: 16
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '8'
@@ -126,6 +122,8 @@ override_c20:
       args:
         max-running-requests: 40
         cuda-graph-max-bs: 40
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '20'

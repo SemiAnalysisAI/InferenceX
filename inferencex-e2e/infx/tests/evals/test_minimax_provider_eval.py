@@ -66,8 +66,6 @@ def test_prepare_smoke_input_preserves_request_and_unicode(
         }),
         encoding="utf-8",
     )
-    # Supply the trusted digests for this controlled input; run the real
-    # fixture validation and JSONL writer, including Unicode preservation.
     monkeypatch.setattr(
         mpe,
         "EXPECTED_LICENSE_SHA256",

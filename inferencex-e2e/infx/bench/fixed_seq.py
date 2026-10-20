@@ -8,9 +8,7 @@ from pathlib import Path
 
 from infx.bench import env, proc, server
 
-# The client needs numpy and transformers, so it runs in a child, never in this process.
 PYTHON = "python3"
-# Single-node srt frameworks and the client backend that speaks their completions API.
 SINGLE_NODE_BACKENDS = {"sglang": "vllm", "atom": "vllm", "trt": "openai"}
 
 
@@ -79,7 +77,7 @@ def served_model(base_url: str) -> str:
 
 
 def srt_single(args: argparse.Namespace) -> int:
-    """One srt-slurm single-node point; srt-slurm owns the server."""
+    """One single-node point; srt-slurm owns the server and power sampling."""
     values = env.require(
         "MODEL", "CONC", "ISL", "OSL", "RANDOM_RANGE_RATIO", "RESULT_FILENAME", "RESULT_DIR",
         "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY", "USE_CHAT_TEMPLATE",
@@ -110,7 +108,12 @@ def srt_single(args: argparse.Namespace) -> int:
     if eval_only:
         print("EVAL_ONLY mode: skipping throughput benchmark", flush=True)
         return 0
-    return _run_client(point)
+    env.require("SRT_MEASUREMENT_WINDOW_DIR")
+    with proc.RelaySignals() as relay:
+        rc = relay.run(client_argv(point))
+        if rc:
+            return rc
+        return relay.run([PYTHON, "-m", "infx.results.power.window", str(point.result), str(conc)])
 
 
 def srt_sweep(args: argparse.Namespace) -> int:
@@ -122,12 +125,10 @@ def srt_sweep(args: argparse.Namespace) -> int:
     isl = env.positive_int("ISL")
     osl = env.positive_int("OSL")
     base_url = f"http://{values['SRT_FRONTEND_HOST']}:{env.positive_int('SRT_FRONTEND_PORT')}"
-    # Aggregated rows export DECODE_NUM_WORKERS=0; the result name still records it.
     ctx = env.non_negative_int("PREFILL_NUM_WORKERS") * env.positive_int("PREFILL_TP")
     gen = env.non_negative_int("DECODE_NUM_WORKERS") * env.positive_int("DECODE_TP")
     concs = [env.parse_positive_int("CONC_LIST", word) for word in values["CONC_LIST"].split()]
     windows = env.optional("SRT_MEASUREMENT_WINDOW_DIR")
-    # The name the workers registered; the workflow's MODEL is the HF id, which can differ.
     model = served_model(base_url)
     tokenizer = env.optional("TOKENIZER") or model
     result_dir = args.logs_dir / f"sa-bench_isl_{isl}_osl_{osl}"
@@ -150,7 +151,6 @@ def srt_sweep(args: argparse.Namespace) -> int:
                 trust_remote_code=True,
             )
             rc = relay.run(client_argv(point))
-            # Power lanes: tell srt-slurm which interval this concurrency's result measured.
             if rc == 0 and windows:
                 window = [PYTHON, "-m", "infx.results.power.window", str(point.result), str(conc)]
                 rc = relay.run(window)
