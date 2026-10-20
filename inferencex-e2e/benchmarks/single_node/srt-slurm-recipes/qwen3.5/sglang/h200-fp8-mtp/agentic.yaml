@@ -77,3 +77,42 @@ override_hicache_ep1:
     env:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '1234'
+# TP4/EP4 HiCache on half the node: 617 GB / TP4 / 2 pools = 77 GB each.
+override_hicache_tp4_c8:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.92
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '617'
+override_hicache_tp4_c12:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        mem-fraction-static: 0.86
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '617'
