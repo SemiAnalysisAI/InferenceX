@@ -32,7 +32,7 @@ base:
         store_config:
           mode: embedded
           metadata_server: P2PHANDSHAKE
-          global_segment_size: 281GB
+          global_segment_size: 174GB  # Mooncake GB is GiB: 1499 GB / 8
           local_buffer_size: 4GB
           protocol: rdma
           device_name: ""
@@ -93,9 +93,9 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2249'
+      TOTAL_CPU_DRAM_GB: '1499'
 
-# One variant per point. Admission is 2x CONC; CONC 56 and 70 keep more memory
+# One variant per point. Admission is 2x CONC; CONC 56 and 64 keep more memory
 # headroom. Graphs capture (1 + drafts) x 1..min(2x CONC, 128) tokens, then the
 # larger powers of two to 8192. Throughput runs switch DSpark to synthetic
 # rejection at the golden acceptance length; points above CONC 16 do not draft
@@ -220,14 +220,14 @@ override_c56:
       CONC: '56'
       SPEC_DECODING: mtp
 
-override_c70:
+override_c64:
   roles:
     agg:
       args:
-        max-num-seqs: 140
+        max-num-seqs: 128
         gpu-memory-utilization: 0.9
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,256,512,1024,2048,4096,8192]}'
   benchmark:
     env:
-      CONC: '70'
+      CONC: '64'
       SPEC_DECODING: mtp
