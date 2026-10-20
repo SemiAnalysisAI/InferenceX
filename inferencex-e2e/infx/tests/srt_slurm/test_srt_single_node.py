@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.single_node import runtime_arguments, select_recipe, submission_fields
-from infx.srt_slurm.synthetic_acceptance import plan_commands
+from infx.srt_slurm.synthetic_acceptance import Planned, plan_commands
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
@@ -23,6 +23,9 @@ def point(tmp_path, monkeypatch):
         shared = tmp_path / f"configs/srt-recipes/{block}.yaml"
         shared.parent.mkdir(parents=True, exist_ok=True)
         shared.write_text(yaml.safe_dump({"benchmark": {"type": "custom", "command": f"bash {client}"}}))
+    (tmp_path / "configs/srt-recipes/telemetry-native.yaml").write_text(
+        yaml.safe_dump({"telemetry": {"enabled": True, "required": False}})
+    )
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
     recipe = {
         "engine": "sglang",
@@ -59,8 +62,8 @@ def test_native_binding_submits_one_point_and_keeps_server_settings(point):
         "USE_CHAT_TEMPLATE": "false",
         "CONC": "2", "RESULT_FILENAME": "point-identity",
         "RUN_EVAL": "false", "EVAL_ONLY": "false", "RESULT_DIR": "/logs",
-        "FRAMEWORK": "sglang",
-    }}
+        "FRAMEWORK": "sglang", "REQUIRE_POWER": "0",
+    }, "concurrencies": [2]}
     assert actual["roles"]["agg"]["args"] == {
         "tensor-parallel-size": 4, "data-parallel-size": 1, "max-running-requests": 32,
     }
@@ -85,7 +88,8 @@ def test_agentx_fragments_are_composed_and_bound_to_the_point(point):
     assert selected == f"{path}:override_c2"
     assert bound["model"] == {"path": "hf:test/model", "container": "other:tag", "precision": "fp8"}
     assert bound["benchmark"] == {
-        "type": "custom", "command": "bash srt_agentic.sh", "env": {"CONC": "2", "MODEL": "test/model"},
+        "type": "custom", "command": "bash srt_agentic.sh", "env": {"CONC": "2", "MODEL": "test/model", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1"},
+        "concurrencies": [2],
     }
     path.write_text(yaml.safe_dump({"base": {**recipe, "model": {"container": "stale:tag"}}}))
     with pytest.raises(ValueError, match=r"remove base\.model\.container"):
@@ -110,24 +114,27 @@ def test_ambiguous_native_variants_are_rejected(point):
         runtime_arguments(str(path), env)
 
 
-def test_mtp_binding_uses_real_verification_and_the_chat_template(point, tmp_path):
+@pytest.mark.parametrize("algorithm,spec_decoding", [("EAGLE", "mtp"), ("DFLASH", "draft_model")])
+def test_speculative_binding_uses_real_verification_and_the_chat_template(
+    point, tmp_path, algorithm, spec_decoding
+):
     path, recipe, env = point
     recipe["roles"]["agg"]["args"].update({
-        "expert-parallel-size": 4, "speculative-algorithm": "EAGLE",
+        "expert-parallel-size": 4, "speculative-algorithm": algorithm,
         "speculative-num-steps": 2, "speculative-num-draft-tokens": 3,
     })
     recipe["roles"]["agg"]["env"] = {"SGLANG_SIMULATE_ACC_LEN": "2.5"}
     path.write_text(yaml.safe_dump({"base": recipe}))
-    env = {**env, "EP_SIZE": "4", "SPEC_DECODING": "mtp"}
+    env = {**env, "EP_SIZE": "4", "SPEC_DECODING": spec_decoding}
     _, bound = select_recipe(f"{path}:base", env)
     assert bound["benchmark"]["env"]["USE_CHAT_TEMPLATE"] == "true"
     concrete = tmp_path / "bound.yaml"
     concrete.write_text(yaml.safe_dump(bound))
     argv = runtime_arguments(f"{path}:base", env)
-    assert plan_commands(str(concrete), "sglang", ["--json", *argv], env) == [[
+    assert plan_commands(str(concrete), "sglang", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", str(concrete),
         "--unset", "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
-    ]]
+    ], None)]
 
 
 def test_concurrency_selects_its_variant_before_binding(point):
@@ -200,10 +207,10 @@ def test_trt_binding_keeps_engine_options_and_sets_eval_token_budget(point):
         "speculative_config": {"decoding_type": "MTP", "num_nextn_predict_layers": 3},
         "cuda_graph_config": {"batch_sizes": [1, 2, 4]},
     }
-    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "trt", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
         "--unset", "roles.agg.env.TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS",
-    ]]
+    ], None)]
     with pytest.raises(ValueError, match="moe_expert_parallel_size"):
         runtime_arguments(f"{path}:base", {**env, "EP_SIZE": "1"})
 
@@ -225,9 +232,9 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         "method": "mtp", "num-speculative-tokens": 3, "kv_cache_dtype": "fp8",
         "enable-expert-parallel": True, "enable-dp-attention": True, "max-model-len": 2048,
     }
-    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [[
+    assert plan_commands(f"{path}:base", "atom", ["--json", *argv], env) == [Planned([
         "srtctl", "apply", "--json", *argv, "--file", f"{path}:base",
-    ]]
+    ], None)]
     for changes, error in [
         ({"EP_SIZE": "2"}, "expert parallelism"),
         ({"EP_SIZE": "1"}, "enable-expert-parallel"),
@@ -274,3 +281,31 @@ def test_runtime_container_options_remain_native_mapping(point):
     }
     with pytest.raises(ValueError, match='must map option names to string values'):
         runtime_arguments(f"{path}:base", {**env, 'SRT_SRUN_OPTIONS': '{"container-remap-root": true}'})
+
+
+@pytest.mark.parametrize("requested", ["0", "1"])
+def test_binding_requires_power_from_the_workflow(point, requested):
+    path, _, env = point
+    _, actual = select_recipe(f"{path}:base", {**env, "REQUIRE_POWER": requested})
+    assert actual["telemetry"]["required"] is (requested == "1")
+    assert actual["benchmark"]["concurrencies"] == [2]
+
+
+@pytest.mark.parametrize("requested,expected", [(None, "0"), ("1", "1")])
+def test_agentic_binding_derives_require_power_from_the_workflow(point, requested, expected):
+    path, _, env = point
+    agentic_env = {**env, "IS_AGENTIC": "1", "DURATION": "20"}
+    if requested is not None:
+        agentic_env["REQUIRE_POWER"] = requested
+    _, actual = select_recipe(f"{path}:base", agentic_env)
+    assert actual["benchmark"]["env"]["REQUIRE_POWER"] == expected
+    assert actual["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "1"
+    assert actual["telemetry"]["required"] is (expected == "1")
+
+
+def test_fragment_cannot_require_single_node_power(point):
+    path, recipe, env = point
+    recipe["telemetry"] = {"required": True}
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    with pytest.raises(ValueError, match="telemetry.required"):
+        select_recipe(f"{path}:base", env)

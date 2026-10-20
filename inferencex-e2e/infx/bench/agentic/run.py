@@ -30,7 +30,6 @@ REQUIRED = (
 POWER_SWITCHES = ("ENABLE_AGENTX_POWER", "REQUIRE_POWER")
 FAILED_REQUEST_THRESHOLD = "0.10"
 TRUE_VALUES = frozenset({"1", "true", "TRUE", "yes", "YES"})
-
 PowerMode = Literal["off", "window", "missing"]
 
 
@@ -53,7 +52,8 @@ class Plan:
         """Validate every input before any setup, so a bad point fails in seconds."""
         values = inputs.require(*REQUIRED, *REPLAY_REQUIRED, env=env)
         multinode = inputs.flag("IS_MULTINODE", env)
-        switches = inputs.require(*POWER_SWITCHES, env=env) if multinode else {}
+        matrix_point = env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding"
+        switches = inputs.require(*POWER_SWITCHES, env=env) if multinode or matrix_point else {}
         result_dir = Path(values["RESULT_DIR"]).absolute()
         result_filename = values["RESULT_FILENAME"]
         if multinode:
@@ -61,7 +61,7 @@ class Plan:
             result_filename += f"_conc{values['CONC']}"
         replay = ReplayConfig.from_env(env, result_dir)
         _require_single_point(env, values["CONC"])
-        if env.get("IS_AGENTIC") == "1" or env.get("SCENARIO_TYPE") == "agentic-coding":
+        if matrix_point:
             _validate_kv_offload(env)
         eval_only = inputs.flag("EVAL_ONLY", env)
         return cls(
@@ -152,7 +152,7 @@ def _download_traces(cfg: ReplayConfig, runtime: Runtime, env: Mapping[str, str]
 
 
 def _open_power_window(plan: Plan, python: str, env: Mapping[str, str]) -> int:
-    """Record the replay clock's UTC offset and mark srt-slurm's multi-node window running."""
+    """Record the replay clock's UTC offset and open srt-slurm's measurement window."""
     if plan.power != "window":
         return 0
     now = dt.datetime.now(dt.timezone.utc).astimezone()

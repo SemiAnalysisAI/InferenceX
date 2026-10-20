@@ -79,7 +79,11 @@ def select_recipe(
     path, _, selector = config.partition(":")
     agentic = environment["IS_AGENTIC"] == "1"
     raw = compose_recipe(
-        Path(path), agentic=agentic, multinode=False, root=root or repository_root()
+        Path(path),
+        agentic=agentic,
+        multinode=False,
+        root=root or repository_root(),
+        native_power=environment.get("EVAL_ONLY") != "true",
     )
     recipes = expand(raw, selector or None)
     matches = []
@@ -109,9 +113,9 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm"}:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
-    if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark"}:
+    if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark", "dflash"}:
         raise ValueError(
-            "Single-node SRT supports only native MTP, EAGLE3, DSpark or no speculation"
+            "Single-node SRT supports only native MTP, EAGLE3, DSpark, DFlash or no speculation"
         )
     speculation = "mtp" if spec else workload.get("SPEC_DECODING", "none")
     agentic = environment["IS_AGENTIC"] == "1"
@@ -213,13 +217,13 @@ def main() -> None:
     parsed = parser.parse_args()
     try:
         if parsed.command == "prepare":
-            _, recipe = select_recipe(parsed.recipe, os.environ)
+            selected, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_fabric(recipe, parsed.fabric)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
             config = parsed.output.with_name(BOUND_RECIPE)
             config.write_text(yaml.safe_dump(recipe, sort_keys=False))
-            parsed.output.write_bytes("\0".join([str(config), *arguments, ""]).encode())
+            parsed.output.write_bytes("\0".join([selected, str(config), *arguments, ""]).encode())
         else:
             print("\n".join(submission_fields(parsed.manifest)))
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
