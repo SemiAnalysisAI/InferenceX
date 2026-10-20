@@ -10329,4 +10329,4 @@
   description:
     - "Raise dram-utilization from 0.75 to 1.0 so the TP8 Mooncake DRAM tier takes the full 3 TB AgentX ceiling (total-cpu-dram-gb 2249 -> 2999, global_segment_size 281GB -> 374GB per rank) at every point."
     - "Sweep concurrency 1 to 64: replace the conc 70 point with conc 64 (max-num-seqs 128)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4348
