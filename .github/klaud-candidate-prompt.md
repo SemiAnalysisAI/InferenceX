@@ -19,9 +19,19 @@ Use the canonical generator, inferencex-e2e/configs/runners.yaml and public Open
 for all points, exact cluster routes and physical node demand; never invent aliases or
 substitute sibling clusters. The planner already owns the family claim; leave claim refs
 to the lifecycle helper. Recheck all open PRs before atomically creating the supplied
-exact candidate branch at its base SHA. An existing branch means stop, not takeover.
+exact candidate branch at its base SHA. An existing branch means stop, not takeover,
+unless KLAUD_RESUME=true.
 Create one draft PR after a real change, titled `[Klaud Cold] English / 简体中文`.
 Start its body with only `<!-- klaud-baseline -->`; the report helper fills it.
+
+When KLAUD_RESUME=true, an earlier session ended (ran out or was cancelled) before finishing
+this candidate, and recovery started this session in a new run to continue it. The branch,
+draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
+never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
+counter, repairs used and run IDs from your attempt comments; a commit pushed after the head
+of your last attempt comment, other than the perf-changelog entry, counts as a used repair.
+Inspect those runs (queued, running, preempted or finished) and continue. Repair budget,
+infrastructure-retry limits and failure rules carry over.
 
 Compare the actual old/new bundled engine source at its tags/commits in vLLM, SGLang,
 ATOM or TensorRT-LLM, including coupled dependencies and used flags/config parsers.
@@ -45,9 +55,9 @@ overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
 workspace permissions and artifact contracts; follow the CODEOWNER checklist.
 
-Before every PR/branch mutation or cancellation, re-read labels. `klaud-handoff` means
-maintainer ownership: leave PR/branch/labels/jobs intact, report handoff and stop.
-Never add or remove it yourself.
+Before every PR/branch mutation or cancellation, re-read labels. `klaud-abort` means a
+maintainer stopped this candidate: stop immediately without further changes; the job's
+cleanup cancels your runs and closes the PR. Never add or remove that label yourself.
 
 The planner checks capacity once, when it selects a candidate; never check or defer for
 capacity inside this session. Klaud runs at the lowest scheduler priority: dispatch every
@@ -104,7 +114,7 @@ repair: keep the same head and classify it as infrastructure-retry, at most two 
 Do not repeat deterministic failures as infrastructure retries. Stop after validation,
 exhausted repairs, or the same failure twice without progress.
 Benchmarks may take three hours. Do not cancel healthy or queued work to fit the agent job
-limit; leave it queued when the session ends.
+limit; leave it queued when the session ends, and a later session resumes it.
 
 After smoke benchmarks AND selected evals pass, append one exact-family inferencex-e2e/perf-changelog.yaml
 entry at the physical tail with this PR URL, preserving every prior byte. Omit scenario,
@@ -114,9 +124,8 @@ one essential compatibility adjustment. Do not include evidence, benchmark resul
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
-Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label.
-Only use full-sweep-enabled for a documented infrastructure exception where healthy jobs
-must survive sibling failures. Never switch labels while owned jobs are active.
+Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
+sweep label. Never switch labels while owned jobs are active.
 Fail-fast cancels siblings within a matrix, not every matrix; wait for all owned jobs.
 Classify the first failure, not the resulting cancellations. Retry cancelled points too;
 for an infrastructure retry of a cancelled run, rerun the whole attempt on the same head.
