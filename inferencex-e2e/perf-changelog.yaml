@@ -10254,4 +10254,4 @@
     - "Update the Muse Spark Open B200 curve to lmsysorg/sglang:nightly-dev-20261019-3c560089, retaining the full AgentX trace corpus selected on main."
     - "Set swa-full-tokens-ratio to 0.2 for every Muse Spark Open B200 SGLang AgentX concurrency point."
     - "Add TP8/EP8 concurrency 64 with layernorm sequence parallelism, MegaMoE, and HiCache DRAM offload, using 8192 MegaMoE tokens per rank and 160 GB of HiCache per rank."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4221
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4334
