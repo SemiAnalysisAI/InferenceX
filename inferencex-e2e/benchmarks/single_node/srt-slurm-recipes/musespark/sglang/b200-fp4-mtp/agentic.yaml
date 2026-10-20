@@ -31,7 +31,7 @@ base:
         max-running-requests: 192
         cuda-graph-max-bs-decode: 128
         cuda-graph-backend-prefill: breakable
-        swa-full-tokens-ratio: 0.4
+        swa-full-tokens-ratio: 0.2
         # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
@@ -164,4 +164,20 @@ override_tp8_c48:
   benchmark:
     env:
       CONC: '48'
+      KV_OFFLOADING: dram
+
+
+override_tp8_c64:
+  roles:
+    agg:
+      args:
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 160
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8192'
+  benchmark:
+    env:
+      CONC: '64'
       KV_OFFLOADING: dram
