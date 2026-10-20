@@ -10216,3 +10216,9 @@
   description:
     - "Add TP4/EP4 DRAM HiCache MTP points at concurrency 8 and 12 for Qwen3.5-397B FP8 on H200 with SGLang."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4209
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Update SGLang image to v0.5.22-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode for the removed alias."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4325
