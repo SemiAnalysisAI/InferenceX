@@ -78,8 +78,10 @@ def run(launch: Launch) -> int:
     model_path = CONTAINER_MODELS / model.dir
     workdir = container_workspace(request.image)
     outputs = script_outputs(request, workdir)
+    with launch.life.event.stage("prepare"):
+        image = backend.prepare_image(request.image)
     container = Container(
-        image=backend.prepare_image(request.image),
+        image=image,
         command=("bash", request.bench_script_override),
         gpus=request.gpu_count,
         time_limit_min=time_limit,

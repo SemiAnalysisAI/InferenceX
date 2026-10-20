@@ -3,6 +3,7 @@ import fnmatch
 import json
 import math
 import re
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
@@ -1502,6 +1503,26 @@ def generate_config_matrix(
     return json.loads(json.dumps(rows))
 
 
+def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
+    """``rows`` with the ``recipe-fingerprint`` changelog plans give the same throughput rows.
+
+    Eval selection copies it to the rows it derives. A row whose recipe cannot be bound gets
+    none and a warning; its job fails when it binds the recipe.
+    """
+    from infx.matrix.fingerprint import recipe_fingerprint  # imports this module via srt_slurm
+
+    fingerprinted = []
+    for row in rows:
+        try:
+            fingerprint = recipe_fingerprint(row, root)
+        except ValueError as error:
+            print(f"WARNING: no recipe fingerprint: {error}", file=sys.stderr)
+            fingerprinted.append(row)
+        else:
+            fingerprinted.append({**row, Fields.RECIPE_FINGERPRINT.value: fingerprint})
+    return fingerprinted
+
+
 def main() -> list[dict]:
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument(
@@ -1710,6 +1731,7 @@ def main() -> list[dict]:
         matrix_values = generate_test_config_sweep(args, all_config_data, runner_data, root)
     else:
         parser.error(f"Unknown command: {args.command}")
+    matrix_values = with_fingerprints(matrix_values, root)
 
     if args.command == "test-config" and args.exp_names:
         try:
