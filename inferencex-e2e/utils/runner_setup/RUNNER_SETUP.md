@@ -319,9 +319,9 @@ The host side of each is defined in that cluster's `clusters.<id>` record in `co
 2. **HF hub cache.** The workflows set the *container-side* path globally
    (`HF_HUB_CACHE=/mnt/hf_hub_cache/` in `benchmark-tmpl.yml`). The launcher mounts the
    cluster's *host* `slurm.volumes.hf-hub-cache` over it. Examples in use:
-   `/mnt/nfs/sa-shared/gharunners/hf-hub-cache/` (h100, shared NFS),
+   `/data/home/sa-gha-runner/gharunners/hf-hub-cache` (h100-dsxe, shared),
    `/mnt/vast/gharunner/hf-hub-cache` (CoreWeave, shared VAST),
-   `/tmp/gharunner/hf-hub-cache` (b200-cw, node-local at the same path on every node, but
+   `/raid/inferencex/models/hub` (mi300x-amd, node-local at the same path on every node, but
    each node downloads its own copy, so prefer shared storage where available).
 3. **Pre-staged model weights.** Large models are not downloaded from HF in CI. The
    cluster's `slurm.volumes` and `models.entries` name the per-cluster staging directories

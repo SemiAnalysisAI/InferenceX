@@ -8,10 +8,12 @@ import io
 import json
 import math
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Never
@@ -25,7 +27,7 @@ PRIVATE = "https://dash.inferencex.semianalysis.com"
 ENDPOINTS = {
     "images": PUBLIC + "/api/v1/latest-images",
     "releases": PUBLIC + "/api/v1/framework-releases",
-    "clusters": PRIVATE + "/api/status/clusters",
+    "scheduler": PRIVATE + "/api/status/scheduler",
     "benchmarks": PUBLIC + "/api/v1/benchmarks",
     "workflow-info": PUBLIC + "/api/v1/workflow-info",
     "evaluations": PUBLIC + "/api/v1/evaluations",
@@ -33,6 +35,7 @@ ENDPOINTS = {
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
 RETRY_DELAYS_SECONDS = (0.5, 1.5)
+KLAUD_JOB = re.compile(r"(?:^| / )klaud \| ", re.IGNORECASE)
 
 
 class ReadError(ValueError):
@@ -86,7 +89,7 @@ def fetch(
             query["exact"] = "true"
     url = ENDPOINTS[resource] + ("?" + urllib.parse.urlencode(query) if query else "")
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
-    if resource == "clusters":
+    if resource == "scheduler":
         if not token or not token.strip():
             raise ReadError("private-status-key-unavailable")
         if any(ord(char) < 33 or ord(char) > 126 for char in token.strip()):
@@ -174,8 +177,6 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
     age = (utc(now) - utc(feed.retrieved_at)).total_seconds()
     if age < -policy.clock_skew_seconds or age > policy.public_max_age_seconds:
         issues.append("feed-retrieval-stale")
-    # The public API/CDN owns cache freshness. Age is time in a shared cache,
-    # not the age of the benchmark data; do not impose a second CDN TTL here.
     return issues
 
 
@@ -232,91 +233,69 @@ def fresh(value: Any, now: datetime, policy: Policy) -> bool:
         return False
 
 
-def available_clusters(feed: Feed, policy: Policy, now: datetime) -> set[str]:
-    """Return clusters below 80% node utilization; never publish private status."""
+def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int]:
+    """Return the idle nodes of each cluster that waiting Klaud jobs have not already requested.
+
+    Clusters a waiting human job could run on, and clusters without headroom, are omitted.
+    Malformed or duplicate scheduler status yields no clusters.
+    """
     try:
         raw = feed.payload
+        snapshot = raw["data"]["snapshot"]
+        snapshot_age = (utc(now) - utc(snapshot["snapshotAt"])).total_seconds()
         if (
             feed.error
             or not fresh(feed.retrieved_at, now, policy)
-            or raw["kind"] != "inferencex.status.clusters"
+            or raw["kind"] != "inferencex.status.scheduler"
             or not fresh(raw["generatedAt"], now, policy)
             or raw["data"]["available"] is not True
+            or snapshot["stalled"] is not False
+            or not -policy.clock_skew_seconds <= snapshot_age <= policy.scheduler_max_age_seconds
         ):
-            return set()
-        # Validate the consumed fields, not schemaVersion: additive API changes
-        # must not turn healthy capacity into an empty candidate list.
-        available: set[str] = set()
+            return {}
+        human: set[str] = set()
+        klaud: Counter[str] = Counter()
+        for job in snapshot["queue"]:
+            # A job without a nodes label runs on one runner.
+            nodes = 1 if job["nodeCount"] is None else job["nodeCount"]
+            labels, runner = job["clusterIds"], job["runnerName"]
+            if (
+                type(nodes) is not int
+                or nodes < 1
+                or not isinstance(labels, list)
+                or not all(isinstance(label, str) for label in labels)
+                or not isinstance(runner, str | None)
+            ):
+                return {}
+            # A job holding a runner is already counted in allocatedNodes.
+            if runner is not None:
+                continue
+            if KLAUD_JOB.search(job["name"]):
+                for label in set(labels):
+                    klaud[label] += nodes
+            else:
+                human.update(labels)
+        headroom: dict[str, int] = {}
         seen: set[str] = set()
-        for cluster in raw["data"]["clusters"]:
-            cluster_id = cluster["clusterId"]
-            if not isinstance(cluster_id, str) or not cluster_id or cluster_id in seen:
-                return set()
-            seen.add(cluster_id)
-            # The API owns the cluster-age cutoff. Check timestamp validity/order,
-            # but do not impose a second cutoff on its current snapshots.
-            observed, received = utc(cluster["observedAt"]), utc(cluster["receivedAt"])
-            generated = utc(raw["generatedAt"])
-            if (
-                cluster["stale"] is not False
-                or cluster["status"] not in ("operational", "degraded")
-                or (observed - received).total_seconds() > policy.clock_skew_seconds
-                or (received - generated).total_seconds() > policy.clock_skew_seconds
-            ):
+        for metric in snapshot["packingMetrics"]:
+            label = metric["clusterLabel"]
+            if not isinstance(label, str) or not label.startswith("cluster:") or label in seen:
+                return {}
+            seen.add(label)
+            schedulable, allocated = metric["schedulableNodes"], metric["allocatedNodes"]
+            if type(schedulable) is not int or type(allocated) is not int or allocated < 0:
                 continue
-            summary = cluster["summary"]
-            total = summary["totalNodes"]
-            counts = [
-                summary[k]
-                for k in (
-                    "allocatedNodes",
-                    "mixedNodes",
-                    "idleNodes",
-                    "downNodes",
-                    "otherNodes",
-                )
-            ]
-            if (
-                type(total) is not int
-                or total <= 0
-                or any(type(n) is not int or n < 0 for n in counts)
-                or sum(counts) != total
-            ):
-                continue
-            # An entirely down/unavailable cluster can also report 0% utilization.
-            if (
-                summary["idleNodes"] > 0
-                and (summary["allocatedNodes"] + summary["mixedNodes"]) * 5 < total * 4
-            ):
-                available.add(cluster_id)
-        return available
+            free = schedulable - allocated - klaud[label]
+            if label not in human and free > 0:
+                headroom[label.removeprefix("cluster:")] = free
+        return headroom
     except (KeyError, ValueError, TypeError, AttributeError):
-        return set()
+        return {}
 
 
-def fetch_capacity(policy: Policy) -> set[str]:
-    return available_clusters(
-        fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
+def fetch_capacity(policy: Policy) -> dict[str, int]:
+    return cluster_headroom(
+        fetch("scheduler", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
         policy,
         datetime.now(UTC),
     )
-
-
-def capacity_context(policy: Policy) -> dict:
-    """Private routing hints for review, without node counts or raw responses."""
-    feed = fetch("clusters", token=os.environ.get("KLAUD_DASHBOARD_API_KEY"))
-    available = available_clusters(feed, policy, datetime.now(UTC))
-    try:
-        clusters = sorted(
-            {
-                cluster["clusterId"]
-                for cluster in feed.payload["data"]["clusters"]
-                if isinstance(cluster["clusterId"], str)
-            }
-        )
-    except (KeyError, TypeError):
-        clusters = []
-    return {
-        "telemetry-clusters": clusters,
-        "eligible-telemetry-clusters": sorted(available),
-    }

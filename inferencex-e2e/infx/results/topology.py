@@ -14,12 +14,13 @@ class Parallelism:
     pp: int = 1
     dcp_size: int = 1
     pcp_size: int = 1
+    dwdp_size: int = 1
     ep: int = 1
 
     @property
     def gpus_per_worker(self) -> int:
-        """EP and DCP share GPUs; only TP, PP, and PCP multiply allocation."""
-        return self.tp * self.pp * self.pcp_size
+        """EP and DCP share GPUs; DWDP counts the ranks in a weight-sharing group."""
+        return self.tp * self.pp * self.pcp_size * self.dwdp_size
 
     def for_decode(self, num_gpus: int) -> Parallelism:
         """An aggregate worker has no separate decode parallelism."""
@@ -33,6 +34,7 @@ class Parallelism:
             f"{prefix}dcp_size": self.dcp_size,
             f"{prefix}pcp_size": self.pcp_size,
             f"{prefix}ep": self.ep,
+            **({f"{prefix}dwdp_size": self.dwdp_size} if self.dwdp_size > 1 else {}),
         }
 
 
@@ -41,6 +43,13 @@ def validate_parallelism(
     error_type: type[BaseException] = ValueError,
 ) -> None:
     """Validate PP/DCP/PCP after the caller has parsed all its inputs."""
+    for layout in layouts:
+        if layout.dwdp_size < 1 or (
+            layout.dwdp_size > 1
+            and (layout.tp, layout.ep, layout.pp, layout.dcp_size, layout.pcp_size)
+            != (1, 1, 1, 1, 1)
+        ):
+            raise error_type("DWDP requires a positive size and TP=EP=PP=DCP=PCP=1.")
     if any(
         size <= 0 for layout in layouts for size in (layout.pp, layout.dcp_size, layout.pcp_size)
     ):

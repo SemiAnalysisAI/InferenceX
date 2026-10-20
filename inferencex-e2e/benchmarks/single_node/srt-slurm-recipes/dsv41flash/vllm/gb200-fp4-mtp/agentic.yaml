@@ -1,13 +1,6 @@
-# DeepSeek-V4.1-Flash AgentX on GB200 with vLLM native DSpark
-# (https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash). Engram weights use
-# UVA DRAM; the KV cache is GPU-resident.
 base:
   schema: 2
   name: dsv41flash-fp4-gb200-vllm-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: vllm/vllm-openai:nightly-dev-arm64-cu130-ac9126e58aa7
-    precision: fp4
   resources:
     gpu_type: gb200
     gpus_per_node: 4
@@ -57,10 +50,7 @@ base:
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # Native zip expansion creates one variant per concurrency.
@@ -96,7 +86,7 @@ zip_override_dep2:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 2
@@ -126,7 +116,7 @@ zip_override_dep4:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
-  setup_script: vllm-router-0.1.14.sh
+  setup_script: vllm-router.sh
   roles:
     agg:
       gpus: 4

@@ -24,6 +24,15 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 
 Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves. All submissions evaluating the same model and mode use the same curve.
 
+For Qwen3.5 srt-slurm launches, `apply_srt_recipe` uses the
+`infx/srt_slurm/synthetic_acceptance.py` connector to select the committed curve
+from the generation role's `speculative-num-steps` and `THINKING_MODE` after
+caller overrides. The verification token is not an additional MTP step. For
+SGLang MTP synthetic throughput, the connector rejects a generation role whose
+`speculative-num-draft-tokens` is missing or is not an integer equal to
+`speculative-num-steps + 1`. Manual acceptance-length settings are not needed.
+Eval-only runs remove synthetic settings and use real verification.
+
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
 ```bash
@@ -136,6 +145,7 @@ Before accepting an updated curve, reviewers should verify:
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | GLM-5.3 | MTP (provisional, K=3 copied from GLM-5.2) | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) (GLM-5.2) |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Muse Spark Open | DFlash2 | [`musespark_dflash.yaml`](musespark_dflash.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
 
 ## Using golden curves in srt-slurm runs
 

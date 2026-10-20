@@ -29,6 +29,8 @@ class Cluster(FrozenModel):
         self,
         gpu_level_power_per_gpu: float,
         *,
+        cpu_and_dram_measured_power_per_socket: float | None = None,
+        cpu_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> ITPowerBreakdown:
         per_gpu = validate_watts(gpu_level_power_per_gpu)
@@ -39,7 +41,12 @@ class Cluster(FrozenModel):
                 PowerComponentBreakdown.group(
                     "GPU systems",
                     tuple(
-                        group.estimate_it_power(per_gpu, operating_state=operating_state)
+                        group.estimate_it_power(
+                            per_gpu,
+                            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
+                            cpu_measured_power_per_socket=cpu_measured_power_per_socket,
+                            operating_state=operating_state,
+                        )
                         for group in self.systems
                     ),
                 ),
