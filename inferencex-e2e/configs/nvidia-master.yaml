@@ -9181,7 +9181,7 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
           dp-attn: true
 
 dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4
+  image: vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -9197,7 +9197,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
       search-space:
       - spec-decoding: mtp
         kv-offloading: none
-        srt-recipe: agg-variants.yaml:override_tp4_c1
+        srt-recipe: agg-variants.yaml:override_tp4_c1_seq1
         conc-list: [1]
         num-nodes: 1
         worker:
@@ -9207,8 +9207,8 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
           dp-attn: false
       - spec-decoding: mtp
         kv-offloading: none
-        srt-recipe: agg-variants.yaml:override_tp4_c8
-        conc-list: [8]
+        srt-recipe: agg-variants.yaml:override_tp4_c16
+        conc-list: [16]
         num-nodes: 1
         worker:
           num-worker: 1
@@ -9217,7 +9217,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
           dp-attn: false
 
 dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4
+  image: vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -9236,70 +9236,10 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_6p1d_dep2_dep16_c2884
-        conc-list: [2884]
+        srt-recipe: disagg-variants.yaml:override_9p1d_dep2_dep16_c7480
+        conc-list: [7480]
         prefill:
-          num-worker: 6
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_4p1d_dep2_dep16_c1228
-        conc-list: [1228]
-        prefill:
-          num-worker: 4
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_8p1d_dep2_dep16_c4096
-        conc-list: [4096]
-        prefill:
-          num-worker: 8
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_8p1d_dep2_dep16_c5120
-        conc-list: [5120]
-        prefill:
-          num-worker: 8
-          tp: 2
-          ep: 2
-          dp-attn: true
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: vllm-simple }
-        srt-recipe: disagg-variants.yaml:override_10p1d_dep2_dep16_c6656
-        conc-list: [6656]
-        prefill:
-          num-worker: 10
+          num-worker: 9
           tp: 2
           ep: 2
           dp-attn: true
