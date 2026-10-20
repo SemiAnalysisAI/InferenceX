@@ -10436,6 +10436,54 @@
   append-only: true
 
 - config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Update SGLang image to v0.5.21-cu130 and rename the TP memory-imbalance check env to its new enable form."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3672
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-rocm700-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3814
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-atom
+  description:
+    - "Bump ATOM image from atom0.1.2.post to rocm/atom-dev:nightly_202610080328 (ATOM v0.1.7)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3913
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update ATOM image from v0.1.3 to the v0.1.7 release build (rocm/atom-dev:nightly_202610080328, digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3915
+
+- config-keys:
+  - qwen3.5-fp8-gb200-dynamo-sglang
+  description:
+  - Update SGLang image to v0.5.21-cu130 and rename the removed TP memory imbalance check env var.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4080
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4168
+
+- config-keys:
+    - dsr1-fp8-h200-sglang-mtp
+  description:
+    - "Update SGLang image to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4256
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update SGLang image from v0.5.12-rocm700-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4269
+
+- config-keys:
     - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
   scenario-type:
     - agentic-coding
