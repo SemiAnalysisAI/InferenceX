@@ -9816,7 +9816,7 @@ musespark-fp4-h100-sglang-agentic-dflash:
       # 330k-480k-token inputs beside the weights and the DFlash2 draft.
       - spec-decoding: draft_model
         kv-offloading: none
-        conc-list: [1, 2]
+        conc-list: [1, 2, 4, 8, 16]
         num-nodes: 2
         srt-recipe: agg-tp8pp2-dflash.yaml
         worker:

@@ -19,13 +19,37 @@ def patch(path, edits):
     if MARK in text:
         print(f"{path.name}: already patched")
         return
-    for old, new in edits:
+    for edit in edits:
+        if callable(edit):
+            text = edit(path, text)
+            continue
+        old, new = edit
         count = text.count(old)
         if count != 1:
             sys.exit(f"{path.name}: expected 1 match, found {count}:\n{old}")
         text = text.replace(old, new)
     path.write_text(f"{MARK}\n{text}")
     print(f"{path.name}: patched")
+
+
+def guard(start, end, head):
+    """Indent the code from ``start`` up to ``end`` under ``head`` (an ``if``
+    or ``else`` line ending in a colon, with any preceding branch)."""
+
+    def edit(path, text):
+        for anchor in (start, end):
+            count = text.count(anchor)
+            if count != 1:
+                sys.exit(f"{path.name}: expected 1 match, found {count}:\n{anchor}")
+        i = text.index(start)
+        j = text.index(end, i)
+        body = "".join(
+            f"    {line}" if line.strip() else line
+            for line in text[i:j].splitlines(keepends=True)
+        )
+        return text[:i] + head + body + text[j:]
+
+    return edit
 
 
 patch(
@@ -593,6 +617,24 @@ patch(
             "            )\n"
             "        draft_input = batch.spec_info\n"
             "        if not isinstance(draft_input, DFlashDraftInputV2):\n",
+        ),
+        # The previous round's tail draft already drafted the relayed block
+        # from this same state, so verify it without drafting it again. The
+        # selector heads keep the draft: their accept reads its samples.
+        guard(
+            "        forward_batch = ForwardBatch(\n"
+            "            forward_mode=ForwardMode.TARGET_VERIFY,\n"
+            "            batch_size=bs,\n"
+            "            input_ids=block_ids.flatten(),\n",
+            "        draft_tokens = self._draft_block_tokens_buf[:bs]\n"
+            "        draft_tokens[:, 0].copy_(block_ids[:, 0])\n",
+            "        if (\n"
+            "            pp_relayed_block is not None\n"
+            "            and self.selector is None\n"
+            "            and self.lilicorr is None\n"
+            "        ):\n"
+            "            draft_next = pp_relayed_block[:, 1:]\n"
+            "        else:\n",
         ),
         (
             "        draft_tokens = self._draft_block_tokens_buf[:bs]\n"

@@ -10198,8 +10198,8 @@
     - agentic-coding
   description:
     - "Re-sweep Muse Spark Open H100 AgentX on the full uncapped trace corpus (semianalysis_cc_traces_weka_062126) after #4287 dropped the Muse Spark 256k exception; the image is unchanged."
-    - "The full corpus has 330k-480k-token inputs, and one H100 node cannot hold them beside the weights and the DFlash2 draft: 0.97 gave a 311k-token GPU KV pool that rejected them, and 0.975 OOMed the MoE in warmup. Serve on two H100 nodes as TP8 x PP2 (31 layers per stage, concurrency 1-2), which gives a multi-million-token pool."
-    - "The image's Muse Spark decoder and DFLASH worker support only one pipeline stage. A setup script adds stage-local layers with the fp32 residual relayed as a bf16 hi/lo pair, and runs DFLASH under SGLANG_ENABLE_PP_SPEC: the last stage verifies the relayed 8-token block and tail-drafts the next, earlier stages verify the same block and relay their target-layer taps."
+    - "The full corpus has 330k-480k-token inputs, and one H100 node cannot hold them beside the weights and the DFlash2 draft: 0.97 gave a 311k-token GPU KV pool that rejected them, and 0.975 OOMed the MoE in warmup. Serve on two H100 nodes as TP8 x PP2 (31 layers per stage). Each stage gets a 6.35M-token GPU KV pool, so the sweep runs concurrency 1-16 with max-running-requests and decode CUDA graphs at 16."
+    - "The image's Muse Spark decoder and DFLASH worker support only one pipeline stage. A setup script adds stage-local layers with the fp32 residual relayed as a bf16 hi/lo pair, and runs DFLASH under SGLANG_ENABLE_PP_SPEC: the last stage verifies the relayed 8-token block without drafting it again and tail-drafts the next, earlier stages verify the same block and relay their target-layer taps."
     - "Add the h100-dsxe multi-node sglang lane; stage traffic uses NCCL sockets on the primary ENI because the image lacks the EFA NCCL plugin."
     - "Set HF_HUB_OFFLINE=1 so every rank resolves the DFlash2 draft from the shared HF cache, matching MI355X; concurrent launches otherwise hit the Hub 429 API rate limit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4289

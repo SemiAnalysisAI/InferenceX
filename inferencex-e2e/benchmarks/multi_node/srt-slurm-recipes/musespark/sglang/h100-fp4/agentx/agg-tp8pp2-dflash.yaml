@@ -73,8 +73,10 @@ roles:
       disable-prefill-cuda-graph: true
       # Pipeline parallelism requires the non-overlap scheduler.
       disable-overlap-schedule: true
-      max-running-requests: 2
-      cuda-graph-max-bs-decode: 2
+      # The 6.35M-token pool holds about 13 of the corpus's longest (~480k)
+      # contexts, and two or more running requests keep both stages busy.
+      max-running-requests: 16
+      cuda-graph-max-bs-decode: 16
       # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
       speculative-algorithm: DFLASH
       speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
