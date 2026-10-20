@@ -16,7 +16,7 @@ collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${
 readonly -a RANK_ENV_VARS=(
   PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
-  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
+  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -319,14 +319,48 @@ print(json.load(open("configs/platform_config.json"))["platforms"][sys.argv[1]][
 PY
 }
 
+# The build recipe keys the cache and is recorded beside the packages, where the adapter publishes
+# it as library_version: a from-source build has no wheel version that tells two pins apart. Bump
+# UCCL_BUILD_GEN when the recipe or the record changes without the pin moving, so caches that
+# already carry .ready are rebuilt rather than reused. PER_EXPERT_BATCHING is off by default
+# upstream but is UCCL's documented drop-in deep_ep build, and it changes the low-latency kernels.
+readonly -a UCCL_BUILD_FLAGS=(USE_DMABUF=1 PER_EXPERT_BATCHING=1)
+readonly UCCL_BUILD_GEN=rec2
+readonly UCCL_BUILD_RECORD=collx_uccl_build.json
+
 uccl_probe() {
   # import torch FIRST so libc10 is resident before the uccl.ep extension dlopens (it links
   # libc10/libtorch); importing deep_ep before torch fails with "libc10.so: cannot open".
-  python3 - <<'PY'
+  # DeepSeek's DeepEP, which the sglang images ship, has the same legacy Buffer API, so capability
+  # checks cannot tell the two apart. Identity can: UCCL's wrapper re-exports uccl.ep's Config, both
+  # must load from this cache, and its build record must name the pinned commit.
+  python3 - "$1/site" "$COLLX_UCCL_COMMIT" "$UCCL_BUILD_RECORD" <<'PY'
+import json
+import sys
+from pathlib import Path
+
 import torch  # noqa: F401
 import deep_ep
 from deep_ep import Buffer
+from uccl import ep
+
+site, commit, record = Path(sys.argv[1]).resolve(), sys.argv[2], sys.argv[3]
+assert deep_ep.Config is ep.Config, "deep_ep is not UCCL's deep_ep_wrapper"
+for module in (deep_ep, ep):
+    assert site in Path(module.__file__).resolve().parents, f"{module.__name__} is not from {site}"
+assert json.loads((site / record).read_text())["commit"] == commit, "UCCL build record is stale"
 assert hasattr(Buffer, "low_latency_dispatch") and hasattr(Buffer, "get_dispatch_layout")
+PY
+}
+
+uccl_record_build() {
+  python3 - "$1/site/$UCCL_BUILD_RECORD" "$COLLX_UCCL_COMMIT" "${3:-${UCCL_BUILD_FLAGS[*]}}" "$2" <<'PY'
+import json
+import sys
+
+path, commit, build_flags, arch = sys.argv[1:]
+with open(path, "w", encoding="utf-8") as record:
+    json.dump({"commit": commit, "build_flags": build_flags, "arch": arch}, record)
 PY
 }
 
@@ -337,7 +371,7 @@ PY
 uccl_cache_root() {
   local arch
   arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
-  backend_cache_root uccl-ep "${arch#-}" "${COLLX_UCCL_COMMIT:0:12}"
+  backend_cache_root uccl-ep "${arch#-}" "${COLLX_UCCL_COMMIT:0:12}" "$UCCL_BUILD_GEN"
 }
 
 # CDNA needs UCCL's aggressive host-atomic path.
@@ -350,11 +384,21 @@ uccl_activate() {
 
 uccl_install() {
   local root="$1" arch="$2" source_dir="/tmp/collectivex-uccl-$COLLX_UCCL_COMMIT" arch_env sp
+  local -a flags=("${UCCL_BUILD_FLAGS[@]}")
+  # UCCL builds its EFA transport whenever EFA_HOME (/opt/amazon/efa) exists. The EFA pools'
+  # containers carry that directory beside an image rdma-core whose efadv.h predates the fields UCCL
+  # uses (h100-dgxc: efadv_qp_init_attr has no sl or flags), so the build fails. uccl-ep never
+  # leaves one node there, and inside one node UCCL starts no proxy, so those pools build without it.
+  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
+    [ "${COLLX_NODES:-1}" -le 1 ] \
+      || { collx_log "ERROR: UCCL-EP across EFA needs an EFA build against the host rdma-core"; return 1; }
+    flags+=(EFA_HOME=/nonexistent)
+  fi
   if [ -e "$root" ] || [ -L "$root" ]; then
     rm -rf "$root" || { collx_log "ERROR: incomplete UCCL cache-reset failed"; return 1; }
   fi
   mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
-  collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (USE_DMABUF, PER_EXPERT_BATCHING)"
+  collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (${flags[*]})"
   # Some sglang/rocm images mark the system env externally-managed (PEP 668).
   { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
       || python3 -m pip install -q --disable-pip-version-check --no-input \
@@ -370,11 +414,39 @@ uccl_install() {
     sed -i 's/cudaMallocManaged/cudaMallocHost/g' \
       "$source_dir/ep/src/uccl_ep.cc" "$source_dir/ep/src/uccl_proxy.cpp" \
       || { collx_log "ERROR: UCCL AMD managed-memory patch failed"; return 1; }
+    # Plain launch on AMD: hipify cannot map the cooperative cudaLaunchKernelEx path, which also
+    # costs ~30 us per launch on gfx942. Defined ahead of the #ifndef-guarded upstream macros.
+    python3 - "$source_dir/ep/include/ep_launch.cuh" <<'PY' \
+      || { collx_log "ERROR: UCCL AMD launch patch failed"; return 1; }
+import sys
+path = sys.argv[1]
+src = open(path).read()
+plain = r"""
+#define SETUP_LAUNCH_CONFIG(sms, threads, stream) \
+  int __num_sms = (sms);                          \
+  int __num_threads = (threads);                  \
+  auto __stream = (stream)
+#define LAUNCH_KERNEL(config, kernel, ...)                          \
+  do {                                                              \
+    kernel<<<__num_sms, __num_threads, 0, __stream>>>(__VA_ARGS__); \
+    cudaError_t e = cudaGetLastError();                             \
+    if (e != cudaSuccess) {                                         \
+      EPException cuda_exception("CUDA", __FILE__, __LINE__,        \
+                                 cudaGetErrorString(e));            \
+      fprintf(stderr, "%s\n", cuda_exception.what());               \
+      throw cuda_exception;                                         \
+    }                                                               \
+  } while (0)
+"""
+anchor = '#include "exception.cuh"\n'
+assert src.count(anchor) == 1, "ep_launch.cuh changed shape"
+open(path, "w").write(src.replace(anchor, anchor + plain, 1))
+PY
   else
     arch_env="TORCH_CUDA_ARCH_LIST=$arch"
   fi
   ( cd "$source_dir/ep" \
-      && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 "$arch_env" python3 setup.py install ) >&2 2>&1 \
+      && env "${flags[@]}" "$arch_env" python3 setup.py install ) >&2 2>&1 \
     || { collx_log "ERROR: UCCL ep extension build failed"; return 1; }
   # --no-deps: the wrapper's install_requires=["uccl"] resolves to the PyPI uccl-cu12 wheel, absent
   # on ROCm and wrong on CUDA too, since the from-source ep build already provides uccl.ep.
@@ -388,6 +460,8 @@ uccl_install() {
   mkdir -p "$root/site" \
     && cp -R "$sp"/deep_ep* "$sp"/uccl* "$root/site/" \
     || { collx_log "ERROR: UCCL cache population failed"; return 1; }
+  uccl_record_build "$root" "$arch" "${flags[*]}" \
+    || { collx_log "ERROR: UCCL build record failed"; return 1; }
   : > "$root/.ready"
 }
 
@@ -401,9 +475,9 @@ uccl_prepare() {
   fi
   shared="$(uccl_cache_root "$arch")" || shared=""
   prepare_site_cache UCCL-EP UCCL "$COLLX_UCCL_COMMIT" "$shared" \
-    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT" uccl_install "$arch" || return 1
+    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT-$UCCL_BUILD_GEN" uccl_install "$arch" || return 1
   uccl_activate "$CACHE_ROOT" || return 1
-  uccl_probe || { collx_log "ERROR: UCCL import probe failed"; return 1; }
+  uccl_probe "$CACHE_ROOT" || { collx_log "ERROR: UCCL import probe failed"; return 1; }
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
 }
 
@@ -487,6 +561,52 @@ nccl_ep_prepare() {
   collx_log "NCCL EP ready ($COLLX_NCCL_EP_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
 }
 
+# Multi-node EFA shards whose host plugin predates aws-ofi-nccl 1.21 build it against the host
+# libfabric the launcher binds, from a hash-pinned release tarball; the rank wrapper's EFA profile
+# then loads it in place of the host's (see COLLX_OFI_NCCL_VERSION). Proxy GIN only: configure finds
+# no libfabric GDA ops on those hosts.
+ofi_nccl_ready() { [ -f "$1/.ready" ] && [ -r "$1/lib/libnccl-net-ofi.so" ]; }
+
+ofi_nccl_install() {
+  local root="$1" version="$COLLX_OFI_NCCL_VERSION" tarball cuda_home
+  rm -rf "$root" && mkdir -m 700 "$root" \
+    || { collx_log "ERROR: aws-ofi-nccl cache-create failed"; return 1; }
+  tarball="aws-ofi-nccl-$version.tar.gz"
+  # Bounded per attempt so a stalled download is retried instead of hanging backend preparation.
+  curl -sSfL --connect-timeout 30 --max-time 300 --retry 3 -o "$root/$tarball" \
+      "https://github.com/aws/aws-ofi-nccl/releases/download/v$version/$tarball" \
+    && printf '%s  %s\n' "$COLLX_OFI_NCCL_SHA256" "$root/$tarball" | sha256sum -c --quiet \
+    && tar -xzf "$root/$tarball" -C "$root" \
+    || { collx_log "ERROR: aws-ofi-nccl source fetch failed"; return 1; }
+  IFS=$'\t' read -r cuda_home _ <<< "$(cuda_toolchain_paths)" && [ -n "$cuda_home" ] || return 1
+  collx_log "aws-ofi-nccl: building $version"
+  (
+    cd "$root/aws-ofi-nccl-$version" \
+      && ./configure -q --prefix="$root" --with-libfabric=/opt/amazon/efa --with-cuda="$cuda_home" \
+        --enable-platform-aws --disable-tests \
+      && make -s -j"$(nproc)" && make -s install
+  ) >&2 2>&1 || { collx_log "ERROR: aws-ofi-nccl build failed"; return 1; }
+  rm -rf "${root:?}/aws-ofi-nccl-$version" "${root:?}/$tarball"
+  : > "$root/.ready"
+}
+
+ofi_nccl_prepare() {
+  local root
+  unset COLLX_OFI_NCCL_LIB_DIR
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] && [ "${COLLX_NODES:-1}" -gt 1 ] || return 0
+  # ncclGinPlugin_v14 (the EFA GDA op table) first shipped in 1.21.0: such a host plugin already has
+  # the worker signal path (b300's 1.21.1, EFA installer 1.50.0).
+  if grep -qF ncclGinPlugin_v14 /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so; then
+    collx_log "aws-ofi-nccl: using the host plugin"
+    return 0
+  fi
+  root="$(backend_cache_root ofi-nccl efa "$COLLX_OFI_NCCL_VERSION")" \
+    || root="/tmp/collectivex-ofi-nccl-$COLLX_OFI_NCCL_VERSION"
+  with_cache_lock "aws-ofi-nccl" "$root" ofi_nccl_ready ofi_nccl_install || return 1
+  export COLLX_OFI_NCCL_LIB_DIR="$root/lib"
+  collx_log "aws-ofi-nccl $COLLX_OFI_NCCL_VERSION ready"
+}
+
 # container boundary
 
 write_rank_env() {
@@ -513,7 +633,7 @@ write_rank_env() {
 }
 
 validate_container_network() {
-  local interface device rdma_name
+  local interface device rdma_name efa_domains
   local -a interfaces devices
   if [ "${COLLX_NODES:-1}" -le 1 ] || [ "${COLLX_TRANSPORT:-}" = mnnvl ]; then
     return 0
@@ -521,11 +641,22 @@ validate_container_network() {
   collx_restore_exact_hca_selector || return 1
   local rdma_selector="${NCCL_IB_HCA:-}"
   if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
-    # No verbs selector on EFA; the probe-validated device list is the contract, and the
-    # libfabric NCCL plugin the enroot hook mounts is what actually carries the traffic.
+    # No verbs selector on EFA; the probe-validated device list is the contract, and the host's
+    # libfabric NCCL plugin (collx_efa_host_mounts) is what actually carries the traffic. A verbs
+    # provider from another rdma-core loads nothing and says nothing, so require the host libfabric
+    # to reach every listed device through the bound user space.
     rdma_selector="${COLLX_RDMA_DEVICES:-}"
     [ -r /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so ] \
-      || { collx_log "ERROR: aws-ofi-nccl plugin is absent inside the container"; return 1; }
+      && [ -r "$COLLX_EFA_HOST_ROOT/lib/libibverbs.so.1" ] \
+      || { collx_log "ERROR: the host EFA user space is absent inside the container"; return 1; }
+    efa_domains="$(/opt/amazon/efa/bin/fi_info -p efa -t FI_EP_RDM 2>&1)" \
+      || { collx_log "ERROR: the host libfabric finds no EFA device"; return 1; }
+    IFS=, read -r -a devices <<< "$rdma_selector"
+    for device in "${devices[@]}"; do
+      [[ "$efa_domains" == *"domain: ${device%%:*}-rdm"* ]] \
+        || { collx_log "ERROR: a configured EFA device is unusable through the host libfabric"
+             return 1; }
+    done
   fi
   [ -n "${GLOO_SOCKET_IFNAME:-}" ] && [ -n "$rdma_selector" ] \
     || { collx_log "ERROR: scale-out network selectors are unavailable"; return 1; }
@@ -570,6 +701,7 @@ FICHECK
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
   validate_container_network || return 1
+  ofi_nccl_prepare || return 1
   case "$COLLX_BENCH" in
     deepep-v2) deepep_prepare || return 1 ;;
     mori)

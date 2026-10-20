@@ -75,6 +75,21 @@ on:
         required: false
         type: string
         default: ""
+      require-power:
+        description: "Fail result processing when GPU power telemetry is invalid"
+        type: boolean
+        required: false
+        default: false
+      pr-number:
+        description: "Pull request whose sweep runs this job; empty for other triggers"
+        required: false
+        type: string
+        default: ""
+      test-name:
+        description: "Name of the dispatched test run; empty for other triggers"
+        required: false
+        type: string
+        default: ""
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
@@ -86,6 +101,7 @@ env:
   SALLOC_TIME_LIMIT: '480'
   KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
+  REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
@@ -123,7 +139,7 @@ env:
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.scenario-type == 'agentic-coding' && fromJSON(inputs.config).kv-offload-backend && toJSON(fromJSON(inputs.config).kv-offload-backend) || '' }}
   ROUTER_METADATA: ${{ fromJSON(inputs.config).router && toJSON(fromJSON(inputs.config).router) || '' }}
   KV_P2P_TRANSFER: ${{ fromJSON(inputs.config).kv-p2p-transfer || '' }}
-  TOTAL_CPU_DRAM_GB: ${{ inputs.scenario-type != 'agentic-coding' && '0' || fromJSON(inputs.config).total-cpu-dram-gb }}
+  TOTAL_CPU_DRAM_GB: ${{ fromJSON(inputs.config).total-cpu-dram-gb || '0' }}
   DURATION: ${{ inputs.duration }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
@@ -131,13 +147,16 @@ env:
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  BENCHMARK_REF: ${{ inputs.ref || github.sha }}
+  PR_NUMBER: ${{ inputs.pr-number }}
+  TEST_NAME: ${{ inputs.test-name }}
 
 permissions:
   contents: read
 
 jobs:
   benchmark:
-    runs-on: >-
+    runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         (
@@ -251,7 +270,8 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
+          JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_a${{ github.run_attempt }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
@@ -318,6 +338,10 @@ jobs:
           if [ ! -f "$RESULT_FILENAME.json" ]; then
             echo "no raw result to process: $RESULT_FILENAME.json" >&2
             exit 1
+          fi
+          # A native power job's launcher stamp names the telemetry producer
+          if [ -f power-producer-sha.txt ]; then
+            export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
           fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
@@ -452,6 +476,33 @@ jobs:
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-single-node-submission.json
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-slurm-sha.txt
             ${{ env.INFERENCEX_E2E_ROOT }}/srt-setup.log
+            ${{ env.INFERENCEX_E2E_ROOT }}/srt-bind.log
+          if-no-files-found: ignore
+
+      - name: Upload power audit bundle
+        if: ${{ always() && !inputs.eval-only }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: power_audit_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power_validation_${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/results/agentic_power_timezone_offset.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/power/**
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/agentic_power_concurrency_*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/${{ env.RESULT_FILENAME }}.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/power-producer-sha.txt
+            ${{ env.INFERENCEX_E2E_ROOT }}/exporter-image.sha256
+          if-no-files-found: ignore
+
+      - name: Upload job event
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: job_event_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/job_event.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

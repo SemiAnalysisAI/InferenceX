@@ -17,6 +17,7 @@ from ep_oracle import (
     chain_output_matches,
     run_expert_oracle,
 )
+import gpu_clocks
 
 _CASE_ID = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
@@ -47,8 +48,8 @@ CONDITIONING_ROUNDS_PER_SHAPE = 8
 def logical_byte_provenance(logical_copies: int, hidden: int, value_bytes: int = 2,
                             scale_bytes_per_copy: int = 0) -> dict[str, int]:
     """Comparable logical activation bytes for one direction. BF16 moves 2 bytes/value with no
-    scales; FP8 moves 1 byte/value, plus per-block FP32 scales for a blockwise codec (DeepEP) and
-    none for a plain e4m3 cast (MoRI). Combine is always BF16."""
+    scales; FP8 moves 1 byte/value plus per-128-block FP32 scales (every FP8 codec here). Combine
+    is always BF16."""
     if logical_copies < 0 or hidden < 0:
         raise ValueError("logical byte dimensions must be non-negative")
     if value_bytes <= 0 or scale_bytes_per_copy < 0:
@@ -139,20 +140,22 @@ def _pcts(xs):
              "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
 
 
-# Consumer contract, not labels: the frontend and durable store key the headline on
+# Consumer contract, not labels: the frontend keys the headline on
 # `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo fails silently.
 CHAIN_PERIOD_ORIGIN = "chained-median"
 CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
 CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 
 
-def _published_tails(percentiles, graph_replay):
-    """Under graph replay only the median: a rank whose host is late to launch its replay stalls
-    the others, so graphed fresh-entry tails measure host jitter (gb200 flashinfer T=1 roundtrip
-    p99 858us vs combine p99 30us)."""
-    if not graph_replay or percentiles is None:
-        return percentiles
-    return {key: (value if key == "p50" else None) for key, value in percentiles.items()}
+def _published_tails(percentiles, suspect_fraction=0.0):
+    """Fresh-entry tails are withheld once the suspect samples, those whose alignment may have
+    failed or whose host stalled inside the window, could fill everything above them: p99 at 1% of
+    samples, p95 at 5%, p90 at 10%. Graphed rows pass through the same gate: a replay call that
+    outlasted the captured spin counts as missed, as an eager sample's late enqueue does."""
+    if percentiles is None:
+        return None
+    return {key: (None if key != "p50" and 100 * suspect_fraction >= 100 - int(key[1:]) else value)
+            for key, value in percentiles.items()}
 
 
 def _component(percentiles, count, *, derived=False, origin=None):
@@ -196,9 +199,11 @@ def _write_json_atomic(path: str, value) -> None:
 
 
 def kernel_generation(backend) -> str:
-    """The adapter's kernel family; `-cudagraph` keeps replayed rows a separate series."""
+    """Identify the kernel family and the rank-alignment regime it was timed under."""
     family = backend.kernel_generation or "n-a"
-    return f"{family}-cudagraph" if backend.cuda_graph_enabled else family
+    if backend.cuda_graph_enabled:
+        return f"{family}-cudagraph-spin-ar"
+    return f"{family}-eager-spin-ar"
 
 
 class _Collectives:
@@ -225,6 +230,11 @@ class _Collectives:
         """Every rank's copy of one per-rank scalar, in rank order."""
         return [float(g.item()) for g in self._gather(
             self.torch.tensor([float(val)], device=self.device, dtype=self.torch.float64))]
+
+    def rows(self, vals):
+        """Every rank's copy of one per-rank vector, in rank order."""
+        return [[float(x) for x in g.tolist()] for g in self._gather(
+            self.torch.tensor(vals, device=self.device, dtype=self.torch.float64))]
 
     def integer(self, v, op) -> int:
         t = self.torch.tensor([int(v)], device=self.device, dtype=self.torch.int64)
@@ -262,8 +272,16 @@ class Point:
 
     Fresh-entry series carry one value per timed iteration pooled across trials: MAX-reduced for
     the published latencies, MIN-reduced (`_min`) for the skew-excluded companions, `spread` the
-    roundtrip's max-min. The chained family runs on its own trials: `chain`/`chain_spread` are
-    per-iteration, `gap` and `settle` one scalar per trial.
+    roundtrip's max-min, and `missed` counts each series' samples that some rank entered after its
+    alignment spin ran out (eager: its enqueue; graphed: its replay call). For series whose dispatch
+    waits on the host, `host_held`
+    counts the samples whose start some rank held until its throttled host recovered, and
+    `host_stalled` the samples some rank's host ran throttled around anyway; `suspect` counts the
+    samples that were missed or stalled, once. The chained family runs on its own trials:
+    `chain`/`chain_spread` are per-iteration, `gap` and `settle` one scalar per trial;
+    `chain_host_retries` and `chain_host_stalled` count, for a dispatch that waits on the host, the
+    chain siblings restarted for a throttled host and the trials still throttled after the last
+    restart (None elsewhere).
     """
 
     T: int
@@ -297,6 +315,12 @@ class Point:
     combine_floor: list = field(default_factory=list)
     gap: list = field(default_factory=list)
     settle: list = field(default_factory=list)
+    missed: dict = field(default_factory=dict)
+    host_held: dict = field(default_factory=dict)
+    host_stalled: dict = field(default_factory=dict)
+    suspect: dict = field(default_factory=dict)
+    chain_host_retries: "int | None" = None
+    chain_host_stalled: "int | None" = None
 
     def inputs_unchanged(self, torch):
         x, idx, weights = self.snapshot
@@ -355,10 +379,15 @@ class Sweep:
         self.points = [point for point, _ in prepared]
         # status=valid also requires a proven-identical routing trace across ranks.
         self.routing_consistent = all([consistent for _, consistent in prepared])
+        # Clocks over the timed passes only; reads land between bursts, never inside a window.
+        self.clocks = gpu_clocks.ClockMonitor(self.torch, self.device)
+        self.clocks.start()
         self._sample_fresh()
         if self.graph:
             self._check_graph_replay()
         self._sample_chain()
+        self.clocks.finish()
+        self.gpu_clocks = gpu_clocks.summarize(self.reduce.rows(self.clocks.vector()), self.clocks.reason)
         for point in self.points:
             self._final_oracle(point)
         rows = [self._row(point) for point in self.points]
@@ -367,7 +396,7 @@ class Sweep:
         if self.rank == 0:
             _write_json_atomic(self.args.out, doc)
             self._print_summary(rows, doc)
-        # The return code is CI's only success signal (the doc uploads regardless), so a captured
+        # The return code is the only success signal (the doc is written regardless), so a captured
         # `invalid` outcome must fail the leg; agreed across ranks so the case fails as one.
         return 0 if self.reduce.all(all_ok) else 3
 
@@ -450,6 +479,25 @@ class Sweep:
                     measured[name] = self.backend.benchmark_component(
                         name, point.problem, self.args.warmup, self.args.iters
                     )
+                    missed = self.backend.alignment_misses()
+                    if missed is not None:
+                        # A sample is misaligned when any rank entered it late and, where the
+                        # dispatch waits on the host, held or host-stalled when any rank's was.
+                        # One MAX reduction carries the three per-sample flags end to end.
+                        held, stalled = self.backend.host_holds(), self.backend.host_stalls()
+                        gated = stalled is not None
+                        flags = self.reduce.vec(missed + (held + stalled if gated else []), MAX)
+                        count = len(missed)
+                        suspect = flags[:count]
+                        point.missed[name] = point.missed.get(name, 0) + int(sum(suspect))
+                        if gated:
+                            waited, slow = flags[count:2 * count], flags[2 * count:]
+                            point.host_held[name] = point.host_held.get(name, 0) + int(sum(waited))
+                            point.host_stalled[name] = point.host_stalled.get(name, 0) + int(sum(slow))
+                            suspect = [max(late, stall) for late, stall in zip(suspect, slow)]
+                        point.suspect[name] = point.suspect.get(name, 0) + int(sum(suspect))
+                # The GPU has just run this point's bursts, so its clock is the one they ran at.
+                self.clocks.sample()
                 if measured["dispatch"]:
                     point.dispatch += self.reduce.vec(measured["dispatch"], MAX)
                     point.combine += self.reduce.vec(measured["combine"], MAX)
@@ -470,8 +518,10 @@ class Sweep:
         for point in self.points:
             point.graph_output_rewritten &= bool(getattr(point.problem, "_cuda_graph_output_rewritten", False))
             replayed = self.backend.graph_replay_output(point.problem)
+            # The replay ran on rescaled inputs; so does this drained reference, then they come back.
             drained = self.backend.run_roundtrip(point.problem)
             self.torch.cuda.synchronize()
+            self.backend.graph_replay_restore(point.problem)
             ok, error = chain_output_matches(replayed, drained)
             point.graph_output_ok &= ok
             point.graph_output_error = max(point.graph_output_error, error)
@@ -489,6 +539,7 @@ class Sweep:
                 chained = self.backend.benchmark_chain(
                     point.problem, self.args.warmup, self.args.chain_iters, self.args.chain_drop
                 )
+                self.clocks.sample(temperature=True)
                 drained = self.backend.run_roundtrip(point.problem)
                 self.torch.cuda.synchronize()
                 if self.chain_output_applicable:
@@ -509,6 +560,9 @@ class Sweep:
                 half = len(pair) // 2
                 drifts = self.reduce.scalars(_pcts(pair[half:])["p50"] - _pcts(pair[:half])["p50"])
                 point.settle.append(max(drifts, key=abs))
+                if chained.get("host_retries") is not None:
+                    point.chain_host_retries = (point.chain_host_retries or 0) + chained["host_retries"]
+                    point.chain_host_stalled = (point.chain_host_stalled or 0) + int(chained["host_stalled"])
                 if final:
                     point.oracle_chain = self._oracle(point)
 
@@ -582,18 +636,31 @@ class Sweep:
         global_tokens = T * self.world_size
         dp, sp, cp, rtp = _pcts(point.dispatch), _pcts(point.stage), _pcts(point.combine), _pcts(point.roundtrip)
         chainp = _pcts(point.chain)
+        if point.chain_host_stalled and chainp is not None:
+            # A trial still throttled after its restarts: its pairs may carry the host's pace.
+            chainp = {key: (value if key == "p50" else None) for key, value in chainp.items()}
         origin = CUDA_GRAPH_ORIGIN if graph else None
+        # Stage is local work, so only the cross-rank series gate the tails.
+        def largest_share(counts):
+            return max((counts.get(name, 0) / len(samples)
+                        for name, samples in (("roundtrip", point.roundtrip),
+                                              ("dispatch", point.dispatch),
+                                              ("combine", point.combine)) if samples),
+                       default=0.0)
+
+        missed_fraction = largest_share(point.missed)
+        stalled_fraction = largest_share(point.host_stalled) if point.host_stalled else None
+        held_fraction = largest_share(point.host_held) if point.host_held else None
 
         def pub(pcts):
-            return _published_tails(pcts, graph)
+            return _published_tails(pcts, largest_share(point.suspect))
 
         def measured(samples, pcts=None):
             return _component(pub(pcts or _pcts(samples)), len(samples), origin=origin)
 
-        # isolated_sum adds the isolated percentiles; not a measured chained operation, never a
-        # throughput basis. Stage contributes zero where it is not timed.
-        isum = ({key: dp[key] + (sp[key] if sp is not None else 0.0) + cp[key] for key in dp}
-                if dp and cp else None)
+        # isolated_sum adds the isolated dispatch and combine percentiles; not a measured chained
+        # operation, never a throughput basis. Stage is reported apart and never summed in.
+        isum = {key: dp[key] + cp[key] for key in dp} if dp and cp else None
         received = point.oracle_pre["receive_count"]
         recv_total = reduce.integer(received, ops.SUM)
         recv_max = reduce.integer(received, ops.MAX)
@@ -634,6 +701,10 @@ class Sweep:
                 "interpair_gap_us": _component(_pcts(point.gap), len(point.gap)),
                 "pair_spread_us": _component(_pcts(point.chain_spread), len(point.chain_spread)),
                 "settle_drift_us": _component(_pcts(point.settle), len(point.settle)),
+                # Dispatch that waits on the host only (null elsewhere): siblings restarted for a
+                # throttled host, and trials still throttled after the last restart.
+                "host_retried_siblings": point.chain_host_retries,
+                "host_stalled_trials": point.chain_host_stalled,
             },
             # Same iterations reduced by cross-rank MIN: how much of a point is rank stagger.
             "cross_rank_min_us": {
@@ -643,6 +714,20 @@ class Sweep:
             },
             # Diagnostic, not a latency: large next to the roundtrip means skew-inflated.
             "cross_rank_spread_us": _component(_pcts(point.spread), len(point.spread)),
+            # Per series, the samples some rank entered after its spin ran out (eager: the host
+            # enqueue; graphed: the replay call) and, where the dispatch waits on the host (null
+            # elsewhere), the samples whose start some rank held for its throttled host and the
+            # samples some rank's host ran throttled around anyway, each with its largest
+            # cross-rank series share. Held samples opened at speed; tails are withheld once the
+            # missed or stalled samples could fill them.
+            "rank_alignment": {
+                "host_held_fraction": held_fraction,
+                "host_held_samples": dict(sorted(point.host_held.items())) or None,
+                "host_stalled_fraction": stalled_fraction,
+                "host_stalled_samples": dict(sorted(point.host_stalled.items())) or None,
+                "missed_fraction": missed_fraction,
+                "missed_samples": dict(sorted(point.missed.items())),
+            },
             "correctness": correctness,
             "global_tokens": global_tokens,
             "byte_provenance": {
@@ -664,6 +749,8 @@ class Sweep:
             "tokens_per_rank": T,
         }
         if self.rank == 0:
+            host_log = ("" if stalled_fraction is None
+                        else f"held={held_fraction:.2%} stalled={stalled_fraction:.2%} ")
             component_log = (f"disp p50/p99={dp['p50']:7.1f}/{dp['p99']:7.1f} "
                              f"comb {cp['p50']:6.1f}/{cp['p99']:6.1f} " if dp and cp
                              else "components=unavailable ")
@@ -672,6 +759,8 @@ class Sweep:
                   f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(point.roundtrip)} "
                   f"fanout={rstats['fanout_mean']:.2f} "
                   f"recv[min/mean/max]={recv_min}/{recv_total // self.world_size}/{recv_max} "
+                  f"missed={missed_fraction:.2%} "
+                  f"{host_log}"
                   f"correct={point_ok}")
         return row
 
@@ -737,8 +826,12 @@ class Sweep:
                 },
             },
             "implementation": {
+                # What the library was realized with (SMs, QPs, launch configs, capacity,
+                # zero-copy, scale format): the adapter's own report, null where it has none.
+                "library_config": backend.implementation_details() or None,
                 "fp8_consume": backend.fp8_consume,
                 "kernel_generation": kernel_generation(backend),
+                "rank_alignment": backend.timing.alignment,
                 # The reduction the oracle held the kernel to, and the library version it was
                 # chosen from: a wheel bump must not silently change the arithmetic behind `passed`.
                 "combine_reduction": backend.combine_reduction,
@@ -761,8 +854,12 @@ class Sweep:
                 "transport": args.transport,
                 "world_size": self.world_size,
             },
-            "runtime": getattr(args, "runtime", {}),
-            "provenance": {"image": getattr(args, "image", "") or None, "source_sha": git_run.get("source_sha")},
+            "runtime": {**getattr(args, "runtime", {}), "gpu_clocks": self.gpu_clocks},
+            "provenance": {
+                "image": getattr(args, "image", "") or None,
+                "source_sha": git_run.get("source_sha"),
+                "source_dirty": git_run.get("source_dirty"),
+            },
             "outcome": {
                 "reasons": [] if all_ok else ["semantic correctness or routing identity failed"],
                 "status": "success" if all_ok else "invalid",
@@ -791,6 +888,9 @@ class Sweep:
               f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={self.routing_consistent}, "
               f"{' '.join(point_summary(row) for row in summary_rows)} "
               f"-> {self.args.out}")
+        warning = gpu_clocks.slow_gpu_warning(doc["runtime"].get("gpu_clocks"))
+        if warning:
+            print(warning)
 
 
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:

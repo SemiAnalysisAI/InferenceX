@@ -80,7 +80,7 @@ def copy_fixed_sequence_results(logs_dir: Path, workspace: Path, result_filename
     """Copy srt-slurm's ``results_concurrency_*.json`` points under bounded workspace names."""
     subdirs = _result_subdirs(logs_dir)
     if not subdirs:
-        _say(f"Warning: No result subdirectories found in {logs_dir}")
+        _warn(f"WARNING: no result subdirectories found in {logs_dir}")
     for subdir in subdirs:
         _say(f"Processing result subdirectory: {subdir}")
         config_name = subdir.name
@@ -203,21 +203,40 @@ def validate_agentic_power(
             _warn("ERROR: INFERENCEX_RESULTS_PYTHON is required")
             rc = 1
             continue
-        python_path = os.environ.get("PYTHONPATH")
-        env = {
-            **os.environ,
-            "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
-        }
-        argv = [
-            results_python, "-m", "infx.results.agentic.power_adapter",
-            "--result-dir", str(logs_dir / "agentic" / f"conc_{concurrency}"),
-            "--agg-result", str(workspace / f"{result_filename}_conc{concurrency}.json"),
-            "--power-dir", str(logs_dir / "power"),
-            "--logs-root", str(logs_dir),
-            "--expected-producer-sha", producer_sha,
-            *(["--require-power"] if require_power else []),
-        ]  # fmt: skip
-        step = proc.run(argv, env=env, cwd=workspace).returncode
-        if step:
+        if step := run_power_adapter(
+            results_python, workspace, logs_dir,
+            logs_dir / "agentic" / f"conc_{concurrency}",
+            workspace / f"{result_filename}_conc{concurrency}.json",
+            producer_sha, require_power=require_power,
+        ):  # fmt: skip
             rc = step
     return rc
+
+
+def run_power_adapter(
+    results_python: str,
+    workspace: Path,
+    logs_dir: Path,
+    result_dir: Path,
+    agg_result: Path,
+    producer_sha: str,
+    *extra: str,
+    require_power: bool,
+) -> int:
+    """Join one AgentX point's aggregate to the power package under ``logs_dir``."""
+    python_path = os.environ.get("PYTHONPATH")
+    env = {
+        **os.environ,
+        "PYTHONPATH": f"{_PROJECT_ROOT}:{python_path}" if python_path else str(_PROJECT_ROOT),
+    }
+    argv = [
+        results_python, "-m", "infx.results.agentic.power_adapter",
+        "--result-dir", str(result_dir),
+        "--agg-result", str(agg_result),
+        "--power-dir", str(logs_dir / "power"),
+        "--logs-root", str(logs_dir),
+        "--expected-producer-sha", producer_sha,
+        *extra,
+        *(["--require-power"] if require_power else []),
+    ]  # fmt: skip
+    return proc.run(argv, env=env, cwd=workspace).returncode

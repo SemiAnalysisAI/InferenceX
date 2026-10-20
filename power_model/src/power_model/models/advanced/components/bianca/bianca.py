@@ -16,7 +16,11 @@ from power_model.base import (
 )
 from power_model.models.advanced.components.grace_cpu import GraceCPU, GraceWorkloadProfile
 from power_model.models.advanced.components.lpddr5x import LPDDR5XMemory
-from power_model.models.advanced.profiles import GPU_INPUT, GRACE_SOCKET_INPUT
+from power_model.models.advanced.profiles import (
+    GPU_INPUT,
+    GRACE_CPU_SOCKET_INPUT,
+    GRACE_SOCKET_INPUT,
+)
 
 
 class BiancaBoard(FrozenModel):
@@ -47,6 +51,7 @@ class BiancaBoard(FrozenModel):
         gpu_level_power_per_gpu: float,
         *,
         cpu_and_dram_measured_power_per_socket: float | None = None,
+        cpu_measured_power_per_socket: float | None = None,
         operating_state: OperatingState = DEFAULT_OPERATING_STATE,
     ) -> PowerComponentBreakdown:
         per_gpu = validate_watts(gpu_level_power_per_gpu)
@@ -56,9 +61,17 @@ class BiancaBoard(FrozenModel):
         if cpu_and_dram_measured_power_per_socket is None:
             grace = (
                 GraceCPU(
-                    power_w=point.cpu_power_w,
+                    power_w=(
+                        point.cpu_power_w
+                        if cpu_measured_power_per_socket is None
+                        else cpu_measured_power_per_socket
+                    ),
                     workload_state=state.workload_state,
-                    provenance=self.workload_profile.provenance,
+                    provenance=(
+                        self.workload_profile.provenance
+                        if cpu_measured_power_per_socket is None
+                        else GRACE_CPU_SOCKET_INPUT
+                    ),
                 ).estimate_breakdown(),
                 memory,
             )
