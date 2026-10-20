@@ -8,6 +8,10 @@ name: "agg-b300-dep8-c384-mtp-kvoffload"
 # (benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-mtp/agentic.yaml,
 # override_dep8_c384). The Dynamo KV router replaces the SGLang router: each
 # DP rank publishes KV events, and sessions stay sticky via X-Dynamo-Session-ID.
+# Scheduling follows the single-node SGLang EAGLE DEP8 recipe
+# (benchmarks/single_node/srt-slurm-recipes/dsv4/sglang/b300-fp4-eagle/agentic.yaml):
+# mixed chunked prefill, shortest-prefill-first, DP spec/prefill coordination and
+# prefill-decode-interval 32.
 # Concurrency is exported by the master config.
 
 identity:
@@ -67,8 +71,10 @@ roles:
       # Triton compiles with the image's CUDA ptxas.
       TRITON_PTXAS_PATH: /usr/local/cuda/bin/ptxas
       SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
-      # Covers the 8192-token per-rank prefill budget (65536 / 8 DP ranks).
+      # Covers the 8192-token per-rank prefill budget (65536 / 8 DP ranks) plus up
+      # to 96 one-token decodes in a mixed chunk.
       SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "8320"
+      SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION: "1"
 
     args:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro-0813"
@@ -86,7 +92,9 @@ roles:
       moe-a2a-backend: megamoe
       enable-deepseek-v4-fp4-indexer: true
       enable-prefill-delayer: true
-      prefill-decode-interval: 20
+      prefill-decode-interval: 32
+      enable-mixed-chunk: true
+      schedule-policy: shortest-prefill-first
       stream-interval: 20
       # Mega-MoE's transient workspace sits outside the static pool.
       mem-fraction-static: 0.88
