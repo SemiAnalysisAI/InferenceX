@@ -183,7 +183,7 @@ base:
     mem: "0"
     cpus-per-task: "144"
     # Prefill Engram host-table allocation hit CUDA_ERROR_OUT_OF_MEMORY on these.
-    exclude: "im-gb300-r01-c[002,010-011],im-gb300-r03-c[001-002]"
+    exclude: "im-gb300-r01-c[001-002,004-005,010-011],im-gb300-r03-c[001-002]"
   srun_options:
     container-remap-root: ""
   benchmark:
