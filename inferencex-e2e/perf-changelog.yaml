@@ -10323,6 +10323,66 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4231
 
 - config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Update SGLang image from v0.5.19-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3813
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Update SGLang image from v0.5.14-cu130 to v0.5.21-cu130 and rename the CLI flags SGLang v0.5.20 removed."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3825
+
+- config-keys:
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.15.post1-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3847
+
+- config-keys:
+    - dsr1-fp8-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3862
+
+- config-keys:
+    - dsr1-fp4-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3868
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Update ATOM to v0.1.7 (rocm/atom-dev:nightly_202610080328) and keep prefix caching disabled as in the old image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3918
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4059
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+  description:
+    - "Update the ATOM image from nightly_202610080328 (v0.1.7) to nightly_202610161458 (0.1.8.dev75)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4192
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.14-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4213
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang-mtp
+  description:
+    - "Bump SGLang image to v0.5.21-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4214
+
+- config-keys:
     - dsr1-fp4-mi355x-sglang-mtp
   description:
     - "Update SGLang image from v0.5.12-rocm700-mi35x to v0.5.22-rocm720-mi35x and rename cuda-graph-max-bs to its decode flag."
