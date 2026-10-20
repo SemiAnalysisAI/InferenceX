@@ -8,12 +8,16 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 from infx.results import artifacts, eval_artifacts
 
 from . import github
 from .github import VerificationError
 from .models import OwnedCandidate, utc
+
+if TYPE_CHECKING:
+    from infx.matrix.revision import Revision
 
 
 def benchmark_entries(matrix: dict) -> list[dict]:
@@ -54,7 +58,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         validate_master_config,
         validate_runner_config,
     )
-    from infx.srt_slurm.workload import SHARED_BLOCKS, TELEMETRY_BLOCK
+    from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
     source, key = family.split(":", 1)
@@ -66,7 +70,10 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         root = Path(temp)
         references = srt_recipe_references(family_config)[key]
         paths = {reference.partition(":")[0] for reference in references}
-        blocks = [block.as_posix() for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK)]
+        blocks = [
+            block.as_posix()
+            for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK, NATIVE_TELEMETRY_BLOCK)
+        ]
         for path in [*paths, *blocks]:
             (root / path).parent.mkdir(parents=True, exist_ok=True)
             (root / path).write_bytes(github.file_at(repository, head, prefix + path))
@@ -123,7 +130,7 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
                 timeout=300,
             )
         with snapshot(head) as producer:
-            rows = producer.generate([family.split(":", 1)[1]], ["--no-evals"])
+            rows = throughput_rows(producer, family.split(":", 1)[1])
             if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
                 raise ValueError("the generator did not print a list of matrix rows")
             fingerprints = producer.fingerprints(rows)
@@ -141,6 +148,22 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
             ]
         }
     }
+
+
+def throughput_rows(producer: Revision, key: str) -> list[dict]:
+    try:
+        return producer.generate([key], ["--no-evals"])
+    except subprocess.CalledProcessError as error:
+        if "unrecognized arguments: --no-evals" not in (error.stderr or ""):
+            raise
+    rows = producer.generate([key], [])
+    if not isinstance(rows, list):
+        return rows
+    return [
+        {**row, "run-eval": False} if isinstance(row, dict) and row.get("run-eval") else row
+        for row in rows
+        if not (isinstance(row, dict) and row.get("eval-only"))
+    ]
 
 
 def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:

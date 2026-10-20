@@ -20,10 +20,15 @@ class ExamplePowerModel(PowerModel):
         gpu_level_power_per_gpu: float,
         *,
         cpu_and_dram_measured_power_per_socket: float | None,
+        cpu_measured_power_per_socket: float | None,
     ) -> ITPowerBreakdown:
         if cpu_and_dram_measured_power_per_socket is not None:
             raise ValueError(
                 "cpu_and_dram_measured_power_per_socket requires the oss model's Grace inventory"
+            )
+        if cpu_measured_power_per_socket is not None:
+            raise ValueError(
+                "cpu_measured_power_per_socket requires the oss model's x86 CPU inventory"
             )
         return ITPowerBreakdown(
             scope="per_gpu_reference",

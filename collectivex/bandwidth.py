@@ -159,7 +159,7 @@ def _cell(row: dict, component: str, ep: int) -> str:
     p99 = _algbw_per_gpu(nbytes, percentiles.get("p99"), ep)
     if p50 is None:
         return f"{component}=n/a"
-    # Graph-replayed fresh-entry rows publish p50 only (tails withheld, see methodology).
+    # A tail the harness withheld (too many misaligned or host-stalled samples) prints as "-".
     tail = "-" if p99 is None else f"{p99:<6.1f}"
     return f"{component}={p50:6.1f}/{tail}"
 
@@ -174,8 +174,7 @@ def _sort_key(document: dict):
 
 
 def _provenance(document: dict) -> str:
-    """Enough identity to tell two attempts of one case apart — CI result directories
-    routinely hold both, and they can disagree."""
+    """Enough identity to tell two attempts of one case apart."""
     run_id = document["identity"].get("allocation_factors", {}).get("run_id")
     attempt = document["identity"].get("attempt_ordinal")
     parts = ((document.get("generated_at") or "")[:19],
@@ -226,11 +225,10 @@ def main() -> int:
         description="CollectiveX per-component EP bandwidth (pure consumer; gates nothing)")
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--runner")
-    parser.add_argument("--ts")
     parser.add_argument("--all", action="store_true",
                         help="include non-success outcomes (skipped by default)")
     args = parser.parse_args()
-    documents = load_results(args.results_dir, args.runner, args.ts)
+    documents = load_results(args.results_dir, args.runner)
     if not args.all:
         documents = [d for d in documents if d["outcome"]["status"] == "success"]
     print(render(documents))
