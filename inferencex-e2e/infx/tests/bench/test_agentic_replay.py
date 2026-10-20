@@ -35,14 +35,18 @@ def _value(argv: list[str], flag: str) -> str | None:
 
 
 def test_default_point_leaves_the_replay_policy_to_the_scenario():
-    # A workflow MAX_MODEL_LEN is not the server's limit, so it never caps the replay.
     assert _argv(MAX_MODEL_LEN="131072") == [
         "/venv/bin/agentx", "profile", "--url", "http://localhost:8000",
         "--model", "deepseek-ai/DeepSeek-V4-Pro", "--tokenizer", "deepseek-ai/DeepSeek-V4-Pro",
         "--concurrency", "8", "--benchmark-duration", "3600", "--tokenizer-trust-remote-code",
         "--output-artifact-dir", "/results/aiperf_artifacts",
-        "--public-dataset", traces.CAPPED,
+        "--public-dataset", "semianalysis_cc_traces_weka_062126",
     ]  # fmt: skip
+
+
+def test_a_recipe_tokenizer_replaces_the_model_id_as_tokenizer_only():
+    argv = _argv(TOKENIZER="/model", SERVED_MODEL_NAME="glm5_2")
+    assert (_value(argv, "--model"), _value(argv, "--tokenizer")) == ("glm5_2", "/model")
 
 
 def test_opt_in_inputs_add_their_flags_in_place():
@@ -81,7 +85,6 @@ def test_opt_in_inputs_add_their_flags_in_place():
     [
         ({"DURATION": "899"}, "899", None, True),
         ({"DURATION": "900"}, "900", None, False),
-        # agentx-fast's 20-minute profile meets the scenario minimum the caller's 300 s misses.
         ({"AIPERF_EXPERIMENTAL_FAST": "1", "DURATION": "300"}, "1200", "1", False),
     ],
 )
@@ -165,18 +168,37 @@ def test_malformed_replay_inputs_are_rejected(overrides, message):
 
 
 @pytest.mark.parametrize(
-    ("prefix", "override", "loader"),
+    ("prefix", "override", "capped"),
     [
-        # Families match by prefix, so a variant of a 1M-context family replays its corpus.
-        ("big41flash", None, traces.UNCAPPED),
-        ("other", None, traces.CAPPED),
-        # A pin beats the family default, and the pre-download follows the pinned corpus.
-        ("other", traces.UNCAPPED, traces.UNCAPPED),
+        ("dsr1", None, True),
+        ("qwen3.5", None, True),
+        ("qwen3.8next", None, True),
+        ("musespark", None, False),
+        ("qwen3.5-variant", None, True),
+        ("dsv4", None, False),
+        ("dsv41flash", None, False),
+        ("glm5.2", None, False),
+        ("glm5.3", None, False),
+        ("minimaxm3", None, False),
+        ("kimik3", None, False),
+        ("new-model", None, False),
+        ("qwen3.9", None, False),
+        ("new-model", "", False),
+        ("qwen3.5", traces.UNCAPPED, False),
+        ("new-model", traces.CAPPED, True),
     ],
 )
-def test_corpus_follows_the_model_family_context_unless_pinned(
-    monkeypatch, prefix, override, loader
-):
-    monkeypatch.setattr(traces, "UNCAPPED_FAMILIES", ("big4",))
+def test_corpus_is_uncapped_unless_explicitly_capped_or_pinned(prefix, override, capped):
+    loader, dataset = (
+        ("semianalysis_cc_traces_weka_062126_256k", "semianalysisai/cc-traces-weka-062126-256k")
+        if capped
+        else ("semianalysis_cc_traces_weka_062126", "semianalysisai/cc-traces-weka-062126")
+    )
+    env = {**BASE_ENV, "MODEL_PREFIX": prefix}
+    if override is not None:
+        env["WEKA_LOADER_OVERRIDE"] = override
 
-    assert traces.resolve(prefix, override) == (loader, traces.LOADERS[loader])
+    config = ReplayConfig.from_env(env, Path("/results"))
+
+    assert (config.loader, config.dataset) == (loader, dataset)
+    assert _value(replay_argv(config, "/venv/bin/agentx"), "--public-dataset") == loader

@@ -17,7 +17,6 @@ CANONICAL_FLAG = "isOnNormalizedInteractivityFrontier"
 
 
 def _positive_finite(value: Any) -> bool:
-    # bool is a number in Python, but not in the dashboard's Number.isFinite.
     return type(value) in (int, float) and value > 0 and math.isfinite(value)
 
 
@@ -45,7 +44,6 @@ def assess_curve(curve: dict[str, Any]) -> dict[str, Any]:
             else:
                 frontier.append(point)
             max_y = point["y"]
-    # Intersect after constructing the full frontier, never promote dominated points.
     if canonical:
         frontier = [point for point in frontier if point.get(CANONICAL_FLAG) is True]
     return {

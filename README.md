@@ -91,7 +91,7 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 ## Contributing
 
 PRs are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on the PR review flow, the [PR Review Checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md), and the merge process.
-For the maintainer and agent documentation map, start with [`docs/index.md`](inferencex-e2e/docs/index.md). It links the architecture, configuration, workflow, eval, runner, and troubleshooting references.
+For maintainer and agent instructions, start with [`AGENTS.md`](AGENTS.md). It links the configuration, workflow, eval, and recovery references.
 
 To benchmark an existing server without CI or Slurm, see
 [Run AgentX-Harness Standalone](inferencex-e2e/docs/agentx-standalone.md)

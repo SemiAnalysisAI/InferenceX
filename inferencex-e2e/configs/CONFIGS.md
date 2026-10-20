@@ -15,12 +15,14 @@ entry-name:
   # Optional defaults for every search-space entry in this config.
   router: { name: string, version: string }
   kv-p2p-transfer: string
+  # Recipe directory under benchmarks/<single|multi>_node/srt-slurm-recipes/.
+  srt-recipe-dir: string
   scenarios:
     fixed-seq-len:
     - isl: int
       osl: int
       search-space:
-      - { tp: int, conc-start: int, conc-end: int }
+      - { tp: int, conc-start: int, conc-end: int, srt-recipe: string }
       # Optionally, specify pipeline/expert/data-attention/context parallelism.
       - { tp: int, pp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
       # Optionally, declare router metadata and the P2P KV transfer engine.
@@ -137,12 +139,19 @@ independent component version. Supply `version` for independently versioned
 backends such as LMCache or Mooncake. Additional keys and image references in
 `version` are rejected.
 
+Most `router` and `kv-offload-backend` versions label what the image ships. When a
+repository setup script installs the component instead, `version` is required and is
+the installed version; the launcher binds or checks it
+([recipe fragments](../benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#recipe-fragments)).
+
 Agentic duration is not a master YAML field. Matrix generation defaults agentic
 jobs to 3600 seconds. Reusable workflow callers may override the `duration`
 input.
 
 Notes:
-- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `srt-recipe`, `num-nodes`, and `require-power`, and they reject any field they do not define, which fails matrix generation.
+- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
+- A multinode search-space entry with `power: true` measures DCGM power: its rows carry `power: true`, the launcher merges the shared telemetry block into the recipe and rejects lanes without a power rule.
+- srt-slurm entries require `srt-recipe-dir`. Every row requires `srt-recipe: <file>[:<selector>]` under it (selector: `base`, `override_<name>` or `zip_override_<name>[<i>]`). Multinode rows may add `eval-srt-recipe`. Validation rejects missing files or variants, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` settings. Only `llmd-vllm` keeps `CONFIG_FILE`. Generated rows carry the path from `inferencex-e2e/`.
 - Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`. Multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
 ### DWDP prefill groups
@@ -196,11 +205,22 @@ schema; unknown keys fail.
 - `labels` maps each schedulable label to concrete runner names. Every runner is in
   exactly one `cluster:<id>` label, and every such label has a `clusters.<id>` record;
   `python -m infx.launch` resolves its cluster from `RUNNER_NAME` this way.
-- Matrix generation reads `gpus-per-node` and `available-cpu-dram-mib` (host DRAM for
-  benchmark jobs, optional where unmeasured) from the cluster a master config's
-  `cluster:<id>` label names; broad SKU labels use the GPU family when its clusters
-  agree. Agentic master configs must use a `cluster:<id>` label; their DRAM KV-offload
-  matrices combine both fields with `dram-utilization` into `total-cpu-dram-gb`.
+- Matrix generation reads `gpus-per-node` and `available-cpu-dram-mib` from the cluster a
+  master config's `cluster:<id>` label names; broad SKU labels use the GPU family when its
+  clusters agree. Agentic master configs must use a `cluster:<id>` label; their DRAM
+  KV-offload matrices combine both fields with `dram-utilization` into per-node caps:
+  `total-cpu-dram-gb` for each node a single-node, aggregate, or prefill server occupies, and
+  `decode-cpu-dram-gb` (omitted when 0) for each node a decode server occupies. Each is the
+  node's share held by that server's GPUs on it; a server spanning nodes gets a full node's
+  share on each. Servers must tile their nodes, and per-worker `hardware` is not supported.
+  Results record them as `allocated_cpu_dram_gb` and `decode_allocated_cpu_dram_gb`.
+- `available-cpu-dram-mib` is the host DRAM a benchmark job can use on a node: the lower of
+  Slurm's `RealMemory - MemSpecLimit` and `MemTotal` less 16 GiB for the OS, over the
+  cluster's GPU nodes; omit it where unmeasured. With `slurm.srt-slurm.single-node-exclusive`
+  (the default), a single-node srt-slurm job requests `--mem=0`, all the memory Slurm has,
+  so its host KV pools must fit the node. Otherwise the job and its srun step get the serving
+  GPUs' share, `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB, which the pools and
+  server processes must fit; Slurm rejects a share above what it can allocate.
 - `env` is the workload environment of every launch on the cluster. Like
   `slurm.srt-slurm.env`, it overrides the runner's own environment but never a name the
   point's additional-settings set. Values cannot contain commas: Slurm hands them to jobs
@@ -240,8 +260,36 @@ schema; unknown keys fail.
   Pyxis imports inside the job.
 - `slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
   volumes every job mounts to container paths, `mounts` does the same for host
-  paths outside the volumes (devices), `env` is the environment of the srt-slurm
+  paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
+  volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
+  of power points, `env` is the environment of the srt-slurm
   launch, `container-aliases` and `nginx-aliases` name the recipe containers that
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
   itself uses.
+- `slurm.srt-slurm.fabric` holds the hosts' network facts that recipes take as
+  `'@fabric.<name>'` values: the lists `rdma-devices` (the RDMA HCAs, as NCCL, Mooncake,
+  SGLang `disaggregation-ib-device` and `IBDEVICES` read them), `rdma-device-ports` (the
+  HCAs as `device:port`, as UCX reads them) and `socket-ifname` (NCCL and Gloo), rendered
+  comma-joined, and the numbers `rdma-gid-index` and `rdma-tc` (the RDMA GID index and
+  traffic class). Fields name cluster facts, not the software that reads them; a recipe
+  maps one onto its engine's setting, as in `MC_GID_INDEX: '@fabric.rdma-gid-index'`.
+  The cluster's own `env` and `srt-slurm.host-setup.env` values may take a field the
+  same way; they resolve when the record loads, and `env` still rejects the commas of a
+  list.
+- `slurm.srt-slurm.extra.default_gpu_exporter` is the cluster's native power exporter.
+  Native single-node throughput and AgentX jobs inherit it when the bound recipe
+  enables telemetry without selecting its own exporter; eval-only jobs collect no power.
+  A cluster without the block stops preparation before the benchmark starts. An invalid
+  measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
+  verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
+  srt-slurm's
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/ae3d6877c46f3147e3a5dafa46ee4cd89322e52f/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
+  former `power_profile`. The AMD exporter reads
+  [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);
+  [`runners/srt-slurm/patches/README.md`](../runners/srt-slurm/patches/README.md) lists
+  the srt-slurm patches native power collection relies on.
+- `slurm.srt-slurm.workspace-mounts` maps files relative to `inferencex-e2e/` into
+  job containers. The renderer resolves each source against the job checkout;
+  host-absolute paths belong in `mounts`, and volume aliases in `volume-mounts`.
