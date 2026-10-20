@@ -99,7 +99,6 @@ def evaluate(
     checkpoint = env.require("MODEL", env=environ)["MODEL"]
     model = environ.get("MODEL_NAME") or checkpoint
     base_url = _server_root(endpoint)
-    # Reject malformed metadata inputs before the eval spends hours.
     meta.build(environ, conc=concurrencies[0], suite="")
     if eval_only and name in vendor.PROVIDERS:
         server.wait_chat_route(base_url, model, server.chat_route_budget(environ))

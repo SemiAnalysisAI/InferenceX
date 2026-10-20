@@ -691,7 +691,6 @@ def test_install_runtime_installs_only_the_verified_wheel(
         excluded = Path(argv[argv.index("--excludes") + 1]).read_text().split()
         installs.append((argv, Path(wheel).read_bytes(), excluded))
 
-    # Packages this interpreter already has are reused, except BFCL itself.
     site = tmp_path / "site"
     for name in ("Image_Stack.Pkg", "bfcl_eval"):
         info = site / f"{name}-1.0.dist-info"
