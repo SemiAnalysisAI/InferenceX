@@ -10321,3 +10321,9 @@
     - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
     - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4231
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image to nightly-39983a5e and lower gpu-memory-utilization from 0.97 to 0.94."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4271

@@ -42,7 +42,8 @@ base:
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
         max-cudagraph-capture-size: 8190
         max-num-batched-tokens: 8192
-        gpu-memory-utilization: 0.97
+        # 0.97 OOMs in the sparse indexer's fp32 logits at runtime and fails startup on GPU 3.
+        gpu-memory-utilization: 0.94
         disable-uvicorn-access-log: true
       env:
         VLLM_USE_V2_MODEL_RUNNER: '1'
