@@ -32,7 +32,7 @@ base:
         store_config:
           mode: embedded
           metadata_server: P2PHANDSHAKE
-          global_segment_size: 374GB
+          global_segment_size: 349GB  # Mooncake GB is GiB: 2999 GB / 8
           local_buffer_size: 4GB
           protocol: rdma
           device_name: ""
