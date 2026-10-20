@@ -10252,6 +10252,6 @@
     - agentic-coding
   description:
     - "Move the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM aggregated curve to vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019 and re-run its TP4 c1 and c8 points."
-    - "Add TP4 at concurrency 1 (max-num-seqs 1) and 16 (max-num-seqs 32, prefill-schedule-interval 128), with capture size 5 for the one-request DSpark draft graph."
+    - "Add TP4 at concurrency 1 (max-num-seqs 1) and 16 (max-num-seqs 32, prefill-schedule-interval 128); CUDA graph capture sizes match the B300 Dynamo vLLM TP4 recipes, adding 5, 10, 15, 20, 25, 35 and 40 at concurrency 1."
     - "Keep the Engram host tables in pinned memory (use_thp false): on this image, THP-registered tables hang the first prefill forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4335
