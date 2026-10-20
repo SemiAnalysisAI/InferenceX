@@ -51,7 +51,7 @@ _WORKFLOW_ENV = (
     "POWER", "REQUIRE_POWER", "IS_AGENTIC", "SCENARIO_TYPE", "RUN_EVAL", "EVAL_ONLY",
 )  # fmt: skip
 _MULTINODE_ENV = (
-    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
+    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip

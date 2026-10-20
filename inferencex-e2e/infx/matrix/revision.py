@@ -1,11 +1,3 @@
-"""Run a repository revision's own matrix generator or planner in a subprocess.
-
-Only that revision's tooling interprets its configs, so config-format changes cannot break
-consumers of older revisions. The tool imports only its own tree and inherits only
-``INHERITED_ENV``. That keeps a caller's credentials out of its environment but does not
-isolate it: callers holding credentials must run other revisions' tools where none are held.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -25,8 +17,6 @@ from infx.config import MASTER_CONFIGS, git_repository_root, project_root
 
 @dataclass(frozen=True)
 class Tool:
-    """A matrix entrypoint: its package module, or the script pre-package revisions shipped."""
-
     module: str
     legacy_script: str
 
@@ -53,8 +43,6 @@ INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
 
 @dataclass(frozen=True)
 class Revision:
-    """One revision's project tree: its tools' working directory, import root and data root."""
-
     root: Path
 
     def __post_init__(self) -> None:
@@ -80,7 +68,6 @@ class Revision:
         )
 
     def invocation(self, tool: Tool, args: Sequence[str]) -> tuple[list[str], dict[str, str]]:
-        """The command and environment that run this tree's own ``tool`` from ``root``."""
         script = self.root / tool.legacy_script
         if (self.root / tool.module_path).is_file():
             entrypoint, imports = ["-m", tool.module], [self.root]
@@ -102,10 +89,6 @@ class Revision:
         flags: Sequence[str],
         config_files: Sequence[str] | None = None,
     ) -> list[dict]:
-        """Decode this revision's ``test-config`` matrix; raise CalledProcessError on failure.
-
-        ``config_files`` default to the revision's master configs.
-        """
         command, env = self.invocation(
             GENERATOR,
             [
@@ -125,7 +108,6 @@ class Revision:
         return json.loads(result.stdout)
 
     def fingerprints(self, rows: list[dict]) -> list[str]:
-        """Each benchmark row's ``recipe-fingerprint`` as this revision's planner assigns it."""
         if not (self.root / f"{FINGERPRINTER.replace('.', '/')}.py").is_file():
             from infx.matrix.fingerprint import row_fingerprint
 
@@ -147,11 +129,6 @@ class Revision:
 
 @contextmanager
 def snapshot(ref: str) -> Iterator[Revision]:
-    """Extract ``ref``'s committed generation inputs into a tree removed on exit.
-
-    Blobs are read by the listed object IDs, so a moving ref cannot mix revisions; working-tree
-    files never replace committed ones, and symlinks become plain files.
-    """
     repository = git_repository_root()
     listing = subprocess.run(
         [

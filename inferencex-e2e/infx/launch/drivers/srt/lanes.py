@@ -57,7 +57,10 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
             ),
         ),
     ),
-    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
+    ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=_DYNAMO,
+        head_frontend=Match(any_of("dsv41flash"), frameworks=any_of("dynamo-vllm"), agentic=True),
+    ),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
         frameworks=_DYNAMO,
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
@@ -77,7 +80,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ),
     ("gb300-nv", LaunchPath.SRT_MULTI): SrtLane(
         real_verification=Match(frameworks=any_of("dynamo-trt"), agentic=True),
-        head_frontend=Match(any_of("dsv4")),
+        head_frontend=Match(any_of("dsv4"), frameworks=any_of("dynamo-trt"), agentic=True),
         write_eval_meta=True,
         time_limit="4:00:00",
         long_time_limit="8:00:00",
