@@ -10460,6 +10460,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3915
 
 - config-keys:
+  - qwen3.5-fp8-gb200-dynamo-sglang
+  description:
+  - Update SGLang image to v0.5.21-cu130 and rename the removed TP memory imbalance check env var.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4080
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4168
+
+- config-keys:
     - dsv41flash-fp4-b200-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
