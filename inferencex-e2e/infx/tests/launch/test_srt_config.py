@@ -29,8 +29,8 @@ from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
 from srtctl.core.schema import ClusterConfig  # noqa: E402
 
 AMD_EXPORTER = {
-    "container_image": "ghcr.io#semianalysisai/amd-device-metrics-exporter@sha256:"
-    "0d1c32c965f955b0fbf1dc87a84f7205be9019ce8d2fdf1eb929de28c71cec54",
+    "container_image": "registry-1.docker.io#rocm/device-metrics-exporter@sha256:"
+    "3f891560bd17c51ff2b1010299c7e6160c532d11d094c1115f599ab5fe8bebb9",
     "port": 19500,
     "command": "/home/amd/tools/entrypoint.sh",
     "kind": "custom",
