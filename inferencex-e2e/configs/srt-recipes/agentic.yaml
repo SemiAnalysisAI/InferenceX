@@ -1,0 +1,3 @@
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/srt_agentic.sh

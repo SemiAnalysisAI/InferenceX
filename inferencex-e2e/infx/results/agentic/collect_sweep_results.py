@@ -35,7 +35,6 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
     Returns a dict with pre-computed metrics matching the result schema,
     or None if the file can't be parsed.
     """
-    # CSV sections have different column counts.
     lines = csv_path.read_text().strip().split("\n")
     if len(lines) < 2:
         return None
@@ -52,7 +51,6 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
         elif len(parts) == 2:
             scalars[parts[0]] = parts[1]
         else:
-            # Different section (GPU metrics) — stop
             break
 
     def metric_stat(metric_name: str, stat: str) -> float:
@@ -110,11 +108,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
     if not client_csv.exists() and aiperf_summary_csv is None:
         return None
 
-    # Parse experiment name from directory.
-    # Supports formats:
-    #   multiturn_tp{N}_conc{M}_offload{mode}
-    #   tp{N}_conc{M}_offload{mode}
-    #   agentic_{model}_tp{N}_conc{M}_offload{mode}_{extra...}
     import re
 
     name = exp_dir.name
@@ -152,7 +145,6 @@ def load_experiment(exp_dir: Path) -> dict | None:
             if df is None or len(df) == 0:
                 return result
 
-            # Prefer benchmark_metadata.json for precise wall-clock duration
             metadata_file = exp_dir / "benchmark_metadata.json"
             total_time_sec = None
             if metadata_file.exists():
