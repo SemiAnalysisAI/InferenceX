@@ -10254,3 +10254,11 @@
     - "Update the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated AgentX configuration to the CUDA 13.4 nightly image, DEP2 prefill with DEP16/DEP32 decode, and revised topology and concurrency settings."
     - "Configure decode worker selection by active request count with soft session affinity, set the prefill host KV cache budget, and use pinned prefill Engram tables and HBM decode Engram tables."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4336
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Sweep two higher-throughput GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX points, both DEP2 prefill with DEP32 decode: 20P1D at c16800 with max-num-seqs 152, and 18P1D at c14500 with max-num-seqs 126 (MegaAttn wave boundaries). The other points are dropped from the search space; their recipes are kept."
+  pr-link: TBD
