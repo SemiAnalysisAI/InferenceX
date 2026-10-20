@@ -10323,6 +10323,155 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4231
 
 - config-keys:
+    - qwen3.5-fp4-b200-sglang
+  description:
+    - "Update SGLang image from v0.5.19-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3813
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Update SGLang image from v0.5.14-cu130 to v0.5.21-cu130 and rename the CLI flags SGLang v0.5.20 removed."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3825
+
+- config-keys:
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.15.post1-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3847
+
+- config-keys:
+    - dsr1-fp8-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3862
+
+- config-keys:
+    - dsr1-fp4-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3868
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom-mtp
+  description:
+    - "Update ATOM to v0.1.7 (rocm/atom-dev:nightly_202610080328) and keep prefix caching disabled as in the old image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3918
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4059
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom
+  description:
+    - "Update the ATOM image from nightly_202610080328 (v0.1.7) to nightly_202610161458 (0.1.8.dev75)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4192
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.14-cu130 to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4213
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang-mtp
+  description:
+    - "Bump SGLang image to v0.5.21-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4214
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-rocm700-mi35x to v0.5.22-rocm720-mi35x and rename cuda-graph-max-bs to its decode flag."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4229
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Update SGLang image to v0.5.22-cu130 and rename two removed deprecated server flags."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4240
+
+- config-keys:
+    - dsr1-fp8-h200-trt
+  description:
+    - "Update the TensorRT-LLM image from 1.3.0rc14 to 1.4.0rc0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4257
+
+- config-keys:
+    - dsr1-fp8-h200-trt-mtp
+  description:
+    - "Update the TensorRT-LLM image from 1.3.0rc14 to 1.4.0rc0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4261
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+  description:
+    - "Update the ATOM image to the v0.1.7 release build (rocm/atom-dev:nightly_202610080328, digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4268
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated and aggregated AgentX curves to vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
+    - "Disaggregated: 9P1D DEP2 prefill / DEP16 decode at c7480 with max-num-seqs 126 (a MegaAttn wave boundary), with 70 GiB of CPU KV offload per prefill rank, pinned prefill Engram tables and HBM decode Engram tables."
+    - "Configure decode worker selection by active request count with soft session affinity."
+    - "Disaggregated jobs exclude GB300 nodes r01-c001, c002, c004, c005, c010, c011 and r03-c001, c002, where prefill Engram host-table allocation hit CUDA_ERROR_OUT_OF_MEMORY."
+    - "Aggregated: TP4 at concurrency 1 (max-num-seqs 1) and 16 (max-num-seqs 32, prefill-schedule-interval 128), with CUDA graph capture sizes matching the B300 Dynamo vLLM TP4 recipes (5, 10, 15, 20, 25, 35 and 40 added at concurrency 1) and Engram host tables in pinned memory (use_thp false): on this image, THP-registered tables hang the first prefill forward."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4336
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DEP2 prefill / DEP32 decode points 16P1D at c10888 and 6P1D at c3018 to the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX disaggregated curve on vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
+    - "Results reuse run 39207089292, which measured these points before #4336 with default decode worker selection and 80 GiB of CPU KV offload per prefill rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4266
+  append-only: true
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Update SGLang image to v0.5.21-cu130 and rename the TP memory-imbalance check env to its new enable form."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3672
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-rocm700-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3814
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-atom
+  description:
+    - "Bump ATOM image from atom0.1.2.post to rocm/atom-dev:nightly_202610080328 (ATOM v0.1.7)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3913
+
+- config-keys:
+    - dsr1-fp8-mi355x-atom-mtp
+  description:
+    - "Update ATOM image from v0.1.3 to the v0.1.7 release build (rocm/atom-dev:nightly_202610080328, digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3915
+
+- config-keys:
+  - qwen3.5-fp8-gb200-dynamo-sglang
+  description:
+  - Update SGLang image to v0.5.21-cu130 and rename the removed TP memory imbalance check env var.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4080
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4168
+
+- config-keys:
     - dsr1-fp8-h200-sglang-mtp
   description:
     - "Update SGLang image to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode"
