@@ -10288,3 +10288,13 @@
     - "The image carries vllm-project/vllm#62131: --monokernel now also runs the three DSpark draft layers as the two persistent mono decode launches (128 experts / top-3, window-only attention over the block's non-causal SWA rows) instead of vLLM's regular path. The step limit is unchanged at 48 rows, i.e. concurrency 1-8 with five DSpark drafts."
     - "No recipe or point changes: concurrency 1, 2, 4, 8, 16, 32 and 64 on TP2 and TP4 (14 points), all re-measured on the new image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4319
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-mooncake-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX disaggregated 1P1D DEP8 c64/c240 and 1P2D DEP8 c64 recipes on lmsysorg/sglang:nightly-dev-efa-20261019-3c560089 that move KV from prefill to decode with Mooncake over EFA. Apart from the KV transfer backend, they match the NIXL disaggregated recipes of dsv4-fp4-b300-dynamo-sglang-agentic-disagg in #3817: DSpark K=6, HiCache ratio 3 write_back DRAM tier on prefill, the image's bundled Dynamo 1.6.0.dev20261018 with its KV router, and the node-local DeepSeek-V4-Pro-0813@scratch weights."
+    - "The EFA image already ships mooncake-transfer-engine-efa-cuda13 0.3.13.post1 and defaults MOONCAKE_PROTOCOL to efa, so there is no setup script or package change. The recipes still set MOONCAKE_PROTOCOL: efa explicitly. Each rank's transfer engine auto-discovers all 16 EFA NICs on the node. MC_MS_FILTERS (a Mooncake Store setting) and WITH_NVIDIA_PEERMEM (RDMA transport only) are not set, since the EFA transfer path does not read them."
+    - "FI_EFA_USE_UNSOLICITED_WRITE_RECV is not set. Mooncake's EFA transport issues plain fi_write/fi_read and only reaps completions on the initiator, and SGLang's Mooncake backend tells decode that KV has arrived over ZMQ, so the EFA provider's unsolicited write recv path is not involved."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4346
