@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from math import isfinite
 
 from power_model import WorkloadState, create_power_model
+from power_model.base import validate_watts
 from power_model.models.advanced.systems.catalog import SYSTEMS, system_name
 from power_model.models.catalog import MODELS, model_name
 from power_model.reporting import format_power_breakdown_per_chassis
@@ -21,6 +22,13 @@ def _help_catalog() -> str:
         for name, system in SYSTEMS.items()
     )
     return f"Models:\n{models}\n\nSystems:\n{systems}"
+
+
+def _measured_watts(value: str) -> float:
+    try:
+        return validate_watts(float(value))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(f"expected finite watts >= 0, got {value!r}") from error
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -39,6 +47,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="GPU electrical power in watts per GPU",
     )
     parser.add_argument(
+        "--cpu-and-dram-measured-power-per-socket",
+        type=_measured_watts,
+        help="Measured CPU and DRAM watts per socket; currently collected from ACPI Grace Power "
+        "Socket on GB200/GB300 NVL72",
+    )
+    parser.add_argument(
+        "--cpu-measured-power-per-socket",
+        type=_measured_watts,
+        help="Measured CPU-only watts per socket, excluding DRAM; currently collected from "
+        "RAPL package power on HGX",
+    )
+    parser.add_argument(
         "--system",
         type=system_name,
         choices=tuple(SYSTEMS),
@@ -50,8 +70,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--model",
         type=model_name,
         choices=tuple(MODELS),
-        default="advanced",
-        help="Power model (default: advanced)",
+        default="oss",
+        help="Power model (default: oss)",
     )
     parser.add_argument(
         "--workload",
@@ -66,7 +86,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="store_true",
         help="Use active NIC and switch power (default: off)",
     )
-    common = parser.add_argument_group("advanced systems")
+    common = parser.add_argument_group("oss systems")
     common.add_argument("--systems", type=int, default=1, help="Quantity of the selected system")
     common.add_argument(
         "--power-breakdown-per-chassis",
@@ -82,7 +102,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             using_scale_out=args.using_scale_out,
             systems=args.systems,
         )
-        result = model.estimate_breakdown(args.gpu_level_power_per_gpu)
+        result = model.estimate_breakdown(
+            args.gpu_level_power_per_gpu,
+            cpu_and_dram_measured_power_per_socket=args.cpu_and_dram_measured_power_per_socket,
+            cpu_measured_power_per_socket=args.cpu_measured_power_per_socket,
+        )
         ratio = (
             result.AllInPower_per_gpu / result.gpu_level_power_per_gpu
             if result.gpu_level_power_per_gpu

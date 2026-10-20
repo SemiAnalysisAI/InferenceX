@@ -9,7 +9,7 @@ from power_model.models.advanced.systems.base import GPUSystem, SystemGroup
 from power_model.models.advanced.systems.catalog import get_system_class
 
 
-class AdvancedAllInPowerModel(PowerModel):
+class OSSAllinPowerModel(PowerModel):
     cluster: Cluster
 
     @classmethod
@@ -39,7 +39,16 @@ class AdvancedAllInPowerModel(PowerModel):
             ),
         )
 
-    def _estimate_it_power(self, gpu_level_power_per_gpu: float) -> ITPowerBreakdown:
+    def _estimate_it_power(
+        self,
+        gpu_level_power_per_gpu: float,
+        *,
+        cpu_and_dram_measured_power_per_socket: float | None,
+        cpu_measured_power_per_socket: float | None,
+    ) -> ITPowerBreakdown:
         return self.cluster.estimate_it_power(
-            gpu_level_power_per_gpu, operating_state=self.operating_state
+            gpu_level_power_per_gpu,
+            cpu_and_dram_measured_power_per_socket=cpu_and_dram_measured_power_per_socket,
+            cpu_measured_power_per_socket=cpu_measured_power_per_socket,
+            operating_state=self.operating_state,
         )

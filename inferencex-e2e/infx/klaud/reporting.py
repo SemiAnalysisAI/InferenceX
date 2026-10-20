@@ -14,15 +14,22 @@ import re
 import zlib
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
-from pydantic import AfterValidator, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from . import github
 from .github import VerificationError
-from .models import Contract, identity, normalized_image
+from .models import ABORT_LABEL, Contract, identity, normalized_image
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
@@ -31,10 +38,10 @@ if TYPE_CHECKING:
 
 Number = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 SHA = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
+SCENARIO_NAME = r"[A-Za-z0-9][A-Za-z0-9 ._/-]{0,59}"
 
 
 def public_prose(value: str) -> str:
-    # Digest-pinned images are inline code, not GitHub mentions.
     prose = re.sub(r"`[A-Za-z0-9_./:+-]+@sha256:[0-9a-f]{64}`", "", value)
     if any(char in prose for char in ("@", "<", ">", "\n", "|")):
         raise ValueError("Use one sentence of public prose without mentions, HTML or tables")
@@ -59,8 +66,6 @@ class Values(Contract):
 
 
 class Point(Contract):
-    # Hash of canonical generated settings excluding image/point name, including
-    # concurrency. Dataset is separate because it is runtime evidence.
     key: str = Field(pattern=r"^[0-9a-f]{64}$")
     label: str = Field(pattern=r"^[A-Za-z0-9_.:+ /=-]{1,150}$")
     conc: int = Field(gt=0)
@@ -86,6 +91,24 @@ class Evaluation(Contract):
     run_attempt: Annotated[int, Field(gt=0)] | None = None
 
 
+class Retirement(Contract):
+    """Frozen points of one workload that a dated MODELS.md scenario deprecation retired.
+
+    The planner records the deprecation's scenario name, date and PR with the family's model
+    prefix and the workload's ISL/OSL, only for points the current family no longer generates.
+    """
+
+    scenario: str = Field(pattern=f"^{SCENARIO_NAME}$")
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    pr_link: str = Field(
+        pattern=r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[1-9]\d*$"
+    )
+    model_prefix: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+    isl: int = Field(gt=0)
+    osl: int = Field(gt=0)
+    points: list[Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(min_length=1)
+
+
 class Baseline(Contract):
     family: str = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
@@ -94,6 +117,7 @@ class Baseline(Contract):
     sources: list[str]
     points: list[Point]
     evals: list[Evaluation] = Field(default_factory=list)
+    retirements: list[Retirement] = Field(default_factory=list)
 
     @field_validator("sources")
     @classmethod
@@ -115,7 +139,23 @@ class Baseline(Contract):
     def distinct(self) -> Self:
         unique_points(self.points)
         unique_evals(self.evals)
+        retired = [key for retirement in self.retirements for key in retirement.points]
+        if len(set(retired)) != len(retired) or not set(retired) <= {p.key for p in self.points}:
+            raise ValueError("Retirements must name distinct frozen baseline points")
+        if not set(retired) <= {p.key for p in self.points if p.scenario == "fixed-seq-len"}:
+            raise ValueError("Only fixed-seq-len points can be retired")
+        if any(day(retirement.date) <= day(self.date) for retirement in self.retirements):
+            raise ValueError("Only a retirement after the baseline date can exempt a point")
+        if self.points and len(retired) == len(self.points):
+            raise ValueError("A baseline needs at least one point that is not retired")
         return self
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = handler(self)
+        if not self.retirements:
+            data.pop("retirements", None)
+        return data
 
 
 class BaselinePreflight(Contract):
@@ -135,7 +175,7 @@ class Attempt(Contract):
     run_attempt: int = Field(gt=0)
     status: Literal["queued", "running", "passed", "failed", "cancelled", "deferred"]
     change: Prose
-    finding: Text | None = None  # Optional diagnostic evidence, not a visible summary paragraph.
+    finding: Text | None = None
     next: Prose
     benchmarks_expected: int = Field(ge=0)
     benchmarks_passed: int = Field(ge=0)
@@ -177,6 +217,13 @@ def unique_evals(rows: list[Evaluation]) -> None:
         raise ValueError("Duplicate comparison eval")
 
 
+def day(value: str) -> date:
+    """Parse a YYYY-MM-DD date, so timestamps or other spellings never compare as text."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError("Dates must be YYYY-MM-DD")
+    return date.fromisoformat(value)
+
+
 def point_key(entry: dict) -> str:
     return identity(
         {
@@ -204,6 +251,12 @@ def point_label(entry: dict) -> str:
         shape = f"TP{entry['tp']} EP{entry.get('ep', 1)}"
     workload = f"{entry['isl']}/{entry['osl']}" if "isl" in entry else "AgentX"
     return f"{workload} c{entry['conc']} {shape} {point_key(entry)[:6]}"
+
+
+def label_workload(label: str) -> tuple[int, int] | None:
+    """The single-turn ISL/OSL that ``point_label`` writes first; None for an AgentX label."""
+    match = re.match(r"([1-9]\d*)/([1-9]\d*) c", label)
+    return (int(match[1]), int(match[2])) if match else None
 
 
 def values(row: dict) -> Values:
@@ -425,7 +478,20 @@ def eval_table(rows: list[Evaluation], baseline: Baseline | None, *, compare: bo
     )
 
 
-def baseline_table(points: list[Point], *, context: bool = True) -> str:
+def retirement_reasons(baseline: Baseline) -> dict[str, str]:
+    """Each retired frozen point's key and the evidence that retired it."""
+    return {
+        key: f"{retirement.scenario} retired {retirement.date} in "
+        f"[#{retirement.pr_link.rsplit('/', 1)[1]}]({retirement.pr_link}) "
+        "after this baseline; excluded from coverage"
+        for retirement in baseline.retirements
+        for key in retirement.points
+    }
+
+
+def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
+    points = baseline.points
+    retired = retirement_reasons(baseline)
     heading, labels, settings = point_layout(points)
     rows = [
         [
@@ -439,10 +505,11 @@ def baseline_table(points: list[Point], *, context: bool = True) -> str:
     ]
     issues = {}
     for label, point in zip(labels, points, strict=False):
+        shown = f"c{label}" if heading == "Concurrency" else label
         if point.result != "passed":
-            issues.setdefault(point.result, []).append(
-                f"c{label}" if heading == "Concurrency" else label
-            )
+            issues.setdefault(point.result, []).append(shown)
+        if point.key in retired:
+            issues.setdefault(retired[point.key], []).append(shown)
         if point.values.request_errors:
             reason = f"{number(point.values.request_errors)} request error" + (
                 "s" if point.values.request_errors != 1 else ""
@@ -474,16 +541,21 @@ def render_body(baseline: Baseline) -> str:
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
     english = (
         f"**Goal:** {baseline.goal.en}  \n**Baseline:** {baseline.date} · `{baseline.image}`  \n{meta}\n\n"
-        + baseline_table(baseline.points, context=False)
+        + baseline_table(baseline, context=False)
         + "\n\n"
         + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
+        + f"\n\n**Stop:** Add the `{ABORT_LABEL}` label at any time to stop this candidate now; "
+        "Klaud cancels its runs, closes this PR and does not retry it. Remove the label to let "
+        "the planner pick it up again."
     )
     chinese = (
         f"**目标：**{baseline.goal.zh}  \n**基线：**{baseline.date} · `{baseline.image}`  \n"
         + meta.replace("Mean latency", "平均延迟")
         .replace("Median latency", "中位延迟")
         .replace("Sources:", "来源：")
-        + "；数值及异常说明见上表。"
+        + "；数值及异常说明见上表。  \n"
+        + f"**停止：**随时添加 `{ABORT_LABEL}` 标签即可立即停止该候选：Klaud 会取消其运行、"
+        "关闭此 PR 且不再重试。移除该标签后，规划器会在下次扫描时重新考虑它。"
     )
     return translated(english, chinese)
 
@@ -511,11 +583,18 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
     link = f"[Run {record.run_id} / attempt {record.run_attempt}](https://github.com/{repository}/actions/runs/{record.run_id}/attempts/{record.run_attempt})"
     _, _, settings = point_layout(record.points)
     meta = f"`{record.image}` · `{record.head[:12]}`" + (f" · {settings}" if settings else "")
+    notes: dict[str, list[str]] = {}
+    if baseline and record.kind == "final":
+        retired = retirement_reasons(baseline)
+        for point in baseline.points:
+            if point.key in retired:
+                notes.setdefault(retired[point.key], []).append(short_label(point.label))
     results = "\n\n".join(
         part
         for part in (
             point_table(record.points, baseline, context=False),
             eval_table(record.evals, baseline),
+            note_lines(notes, len(baseline.points)) if notes else "",
         )
         if part
     )
@@ -568,13 +647,29 @@ def decode[Record: Contract](
     return model.model_validate(value)
 
 
+def latest_next(session: Session, pull: dict) -> Prose | None:
+    attempts = [
+        c
+        for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
+        if c["user"]["login"] == "Klaud-Cold"
+        and re.fullmatch(r"run-\d+-\d+", name := c["body"].split("\n", 1)[0].rpartition(":")[2])
+        and c["body"].startswith(marker(session, name))
+    ]
+    if not attempts:
+        return None
+    body = max(attempts, key=lambda c: c["id"])["body"]
+    try:
+        value = json.loads(body.split("\n", 1)[1].split("\n-->", 1)[0])
+        return Prose.model_validate(value.get("record", value)["next"])
+    except (ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return None
+
+
 def baseline_for(session: Session, pull: dict) -> Baseline | None:
     current = session.refresh(pull)
     embedded = baseline_from_body(current.get("body") or "")
     if embedded:
         return embedded
-    # Existing Klaud PRs stored their frozen baseline in a comment. Keep reading
-    # that format so retries and recovery remain compatible.
     comment = stored(session, pull, "baseline")
     return decode(comment, Baseline, session, pull) if comment else None
 
@@ -652,8 +747,6 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
     name = f"run-{record.run_id}-{record.run_attempt}"
     previous = stored(session, pull, name)
     text = render_attempt(record, baseline_for(session, pull), session.repository)
-    # Bounded comment chunks preserve every point without imposing a family-size cap.
-    # Write the index last: interrupted publication is retried idempotently.
     packed = record.model_dump(by_alias=True)
     chunks = []
     if len(record.points) > 20 or len(record.evals) > 20:
@@ -662,8 +755,6 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
                 "points": packed["points"][offset : offset + 20],
                 "evals": packed["evals"][offset : offset + 20],
             }
-            # Immutable content-addressed parts keep an existing index consistent
-            # until the replacement index is published, even across interruptions.
             part_name = f"{name}-part-{offset // 20 + 1}-{identity(part)[:16]}"
             part_text = point_table(
                 record.points[offset : offset + 20], baseline_for(session, pull)
@@ -693,7 +784,6 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
 
 def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> None:
     previous = stored(session, pull, name)
-    # Only the typed allowlist enters the durable record, never raw API/log data.
     body = marker(session, name) + data + "\n-->\n" + text
     if len(body) > 60000:
         raise VerificationError(
@@ -802,8 +892,9 @@ def public_point(entry: dict) -> dict:
         "conc": int(entry["conc"]),
         "image": normalized_image(entry["image"]),
     }
+    aggregate = multi and not point["disagg"] and not entry["decode"].get("num-worker")
     for role in ("prefill", "decode"):
-        topology = entry[role] if multi else entry
+        topology = entry["prefill" if aggregate else role] if multi else entry
         point.update(
             {
                 f"{role}_tp": topology["tp"],
@@ -819,14 +910,20 @@ def _matches_public_point(row: dict, point: dict) -> bool:
     """Compare a public row with a generated identity using canonical image spelling."""
     from .models import normalized_image
 
-    for key, value in point.items():
-        observed = row.get(key)
-        if key == "image":
-            if not isinstance(observed, str) or normalized_image(observed) != value:
-                return False
-        elif observed != value:
-            return False
-    return True
+    encodings = [point]
+    if point["is_multinode"] and not point["disagg"] and point["prefill_num_workers"] == 1:
+        encodings.append(
+            {**point, "is_multinode": False, "prefill_num_workers": 0, "decode_num_workers": 0}
+        )
+    return any(
+        all(
+            isinstance(row.get(key), str) and normalized_image(row[key]) == value
+            if key == "image"
+            else row.get(key) == value
+            for key, value in encoding.items()
+        )
+        for encoding in encodings
+    )
 
 
 def matrix_points(matrix: dict) -> list[dict]:
@@ -839,11 +936,35 @@ def matrix_points(matrix: dict) -> list[dict]:
     ]
 
 
-def check_baseline_coverage(matrix: dict, baseline: Baseline | None) -> None:
-    """Current-family completeness cannot replace the frozen original point roster."""
+def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
+    """Frozen baseline points that ``matrix`` cannot reproduce and the baseline did not retire."""
+    covered = {point_key(point) for point in matrix_points(matrix)}
+    covered.update(key for retirement in baseline.retirements for key in retirement.points)
+    return [point for point in baseline.points if point.key not in covered]
+
+
+def check_baseline_coverage(
+    repository: str, candidate: OwnedCandidate, matrix: dict, baseline: Baseline | None
+) -> None:
+    """Current-family completeness cannot replace the frozen original point roster.
+
+    The agent can rewrite the recorded baseline, so its retirements exempt points only when
+    the planner's rule, re-run on the family and MODELS.md at the candidate base (never the PR
+    head), derives exactly the same retirements.
+    """
+    from .validation import canonical_matrix
+
     if baseline is None or not baseline.points:
         raise VerificationError("Missing frozen baseline point roster")
-    if {point.key for point in baseline.points} - {point_key(p) for p in matrix_points(matrix)}:
+    family = canonical_matrix(repository, candidate.base, candidate.family)
+    current = {point_key(entry): public_point(entry) for entry in matrix_points(family)}
+    if baseline.retirements != retirements(
+        repository, candidate.base, baseline.date, baseline.points, current
+    ):
+        raise VerificationError(
+            "Recorded baseline retirements do not match MODELS.md at the candidate base"
+        )
+    if missing_baseline_points(matrix, baseline):
         raise VerificationError("Final matrix omits or changes frozen baseline points")
 
 
@@ -874,7 +995,6 @@ def publication(repository: str, context: dict, model: str) -> Publication:
     source = context["source"]
     feed = fetch("benchmarks", model=model, date=source["date"])
     info = fetch("workflow-info", date=source["date"])
-    # Public database bigint IDs are serialized as strings; URLs use decimal IDs.
     producers = {int(row["github_run_id"]): row for row in info.payload["runs"]}
     heads: dict[int, set[str]] = {}
     for row in info.payload["runConfigs"]:
@@ -921,6 +1041,153 @@ def publication(repository: str, context: dict, model: str) -> Publication:
     return Publication([feed.url, info.url], info.payload["changelogs"], rows)
 
 
+MODEL_COLUMNS = (
+    "Model architecture class",
+    "Prefix",
+    "Date added",
+    "Active scenarios",
+    "Deprecated scenarios",
+)
+SCENARIO_COLUMNS = ("Scenario", "ISL/OSL", "Status")
+DEPRECATED_SINCE = re.compile(
+    r"(?:\*\*)?Deprecated(?: for all models)?(?:\*\*)? since (\d{4}-\d{2}-\d{2}) "
+    r"\(\[#([1-9]\d*)\]\((https://github\.com/([^/()\s]+/[^/()\s]+)/pull/([1-9]\d*))\)\)"
+)
+
+
+def markdown_table(markdown: str, header: tuple[str, ...]) -> list[dict[str, str]]:
+    """Rows of the one Markdown table headed exactly by ``header``.
+
+    None if the table is absent or repeated, or if any of its rows has another cell count.
+    """
+
+    def cells(line: str) -> list[str] | None:
+        line = line.strip()
+        if len(line) < 2 or line[0] != "|" or line[-1] != "|":
+            return None
+        return [cell.strip() for cell in line[1:-1].split("|")]
+
+    lines = markdown.splitlines()
+    starts = [index for index, line in enumerate(lines) if cells(line) == list(header)]
+    if len(starts) != 1:
+        return []
+    rows = []
+    for line in lines[starts[0] + 2 :]:
+        if (values := cells(line)) is None:
+            break
+        if len(values) != len(header):
+            return []
+        rows.append(dict(zip(header, values, strict=True)))
+    return rows
+
+
+def calendar_date(value: str) -> bool:
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def deprecated_workloads(
+    markdown: str, repository: str, model_prefix: str
+) -> dict[tuple[int, int], tuple[str, str, str]]:
+    """MODELS.md single-turn workloads explicitly deprecated for ``model_prefix``.
+
+    Maps (ISL, OSL) to the scenario name, date and PR link of its deprecation. The workload's
+    only Scenarios row must start ``Deprecated since DATE ([#N](PR))``, or the bold
+    ``Deprecated for all models`` form, linking a PR of ``repository``. The model's only
+    support-matrix row must list that scenario as deprecated and not as active. Other
+    wording, a malformed table or any ambiguity retires nothing.
+    """
+    models = [
+        row
+        for row in markdown_table(markdown, MODEL_COLUMNS)
+        if model_prefix in re.findall(r"`([^`]+)`", row["Prefix"])
+    ]
+    if len(models) != 1:
+        return {}
+
+    def lists(cell: str, scenario: str) -> bool:
+        return re.search(rf"(?<![\w-]){re.escape(scenario)}(?![\w-])", cell) is not None
+
+    rows: dict[tuple[int, int], list[dict[str, str]]] = {}
+    for row in markdown_table(markdown, SCENARIO_COLUMNS):
+        if workload := re.fullmatch(r"([1-9]\d*)\s*/\s*([1-9]\d*)", row["ISL/OSL"]):
+            rows.setdefault((int(workload[1]), int(workload[2])), []).append(row)
+    deprecated = {}
+    for workload, matches in rows.items():
+        scenario = matches[0]["Scenario"]
+        statement = DEPRECATED_SINCE.match(matches[0]["Status"])
+        if (
+            len(matches) == 1
+            and statement
+            and statement[2] == statement[5]
+            and statement[4] == repository
+            and calendar_date(statement[1])
+            and re.fullmatch(SCENARIO_NAME, scenario)
+            and lists(models[0]["Deprecated scenarios"], scenario)
+            and not lists(models[0]["Active scenarios"], scenario)
+        ):
+            deprecated[workload] = (scenario, statement[1], statement[3])
+    return deprecated
+
+
+def retirements(
+    repository: str,
+    base: str,
+    baseline_date: str,
+    points: list[Point],
+    current: Mapping[str, dict],
+) -> list[Retirement]:
+    """Group frozen points the family dropped under MODELS.md deprecations after the baseline.
+
+    ``current`` maps each point the family generates at ``base`` to its public identity. A
+    frozen fixed-seq-len point is retired only when no current single-turn point has the
+    ISL/OSL of its label and MODELS.md at ``base`` deprecated that workload for the family's
+    model after ``baseline_date``. Absence alone never retires a point. The planner and every
+    later check of the recorded baseline derive retirements from the same inputs here.
+    """
+    from .validation import project_prefix
+
+    active = {
+        (point["isl"], point["osl"])
+        for point in current.values()
+        if point["benchmark_type"] == "single_turn"
+    }
+    dropped = {
+        point.key: workload
+        for point in points
+        if point.key not in current
+        and point.scenario == "fixed-seq-len"
+        and (workload := label_workload(point.label)) is not None
+        and workload not in active
+    }
+    if not dropped:
+        return []
+    [model] = {point["model"] for point in current.values()}
+    path = project_prefix(repository, base) + "docs/MODELS.md"
+    markdown = github.file_at(repository, base, path).decode()
+    deprecated = deprecated_workloads(markdown, repository, model)
+    retired: dict[tuple[str, str, str, int, int], list[str]] = {}
+    for key, workload in dropped.items():
+        evidence = deprecated.get(workload)
+        if evidence and day(evidence[1]) > day(baseline_date):
+            retired.setdefault((*evidence, *workload), []).append(key)
+    return [
+        Retirement(
+            scenario=scenario,
+            date=when,
+            pr_link=link,
+            model_prefix=model,
+            isl=isl,
+            osl=osl,
+            points=keys,
+        )
+        for (scenario, when, link, isl, osl), keys in retired.items()
+    ]
+
+
 def resolve_baseline(
     repository: str,
     candidate: OwnedCandidate,
@@ -949,9 +1216,6 @@ def resolve_baseline(
         for entry in entries.values()
     ):
         raise VerificationError("Baseline source image no longer matches the selected base")
-    # Routing and generator metadata (runner labels, recipe paths, fingerprints) can change
-    # after a producer ran. Key a historical point by the current point with the same public
-    # identity, so the frozen roster names points the current generator can reproduce.
     current = {key: public_point(entry) for key, entry in entries.items()}
 
     def current_key(entry: dict) -> str | None:
@@ -974,8 +1238,6 @@ def resolve_baseline(
     }
     for row, run_id, run_attempt, head in public.rows:
         if head is None:
-            # Classify after reconstructing the complete historical family, so an
-            # unrelated sibling cannot block it and feed ordering cannot hide points.
             unverified.append(row)
             continue
         if head not in historical:
@@ -985,7 +1247,7 @@ def resolve_baseline(
         matches = [
             entry for entry in historical[head] if _matches_public_point(row, public_point(entry))
         ]
-        if not matches:  # A distinct sibling workload/topology is not this family's baseline.
+        if not matches:
             continue
         if row.get("recipe_fingerprint"):
             matches = [
@@ -1000,7 +1262,6 @@ def resolve_baseline(
         key = current_key(matches[0]) or point_key(matches[0])
         if key in published:
             raise VerificationError("Duplicate public baseline point")
-        # Retain all original points, even if a current family or API response is smaller.
         entries.update(
             (point_key(point), point)
             for point in historical[head]
@@ -1013,7 +1274,6 @@ def resolve_baseline(
             label=point_label(entry),
             conc=entry["conc"],
             scenario=entry.get("scenario-type", "fixed-seq-len"),
-            # Dataset is not in BenchmarkRow; AgentX deltas remain N/A until proven.
             values=values(row),
             result="passed",
             run_id=run_id,
@@ -1025,26 +1285,30 @@ def resolve_baseline(
         raise VerificationError("Public baseline producer provenance is unavailable")
     if not published:
         raise VerificationError("No verified public baseline points for the selected family")
-    points = [
-        published.get(key)
-        or Point(
-            key=key,
-            label=point_label(entry),
-            conc=entry["conc"],
-            scenario=entry.get("scenario-type", "fixed-seq-len"),
-            values=Values(),
-            result="unavailable",
-        )
-        for key, entry in entries.items()
-    ]
+    points = sorted(
+        (
+            published.get(key)
+            or Point(
+                key=key,
+                label=point_label(entry),
+                conc=entry["conc"],
+                scenario=entry.get("scenario-type", "fixed-seq-len"),
+                values=Values(),
+                result="unavailable",
+            )
+            for key, entry in entries.items()
+        ),
+        key=lambda point: (point.label.split(" c")[0], point.conc, point.label),
+    )
     return Baseline(
         family=candidate.family,
         date=context["source"]["date"],
         image=old_image,
         goal=goal,
         sources=public.sources,
-        points=sorted(
-            points, key=lambda point: (point.label.split(" c")[0], point.conc, point.label)
+        points=points,
+        retirements=retirements(
+            repository, candidate.base, context["source"]["date"], points, current
         ),
     )
 

@@ -1,5 +1,3 @@
-# YAML from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/gsm8k/gsm8k.yaml 
-# Changed doc_to_text so model answers properly. Also see lm-evaluation-harness#3411.
 tag:
   - math_word_problems
 task: gsm8k
@@ -10,7 +8,7 @@ training_split: train
 fewshot_split: train
 test_split: test
 doc_to_text: "Question: {{question}}\nEnd your response with the answer on the last line, formatted as: #### [number]\nAnswer:"
-doc_to_target: "{{answer}}" #" {{answer.split('### ')[-1].rstrip()}}"
+doc_to_target: "{{answer}}"
 metric_list:
   - metric: exact_match
     aggregation: mean

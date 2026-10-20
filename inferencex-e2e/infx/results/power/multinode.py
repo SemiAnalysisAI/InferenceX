@@ -1,8 +1,8 @@
-"""Validate and aggregate multinode srt-slurm DCGM power artifacts.
+"""Validate and aggregate srt-slurm GPU power artifacts.
 
 Consumes the srt-slurm ``dcgm-power`` artifact package (v1 wire contract:
 ``power/{manifest.json, samples.csv, windows/*.json}``) produced for
-multinode runs, re-validates it independently, and patches whole-deployment
+single- or multi-node runs, re-validates it independently, and patches whole-deployment
 energy metrics plus role-level metrics for disaggregated deployments into the
 aggregate JSON.
 
@@ -43,8 +43,6 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-# ROLE_METRIC_KEYS and WHOLE_METRIC_KEYS are re-exported for callers that
-# import them through this module.
 from . import (
     ALL_POWER_METRIC_KEYS as _ALL_POWER_METRIC_KEYS,
     ROLE_METRIC_KEYS as ROLE_METRIC_KEYS,
@@ -62,13 +60,9 @@ from .common import (
     patch_power_metrics,
 )
 
-# --- srt-slurm dcgm-power v1 wire contract (mirrored constants) -------------
-
 SCHEMA_VERSION = 1
 PRODUCER = "srt-slurm.dcgm-power"
-POWER_METRIC = "DCGM_FI_DEV_POWER_USAGE"
 POWER_UNIT = "W"
-POWER_SCOPE = "gpu_device_board_as_reported_by_dcgm"
 CLOCK_SOURCE = "head_node_unix_clock"
 
 MANIFEST_FILENAME = "manifest.json"
@@ -85,12 +79,12 @@ SAMPLES_HEADER = (
     "power_w",
 )
 
-# srt-slurm v2 appends optional utilization fields to the power samples.
 SAMPLES_HEADER_V2 = (*SAMPLES_HEADER, "gpu_util_pct", "sm_active")
+SAMPLES_HEADER_V3 = (*SAMPLES_HEADER_V2, "temperature_c")
+SAMPLES_HEADERS = {1: SAMPLES_HEADER, 2: SAMPLES_HEADER_V2, 3: SAMPLES_HEADER_V3}
 
-# Fixed by the producer contract (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS),
-# NOT a multiple of the configured sample interval.
 MAX_SAMPLE_GAP_SECONDS = 3.0
+MAX_TEMPERATURE_C = 200.0
 
 WORKER_ROLES = ("prefill", "decode", "agg")
 
@@ -102,7 +96,6 @@ _WINDOW_ALLOWED_STATUSES = ("running", "completed", "failed", "interrupted")
 _CLOCK_TOLERANCE_SECONDS = 0.5
 _CLOCK_TOLERANCE_FRACTION = 0.01
 
-# Lifecycle reason codes that contradict a "complete" manifest.
 _FATAL_LIFECYCLE_REASONS = (
     "exporter_exited",
     "collector_exception",
@@ -144,9 +137,6 @@ def _is_finite(value: Any) -> bool:
 
 def _is_positive_finite(value: Any) -> bool:
     return _is_finite(value) and value > 0
-
-
-# --- strict manifest parsing (mirrors srt-slurm validate_artifacts) ---------
 
 
 @dataclass(frozen=True)
@@ -284,13 +274,15 @@ def _check_wire_contract(manifest: dict) -> list[str]:
     for key, expected in (
         ("schema_version", SCHEMA_VERSION),
         ("producer", PRODUCER),
-        ("source_metric", POWER_METRIC),
         ("unit", POWER_UNIT),
-        ("power_scope", POWER_SCOPE),
         ("timestamp_source", CLOCK_SOURCE),
     ):
         if manifest.get(key) != expected:
             failures.append(f"{key} is {manifest.get(key)!r}, expected {expected!r}")
+    for key in ("source_metric", "power_scope"):
+        value = manifest.get(key)
+        if not (isinstance(value, str) and value):
+            failures.append(f"{key} is not a non-empty string")
 
     status = manifest.get("status")
     if status != STATUS_COMPLETE:
@@ -336,13 +328,9 @@ def _check_wire_contract(manifest: dict) -> list[str]:
     return failures
 
 
-# --- strict samples parsing (mirrors srt-slurm samples.read_samples) --------
-
-
 def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None:
-    """Validate the selected CSV generation, including optional utilization."""
-    header = SAMPLES_HEADER_V2 if expected_version == 2 else SAMPLES_HEADER
-    if len(raw) != len(header):
+    """Validate the selected CSV generation, including optional utilization and temperature."""
+    if len(raw) != len(SAMPLES_HEADERS[expected_version]):
         return None
     try:
         schema_version = int(raw[0])
@@ -350,12 +338,16 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
         scrape_seq = int(raw[2])
         gpu_index = int(raw[4])
         power_w = float(raw[6])
-        if expected_version == 2:
-            for cell, maximum in zip(raw[7:], (100.0, 1.0), strict=False):
+        if expected_version >= 2:
+            for cell, maximum in zip(raw[7:9], (100.0, 1.0), strict=False):
                 if cell:
                     value = float(cell)
                     if not math.isfinite(value) or not 0 <= value <= maximum:
                         return None
+        if expected_version == 3 and raw[9]:
+            temperature = float(raw[9])
+            if not math.isfinite(temperature) or not -273.15 <= temperature <= MAX_TEMPERATURE_C:
+                return None
     except ValueError:
         return None
     hostname, gpu_uuid = raw[3], raw[5]
@@ -385,11 +377,11 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
         with open(path, newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            if header == list(SAMPLES_HEADER):
-                expected_version = 1
-            elif header == list(SAMPLES_HEADER_V2):
-                expected_version = 2
-            else:
+            expected_version = next(
+                (version for version, names in SAMPLES_HEADERS.items() if header == list(names)),
+                None,
+            )
+            if expected_version is None:
                 return (), ("samples_csv_header_mismatch",)
             for raw in reader:
                 row = _parse_sample_row(raw, expected_version)
@@ -446,9 +438,6 @@ def derive_observed_devices(rows: tuple[SampleRow, ...]) -> list[ObservedDevice]
     return devices
 
 
-# --- device identity / topology (mirrors srt-slurm validation.py) -----------
-
-
 def _resolve_roles(
     devices: list[ExpectedDevice],
 ) -> tuple[dict[tuple[str, int], str], list[str]]:
@@ -488,7 +477,6 @@ def _validate_devices(
         reasons.append("expected_device_missing")
     if observed_keys - expected_keys:
         reasons.append("unexpected_device")
-    # A UUID must map 1:1 to a device key, or one physical GPU is counted twice.
     if any(len(device.gpu_uuids) != 1 for device in observed):
         reasons.append("gpu_uuid_changed")
     else:
@@ -529,9 +517,6 @@ def _check_role_topology(
         if device.key in roles:
             per_role.setdefault(roles[device.key], set()).add(groups[device.hostname])
 
-    # Non-het deployments (e.g. GB200 single-job 1P1D) legitimately report
-    # het_group=None for every device; the exemption is deployment-wide, so a
-    # mixed manifest (one role het, another None) stays a topology failure.
     non_het_deployment = all(group is None for group in groups.values())
 
     assigned: list[int] = []
@@ -555,9 +540,6 @@ def _check_role_topology(
     if len(set(assigned)) != len(assigned):
         failures.append("roles share a het group")
     return failures
-
-
-# --- window scan + audit (mirrors srt-slurm windows.py) ---------------------
 
 
 @dataclass(frozen=True)
@@ -830,9 +812,6 @@ def _validate_expected_windows(
     return validations, parsed
 
 
-# --- stored-evidence cross-check (mirrors srt-slurm validate_artifacts) -----
-
-
 def _check_stored_evidence(
     manifest: dict,
     expected_devices: list[ExpectedDevice],
@@ -874,10 +853,19 @@ def _check_stored_evidence(
         if len(set(keys)) != len(keys):
             failures.append(f"{label} contains duplicate keys")
 
+    clock_sync_failures = manifest.get("clock_sync_failures", [])
+    if not isinstance(clock_sync_failures, list) or not all(
+        isinstance(node, str) for node in clock_sync_failures
+    ):
+        failures.append("clock_sync_failures is not a list of strings")
+    elif clock_sync_failures:
+        failures.append(
+            "clock_sync_unverified: "
+            + ", ".join(clock_sync_failures)
+            + " did not prove NTP synchronisation"
+        )
+
     return failures
-
-
-# --- consumer-side verdict, integration, and metrics ------------------------
 
 
 @dataclass
@@ -959,7 +947,6 @@ def validate_and_integrate(
         sha = exporter.get("container_image_sha256")
         audit.exporter_image_sha256 = sha if isinstance(sha, str) else None
 
-    # Gate: producer pin. Unknown producer contract → never publish numbers.
     if not expected_producer_sha:
         _add_reason(audit, "producer_pin_missing", "no expected producer SHA configured")
     elif audit.producer_git_commit != expected_producer_sha:
@@ -969,7 +956,6 @@ def validate_and_integrate(
             f"producer_git_commit {audit.producer_git_commit!r} != expected {expected_producer_sha!r}",
         )
 
-    # Recompute publication validity exactly like srt-slurm's offline validator.
     recompute_failures: list[str] = _check_wire_contract(manifest)
 
     try:
@@ -1020,9 +1006,6 @@ def validate_and_integrate(
     )
 
     audit.recomputed_publication_valid = not (recompute_failures or window_failures)
-    # A faithfully recorded failed window does not corrupt its siblings. Keep
-    # the complete package verdict for publication, while separately requiring
-    # trusted, reconciled evidence before retaining any individual measurement.
     audit.package_integrity_valid = (
         not recompute_failures
         and not audit.reasons
@@ -1032,8 +1015,6 @@ def validate_and_integrate(
     if recompute_failures or window_failures:
         _append_reason(audit.reasons, "package_recompute_invalid")
 
-    # Gate: stored verdict must agree with the recomputation, and both must be
-    # true. The stored verdict is never trusted on its own.
     if audit.stored_publication_valid is not True or (
         audit.stored_publication_valid != audit.recomputed_publication_valid
     ):
@@ -1047,9 +1028,6 @@ def validate_and_integrate(
         elif audit.stored_publication_valid is not True:
             _add_reason(audit, "package_recompute_invalid", "stored and recomputed both invalid")
 
-    # Gate: role topology must match the workflow's own GPU counts. Aggregate
-    # workers are mutually exclusive with disaggregated prefill/decode workers;
-    # this prevents phase-local fields from being fabricated for shared GPUs.
     expected_roles = {}
     topology_valid = True
     if aggregate_gpus > 0 and (prefill_gpus > 0 or decode_gpus > 0):
@@ -1080,9 +1058,6 @@ def validate_and_integrate(
 
     audit.expected_gpu_count = len(expected_devices)
     audit.observed_gpu_count = len(observed)
-    # Sidecar per-GPU maps share the hostname/uuid namespace the producer uses
-    # for its stored evidence, so role/energy/gap entries join on one key;
-    # fall back to hostname/index for devices that were never observed.
     uuid_label = {
         device.key: f"{device.hostname}/{device.gpu_uuids[0]}"
         for device in observed
@@ -1092,9 +1067,6 @@ def validate_and_integrate(
         uuid_label.get(key, f"{key[0]}/{key[1]}"): role for key, role in sorted(roles.items())
     }
 
-    # Gate: exactly one completed window must belong to THIS processed result.
-    # The workspace copy was renamed by the launcher, so the link is by content:
-    # the original result at LOGS/<result_path> must equal the processed copy.
     window = _select_window_for_result(
         audit, parsed_windows, logs_root, bench_result_path, benchmark
     )
@@ -1113,7 +1085,6 @@ def validate_and_integrate(
     ):
         return audit
 
-    # Integration: per-GPU trapezoid clipped to the formal window; roles sum.
     per_key_samples: dict[tuple[str, int], list[tuple[float, float]]] = {}
     for row in rows:
         per_key_samples.setdefault((row.hostname, row.gpu_index), []).append(
@@ -1183,16 +1154,12 @@ def validate_and_integrate(
         metrics["decode_joules_per_output_token"] = (
             role_energy["decode"] / benchmark.total_output_tokens
         )
-    # Absurd-but-finite sample values can overflow to inf during integration;
-    # publish an invalid verdict instead of dying in _patch_agg with a stale agg.
     non_finite = sorted(key for key, value in metrics.items() if not math.isfinite(value))
     if non_finite:
         _add_reason(audit, "non_finite_power_metric", f"non-finite: {', '.join(non_finite)}")
         return audit
     audit.window_metrics = metrics
     audit.window_power_valid = True
-    # Retention is independent of publication. An invalid sibling still blocks
-    # aggregate metrics and REQUIRE_POWER, even for this healthy measurement.
     if not audit.reasons:
         audit.metrics = metrics
         audit.power_valid = True
@@ -1271,9 +1238,6 @@ def _select_window_for_result(
     return window
 
 
-# --- aggregate patch + sidecar + entry point ---------------------------------
-
-
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
     patch_power_metrics(
         agg_path,
@@ -1322,8 +1286,6 @@ def _sidecar_payload(
         "observed_gpu_count": audit.observed_gpu_count,
         "per_gpu_role": audit.per_gpu_role,
         "per_gpu_max_sample_gap_s": audit.per_gpu_max_sample_gap_s,
-        # Overflowed integrations reach here as inf; json.dumps would emit a
-        # bare Infinity token, which strict RFC 8259 parsers reject.
         "per_gpu_energy_j": {
             key: value if math.isfinite(value) else None
             for key, value in audit.per_gpu_energy_j.items()
@@ -1350,9 +1312,6 @@ def run(
         f"power_validation_{bench_result.stem}.json"
     )
     benchmark, benchmark_reasons = _load_benchmark_data(bench_result)
-    # Integration/normalization must only ever see a fully valid benchmark
-    # contract; a partially valid one (e.g. zero token counts) is invalid
-    # anyway and would divide by zero.
     effective_benchmark = benchmark if benchmark is not None and not benchmark_reasons else None
 
     audit = validate_and_integrate(

@@ -109,8 +109,6 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
 
     assert validate_scores_main() == 1
 
-    # Each score line is attributed to the concurrency that produced it, so a
-    # failing concurrency is identifiable from the log (conc 4 here).
     captured = capsys.readouterr()
     assert "PASS: [conc=1] gsm8k exact_match,strict-match" in captured.out
     assert "FAIL: [conc=4] gsm8k exact_match,strict-match" in captured.err

@@ -57,6 +57,11 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
             as_int(row.get("prefill_pp", 1), 1),
             as_int(row.get("prefill_dcp_size", 1), 1),
             as_int(row.get("prefill_pcp_size", 1), 1),
+            *(
+                ("dwdp", as_int(row["prefill_dwdp_size"], 1))
+                if as_int(row.get("prefill_dwdp_size", 1), 1) > 1
+                else ()
+            ),
             as_int(row.get("prefill_ep", 1)),
             as_bool(row.get("prefill_dp_attention", False)),
             as_int(row.get("prefill_num_workers", 0)),

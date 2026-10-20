@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from power_model import CoolingProfile, OperatingState
 from power_model.cli import main
-from power_model.models.advanced import AdvancedAllInPowerModel, Cluster, SystemGroup
+from power_model.models.advanced import Cluster, OSSAllinPowerModel, SystemGroup
 from power_model.models.advanced.components import (
     AffinityFanPower,
     B200PSUEfficiency,
@@ -287,7 +287,7 @@ def test_psu_converts_fans_and_components_before_pue_and_quantity_scaling():
         fan_policy=controlled_fan_policy(),
         psu=psu,
     )
-    model = AdvancedAllInPowerModel(
+    model = OSSAllinPowerModel(
         cooling=CoolingProfile(mode="air"),
         using_scale_out=True,
         cluster=Cluster(systems=(SystemGroup(system=hardware, quantity=2),), networking=()),

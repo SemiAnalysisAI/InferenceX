@@ -1,30 +1,33 @@
 # Contributing to InferenceX
 
-<div align="center">
-
-**English** | [中文](CONTRIBUTING_zh.md)
-
-</div>
-
 Thanks for contributing! PRs are welcome. This page covers the review process every PR goes through before it can be merged.
+
+## Documentation language
+
+Maintain contributor-facing docs in English. Only READMEs retain Chinese translations: keep existing `README_zh.md` files synchronized with their English READMEs and preserve their language switchers. Do not add or recreate Chinese versions of other docs.
+
+PR titles must still include both English and Simplified Chinese, using `<English title> / <中文标题>`. The existing bilingual requirements for issue titles, PR and issue descriptions, human-authored PR comments, and commit bodies remain unchanged; see [AGENTS.md](AGENTS.md).
+
+## PR descriptions
+
+Lead with a short explanation of the problem, the resulting behavior, and why the change matters. A reviewer should understand the PR at a high level without expanding any sections. Keep material risks, breaking changes, and unresolved failures visible alongside the summary. Include related issue links only when relevant.
+
+Put AI disclosure, change-type lists, author checklists, and other administrative boilerplate after the summary in clearly named `<details><summary>…</summary>` blocks. Omit the `open` attribute so they are collapsed by default, and leave blank lines around the Markdown inside each block. Keep required checklist items intact; collapsing them changes presentation, not review or merge requirements.
+
+Report validation only from actual integration or end-to-end runs: keep the outcome concise and link the run when available. Put supporting validation evidence, verbose check output, and logs in a collapsed `Validation details` block, while keeping material failures and regressions visible. Substantive benchmark comparisons that explain the change, including the specialized Klaud reports, remain visible; they are not administrative boilerplate. Omit routine local-check inventories (unit-test counts, mocked checks, lint/format, schema checks, matrix generation, and changelog-byte checks), empty sections, and pending-validation boilerplate. Continue running the appropriate checks; this rule governs what belongs in the PR description and comments. If no integration or end-to-end run was performed, omit the validation section.
+
+Every PR description must include an **AI model disclosure** section inside a collapsed-by-default `<details><summary>AI model disclosure</summary>` block. Name the exact model/version used to prepare the PR and each model's role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer alone are insufficient. Use the identifier exposed by the runtime; never guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Update the disclosure when later edits use another model.
 
 ## PR review flow
 
-Every PR description must include an **AI model disclosure** section. Name the exact model/version used to prepare the PR and each model's role, including delegated agents. Tool names such as Claude Code, Cursor, or Perplexity Computer alone are insufficient. Use the identifier exposed by the runtime; never guess an unavailable identifier. If the runtime does not expose the exact model, explicitly state that it could not be verified. Human-only PRs must state `No AI used`. Update the disclosure when later edits use another model.
+1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that change `inferencex-e2e/perf-changelog.yaml` (the matrix comes from the appended entries) and carry exactly one primary label, normally `full-sweep-fail-fast`. Labels, modifiers, canary, fail-fast, and the maintainer-approved fork path are described in [PR sweep labels](.github/workflows/README.md#pr-sweep-labels). Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
 
-1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that change `inferencex-e2e/perf-changelog.yaml` (the matrix comes from the appended entries) and carry exactly one primary label; more than one fails validation. See [PR primary and modifier labels](inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels).
-   - `full-sweep-fail-fast` (strongly recommended): canary gate plus fail-fast, which stops each matrix at its first failure.
-   - `full-sweep-enabled`: the same canary gate without fail-fast; use it only if you need jobs to keep running past a failure.
-   - `non-canary-full-sweep-enabled`: no canary and no fail-fast.
-
-   The canary is the lowest-concurrency eligible benchmark entry; if it fails, every other matrix is skipped. That shared canary, not fail-fast, keeps a broken change from wasting the whole fan-out. A sweep with only multi-node fixed-sequence or eval entries has no canary, so every matrix fans out at once and fail-fast is the only guard. The `all-evals`, `evals-only`, and `agentx-fast` modifiers start no GPU sweep without a primary label (`check-changelog` still runs), and `/use` is rejected while the PR carries `evals-only` or `agentx-fast`. Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
-
-   **Fork PRs:** External contributors cannot apply labels, and `run-sweep.yml` runs no jobs for fork PRs, not even changelog validation. Once the PR is open, ready for review, and free of merge conflicts, a maintainer with write access applies any modifiers and then one primary label. That approves only the current head SHA: `trusted-external-sweep.yml` dispatches `e2e-tests.yml` for it, with no canary for any label and fail-fast only for `full-sweep-fail-fast`. After each push, the maintainer must remove and re-add the primary label to approve the new head.
+   **Fork PRs:** external contributors cannot apply labels. Once the PR is open, ready for review, and free of merge conflicts, a maintainer applies the labels, which approves only the current head SHA. After each push, the maintainer must remove and re-add the primary label.
 2. For changes owned by a non-admin CODEOWNER other than `@SemiAnalysisAI/core`, ask one eligible [CODEOWNER](.github/CODEOWNERS) to review and post the **PR Review Checklist** sign-off (see below) in their approval comment.
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
-**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
+**Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
 
 ## Draft-model precision
 
@@ -109,8 +112,13 @@ name or precision label.
 For speculative-decoding changes, the CODEOWNER's additional detail section must
 identify the draft checkpoint/revision (or embedded head), the precision it ships in,
 how the pinned upstream image handles it by default, and its effective serving
-precision, so the reviewer can confirm the last two match. If this cannot be
-verified, the criterion is not satisfied. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
+precision, so the reviewer can confirm the last two match. If evidence is missing
+or inaccessible, record the uncertainty and missing evidence instead of claiming
+verification. Check 13 reports WARN and requests human review; this does not
+establish compliance or grant an exception. A demonstrated precision violation or
+prohibited enablement still FAILs, even if another affected variant is unverified.
+An unchecked draft-precision item explained this way does not independently fail
+the checklist-format check. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
 [verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped).
 
 This follows the same principle as

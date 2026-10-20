@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from power_model import OperatingState, create_power_model
 from power_model.cli import main
-from power_model.models.advanced import AdvancedAllInPowerModel, Cluster
+from power_model.models.advanced import Cluster, OSSAllinPowerModel
 from power_model.models.advanced.components import SwitchSide800GSR8Transceiver
 from power_model.models.advanced.networking import (
     AMD_TWO_TIER_NETWORK,
@@ -97,7 +97,7 @@ def test_hgx_default_network_adds_power_before_pue_without_heating_chassis(
     network_w = active_w if enabled else idle_w
     facility_delta = active_facility_delta if enabled else idle_facility_delta
     automatic = create_power_model(system=system, systems=2, using_scale_out=enabled)
-    without_network = AdvancedAllInPowerModel(
+    without_network = OSSAllinPowerModel(
         cooling=automatic.cooling,
         using_scale_out=enabled,
         cluster=Cluster(systems=automatic.cluster.systems, networking=()),
