@@ -164,40 +164,58 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 `run-sweep.yml` sweeps only same-repository PRs that change
 `inferencex-e2e/perf-changelog.yaml`, using the appended entries as the matrix.
-Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc)
-instead. Apply exactly one primary sweep label; more than one fails
-`check-changelog`.
+Apply exactly one primary label, normally `full-sweep-fail-fast`.
+Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc).
 
-| Label | Canary | Per-matrix fail-fast |
+| Primary label | Canary | Per-matrix fail-fast |
 | --- | --- | --- |
-| `full-sweep-fail-fast` (recommended) | Yes | Yes |
+| `full-sweep-fail-fast` | Yes | Yes |
 | `full-sweep-enabled` | Yes | No |
 | `non-canary-full-sweep-enabled` | No | No |
 
-No label trims concurrency. For canary selection (some sweeps have no
-candidate) and label-change cancellation, see
-[CI procedures](../../inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels).
+All primary labels run the full selected concurrency matrix. Modifiers require
+a primary label: `all-evals` expands eligible evals while retaining throughput;
+`evals-only` suppresses throughput; `agentx-fast` uses one extra AgentX warmup
+request after mandatory primers and a 20-minute profile, leaving fixed-sequence
+and eval settings canonical. `all-evals`/`evals-only` reject changelog additions
+with `append-only: true` or `no-evals: true`. Do not reuse an `evals-only` or
+`agentx-fast` run. For lowest-concurrency smoke, dispatch `e2e-tests.yml` with
+`trim-conc: true`; no PR label trims concurrency.
 
-## PR Eval Modifiers
+Labels authorize same-repository sweeps on draft or ready PRs. Marking ready
+does not dispatch a sweep. Changing a recognized primary or modifier label
+cancels the active sweep; another starts only if a primary label remains.
+To retrigger an already-labeled PR, remove and reapply its primary label.
+Merge conflicts block sweeps. Queue priority comes from the PR diff and
+review state, not priority labels.
 
-Use `all-evals` and/or `evals-only` with one primary sweep label. `full-sweep-fail-fast` is the strongly recommended primary. Use `full-sweep-enabled` only when jobs must keep running past a failure. `all-evals`
-covers every fixed-sequence config. Each multi-node topology runs all
-`conc-list` values on one engine. `evals-only` suppresses throughput. Together
-they run all evals only. The primary label still controls canary/fail-fast.
-Default full sweeps, including their default evals, and `all-evals` sweeps are
-reusable; [reuse is rejected](#reusing-an-approved-pr-full-sweep) while the PR
-carries `evals-only`, alone or with `all-evals`. Either modifier fails
-`check-changelog` when the changelog additions include `append-only: true` or
-`no-evals: true` entries.
+The canary is the lowest-concurrency non-eval candidate among single-node
+fixed-sequence 1k/1k, 8k/1k, or AgentX entries, falling back to multi-node AgentX.
+It is removed from the remaining matrix. If none qualify, fan-out proceeds
+without a canary; otherwise all matrices require canary success. Fail-fast
+cancels siblings within each matrix family, not every independent family.
+Find the first actual failure before treating a cancelled run as a flake.
+Manual `e2e-tests.yml` has no canary and defaults `fail-fast` to false.
 
-## AgentX Fast Mode
+## Changelog Conflict Recovery
 
-Add `agentx-fast` alongside one primary sweep label to run one additional
-warmup request per AgentX lane after mandatory primers and a 20-minute profile
-for single- and multi-node AgentX throughput jobs. Fixed-sequence throughput
-and eval jobs retain their canonical settings. Adding or removing the modifier
-restarts the active sweep. [Reuse is rejected](#reusing-an-approved-pr-full-sweep)
-while the PR carries `agentx-fast`.
+Run from `inferencex-e2e/`. After fetching and merging `origin/main`, if the
+changelog conflicts, use the helper while index stages 1/2/3 still exist:
+
+```bash
+uv run --extra workflows python -m infx.workflows.prepare_perf_changelog_merge resolve-conflict \
+  --changelog-file perf-changelog.yaml --pr-number "$PR" --repo SemiAnalysisAI/InferenceX
+git add perf-changelog.yaml
+git commit --no-edit
+uv run --extra workflows python -m infx.workflows.validate_perf_changelog \
+  --changelog-file perf-changelog.yaml --base-ref origin/main --head-ref HEAD
+```
+
+The helper preserves main's bytes and appends only unique PR contributions.
+Stop on any refusal or unexpected historical edit. Never accept only one side,
+hand-merge, or reformat history. Resolve non-changelog conflicts separately.
+For authorized reuse, prefer `infx.workflows.merge_with_reuse`, which performs
+the synchronization and validation together.
 
 ## Trusted External-Fork Sweep Dispatch (PoC)
 
@@ -207,10 +225,12 @@ Public-fork `pull_request` workflows receive no repository secrets, and every
 fans out onto GPU runners. A maintainer with `write`, `maintain`, or `admin`
 permission can add any modifier labels first, then apply one primary sweep
 label to approve the PR's exact current head SHA. The PR must be open and
-non-draft, and dispatch is refused until GitHub reports `merge_commit_sha`;
-resolve conflicts first. `trusted-external-sweep.yml` then dispatches
-`e2e-tests.yml` from `main` and pins both the approved head and GitHub's merge
-SHA. `e2e-tests.yml` plans the changelog matrix itself and runs it with the
+non-draft. Dispatch waits briefly for GitHub to settle mergeability, then is
+refused unless the PR is mergeable and GitHub's test merge commit has the
+approved head as its second parent; resolve conflicts or re-add the label if
+GitHub is still recomputing it. `trusted-external-sweep.yml` then dispatches
+`e2e-tests.yml` from `main` and pins both the approved head and that verified
+merge SHA. `e2e-tests.yml` plans the changelog matrix itself and runs it with the
 trusted workflow's secrets.
 
 The approval is revision-specific. A later push is not trusted automatically.

@@ -24,6 +24,8 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线。所有评估同一模型和模式的提交都使用同一条曲线。
 
+对于 Qwen3.5 的 srt-slurm 启动，`apply_srt_recipe` 通过 `infx/srt_slurm/synthetic_acceptance.py` 连接器，在应用调用方覆盖设置后，根据生成角色的 `speculative-num-steps` 和 `THINKING_MODE` 选择已提交的曲线。验证 token 不计为额外的 MTP 步数。对于采用合成接受的 SGLang MTP 吞吐测试，如果生成角色缺少 `speculative-num-draft-tokens`，或者其值不是等于 `speculative-num-steps + 1` 的整数，连接器会拒绝启动。无需手动设置接受长度。仅评测运行会移除合成设置并使用真实验证。
+
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
 ```bash
@@ -136,6 +138,15 @@ gh workflow run speedbench-al.yml \
 | GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 | GLM-5.3 | MTP（临时，K=3 取自 GLM-5.2） | [`glm5.3_mtp.yaml`](glm5.3_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479)（GLM-5.2） |
 | Qwen3.8-Flash-Next | MTP (native) | [`qwen3.8next_mtp.yaml`](qwen3.8next_mtp.yaml) | [33034290269](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/33034290269) |
+| Muse Spark Open | DFlash2 | [`musespark_dflash.yaml`](musespark_dflash.yaml) | [38808046215](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/38808046215) |
+
+## 在 srt-slurm 运行中使用黄金曲线
+
+- 不要在 SRT 方案、主配置或启动器中硬编码合成接受长度，也不要手动添加 `SYNTHETIC_ACCEPTANCE_LENGTH`、vLLM `synthetic_acceptance_length`、SGLang `SGLANG_SIMULATE_ACC_LEN` 或 TRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` 设置。上文的引擎示例展示的是连接器注入的内容，而不是方案应设置的内容。
+- 通过 srt 驱动（`infx/launch/drivers/srt/`）提交方案。它会运行 [`infx/srt_slurm` 连接器](../srt_slurm/synthetic_acceptance.py)，以原生 SRT `--set` / `--unset` 覆盖应用设置。直接调用上游 `srtctl` 会跳过这一选择。
+- 在方案中显式保留投机方法、draft 模型、draft token 数和相关采样设置。连接器会在调用方覆盖之后，把生成角色（decode，否则为 aggregated）的设置与 `MODEL_PREFIX` 和 `THINKING_MODE` 组合来选择曲线。Kimi DSpark 需将 `draft_sample_method` 设为 `greedy` 或 `probabilistic`。
+- 仅评测和非 AgentX 运行使用真实验证，连接器会移除陈旧的合成设置。非投机角色不会收到模拟设置。`RUN_EVAL` 不会关闭吞吐部分的模拟。
+- 缺少黄金曲线或 draft 长度未测量时，会在提交前失败。新组合应补充实测黄金数据，而不是使用猜测或硬编码的长度。
 
 ## 查询曲线
 

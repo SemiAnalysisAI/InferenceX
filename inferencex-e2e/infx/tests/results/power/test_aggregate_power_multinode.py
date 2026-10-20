@@ -23,7 +23,6 @@ FIRST_TS = 998.0
 LAST_TS = 1062.0
 RESULT_STEM = "my_result"
 
-# (hostname, gpu_index, role, het_group, constant power W)
 DEVICES = (
     ("node-d", 0, "decode", 1, 300.0),
     ("node-d", 1, "decode", 1, 300.0),
@@ -107,7 +106,6 @@ def build_package(tmp_path, power_fn=None, publication_valid=True, bench_extra=N
     rows, scrapes = _rows(power_fn)
     with open(pkg.power_dir / "samples.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
-        # Model the producer's wire format independently of the consumer's parser.
         writer.writerow([
             "schema_version", "timestamp_unix", "scrape_seq", "hostname",
             "gpu_index", "gpu_uuid", "power_w",
@@ -254,7 +252,6 @@ def build_mixed_package(tmp_path, failure):
     window_file = None
     if failure != "missing":
         window_file = "windows/failed_result.json"
-        # C8 is beyond the retained samples; C4's bytes and coverage stay intact.
         window = {
             "schema_version": 1,
             "clock_source": "head_node_unix_clock",
@@ -307,8 +304,6 @@ def test_mixed_windows_retain_healthy_measurement_without_publication(tmp_path, 
     assert pkg.agg()["power_valid"] == 0
     assert "total_gpu_energy_j" not in pkg.agg()
 
-    # Replaying with the required-power gate still fails after retaining the
-    # independent measurement, and never changes the input package or verdict.
     assert pkg.run(require_power=True) == 1
     assert pkg.sidecar() == audit
     assert {path: path.read_bytes() for path in retained} == retained
@@ -376,8 +371,6 @@ class TestValidPackage:
         assert sidecar["producer"]["stored_publication_valid"] is True
         assert sidecar["producer"]["recomputed_publication_valid"] is True
         assert sidecar["selected_window"]["window_file"] == f"windows/{RESULT_STEM}.json"
-        # Role, energy, and gap maps share the hostname/uuid key namespace so
-        # role-level sums can be re-derived from the sidecar alone.
         assert sidecar["per_gpu_role"] == {
             "node-d/GPU-node-d-0": "decode",
             "node-d/GPU-node-d-1": "decode",
@@ -397,7 +390,6 @@ class TestValidPackage:
         pkg = build_package(tmp_path, power_fn=ramp)
         assert pkg.run() == 0
         agg = pkg.agg()
-        # Decode GPU means are 332 W and 300 W; both prefill GPUs draw 400 W.
         assert agg["prefill_avg_power_w"] == pytest.approx(400.0)
         assert agg["decode_avg_power_w"] == pytest.approx(316.0)
         assert agg["avg_total_gpu_power_w"] == pytest.approx(1432.0)
@@ -433,7 +425,7 @@ class TestValidPackage:
         assert set(pkg.sidecar()["per_gpu_role"].values()) == {"agg"}
 
     def test_agentx_adapter_consumes_a_real_custom_benchmark_package(self, tmp_path):
-        from infx.results.agentic.power_adapter import run_multinode_agentic_power
+        from infx.results.agentic.power_adapter import run_native_agentic_power
 
         pkg = build_package(tmp_path)
         result_dir = pkg.logs_root / "agentic" / "conc_4"
@@ -477,7 +469,7 @@ class TestValidPackage:
             )
         )
 
-        assert run_multinode_agentic_power(
+        assert run_native_agentic_power(
             result_dir=result_dir,
             agg_result=pkg.agg_result,
             power_dir=pkg.power_dir,
@@ -494,9 +486,6 @@ class TestValidPackage:
         assert validation["selected_window"]["window_file"] == f"windows/{stem}.json"
 
     def test_trapezoid_matches_hand_computed_ramp(self, tmp_path):
-        # node-d/0 ramps linearly 300 -> 364 W across the samples; the
-        # trapezoid over [1000, 1060] must equal the analytic integral
-        # (mean of boundary powers x duration) to well under 0.1%.
         def ramp(host, idx, ts):
             if (host, idx) == ("node-d", 0):
                 return 300.0 + (ts - FIRST_TS)
@@ -596,14 +585,9 @@ class TestSampleGates:
         )
 
     def test_overflowing_power_metric_is_invalid_not_stale(self, tmp_path):
-        # 9e307 W rows are finite sample-wise, so the recompute stays valid,
-        # but the trapezoid sum overflows to inf; the verdict must flip to
-        # invalid instead of dying mid-patch and leaving the agg unpatched.
         pkg = build_package(tmp_path, power_fn=lambda host, idx, ts: 9e307)
         assert_invalid(pkg, "non_finite_power_metric")
 
-        # The sidecar must stay strict RFC 8259 JSON: the overflowed per-GPU
-        # energies are nulled, never serialized as bare Infinity tokens.
         def reject_constant(value):
             raise AssertionError(f"non-finite JSON constant in sidecar: {value}")
 
@@ -638,8 +622,6 @@ class TestWindowAndResultGates:
         pkg.original_result.write_text(json.dumps(tampered, indent=2))
         pkg.bench_result.write_text(json.dumps(tampered, indent=2))
         sidecar = assert_invalid(pkg, "window_for_result_missing")
-        # The package is still internally consistent (window start/end/duration
-        # match the original result); only the result<->window binding fails.
         assert sidecar["producer"]["recomputed_publication_valid"] is True
 
 
@@ -677,9 +659,6 @@ class TestTopologyGates:
         assert any("share a het group" in failure for failure in sidecar["failures"])
 
     def test_none_het_groups_valid_for_non_het_deployments(self, tmp_path):
-        # Real GB200 1P1D runs launch as one plain Slurm job (no het
-        # components): the producer reports het_group=None for every device
-        # and the package must stay publishable in both modes.
         pkg = build_package(tmp_path)
         manifest = json.loads((pkg.power_dir / "manifest.json").read_text())
         for device in manifest["expected_devices"]:
@@ -728,16 +707,19 @@ class TestManifestGates:
 
 
 @pytest.mark.parametrize("utilization", [("", ""), ("75.5", "0.9")])
-def test_v2_samples_preserve_energy(tmp_path, utilization):
-    """The pinned producer's optional utilization columns preserve board energy."""
+@pytest.mark.parametrize("temperature", [None, "", "0", "65.5", "200"])
+def test_optional_samples_preserve_energy(tmp_path, utilization, temperature):
+    """Optional utilization and temperature columns preserve board energy."""
     pkg = build_package(tmp_path)
     path = pkg.power_dir / "samples.csv"
     with path.open(newline="") as handle:
         rows = list(csv.reader(handle))
     with path.open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(rows[0] + ["gpu_util_pct", "sm_active"])
-        writer.writerows([[2, *row[1:], *utilization] for row in rows[1:]])
+        writer.writerow(rows[0] + ["gpu_util_pct", "sm_active"] + (["temperature_c"] if temperature is not None else []))
+        version = 3 if temperature is not None else 2
+        extra = [temperature] if temperature is not None else []
+        writer.writerows([[version, *row[1:], *utilization, *extra] for row in rows[1:]])
     assert pkg.run(require_power=True) == 0
     assert pkg.agg()["power_valid"] == 1
     assert pkg.agg()["total_gpu_energy_j"] == pytest.approx(84000)
@@ -759,4 +741,16 @@ def test_v2_samples_reject_mixed_versions_and_invalid_utilization(tmp_path, row)
         writer.writerow(row)
     rows, reasons = apm.read_samples(path)
     assert not rows
+    assert reasons == ("samples_csv_malformed",)
+
+
+@pytest.mark.parametrize("temperature", ["nan", "inf", "bad", "-300", "200.5", "9223372036854775794"])
+def test_v3_samples_reject_invalid_temperature(tmp_path, temperature):
+    path = tmp_path / "samples.csv"
+    path.write_text(
+        "schema_version,timestamp_unix,scrape_seq,hostname,gpu_index,gpu_uuid,power_w,gpu_util_pct,sm_active,temperature_c\n"
+        f"3,1000,0,node-a,0,GPU-a,400,,,{temperature}\n"
+    )
+    rows, reasons = apm.read_samples(path)
+    assert rows == ()
     assert reasons == ("samples_csv_malformed",)

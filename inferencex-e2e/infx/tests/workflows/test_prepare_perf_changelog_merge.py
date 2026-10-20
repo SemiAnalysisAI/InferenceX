@@ -139,9 +139,6 @@ def test_conflict_resolution_separates_multiple_contributions_by_one_blank_line(
         "https://github.com/SemiAnalysisAI/InferenceX/pull/41",
     )
 
-    # resolve_conflict_bytes self-validates via validate_raw_change, which
-    # requires exactly one blank line between appended entries — so a wrong
-    # separator would raise here rather than return.
     result = resolve_conflict_bytes(
         base, pr, main, 42, "SemiAnalysisAI/InferenceX"
     )
@@ -153,7 +150,6 @@ def test_conflict_resolution_separates_multiple_contributions_by_one_blank_line(
         "new-a",
         "new-b",
     ]
-    # 4 entries -> 3 single-blank-line separators, no double blanks, one trailing newline
     assert result.count(b"- config-keys:") == 4
     assert result.count(b"\n\n- config-keys:") == 3
     assert b"\n\n\n" not in result

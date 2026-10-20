@@ -57,6 +57,7 @@ class LaunchPath(StrEnum):
     SRT_NATIVE = "srt-native"
     SRT_BATCH = "srt-batch"
     SCRIPT = "script"
+    LLMD = "llmd"
 
 
 NATIVE_SRT_LANES: dict[str, tuple[Match, ...]] = {
@@ -76,6 +77,8 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
     if request.is_multinode:
+        if request.framework == "llmd-vllm":
+            return LaunchPath.LLMD
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
         return LaunchPath.SRT_MULTI

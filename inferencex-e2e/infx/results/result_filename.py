@@ -20,8 +20,6 @@ def compact(value: str, budget: int) -> str:
 
 
 def result_stem(base: str, fingerprint: str = "") -> str:
-    # Leave room for SRT point suffixes, power_validation_, .json and atomic .tmp.
-    # The hash includes the entire fingerprint; full metadata stays in the JSON.
     value = base + (f"_recipe-{fingerprint}" if fingerprint else "")
     return compact(value, 120)
 
@@ -33,7 +31,6 @@ def point_filename(
     if any(not number.isascii() or not number.isdecimal() for number in numbers):
         raise ValueError("Expected numeric point identity")
     tail = f"_conc{conc}_gpus_{gpus}" + (f"_ctx_{ctx}_gen_{gen}" if ctx else "")
-    # Keep the numeric tail readable by existing workflow GPU-count extraction.
     budget = 255 - len(("power_validation_" + stem + "_" + tail + ".json.tmp").encode())
     return f"{stem}_{compact(config, budget)}{tail}.json"
 

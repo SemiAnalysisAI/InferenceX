@@ -3,8 +3,7 @@
 
 The GB SKUs are an NVLink-only domain, and vLLM selects a different all-to-all there than it
 does on an RDMA fabric: `--all2all-backend deepep_v2` for RDMA, `flashinfer_nvlink_one_sided`
-for NVLink. Benchmarking the GB racks with DeepEP V2 and NCCL EP therefore measured transports
-no deployment would choose on that hardware. This adapter closes that gap.
+for NVLink.
 
 ONE-SIDED, not two-sided. The sibling `flashinfer_nvlink_two_sided` backend is deliberately not
 wired: it produces gibberish output on GB200/arm64 (vllm#39722). One-sided means the initiator
@@ -18,8 +17,17 @@ Upstream surface (flashinfer.comm.trtllm_moe_alltoall):
                 workspace_size_per_rank=..., mnnvl_config=...)
     .dispatch(token_selected_experts, input_payloads, runtime_max_tokens_per_rank)
         -> list of [ep_size, runtime_max_tokens_per_rank, *] workspace-backed receives
-    .combine(payload, runtime_max_tokens_per_rank, output=...)
+    .combine(payload, runtime_max_tokens_per_rank, payload_in_workspace=False[, output=...])
         -> [local_num_tokens, elements_per_token]
+
+The contract is vLLM's integration (`FlashInferNVLinkOneSidedManager.combine_into` and the
+`flashinfer_nvlink_one_sided` prepare/finalize). Its finalize hands combine the experts' output, a
+tensor the caller owns, and never sets `payload_in_workspace`, so combine first stages that payload
+into the workspace itself: that copy is part of what vLLM's combine costs, and the timed combine
+pays it. Having the expert GEMM write straight into the workspace region instead is TensorRT-LLM's
+path (and SGLang's, with its `flashinfer_cutlass` MoE runner only). Wheels from 0.6.16 combine into
+a caller-supplied `output=`; before that vLLM copies the returned tensor into its own, and so does
+`_combine_into`.
 
 Three properties of that API shape this adapter:
 
@@ -40,6 +48,9 @@ phase is still covered — `normal` runs the full decode and prefill ladders.
 """
 from __future__ import annotations
 
+import inspect
+import os
+import re
 import types
 
 import torch
@@ -72,6 +83,23 @@ def _wheel_has_fp32_combine(version: str) -> bool:
         return False
 
 
+def _accepts_keyword(fn, name) -> bool:
+    """vLLM's `supports_kw(fn, name, allow_var_kwargs=False)`: whether `name` is an explicit
+    parameter of `fn`. vLLM picks its combine call by this probe, not by version (`output=` and
+    `use_low_precision` both arrived in 0.6.16), so the adapter makes the same choice the same way."""
+    try:
+        parameter = inspect.signature(fn).parameters.get(name)
+    except (TypeError, ValueError):
+        return False
+    return parameter is not None and parameter.kind not in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD)
+
+
+def _version_slug(version: str) -> str:
+    """The wheel version as a `kernel_generation` segment: a local tag such as `+cu130` keeps its
+    text but not its `+`."""
+    return re.sub(r"[^A-Za-z0-9.]+", "-", version).strip("-") or "unknown"
+
+
 # FP8 block size, matching the DeepSeek-V3 recipe every other FP8 backend here uses.
 _FP8_BLOCK = 128
 
@@ -79,9 +107,11 @@ _FP8_BLOCK = 128
 def _blockwise_cast_to_fp8(x):
     """Per-128-channel e4m3 quantize: (values [m, n], FP32 scales [m, n//128]).
 
-    Local rather than shared on purpose: deepep-v2 and uccl-ep must match their own libraries'
-    in-kernel bits, while nothing here quantises in-kernel, so this copy only has to round-trip
-    self-consistently. Three contracts, not three copies of one.
+    The layout vLLM dispatches on this transport: `per_token_group_quant_fp8(x, 128)`, row-major
+    FP32 scales, sent as the payload after the values. Local rather than shared on purpose:
+    deepep-v2 and uccl-ep must match their own libraries' in-kernel bits, while nothing here
+    quantises in-kernel, so this copy only has to round-trip self-consistently. Three contracts,
+    not three copies of one.
     """
     m, n = x.shape
     blocks = x.view(m, -1, _FP8_BLOCK)
@@ -103,13 +133,14 @@ class FlashInferEPBackend(EPBackend):
     # One kernel family and so the base's normal-only SUPPORTED_MODES; see the module docstring
     # for why there is no low-latency mode.
     # FP8 is dispatch-side only: scales ride as a fourth payload and combine stays BF16, so none
-    # of the 0.6.16+ combine-quant API is needed. vLLM accepts only nvfp4/mxfp8/bf16 on this
-    # transport, so an fp8 row measures the transport off-path; `dispatch_dtype` records that.
+    # of the 0.6.16+ combine-quant API is needed. vLLM accepts DeepSeek blockwise FP8 (e4m3, FP32
+    # 1x128 scales) on this transport from v0.29.0, so it is an engine path like BF16.
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     CUDA_GRAPH_MODES = ("normal",)
-    kernel_generation = "flashinfer-mnnvl-one-sided"
-    # stage() copies the received payload into the workspace combine region.
-    stage_device_work = True
+    # create_buffer appends the installed wheel's version: the kernels differ between wheels (0.6.16
+    # brought the FP32 combine and programmatic dependent launch), so an image bump must not pool
+    # with the rows before it. "staged": combine stages a caller-owned payload, as in vLLM.
+    kernel_generation = "flashinfer-mnnvl-one-sided-staged"
     # combine_weight_semantics stays the base's unweighted-rank-sum: the kernel scatters expert
     # outputs back to the supplying rank without multiplying by the routing weights (those ride
     # along as a caller payload, and vLLM applies them in the MoE layer, not in the A2A).
@@ -127,12 +158,15 @@ class FlashInferEPBackend(EPBackend):
         super().__init__(args, rank, world_size, local_rank, device)
         self._fp8 = self.precision == "fp8"
         if self._fp8:
-            # "-offpath" per SUPPORTED_PRECISIONS; bytes and block size match deepep-v2/uccl-ep.
-            self._enable_fp8(
-                "fp8-e4m3fn-blockwise-offpath", _blockwise_cast_to_fp8, _blockwise_cast_back
-            )
+            # The codec, bytes and block size of deepep-v2/uccl-ep, so the same label.
+            self._enable_fp8("fp8-e4m3fn", _blockwise_cast_to_fp8, _blockwise_cast_back)
+        # BF16 stage() is a pointer hand-off, so only the FP8 dequant is device work to hoist.
+        self.stage_device_work = self._fp8
         self._a2a = None
         self._max_tokens = None
+        self._workspace_sizing = {}
+        # Which of vLLM's two combine calls this wheel takes; resolved in create_buffer.
+        self._combine_takes_output = False
         self.experts_per_rank = args.experts // world_size
 
     # ---- setup -------------------------------------------------------------------------------
@@ -145,6 +179,16 @@ class FlashInferEPBackend(EPBackend):
         from `make_problem`, so both payloads reach the kernel with no conversion.
         """
         return torch.int32
+
+    def make_problem(self, T, idx, weights, x):
+        """Adds the MoE layer's output, which vLLM's finalize owns and combines into.
+
+        Allocated here, once per rung and untimed, so no timed window or graph capture allocates
+        it, and every combine of the rung writes the same tensor.
+        """
+        problem = super().make_problem(T, idx, weights, x)
+        problem.combine_output = torch.empty((T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
+        return problem
 
     def create_buffer(self, spec):
         """Build the one MoeAlltoAll for this group, sized to the ladder maximum.
@@ -177,6 +221,12 @@ class FlashInferEPBackend(EPBackend):
             total_dispatch_payload_size_per_token=dispatch_bytes,
             combine_payload_size_per_token=combine_bytes,
         )
+        self._workspace_sizing = {
+            "capacity_tokens_per_rank": self._max_tokens,
+            "dispatch_bytes_per_token": dispatch_bytes,
+            "combine_bytes_per_token": combine_bytes,
+            "workspace_bytes_per_rank": workspace_size,
+        }
         mapping = Mapping(
             self.world_size,
             self.rank,
@@ -193,6 +243,8 @@ class FlashInferEPBackend(EPBackend):
             mnnvl_config=MnnvlConfig(comm_backend=_communicator(_ep_group())),
         )
         self.library_version = flashinfer.__version__
+        self.kernel_generation = f"{type(self).kernel_generation}-{_version_slug(self.library_version)}"
+        self._combine_takes_output = _accepts_keyword(self._a2a.combine, "output")
         if _wheel_has_fp32_combine(flashinfer.__version__):
             self.combine_reduction = "domain-fp32"
         # Every rank must finish mapping its workspace before any peer writes into it;
@@ -244,16 +296,6 @@ class FlashInferEPBackend(EPBackend):
             tokens=p.T, topk=p.topk_idx.shape[1], combine_input=None,
         )
 
-    def _combine_buffer(self, h):
-        """The workspace-resident combine payload region for this rung.
-
-        Always BF16: combine carries BF16 whatever the dispatch precision was, so this cannot
-        key off `recv_x.dtype` -- under FP8 that would size the region for 1-byte values.
-        """
-        return self._a2a.get_combine_payload_tensor_in_workspace(
-            h.tokens, h.recv_x.shape[-1], torch.bfloat16
-        )
-
     def _filled_slot_index(self, p, h):
         """Row indices of the receive slots dispatch actually filled, resolved once per rung.
 
@@ -268,36 +310,44 @@ class FlashInferEPBackend(EPBackend):
         return index
 
     def stage(self, p, h):
-        """Materialise the combine payload in the workspace region the API designates.
+        """Hand combine the payload vLLM's finalize would: a caller-owned BF16 `[ep, T, hidden]`.
 
-        A production integration has the expert GEMM write its output straight into this
-        region and submits it with `payload_in_workspace=True`, so combine performs no
-        staging copy. Copying here rather than handing `combine` a caller-owned tensor keeps
-        that copy out of the combine measurement, where production does not pay it; it is
-        still executed and reported, as `stage`.
+        In vLLM that is the experts' output, written beside the receive, never into the workspace
+        combine region, so combine stages it there itself (`payload_in_workspace=False`). With no
+        expert the received rows are that output, and under BF16 the receive already is a
+        contiguous BF16 `[ep, T, hidden]` tensor disjoint from the combine region, so the hand-off
+        is a pointer and the staging copy is timed inside combine.
 
-        Only the filled slots are copied, matching the kernel's own staging path
-        (`moeA2APrepareCombineKernel` returns early past `recv_counters[source]`); copying the
-        whole plane over-copied 1.5x at EP8 and 2.4x at EP16. Untouched slots are never read.
+        Under FP8 the received values are 1-byte, so the dequant into a fresh BF16 tensor stands
+        in for the expert's BF16 output: device work, hoisted out of the roundtrip like every
+        FP8 stage. Only the filled slots are converted, the ones the kernel's staging copy reads
+        (`moeA2APrepareCombineKernel` returns past `recv_counters[source]`); the rest are never read.
         """
-        buffer = self._combine_buffer(h)
+        if not self._fp8:
+            h.combine_input = h.recv_x
+            return
         filled = self._filled_slot_index(p, h)
         hidden = h.recv_x.shape[-1]
-        flat_buffer = buffer.view(-1, buffer.shape[-1])
-        source = h.recv_x.view(-1, hidden)[filled]
-        if self._fp8:
-            # Combine sends BF16, so the dequant lands here -- device work, hence `stage` is
-            # a reported component under either precision.
-            source = _blockwise_cast_back(
-                source, h.recv_scales.view(-1, h.recv_scales.shape[-1])[filled]
-            )
-        flat_buffer[filled] = source
-        h.combine_input = buffer
+        payload = torch.empty(h.recv_x.shape, dtype=torch.bfloat16, device=h.recv_x.device)
+        payload.view(-1, hidden)[filled] = _blockwise_cast_back(
+            h.recv_x.view(-1, hidden)[filled], h.recv_scales.view(-1, h.recv_scales.shape[-1])[filled]
+        )
+        h.combine_input = payload
 
     def combine(self, p, h):
-        out = self._a2a.combine(h.combine_input, h.tokens, payload_in_workspace=True)
-        h.out = out
-        return out
+        return self._combine_into(h.combine_input, h.tokens, p.combine_output)
+
+    def _combine_into(self, payload, tokens, output):
+        """vLLM's `combine_into`: a caller-owned payload, which combine stages into the workspace,
+        combined into the caller's `output`. A wheel without `output=` (before 0.6.16) returns a
+        fresh tensor that vLLM copies into its own, so that copy is timed here too.
+        `use_low_precision` stays at FlashInfer's default, False, as vLLM's
+        VLLM_FLASHINFER_MOE_A2A_LOW_PRECISION_COMBINE leaves it."""
+        if self._combine_takes_output:
+            self._a2a.combine(payload, tokens, payload_in_workspace=False, output=output)
+        else:
+            output.copy_(self._a2a.combine(payload, tokens, payload_in_workspace=False))
+        return output
 
     def recv_tokens(self, h):
         # Rows the kernel actually filled, across every source plane.
@@ -338,18 +388,40 @@ class FlashInferEPBackend(EPBackend):
         )
 
     def combine_transformed(self, p, h, transformed):
-        """Combine an oracle-transformed payload through the same kernel as the timed path.
+        """Combine an oracle-transformed payload through the timed path's call (`_combine_into`).
 
-        Scattered into the workspace combine region (see stage) and submitted with
-        `payload_in_workspace=True`, so the kernel reads the slots from the region the API
-        designates for them rather than from the dispatch-receive buffer.
+        Scattered into a fresh caller-owned BF16 `[ep, T, hidden]` payload, as the experts'
+        output is, so combine's own staging copy moves it into the workspace.
         """
-        buffer = self._combine_buffer(h)
-        flat = buffer.view(-1, buffer.shape[-1])
-        keep = self._valid_rows(h)
-        flat[keep] = transformed.to(buffer.dtype)
-        flat[~keep] = 0            # slots the kernel never filled contribute nothing
-        return self._a2a.combine(buffer, h.tokens, payload_in_workspace=True)
+        payload = torch.zeros(h.recv_x.shape, dtype=torch.bfloat16, device=h.recv_x.device)
+        payload.view(-1, payload.shape[-1])[self._valid_rows(h)] = transformed.to(torch.bfloat16)
+        return self._combine_into(payload, h.tokens, p.combine_output)
+
+    def implementation_details(self):
+        """What this run handed the library (`EPBackend.implementation_details`)."""
+        from flashinfer.comm import trtllm_moe_alltoall
+
+        return {
+            "flashinfer_version": self.library_version,
+            # vLLM's contract: combine stages a caller-owned payload; the dispatch receive is
+            # consumed in place, as a workspace view.
+            "combine_payload": "caller-owned",
+            "payload_in_workspace": False,
+            "zero_copy": False,
+            "combine_output": "output-kw" if self._combine_takes_output else "copy",
+            "low_precision_combine": False,
+            "dispatch_scale_format": "fp32-per-128-block-row-major" if self._fp8 else None,
+            # Left at the library's device default by vLLM and here alike; wheels before 0.6.16
+            # have no programmatic dependent launch at all.
+            "pdl_available": _accepts_keyword(trtllm_moe_alltoall.moe_a2a_combine, "enable_pdl"),
+            # One CTA per token: the grid follows T and there is no SM budget, and NVLink loads
+            # and stores need no queue pairs.
+            "num_sms": None,
+            "num_qps": None,
+            "launch_env": {name: value for name, value in sorted(os.environ.items())
+                           if name.startswith("TLLM_MOE_A2A_")},
+            **self._workspace_sizing,
+        }
 
 
 def _ep_group():
@@ -367,11 +439,15 @@ def _communicator(group):
     handles; the harness has one in torch.distributed, so wrap that rather than standing up a
     second. The contract is `flashinfer.comm.mnnvl.CommBackend` and it is not optional in any
     part: implementing only rank/size/allgather/Split killed the first dispatch with `CUDA
-    error: unspecified launch failure` (sticky 719) on gb200. Every method is required because `CommBackend` declares them abstract, not because the
-    fabric path calls them: `MnnvlMemory` exchanges handles with `allgather` alone. What the
-    ordering actually needs is the explicit `torch.distributed.barrier` in create_buffer.
-    Built as a subclass of the upstream ABC so a future interface change is an
-    import-time error here rather than another asynchronous fault on the cluster.
+    error: unspecified launch failure` (sticky 719) on gb200. Every method is required because
+    `CommBackend` declares them abstract, not because the fabric path calls them: `MnnvlMemory`
+    exchanges handles with `allgather` alone. What the ordering actually needs is the explicit
+    `torch.distributed.barrier` in create_buffer.
+    Built as a subclass of the upstream class, which in the image's 0.6.8.post1 is an ABC, so an
+    interface change is an import-time error here rather than another asynchronous fault on the
+    cluster. Later wheels (0.6.18.post1, 0.7.0.post1) make `CommBackend` a `typing.Protocol`
+    (flashinfer/comm/abstractions.py), under which a missing method raises nothing at import:
+    recheck this class against the protocol when the pin moves.
     """
     import torch.distributed as dist
     from flashinfer.comm.mnnvl import CommBackend

@@ -109,7 +109,6 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | No
 
     body = event["comment"]["body"]
     if body.strip(COMMAND_SPACE).startswith("/use"):
-        # /use is owned by the reuse workflow; only well-formed requests also stage.
         command = use_command(body)
         if not command:
             return None

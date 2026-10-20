@@ -38,6 +38,7 @@ def test_every_committed_curve_is_valid() -> None:
         ("minimaxm3", {"method": "eagle3", "model": "org/MiniMax-M3-EAGLE3-GQA"}, "minimaxm3_eagle3_gqa"),
         ("dsv4dsparkprob", {"method": "dspark"}, "dsv4-pro-0813-dspark"),
         ("dsv41flash", {"method": "dspark"}, "dsv41flash_dspark"),
+        ("musespark", {"method": "dflash"}, "musespark_dflash"),
         ("kimik3", {"method": "dspark", "draft_sample_method": "greedy"}, "kimik3_dspark"),
         (
             "kimik3",

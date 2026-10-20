@@ -9,6 +9,7 @@ from pathlib import Path
 
 from infx.results.agentic import build_result
 from infx.results.agentic.common import round_floats
+from infx.results.metadata import run_attempt
 
 from .artifacts import (
     find_server_log_paths,
@@ -54,6 +55,9 @@ def main() -> int:
             server_logs=(load_server_log_head(path) for path in server_log_paths),
         )
     )
+
+    if (attempt := run_attempt(os.environ)) is not None:
+        agg["run_attempt"] = attempt
 
     output_path = output_dir / f"{result_filename}.json"
     output_dir.mkdir(parents=True, exist_ok=True)

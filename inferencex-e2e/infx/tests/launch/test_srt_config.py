@@ -10,19 +10,45 @@ import pytest
 import yaml
 
 from infx.clusters import Cluster, load_inventory
+from infx.clusters.slurm import slurm_settings
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch
 from infx.launch.drivers.srt.checkout import Checkout, compute_workspace
-from infx.launch.drivers.srt.config import SrtJob, pyxis_spelling, render, write
+from infx.launch.drivers.srt.config import SrtJob, binder_inputs, pyxis_spelling, render, write
+from infx.launch.drivers.srt.lanes import SrtLane
+from infx.launch.drivers.srt.power import NO_POWER, PowerDecision
 from infx.launch.drivers.srt.recipe import HEALTH_ATTEMPTS, prepare_recipe
 from infx.launch.drivers.srt.run import SrtRun
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.policy import LaunchPath
-from infx.launch.request import SrtRequest
+from infx.launch.request import MultiNodeRequest, SrtRequest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "utils/srt-slurm/src"))
 from srtctl.core.config import resolve_config_with_defaults  # noqa: E402
+from srtctl.core.schema import ClusterConfig  # noqa: E402
+
+AMD_EXPORTER = {
+    "container_image": "registry-1.docker.io#rocm/device-metrics-exporter@sha256:"
+    "3f891560bd17c51ff2b1010299c7e6160c532d11d094c1115f599ab5fe8bebb9",
+    "port": 19500,
+    "command": "/home/amd/tools/entrypoint.sh",
+    "kind": "custom",
+    "gpu_labels": {"index": "gpu_id", "identity": "serial_number"},
+    "gpu_metrics": {
+        "power": {
+            "metric": "gpu_power_usage",
+            "scope": "gpu_device_power_as_reported_by_amd_device_metrics_exporter",
+        },
+        "gpu_util": {"metric": "gpu_gfx_activity"},
+        "temperature": {"metric": "gpu_junction_temperature"},
+    },
+}
+DCGM_EXPORTER = {
+    "container_image": "nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless",
+    "port": 9401,
+    "command": "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv",
+}
 
 
 def cluster(slurm: dict | None = None, srt: dict | None = None, entries: dict | None = None) -> Cluster:
@@ -59,6 +85,7 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
             },
             "volume-mounts": {"hub": "/hf_hub_cache/hub"},
             "mounts": {"/dev/kfd": "/dev/kfd"},
+            "workspace-mounts": {"runners/exporter.json": "/etc/exporter.json"},
             "extra": {"visible_devices_env": "ROCR_VISIBLE_DEVICES", "default_gpu_exporter": None},
         },
         entries={"Model-A": {"root": "data", "dir": "Model-A"}},
@@ -68,6 +95,7 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
         "/share/hub": "/hf_hub_cache/hub",
         "/dev/kfd": "/dev/kfd",
         "/share/hub/": "/mnt/hf_hub_cache/",
+        "/ws/runners/exporter.json": "/etc/exporter.json",
     }
     assert config["default_host_setup"] == {
         "commands": ["IBDEVICES=rdma0,rdma1 bash /ws/runners/hooks/setup.sh"],
@@ -80,6 +108,20 @@ def test_the_profile_renders_its_facts_and_mounts_a_volume_at_a_second_target():
     assert (config["visible_devices_env"], config["default_gpu_exporter"]) == ("ROCR_VISIBLE_DEVICES", None)
     assert (config["network_interface"], config["use_exclusive_sbatch_directive"]) == ("eno0", True)
     assert config["cluster"] == "c"
+
+
+@pytest.mark.parametrize("exporter", [AMD_EXPORTER, DCGM_EXPORTER])
+def test_rendered_exporter_defaults_resolve_for_native_telemetry(exporter):
+    config = render(cluster(srt={"extra": {"default_gpu_exporter": exporter}}), job(single_node=True))
+    ClusterConfig.Schema().load(config)
+    recipe = {"schema": 2, "name": "point", "telemetry": {"enabled": True}}
+    assert resolve_config_with_defaults(recipe, config)["telemetry"]["dcgm_exporter"]["port"] == exporter["port"]
+
+
+@pytest.mark.parametrize("source,target", [("/absolute", "/config"), ("../escape", "/config"), ("", "/config"), ("config.json", "relative")])
+def test_workspace_mounts_reject_paths_outside_the_repository_or_container(source, target):
+    with pytest.raises(ValueError, match="workspace-mounts"):
+        cluster(srt={"workspace-mounts": {source: target}})
 
 
 def test_a_host_directory_cannot_be_mounted_at_three_targets():
@@ -177,11 +219,10 @@ def test_selected_partition_overrides_inherited_and_point_environment(tmp_path):
     ({"max_attempts": 2160, "interval_seconds": 5}, {"max_attempts": 2160, "interval_seconds": 5}),
 ])  # fmt: skip
 def test_multinode_jobs_wait_at_least_the_health_floor_for_their_server(tmp_path, health, effective):
-    recipe = tmp_path / "recipes/r.yaml"
-    recipe.parent.mkdir()
-    recipe.write_text(yaml.safe_dump({"name": "r", **({"health_check": health} if health else {})}))
+    recipe = tmp_path / "recipe.yaml"
+    recipe.write_text(yaml.safe_dump({"schema": 2, "name": "r", **({"health_check": health} if health else {})}))
 
-    prepare_recipe(tmp_path, "recipes/r.yaml", "job", None, None)
+    prepare_recipe(recipe, "job", None)
 
     resolved = resolve_config_with_defaults(yaml.safe_load(recipe.read_text()), render(cluster(), job()))
     assert resolved["health_check"] == effective
@@ -229,3 +270,35 @@ def test_the_staged_workspace_drops_run_artifacts_but_keeps_srt_slurm_sources(tm
 
     assert staged == tmp_path / "runs/infmax-workspace-1-1-abc"
     assert sorted(str(p.relative_to(staged)) for p in staged.rglob("*") if p.is_file()) == sorted(kept)
+
+
+@pytest.mark.parametrize(("agentic", "decision", "expected"), [
+    ("1", NO_POWER, (None, "true", "0", "0")),
+    ("1", PowerDecision(dcgm=True, agentx=False), (9401, "true", "0", "0")),
+    ("1", PowerDecision(dcgm=True, agentx=True), (9401, "true", "1", "0")),
+    ("1", PowerDecision(dcgm=True, agentx=True, require=True), (9401, "true", "1", "1")),
+    ("1", PowerDecision(dcgm=True, agentx=False, adapter=True), (9401, "true", "1", "0")),
+    ("0", PowerDecision(dcgm=True, agentx=False), (9401, None, None, None)),
+])  # fmt: skip
+def test_the_agentx_client_measures_power_exactly_when_the_launcher_collects_it(
+    tmp_path, agentic, decision, expected
+):
+    record = cluster(srt={"power-exporter-port": 9401})
+    request = MultiNodeRequest.from_env({
+        "RUNNER_NAME": "c_0", "GITHUB_WORKSPACE": str(tmp_path), "IMAGE": "i",
+        "FRAMEWORK": "dynamo-sglang", "MODEL_PREFIX": "m", "PRECISION": "fp8",
+        "SPEC_DECODING": "none", "RESULT_FILENAME": "r", "IS_AGENTIC": agentic, "RUN_EVAL": "false",
+        "EVAL_ONLY": "false", "IS_MULTINODE": "true", "SRT_RECIPE": "r.yaml", "CONC": "4",
+        "CONC_LIST": "4",
+    })  # fmt: skip
+
+    port, client_env = binder_inputs(
+        record, slurm_settings(record).srt_slurm, SrtLane(), request, decision
+    )
+
+    switches = (
+        client_env.get("IS_MULTINODE"),
+        client_env.get("ENABLE_AGENTX_POWER"),
+        client_env.get("REQUIRE_POWER"),
+    )
+    assert (port, *switches) == expected

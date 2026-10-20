@@ -1,11 +1,6 @@
-# Qwen3.8-Flash-Next FP8 AgentX on H200 via SGLang with native NEXTN MTP.
 base:
   schema: 2
   name: qwen3.8next-fp8-h200-sglang-agentic
-  model:
-    path: hf:Qwen/Qwen3.8-Flash-Next-FP8
-    container: lmsysorg/sglang:qwen38flashnext
-    precision: fp8
   resources:
     gpu_type: h200
     gpus_per_node: 8
@@ -44,62 +39,92 @@ base:
         enable-metrics: true
       env:
         PYTHONNOUSERSITE: '1'
-        SGLANG_ENABLE_SPEC_V2: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
-    env:
-      MODEL: Qwen/Qwen3.8-Flash-Next-FP8
-      # 256k-capped with-subagents corpus, within this model's context.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_with_subagents_256k
 
-# One variant per point: admission is 2x CONC and the graph batch is CONC.
-override_c1:
+override_tp2_c1:
   roles:
     agg:
+      gpus: 2
       args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
         max-running-requests: 2
-        cuda-graph-max-bs: 1
+        cuda-graph-max-bs-decode: 2  # decode graphs cover the full admission, so no decode step runs eager
   benchmark:
     env:
       CONC: '1'
 
-override_c4:
+override_tp2_c8:
   roles:
     agg:
+      gpus: 2
       args:
-        max-running-requests: 8
-        cuda-graph-max-bs: 4
-  benchmark:
-    env:
-      CONC: '4'
-
-override_c8:
-  roles:
-    agg:
-      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
         max-running-requests: 16
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 16
+        enable-linear-replayssm-spec: true
   benchmark:
     env:
       CONC: '8'
 
-override_c12:
+override_tp2_c12:
   roles:
     agg:
+      gpus: 2
       args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
         max-running-requests: 24
-        cuda-graph-max-bs: 12
+        cuda-graph-max-bs-decode: 24
+        enable-linear-replayssm-spec: true
   benchmark:
     env:
       CONC: '12'
 
-override_c16:
+override_tp2_c14:
   roles:
     agg:
+      gpus: 2
       args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 28
+        cuda-graph-max-bs-decode: 28
+        enable-linear-replayssm-spec: true
+  benchmark:
+    env:
+      CONC: '14'
+
+override_tp2_c16:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
         max-running-requests: 32
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 32
+        enable-linear-replayssm-spec: true
   benchmark:
     env:
       CONC: '16'
+
+override_tp4_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+  benchmark:
+    env:
+      CONC: '8'

@@ -1,11 +1,3 @@
-"""Run a repository revision's own matrix generator or planner in a subprocess.
-
-Only that revision's tooling interprets its configs, so config-format changes cannot break
-consumers of older revisions. The tool imports only its own tree and inherits only
-``INHERITED_ENV``. That keeps a caller's credentials out of its environment but does not
-isolate it: callers holding credentials must run other revisions' tools where none are held.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -25,8 +17,6 @@ from infx.config import MASTER_CONFIGS, git_repository_root, project_root
 
 @dataclass(frozen=True)
 class Tool:
-    """A matrix entrypoint: its package module, or the script pre-package revisions shipped."""
-
     module: str
     legacy_script: str
 
@@ -38,12 +28,14 @@ class Tool:
 GENERATOR = Tool("infx.matrix.generate", "utils/matrix_logic/generate_sweep_configs.py")
 PLANNER = Tool("infx.matrix.plan", "utils/process_changelog.py")
 TOOLS = {"generate": GENERATOR, "plan": PLANNER}
+FINGERPRINTER = "infx.matrix.fingerprint"
 CONFIG_DIRS = ("configs", ".github/configs")
 NESTED_PROJECT = "inferencex-e2e/"
 SNAPSHOT_PATHS = (
     "infx",
     "utils/matrix_logic",
     *CONFIG_DIRS,
+    "benchmarks/single_node/srt-slurm-recipes",
     "benchmarks/multi_node/srt-slurm-recipes",
 )
 INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
@@ -51,8 +43,6 @@ INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
 
 @dataclass(frozen=True)
 class Revision:
-    """One revision's project tree: its tools' working directory, import root and data root."""
-
     root: Path
 
     def __post_init__(self) -> None:
@@ -78,7 +68,6 @@ class Revision:
         )
 
     def invocation(self, tool: Tool, args: Sequence[str]) -> tuple[list[str], dict[str, str]]:
-        """The command and environment that run this tree's own ``tool`` from ``root``."""
         script = self.root / tool.legacy_script
         if (self.root / tool.module_path).is_file():
             entrypoint, imports = ["-m", tool.module], [self.root]
@@ -86,13 +75,20 @@ class Revision:
             entrypoint, imports = [str(script)], [script.parent, self.root]
         else:
             raise ValueError(f"{self.root} has neither {tool.module_path} nor {tool.legacy_script}")
+        return [sys.executable, *entrypoint, *args], self._environment(imports)
+
+    def _environment(self, imports: Sequence[Path]) -> dict[str, str]:
         env = {name: os.environ[name] for name in INHERITED_ENV if name in os.environ}
         env["PYTHONPATH"] = os.pathsep.join(map(str, imports))
         env["INFERENCEX_REPOSITORY_ROOT"] = str(self.root)
-        return [sys.executable, *entrypoint, *args], env
+        return env
 
-    def generate(self, config_keys: Sequence[str], flags: Sequence[str]) -> list[dict]:
-        """Decode this revision's ``test-config`` matrix; raise CalledProcessError on failure."""
+    def generate(
+        self,
+        config_keys: Sequence[str],
+        flags: Sequence[str],
+        config_files: Sequence[str] | None = None,
+    ) -> list[dict]:
         command, env = self.invocation(
             GENERATOR,
             [
@@ -100,7 +96,7 @@ class Revision:
                 "--config-keys",
                 *config_keys,
                 "--config-files",
-                *self.master_configs,
+                *(self.master_configs if config_files is None else config_files),
                 "--runner-config",
                 self.runner_config,
                 *flags,
@@ -111,14 +107,28 @@ class Revision:
         )
         return json.loads(result.stdout)
 
+    def fingerprints(self, rows: list[dict]) -> list[str]:
+        if not (self.root / f"{FINGERPRINTER.replace('.', '/')}.py").is_file():
+            from infx.matrix.fingerprint import row_fingerprint
+
+            return [row_fingerprint(row) for row in rows]
+        result = subprocess.run(
+            [sys.executable, "-m", FINGERPRINTER],
+            cwd=self.root,
+            env=self._environment([self.root]),
+            input=json.dumps(rows),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        fingerprints = json.loads(result.stdout)
+        if not isinstance(fingerprints, list) or len(fingerprints) != len(rows):
+            raise ValueError(f"{FINGERPRINTER} did not print one fingerprint per row")
+        return fingerprints
+
 
 @contextmanager
 def snapshot(ref: str) -> Iterator[Revision]:
-    """Extract ``ref``'s committed generation inputs into a tree removed on exit.
-
-    Blobs are read by the listed object IDs, so a moving ref cannot mix revisions; working-tree
-    files never replace committed ones, and symlinks become plain files.
-    """
     repository = git_repository_root()
     listing = subprocess.run(
         [

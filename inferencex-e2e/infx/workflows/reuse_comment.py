@@ -27,13 +27,12 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
     comment_id = int(event["comment"]["id"])
     comment_path = f"/issues/comments/{comment_id}"
     comment = github.api(repo, comment_path, token)
-    # A queued event must not acknowledge an edited version it did not validate.
     if any(comment.get(key) != event["comment"].get(key) for key in ("body", "updated_at")):
         return 0
     github.set_comment_reaction(repo, comment_id, token, None, replace=("+1", "-1"))
     body = str(comment.get("body") or "")
     if not command_pattern.search(body):
-        return 0  # Includes edits that remove the command and its old acknowledgment.
+        return 0
 
     try:
         allowed = set(reuse.DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS)
