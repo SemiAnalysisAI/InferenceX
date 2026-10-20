@@ -67,6 +67,7 @@ base:
         SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
         GPU_MAX_HW_QUEUES: '2'
+        SGLANG_HIP_DSV4_C4_INDEXER_ROWGROUP: '1'
   benchmark:
     env:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
@@ -74,9 +75,9 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # One variant per point. Admission is 2x CONC; the decode graph batch follows it
-# up to 128. HiCache pins 1.5x the device KV pool per rank. DP attention keeps
-# 8192 prefill tokens per rank, and the router pins each AIPerf session to the
-# rank holding its prefix. Saturation points get a longer warmup drain.
+# up to 128. HiCache pins 1.5x the device KV pool per rank. The router pins each
+# AIPerf session to the rank holding its prefix. Saturation points get a longer
+# warmup drain.
 # TP-only arms from conc 16 split each prompt across all eight ranks for prefill.
 # HIP CP replaces breakable prefill graphs, so conc 1 and 4, where CP trails
 # TP8, keep BCG instead.
@@ -194,7 +195,7 @@ override_tp8_c128_dp_hicache:
         stream-interval: 20
         prefill-delayer-token-usage-low-watermark: 0.7
         load-balance-method: total_requests
-        chunked-prefill-size: 65536
+        chunked-prefill-size: 131072
         mem-fraction-static: 0.92
       env:
         SGLANG_SHARED_EXPERT_TP1: '1'
@@ -239,10 +240,10 @@ override_tp8_c128_dp_ep8_megamoe_hicache:
         enable-dp-attention-local-control-broadcast: true
         tokenizer-worker-num: 8
         stream-interval: 20
-        prefill-decode-interval: 20
+        prefill-decode-interval: 40
         prefill-delayer-token-usage-low-watermark: 0.7
         load-balance-method: total_requests
-        chunked-prefill-size: 65536
+        chunked-prefill-size: 131072
         mem-fraction-static: 0.85
         enforce-shared-experts-fusion: false
         moe-a2a-backend: megamoe
@@ -253,12 +254,18 @@ override_tp8_c128_dp_ep8_megamoe_hicache:
         expert-distribution-recorder-mode: stat
       env:
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: '1'
-        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '8192'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '16384'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
         SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
         MORI_SHMEM_HEAP_SIZE: '17179869184'
         SGLANG_AITER_MEGA_RANK_SYNC: '1'
         SGLANG_AITER_MEGA_EPLB_PREFILL_ONLY: '1'
         SGLANG_AITER_MEGA_EPLB_FUSED_MAP_RECORD: '1'
+        # RCCL runs a P2P group of more than 31 ops per rank as several kernels,
+        # which can deadlock two ranks exchanging both ways. 7 experts x 4
+        # tensors keeps every rank under that in EPLB rebalance.
+        SGLANG_EPLB_P2P_BATCH_CHUNK_SIZE: '7'
         SGLANG_DP_USE_REDUCE_SCATTER: '0'
         GPU_MAX_HW_QUEUES: '5'
   benchmark:
@@ -298,10 +305,10 @@ override_tp8_c256_dp_ep8_megamoe_hicache:
         enable-dp-attention-local-control-broadcast: true
         tokenizer-worker-num: 8
         stream-interval: 20
-        prefill-decode-interval: 20
+        prefill-decode-interval: 40
         prefill-delayer-token-usage-low-watermark: 0.7
         load-balance-method: total_requests
-        chunked-prefill-size: 65536
+        chunked-prefill-size: 131072
         mem-fraction-static: 0.85
         enforce-shared-experts-fusion: false
         moe-a2a-backend: megamoe
@@ -312,12 +319,18 @@ override_tp8_c256_dp_ep8_megamoe_hicache:
         expert-distribution-recorder-mode: stat
       env:
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: '1'
-        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '8192'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '16384'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
         SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
         MORI_SHMEM_HEAP_SIZE: '17179869184'
         SGLANG_AITER_MEGA_RANK_SYNC: '1'
         SGLANG_AITER_MEGA_EPLB_PREFILL_ONLY: '1'
         SGLANG_AITER_MEGA_EPLB_FUSED_MAP_RECORD: '1'
+        # RCCL runs a P2P group of more than 31 ops per rank as several kernels,
+        # which can deadlock two ranks exchanging both ways. 7 experts x 4
+        # tensors keeps every rank under that in EPLB rebalance.
+        SGLANG_EPLB_P2P_BATCH_CHUNK_SIZE: '7'
         SGLANG_DP_USE_REDUCE_SCATTER: '0'
         GPU_MAX_HW_QUEUES: '5'
   benchmark:
@@ -357,10 +370,10 @@ override_tp8_c384_dp_ep8_megamoe_hicache:
         enable-dp-attention-local-control-broadcast: true
         tokenizer-worker-num: 8
         stream-interval: 20
-        prefill-decode-interval: 15
+        prefill-decode-interval: 20
         prefill-delayer-token-usage-low-watermark: 0.7
         load-balance-method: total_requests
-        chunked-prefill-size: 65536
+        chunked-prefill-size: 131072
         mem-fraction-static: 0.85
         enforce-shared-experts-fusion: false
         moe-a2a-backend: megamoe
@@ -371,12 +384,18 @@ override_tp8_c384_dp_ep8_megamoe_hicache:
         expert-distribution-recorder-mode: stat
       env:
         SGLANG_AMD_USE_FLYDSL_MEGA_MOE: '1'
-        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '8192'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_MTPR: '16384'
+        SGLANG_AMD_FLYDSL_MEGA_MOE_DECODE_MTPR: '1024'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '2047'
         SGLANG_AMD_FLYDSL_MEGA_QUANT: a8w4
         MORI_SHMEM_HEAP_SIZE: '17179869184'
         SGLANG_AITER_MEGA_RANK_SYNC: '1'
         SGLANG_AITER_MEGA_EPLB_PREFILL_ONLY: '1'
         SGLANG_AITER_MEGA_EPLB_FUSED_MAP_RECORD: '1'
+        # RCCL runs a P2P group of more than 31 ops per rank as several kernels,
+        # which can deadlock two ranks exchanging both ways. 7 experts x 4
+        # tensors keeps every rank under that in EPLB rebalance.
+        SGLANG_EPLB_P2P_BATCH_CHUNK_SIZE: '7'
         SGLANG_DP_USE_REDUCE_SCATTER: '0'
         GPU_MAX_HW_QUEUES: '5'
   benchmark:
