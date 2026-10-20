@@ -9205,8 +9205,8 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
   srt-recipe-dir: dsv41flash/vllm/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    # Four prefill DP ranks share an 840 GiB host with Engram tables.
-    - dram-utilization: 0.285714
+    # Four prefill DP ranks per node each offload up to 70 GiB of KV on an 840 GiB node.
+    - dram-utilization: 0.333333
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram

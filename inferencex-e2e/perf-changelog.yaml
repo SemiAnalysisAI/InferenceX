@@ -10260,5 +10260,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Sweep two higher-throughput GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX points, both DEP2 prefill with DEP32 decode: 20P1D at c16800 with max-num-seqs 152, and 18P1D at c14500 with max-num-seqs 126 (MegaAttn wave boundaries). The other points are dropped from the search space; their recipes are kept."
+    - "Sweep two higher-throughput GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX points, both DEP2 prefill with DEP32 decode: 20P1D at c16800 with max-num-seqs 152, and 18P1D at c14500 with max-num-seqs 126 (MegaAttn wave boundaries), with 70 GiB of CPU KV offload per prefill rank. The other points are dropped from the search space; their recipes are kept."
   pr-link: TBD
