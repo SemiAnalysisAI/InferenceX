@@ -4,6 +4,21 @@ set -eo pipefail
 source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars KIMI_EFA_BUILD_CACHE LD_LIBRARY_PATH
 
+# An EFA device that has failed memory registrations stays degraded until the
+# host reboots, and heavy RDMA on it freezes the host. Refuse such a node here
+# instead of letting a worker take it down.
+reg_mr_errors=0
+for counter in /sys/class/infiniband/*/hw_counters/reg_mr_err \
+    /sys/class/infiniband/*/ports/*/hw_counters/reg_mr_err; do
+    [ -r "$counter" ] || continue
+    reg_mr_errors=$((reg_mr_errors + $(cat "$counter")))
+done
+if [ "$reg_mr_errors" -gt 0 ]; then
+    echo "EFA devices on $(hostname) report $reg_mr_errors failed memory registrations since boot;" \
+        "reboot the node before running EFA workloads on it." >&2
+    exit 1
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
