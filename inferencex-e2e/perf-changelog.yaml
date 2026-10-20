@@ -10253,7 +10253,7 @@
     - agentic-coding
   description:
     - "Move the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM disaggregated and aggregated AgentX curves to vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
-    - "Disaggregated: two DEP2 prefill / DEP16 decode points, 10P1D at c8400 with max-num-seqs 152 and 9P1D at c7250 with max-num-seqs 126 (MegaAttn wave boundaries), with 70 GiB of CPU KV offload per prefill rank, pinned prefill Engram tables and HBM decode Engram tables."
+    - "Disaggregated: two DEP2 prefill / DEP16 decode points, 10P1D at c8400 with max-num-seqs 152 and 9P1D at c7480 with max-num-seqs 126 (MegaAttn wave boundaries), with 70 GiB of CPU KV offload per prefill rank, pinned prefill Engram tables and HBM decode Engram tables."
     - "Configure decode worker selection by active request count with soft session affinity."
     - "Aggregated: TP4 at concurrency 1 (max-num-seqs 1) and 16 (max-num-seqs 32, prefill-schedule-interval 128), with CUDA graph capture sizes matching the B300 Dynamo vLLM TP4 recipes (5, 10, 15, 20, 25, 35 and 40 added at concurrency 1) and Engram host tables in pinned memory (use_thp false): on this image, THP-registered tables hang the first prefill forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4336
