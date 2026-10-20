@@ -25,13 +25,13 @@ Create one draft PR after a real change, titled `[Klaud Cold] English / 简体�
 Start its body with only `<!-- klaud-baseline -->`; the report helper fills it.
 
 When KLAUD_RESUME=true, an earlier session ended (ran out or was cancelled) before finishing
-this candidate and this session continues it in the same run. The branch, draft PR, frozen
-baseline (prepare-baseline returns it), attempt comments and runs are yours; never recreate
-them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt counter, repairs used
-and run IDs from your attempt comments; a commit pushed after the head of your last attempt
-comment, other than the perf-changelog entry, counts as a used repair. Inspect those runs
-(queued, running, preempted or finished) and continue. Repair budget, infrastructure-retry
-limits and failure rules carry over.
+this candidate, and recovery started this session in a new run to continue it. The branch,
+draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
+never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
+counter, repairs used and run IDs from your attempt comments; a commit pushed after the head
+of your last attempt comment, other than the perf-changelog entry, counts as a used repair.
+Inspect those runs (queued, running, preempted or finished) and continue. Repair budget,
+infrastructure-retry limits and failure rules carry over.
 
 Compare the actual old/new bundled engine source at its tags/commits in vLLM, SGLang,
 ATOM or TensorRT-LLM, including coupled dependencies and used flags/config parsers.
