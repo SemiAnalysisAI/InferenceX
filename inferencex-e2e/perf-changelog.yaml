@@ -10245,6 +10245,17 @@
     - "The new image brings Kimi-K3 ROCm changes vllm-project/vllm#57392 (AITER Gluon KDA kernels for decode and spec decode), #61207 (stage fused KDA decode weights after loading), #61654 (MLA wrapper no longer reads W_UK_T before weight loading), #61895 (any-shape low-latency MoE router GEMM on MI355), #59406 (preshuffled FP4 GEMM config probed by logical K), #58381 (lighter MLA metadata build), #59070 (DCP prefill context kept in FP8 through AllGather), #59468 (DSpark draft slots no longer reserved in the scheduler token budget) and #61230 (AITER v0.1.25 base)."
     - "No change to the Inferact/Kimi-K3-DSpark draft's precision: the checkpoint is all BF16 with no quantization_config, and at both images the draft takes its own quantization config (get_draft_quant_config()), so the target quantization-config does not reach it. The draft runs BF16 weights with an fp8 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4215
+  
+- config-keys:  
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019."
+    - "Enable SGLANG_HIP_DSV4_C4_INDEXER_ROWGROUP=1 on all points."
+    - "Raise DP chunked-prefill-size from 65536 to 131072 (16384 tokens per rank)."
+    - "MegaMoE: raise FlyDSL MTPR to 16384, add decode MTPR / fixed-slot caps, EPLB P2P batch chunk size 7."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4315
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
@@ -10254,4 +10265,4 @@
     - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 for MI355X DSv4 disaggregated DSpark AgentX."
     - "Replace concurrency 4 with 1; enable FP8 unified KV and mxscale dense GEMM at concurrency 1-48, mxscale decode GEMM throughout, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
     - "Give concurrency 1 eight request slots on both roles and decode graph batches 1-8 so PD admission can progress while replay concurrency remains one."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186  
