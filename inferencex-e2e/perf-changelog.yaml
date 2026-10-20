@@ -10258,4 +10258,4 @@
     - "Aggregated: TP4 with max-running-requests 8 at concurrency 8, 9, 12 and 18, 3 at concurrency 23, 2 at concurrency 16 and 20, and 1 at concurrency 13; TP8 across two nodes with max-running-requests 1 at concurrency 11 and 18."
     - "MTP runs six draft steps with the checkpoint's shipped BF16 draft head: no speculative-draft-model-quantization and no SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE."
     - "Retire qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg-pareto and qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto and their recipes; the points above supersede them."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4333
