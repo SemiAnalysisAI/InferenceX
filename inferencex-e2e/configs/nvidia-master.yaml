@@ -9850,10 +9850,11 @@ glm5.3-fp4-b300-sglang-agentic-mtp:
   precision: fp4
   framework: sglang
   multinode: false
+  srt-recipe-dir: glm5.3/sglang/b300-fp4-mtp
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 10, 13, 14], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/b300-fp4-mtp/agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 10, 13, 14], srt-recipe: agentic.yaml }
     - dram-utilization: 1.0
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: benchmarks/single_node/srt-slurm-recipes/glm5.3/sglang/b300-fp4-mtp/agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }

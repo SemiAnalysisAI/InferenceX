@@ -5,14 +5,8 @@
 base:
   schema: 2
   name: glm5.3-fp4-b300-sglang-agentic
-  model:
-    path: hf:nvidia/GLM-5.3-NVFP4
-    # Official v0.5.20-cu130, linux/amd64 manifest.
-    container: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
-    precision: fp4
   identity:
     model:
-      repo: nvidia/GLM-5.3-NVFP4
       revision: e3b8f9f2fad29727dfa95e766c5cac18ea1414bf
   resources:
     gpu_type: b300
@@ -65,7 +59,6 @@ base:
     type: custom
     command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/GLM-5.3-NVFP4
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
