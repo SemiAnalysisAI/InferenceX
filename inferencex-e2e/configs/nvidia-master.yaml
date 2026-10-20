@@ -7380,13 +7380,13 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg:
           ep: 1
           dp-attn: false
 glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+  image: lmsysorg/sglang:nightly-dev-20261016-a93f16f0@sha256:0b3e39704480c423d8a00ca15ebee63154defc62944df2d4b11c594563bab457
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.5.0.dev20260913" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261015" }
   multinode: true
   disagg: false
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
@@ -7394,7 +7394,17 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # aggregated 1-worker TP8 (prefill+decode on the same GPUs), concurrency 1
+      - spec-decoding: mtp
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_c1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
       - spec-decoding: mtp
         conc-list: [1]
         kv-offloading: dram
@@ -7406,108 +7416,122 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
           tp: 8
           ep: 1
           dp-attn: false
-      # aggregated 1-worker TP8 (prefill+decode on the same GPUs), concurrency 2
-      - spec-decoding: mtp
-        conc-list: [2]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 2
-        srt-recipe: agg-variants.yaml:override_tp8_c2
-        worker:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      # aggregated 1-worker TP8 (prefill+decode on the same GPUs), concurrency 4
-      - spec-decoding: mtp
-        conc-list: [4]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        num-nodes: 2
-        srt-recipe: agg-variants.yaml:override_tp8_c4
-        worker:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
 glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-20260914-4358a161
+  image: lmsysorg/sglang:nightly-dev-20261016-a93f16f0@sha256:0b3e39704480c423d8a00ca15ebee63154defc62944df2d4b11c594563bab457
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.5.0.dev20260913" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261016" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.85
       search-space:
-      # low-latency 1P2D DEP4-prefill / TP4-decode (2 decode workers)
       - spec-decoding: mtp
-        conc-list: [48]
+        conc-list: [30]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-variants.yaml:override_1p2d_c48
+        srt-recipe: disagg-variants.yaml:override_1p5d_pp4_tp4_c30
         prefill:
           num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-        decode:
-          num-worker: 2
-          tp: 4
+          tp: 1
+          pp: 4
           ep: 1
           dp-attn: false
-      # low-latency 1P4D DEP4-prefill / TP4-decode (4 decode workers)
+        decode:
+          num-worker: 5
+          tp: 4
+          pp: 1
+          ep: 1
+          dp-attn: false
       - spec-decoding: mtp
-        conc-list: [45]
+        conc-list: [40]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-variants.yaml:override_1p4d_c45
+        srt-recipe: disagg-variants.yaml:override_1p3d_pp4_tp4_c40
         prefill:
           num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-        decode:
-          num-worker: 4
-          tp: 4
+          tp: 1
+          pp: 4
           ep: 1
           dp-attn: false
-      # low-latency 1P6D DEP4-prefill / TP4-decode (6 decode workers)
+        decode:
+          num-worker: 3
+          tp: 4
+          pp: 1
+          ep: 1
+          dp-attn: false
       - spec-decoding: mtp
-        conc-list: [45]
+        conc-list: [56]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-variants.yaml:override_1p6d_c45
+        srt-recipe: disagg-variants.yaml:override_1p1d_pp4_dep8_c56
         prefill:
           num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-        decode:
-          num-worker: 6
-          tp: 4
+          tp: 1
+          pp: 4
           ep: 1
           dp-attn: false
-      # high-throughput 2P1D DEP8-prefill / DEP16-decode
-      - spec-decoding: mtp
-        conc-list: [192]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-2p1d-p-dep8-d-dep16-c192-mtp.yaml
-        prefill:
-          num-worker: 2
+        decode:
+          num-worker: 1
           tp: 8
+          pp: 1
           ep: 8
           dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [216]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-variants.yaml:override_3p1d_pp4_dep8_c216
+        prefill:
+          num-worker: 3
+          tp: 1
+          pp: 4
+          ep: 1
+          dp-attn: false
+        decode:
+          num-worker: 1
+          tp: 8
+          pp: 1
+          ep: 8
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [264]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-variants.yaml:override_3p1d_pp4_dep8_c264
+        prefill:
+          num-worker: 3
+          tp: 1
+          pp: 4
+          ep: 1
+          dp-attn: false
+        decode:
+          num-worker: 1
+          tp: 8
+          pp: 1
+          ep: 8
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        srt-recipe: disagg-variants.yaml:override_4p1d_pp4_dep16_c256
+        prefill:
+          num-worker: 4
+          tp: 1
+          pp: 4
+          ep: 1
+          dp-attn: false
         decode:
           num-worker: 1
           tp: 16
+          pp: 1
           ep: 16
           dp-attn: true
 
