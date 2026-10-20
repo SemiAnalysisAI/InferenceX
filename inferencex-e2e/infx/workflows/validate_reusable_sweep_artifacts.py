@@ -45,8 +45,6 @@ def main() -> int:
     if not args.artifacts_dir.is_dir():
         raise ValueError(f"artifacts directory does not exist: {args.artifacts_dir}")
 
-    # Collapse reran (flaky) eval duplicates to the latest result before
-    # validating, so a legitimate rerun does not fail the consistency checks.
     dedupe_messages = dedupe_reran_evals(args.artifacts_dir)
     if dedupe_messages:
         print("Collapsed reran eval duplicates (kept latest result per identity):")

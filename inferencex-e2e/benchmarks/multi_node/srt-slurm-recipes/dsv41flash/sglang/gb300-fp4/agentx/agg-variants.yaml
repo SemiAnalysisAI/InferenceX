@@ -1,0 +1,160 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg
+  identity:
+    model: {}
+    frameworks:
+      dynamo: "1.6.0.dev20261014"
+      sglang: "0.0.0.dev1+ga6a8c5601"
+  dynamo:
+    install: false
+    request_plane: tcp
+  # gb300-nv serves this model from the Hub; read it from the shared mounted cache.
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  # Tachometer's per-node exporters slow decode steps and add head-node host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  slurm:
+    time_limit: "4:00:00"
+  # Cold weight loads from the shared HF cache plus graph capture take 15-20 min.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TOKENIZER: "fastokens"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+      DYN_TCP_CHANNEL_BUFFER: "128"
+      DYN_TCP_REQUEST_TIMEOUT: "60"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "14400"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      env:
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        mem-fraction-static: 0.8
+        chunked-prefill-size: 16384
+        # Admission never exceeds the captured decode graph batch.
+        cuda-graph-max-bs-decode: 64
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+    # Engram host tables need the node's full memory in every worker step.
+    mem: "0"
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
+
+override_tp2_c16:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2ep2-c16
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
+        prefill-decode-interval: 96
+        swa-prefix-tails: 1024
+        max-running-requests: 32
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_NUMA_BIND_V2: "0"
+
+override_tp4_c1:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c1
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        prefill-decode-interval: 0
+        max-running-requests: 1
+        enable-decoder-swa-bounded-replay: true
+        cuda-graph-backend-prefill: disabled
+
+override_tp4_c4:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c4
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        prefill-decode-interval: 0
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+
+override_tp4_c16:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-agg-tp4ep1-c16
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        prefill-decode-interval: 192
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+      env:
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NUMA_BIND_V2: "0"

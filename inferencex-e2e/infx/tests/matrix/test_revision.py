@@ -38,6 +38,9 @@ def generation_repo(tmp_path, monkeypatch):
     (tmp_path / "infx/data 中文\t\r\n.bin").write_bytes(b"named asset")
     (tmp_path / "infx/data-link").symlink_to("data.bin")
     (tmp_path / ".gitattributes").write_text("infx/data.bin export-ignore\n")
+    recipe = tmp_path / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text("{}\n")
 
     git = git_in(tmp_path)
     git("init", "-q")
@@ -47,9 +50,10 @@ def generation_repo(tmp_path, monkeypatch):
         master = {"fixture": {
             "image": "example/image:stable", "model": name, "model-prefix": "dsr1",
             "precision": "fp8", "framework": "sglang", "runner": "fixture",
-            "multinode": False,
+            "multinode": False, "srt-recipe-dir": "fixture",
             "scenarios": {"fixed-seq-len": [{
-                "isl": 1024, "osl": 1024, "search-space": [{"tp": 1, "conc-list": [conc]}],
+                "isl": 1024, "osl": 1024,
+                "search-space": [{"tp": 1, "conc-list": [conc], "srt-recipe": "recipe.yaml"}],
             }]},
         }}
         (tmp_path / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
@@ -129,12 +133,34 @@ def test_historical_generation_supports_legacy_script_layout(generation_repo, mo
         assert inputs.generate(["fixture"], ["--no-evals"]) == [{"model": "legacy snapshot", "conc": 2}]
 
 
+@pytest.mark.parametrize("own", [True, False])
+def test_rows_are_fingerprinted_with_the_revisions_own_rule(generation_repo, own):
+    root, git = generation_repo
+    if own:
+        (root / "infx/matrix/fingerprint.py").write_text(
+            "import json, sys\n"
+            "print(json.dumps(['own ' + row['model'] for row in json.load(sys.stdin)]))\n"
+        )
+        git("add", "infx/matrix/fingerprint.py")
+    else:
+        git("rm", "-qf", "infx/matrix/fingerprint.py")
+    git("commit", "-qm", "fingerprints")
+    rows = [{"image": "img", "model": "m", "conc": 4, "exp-name": "x"}]
+
+    with revision.snapshot("HEAD") as producer:
+        fingerprints = producer.fingerprints(rows)
+
+    assert fingerprints == (
+        ["own m"] if own else ["adfebb88b80b867b258d2e9f972eb51f9f8c8bb2ae2bef10ab80ca8226913878"]
+    )
+
+
 @pytest.mark.parametrize("ref,expected", [("HEAD", ("newer", 6)), ("older", ("older", 2))])
 def test_historical_generation_from_nested_project(generation_repo, monkeypatch, ref, expected):
     root, git = generation_repo
     git("restore", ".")
     (root / "inferencex-e2e").mkdir()
-    git("mv", "infx", "configs", "inferencex-e2e/")
+    git("mv", "infx", "configs", "benchmarks", "inferencex-e2e/")
     (root / "infx/matrix").mkdir(parents=True)
     (root / "infx/matrix/generate.py").write_text(
         'raise RuntimeError("root-level decoy source was used")\n'
