@@ -18,6 +18,12 @@ frontend:
 
 engine: sglang
 
+# h100-dsxe allocates 2 CPUs per multi-node task by default: too few for 16
+# ranks, and the AgentX client then rebuilds the full corpus past its 1800 s
+# dataset timeout. Take the whole nodes.
+sbatch_directives:
+  exclusive: ""
+
 # The image's Muse Spark decoder and DFLASH worker run single-stage only; this
 # adds pipeline stages and the DFLASH relay between them.
 setup_script: musespark-pp.sh
