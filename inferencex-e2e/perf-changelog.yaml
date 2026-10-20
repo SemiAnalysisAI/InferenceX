@@ -10426,6 +10426,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4336
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DEP2 prefill / DEP32 decode points 16P1D at c10888 and 6P1D at c3018 to the GB300 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX disaggregated curve on vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019."
+    - "Results reuse run 39207089292, which measured these points before #4336 with default decode worker selection and 80 GiB of CPU KV offload per prefill rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4266
+  append-only: true
+
+- config-keys:
     - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
   scenario-type:
     - agentic-coding
