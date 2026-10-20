@@ -9156,7 +9156,7 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
           dp-attn: true
 
 dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:nightly-aarch64-dev-20261012-59e75f4
+  image: vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv

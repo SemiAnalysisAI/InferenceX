@@ -79,7 +79,7 @@ base:
         # Parse once in the Dynamo frontend.
         reasoning-parser: None
         tensor-parallel-size: 4
-        engram-config: '{"cpu_offload":true,"use_thp":true}'
+        engram-config: '{"cpu_offload":true,"use_thp":false}'
         kernel-config: '{"enable_flashinfer_autotune":true}'
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
         kv-cache-dtype: "fp8"
