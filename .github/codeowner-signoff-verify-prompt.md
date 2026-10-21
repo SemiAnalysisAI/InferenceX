@@ -72,7 +72,7 @@ Then decide:
 The merge standard requires a green full sweep, including evals, on a commit that is
 CURRENTLY part of this PR. A sweep that ran on a commit later rebased/force-pushed out
 does NOT count. The reuse tooling no longer enforces this: a pinned `/use <run_id>` may
-name any run, and the acknowledgement bot only warns (😕) when its commit is outside the
+name any run, and the acknowledgement bot only posts a warning comment when its commit is outside the
 PR. This check is therefore the enforcement point, and the whole question collapses to
 one fact: does a commit still in this PR carry green, executed sweep/eval checks?
 

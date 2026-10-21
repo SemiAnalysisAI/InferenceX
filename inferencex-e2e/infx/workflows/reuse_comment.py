@@ -1,7 +1,7 @@
-"""Acknowledge reuse requests with reactions; never post a separate comment.
+"""Acknowledge reuse requests with reactions.
 
 An accepted request gets 👍. If its source run's commit is not part of the PR,
-the bot also adds 😕 and logs a warning; the reuse still proceeds.
+the bot also posts one warning comment per request and run; reuse still proceeds.
 """
 
 from __future__ import annotations
@@ -17,7 +17,31 @@ from infx import github
 
 from . import reuse
 
-BOT_STATUS = ("+1", "-1", "confused")
+BOT_STATUS = ("+1", "-1")
+
+
+def warn_outside_pr(
+    repo: str, pr_number: int, comment: dict[str, Any], run: dict[str, Any], token: str
+) -> None:
+    """Post a warning comment once for a reuse source outside the PR."""
+    marker = f"<!-- reuse-outside-pr request={comment['id']} run={run['id']} -->"
+    comments = github.paginate(repo, f"/issues/{pr_number}/comments", token, "")
+    if any(
+        c.get("user", {}).get("login") == "github-actions[bot]" and marker in str(c.get("body"))
+        for c in comments
+    ):
+        return
+    head_sha = str(run.get("head_sha") or "")
+    body = (
+        f"{marker}\n"
+        f"⚠️ Reuse source run [{run['id']}]({run.get('html_url', '')}) "
+        f"(commit `{head_sha[:12]}`) is not part of this PR. Its results will publish "
+        f"under this PR's changelog entry at merge. Confirm this is the intended run "
+        f"(requested in {comment.get('html_url', 'the /use comment')}).\n\n"
+        f"⚠️ 复用的来源运行 [{run['id']}]({run.get('html_url', '')})（提交 `{head_sha[:12]}`）"
+        f"不属于本 PR，合并后其结果将以本 PR 的 changelog 条目发布。请确认这是预期的运行。"
+    )
+    github.api(repo, f"/issues/{pr_number}/comments", token, method="POST", data={"body": body})
 
 
 def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
@@ -70,14 +94,13 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         github.set_comment_reaction(repo, comment_id, token, "+1", replace=BOT_STATUS)
         message = f"Reuse accepted / 复用请求已接受: PR #{pr_number}, run {run['id']} ({run['conclusion']})."
         if outside_pr:
-            github.set_comment_reaction(repo, comment_id, token, "confused")
+            try:
+                warn_outside_pr(repo, pr_number, comment, run, token)
+            except Exception as exc:  # noqa: BLE001
+                print(f"::warning::Could not post outside-PR warning comment: {exc}")
             print(
                 f"::warning::Reuse source run {run['id']} head {head_sha} is not part of "
                 f"PR #{pr_number}; its results will publish under this PR's changelog."
-            )
-            message += (
-                f" Warning / 警告: run {run['id']} head {head_sha} is not part of this PR"
-                " / 该运行的提交不属于本 PR."
             )
         code = 0
     except Exception as exc:  # noqa: BLE001

@@ -272,9 +272,9 @@ is required by the review process.
 
 The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection. When the
-pinned run's commit is not part of the PR, it also adds 😕 as a warning; reuse still
-proceeds. Details are in the Actions run summary. Edits replace the bot's old reactions. The reuse
-check posts no comment, but `/use <run_id>` also triggers `stage-results.yml`.
+pinned run's commit is not part of the PR, it also posts one warning comment for
+that request and run; reuse still proceeds. Details are in the Actions run summary.
+Edits replace the bot's old reaction. `/use <run_id>` also triggers `stage-results.yml`.
 Staging requires a primary sweep label on the PR and a source run created while
 one was applied. It posts a staging comment, or a rejection comment when the PR
 has no primary label. Comments do not trigger or cancel GPU sweeps. Later commits

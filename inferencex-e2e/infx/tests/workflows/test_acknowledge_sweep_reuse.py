@@ -29,7 +29,7 @@ def make_request_case(monkeypatch) -> dict:
                 "head_sha": "tested-sha"},
         "commits": [{"sha": "tested-sha"}],
         "artifacts": [{"name": "results_bmk", "expired": False}],
-        "reactions": [], "writes": [],
+        "reactions": [], "writes": [], "posted": [],
     }
 
     def api(repo, path, token, params=None, *, method="GET", data=None):
@@ -37,6 +37,14 @@ def make_request_case(monkeypatch) -> dict:
         assert token == "test-token"
         if case.get("fail_path") == path:
             raise RuntimeError("GitHub unavailable")
+        if method == "POST" and path == "/issues/7/comments":
+            if case.get("fail_warning"):
+                raise RuntimeError("comment write failed")
+            posted = {"id": 900 + len(case["posted"]), "body": data["body"],
+                      "user": {"login": "github-actions[bot]"}}
+            case["posted"].append(posted)
+            case["comments"].append(posted)
+            return posted
         if method == "POST":
             assert path == "/issues/comments/41/reactions"
             case["writes"].append(data["content"])
@@ -111,11 +119,27 @@ def test_explicit_partial_source_keeps_existing_acceptance(request_case, conclus
     assert bot_status(request_case) == ["+1"]
 
 
-def test_source_outside_pr_is_accepted_with_warning(request_case, capsys):
+def test_source_outside_pr_is_accepted_then_warned_once(request_case, capsys):
     request_case["commits"] = [{"sha": "different-sha"}]
-    assert acknowledgment.acknowledge("example/project", event_for(request_case), "test-token") == 0
-    assert bot_status(request_case) == ["+1", "confused"]
+    event = event_for(request_case)
+    for _ in range(2):
+        assert acknowledgment.acknowledge("example/project", event, "test-token") == 0
+    assert bot_status(request_case) == ["+1"]
+    assert len(request_case["posted"]) == 1
+    assert "Reuse source run [123]" in request_case["posted"][0]["body"]
     assert "::warning::Reuse source run 123 head tested-sha is not part of PR #7" in capsys.readouterr().out
+
+
+def test_warning_comment_failure_keeps_acceptance(request_case):
+    request_case["commits"] = [{"sha": "different-sha"}]
+    request_case["fail_warning"] = True
+    assert acknowledgment.acknowledge("example/project", event_for(request_case), "test-token") == 0
+    assert bot_status(request_case) == ["+1"]
+
+
+def test_source_in_pr_posts_no_warning(request_case):
+    assert acknowledgment.acknowledge("example/project", event_for(request_case), "test-token") == 0
+    assert request_case["posted"] == []
 
 
 @pytest.mark.parametrize("problem,reason", [
@@ -164,7 +188,6 @@ def test_edit_replaces_bot_status_and_preserves_human_reaction(request_case, bod
     case = request_case
     case["reactions"] = [
         {"id": 1, "content": "+1", "user": {"login": "github-actions[bot]"}},
-        {"id": 3, "content": "confused", "user": {"login": "github-actions[bot]"}},
         {"id": 2, "content": "+1", "user": {"login": "maintainer"}},
     ]
     case["comment"]["body"] = body

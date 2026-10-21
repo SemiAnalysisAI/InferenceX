@@ -165,7 +165,7 @@ git push origin "$BRANCH"
 An authorized `OWNER`, `MEMBER`, or `COLLABORATOR` then pins the source with
 `/use $SOURCE_RUN_ID` (legacy `/reuse-sweep-run <run_id>` is also accepted). The
 source commit belongs to the original PR, not the recovery PR, so expect the bot to
-react 👍 and 😕: accepted, with an outside-PR warning. Require the 👍 before merging.
+react 👍 and post an outside-PR warning comment. Require the 👍 before merging.
 A 👎 explains itself only in the matching `reuse-sweep-comment.yml` run log
 (`Reuse rejected / 复用请求未接受: ...`).
 
