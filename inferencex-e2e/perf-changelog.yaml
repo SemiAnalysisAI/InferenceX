@@ -10493,19 +10493,102 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
-  scenario-type:
-    - agentic-coding
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
   description:
-    - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 for MI355X DSv4 disaggregated DSpark AgentX."
-    - "Replace concurrency 4 with 1; enable FP8 unified KV and mxscale dense GEMM at concurrency 1-48, mxscale decode GEMM throughout, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
-    - "Give concurrency 1 eight request slots on both roles and decode graph batches 1-8 so PD admission can progress while replay concurrency remains one."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186
+    - "Update the MI300X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.30.0 to v0.31.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3710
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image to v0.5.21-rocm720-mi30x; rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3762
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260916-c9a8fba9 to the v0.5.21-cu130 release."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3869
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  description:
+    - "Update the MI325X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.27.1 to v0.31.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3954
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260914-4358a161 to v0.5.21-cu130 (digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4058
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-rocm720-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4067
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4069
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-dev-x86_64-cu13.0.1-591bb95 to nightly-dev-x86_64-cu13.0.1-20ebb28."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4169
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130 and drop a removed SWA env var."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4176
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4196
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-cd10ed6f to the digest-pinned nightly-49cb2bbf"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4198
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  description:
+    - "Update SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.22-cu130 and drop a removed SWA env var."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4203
+
+- config-keys:
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4224
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20260805-211ee642 to v0.5.22-cu130 and pin Dynamo to b4540b87."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4227
+
+- config-keys:
+    - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4235
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
   scenario-type:
     - agentic-coding
   description:
-    - "Remove SGLANG_DSV4_DENSE_MXSCALE from all prefill and decode variants to preserve the pinned upstream image default draft activation scaling. Supersedes the mxscale enablement described earlier in this PR."
+    - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 for MI355X DSv4 disaggregated DSpark AgentX."
+    - "Replace concurrency 4 with 1; enable FP8 unified KV at concurrency 1-48, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
+    - "Give concurrency 1 eight request slots on both roles and decode graph batches 1-8 so PD admission can progress while replay concurrency remains one."
+    - "Keep SGLANG_DSV4_DENSE_MXSCALE unset on both serving roles so draft activation scaling follows the pinned image default."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186
