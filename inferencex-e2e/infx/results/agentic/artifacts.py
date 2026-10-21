@@ -141,7 +141,6 @@ def _hf_traces_dir(hf_dataset_name: str | None, env: Mapping[str, str]) -> Path 
     if not snap_root.is_dir():
         return None
 
-    # The export has no resolved revision; multiple snapshots are ambiguous.
     snapshots = [path for path in snap_root.iterdir() if path.is_dir()]
     return snapshots[0] if len(snapshots) == 1 else None
 

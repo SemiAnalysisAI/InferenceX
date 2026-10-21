@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: qwen3.5-fp8-b300-sglang-8k1k
-  model:
-    path: hf:Qwen/Qwen3.5-397B-A17B-FP8
-    container: lmsysorg/sglang:v0.5.12-cu130
-    precision: fp8
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -35,7 +31,7 @@ base:
         attention-backend: trtllm_mha
         mm-attention-backend: triton_attn
         moe-runner-backend: flashinfer_trtllm
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-running-requests: 4
         max-prefill-tokens: 16384
         chunked-prefill-size: 16384
@@ -48,20 +44,11 @@ base:
         enable-metrics: false
       env:
         PYTHONNOUSERSITE: '1'
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: Qwen/Qwen3.5-397B-A17B-FP8
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'false'
 zip_override_concurrency:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64, 128, 256]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64, 128, 256]
         max-running-requests: [4, 8, 16, 32, 64, 128, 256]
   benchmark:
     env:

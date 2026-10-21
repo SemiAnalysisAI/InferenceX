@@ -68,7 +68,6 @@ from .sweep_runs import (  # noqa: E402
 )
 from .validate_perf_changelog import read_git_file  # noqa: E402
 
-# Defaults
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
 DEFAULT_CHECK_TIMEOUT = 900
 DEFAULT_HEAD_LAG_RETRIES = 6
@@ -91,15 +90,12 @@ SWEEP_LABEL_NAMES = frozenset(
 
 REUSE_INCOMPATIBLE_LABELS = frozenset({"evals-only", "agentx-fast"})
 
-# Suppress PyGithub/GitPython/urllib3 debug logging to avoid leaking tokens
-# or request headers.
 logging.getLogger("github").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("git").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# Logging helpers (match the bash colors/symbols exactly)
 
 _CYAN_BOLD = "\033[1;36m"
 _GREEN_BOLD = "\033[1;32m"
@@ -120,9 +116,6 @@ def die(msg: str) -> int:
     return 1
 
 
-# Auth
-
-
 def _resolve_token() -> str:
     """Resolve the GitHub token from the environment, falling back to ``gh auth token``.
 
@@ -132,7 +125,6 @@ def _resolve_token() -> str:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
     if token:
         return token
-    # Last-resort fallback: ask the gh CLI for its stored credential.
     try:
         result = subprocess.run(
             ["gh", "auth", "token"],
@@ -151,8 +143,6 @@ def _make_github(token: str) -> Github:
     return Github(login_or_token=token, base_url=base_url)
 
 
-# Transient error handling for API polling
-
 _TRANSIENT_HTTP_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
 
 
@@ -164,9 +154,6 @@ def _is_transient_error(exc: Exception) -> bool:
     """
     if isinstance(exc, GithubException):
         return exc.status in _TRANSIENT_HTTP_STATUSES
-    # Connection/timeout at any level (builtin, requests, urllib3).
-    # builtins.ConnectionError covers ConnectionRefused/Reset/Aborted/BrokenPipe.
-    # requests.ConnectionError and urllib3 errors inherit from OSError.
     return isinstance(exc, (ConnectionError, TimeoutError))
 
 
@@ -184,9 +171,6 @@ def _retry_delay(exc: Exception) -> float:
     return 10.0
 
 
-# GitPython wrapper
-
-
 class GitOps:
     """Thin wrapper around GitPython for the operations this workflow needs.
 
@@ -197,8 +181,6 @@ class GitOps:
 
     def __init__(self, repo: gitpython.Repo | None = None) -> None:
         self.repo = repo or gitpython.Repo(".", search_parent_directories=True)
-
-    # -- queries --
 
     def is_clean(self) -> bool:
         return not self.repo.is_dirty(untracked_files=True)
@@ -238,8 +220,6 @@ class GitOps:
             strip_newline_in_stdout=False,
         )
 
-    # -- mutations --
-
     def fetch(self, *args: str) -> None:
         self.repo.git.fetch(*args)
 
@@ -272,9 +252,6 @@ class GitOps:
             self.repo.git.merge("--abort")
 
 
-# Eligibility check (mirrors the bash's loop over workflow runs + artifacts)
-
-
 def find_eligible_run(
     repo: str,
     pr: int,
@@ -300,9 +277,6 @@ def find_eligible_run(
         if has_reusable_result_artifacts(names):
             return int(run["id"])
     return None
-
-
-# Check-run deduplication helpers
 
 
 def _latest_check_runs(check_runs: list) -> list:
@@ -346,7 +320,6 @@ def _latest_statuses(statuses: list) -> list:
     return list(by_context.values())
 
 
-# Match gh --fail-fast: cancelled is complete but does not abort the wait.
 _FAIL_FAST_CONCLUSIONS = frozenset(
     {
         "failure",
@@ -355,9 +328,6 @@ _FAIL_FAST_CONCLUSIONS = frozenset(
         "startup_failure",
     }
 )
-
-
-# Check-run polling (mirrors wait_for_check in the bash)
 
 
 def wait_for_checks(
@@ -397,16 +367,12 @@ def wait_for_checks(
                     all_completed = False
                     continue
                 if cr.conclusion == "stale":
-                    # Stale means the check needs re-evaluation; treat as pending.
                     all_completed = False
                     continue
                 if cr.conclusion in _FAIL_FAST_CONCLUSIONS:
                     detail = f" - {cr.details_url}" if cr.details_url else ""
                     return die(f"{cr.name} concluded {cr.conclusion}{detail}")
-                # cancelled: completed but not a fail-fast trigger
-                # success, neutral, skipped: passing
 
-            # -- Commit statuses (Status API, e.g. external CI) --
             combined = commit.get_combined_status()
             statuses = _latest_statuses(list(combined.statuses))
             statuses_done = True
@@ -481,9 +447,6 @@ def wait_for_check(
     return die(f"Timed out after {timeout}s waiting for {check_name} on {sha}")
 
 
-# Changelog conflict resolution (calls infx Python APIs, not CLI)
-
-
 def _read_index_stage(git_ops: GitOps, stage: int, path: str) -> bytes:
     """Read a file from a given git index stage during a merge conflict."""
     return git_ops.show_stage(stage, path)
@@ -525,9 +488,6 @@ def canonicalize_changelog(pr: int, repo: str) -> None:
         print(f"{changelog_path()} already prepared for PR #{pr}")
 
 
-# Main merge flow
-
-
 class _MergeState:
     """Shared mutable state between merge_pr and its cleanup closure."""
 
@@ -561,14 +521,10 @@ def merge_pr(
 
     original_branch = git_ops.current_ref()
     original_directory = Path.cwd()
-    # Checking out a pre-migration PR can remove the caller's project directory.
-    # Keep process-relative Git and file operations anchored at the stable checkout.
     os.chdir(git_ops.repo.working_dir)
     state = _MergeState()
 
     def cleanup() -> None:
-        # Abort any in-progress merge first so checkout doesn't fail on a
-        # half-merged index.
         git_ops.merge_abort()
         with contextlib.suppress(Exception):
             git_ops.checkout("--quiet", original_branch)
@@ -591,8 +547,6 @@ def merge_pr(
         try:
             cleanup()
         finally:
-            # Cleanup normally recreates the original project directory. If branch
-            # restoration failed, retain the checkout root instead of a deleted cwd.
             if original_directory.is_dir():
                 with contextlib.suppress(OSError):
                     os.chdir(original_directory)
@@ -714,14 +668,10 @@ def _merge_pr_inner(
     if current_head != post_merge:
         return die(f"PR head changed to {current_head[:8]}; expected {post_merge[:8]}")
 
-    # GitHub's MergePullRequestInput has no bypass field; the "Protect main"
-    # ruleset lists org admins as bypass actors, so REST PullRequest.merge
-    # with an admin token is equivalent to ``gh pr merge --admin``.
     log(f"Squash-merging PR #{pr} into main")
     try:
         merge_status = pull.merge(merge_method="squash", sha=post_merge)
     except GithubException as exc:
-        # Surface the API error message verbatim, but never the token.
         api_message = (
             exc.data.get("message", str(exc.status))
             if isinstance(exc.data, dict)
@@ -756,8 +706,6 @@ def _poll_pr_head(
             time.sleep(delay)
     return current  # type: ignore[possibly-undefined]
 
-
-# CLI
 
 _INSTALL_HINT = (
     "Missing required dependencies (PyGithub, GitPython). From the repository root, run:\n"

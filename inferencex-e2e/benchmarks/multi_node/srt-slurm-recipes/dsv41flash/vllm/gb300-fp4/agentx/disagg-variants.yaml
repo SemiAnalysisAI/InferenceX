@@ -1,0 +1,248 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: "1.6.0.dev20261010"
+  dynamo:
+    install: true
+    source:
+      wheel: "1.6.0.dev20261010"
+    request_plane: tcp
+    event_plane: zmq
+    sidecar: true
+    sidecar_args:
+      - --grpc-startup-deadline-secs
+      - "3600"
+      - --dyn-tool-call-parser
+      - deepseek_v41
+      - --dyn-reasoning-parser
+      - deepseek_v41
+  environment:
+    PYTHONHASHSEED: "0"
+  slurm:
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 2160
+    interval_seconds: 10
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    numa_bind: true
+    placement:
+      # Sharing prefill hosts exhausted RAM at c5120 with Engram and host KV offload.
+      node: dedicated
+    args:
+      router-mode: "kv"
+      router-session-affinity-ttl-secs: 14400
+      # Keep prefill off the lockstep decode ranks.
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+      no-kv-events: true
+    env:
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_LOG: warn
+      DYN_TOKENIZER: "fastokens"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_ROUTER_DECODE_ACTIVE_REQUEST_WEIGHT: "10000000"
+      DYN_TCP_CHANNEL_BUFFER: "128"
+      DYN_TCP_REQUEST_TIMEOUT: "60"
+    # cache_threshold 1.0 selects the active-request cost tier.
+    worker_selection:
+      decode: decode-least-loaded
+      instances:
+        - name: decode-least-loaded
+          type: dynamo-two-tier-cost-fn
+          parameters:
+            cache_threshold: 1.0
+  engine:
+    type: vllm
+    connector:
+    dp_launch_mode: per_node
+  roles:
+    prefill:
+      gpus: 2
+      kv_events: true
+      env:
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        TRANSFORMERS_CACHE: "/hf_hub_cache"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_RPC_TIMEOUT: "600000"
+        VLLM_LOG_STATS_INTERVAL: "1"
+        VLLM_SERVER_DEV_MODE: "1"
+        VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+        UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+        UCX_MEMTYPE_CACHE: "n"
+        UCX_MEMTYPE_REG_WHOLE: "n"
+        UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
+        UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
+        NIXL_UCX_SGL_ENABLE: "1"
+        VLLM_RS_TOKEN_IDS_AS_BYTES: "1"
+      args:
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":64424509440,"lazy_offload":true}}]}}'
+        served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        language-model-only: true
+        tokenizer-mode: "deepseek_v41"
+        # Parse once in the Dynamo frontend.
+        reasoning-parser: None
+        kv-cache-dtype: "fp8"
+        max-model-len: 1048576
+        tensor-parallel-size: 1
+        enable-expert-parallel: true
+        enable-cumem-allocator: true
+        enable-ep-weight-filter: true
+        attention-config: '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true,"use_thp":false}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","enable_adaptive_verification":false}'
+        prefill-schedule-interval: 2
+        gpu-memory-utilization: 0.95
+        data-parallel-size: 2
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048],"max_cudagraph_capture_size":2046}'
+        max-num-seqs: 64
+        max-num-batched-tokens: 32768
+        long-prefill-token-threshold: 8192
+        prefix-cache-retention-interval: 32768
+        numa-bind: true
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        TRANSFORMERS_CACHE: "/hf_hub_cache"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_RPC_TIMEOUT: "600000"
+        VLLM_LOG_STATS_INTERVAL: "1"
+        VLLM_SERVER_DEV_MODE: "1"
+        VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+        UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+        UCX_MEMTYPE_CACHE: "n"
+        UCX_MEMTYPE_REG_WHOLE: "n"
+        UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
+        UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
+        NIXL_UCX_SGL_ENABLE: "1"
+        VLLM_RS_TOKEN_IDS_AS_BYTES: "1"
+        VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: "4"
+      args:
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}}'
+        served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        language-model-only: true
+        tokenizer-mode: "deepseek_v41"
+        # Parse once in the Dynamo frontend.
+        reasoning-parser: None
+        kv-cache-dtype: "fp8"
+        max-model-len: 1048576
+        tensor-parallel-size: 1
+        enable-expert-parallel: true
+        enable-cumem-allocator: true
+        enable-ep-weight-filter: true
+        attention-config: '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        engram-config: '{"cpu_offload":false,"embedding_across_dp":true,"use_thp":false}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","enable_adaptive_verification":false}'
+        prefill-schedule-interval: 2
+        gpu-memory-utilization: 0.95
+        data-parallel-size: 16
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
+        enable-eplb: true
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":false,"log_balancedness_interval":3000}'
+        no-enable-prefix-caching: true
+        numa-bind: true
+        numa-bind-nodes: [0, 0, 1, 1]
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+    # Prefill Engram host-table allocation hit CUDA_ERROR_OUT_OF_MEMORY on these.
+    exclude: "im-gb300-r01-c[001-002,004-005,010-011],im-gb300-r03-c[001-002]"
+  srun_options:
+    container-remap-root: ""
+  benchmark:
+    placement:
+      node: dedicated
+    env:
+      INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+      PORT: "8000"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_16p1d_dep2_dep32_c10888:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-16p1d-dep2-dep32-c10888"
+  roles:
+    prefill:
+      nodes: 8
+      workers: 16
+    decode:
+      nodes: 8
+      gpus: 32
+      env:
+        VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: "5"
+      args:
+        data-parallel-size: 32
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":32,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":false,"log_balancedness_interval":3000}'
+        max-num-seqs: 76
+        max-num-batched-tokens: 760
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":456,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384,390,396,402,408,414,420,426,432,438,444,450,456]}'
+
+override_6p1d_dep2_dep32_c3018:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-6p1d-dep2-dep32-c3018"
+  roles:
+    prefill:
+      nodes: 3
+      workers: 6
+    decode:
+      nodes: 8
+      gpus: 32
+      env:
+        VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: "2"
+      args:
+        data-parallel-size: 32
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":32,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":false,"log_balancedness_interval":3000}'
+        max-num-seqs: 18
+        max-num-batched-tokens: 180
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":108,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108]}'
+
+override_9p1d_dep2_dep16_c7480:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-disagg-9p1d-dep2-dep16-c7480"
+  roles:
+    prefill:
+      nodes: 5
+      workers: 9
+      args:
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":75161927680,"lazy_offload":true}}]}}'
+    decode:
+      env:
+        VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: "6"
+      args:
+        max-num-seqs: 126
+        max-num-batched-tokens: 1260
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":756,"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384,390,396,402,408,414,420,426,432,438,444,450,456,462,468,474,480,486,492,498,504,510,516,522,528,534,540,546,552,558,564,570,576,582,588,594,600,606,612,618,624,630,636,642,648,654,660,666,672,678,684,690,696,702,708,714,720,726,732,738,744,750,756]}'

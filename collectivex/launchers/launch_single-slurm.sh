@@ -12,19 +12,26 @@ source "$HERE/../runtime/common.sh"
 RUNNER="${COLLX_SHARD_SKU:-}"
 ALLOC_EXTRA=(); SRUN_EXTRA=(); LOCAL_IMPORT=0
 case "$RUNNER" in
-  h100-dgxc) PRODUCT=h100; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1 ;;
+  h100-dgxc)
+    # AWS p5.48xlarge on EFA, laid out like the b300 dsxe pool, so it takes the same Slurm and
+    # pyxis flags and imports the image on the login node.
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
+    ALLOC_EXTRA=(--mem=0)
+    SRUN_EXTRA=(--mpi=none --container-remap-root)
+    LOCAL_IMPORT=1
+    ;;
   h200-dgxc)
-    PRODUCT=h200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=0
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=0
     SRUN_EXTRA=(--container-remap-root)
     ;;
   b200-nscale)
     # Bare-metal B200 (nsc): native IB rails + gdrdrv make the deepep low-latency EP16 rows
     # dispatchable, unlike the virtualized dgxc pool. 45 min covers first-run backend builds.
-    PRODUCT=b200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     ALLOC_EXTRA=(--mem=0)
     ;;
   b300)
-    PRODUCT=b300; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
+    DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     # -N 1 here would block two-node B300 jobs.
     ALLOC_EXTRA=(--mem=0)
     SRUN_EXTRA=(--mpi=none --container-remap-root)
@@ -34,7 +41,7 @@ case "$RUNNER" in
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
 export COLLX_VENDOR=nvidia
-collx_launcher_prologue "$RUNNER"
+collx_launcher_prologue
 
 collx_set_placement 1 8 8 nvlink
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
@@ -48,8 +55,8 @@ export NCCL_CUMEM_ENABLE=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR
 [ "$REQUIRE_ACCOUNT" = 0 ] || collx_require_vars COLLX_ACCOUNT
-# h100-dgxc /home is login-local (absent on compute nodes), so the operator config must pin an
-# explicit stage_dir; the b300 prologue resolves a per-execution stage. Both must be set by now.
+# The dsxe pools (b300, h100-dgxc) have no shared stage beside their image store, so the operator
+# config must name one (stage_dir, or storage_roots on the compute-visible /data).
 case "$RUNNER" in
   b300|h100-dgxc) collx_require_vars COLLX_STAGE_DIR ;;
 esac
@@ -58,6 +65,8 @@ collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BEN
 collx_select_image "$IMAGE"
 
 collx_stage_with_backend_cache
+# Multi-node shards on the EFA pools (b300, h100-dgxc) carry the host EFA user space themselves.
+collx_add_efa_host_mounts
 
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$COLLX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
@@ -119,5 +128,5 @@ fi
 
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable "${SRUN_EXTRA[@]}")
 collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
-collx_log "done - result artifacts collected"
+collx_log "done - results collected"
 exit "$FINAL_RC"
