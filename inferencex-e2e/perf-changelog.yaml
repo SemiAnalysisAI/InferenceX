@@ -10496,4 +10496,4 @@
     - musespark-fp4-b200-sglang-agentic-dflash
   description:
     - "Update Muse Spark Open B200 to lmsysorg/sglang:nightly-dev-20261021-c1c287a4; enable unified memory without an explicit SWA token ratio at concurrency 48 and 64, retaining c64 coverage."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4366
