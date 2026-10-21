@@ -10547,6 +10547,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4176
 
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4196
+
+- config-keys:
   - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
   - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
   scenario-type:
