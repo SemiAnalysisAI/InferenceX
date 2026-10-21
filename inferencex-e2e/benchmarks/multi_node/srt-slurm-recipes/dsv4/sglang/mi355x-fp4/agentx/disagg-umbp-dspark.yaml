@@ -167,7 +167,6 @@ base:
         SGLANG_SIMULATE_ACC_METHOD: match-expected
         SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
         SGLANG_SIMULATE_ACC_GREEDY: "0"
-        SGLANG_DSV4_DENSE_MXSCALE: "1"
       args:
         <<: *server
         disable-cuda-graph: false
@@ -205,7 +204,6 @@ override_c1:
       env:
         # HCA split-K applies only to the bf16 KV path.
         SGLANG_MLA_HCA_KV_SPLITS: "8"
-        SGLANG_DSV4_DENSE_MXSCALE: "1"
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 4
@@ -241,7 +239,6 @@ override_c16:
     prefill:
       gpus: 4
       env: &tp_kernel_env
-        SGLANG_DSV4_DENSE_MXSCALE: "1"
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
         tp-size: 4

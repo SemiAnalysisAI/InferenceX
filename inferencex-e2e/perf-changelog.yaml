@@ -10276,3 +10276,11 @@
     - "The image carries vllm-project/vllm#62131: --monokernel now also runs the three DSpark draft layers as the two persistent mono decode launches (128 experts / top-3, window-only attention over the block's non-causal SWA rows) instead of vLLM's regular path. The step limit is unchanged at 48 rows, i.e. concurrency 1-8 with five DSpark drafts."
     - "No recipe or point changes: concurrency 1, 2, 4, 8, 16, 32 and 64 on TP2 and TP4 (14 points), all re-measured on the new image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4319
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove SGLANG_DSV4_DENSE_MXSCALE from all prefill and decode variants to preserve the pinned upstream image default draft activation scaling. Supersedes the mxscale enablement described earlier in this PR."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186
