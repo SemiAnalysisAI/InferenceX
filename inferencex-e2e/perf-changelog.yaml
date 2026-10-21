@@ -10501,4 +10501,4 @@
     - "Run TP8 x DCP8 with a GPU-only KV cache: drop the Mooncake RDMA store and its kimik3-b300-mooncake.sh setup script, with no host DRAM offload tier."
     - "Drop prefix-match-unit 128 so prefix-cache granularity matches the SimpleCPUOffloadConnector DRAM variants."
     - "Sweep concurrency 1, 4, 16, 24, 32, 40, 48, 56 and 64: drop conc 2, 8 and 70 and add conc 64 (max-num-seqs 128)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4361
