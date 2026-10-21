@@ -10501,4 +10501,4 @@
     - "Drop AITER_BF16_FP8_MOE_BOUND=0. The image runs DeepSeek-V4.1's FP4 routed experts on FP8 activations by default (sgl-project/sglang#45480)."
     - "Enable --monokernel-backend amd on concurrency <= 16."
     - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 on all points. Enable SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 only on the non-monokernel points (TP2 c32, DP2 c32 and c64); the monokernel refuses that layout."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4367
