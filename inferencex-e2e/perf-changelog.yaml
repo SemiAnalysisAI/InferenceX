@@ -9695,6 +9695,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add Qwen3.5-397B-A17B NVFP4 B300 AgentX on TensorRT-LLM release:1.3.0rc24: one aggregated TEP8 worker (TP8, MoE EP8) with native MTP at draft length 6, at concurrency 4, 8, 16, 24, 32, 52 and 64."
-    - "FP8 KV cache with KV cache manager v2, per-conversation block reuse, and TRT-LLM's native 128 GiB/rank host KV tier (dram-utilization 0.367)."
+    - "Add Qwen3.5-397B-A17B NVFP4 B300 AgentX on TensorRT-LLM release:1.3.0rc24: one aggregated TEP8 worker (TP8, MoE EP8) with native MTP at draft length 6, at concurrency 4, 8, 24, 52 and 64."
+    - "Every point uses piecewise CUDA graphs for steps with context tokens (torch_compile_config, no inductor). Concurrency 4 and 8 add the TRTLLM-gen MoE backend and two torch.compile streams. Concurrency 24, 52 and 64 add the TRTLLM-gen MoE backend and context batching (batch_wait_max_tokens_ratio 0.9, batch_wait_timeout_iters 24)."
+    - "FP8 KV cache with KV cache manager v2, per-conversation block reuse, free_gpu_memory_fraction 0.8, and TRT-LLM's native 128 GiB/rank host KV tier (1,100 GB per node, dram-utilization 0.367)."
+    - "No data-type or precision change to the MTP draft: the checkpoint excludes mtp.layers.0 from NVFP4, the recipe sets no draft quantization or dtype, and the draft uses the target's FP8 KV cache dtype."
+    - "TensorRT-LLM iteration perf stats are on: enable_iter_perf_stats true and kv_cache_config.iteration_stats_interval 20."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3967
