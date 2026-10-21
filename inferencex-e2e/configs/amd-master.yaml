@@ -109,7 +109,7 @@ dsr1-fp8-mi300x-sglang:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.19-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi30x@sha256:58b6bc333f527c88fe5ff1b4bd8d17e82214eabcb3044549117159878967c930
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x
