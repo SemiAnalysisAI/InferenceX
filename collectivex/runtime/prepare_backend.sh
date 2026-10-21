@@ -679,7 +679,8 @@ validate_container_network() {
 flashinfer_cache_root() {
   local arch digest
   arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
-  digest="$(printf '%s %s' "$COLLX_FLASHINFER_SPEC" "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
+  # "aot" names the cache layout below; change it when the layout changes.
+  digest="$(printf 'aot %s %s' "$COLLX_FLASHINFER_SPEC" "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
     | sha256sum | cut -c1-12)" || return 1
   backend_cache_root flashinfer-ep "${arch#-}" "$digest"
 }
@@ -698,7 +699,30 @@ flashinfer_activate() {
     FLASHINFER_WORKSPACE_BASE="$1/workspace"
 }
 
-# Asserts the pinned wheel and builds the all-to-all module, which ranks then load without a lock.
+# FlashInfer takes a file lock and reruns ninja on every load of a JIT module, which fails on
+# NFS without lock support and relinks the library while other ranks load it. An artifact in the
+# package's own AOT directory loads without either, so the module is built once under the cache
+# lock and copied there.
+flashinfer_promote_aot() {
+  python3 - <<'PY'
+import os
+import shutil
+
+from flashinfer.comm.trtllm_moe_alltoall import gen_moe_alltoall_module
+from flashinfer.jit import env as jit_env
+
+spec = gen_moe_alltoall_module("legacy")
+spec.build_and_load()
+target = jit_env.FLASHINFER_AOT_DIR / spec.name / f"{spec.name}.so"
+target.parent.mkdir(parents=True, exist_ok=True)
+staged = target.with_name(target.name + ".tmp")
+shutil.copyfile(spec.jit_library_path, staged)
+os.chmod(staged, 0o755)
+os.replace(staged, target)
+PY
+}
+
+# Asserts the pinned wheel and that the all-to-all module loads from the AOT directory.
 flashinfer_probe() {
   python3 - "${COLLX_FLASHINFER_SPEC%% *}" <<'PY'
 import sys
@@ -708,6 +732,7 @@ from flashinfer.comm import Mapping  # noqa: F401
 from flashinfer.comm.mnnvl import MnnvlConfig  # noqa: F401
 from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
     MoeAlltoAll,
+    gen_moe_alltoall_module,
     get_moe_alltoall_module,
     moe_a2a_get_workspace_size_per_rank,
 )
@@ -715,6 +740,8 @@ from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
 pinned = sys.argv[1].split("==")[1]
 if flashinfer.__version__ != pinned:
     raise SystemExit(f"flashinfer {flashinfer.__version__} loaded, {pinned} pinned")
+if not gen_moe_alltoall_module("legacy").is_aot:
+    raise SystemExit("the all-to-all module is not in FlashInfer's AOT directory")
 get_moe_alltoall_module()
 print(f"FlashInfer {flashinfer.__version__} one-sided A2A available", file=sys.stderr)
 PY
@@ -751,6 +778,7 @@ PY
     && "${pip[@]}" --no-deps "$COLLX_FLASHINFER_JIT_CACHE_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: FlashInfer installation failed"; return 1; }
   flashinfer_activate "$root" || return 1
+  flashinfer_promote_aot || { collx_log "ERROR: FlashInfer all-to-all build failed"; return 1; }
   flashinfer_probe || { collx_log "ERROR: FlashInfer import probe failed"; return 1; }
   : > "$root/.ready"
 }
