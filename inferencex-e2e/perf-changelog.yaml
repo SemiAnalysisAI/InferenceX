@@ -10602,6 +10602,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4258
 
 - config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update the SGLang image from v0.5.18-cu130 to v0.5.22-cu130 and pin Dynamo b4540b87 for compatibility."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4277
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
   scenario-type:
     - agentic-coding
