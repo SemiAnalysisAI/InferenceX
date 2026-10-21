@@ -16,7 +16,7 @@ collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${
 readonly -a RANK_ENV_VARS=(
   PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
-  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR
+  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR FLASHINFER_WORKSPACE_BASE
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -674,28 +674,106 @@ validate_container_network() {
   done
 }
 
-# The pinned SGLang images ship flashinfer-python with the one-sided MoE all-to-all, so this is a
-# capability assert, not an install: fail early rather than mid-case inside create_buffer.
-flashinfer_ep_prepare() {
-  command -v python3 >/dev/null \
-    || { collx_log "ERROR: python3 unavailable for FlashInfer EP"; return 1; }
-  python3 - <<'FICHECK'
+# FlashInfer lifecycle
+
+flashinfer_cache_root() {
+  local arch digest
+  arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
+  digest="$(printf '%s %s' "$COLLX_FLASHINFER_SPEC" "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
+    | sha256sum | cut -c1-12)" || return 1
+  backend_cache_root flashinfer-ep "${arch#-}" "$digest"
+}
+
+flashinfer_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ]; }
+
+# The venv sees the image's torch and NCCL (--system-site-packages) and shadows its FlashInfer.
+flashinfer_activate() {
+  local venv="$1/venv" site
+  for site in "$venv"/lib/python*/site-packages; do break; done
+  [ -d "$site" ] || { collx_log "ERROR: FlashInfer venv site-packages is unavailable"; return 1; }
+  export \
+    VIRTUAL_ENV="$venv" \
+    PATH="$venv/bin:${PATH#"$venv/bin:"}" \
+    PYTHONPATH="$site${PYTHONPATH:+:$PYTHONPATH}" \
+    FLASHINFER_WORKSPACE_BASE="$1/workspace"
+}
+
+# Asserts the pinned wheel and builds the all-to-all module, which ranks then load without a lock.
+flashinfer_probe() {
+  python3 - "${COLLX_FLASHINFER_SPEC%% *}" <<'PY'
 import sys
-try:
-    import flashinfer
-    from flashinfer.comm import Mapping  # noqa: F401
-    from flashinfer.comm.mnnvl import MnnvlConfig  # noqa: F401
-    from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
-        MoeAlltoAll,
-        moe_a2a_get_workspace_size_per_rank,
-    )
-except Exception as exc:  # noqa: BLE001 - the reason belongs in the leg log
-    print(f"flashinfer one-sided a2a import failed: {exc}", file=sys.stderr)
-    raise SystemExit(1)
-print(f"FlashInfer {getattr(flashinfer, '__version__', 'unknown')} one-sided A2A available")
-FICHECK
-  local rc=$?
-  [ "$rc" -eq 0 ] || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable in this image"; return 1; }
+
+import flashinfer
+from flashinfer.comm import Mapping  # noqa: F401
+from flashinfer.comm.mnnvl import MnnvlConfig  # noqa: F401
+from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
+    MoeAlltoAll,
+    get_moe_alltoall_module,
+    moe_a2a_get_workspace_size_per_rank,
+)
+
+pinned = sys.argv[1].split("==")[1]
+if flashinfer.__version__ != pinned:
+    raise SystemExit(f"flashinfer {flashinfer.__version__} loaded, {pinned} pinned")
+get_moe_alltoall_module()
+print(f"FlashInfer {flashinfer.__version__} one-sided A2A available", file=sys.stderr)
+PY
+}
+
+flashinfer_install() {
+  local root="$1" venv="$1/venv" report="$1/pip-report.json"
+  local -a pip
+  if [ -e "$root" ] || [ -L "$root" ]; then
+    rm -rf "$root" || { collx_log "ERROR: incomplete FlashInfer cache-reset failed"; return 1; }
+  fi
+  mkdir -m 700 "$root" || { collx_log "ERROR: FlashInfer cache-create failed"; return 1; }
+  python3 -m venv --system-site-packages "$venv" \
+    || { collx_log "ERROR: FlashInfer venv creation failed"; return 1; }
+  pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input
+       --extra-index-url https://flashinfer.ai/whl/cu130 --extra-index-url https://flashinfer.ai/whl)
+  collx_log "FlashInfer: installing $COLLX_FLASHINFER_SPEC"
+  # The specs are unquoted on purpose: the variable carries whitespace-separated pip specs.
+  # shellcheck disable=SC2086
+  "${pip[@]}" --dry-run --report "$report" $COLLX_FLASHINFER_SPEC >&2 2>&1 \
+    || { collx_log "ERROR: FlashInfer dependency resolution failed"; return 1; }
+  # Replacing the image's torch or NCCL would change what every other backend measures.
+  python3 - "$report" <<'PY' \
+    || { collx_log "ERROR: FlashInfer would replace the image's torch or NCCL"; return 1; }
+import json, re, sys
+
+names = [item["metadata"]["name"] for item in json.load(open(sys.argv[1]))["install"]]
+clash = [name for name in names if re.match(r"(torch|triton|pytorch-triton|nvidia-nccl)", name, re.I)]
+if clash:
+    raise SystemExit(f"refusing to install {clash}")
+PY
+  # shellcheck disable=SC2086
+  "${pip[@]}" $COLLX_FLASHINFER_SPEC >&2 2>&1 \
+    && "${pip[@]}" --no-deps "$COLLX_FLASHINFER_JIT_CACHE_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: FlashInfer installation failed"; return 1; }
+  flashinfer_activate "$root" || return 1
+  flashinfer_probe || { collx_log "ERROR: FlashInfer import probe failed"; return 1; }
+  : > "$root/.ready"
+}
+
+flashinfer_ep_prepare() {
+  local arch shared
+  command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for FlashInfer EP"; return 1; }
+  arch="$(cuda_arch)" || return 1
+  shared="$(flashinfer_cache_root "$arch")" || shared=""
+  if [ -n "$shared" ]; then
+    CACHE_ROOT="$shared"
+    command -v flock >/dev/null || { collx_log "ERROR: flock is required for FlashInfer caching"; return 1; }
+    mkdir -p "${shared%/*}" || return 1
+    collx_log "FlashInfer: preparing (shared cache $shared)"
+    with_cache_lock "FlashInfer" "$shared" flashinfer_ready flashinfer_install \
+      || { collx_log "ERROR: shared FlashInfer environment is incomplete"; return 1; }
+  else
+    CACHE_ROOT="/tmp/collectivex-flashinfer-cache-$arch"
+    collx_log "FlashInfer: preparing (node-local $CACHE_ROOT; no shared cache mounted)"
+    flashinfer_ready "$CACHE_ROOT" || flashinfer_install "$CACHE_ROOT" || return 1
+  fi
+  flashinfer_activate "$CACHE_ROOT" || return 1
+  flashinfer_probe || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable"; return 1; }
 }
 
 main() {
