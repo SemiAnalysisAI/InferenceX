@@ -40,7 +40,8 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC. TP4 C1/C2 run mono decode at
+# One variant per point. Admission is 2x CONC, except TP4 C1/C2, which admit
+# exactly CONC with graphs captured up to it. TP4 C1/C2 run mono decode at
 # three draft tokens; C4/C8 draft five and C10 four on the production path. The
 # DCP4 arm shards the decode KV, adds the LMCache DRAM tier at 256 GiB per rank
 # (1024 GiB, 1099.5 GB per server, within the 1109 GB TP4 share at
@@ -50,8 +51,8 @@ override_tp4_c1:
     agg:
       gpus: 4
       args:
-        max-num-seqs: 2
-        cudagraph-capture-sizes: '[1,2]'
+        max-num-seqs: 1
+        cudagraph-capture-sizes: '[1]'
         num-speculative-tokens: 3
       env:
         ATOM_MONO_ENABLE: '1'
@@ -64,8 +65,8 @@ override_tp4_c2:
     agg:
       gpus: 4
       args:
-        max-num-seqs: 4
-        cudagraph-capture-sizes: '[1,2,4]'
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
         num-speculative-tokens: 3
       env:
         ATOM_MONO_ENABLE: '1'
