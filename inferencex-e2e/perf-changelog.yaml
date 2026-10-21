@@ -10491,3 +10491,9 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Update vLLM image from nightly-ac9126e5 to v0.32.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4369
