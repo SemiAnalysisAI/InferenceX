@@ -144,7 +144,8 @@ manifest digest in its container registry, resolved at launch, decides when it i
 `COLLX_IMAGE_REFRESH=1` forces a re-import. An image owned by another account is reused when
 readable and current, but never replaced or deleted; the launcher stops with an error instead.
 Backends the image does not ship (DeepEP V2 and UCCL-EP, built at their source pins in
-`runtime/common.sh`, the `nccl-extensions` wheels, and aws-ofi-nccl where an EFA host needs it)
+`runtime/common.sh`, the `nccl-extensions` wheels, FlashInfer at vLLM's pin, and aws-ofi-nccl
+where an EFA host needs it)
 are cached in a cluster-local backend cache that reaches the container only as `/cx-cache`.
 
 ## Local Checks
