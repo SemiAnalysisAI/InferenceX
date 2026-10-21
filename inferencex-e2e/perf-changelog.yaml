@@ -10491,3 +10491,14 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261021."
+    - "Drop AITER_BF16_FP8_MOE_BOUND=0. The image runs DeepSeek-V4.1's FP4 routed experts on FP8 activations by default (sgl-project/sglang#45480)."
+    - "Enable --monokernel-backend amd on concurrency <= 16."
+    - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 on all points. Enable SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 only on the non-monokernel points (TP2 c32, DP2 c32 and c64); the monokernel refuses that layout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
