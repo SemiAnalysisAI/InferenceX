@@ -10553,6 +10553,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4196
 
 - config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-cd10ed6f to the digest-pinned nightly-49cb2bbf"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4198
+
+- config-keys:
     - musespark-fp4-mi355x-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
