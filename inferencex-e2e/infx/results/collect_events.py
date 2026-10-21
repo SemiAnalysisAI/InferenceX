@@ -1,13 +1,17 @@
 """Join a sweep's per-job ``job_event.json`` records into one JSON Lines file.
 
-Given the run, each record also gains what only its finished GitHub job knows, and every
-benchmark or eval job that left no record gets one synthesized from the run's job listing.
-Records are diagnostics: a listing that cannot be read leaves the records as they are.
+Given the run, each record also gains what only its finished GitHub job knows, and fails with
+its job if its launcher succeeded or never finished; every benchmark or eval job that left no
+record gets one synthesized from the run's job listing.
+Given a summary file, the job counts and a table of the failed jobs are appended to it.
+Records are diagnostics: a listing that cannot be read leaves the records as they are, and a
+summary that cannot be written is skipped.
 """
 
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -23,13 +27,17 @@ from infx import github
 FILENAME = "job_event.json"
 SCHEMA_VERSION = 2
 NO_RECORD = "NoLauncherRecord"
+STEP_FAILED = "StepFailed"
+INTERRUPTED = "Interrupted"
 # The names benchmark-tmpl.yml and benchmark-multinode-tmpl.yml give their jobs: an optional
 # klaud marker, the priority, model prefix, precision and runner, then the concurrency last.
 _BENCHMARK_JOB = re.compile(
-    r"(?:^|/ )(?:klaud \| )?p[0-9.]+ \| (?P<model_prefix>\S+) (?P<precision>\S+) (?P<runner>\S+)"
-    r" .* c(?P<conc>[0-9]+(?:x[0-9]+)*)(?: \| (?P<eval>eval|eval-only))?$"
+    r"(?:^|/ )(?:klaud \| )?p[0-9.]+ \| (?P<point>(?P<model_prefix>\S+) (?P<precision>\S+)"
+    r" (?P<runner>\S+) .* c(?P<conc>[0-9]+(?:x[0-9]+)*)(?: \| (?P<eval>eval|eval-only))?)$"
 )
-_FAILED_STEP = frozenset({"failure", "cancelled", "timed_out"})
+_FAILED = frozenset({"failure", "cancelled", "timed_out"})
+_SUMMARY_COLUMNS = ("Cluster", "Job", "Stage", "Error", "Retriable", "Cause", "Link")
+_CAUSE_CHARS = 200
 
 
 def read_events(directory: Path) -> list[dict[str, Any]]:
@@ -51,7 +59,11 @@ def read_events(directory: Path) -> list[dict[str, Any]]:
 def reconcile(
     events: list[dict[str, Any]], jobs: Iterable[dict[str, Any]], *, run_url: str
 ) -> list[dict[str, Any]]:
-    """``events`` with their jobs' outcomes, then a record for each benchmark job without one."""
+    """``events`` with their jobs' outcomes, then a record for each benchmark job without one.
+
+    A record whose launcher succeeded, or never finished and so has no outcome, fails with its
+    job at the job's failed step.
+    """
     events = [dict(event) for event in events]
     synthesized = []
     for job in jobs:
@@ -61,8 +73,15 @@ def reconcile(
         event = next((event for event in events if _ran(event, job)), None)
         if event is None:
             synthesized.append(_synthesized(job, run_url))
-        elif isinstance(event.get("github"), dict):
-            event["github"] = {**event["github"], **_outcome(job)}
+            continue
+        outcome = _outcome(job)
+        if isinstance(event.get("github"), dict):
+            event["github"] = {**event["github"], **outcome}
+        launched = event.get("outcome")
+        if launched != "failure" and outcome["conclusion"] in _FAILED:
+            event["outcome"] = "failure"
+            if not event.get("error"):
+                event["error"] = _job_error(outcome, launched=launched == "success")
     return [*events, *synthesized]
 
 
@@ -87,15 +106,36 @@ def _ran(event: dict[str, Any], job: dict[str, Any]) -> bool:
 def _outcome(job: dict[str, Any]) -> dict[str, Any]:
     """The finished job's identity and conclusion, and the step that failed it."""
     steps = job.get("steps") or []
-    failed = next(
-        (step.get("name") for step in steps if step.get("conclusion") in _FAILED_STEP), None
-    )
+    failed = next((step.get("name") for step in steps if step.get("conclusion") in _FAILED), None)
     return {
         "job_id": job.get("id"),
         "job_url": job.get("html_url"),
         "job_name": job.get("name"),
         "conclusion": job.get("conclusion"),
         "failed_step": failed,
+    }
+
+
+def _job_error(outcome: dict[str, Any], *, launched: bool) -> dict[str, Any]:
+    """The error of a failed job its record does not explain.
+
+    A later step failed a job whose launcher succeeded; a cancel, timeout or kill stopped one
+    whose launcher never finished.
+    """
+    conclusion, step = outcome["conclusion"], outcome["failed_step"]
+    where = f" at step {step!r}" if step else ""
+    if launched:
+        kind, when, retriable = STEP_FAILED, "after the launcher succeeded", False
+    else:
+        kind, when = INTERRUPTED, "before the launcher finished"
+        retriable = True if conclusion in {"cancelled", "timed_out"} else None
+    return {
+        "stage": step or "runner",
+        "type": kind,
+        "message": f"job concluded {conclusion}{where} {when}",
+        "exit_code": None,
+        "retriable": retriable,
+        "evidence": outcome["job_url"],
     }
 
 
@@ -152,6 +192,54 @@ def _time(value: object) -> datetime | None:
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
+def summary(events: list[dict[str, Any]], synthesized: int) -> str:
+    """Markdown counting ``events`` by outcome, then a row per failure, retriable ones last."""
+    failures = sorted(
+        (event for event in events if event.get("outcome") == "failure"),
+        key=lambda event: (event.get("error") or {}).get("retriable") is True,
+    )
+    succeeded = sum(event.get("outcome") == "success" for event in events)
+    counts = (
+        f"**Job events:** {len(events)} total, {succeeded} succeeded, {len(failures)} failed,"
+        f" {synthesized} synthesized"
+    )
+    if not failures:
+        return counts + "\n"
+    header = _row(_SUMMARY_COLUMNS), _row(["---"] * len(_SUMMARY_COLUMNS))
+    return "\n".join([counts, "", *header, *map(_failure, failures)]) + "\n"
+
+
+def _failure(event: dict[str, Any]) -> str:
+    """``event``'s row: its job by benchmark point, its cause by log cause line, else message."""
+    error, job = event.get("error") or {}, event.get("github") or {}
+    cause = (error.get("detail") or "").partition("\n")[0] or error.get("message") or ""
+    if len(cause) > _CAUSE_CHARS:
+        cause = cause[: _CAUSE_CHARS - 1] + "…"
+    name = job.get("job_name")
+    benchmark = _BENCHMARK_JOB.search(name) if name else None
+    retriable = error.get("retriable")
+    cells = [
+        event.get("cluster"),
+        benchmark["point"] if benchmark else name,
+        error.get("stage"),
+        error.get("type"),
+        "yes" if retriable is True else "no" if retriable is False else "?",
+        cause,
+    ]
+    link = f"[job]({job['job_url']})" if job.get("job_url") else ""
+    return _row([*map(_cell, cells), link])
+
+
+def _row(cells: Iterable[str]) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
+def _cell(value: object) -> str:
+    """``value`` as table cell text, with its HTML, pipes and line breaks escaped."""
+    text = html.escape("" if value is None else str(value), quote=False).replace("|", r"\|")
+    return "<br>".join(text.splitlines())
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m infx.results.collect_events", description=__doc__
@@ -165,6 +253,12 @@ def main(argv: list[str] | None = None) -> int:
         nargs=3,
         metavar=("SERVER_URL", "REPOSITORY", "RUN_ID"),
         help="the run to list jobs of, with GH_TOKEN, and reconcile the records with",
+    )
+    parser.add_argument(
+        "--summary",
+        type=Path,
+        metavar="PATH",
+        help="Markdown file, such as $GITHUB_STEP_SUMMARY, to append the counts and failures to",
     )
     args = parser.parse_args(argv)
     events = read_events(args.artifacts)
@@ -192,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
         f"into {args.output}",
         file=sys.stderr,
     )
+    if args.summary is not None:
+        try:
+            with args.summary.open("a", encoding="utf-8") as handle:
+                handle.write(summary(events, len(events) - collected))
+        except OSError as error:
+            print(f"WARNING: could not write {args.summary}: {error}", file=sys.stderr)
     return 0
 
 

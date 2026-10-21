@@ -792,7 +792,7 @@ jobs:
                 sweep-multi-node-evals,
                 sweep-multi-node-agentic-evals,
             ]
-        if: ${{ !cancelled() && needs.setup.result == 'success' }}
+        if: ${{ always() && needs.setup.result == 'success' }}
         permissions:
             actions: read # List the run's jobs to record the jobs that wrote no event.
             contents: read

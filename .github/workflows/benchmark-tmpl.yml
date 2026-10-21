@@ -271,6 +271,7 @@ jobs:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
           JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          INFERENCEX_TOOLING: ${{ github.workspace }}/.result-tooling/inferencex-e2e
           RESULT_FILENAME_BASE: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_a${{ github.run_attempt }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
@@ -288,7 +289,8 @@ jobs:
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
           source benchmarks/runtime_settings.sh
-          "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
+          source "$INFERENCEX_TOOLING/benchmarks/forward_signals.sh"
+          forward_signals "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
 
           if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"

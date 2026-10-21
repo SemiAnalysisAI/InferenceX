@@ -137,6 +137,7 @@ def run_batch(launch: Launch) -> int:
     with os.fdopen(descriptor, "w") as handle:
         handle.write(f"#!/usr/bin/env bash\nexport {BATCH_REENTRY_ENV}=1\nexec {command}\n")
     log = script.with_suffix(".log")
+    event.delegate()
     with event.stage("submit"):
         try:
             job = backend.submit_batch(script, gpus=request.gpu_count, time_min=minutes, log=log)
@@ -149,9 +150,7 @@ def run_batch(launch: Launch) -> int:
         backend.stream_logs(job)
     except BackendError:
         return 1
-    succeeded = backend.state(job).succeeded
-    event.adopt_reentry()
-    return 0 if succeeded else 1
+    return 0 if backend.state(job).succeeded else 1
 
 
 def run_multinode(launch: Launch) -> int:

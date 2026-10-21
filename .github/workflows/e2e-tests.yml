@@ -569,7 +569,7 @@ jobs:
     collect-job-events:
         name: collect-job-events
         needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals]
-        if: ${{ !cancelled() && needs.get-jobs.result == 'success' }}
+        if: ${{ always() && needs.get-jobs.result == 'success' }}
         permissions:
             actions: read # List the run's jobs to record the jobs that wrote no event.
             contents: read

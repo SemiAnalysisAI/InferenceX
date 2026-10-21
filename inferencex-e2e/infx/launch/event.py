@@ -1,4 +1,4 @@
-"""``job_event.json``: one record per benchmark job, written once when its launch ends."""
+"""``job_event.json``: one record per benchmark job, rewritten as its launch runs and ends."""
 
 from __future__ import annotations
 
@@ -23,9 +23,10 @@ from infx.bench.agentic.venv import REQUIREMENTS
 from infx.config import repository_root
 from infx.launch.evidence import error_detail
 from infx.launch.request import BATCH_REENTRY_ENV
-from infx.results.collect_events import FILENAME, SCHEMA_VERSION
+from infx.results.collect_events import FILENAME, INTERRUPTED, SCHEMA_VERSION
 
 AGENTIC = "agentic-coding"
+_TEMPORARY = f".{FILENAME}.tmp"
 _SHA = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _PINNED = re.compile(r"@(sha256:[0-9a-f]{64})$")
 _HARNESS = re.compile(r"^agentx-harness==(\S+)", re.MULTILINE)
@@ -196,8 +197,10 @@ class _Failure:
 
 
 class JobEventBuilder:
-    """One launch's JobEvent, enriched as the launch learns facts and emitted once at its end.
+    """One launch's JobEvent, enriched as the launch learns facts.
 
+    The record is written without an outcome as the launch starts and at each stage boundary,
+    so a killed launch still leaves one, and then with its outcome as the launch ends.
     The first recorded failure wins: later ones are usually its consequences.
     """
 
@@ -219,6 +222,9 @@ class JobEventBuilder:
         self._evidence: Path | None = None
         self._failure: _Failure | None = None
         self._reentry: JobEvent | None = None
+        self._delegated = False
+        self._ended = False
+        self._writing = False
         self._before = _files(workspace)
 
     @classmethod
@@ -275,10 +281,14 @@ class JobEventBuilder:
 
     @contextlib.contextmanager
     def stage(self, name: str) -> Iterator[None]:
-        """Time the block as ``name``. A nested stage's time counts only toward itself."""
+        """Time the block as ``name``. A nested stage's time counts only toward itself.
+
+        The record is checkpointed as the stage starts and as it ends.
+        """
         self._lap()
         self._active.append(name)
         self._last = name
+        self.checkpoint()
         try:
             yield
         except Exception as error:
@@ -287,6 +297,7 @@ class JobEventBuilder:
         finally:
             self._lap()
             self._active.pop()
+            self.checkpoint()
 
     @property
     def current_stage(self) -> str:
@@ -325,14 +336,69 @@ class JobEventBuilder:
 
     def interrupted(self, signum: int) -> None:
         message = f"received {signal.Signals(signum).name}"
-        self.fail("Interrupted", message, retriable=True, report=False)
+        self.fail(INTERRUPTED, message, retriable=True, report=False)
 
     def exited(self, returncode: int) -> None:
         if returncode:
             self.fail("ExitStatus", f"exited {returncode}", report=False)
 
-    def adopt_reentry(self) -> None:
-        """Continue the record the batch-wrapped launch of this job left in the workspace."""
+    def delegate(self) -> None:
+        """Leave the record to the batch-wrapped launch of this job, and adopt what it writes.
+
+        Checkpoints stop: the wrapped launch writes the same file.
+        """
+        self._delegated = True
+
+    def finish(self, returncode: int) -> JobEvent:
+        self.exited(returncode)
+        return self._snapshot(returncode)
+
+    def checkpoint(self) -> None:
+        """Write the record so far, without an outcome, until the launch ends or delegates it."""
+        if not (self._delegated or self._ended):
+            self._write(None)
+
+    def write(self, returncode: int) -> JobEvent | None:
+        """Write the record of the launch ending with ``returncode``; no checkpoint follows."""
+        self._ended = True
+        return self._write(returncode)
+
+    def emit(self, returncode: int) -> None:
+        """``write`` the final record, and on GitHub Actions annotate its failure."""
+        record = self.write(returncode)
+        if self._annotate and record is not None and record.error is not None:
+            print(annotation(record.error), file=sys.stderr, flush=True)
+
+    def _write(self, returncode: int | None) -> JobEvent | None:
+        """Write the record as of now, without an outcome if ``returncode`` is None.
+
+        Never raises: the record must not change the launch's exit.
+        """
+        try:
+            record = self._snapshot(None) if returncode is None else self.finish(returncode)
+        except Exception as error:  # noqa: BLE001
+            print(f"WARNING: no {FILENAME}: {error}", file=sys.stderr)
+            return None
+        # A signal handler's write would share the temporary file of the write it interrupted.
+        if self.workspace is None or self._writing:
+            return record
+        path = self.workspace / FILENAME
+        temporary = path.with_name(_TEMPORARY)
+        try:
+            self._writing = True
+            temporary.write_text(record.model_dump_json(indent=2) + "\n")
+            temporary.replace(path)
+        except OSError as error:
+            print(f"WARNING: could not write {path}: {error}", file=sys.stderr)
+        finally:
+            self._writing = False
+        return record
+
+    def _adopt_reentry(self) -> None:
+        """Continue the record the batch-wrapped launch of this job left in the workspace.
+
+        A record started when this launch did is this launch's own checkpoint.
+        """
         if self.workspace is None:
             return
         try:
@@ -340,12 +406,16 @@ class JobEventBuilder:
         except (OSError, ValueError):
             return
         identity = ("run_id", "run_attempt", "result_filename")
-        if all(getattr(inner, name) == getattr(self.event, name) for name in identity):
+        if inner.started_at != self._started_at and all(
+            getattr(inner, name) == getattr(self.event, name) for name in identity
+        ):
             self._reentry = inner
 
-    def finish(self, returncode: int) -> JobEvent:
+    def _snapshot(self, returncode: int | None) -> JobEvent:
+        """The record as of now; without ``returncode`` it has no outcome yet."""
         self._lap()
-        self.exited(returncode)
+        if self._delegated:
+            self._adopt_reentry()
         record = self.event.model_copy(deep=True)
         stages = dict(self._stages)
         failure = self._failure
@@ -368,9 +438,11 @@ class JobEventBuilder:
         record.started_at = self._started_at
         record.duration_s = round(time.monotonic() - self._started, 3)
         record.stages = {name: round(seconds, 3) for name, seconds in stages.items()}
-        record.outcome = Outcome.FAILURE if returncode else Outcome.SUCCESS
+        record.outcome = None
+        if returncode is not None:
+            record.outcome = Outcome.FAILURE if returncode else Outcome.SUCCESS
         record.error = None
-        if returncode and failure is not None:
+        if returncode != 0 and failure is not None:
             record.error = JobError(
                 stage=failure.stage,
                 type=failure.kind,
@@ -384,32 +456,10 @@ class JobEventBuilder:
         record.artifacts = sorted(
             name
             for name, seen in after.items()
-            if name != FILENAME and self._before.get(name) != seen
+            if name not in {FILENAME, _TEMPORARY} and self._before.get(name) != seen
         )
         record.metrics = self._metrics(record)
         return record
-
-    def emit(self, returncode: int) -> None:
-        """Write the record into the workspace, and on GitHub Actions annotate a failure.
-
-        Never raises: the record must not change the launch's exit.
-        """
-        try:
-            record = self.finish(returncode)
-        except Exception as error:  # noqa: BLE001
-            print(f"WARNING: no {FILENAME}: {error}", file=sys.stderr)
-            return
-        if self._annotate and record.error is not None:
-            print(annotation(record.error), file=sys.stderr, flush=True)
-        if self.workspace is None:
-            return
-        path = self.workspace / FILENAME
-        temporary = path.with_name(f".{FILENAME}.tmp")
-        try:
-            temporary.write_text(record.model_dump_json(indent=2) + "\n")
-            temporary.replace(path)
-        except OSError as error:
-            print(f"WARNING: could not write {path}: {error}", file=sys.stderr)
 
     def _lap(self) -> None:
         now = time.monotonic()

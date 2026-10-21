@@ -514,10 +514,19 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     assert (error["stage"], error["type"], error["exit_code"]) == ("submit", "SubmitFailed", 7)
 
 
+def await_file(path: Path, process: subprocess.Popen, output: Path, waiting_for: str) -> None:
+    """Wait up to two minutes for ``path`` while ``process`` runs."""
+    deadline = time.monotonic() + 120
+    while not path.exists():
+        assert process.poll() is None, output.read_text()[-4000:]
+        assert time.monotonic() < deadline, f"no {waiting_for}"
+        time.sleep(0.1)
+
+
 @pytest.mark.parametrize("shape", ["single", "multi"])
-def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
-    active, tailing = harness.tmp / "active", harness.tmp / "tailing"
-    extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing)}
+def test_sigterm_while_streaming_records_the_interruption_before_the_slow_cleanups_and_exits_143(harness, shape):
+    active, tailing, held = harness.tmp / "active", harness.tmp / "tailing", harness.tmp / "scancel-held"
+    extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing), "FAKE_SCANCEL_HOLD": str(held)}
     if shape == "single":
         env = single_node_env(harness, "h100-cw", **extra)
     else:
@@ -534,21 +543,30 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
             stderr=subprocess.STDOUT,
             text=True,
         )
-        deadline = time.monotonic() + 120
-        while not tailing.exists():
-            assert process.poll() is None, output.read_text()[-4000:]
-            assert time.monotonic() < deadline, "the launcher never started streaming"
-            time.sleep(0.1)
+    try:
+        await_file(tailing, process, output, "streaming")
+        running = job_event(harness.workspace)
         process.send_signal(signal.SIGTERM)
+        await_file(held, process, output, "cancelling cleanup")
+        cleaning = job_event(harness.workspace)
+        assert process.poll() is None
+        held.unlink()
         process.wait(timeout=60)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+
+    assert (running["outcome"], running["error"], set(running["stages"])) == (None, None, {"prepare", "submit", "run"})
+    interrupted = {"stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True}
+    assert cleaning["outcome"] == "failure"
+    assert {key: cleaning["error"][key] for key in interrupted} == interrupted
     assert process.returncode == 143, output.read_text()[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
     staged = "srt-single-node-logs.tar.gz" if shape == "single" else "multinode_server_logs.tar.gz"
     assert (harness.workspace / staged).stat().st_size > 0
     error = job_event(harness.workspace)["error"]
-    assert {key: error[key] for key in ("stage", "type", "exit_code", "retriable")} == {
-        "stage": "run", "type": "Interrupted", "exit_code": 143, "retriable": True,
-    }
+    assert {key: error[key] for key in interrupted} == interrupted
 
 
 def batch_env(harness, **overrides: str) -> dict[str, str]:
@@ -593,6 +611,16 @@ def test_a_failed_batch_wrapped_point_reports_the_wrapped_failure_once(harness):
     error = job_event(harness.workspace)["error"]
     assert (error["stage"], error["message"]) == ("run", "Slurm job 42 ended with state=FAILED exit_code=1:0")
     assert (result.stdout + result.stderr).count("::error") == 1
+
+
+def test_a_batch_that_ended_before_its_script_keeps_this_launchs_own_record(harness):
+    result = launch(batch_env(harness, FAKE_BATCH_LOST="1"), harness.config, harness.workspace)
+
+    assert result.returncode == 1
+    event = job_event(harness.workspace)
+    assert (event["launch_path"], event["slurm_job_id"], event["batch_job_id"]) == ("srt-batch", "4242", None)
+    assert (event["error"]["stage"], event["error"]["type"]) == ("run", "SlurmError")
+    assert set(event["stages"]) == {"submit", "run"}
 
 
 def test_tilert_uses_upstream_submission_and_prepared_weights(harness):

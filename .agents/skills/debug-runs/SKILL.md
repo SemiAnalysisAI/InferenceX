@@ -83,14 +83,19 @@ each as it lands. Never declare success from absence of output.
 
 Read a failed job's launch record before its logs. Every `python -m infx.launch run` writes
 `job_event.json` ([schema](../../../inferencex-e2e/infx/launch/event.py)), uploaded as
-`job_event_<RESULT_FILENAME>`. Once every benchmark and eval job has finished,
-`collect-job-events.yml` joins the records into `events.jsonl` in the `job_events` artifact,
-adds each job's GitHub `conclusion` and `failed_step`, and synthesizes a `NoLauncherRecord`
-record for every benchmark or eval job that wrote none (runner setup, checkout, node prep); a
-cancelled run keeps only the per-job artifacts. A failure's `error` names the first failing
+`job_event_<RESULT_FILENAME>`: with no `outcome` as it starts and at each stage boundary, so a
+killed launch still leaves one, and with its outcome as it ends. The launch step's shell
+passes a cancel or timeout signal on to the launcher, which records an `Interrupted` failure
+before its cleanups run. Once every benchmark and eval job has finished, even in a cancelled
+run, `collect-job-events.yml` joins the records into `events.jsonl` in the `job_events`
+artifact, adds each job's GitHub `conclusion` and `failed_step`, fails a record whose job
+failed after its launcher succeeded (`StepFailed`) or before it finished (`Interrupted`), and
+synthesizes a `NoLauncherRecord` record for every benchmark or eval job that wrote none
+(runner setup, checkout, node prep). A failure's `error` names the first failing
 stage and type, marks likely infrastructure faults `retriable` (a hint, not a diagnosis),
 points `evidence` at the log to open first, and quotes that log's likeliest cause line and
-last lines in `detail`.
+last lines in `detail`. The run's summary page counts the jobs by outcome and tables each
+failure's cluster, stage, type, retriability and cause line, with the retriable failures last.
 
 ```bash
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX -n job_events

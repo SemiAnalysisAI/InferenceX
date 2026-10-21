@@ -41,6 +41,7 @@ jobs:
         run: >-
           python3 -m infx.results.collect_events job_events/ events.jsonl
           --run "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+          --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Upload job events
         continue-on-error: true
