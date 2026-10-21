@@ -29,7 +29,7 @@ gh api --paginate "repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID/artifact
 | --- | --- |
 | `results_bmk/agg_bmk.json` | JSON array; filter the intended model, hardware, topology, scenario, and concurrency. The collector parses JSON but does not validate or deduplicate rows. |
 | `eval_results_all/agg_eval_all.json` and `eval_*` | Aggregate rows must match task, concurrency, score, and `n_eff`; retain per-config `meta_env.json`, results, and samples where needed. Collection may keep completed points from failed batches; reuse requires valid coverage. |
-| `bmk_agentic_<suffix>` and `agentic_<suffix>` | Pair exact suffixes, including `_concN`; raw `profile_export.jsonl` is required. Preserve dataset identity, request accounting, and relevant `server_logs_*`. |
+| `bmk_agentic_<suffix>` and `agentic_<suffix>` | Pair exact suffixes, including `_concN`; raw `profile_export.jsonl` is required. Preserve dataset identity, request accounting, and relevant `server_logs_*`. `num_requests_successful` counts profiled records only, while `num_requests_total` also counts warmup drops, so their ratio is not an error rate. Read `request_accounting.records_error_dropped` and `error_categories` instead. |
 | Power audits | Retained diagnostics or `power_valid` alone do not prove successful requests, answer quality, or publishable power. Inspect the outcome and each required window's validity. |
 
 Download only unexpired artifacts into a fresh `mktemp -d` directory. Check shape
@@ -84,8 +84,11 @@ For PR-number input, use `gh pr view "$ORIGINAL_PR" --json mergeCommit` and
 with `-R SemiAnalysisAI/InferenceX`; select the exact target, not the newest unrelated run.
 
 Find completed `pull_request` runs of `run-sweep.yml` on the original PR branch.
-Skip no-op reuse-gate runs without results. Require success unless the user explicitly
-pinned the exact failed/cancelled source; only its completed, valid points can be recovered.
+Skip no-op reuse-gate runs without results (zero artifacts, about 30 seconds long).
+Require success unless the user explicitly pinned the exact failed/cancelled source;
+only its completed, valid points can be recovered. Do not just take the run cited in
+a sign-off. Later commits can change the recipe, so choose the newest run whose
+execution inputs match the final PR head.
 
 ```bash
 SOURCE_JSON=$(gh api "repos/SemiAnalysisAI/InferenceX/actions/runs/$SOURCE_RUN_ID")
@@ -104,6 +107,15 @@ uv run --project inferencex-e2e --extra workflows python -m infx.workflows.recov
 git diff "${ORIGINAL_MERGE_SHA}^" "$ORIGINAL_MERGE_SHA" -- inferencex-e2e/perf-changelog.yaml
 ```
 
+If the original PR merged `main`, a whole-tree diff mostly shows `main`'s changes.
+Restrict the comparison to the files the original merge commit changed:
+
+```bash
+git diff --name-only "${ORIGINAL_MERGE_SHA}^" "$ORIGINAL_MERGE_SHA" |
+  grep -v perf-changelog.yaml | xargs git diff --stat "$SOURCE_HEAD_SHA" \
+  "refs/remotes/origin/source-pr-$ORIGINAL_PR" --
+```
+
 Compare the recovered config and its image, model, recipe, runner, launcher,
 arguments, and environment at the source SHA and final original PR head.
 Stop if execution semantics changed. Unrelated edits and generator/eval-selection
@@ -116,9 +128,9 @@ intended entries from the original PR diff or stop on ambiguity.
 Create an empty bootstrap branch/commit from current `origin/main`, then open the
 PR before changing the changelog. Use a bilingual title/body and the required AI
 disclosure; set `BRANCH` and `RECOVERY_PR` to its branch and number.
-An authorized `OWNER`, `MEMBER`, or `COLLABORATOR` must pin the source
-with `/use <run_id>` (legacy `/reuse-sweep-run <run_id>` is also accepted).
-Verify acknowledgement before pushing the changelog change.
+Do not post the reuse command yet. The acknowledgement bot rejects a pin whose
+source commit is not in the PR's commit list, and the source only joins it with the
+carrier commit below.
 
 Reuse needs no sweep label. If a primary label is present, allow only one.
 Never use `evals-only` or `agentx-fast` on the recovery PR, or select a source
@@ -162,6 +174,12 @@ git diff --check origin/main...HEAD || exit 1
 git push origin "$BRANCH"
 ```
 
+Pushing the carrier starts no GPU jobs as long as the PR has no primary sweep label.
+Then an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` pins the source with
+`/use <run_id>` (legacy `/reuse-sweep-run <run_id>` is also accepted). Require a 👍
+reaction on that comment before merging. A 👎 explains itself only in the matching
+`reuse-sweep-comment.yml` run log (`Reuse rejected / 复用请求未接受: ...`).
+
 Never rebase, locally squash, amend, or force-push after attaching the source.
 If `main` advances or conflicts, update from it and recreate the final two-parent
 carrier; preserve the verified first-parent tree. Do not silently drop ancestry.
@@ -180,8 +198,15 @@ Wait for the `run-sweep.yml` run at `ATTACH_SHA`, not just early comment checks.
 Require passing `check-changelog` and `reuse-sweep-gate`, with `setup` and GPU jobs
 skipped. Keep `ATTACH_SHA` as the PR head. Merge only with explicit authorization;
 never bypass failed or pending checks. Admin merge is allowed only when passing
-checks leave repository policy as the sole blocker. GitHub squash merge is safe
-because it does not rewrite the PR branch's recorded ancestry.
+checks leave repository policy as the sole blocker. Do not use `merge_with_reuse`
+here. It merges `main` into the branch and pushes a sync commit, which replaces
+`ATTACH_SHA` as the head. Merge directly instead. GitHub squash merge is safe
+because it does not rewrite the PR branch's recorded ancestry:
+
+```bash
+gh pr merge "$RECOVERY_PR" -R SemiAnalysisAI/InferenceX --squash --admin \
+  --match-head-commit "$ATTACH_SHA"
+```
 
 ## Verify the exact publication
 
