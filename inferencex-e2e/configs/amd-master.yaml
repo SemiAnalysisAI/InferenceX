@@ -22,7 +22,7 @@ dsr1-fp4-mi355x-sglang:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
   model: amd/DeepSeek-R1-0528-MXFP4
   model-prefix: dsr1
   runner: mi355x
@@ -43,7 +43,7 @@ dsr1-fp4-mi355x-sglang-mtp:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
+  image: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
   runner: mi355x
@@ -90,7 +90,7 @@ dsr1-fp4-mi355x-atom-mtp:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp8-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.12-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.21-rocm720-mi30x@sha256:0534eb382626ef55ace8be24f7d81cc6eb7451acac8a5727848397a5e9309d91
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi300x
@@ -307,7 +307,7 @@ qwen3.5-fp8-mi355x-atom:
         srt-recipe: 8k1k.yaml
 
 qwen3.5-fp8-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
+  image: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
@@ -401,7 +401,7 @@ qwen3.5-fp4-mi355x-sglang:
         srt-recipe: 8k1k.yaml
 
 qwen3.5-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
+  image: rocm/atom-dev:nightly_202610080328
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
   runner: mi355x
@@ -535,7 +535,7 @@ qwen3.5-fp8-mi300x-sglang-agentic-mtp:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32], srt-recipe: agentic.yaml }
 
 dsr1-fp8-mi355x-atom:
-  image: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
+  image: rocm/atom-dev:nightly_202610161458@sha256:7782d69e15b5cf88ad550095a8ec18429af852d07897824b8c35f9ce32f89f33
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
@@ -555,7 +555,7 @@ dsr1-fp8-mi355x-atom:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp8-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3
+  image: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi355x
@@ -736,14 +736,14 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
 # Kimi-K3 MXFP4 agentic-coding on MI355X via vLLM with DSpark speculative
 # decoding. Companion to kimik3-fp4-mi355x-atom-agentic-mtp: same checkpoint and
 # runner. TP8 only -- the 1.56 TB MXFP4 checkpoint is ~195 GB/GPU. Three bands:
-#   interactive (1)      GPU-resident, dcp 1 and dcp 8, DSpark draft.
-#   mid         (2-32)   dcp 8, DSpark draft, SimpleCPUOffload DRAM tier.
-#   throughput  (48)     dcp 8 shards the KV read across all 8 GPUs, DRAM
+#   interactive (1, 4)   GPU-resident, dcp 1, DSpark draft.
+#   mid         (4-32)   dcp 8, DSpark draft, SimpleCPUOffload DRAM tier.
+#   throughput  (48-60)  dcp 8 shards the KV read across all 8 GPUs, DRAM
 #                        offload, 4-token DSpark draft with synthetic acceptance.
 # dram-utilization 0.6 -> TOTAL_CPU_DRAM_GB 1799 at TP8 (node cap 2861022 MiB),
 # split evenly across the eight ranks by the launcher.
 kimik3-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-rocm100-fe4df3df0eb703862c686b256e9fe44fa94c8945
+  image: vllm/vllm-openai-rocm:nightly-rocm100-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -755,9 +755,8 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.6
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [2, 4, 10, 16, 24, 32, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 1, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48, 52, 60], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202610070333
@@ -897,7 +896,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
 dsr1-fp8-mi325x-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-rocm700-mi30x
+  image: lmsysorg/sglang:v0.5.21-rocm720-mi30x@sha256:0534eb382626ef55ace8be24f7d81cc6eb7451acac8a5727848397a5e9309d91
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
   runner: mi325x
@@ -1489,7 +1488,7 @@ glm5.2-fp4-mi355x-atom-agentic-mtp:
        - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 dsv4-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261007
+  image: lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1516,10 +1515,10 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # ROCm 10.0 nightly of 2026-10-13, the first to carry both
-  # vllm-project/vllm#59039 (decoder SWA bounded replay on ROCm) and #61082
-  # (mono decode on all 40 backbone layers, switched by --monokernel).
-  image: vllm/vllm-openai-rocm:nightly-rocm100-5555a2d8f7116b2b4877f66516f4128176cf722a
+  # ROCm 10.0 nightly carrying vllm-project/vllm#59039 (decoder SWA bounded
+  # replay on ROCm), #61082 (mono decode on all 40 backbone layers) and #62131
+  # (mono decode on the DSpark draft layers), all switched by --monokernel.
+  image: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f@sha256:520e098f54ec96837228aaddea0a833cbf6374dbdffd480c1d65f26ffab7701b
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
