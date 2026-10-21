@@ -37,9 +37,10 @@ def warn_outside_pr(
         f"⚠️ Reuse source run [{run['id']}]({run.get('html_url', '')}) "
         f"(commit `{head_sha[:12]}`) is not part of this PR. Its results will publish "
         f"under this PR's changelog entry at merge. Confirm this is the intended run.\n\n"
-        f"## 中文说明\n\n"
+        f"<details>\n<summary>中文说明</summary>\n\n"
         f"⚠️ 复用的来源运行 [{run['id']}]({run.get('html_url', '')})（提交 `{head_sha[:12]}`）"
-        f"不属于本 PR，合并后其结果将以本 PR 的 changelog 条目发布。请确认这是预期的运行。"
+        f"不属于本 PR，合并后其结果将以本 PR 的 changelog 条目发布。请确认这是预期的运行。\n\n"
+        f"</details>"
     )
     github.api(repo, f"/issues/{pr_number}/comments", token, method="POST", data={"body": body})
 
