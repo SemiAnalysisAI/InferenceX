@@ -10607,7 +10607,5 @@
     - agentic-coding
   description:
     - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 for MI355X DSv4 disaggregated DSpark AgentX."
-    - "Replace concurrency 4 with 1; enable FP8 unified KV at concurrency 1-48, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
-    - "Give concurrency 1 eight request slots on both roles and decode graph batches 1-8 so PD admission can progress while replay concurrency remains one."
-    - "Keep SGLANG_DSV4_DENSE_MXSCALE unset on both serving roles so draft activation scaling follows the pinned image default."
+    - "Replace concurrency 4 with 1 using eight request slots and decode graph batches 1-8; enable FP8 unified KV at concurrency 1-48, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186
