@@ -10493,6 +10493,142 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
 
 - config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the MI300X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.30.0 to v0.31.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3710
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image to v0.5.21-rocm720-mi30x; rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3762
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260916-c9a8fba9 to the v0.5.21-cu130 release."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3869
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  description:
+    - "Update the MI325X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.27.1 to v0.31.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3954
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260914-4358a161 to v0.5.21-cu130 (digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4058
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-rocm720-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4067
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4069
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-dev-x86_64-cu13.0.1-591bb95 to nightly-dev-x86_64-cu13.0.1-20ebb28."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4169
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130 and drop a removed SWA env var."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4176
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4196
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-cd10ed6f to the digest-pinned nightly-49cb2bbf"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4198
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-agg
+  description:
+    - "Update SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.22-cu130 and drop a removed SWA env var."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4203
+
+- config-keys:
+    - qwen3.5-fp8-b300-dynamo-sglang-agentic-disagg
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4224
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp-agg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20260805-211ee642 to v0.5.22-cu130 and pin Dynamo to b4540b87."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4227
+
+- config-keys:
+    - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4235
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use one image, vllm/vllm-openai:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f pinned by digest, for both the GB200 aggregated TP8 PP2 DCP8 and the disaggregated 1P1D TP16 DCP16 Kimi-K3 configurations."
+    - "Aggregated: DSpark depth 7 at concurrency 1, 4 and 8, and depth 4 at concurrency 24, 32, 48 and 56, with bfloat16 mamba SSM cache and Mooncake DRAM KV offload."
+    - "Disaggregated: add GB200 Kimi-K3 FP4 Dynamo and vLLM AgentX serving with one TP16 DCP16 prefill role and one TP16 DCP16 decode role at concurrency 16, 32 and 48, NIXL for prefill-to-decode KV transfer, Mooncake DRAM KV offload and DSpark depth 4."
+    - "Disaggregated: bfloat16 mamba SSM cache on both roles, FlashInfer autotune on, decode max-num-batched-tokens 1024 so the autotune stops at the token counts decode can reach, and PYTORCH_CUDA_ALLOC_CONF max_split_size_mb:512 so the prefill MoE workspace does not fail on fragmented memory."
+    - "Disaggregated: Dynamo ffbbaaa6c44370e798687881317535ac17d66a76; eval runs add the Kimi K3 tool and reasoning parsers with structural tags."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4322
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image to nightly-39983a5e, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4258
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update the SGLang image from v0.5.18-cu130 to v0.5.22-cu130 and pin Dynamo b4540b87 for compatibility."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4277
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 for MI355X DSv4 disaggregated DSpark AgentX."
+    - "Replace concurrency 4 with 1 using eight request slots and decode graph batches 1-8; enable FP8 unified KV at concurrency 1-48, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186
+
+- config-keys:
+    - glm5.2-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image to v0.5.22-cu130 and pass the graph batch as cuda-graph-max-bs-decode after alias removal"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4316
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark-dpa
+  description:
+    - "Update the DeepSeek-V4.1-Flash FP4 H100 SGLang AgentX DPA image from nightly 20260922-582389ce to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4324
+
+- config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
     - "Update vLLM image from nightly-ac9126e5 to v0.32.0"
