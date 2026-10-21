@@ -10494,9 +10494,11 @@
 
 - config-keys:
     - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
   scenario-type:
     - agentic-coding
   description:
+    - "Include the unchanged aggregated TP4 c1/c4/c16 and TP2 c16 points in the sweep and evaluation coverage, retaining their pinned October 15 image."
     - "Move the disaggregated points to lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4 (digest sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb) with the ai-dynamo 1.6.0.dev20261019 it ships and the ZMQ event plane. One CPU node hosts etcd, the Mooncake master, the frontend and the AgentX client."
     - "Replace prefill HiCache DRAM offload with the Mooncake external cache linker on both roles (MOONCAKE_GLOBAL_SEGMENT_SIZE 80gb on prefill, 140gb on decode). The higher prefix hit rate lets c1228 run 3x DEP2 prefill instead of 4x and c2884 5x instead of 6x."
     - "Add c4096 with 8x DEP2 prefill (4 nodes) and one DEP16 decode: 64 requests per decode rank, 128 extra decode slots."
