@@ -10491,3 +10491,9 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - dsr1-fp8-h200-trt
+  description:
+    - "Update TensorRT-LLM image from 1.4.0rc0 to 1.4.0rc1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4359
