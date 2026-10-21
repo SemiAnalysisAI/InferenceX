@@ -10491,3 +10491,15 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  no-evals: true
+  description:
+    - "Replace the Mooncake RDMA store with vLLM SimpleCPUOffloadConnector in lazy mode (lazy_offload true) for single-node host DRAM KV offload, and drop the now-unused kimik3-b300-mooncake.sh setup script."
+    - "Raise dram-utilization from 0.75 to 1.0 (total-cpu-dram-gb 2249 -> 2999, cpu_bytes_to_use_per_rank 374875000000)."
+    - "Drop prefix-match-unit 128: SimpleCPUOffloadConnector asserts CPU cache hits are scheduler-block aligned, and 128-token KDA partial hits killed the engine (num_external_tokens=21760 not aligned to block_size=12288)."
+    - "Sweep concurrency 16, 24, 32, 40, 48, 56, 64, 70, 76 and 84: drop conc 1, 2, 4 and 8, and add conc 64, 76 and 84 (max-num-seqs 2x CONC, gpu-memory-utilization 0.9 above conc 48)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
