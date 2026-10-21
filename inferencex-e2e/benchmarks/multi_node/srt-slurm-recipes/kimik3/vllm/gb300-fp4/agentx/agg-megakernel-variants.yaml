@@ -4,7 +4,7 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: 49cb2bbf71cfd36ee5aa33d1e184b1cddff55294
+      vllm: 1b2a666391f2a24228a1436b64d547c34cc6b6ce
   dynamo:
     install: false
   slurm:
@@ -37,6 +37,7 @@ base:
         VLLM_USE_RUST_FRONTEND: '0'
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
         VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
       args:
         served-model-name: moonshotai/Kimi-K3
         enable-auto-tool-choice: true
