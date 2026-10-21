@@ -186,7 +186,9 @@ base:
 
 # Specialized decode backend (latency_specialized) for the low-concurrency points:
 # decode max-num-seqs = 64 // (K + 1) with DSpark K4, FP32 SSM state, and CUDA
-# graphs captured for every batch size up to 64.
+# graphs captured for every batch size up to 64. The DCP KV interleave is pinned to 1
+# on both roles: otherwise NIXL P/D raises it to the KV block size after the
+# specialized decode has read it, and its spec-verify causal mask uses the stale value.
 override_1p3d_specdecode:
   roles:
     prefill: &override_1p3d_specdecode_prefill
@@ -194,6 +196,7 @@ override_1p3d_specdecode:
       workers: 1
       args: &override_1p3d_specdecode_prefill_args
         mamba-ssm-cache-dtype: "float32"
+        cp-kv-cache-interleave-size: 1
         enable-flashinfer-autotune: null
         no-enable-flashinfer-autotune: true
     decode: &override_1p3d_specdecode_decode
@@ -201,6 +204,7 @@ override_1p3d_specdecode:
       workers: 3
       args: &override_1p3d_specdecode_decode_args
         mamba-ssm-cache-dtype: "float32"
+        cp-kv-cache-interleave-size: 1
         enable-flashinfer-autotune: null
         no-enable-flashinfer-autotune: true
         additional-config: '{"decode_backend":"latency_specialized"}'
