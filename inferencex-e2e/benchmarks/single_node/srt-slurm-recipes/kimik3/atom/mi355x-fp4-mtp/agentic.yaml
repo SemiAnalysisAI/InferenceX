@@ -56,6 +56,8 @@ base:
         AITER_SITUV2_A4W4: '1'
         AITER_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_FLYDSL_STAGE2_FP8: '1'
+        AITER_FLYDSL_USE_HERD: '1'
+        AITER_FLYDSL_HERD_MIN_M: '64'
         # Anchor-only state checkpointing.
         ATOM_STATE_CHECKPOINT_DEMAND: '0'
         ATOM_GDN_SSM_DTYPE: fp16
