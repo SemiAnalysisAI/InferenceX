@@ -1586,7 +1586,6 @@ glm5.3-fp8-mi355x-tilert-agentic:
 
 # SGLang ROCm 10 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
 # DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
-# Conc <= 16 enables --monokernel-backend amd.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
   image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261021
   model: deepseek-ai/DeepSeek-V4.1-Flash
