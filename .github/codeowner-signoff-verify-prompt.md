@@ -228,10 +228,15 @@ a green sweep alone is not enough. Verify the command directly from the comments
 - PASS only if a matching comment exists whose `author_association` is `OWNER`,
   `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
   authorized matching comment across both names determines the requested source.
-- WARN if no authorized reuse command is present. This is an advisory reminder,
-  not a failing criterion. State: "No authorized reuse command
-  has been posted on this PR" and ask an authorized maintainer to comment
-  `/use <run_id>` before merging via reuse.
+- WARN if no authorized reuse command is present. This is an advisory warning,
+  not a failing criterion, but it must always be shown expanded in the verdict.
+  State: "No authorized reuse command has been posted on this PR" and tell the
+  reviewer to have an authorized maintainer comment `/use <run_id>` on its own line,
+  using the passing sweep run from Check 1, before merging. When the PR appends a
+  `perf-changelog.yaml` entry, also state that merging without it makes the
+  push-to-main `merge-ingest.yml` "Require sweep reuse" step fail, so the results
+  never publish.
+- N/A if the PR appends no `perf-changelog.yaml` entry and so relies on no sweep.
 
 ## Check 5 — Sign-off uses the LATEST checklist template
 The first item of the checklist has the reviewer affirm they used the latest version
@@ -827,7 +832,7 @@ single terse line. Rules:
     `✅ Check N (<name>): PASS — <brief reason>`
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
-    `⚠️ Check 4 (Reuse command): WARN — <missing authorized command; reminder to post /use run_id>`
+    `⚠️ Check 4 (Reuse command): WARN — <no authorized command; post /use <run_id> of the Check 1 run before merging, else merge-ingest "Require sweep reuse" fails>`
     `⚠️ Check 13 (Draft precision): WARN — <affected config; missing pinned evidence; human review needed>`
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
     `⚠️ Check 15 (PR description): WARN — <claim versus actual configuration/evidence; correction needed>`
