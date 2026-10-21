@@ -54,6 +54,7 @@ base:
         PYTHONUNBUFFERED: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        HF_HUB_OFFLINE: '1'
         OMP_NUM_THREADS: '8'
         TVM_FFI_CUDA_ARCH_LIST: 10.3a
         SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN: '1'
