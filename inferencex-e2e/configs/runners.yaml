@@ -655,6 +655,8 @@ clusters:
       partitions: [batch_1, batch_3]
       account: benchmark
       exclusive: false
+      # Rack-1 prolog check (NVIDIA SRE AIAMB-88): keep jobs off rack 3. Test branch only.
+      exclude: ["im-gb300-r03-c[001-018]"]
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/ai-perf-cache}
