@@ -10499,4 +10499,4 @@
   - agentic-coding
   description:
   - 'Refine GB300 Kimi-K3 AgentX points to be good on all four p90 charts: replace the decode-capped 1P2D-2P5D points with uncapped 1P2D c48-64 and 3P4D c240, add specialized-decode 1P3D c16 and 1P2D c24/32, keep 2P3D c240 and aggregated TP16 c1, and drop aggregated TP8 c2/c4.'
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4373
