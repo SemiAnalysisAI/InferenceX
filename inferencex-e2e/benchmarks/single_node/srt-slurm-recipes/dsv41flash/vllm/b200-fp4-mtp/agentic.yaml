@@ -63,7 +63,7 @@ zip_override_tp4:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true,"use_thp":true}'
-        max-num-seqs: [8, 8, 16, 32, 64, 256]
+        max-num-seqs: [8, 8, 16, 32, 128, 256]
         compilation-config:
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
