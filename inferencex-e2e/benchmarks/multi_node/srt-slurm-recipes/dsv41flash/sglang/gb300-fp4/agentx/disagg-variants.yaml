@@ -6,12 +6,11 @@ base:
     model: {}
     frameworks:
       dynamo: "1.6.0.dev20261019"
-      sglang: "0.0.0.dev1+gab580b2e0"
+      sglang: "0.0.0.dev1+gc1c287a42"
   dynamo:
     install: false
     request_plane: tcp
     event_plane: zmq
-  setup_script: dsv41flash-sglang-patches.sh
   # gb300-nv serves this model from the Hub; read it from the shared mounted cache.
   environment:
     HF_HUB_CACHE: /hf_hub_cache
@@ -97,6 +96,9 @@ base:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
         tensor-parallel-size: 2
+        tokenizer-backend: fastokens
+        router-mode: kv
+        router-session-affinity-ttl-secs: "14400"
         data-parallel-size: 2
         expert-parallel-size: 2
         enable-dp-attention: true
@@ -141,6 +143,7 @@ base:
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        SGLANG_OPT_DSV41_BF16_INDEX_LOGITS: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_CUMEM_ENABLE: "1"
         MC_FORCE_MNNVL: "1"
@@ -155,6 +158,9 @@ base:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
         tensor-parallel-size: 16
+        tokenizer-backend: fastokens
+        router-mode: round-robin
+        load-balance-method: total_tokens
         data-parallel-size: 16
         expert-parallel-size: 16
         enable-dp-attention: true
@@ -232,13 +238,12 @@ override_5p1d_dep2_dep16_c2884:
         cuda-graph-max-bs-decode: 40
         disaggregation-decode-extra-slots: 80
 
-override_7p1d_dep2_dep16_c4096:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-7p1d-dep2-dep16-c4096
+override_8p1d_dep2_dep16_c4096:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-8p1d-dep2-dep16-c4096
   roles:
     prefill:
-      # Seven DEP2 workers leave two GPUs of the fourth node idle.
       nodes: 4
-      workers: 7
+      workers: 8
       args:
         max-prefill-tokens: 32768
     decode:

@@ -9109,7 +9109,7 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
+  image: lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -9156,11 +9156,11 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [4096]
-        srt-recipe: disagg-variants.yaml:override_7p1d_dep2_dep16_c4096
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep2_dep16_c4096
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         prefill:
-          num-worker: 7
+          num-worker: 8
           tp: 2
           ep: 2
           dp-attn: true
