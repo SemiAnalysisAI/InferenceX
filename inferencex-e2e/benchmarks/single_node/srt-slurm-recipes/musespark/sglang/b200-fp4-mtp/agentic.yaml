@@ -155,6 +155,8 @@ override_tp8_c48:
   roles:
     agg:
       args:
+        swa-full-tokens-ratio: null
+        enable-unified-memory: true
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
@@ -171,6 +173,8 @@ override_tp8_c64:
   roles:
     agg:
       args:
+        swa-full-tokens-ratio: null
+        enable-unified-memory: true
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
         enable-hierarchical-cache: true
