@@ -10502,4 +10502,4 @@
     - "Lower dram-utilization from 0.75 to 0.5 (total-cpu-dram-gb 2249 -> 1499, cpu_bytes_to_use_per_rank 187375000000)."
     - "Drop prefix-match-unit 128: SimpleCPUOffloadConnector asserts CPU cache hits are scheduler-block aligned, and 128-token KDA partial hits killed the engine."
     - "Sweep concurrency 1, 4, 16, 24, 32, 40, 48, 56 and 64: drop conc 2, 8 and 70 and add conc 64 (max-num-seqs 128)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4362
