@@ -7,7 +7,7 @@ strategy runs NCCL EP's low-latency algorithm with the rank-major layout, and no
 auto-selected after TensorRT-LLM's NVLink one- and two-sided strategies, or forced with
 `TRTLLM_FORCE_COMM_METHOD=NCCL_EP`. Claims below were checked against TensorRT-LLM main
 `a6142c920` (`tensorrt_llm/_torch/moe/fused_moe/`) and nccl-extensions `1ee7136`, the last commit
-before the pinned nightly.
+before the 2026-10-05 nightly. They have not been rechecked against the pinned 2026-10-13 nightly.
 
 | Row | Configuration | `maturity` |
 |---|---|---|
