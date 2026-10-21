@@ -10627,3 +10627,9 @@
   description:
     - "Update the DeepSeek-V4.1-Flash FP4 H100 SGLang AgentX DPA image from nightly 20260922-582389ce to v0.5.22-cu130."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4324
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  description:
+    - "Update Muse Spark Open B200 to lmsysorg/sglang:nightly-dev-20261021-c1c287a4; enable unified memory without an explicit SWA token ratio and set mem-fraction-static to 0.8 at concurrency 48 and 64, retaining c64 coverage."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4366
