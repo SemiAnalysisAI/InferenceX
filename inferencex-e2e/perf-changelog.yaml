@@ -10491,3 +10491,9 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260901-07c8f729 to v0.5.22-cu130 and pin Dynamo b4540b87"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4370
