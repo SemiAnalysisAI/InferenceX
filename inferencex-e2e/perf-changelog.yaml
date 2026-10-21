@@ -10491,3 +10491,16 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Track the updated GLM-5.2 standalone recipe (ROCm/ATOM PR 2632) on the MI355X ATOM AgentX config, on rocm/atom-dev:nightly_202610181506 (was nightly_202609211553)."
+    - "TP4 C1 and C2 run the GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) at 3 draft tokens, golden AL 2.99; C1 joins the TP4 arm. Every other point sets ATOM_MONO_ENABLE=0, which ATOM otherwise defaults on."
+    - "TP4 C1 and C2 cap the server at exactly the concurrency (max-num-seqs 1 and 2, CUDA graphs captured at [1] and [1,2]); every other point admits 2x the concurrency."
+    - "TP4 C4 and C8 stay at 5 draft tokens (AL 3.61) and C10 at 4 (AL 3.33) on the production path; the TP8 arm at C1, C2 and C4 is unchanged."
+    - "Restore the TP4+DCP4 arm at C16, C24, C32 and C40 (4 draft tokens, AL 3.33) and C48 (3 draft tokens, AL 2.99) with ATOM_DCP_PREFILL_QREP=1 and the LMCache DRAM tier (0.5.6.dev139+gf22dec28) at 256 GiB per rank through extra-kv-connectors."
+    - "dram-utilization 0.171 -> 0.74, so TOTAL_CPU_DRAM_GB is 1109 GB per TP4 server, covering the 4 x 256 GiB = 1099.5 GB LMCache tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4308
