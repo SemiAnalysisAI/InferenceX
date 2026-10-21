@@ -10493,6 +10493,60 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
 
 - config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the MI300X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.30.0 to v0.31.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3710
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image to v0.5.21-rocm720-mi30x; rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3762
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260916-c9a8fba9 to the v0.5.21-cu130 release."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3869
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  description:
+    - "Update the MI325X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.27.1 to v0.31.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3954
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260914-4358a161 to v0.5.21-cu130 (digest-pinned)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4058
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-rocm720-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4067
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4069
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-dev-x86_64-cu13.0.1-591bb95 to nightly-dev-x86_64-cu13.0.1-20ebb28."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4169
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130 and drop a removed SWA env var."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4176
+
+- config-keys:
   - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
   - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
   scenario-type:
