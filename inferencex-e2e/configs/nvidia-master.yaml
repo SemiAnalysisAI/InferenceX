@@ -5512,7 +5512,7 @@ minimaxm3-fp4-b300-trtllm-agentic-mtp:
 # enabled by framework=dynamo-vllm.
 
 minimaxm3-fp4-b200-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b
+  image: vllm/vllm-openai:nightly-af7f9488c2210d67e1033ecdc845b087ee7fe92b@sha256:8e2ffbb9f866de678b22e7446903b1ee5a5766c51a948013277477c462a68a77
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
@@ -5524,11 +5524,33 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.683
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20], srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [15], srt-recipe: agentic.yaml:override_tp4_c15 }
     - dram-utilization: 1.0
       search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32, 34, 36, 38, 40], srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30], srt-recipe: agentic.yaml:override_tp4_c30_dram }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml:override_tp4_c32_dram }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [38], srt-recipe: agentic.yaml:override_tp4_c38_dram }
+minimaxm3-fp4-b200-vllm-agentic-mtp-c10:
+  image: vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9@sha256:98adb2311118263a453ec0acd5d4b72bda3db26cecc0fe8ffc94b9ab03c951f9
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm3/vllm/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.683
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [10], srt-recipe: agentic.yaml:override_cap1_k5_tp4_c10 }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [10], srt-recipe: agentic.yaml:override_cap1_k5_tp8_c10 }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [20], srt-recipe: agentic.yaml:override_cap4_tp4_c20_dram }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [20], srt-recipe: agentic.yaml:override_cap3_tp4_c20_dram }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml:override_cap6_tp4_c32_dram }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml:override_cap16_tp4_c32_dram }
 minimaxm3-fp4-b200-trtllm-agentic-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
   model: nvidia/MiniMax-M3-NVFP4

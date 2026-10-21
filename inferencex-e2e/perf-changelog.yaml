@@ -10627,3 +10627,13 @@
   description:
     - "Update the DeepSeek-V4.1-Flash FP4 H100 SGLang AgentX DPA image from nightly 20260922-582389ce to v0.5.22-cu130."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4324
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp-c10
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the MiniMax-M3 B200 vLLM images by digest and retune the TP4 concurrency 15-38 entries, with DRAM KV offload sized to the 1,073 GB node allowance."
+    - "Add minimaxm3-fp4-b200-vllm-agentic-mtp-c10 with TP4 and TP8 concurrency 10 and TP4 DRAM concurrency 20 and 32 entries that cap active sequences."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4382
