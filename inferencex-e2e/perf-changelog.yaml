@@ -10596,6 +10596,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4322
 
 - config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image to nightly-39983a5e, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4258
+
+- config-keys:
     - dsr1-fp8-mi325x-sglang
   description:
     - "Update SGLang ROCm image to v0.5.22-rocm720-mi30x; rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
