@@ -185,7 +185,7 @@ base:
         weight-loader-prefetch-checkpoints: true
         weight-loader-drop-cache-after-load: false
         model-loader-extra-config: '{"enable_multithread_load":true}'
-      kv_events: true
+      kv_events: false
   sbatch_directives:
     mem: "0"
     exclusive: ""
