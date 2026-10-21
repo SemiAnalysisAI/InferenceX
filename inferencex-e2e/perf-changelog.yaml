@@ -10523,6 +10523,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4058
 
 - config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-rocm720-mi30x to v0.5.21-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4067
+
+- config-keys:
+    - qwen3.8next-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image to v0.5.21-cu130 and rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4069
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-dev-x86_64-cu13.0.1-591bb95 to nightly-dev-x86_64-cu13.0.1-20ebb28."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4169
+
+- config-keys:
     - musespark-fp4-mi355x-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
