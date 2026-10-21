@@ -10515,3 +10515,9 @@
   description:
     - "Update the MI325X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.27.1 to v0.31.0."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3954
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update SGLang ROCm image to v0.5.22-rocm720-mi30x; rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4380
