@@ -10491,3 +10491,9 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+  description:
+    - "Update ATOM image from v0.1.7 nightly_202610080328 to the v0.1.8 nightly_202610190554 build"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4358
