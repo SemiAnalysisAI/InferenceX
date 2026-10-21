@@ -10491,3 +10491,12 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-1020."
+    - "Run TP8/EP8 only: concurrency 1, 2, 4 and 8 with GPU-only KV; 16, 32, 48 and 64 with a 253 GB-per-rank HiCache DRAM tier (kernel I/O, page_first layout)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
