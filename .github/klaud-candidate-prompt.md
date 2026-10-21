@@ -100,7 +100,8 @@ never treat a point's absence from the current family as its retirement.
 Keep targeted work draft with no sweep labels. Dispatch ONLY updated-image e2e-tests.yml
 from main, with ref=exact measured SHA, fail-fast=true, klaud-run=true,
 test-name=$KLAUD_TEST_NAME, and
-`generate-cli-command="test-config --config-files FILE --config-keys FAMILY --smoke"`.
+`generate-cli-command="test-config --config-files FILE --config-keys FAMILY --scenario-type agentic-coding --smoke"`.
+Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
 it is startup evidence, not a full curve. Persist each run ID/head/attempt and typed progress
 comment immediately, before waiting. Use `gh run watch --interval 60`, resume after tool
@@ -117,8 +118,9 @@ Benchmarks may take three hours. Do not cancel healthy or queued work to fit the
 limit; leave it queued when the session ends, and a later session resumes it.
 
 After smoke benchmarks AND selected evals pass, append one exact-family inferencex-e2e/perf-changelog.yaml
-entry at the physical tail with this PR URL, preserving every prior byte. Omit scenario,
-append-only and eval-selection modifiers. Its description must be one plain-English sentence
+entry at the physical tail with this PR URL, preserving every prior byte. Set exactly
+`scenario-type: [agentic-coding]`; omit append-only and eval-selection modifiers.
+Its description must be one plain-English sentence
 of at most 120 characters: state the engine image version change and, only when necessary,
 one essential compatibility adjustment. Do not include evidence, benchmark results, upstream
 release summaries, rationale or limitations there; those belong in attempt comments.
