@@ -10515,3 +10515,9 @@
   description:
     - "Update the MI325X MiniMax-M3 vLLM AgentX image from vllm-openai-rocm v0.27.1 to v0.31.0."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3954
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4378
