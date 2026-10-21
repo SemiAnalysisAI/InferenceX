@@ -43,7 +43,7 @@ dsr1-fp4-mi355x-sglang-mtp:
         srt-recipe: 8k1k.yaml
 
 dsr1-fp4-mi355x-atom:
-  image: rocm/atom-dev:nightly_202610080328@sha256:9c3070bb7d2600d2e1bcfd03cf5f71e4dc0941f3e1d20d3a5845056aae2334eb
+  image: rocm/atom-dev:nightly_202610190554@sha256:9765777e2f56c5c17fefc9e141b37c51f1ab2dea009b158bcf1823f10030cea3
   model: amd/DeepSeek-R1-0528-MXFP4-Preview
   model-prefix: dsr1
   runner: mi355x
