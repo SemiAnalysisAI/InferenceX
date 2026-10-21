@@ -10501,7 +10501,8 @@
     - "Replace prefill HiCache DRAM offload with the Mooncake external cache linker on both roles (MOONCAKE_GLOBAL_SEGMENT_SIZE 80gb on prefill, 140gb on decode). The higher prefix hit rate lets c1228 run 3x DEP2 prefill instead of 4x and c2884 5x instead of 6x."
     - "Add c4096 with 8x DEP2 prefill (4 nodes) and one DEP16 decode: 64 requests per decode rank, 128 extra decode slots."
     - "Other engine changes: flashmla_mega attention and local DP control broadcast on both roles; on decode, 2048 SWA prefix tails, decoder SWA bounded replay, stream interval 32, polling interval 8 and KV events, with the NCCL DP-batch sync env removed; c2884 and c4096 cap prefill batches at 32768 tokens."
-    - "Use the image's upstream DeepSeek-V4.1 external linker pool support (sgl-project/sglang#44623) without runtime source patches."
+    - "Use the image's upstream DeepSeek-V4.1 external linker pool support (sgl-project/sglang#44623) without SGLang source patches."
     - "Keep KV routing and session affinity on prefill; use round-robin routing on decode so SGLang places requests with total_tokens load balancing."
     - "Use fastokens in both worker roles and BF16 decode index logits."
+    - "Backport NVIDIA/srt-slurm#617 to move KV-event allocation below 9000 and avoid monitoring listeners on port 5252."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4303
