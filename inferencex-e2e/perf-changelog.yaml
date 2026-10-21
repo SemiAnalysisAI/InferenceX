@@ -10504,5 +10504,5 @@
     - "Use the image's upstream DeepSeek-V4.1 external linker pool support (sgl-project/sglang#44623) without SGLang source patches."
     - "Keep KV routing and session affinity on prefill; use round-robin routing on decode so SGLang places requests with total_tokens load balancing."
     - "Use fastokens in both worker roles and BF16 decode index logits."
-    - "Backport NVIDIA/srt-slurm#617 to move KV-event allocation below 9000 and avoid monitoring listeners on port 5252."
+    - "Backport NVIDIA/srt-slurm#617 to avoid monitoring listeners on port 5252 when allocating KV-event ports."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4303
