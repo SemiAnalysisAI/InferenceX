@@ -676,12 +676,17 @@ validate_container_network() {
 
 # FlashInfer lifecycle
 
+# Keys both the shared and the node-local cache, so a pin change never reuses an older venv.
+flashinfer_spec_digest() {
+  # "aot" names the cache layout below; change it when the layout changes.
+  printf 'aot %s %s' "$COLLX_FLASHINFER_SPEC" "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
+    | sha256sum | cut -c1-12
+}
+
 flashinfer_cache_root() {
   local arch digest
   arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
-  # "aot" names the cache layout below; change it when the layout changes.
-  digest="$(printf 'aot %s %s' "$COLLX_FLASHINFER_SPEC" "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
-    | sha256sum | cut -c1-12)" || return 1
+  digest="$(flashinfer_spec_digest)" || return 1
   backend_cache_root flashinfer-ep "${arch#-}" "$digest"
 }
 
@@ -796,7 +801,7 @@ flashinfer_ep_prepare() {
     with_cache_lock "FlashInfer" "$shared" flashinfer_ready flashinfer_install \
       || { collx_log "ERROR: shared FlashInfer environment is incomplete"; return 1; }
   else
-    CACHE_ROOT="/tmp/collectivex-flashinfer-cache-$arch"
+    CACHE_ROOT="/tmp/collectivex-flashinfer-cache-$arch-$(flashinfer_spec_digest)" || return 1
     collx_log "FlashInfer: preparing (node-local $CACHE_ROOT; no shared cache mounted)"
     flashinfer_ready "$CACHE_ROOT" || flashinfer_install "$CACHE_ROOT" || return 1
   fi
