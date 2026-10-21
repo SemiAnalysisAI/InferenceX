@@ -10491,3 +10491,13 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B MXFP4 (amd/Qwen3.5-397B-A17B-MXFP4) AgentX on MI355X via ATOM on rocm/atom-dev:nightly_202610181506, reusing the FP8 standalone recipe (ROCm/ATOM PR 2592) on the MXFP4 checkpoint."
+    - "TP4 with MTP at 3 draft tokens; throughput runs take the golden AL from golden_al_distribution/qwen3.5_mtp.yaml (3.39), evaluations use real acceptance."
+    - "Eleven points: CONC 1, 4, 8, 16, 24, 32 and 40 on the GPU prefix cache, and CONC 48, 56, 64 and 80 with the LMCache DRAM tier (0.5.6.dev139+gf22dec28) at 253 GiB of KV plus 110 GiB of GDN state per rank, at dram-utilization 1.0 (TOTAL_CPU_DRAM_GB 1499)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4310
