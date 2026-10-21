@@ -10491,3 +10491,11 @@
   description:
   - 'Update GB300 Kimi-K3 AgentX coverage with low-latency aggregated runs and DCP8 disaggregation: 1P2D, 1P3D, 1P4D, 2P3D, and 2P5D.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4047
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Remove the Engram host-memory node exclusions so the 17-node c10888 topology can use rack 1 after the SRE memory-preparation prolog was installed."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
