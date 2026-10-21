@@ -26,6 +26,7 @@ from .sweep_runs import (
     completed_pr_runs,
     has_reusable_result_artifacts as has_reusable_result_artifacts,
     pr_commit_shas as pr_commit_shas,
+    run_pr_number as run_pr_number,
 )
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
@@ -397,6 +398,11 @@ def main() -> int:
     )
     run_id = int(run["id"])
     reason = f"PR #{pr_number} approved sweep reuse from run {run_id}"
+    head_sha = str(run.get("head_sha") or "")
+    if head_sha in pr_commit_shas(args.repo, pr_number, token):
+        source_pr: int | None = pr_number
+    else:
+        source_pr = run_pr_number(args.repo, run, token)
 
     outputs = result(
         enabled=True,
@@ -404,8 +410,8 @@ def main() -> int:
         source_run_id=str(run_id),
         source_run_attempt=str(run.get("run_attempt") or "1"),
         source_run_url=str(run.get("html_url") or ""),
-        source_pr_number=str(pr_number),
-        source_head_sha=str(run.get("head_sha") or ""),
+        source_pr_number=str(source_pr or ""),
+        source_head_sha=head_sha,
     )
     write_outputs(args.github_output, outputs)
     print(json.dumps(outputs, indent=2))

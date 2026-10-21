@@ -67,6 +67,8 @@ def make_request_case(monkeypatch) -> dict:
             return case["pr"]
         if path == "/pulls/7/commits":
             return case["commits"]
+        if path == "/commits/tested-sha/pulls":
+            return case.get("source_pulls", [])
         if path == "/actions/runs/123":
             return case["run"]
         if path == "/actions/workflows/run-sweep.yml/runs":
@@ -121,12 +123,17 @@ def test_explicit_partial_source_keeps_existing_acceptance(request_case, conclus
 
 def test_source_outside_pr_is_accepted_then_warned_once(request_case, capsys):
     request_case["commits"] = [{"sha": "different-sha"}]
+    request_case["run"]["head_branch"] = "other-branch"
+    request_case["source_pulls"] = [
+        {"number": 6, "head": {"ref": "unrelated"}},
+        {"number": 5, "head": {"ref": "other-branch"}},
+    ]
     event = event_for(request_case)
     for _ in range(2):
         assert acknowledgment.acknowledge("example/project", event, "test-token") == 0
     assert bot_status(request_case) == ["+1"]
     assert len(request_case["posted"]) == 1
-    assert "Reuse source run [123]" in request_case["posted"][0]["body"]
+    assert "(from PR #5, commit `tested-sha`)" in request_case["posted"][0]["body"]
     assert "::warning::Reuse source run 123 head tested-sha is not part of PR #7" in capsys.readouterr().out
 
 

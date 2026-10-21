@@ -32,14 +32,18 @@ def warn_outside_pr(
     ):
         return
     head_sha = str(run.get("head_sha") or "")
+    source_pr = reuse.run_pr_number(repo, run, token)
+    origin_en = f"from PR #{source_pr}, " if source_pr else ""
+    origin_zh = f"来自 PR #{source_pr}，" if source_pr else ""
     body = (
         f"{marker}\n"
         f"⚠️ Reuse source run [{run['id']}]({run.get('html_url', '')}) "
-        f"(commit `{head_sha[:12]}`) is not part of this PR. Its results will publish "
-        f"under this PR's changelog entry at merge. Confirm this is the intended run.\n\n"
+        f"({origin_en}commit `{head_sha[:12]}`) is not part of this PR. Its results will "
+        f"publish under this PR's changelog entry at merge. Confirm this is the intended run.\n\n"
         f"<details>\n<summary>中文</summary>\n\n"
-        f"⚠️ 复用的来源运行 [{run['id']}]({run.get('html_url', '')})（提交 `{head_sha[:12]}`）"
-        f"不属于本 PR，合并后其结果将以本 PR 的 changelog 条目发布。请确认这是预期的运行。\n\n"
+        f"⚠️ 复用的来源运行 [{run['id']}]({run.get('html_url', '')})，{origin_zh}"
+        f"提交 `{head_sha[:12]}`，不属于本 PR，合并后其结果将以本 PR 的 changelog 条目发布。"
+        f"请确认这是预期的运行。\n\n"
         f"</details>"
     )
     github.api(repo, f"/issues/{pr_number}/comments", token, method="POST", data={"body": body})
