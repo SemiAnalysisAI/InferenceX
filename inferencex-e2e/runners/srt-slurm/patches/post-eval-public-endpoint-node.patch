@@ -1,0 +1,23 @@
+diff --git a/src/srtctl/cli/do_sweep.py b/src/srtctl/cli/do_sweep.py
+index d0d2bae3..96fb0f56 100644
+--- a/src/srtctl/cli/do_sweep.py
++++ b/src/srtctl/cli/do_sweep.py
+@@ -751,15 +751,16 @@ class SweepOrchestrator(
+                 env_to_set["EVAL_CONC"] = str(max(conc_list))
+                 logger.info("Eval concurrency (max of %s): %s", conc_list, env_to_set["EVAL_CONC"])
+
++        eval_node = self._public_api_node()
+         proc = start_srun_process(
+             command=cmd,
+-            nodelist=[self.runtime.nodes.head],
++            nodelist=[eval_node],
+             output=str(eval_log),
+             container_image=str(self.runtime.container_image),
+             container_mounts=self.runtime.container_mounts,
+             env_to_set=env_to_set,
+             srun_options=self.runtime.srun_options,
+-            het_group=self.runtime.nodes.het_group_for(self.runtime.nodes.head),
++            het_group=self.runtime.nodes.het_group_for(eval_node),
+         )
+
+         while proc.poll() is None:

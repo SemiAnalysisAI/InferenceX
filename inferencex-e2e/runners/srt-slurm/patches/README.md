@@ -9,3 +9,4 @@ Each patch backports an upstream fix that the shared submodule pin does not incl
 | Patch | Upstream PR | Fix |
 |-------|-------------|-----|
 | `573-participating-gpus.patch` | [NVIDIA/srt-slurm#573](https://github.com/NVIDIA/srt-slurm/pull/573) | Record only the GPUs workers occupy on a worker node; an exclusive node's exporter (DCGM or AMD) reports every GPU, which the collector otherwise flags as `unexpected_device`. The pin includes #573, but upstream merged a different design: it keeps every row and excuses idle worker-node GPUs only after a DCGM worker GPU UUID probe. [`infx/results/power/multinode.py`](../../../infx/results/power/multinode.py) does not apply that excusal yet, so keep this filter until it does. |
+| `post-eval-public-endpoint-node.patch` | [NVIDIA/srt-slurm#615](https://github.com/NVIDIA/srt-slurm/pull/615) | Run post-benchmark and eval-only evaluation beside the public frontend and select its Slurm allocation component. |
