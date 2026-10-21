@@ -1,5 +1,5 @@
 schema: 2
-name: "disagg-b300-1p2d-dep8-dep8-c64-mtp-kvoffload-mooncake"
+name: "disagg-b300-1p1d-dep8-dep8-c240-mtp-kvoffload"
 
 identity:
   model: {}
@@ -99,8 +99,8 @@ roles:
       hicache-io-backend: direct
 
   decode:
-    nodes: 2
-    workers: 2
+    nodes: 1
+    workers: 1
     gpus: 8
 
     env:
@@ -141,7 +141,7 @@ roles:
       load-balance-method: total_tokens
       mem-fraction-static: 0.9
       swa-full-tokens-ratio: 0.02
-      max-running-requests: 128
+      max-running-requests: 480
       cuda-graph-max-bs-decode: 256
       disable-flashinfer-autotune: true
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
