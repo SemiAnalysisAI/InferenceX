@@ -114,7 +114,6 @@ base:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         hicache-storage-backend-extra-config: '{"enable_group_semantics":true}'
-        hicache-write-policy: write_back
         hicache-ratio: 1.02
         hicache-mem-layout: page_first_direct
         mem-fraction-static: 0.85
