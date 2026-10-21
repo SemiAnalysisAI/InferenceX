@@ -1,6 +1,6 @@
 # GLM-5.3 NVFP4 AgentX on B300 with upstream SGLang TP8 and NEXTN off the
 # checkpoint's built-in MTP head (K=3, 4 draft tokens). Two arms share this base:
-# the interactive arm (c8-c14) keeps the whole working set in HBM, and the
+# the interactive arm (c1-c14) keeps the whole working set in HBM, and the
 # throughput arm (c22-c28) spills evicted prefixes to a HiCache host-DRAM tier.
 base:
   schema: 2
@@ -65,6 +65,36 @@ base:
 
 # Interactive arm: no host tier. Expandable segments and symmetric-memory
 # all-reduce lift tokens/s/GPU at the same interactivity.
+# c1/c4 cap admission at 2x CONC with a matching decode graph batch. They stay
+# at K=3 because glm5.3_mtp.yaml only carries a golden AL for K=3.
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
 override_c8:
   roles:
     agg:

@@ -9840,7 +9840,7 @@ musespark-fp4-h100-sglang-agentic-dflash:
 
 # GLM-5.3 NVFP4 AgentX on upstream SGLang v0.5.20: TP8, NEXTN off the built-in
 # MTP head at K=3 (golden AL from infx/golden_al_distribution/glm5.3_mtp.yaml).
-# c8-c14 keep the working set in HBM; c22-c28 add a 300 GB/rank HiCache tier
+# c1-c14 keep the working set in HBM; c22-c28 add a 300 GB/rank HiCache tier
 # (plus the DSA indexer pool), about 2.95 TB of host DRAM per node.
 glm5.3-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
@@ -9854,7 +9854,7 @@ glm5.3-fp4-b300-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [8, 10, 13, 14], srt-recipe: agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 10, 13, 14], srt-recipe: agentic.yaml }
     - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }
