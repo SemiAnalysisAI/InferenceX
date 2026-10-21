@@ -537,7 +537,7 @@ nccl_ep_install() {
   mkdir -p "$site" || { collx_log "ERROR: NCCL EP cache-site-create failed"; return 1; }
   collx_log "NCCL EP: installing $COLLX_NCCL_EP_SPEC (pip --target)"
   # --target does not touch the system env, so PEP 668 does not apply. $COLLX_NCCL_EP_SPEC is
-  # unquoted on purpose: it carries two whitespace-separated pip specs.
+  # unquoted on purpose: it carries whitespace-separated pip specs.
   # shellcheck disable=SC2086
   python3 -m pip install -q --disable-pip-version-check --no-input \
       --pre --extra-index-url https://pypi.nvidia.com \
