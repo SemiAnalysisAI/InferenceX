@@ -34,10 +34,10 @@ COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 
 # nccl-extensions (github.com/NVIDIA/nccl-extensions) owns nccl.ep, which nccl4py >= 0.4 does
 # not bundle; its combine-recv fence (DeepEP's LOW_LATENCY_COMBINE_RECV analogue) releases the
-# low-latency ladder clamp. nccl4py is pinned alongside so a rebuild resolves the same tree. Two
-# whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
-# string keys the shared cache dir.
-COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
+# low-latency ladder clamp. nccl4py and cuda-core are pinned alongside so a rebuild resolves the
+# same tree. Whitespace-separated pip specs: the install site word-splits this deliberately, and the
+# whole string keys the shared cache dir.
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261013 nccl4py[cu13]==0.5.0 cuda-core==1.2.1"
 # vLLM main's FlashInfer pin and the companions its one-sided all-to-all imports, installed over the
 # image's older FlashInfer. The cubin and jit-cache wheels must match flashinfer-python's version or
 # it refuses to import. jit-cache goes in without deps: its per-arch providers hold no all-to-all
