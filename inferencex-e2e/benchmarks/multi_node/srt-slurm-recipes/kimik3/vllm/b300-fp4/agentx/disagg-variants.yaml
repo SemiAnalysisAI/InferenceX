@@ -107,6 +107,12 @@ base:
         # memory on all 16 NICs and retried slices may DMA it from a NIC on the
         # other socket; disaggregated prefill hosts froze without this.
         MC_EFA_NIC_SELECTION: "local"
+        # Keep the two non-EFA IB HCAs (ibp198s0f0/ibp199s0f0) out of Mooncake's
+        # topology. EfaTransport indexes its NIC contexts over EFA devices only,
+        # but disabled topology HCAs keep their slots, so every selected NIC was
+        # off by two: GPU 0 could never transfer (AddressNotRegistered, 0% store
+        # hits) and other GPUs posted through a neighbouring GPU's NICs.
+        MC_MS_FILTERS: "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
         NCCL_MNNVL_ENABLE: "0"
         NCCL_NVLS_ENABLE: "1"
         VLLM_SERVER_DEV_MODE: "1"
