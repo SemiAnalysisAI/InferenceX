@@ -10541,6 +10541,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4169
 
 - config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130 and drop a removed SWA env var."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4176
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-20260916-c9a8fba9 to v0.5.21-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4196
+
+- config-keys:
     - musespark-fp4-mi355x-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
