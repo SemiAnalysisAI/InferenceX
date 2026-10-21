@@ -128,9 +128,6 @@ intended entries from the original PR diff or stop on ambiguity.
 Create an empty bootstrap branch/commit from current `origin/main`, then open the
 PR before changing the changelog. Use a bilingual title/body and the required AI
 disclosure; set `BRANCH` and `RECOVERY_PR` to its branch and number.
-Do not post the reuse command yet. The acknowledgement bot rejects a pin whose
-source commit is not in the PR's commit list, and the source only joins it with the
-carrier commit below.
 
 Reuse needs no sweep label. If a primary label is present, allow only one.
 Never use `evals-only` or `agentx-fast` on the recovery PR, or select a source
@@ -156,56 +153,41 @@ Commit the append, set `RECOVERY_COMMIT=$(git rev-parse HEAD)`, and validate:
 ```
 
 Require only the intended recovery scope; current matrix row counts may differ
-from the source. With no uncommitted or untracked work, attach source ancestry
-without changing the recovery tree:
+from the source. Push the append, which starts no GPU jobs while the PR has no
+primary sweep label:
 
 ```bash
-test -z "$(git status --porcelain)" || exit 1
-TARGET_PARENT=$(git rev-parse HEAD)
-TARGET_TREE=$(git rev-parse HEAD^{tree})
-ATTACH_SHA=$(printf 'chore: attach reusable sweep run %s\n' "$SOURCE_RUN_ID" |
-  git commit-tree "$TARGET_TREE" -p "$TARGET_PARENT" -p "$SOURCE_HEAD_SHA")
-git reset --hard "$ATTACH_SHA"
-test "$(git rev-parse HEAD^1)" = "$TARGET_PARENT" || exit 1
-test "$(git rev-parse HEAD^2)" = "$SOURCE_HEAD_SHA" || exit 1
-test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse HEAD^1^{tree})" || exit 1
 test "$(git diff --name-only origin/main...HEAD)" = "inferencex-e2e/perf-changelog.yaml" || exit 1
 git diff --check origin/main...HEAD || exit 1
 git push origin "$BRANCH"
 ```
 
-Pushing the carrier starts no GPU jobs as long as the PR has no primary sweep label.
-Then an authorized `OWNER`, `MEMBER`, or `COLLABORATOR` pins the source with
-`/use <run_id>` (legacy `/reuse-sweep-run <run_id>` is also accepted). Require a 👍
-reaction on that comment before merging. A 👎 explains itself only in the matching
-`reuse-sweep-comment.yml` run log (`Reuse rejected / 复用请求未接受: ...`).
-
-Never rebase, locally squash, amend, or force-push after attaching the source.
-If `main` advances or conflicts, update from it and recreate the final two-parent
-carrier; preserve the verified first-parent tree. Do not silently drop ancestry.
+An authorized `OWNER`, `MEMBER`, or `COLLABORATOR` then pins the source with
+`/use $SOURCE_RUN_ID` (legacy `/reuse-sweep-run <run_id>` is also accepted). The
+source commit belongs to the original PR, not the recovery PR, so expect the bot to
+react 👍 and 😕: accepted, with an outside-PR warning. Require the 👍 before merging.
+A 👎 explains itself only in the matching `reuse-sweep-comment.yml` run log
+(`Reuse rejected / 复用请求未接受: ...`).
 
 ## Verify reuse and merge
 
 ```bash
-gh api --paginate "repos/SemiAnalysisAI/InferenceX/pulls/$RECOVERY_PR/commits" \
-  --jq '.[].sha' | grep -Fx "$SOURCE_HEAD_SHA"
 test "$(gh pr diff "$RECOVERY_PR" -R SemiAnalysisAI/InferenceX --name-only)" = \
   "inferencex-e2e/perf-changelog.yaml"
 gh pr checks "$RECOVERY_PR" -R SemiAnalysisAI/InferenceX --watch --fail-fast
 ```
 
-Wait for the `run-sweep.yml` run at `ATTACH_SHA`, not just early comment checks.
+Wait for the `run-sweep.yml` run at the PR head, not just early comment checks.
 Require passing `check-changelog` and `reuse-sweep-gate`, with `setup` and GPU jobs
-skipped. Keep `ATTACH_SHA` as the PR head. Merge only with explicit authorization;
-never bypass failed or pending checks. Admin merge is allowed only when passing
-checks leave repository policy as the sole blocker. Do not use `merge_with_reuse`
-here. It merges `main` into the branch and pushes a sync commit, which replaces
-`ATTACH_SHA` as the head. Merge directly instead. GitHub squash merge is safe
-because it does not rewrite the PR branch's recorded ancestry:
+skipped. Merge only with explicit authorization; never bypass failed or pending
+checks. Admin merge is allowed only when passing checks leave repository policy as
+the sole blocker. Do not use `merge_with_reuse` here. It posts its own
+`/reuse-sweep-run` chosen from the recovery PR's commits, which supersedes the pinned
+source and finds no sweep. Merge directly:
 
 ```bash
 gh pr merge "$RECOVERY_PR" -R SemiAnalysisAI/InferenceX --squash --admin \
-  --match-head-commit "$ATTACH_SHA"
+  --match-head-commit "$(git rev-parse HEAD)"
 ```
 
 ## Verify the exact publication

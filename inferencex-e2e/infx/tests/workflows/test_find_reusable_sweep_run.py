@@ -336,7 +336,6 @@ def test_validate_reusable_run_rejects_non_success_run_by_default(conclusion) ->
         reuse.validate_reusable_run(
             "SemiAnalysisAI/InferenceX",
             "run-sweep.yml",
-            1321,
             {
                 "id": 25763404168,
                 "event": "pull_request",

@@ -111,13 +111,19 @@ def test_explicit_partial_source_keeps_existing_acceptance(request_case, conclus
     assert bot_status(request_case) == ["+1"]
 
 
+def test_source_outside_pr_is_accepted_with_warning(request_case, capsys):
+    request_case["commits"] = [{"sha": "different-sha"}]
+    assert acknowledgment.acknowledge("example/project", event_for(request_case), "test-token") == 0
+    assert bot_status(request_case) == ["+1", "confused"]
+    assert "::warning::Reuse source run 123 head tested-sha is not part of PR #7" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("problem,reason", [
     ("unauthorized", "OWNER, MEMBER, or COLLABORATOR"),
     ("syntax", "Usage:"),
     ("closed", "not open"),
     ("workflow", "expected .github/workflows/run-sweep.yml"),
     ("running", "not completed"),
-    ("orphan", "not in PR #7's commit list"),
     ("empty", "no benchmark, eval, or agentic result artifact"),
     ("expired", "no benchmark, eval, or agentic result artifact"),
     ("modifier", "reuse-incompatible"),
@@ -136,8 +142,6 @@ def test_rejects_invalid_requests_without_approving(request_case, capsys, proble
         case["run"]["path"] = ".github/workflows/other.yml"
     elif problem == "running":
         case["run"]["status"] = "in_progress"
-    elif problem == "orphan":
-        case["commits"] = [{"sha": "different-sha"}]
     elif problem == "empty":
         case["artifacts"] = [{"name": "run-stats"}]
     elif problem == "expired":
@@ -160,6 +164,7 @@ def test_edit_replaces_bot_status_and_preserves_human_reaction(request_case, bod
     case = request_case
     case["reactions"] = [
         {"id": 1, "content": "+1", "user": {"login": "github-actions[bot]"}},
+        {"id": 3, "content": "confused", "user": {"login": "github-actions[bot]"}},
         {"id": 2, "content": "+1", "user": {"login": "maintainer"}},
     ]
     case["comment"]["body"] = body

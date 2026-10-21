@@ -69,12 +69,12 @@ Then decide:
   Name the path and its real owners in one line.
 
 ## Check 1 — A passing sweep + evals ran on a commit IN this PR
-The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
-including evals, on a commit that is CURRENTLY part of this PR. A sweep that ran on a
-commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.py`
-→ `validate_reusable_run` (in `inferencex-e2e/infx/workflows/reuse.py`) rejects any source
-whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
-to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
+The merge standard requires a green full sweep, including evals, on a commit that is
+CURRENTLY part of this PR. A sweep that ran on a commit later rebased/force-pushed out
+does NOT count. The reuse tooling no longer enforces this: a pinned `/use <run_id>` may
+name any run, and the acknowledgement bot only warns (😕) when its commit is outside the
+PR. This check is therefore the enforcement point, and the whole question collapses to
+one fact: does a commit still in this PR carry green, executed sweep/eval checks?
 
 The cleanest way to answer is the check-runs attached to each in-PR commit. You do
 NOT need to list `run-sweep.yml` runs or parse reuse logs.
