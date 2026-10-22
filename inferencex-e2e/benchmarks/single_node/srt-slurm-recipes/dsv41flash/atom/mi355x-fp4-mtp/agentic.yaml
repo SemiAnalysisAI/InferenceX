@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:aa6754256dd68009240e54206265e5250395374640f07757f2fdeac6170097cf
+    container_image: rocm/atom-dev@sha256:32c81e56e4680065b6ea3e0ca8363a00cd3ccb932d8990e83d799b8bbb58a4b3
     enable_multiple_frontends: false
   observability:
     enabled: false
