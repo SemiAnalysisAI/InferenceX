@@ -387,6 +387,9 @@ clusters:
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         single-node-models: staged
+        # Multi-node control and stage-to-stage traffic ride the primary ENI.
+        fabric:
+          socket-ifname: [enp71s0]
   h200-dgxc:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_471_356

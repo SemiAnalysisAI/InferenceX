@@ -1,0 +1,98 @@
+schema: 2
+name: "musespark-sglang-agg-h100-tp8pp2-dflash-agentic"
+
+dynamo:
+  install: false
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 5
+
+resources:
+  gpu_type: h100
+  gpus_per_node: 8
+
+frontend:
+  type: sglang
+  enable_multiple_frontends: false
+
+engine: sglang
+
+# h100-dsxe allocates 2 CPUs per multi-node task by default: too few for 16
+# ranks, and the AgentX client then rebuilds the full corpus past its 1800 s
+# dataset timeout. Take the whole nodes.
+sbatch_directives:
+  exclusive: ""
+
+# The image's Muse Spark decoder and DFLASH worker run single-stage only; this
+# adds pipeline stages and the DFLASH relay between them.
+setup_script: musespark-pp.sh
+
+roles:
+  agg:
+    # One TP8 stage per node: each holds 31 of the 62 layers, which frees enough
+    # memory for a multi-million-token GPU KV pool under the full trace corpus.
+    nodes: 2
+    workers: 1
+    gpus: 16
+    env:
+      PYTHONNOUSERSITE: "1"
+      PYTHONUNBUFFERED: "1"
+      # The draft lives on the last stage; earlier stages verify the block it
+      # relays and send it their DFLASH taps.
+      SGLANG_ENABLE_PP_SPEC: "1"
+      # Eager sampling supports admission above the captured graph batch size.
+      SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: "1"
+      # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+      SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+      # Serve from the pre-seeded shared HF cache with no Hub API calls.
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_CACHE: "/hf_hub_cache"
+      HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+      # Only stage-boundary activations cross nodes. The container has no EFA
+      # NCCL plugin, so keep NCCL off the EFA verbs devices and on sockets.
+      NCCL_IB_DISABLE: "1"
+      NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
+      GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+    args:
+      served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+      trust-remote-code: true
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 2
+      expert-parallel-size: 8
+      quantization: modelopt_fp4
+      moe-runner-backend: marlin
+      fp4-gemm-backend: marlin
+      attention-backend: fa3
+      kv-cache-dtype: fp8_e4m3
+      # Each stage holds half the weights; the last also holds the draft.
+      mem-fraction-static: 0.9
+      # Bound prefill activations while retaining the full request context.
+      chunked-prefill-size: 1024
+      swa-full-tokens-ratio: 0.1
+      disable-prefill-cuda-graph: true
+      # Pipeline parallelism requires the non-overlap scheduler.
+      disable-overlap-schedule: true
+      # The 6.35M-token pool holds about 13 of the corpus's longest (~480k)
+      # contexts, and two or more running requests keep both stages busy.
+      max-running-requests: 16
+      cuda-graph-max-bs-decode: 16
+      # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+      speculative-algorithm: DFLASH
+      speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+      speculative-draft-attention-backend: fa4
+      speculative-num-draft-tokens: 8
+      mm-feature-transport: cpu
+      reasoning-parser: muse
+      tool-call-parser: muse
+      watchdog-timeout: 3600
+      enable-metrics: true
+
+benchmark:
+  env:
+    # The gated Hub repo is unreadable to the client; use the staged checkpoint.
+    TOKENIZER: /model
+    # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+    AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    AGENTIC_WARMUP_GRACE_PERIOD: "3600"
