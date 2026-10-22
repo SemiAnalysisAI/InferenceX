@@ -114,7 +114,6 @@ base:
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
       AGENTIC_WARMUP_GRACE_PERIOD: "3600"
 
-# TP8 over two nodes for the single-stream point.
 override_tp8_c1:
   name: dsv4-fp4-gb300-dynamo-sglang-agentx-agg-tp8-c1
   roles:
@@ -125,7 +124,6 @@ override_tp8_c1:
         tensor-parallel-size: 8
         mem-fraction-static: 0.94
 
-# TP4 on one node; the fastokens tokenizer trims frontend latency.
 override_tp4:
   name: dsv4-fp4-gb300-dynamo-sglang-agentx-agg-tp4
   frontend:

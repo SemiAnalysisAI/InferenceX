@@ -6610,8 +6610,6 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
   scenarios:
     agentic-coding:
     - search-space:
-      # DSpark block size 6. Throughput jobs inject the committed
-      # dsv4-pro-0813-dspark golden AL at launch; EVAL_ONLY stays real.
       - spec-decoding: draft_model
         conc-list: [1]
         num-nodes: 2
@@ -6644,12 +6642,8 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
   srt-recipe-dir: dsv4/sglang/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    # Prefill keeps a HiCache host pool at twice its device KV pool.
     - dram-utilization: 0.80
       search-space:
-      # TP1 x PP8 prefill workers; DSpark block size 4-6 matched on prefill and
-      # decode. Throughput jobs inject the committed dsv4-pro-0813-dspark golden
-      # AL at launch; EVAL_ONLY stays real.
       - spec-decoding: draft_model
         conc-list: [80, 160, 200]
         kv-offloading: dram

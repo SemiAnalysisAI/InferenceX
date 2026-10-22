@@ -46,9 +46,7 @@ base:
     num_additional_frontends: 4
     env:
       PIP_BREAK_SYSTEM_PACKAGES: "1"
-    # Spread requests evenly over the decode DP ranks (paired with decode
-    # load-balance-method: total_requests). Prefill keeps KV-aware session
-    # affinity through the prefill workers' router args.
+    # Paired with decode load-balance-method: total_requests.
     args:
       router-mode: round-robin
       router-replica-sync: true
@@ -57,7 +55,6 @@ base:
       active-prefill-tokens-threshold-frac: "None"
   engine: sglang
   roles:
-    # One prefill worker is a TP1 x PP8 pipeline over two nodes.
     prefill:
       nodes: 2
       workers: 1
@@ -86,7 +83,6 @@ base:
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
         SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
         SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
-        # Split of the 61 layers over the 8 pipeline stages.
         SGLANG_PP_LAYER_PARTITION: 8,8,8,8,8,8,7,6
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
         MC_FORCE_MNNVL: "1"
@@ -230,7 +226,6 @@ base:
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
       AGENTIC_WARMUP_GRACE_PERIOD: "3600"
 
-# Low concurrency: KV-aware decode routing, decode DP ranks balanced by tokens.
 override_1p1d_pp8_dep16_kv:
   name: dsv4-fp4-gb300-dynamo-sglang-agentx-disagg-1p1d-pp8-dep16-kv
   frontend:
