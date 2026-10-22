@@ -10,6 +10,9 @@ _ROOT = Path(__file__).resolve().parents[3] / "collectivex"
 
 
 def _load(name: str, rel: str):
+    folder = str((_ROOT / rel).parent)  # its sibling imports (ep_harness -> ep_oracle)
+    if folder not in sys.path:
+        sys.path.append(folder)
     spec = importlib.util.spec_from_file_location(name, _ROOT / rel)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module  # its dataclasses resolve their module by name

@@ -104,7 +104,10 @@ def load_platforms(path: Path) -> dict:
         base = json.loads((path.parent / document["base"]).read_text())["platforms"]
     platforms = {}
     for runner, (_, profile) in RUNNERS.items():
-        merged = {**base.get(profile, {}), **document["platforms"].get(runner, {})}
+        own = document["platforms"].get(runner, {})
+        merged = {**base.get(profile, {}), **own}
+        if "operator" in own:  # add to CollectiveX's operator settings, not replace them
+            merged["operator"] = {**base.get(profile, {}).get("operator", {}), **own["operator"]}
         if merged:
             platforms[runner] = merged
     return platforms
