@@ -10778,3 +10778,12 @@
     - "Enable --monokernel-backend amd on concurrency <= 16."
     - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 on all points. Enable SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 only on the non-monokernel points (TP2 c32, DP2 c32 and c64); the monokernel refuses that layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4367
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open B200 curve to lmsysorg/sglang:nightly-dev-20261021-c1c287a4 and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 at every concurrency."
+    - "Use 32768-token prefill chunks and the Python radix tree core at TP8 concurrency 56 (prefill-decode-interval 64) and new concurrency 64, and raise mem-fraction-static to 0.98 at TP4 concurrency 24."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
