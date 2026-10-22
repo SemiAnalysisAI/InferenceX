@@ -18,6 +18,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
+
 from .api import PUBLIC, ReadError, fetch_capacity, fetch_catalog
 from .github import (
     VerificationError,
@@ -78,14 +80,17 @@ def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozense
 
 
 def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int]]]:
-    """Resolve public identities, target clusters and node demand from the canonical generator.
+    """Resolve public AgentX identities, target clusters and node demand from the generator.
 
-    Archives are excluded. A family's node demand is the node count of its largest generated job.
+    Archives and fixed-seq-len points are excluded. A family's node demand is the node count of
+    its largest generated AgentX job.
     """
     from infx.clusters import load_inventory
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
     from infx.matrix.validation import load_config_files, load_runner_file
+
+    from .validation import in_scope
 
     root = project_root(root)
     runners = load_runner_file(str(root / "configs/runners.yaml"))
@@ -105,13 +110,15 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
             except ValueError:
                 print(f"::warning::Klaud live-family-unrenderable: {family}")
                 continue
+            entries = [entry for entry in entries if in_scope(entry)]
+            if not entries:
+                continue
             clusters = target_clusters(entries, inventory)
             if not clusters:
                 print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
                 continue
             demand = max(entry.get("node-count", 1) for entry in entries)
             for entry in entries:
-                agentic = entry.get("scenario-type") == "agentic-coding"
                 row = {
                     "model": entry["model-prefix"],
                     "hardware": _hardware_family(entry["runner"]),
@@ -119,9 +126,9 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
                     "precision": entry["precision"],
                     "spec_method": entry["spec-decoding"],
                     "disagg": entry.get("disagg", False),
-                    "benchmark_type": "agentic_traces" if agentic else "single_turn",
-                    "isl": None if agentic else entry["isl"],
-                    "osl": None if agentic else entry["osl"],
+                    "benchmark_type": "agentic_traces",
+                    "isl": None,
+                    "osl": None,
                     "image": entry["image"],
                 }
                 index.setdefault(observation_key(row), {})[family] = (clusters, demand)
@@ -1146,7 +1153,15 @@ def main() -> int:
     try:
         if args.command in ("report", "report-schema", "prepare-baseline"):
             from .lifecycle import current_session
-            from .reporting import Attempt, Baseline, Prose, baseline_for, prepare_baseline, publish
+            from .reporting import (
+                Attempt,
+                Baseline,
+                Prose,
+                baseline_for,
+                check_reported_datasets,
+                prepare_baseline,
+                publish,
+            )
 
             if args.command == "prepare-baseline":
                 if args.output.exists():
@@ -1169,7 +1184,10 @@ def main() -> int:
             if args.command == "report-schema":
                 print(json.dumps(model.model_json_schema(by_alias=True)))
             else:
-                publish(current_session(), model.model_validate_json(args.file.read_text()))
+                record = model.model_validate_json(args.file.read_text())
+                if isinstance(record, Attempt):
+                    check_reported_datasets(record)
+                publish(current_session(), record)
             return 0
         if args.command == "check-final":
             from .lifecycle import current_session
@@ -1294,11 +1312,18 @@ def main() -> int:
         TypeError,
         subprocess.SubprocessError,
     ) as error:
-        reason = (
-            str(error)
-            if isinstance(error, VerificationError)
-            else "State unavailable or invalid; inspect GitHub before retrying"
-        )
+        if isinstance(error, VerificationError):
+            reason = str(error)
+        elif isinstance(error, ValidationError) and args.command == "report":
+            # Name the failing fields of the agent's own record without echoing its values.
+            reason = "Invalid record: " + "; ".join(
+                ".".join(str(part) for part in item["loc"]) + ": " + item["msg"]
+                if item["loc"]
+                else item["msg"]
+                for item in error.errors(include_url=False)
+            )
+        else:
+            reason = "State unavailable or invalid; inspect GitHub before retrying"
         print(f"::error::Klaud: {reason}.")
         return 1
 
