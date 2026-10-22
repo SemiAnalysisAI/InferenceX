@@ -1526,10 +1526,10 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # Concurrency 1-64 on both TP arms, every point re-measured on the new
-      # image. c128 and c192 are excluded: c128 did not raise the scored
-      # metric at TP=2 (150,683 against 151,896 tok/s/chip at c64).
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
+      # TP4 runs c1 and c2 only; TP2 covers concurrency 1-64. c128 and c192
+      # are excluded: c128 did not raise the scored metric at TP=2 (150,683
+      # against 151,896 tok/s/chip at c64).
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
 # DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.

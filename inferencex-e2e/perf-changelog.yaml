@@ -10863,7 +10863,8 @@
   scenario-type:
     - agentic-coding
   description:
-    - "TP2 and TP4 c16: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 4."
-    - "TP2 and TP4 c32: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 8."
+    - "Run TP4 at c1 and c2 only; remove the TP4 c4, c8, c16, c32 and c64 points. TP2 keeps c1-c64."
+    - "TP2 c16: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 4."
+    - "TP2 c32: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 8."
     - "Image (vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f, same as #4319), DSpark settings and all other points are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4409
