@@ -24,6 +24,12 @@ from infx.srt_slurm.workload import (
 )
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
+# SGLang spells decode context parallelism --dcp-size, with the vLLM name as an alias.
+DCP_FLAGS = {
+    "sglang": ("dcp-size", "decode-context-parallel-size"),
+    "vllm": ("decode-context-parallel-size",),
+    "atom": ("decode-context-parallel-size",),
+}
 
 
 def parallelism_constraints(
@@ -140,7 +146,7 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
             expected[name] = (str(workload[name]), environment[name])
     if engine == "atom":
         expected["ATOM TP"] = (role["gpus"], int(environment["TP"]))
-    dcp = str(args.get("decode-context-parallel-size", 1)) if engine in {"vllm", "atom"} else "1"
+    dcp = next((str(args[flag]) for flag in DCP_FLAGS.get(engine, ()) if flag in args), "1")
     for name, value in {"PP_SIZE": "1", "DCP_SIZE": dcp, "PCP_SIZE": "1"}.items():
         expected[name] = (environment[name], value)
     for name, (actual, wanted) in expected.items():
@@ -217,13 +223,13 @@ def main() -> None:
     parsed = parser.parse_args()
     try:
         if parsed.command == "prepare":
-            _, recipe = select_recipe(parsed.recipe, os.environ)
+            selected, recipe = select_recipe(parsed.recipe, os.environ)
             recipe = resolve_fabric(recipe, parsed.fabric)
             check_setup_script(recipe, Path(parsed.recipe.partition(":")[0]), repository_root())
             arguments = runtime_arguments(parsed.recipe, os.environ)
             config = parsed.output.with_name(BOUND_RECIPE)
             config.write_text(yaml.safe_dump(recipe, sort_keys=False))
-            parsed.output.write_bytes("\0".join([str(config), *arguments, ""]).encode())
+            parsed.output.write_bytes("\0".join([selected, str(config), *arguments, ""]).encode())
         else:
             print("\n".join(submission_fields(parsed.manifest)))
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
