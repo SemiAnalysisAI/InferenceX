@@ -10778,3 +10778,10 @@
     - "Enable --monokernel-backend amd on concurrency <= 16."
     - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 on all points. Enable SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 only on the non-monokernel points (TP2 c32, DP2 c32 and c64); the monokernel refuses that layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4367
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4395
+  scenario-type: [agentic-coding]
