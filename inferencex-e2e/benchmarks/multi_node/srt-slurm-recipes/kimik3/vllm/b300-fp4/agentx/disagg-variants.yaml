@@ -150,9 +150,6 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        # With async scheduling, one prefill GPU stops mid-CUDA-graph under this
-        # Mooncake EFA workload while its peers spin; run synchronously.
-        no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10
@@ -164,7 +161,6 @@ base:
         moe-backend: deep_gemm_mega_moe
         max-num-seqs: 64
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      kv_events: true
     decode:
       nodes: 1
       workers: 1
@@ -184,9 +180,6 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        # With async scheduling, one prefill GPU stops mid-CUDA-graph under this
-        # Mooncake EFA workload while its peers spin; run synchronously.
-        no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10
