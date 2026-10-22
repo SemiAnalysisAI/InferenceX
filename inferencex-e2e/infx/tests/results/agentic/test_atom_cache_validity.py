@@ -82,8 +82,13 @@ def _rates(result, gpu, cpu, overall):
 
 @pytest.mark.parametrize("modern", [False, True])
 def test_qualified_pd_preserves_the_old_detail_and_prompt_sources(modern):
-    result = _run(_export(modern=modern))
+    export = _export(modern=modern)
+    export["metrics"]["atom:prompt_tokens"] = {
+        "series": [{"endpoint_url": url, "stats": {"total": 1500}} for url in (P, D)]
+    }
+    result = _run(export)
     _rates(result, 0.6, 0.1, 0.7)
+    assert result["tokens"]["prompt_total"] == 1000
     detail = result["cache_validity"]
     assert detail["schema"] == "atom-cache-validity/1"
     assert detail["status"] == "VALID_COMPLETE" and detail["pricing_eligible"] is True
@@ -348,3 +353,17 @@ def test_only_legacy_callers_may_omit_the_cancelled_count(modern):
     ):
         result = _run(_export(modern=modern), scope={**SCOPE, key: value})
         assert result["cache_validity"]["status"] == "REQUEST_SCOPE_UNRESOLVED"
+
+
+@pytest.mark.parametrize("labels", [None, []])
+def test_null_labels_are_unlabelled_but_malformed_labels_remain_invalid(labels):
+    export = _export(modern=True)
+    export["metrics"]["atom:prefix_cache_cached_tokens"]["series"][0]["labels"] = labels
+    result = _run(export)
+    if labels is None:
+        _rates(result, 0.6, 0.1, 0.7)
+        assert result["cache_validity"]["pricing_eligible"] is True
+    else:
+        _rates(result, None, None, None)
+        assert result["cache_validity"]["status"] == "INVALID_COUNTER"
+        assert result["cache_validity"]["pricing_eligible"] is False

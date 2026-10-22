@@ -185,6 +185,7 @@ class AtomBackend(ServerMetricsBackend):
             full_tokens, cached_tokens, external_tokens = (
                 accounting[key] for key in ("full", "cached", "offload")
             )
+            flat["total_prompt_tokens"] = counter_int(full_tokens)
         nested["cache_validity"] = accounting["validity"]
         sink = context.get("warnings")
         if isinstance(sink, list):
