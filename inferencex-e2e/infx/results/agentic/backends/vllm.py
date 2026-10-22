@@ -41,7 +41,8 @@ class VllmBackend(ServerMetricsBackend):
         flat["total_prompt_tokens"] = counter_int(prompt_total)
         flat["total_generation_tokens"] = counter_int(generation_total)
 
-        role_scope, role_filter = _cache_role_filter(metrics)
+        disaggregated = nested["validity"]["deployment"]["disaggregated"]
+        role_scope, role_filter = _cache_role_filter(metrics, disaggregated)
         prefix_hits = sum_stat(
             metrics,
             "vllm:prefix_cache_hits",
@@ -181,7 +182,7 @@ class VllmBackend(ServerMetricsBackend):
                 "generation_total": flat["total_generation_tokens"],
             }
         )
-        nested["sources"] = _vllm_sources(metrics)
+        nested["sources"] = _vllm_sources(metrics, disaggregated)
 
     def prompt_generation_totals(
         self,
@@ -260,7 +261,9 @@ def first_counter_total(
     return None
 
 
-def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _vllm_sources(
+    metrics: dict[str, dict[str, Any]], disaggregated: bool | None
+) -> list[dict[str, Any]]:
     source_ids = set()
     for metric_name in (
         "vllm:prompt_tokens",
@@ -271,7 +274,7 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "vllm:prompt_tokens_by_source",
     ):
         for series in metric_series(metrics, metric_name):
-            source_ids.add(_source_id(series))
+            source_ids.add(_source_id(series, disaggregated))
 
     sources: list[dict[str, Any]] = []
     for source_id in sorted(source_ids):
@@ -279,7 +282,7 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             continue
 
         def series_filter(series: dict, source_id: str = source_id) -> bool:
-            return _source_id(series) == source_id
+            return _source_id(series, disaggregated) == source_id
 
         prompt_tokens = sum_stat(metrics, "vllm:prompt_tokens", series_filter=series_filter)
         generation_tokens = sum_stat(metrics, "vllm:generation_tokens", series_filter=series_filter)
@@ -315,11 +318,20 @@ _CACHE_METRICS = (
 )
 
 
-def _series_role(series: dict[str, Any]) -> str:
+def _series_role(series: dict[str, Any], disaggregated: bool | None = None) -> str:
     labels = series.get("labels") if isinstance(series.get("labels"), dict) else {}
+    mode = str(labels.get("disaggregation_mode") or "").lower()
+    if mode in ("prefill", "context"):
+        return "prefill"
+    if mode == "decode":
+        return "decode"
+    if mode in ("combined", "unified", "prefill_and_decode"):
+        return "combined"
     component = str(labels.get("dynamo_component") or labels.get("component") or "")
     if component == "prefill":
         return "prefill"
+    if component == "backend" and disaggregated is False:
+        return "combined"
     if component in ("backend", "decode"):
         return "decode"
     if component in ("frontend", "router"):
@@ -327,19 +339,26 @@ def _series_role(series: dict[str, Any]) -> str:
     return "combined"
 
 
-def _cache_role_filter(metrics: dict[str, dict[str, Any]]) -> tuple[str, Any]:
-    # A P/D decode worker counts every transferred prompt token as external_kv_transfer, so only
-    # prefill series measure reuse; unlabelled series next to prefill ones are kept, not dropped.
-    roles = {_series_role(s) for name in _CACHE_METRICS for s in metric_series(metrics, name)}
-    if "prefill" not in roles:
-        return "combined", None
-    if "combined" in roles:
-        return "mixed", None
-    return "prefill", lambda series: _series_role(series) == "prefill"
+def _cache_role_filter(
+    metrics: dict[str, dict[str, Any]], disaggregated: bool | None
+) -> tuple[str, Any]:
+    roles = {
+        _series_role(s, disaggregated)
+        for name in _CACHE_METRICS
+        for s in metric_series(metrics, name)
+    }
+    if "prefill" in roles:
+        scope = "mixed" if "combined" in roles else "prefill"
+    else:
+        scope = "unresolved" if "decode" in roles or disaggregated is True else "combined"
+    if disaggregated is True and "combined" in roles:
+        scope = "unresolved"
+    # Known decode counters measure KV transfer, including alongside unlabelled workers.
+    return scope, lambda series: _series_role(series, disaggregated) not in ("decode", "router")
 
 
-def _source_id(series: dict[str, Any]) -> str:
-    role = _series_role(series)
+def _source_id(series: dict[str, Any], disaggregated: bool | None) -> str:
+    role = _series_role(series, disaggregated)
 
     parts = [role]
     endpoint = series.get("endpoint_url")

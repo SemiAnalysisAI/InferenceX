@@ -1,9 +1,3 @@
-"""Dynamo frontend overall, vLLM P/D roles and SGLang non-device tiers.
-
-Synthetic AIPerf 0.12 exports (counter names without ``_total``). These adapters do not assess
-phase validity yet (``NOT_EVALUATED``); the cases pin which series each rate is built from.
-"""
-
 from __future__ import annotations
 
 import pytest
@@ -81,8 +75,12 @@ class TestDynamoFrontendOverall:
     def test_router_estimate_is_labelled_as_an_estimate(self) -> None:
         metrics = {"dynamo_component_router_shared_cache_hit_rate": _gauge(FE, 0.7)}
         flat, nested = _run(metrics, "dynamo-vllm")
-        assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.7)
+        assert flat["server_overall_cache_hit_rate"] == pytest.approx(0.7)
+        assert nested["cache"]["overall_cache_hit_rate"] is None
         assert nested["cache"]["overall_source"] == "router_estimate"
+        assert nested["cache_validity"]["published"] is False
+        assert nested["cache_validity"]["basis"] is None
+        assert nested["cache_validity"]["pricing_eligible"] is False
 
     def test_worker_counters_take_precedence_over_the_frontend(self) -> None:
         metrics = {
@@ -148,6 +146,59 @@ class TestVllmPrefillDecodeRoles:
         assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.3)
         assert nested["cache"]["role_scope"] == "combined"
 
+    def test_mixed_roles_exclude_known_decode_transfers(self) -> None:
+        metrics = {
+            "vllm:prompt_tokens_by_source": _counter(
+                [
+                    (PRE, _vllm_role("prefill", "local_cache_hit"), 600),
+                    (PRE, _vllm_role("prefill", "local_compute"), 400),
+                    (DEC, _vllm_role("backend", "external_kv_transfer"), 1000),
+                    (FE, {"source": "local_compute"}, 100),
+                ]
+            )
+        }
+        _, nested = _run(metrics, "dynamo-vllm")
+        assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(600 / 1100)
+        assert nested["cache"]["role_scope"] == "mixed"
+        assert nested["tokens"]["prompt_by_source"]["cpu_or_external_cache_hit"] is None
+        assert nested["cache_validity"]["pricing_eligible"] is False
+
+    def test_decode_only_has_no_reuse_measurement(self) -> None:
+        metrics = {
+            "vllm:prompt_tokens_by_source": _counter(
+                [(DEC, _vllm_role("backend", "external_kv_transfer"), 1000)]
+            )
+        }
+        _, nested, _ = compute_server_metrics(
+            {"metrics": metrics}, framework="dynamo-vllm", records=[], disaggregated=True
+        )
+        assert nested["cache"]["overall_cache_hit_rate"] is None
+        assert nested["cache"]["role_scope"] == "unresolved"
+        assert nested["cache_validity"]["published"] is False
+
+    @pytest.mark.parametrize("disaggregated", [False, True])
+    def test_backend_component_respects_deployment_mode(self, disaggregated: bool) -> None:
+        metrics = {
+            "vllm:prompt_tokens_by_source": _counter(
+                [
+                    (PRE, _vllm_role("backend", "local_cache_hit"), 300),
+                    (PRE, _vllm_role("backend", "local_compute"), 700),
+                ]
+            )
+        }
+        _, nested, _ = compute_server_metrics(
+            {"metrics": metrics},
+            framework="dynamo-vllm",
+            records=[],
+            disaggregated=disaggregated,
+        )
+        if disaggregated:
+            assert nested["cache"]["overall_cache_hit_rate"] is None
+            assert nested["cache"]["role_scope"] == "unresolved"
+        else:
+            assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.3)
+            assert nested["cache"]["role_scope"] == "combined"
+
 
 class TestSglangNonDeviceTiers:
     @staticmethod
@@ -202,3 +253,18 @@ def test_frontend_only_total_reaches_the_cache_validity_core() -> None:
     assert core["status_class"] == "NOT_EVALUATED"
     assert core["published"] is True
     assert core["basis"] == "combined"
+
+
+@pytest.mark.parametrize("framework", ["vllm", "sglang"])
+@pytest.mark.parametrize("records", [[], [{"metrics": {"input_sequence_length": 1000}}]])
+def test_disaggregated_prompt_total_uses_the_profile_cohort(
+    framework: str, records: list[dict]
+) -> None:
+    metrics = {f"{framework}:prompt_tokens": _counter([(PRE, {}, 1000), (DEC, {}, 1000)])}
+    flat, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework=framework, records=records, disaggregated=True
+    )
+    expected = 1000 if records else None
+    assert flat["total_prompt_tokens"] == expected
+    assert nested["tokens"]["prompt_total"] == expected
+    assert nested["cache_validity"]["pricing_eligible"] is False

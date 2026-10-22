@@ -63,7 +63,7 @@ class SglangBackend(ServerMetricsBackend):
 
         flat["server_gpu_cache_hit_rate"] = rate(device_hits, prompt_total)
         flat["server_cpu_cache_hit_rate"] = rate(host_hits, prompt_total)
-        # Consumers price GPU + external, so external carries every non-device tier (host and storage).
+        # External reuse includes host and storage; CPU reuse includes host only.
         flat["server_external_cache_hit_rate"] = (
             rate(sum(non_device), prompt_total) if non_device else None
         )
