@@ -96,8 +96,6 @@ base:
     mem: '0'
     container-remap-root: ''
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
       INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
       PORT: '8000'

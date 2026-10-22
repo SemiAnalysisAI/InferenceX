@@ -7139,7 +7139,7 @@ glm5.2-fp8-b300-sglang-agentic-mtp:
 # memory as well as comparability -- the ~433 GB NVFP4
 # checkpoint needs ~54 GB/GPU across 8 B200s and does not fit below 8.
 glm5.2-fp4-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260901-07c8f729
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:b200-nscale
@@ -7153,24 +7153,8 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
 
-# First GLM-5.2 FP8 AgentX recipe on B200, the FP8 precision sibling of
-# glm5.2-fp4-b200-sglang-agentic-mtp. Same spec-decode-only shape per the AgentX
-# policy (docs/MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps
-# 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with acceptance pinned
-# to the golden AL 2.99 (infx/golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
-# K=3) through SGLANG_SIMULATE_ACC_*. That curve was measured on glm-5.2-fp8,
-# i.e. on this checkpoint. Pinned to the 2026-09-08 cu13 dev nightly (the first that carries sgl-project/sglang#38318, the guard for the EAGLE DSA fp8 read-door crash seen on the 2026-09-07 build), the same
-# tag the B200 Qwen3.5 FP8/FP4 SGLang AgentX recipes moved to that day.
-#
-# Same single arm and concurrency grid as the NVFP4 B200 and B300 siblings:
-# cookbook low-latency TP8 with HiCache host-DRAM offload, conc
-# [1, 4, 8, 12, 16] (steps of at least 2, hard stop at 16). TP8-only for
-# memory as well as comparability -- the ~756 GB block-FP8 checkpoint needs
-# ~94.5 GB/GPU across 8 B200s and does not fit below 8; the fp8 KV pool that
-# remains inside --mem-fraction-static 0.83 is ~55 GB/GPU against ~91 GB/GPU
-# on NVFP4, which HiCache absorbs as host spill.
 glm5.2-fp8-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:b200-nscale
@@ -7182,7 +7166,8 @@ glm5.2-fp8-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12], srt-recipe: agentic.yaml }
+      - { tp: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [16, 17, 18, 24], srt-recipe: agentic.yaml }
 
 # GLM-5.2 NVFP4 B200 AgentX on Dynamo + SGLang. EAGLE uses the model's
 # built-in nextn head, with acceptance pinned to the golden thinking-on AL in
@@ -8721,12 +8706,16 @@ dsv41flash-fp4-b200-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       # Engram weights use UVA DRAM; the KV cache stays GPU-resident.
-      # TP4 covers concurrency 1-128 with FlashInfer attention and THP Engram tables.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 64, 128], srt-recipe: agentic.yaml }
+      # TP4 covers concurrency 1-128 except 64 with FlashInfer attention and THP Engram tables.
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 128], srt-recipe: agentic.yaml }
+      # TP2 runs the TP4 c1 settings on two GPUs.
+      - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
       # DEP2 is native TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash vLLM Router.
-      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 24, 32], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      # DEP2 c128 adds vLLM's native CPU KV offloading at 32 GiB per DP rank.
+      - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: native }, spec-decoding: mtp, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
       # DEP4 is native TP1 x DP4 + EP4 with MegaMoE behind the same router.
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [96, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b200-sglang-agentic-dspark:
   image: lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
@@ -10185,3 +10174,20 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg:
           ep: 1
           dp-attn: false
         decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
+
+glm5.3-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
+  model: nvidia/GLM-5.3-NVFP4
+  model-prefix: glm5.3
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 10, 13, 14], srt-recipe: agentic.yaml }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }
