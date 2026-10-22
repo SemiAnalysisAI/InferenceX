@@ -66,7 +66,7 @@ LAST: dict = {}  # the last timing's reduction, for summary()
 
 
 def iterations(times: list[float]) -> dict:
-    """Per-iteration latencies reduced across ranks (CollectiveX ep_harness._reduce_vec)."""
+    """Per-iteration latencies reduced across ranks (CollectiveX ep_harness._Collectives.vec)."""
     d = _group()
     if d is None:
         out = {"max": list(times), "min": list(times), "spread": [0.0] * len(times)}
@@ -74,8 +74,9 @@ def iterations(times: list[float]) -> dict:
         from operatorx.runners.common import collectivex
         h = collectivex.harness()
         dev = torch.device("cuda", torch.cuda.current_device())
-        hi = h._reduce_vec(torch, d, dev, times, d.ReduceOp.MAX)
-        lo = h._reduce_vec(torch, d, dev, times, d.ReduceOp.MIN)
+        reduce = h._Collectives(torch, d, dev)
+        hi = reduce.vec(times, d.ReduceOp.MAX)
+        lo = reduce.vec(times, d.ReduceOp.MIN)
         out = {"max": hi, "min": lo, "spread": [a - b for a, b in zip(hi, lo)]}
     LAST.clear()
     LAST.update(out, own=list(times))
