@@ -17,7 +17,7 @@ from operatorx import main as benchmark
 from operatorx.core import Result, UnsupportedOpError
 
 
-def platforms(runner="cluster:h100-dgxc", gpus=8, architecture="linux/amd64"):
+def platforms(runner="cluster:h100-dsxe", gpus=8, architecture="linux/amd64"):
     return {runner: {"gpus_per_node": gpus, "image_platform": architecture}}
 
 
@@ -26,7 +26,7 @@ def test_plan_chunks_by_world_size():
     wide = {"type": "gemm", "args": {"m": 2, "parallel": {"tp": 4}}}
     multi = {"type": "gemm", "args": {"m": 2, "parallel": {"tp": 16}}}
     result = ci.plan(
-        "cluster:h100-dgxc",
+        "cluster:h100-dsxe",
         ["a", "b"],
         {"small": [ordinary, ordinary, wide, multi]},
         {"a": {"image": "same:1"}, "b": {"image": "same:1"}},
@@ -49,10 +49,10 @@ def test_plan_chunks_by_world_size():
     "runner,backends,worlds,shapes,chunk",
     [
         ("cluster:b200", ["a"], [1], [{"type": "gemm", "args": {}}], 1),
-        ("cluster:h100-dgxc", ["missing"], [1], [{"type": "gemm", "args": {}}], 1),
-        ("cluster:h100-dgxc", ["a"], [16], [{"type": "gemm", "args": {}}], 1),
-        ("cluster:h100-dgxc", ["a"], [1], [], 1),
-        ("cluster:h100-dgxc", ["a"], [1], [{"type": "gemm", "args": {}}] * 257, 1),
+        ("cluster:h100-dsxe", ["missing"], [1], [{"type": "gemm", "args": {}}], 1),
+        ("cluster:h100-dsxe", ["a"], [16], [{"type": "gemm", "args": {}}], 1),
+        ("cluster:h100-dsxe", ["a"], [1], [], 1),
+        ("cluster:h100-dsxe", ["a"], [1], [{"type": "gemm", "args": {}}] * 257, 1),
     ],
 )
 def test_plan_rejects_unexecutable_selection(runner, backends, worlds, shapes, chunk):
@@ -285,10 +285,10 @@ def test_testlist_loading_and_unknown_selection(tmp_path):
 @pytest.mark.parametrize(
     "exit_code,cancel,runner,gpus,architecture",
     [
-        (0, False, "cluster:h100-dgxc", 8, "linux/amd64"),
-        (3, False, "cluster:h100-dgxc", 8, "linux/amd64"),
-        (0, True, "cluster:h100-dgxc", 8, "linux/amd64"),
-        (0, "queued", "cluster:h100-dgxc", 8, "linux/amd64"),
+        (0, False, "cluster:h100-dsxe", 8, "linux/amd64"),
+        (3, False, "cluster:h100-dsxe", 8, "linux/amd64"),
+        (0, True, "cluster:h100-dsxe", 8, "linux/amd64"),
+        (0, "queued", "cluster:h100-dsxe", 8, "linux/amd64"),
         (0, False, "cluster:gb200-nv", 4, "linux/arm64"),
         (0, False, "cluster:gb300-nv", 4, "linux/arm64"),
         (0, False, "cluster:b300-dsxe", 8, "linux/amd64"),
@@ -468,10 +468,10 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
         assert "--ntasks=1" in launched
-        if runner in ("cluster:gb200-nv", "cluster:gb300-nv", "cluster:b300-dsxe", "cluster:h100-dgxc",
+        if runner in ("cluster:gb200-nv", "cluster:gb300-nv", "cluster:b300-dsxe", "cluster:h100-dsxe",
                       "cluster:mi300x-amd", "cluster:mi355x-amds"):
             assert "--container-remap-root" in launched
-        if runner in ("cluster:b300-dsxe", "cluster:h100-dgxc"):
+        if runner in ("cluster:b300-dsxe", "cluster:h100-dsxe"):
             assert "--mpi=none" in launched
             assert "--mem=0" in allocation
         if runner == "cluster:mi300x-amd":
@@ -539,7 +539,7 @@ def test_recovery_refuses_unrelated_pool_or_storage(tmp_path):
         profile,
         {
             "platforms": {
-                "cluster:h100-dgxc": {
+                "cluster:h100-dsxe": {
                     "operator": {"squash_dir": str(tmp_path / "shared/squash")}
                 }
             }
@@ -552,11 +552,11 @@ def test_recovery_refuses_unrelated_pool_or_storage(tmp_path):
     }
     ci.write_json(artifacts / "execution.json", data)
     with pytest.raises(ValueError, match="run/runner"):
-        ci.recover(artifacts, "12", "cluster:h100-dgxc", profile, 2)
-    data["cell"]["runner"] = "cluster:h100-dgxc"
+        ci.recover(artifacts, "12", "cluster:h100-dsxe", profile, 2)
+    data["cell"]["runner"] = "cluster:h100-dsxe"
     ci.write_json(artifacts / "execution.json", data)
     with pytest.raises(ValueError, match="runner/user"):
-        ci.recover(artifacts, "12", "cluster:h100-dgxc", profile, 2)
+        ci.recover(artifacts, "12", "cluster:h100-dsxe", profile, 2)
 
 
 @pytest.mark.parametrize("release", [True, False])

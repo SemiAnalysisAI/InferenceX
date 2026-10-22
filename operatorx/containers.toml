@@ -1,11 +1,10 @@
+# A backend's image where InferenceX serves no configuration with that framework on the
+# runner's hardware; otherwise cases take InferenceX's own image (operatorx.recipes).
 [nvidia.vllm]
-image = "vllm/vllm-openai:nightly-cd10ed6f9f6b37a8ace9cf380007e66fe12ec0c3"
-# the tag's digest, used once the registry prunes the nightly tag (staged squashes are keyed by it)
-digest = "sha256:20a52b807cef7a3be15d2174d293b5642d437615b20b5930d78a927e709e6bb6"
+image = "vllm/vllm-openai:nightly-39983a5e7a5a575a7829f5d5ada50a33d9337ec1@sha256:9c482f0f927b7064777c7baf0faafe5721804a9eb8b9bfea9d939cfbc3138348"
 
 [amd.torch]
-image = "vllm/vllm-openai-rocm:v0.19.0"
+image = "vllm/vllm-openai-rocm:v0.31.0@sha256:749f6f3f944f12af49966ac523c1f8573e4b229594b541954bd5f879b4496b1f"
 
 [amd.vllm]
-image = "vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984"
-digest = "sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1"
+image = "vllm/vllm-openai-rocm:v0.31.0@sha256:749f6f3f944f12af49966ac523c1f8573e4b229594b541954bd5f879b4496b1f"

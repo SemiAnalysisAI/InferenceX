@@ -6,9 +6,9 @@ on:
       runner:
         description: Self-hosted runner label (one physical node per shard)
         type: choice
-        default: cluster:h100-dgxc
+        default: cluster:h100-dsxe
         options:
-          - cluster:h100-dgxc
+          - cluster:h100-dsxe
           - cluster:h200-dgxc
           - cluster:b200-nscale
           - cluster:b300-dsxe
@@ -78,7 +78,7 @@ jobs:
       - name: Plan requested coverage
         id: plan
         env:
-          OPERATORX_RUNNER: ${{ inputs.runner || 'cluster:h100-dgxc' }}
+          OPERATORX_RUNNER: ${{ inputs.runner || 'cluster:h100-dsxe' }}
           OPERATORX_BACKENDS: ${{ inputs.backends || 'vllm' }}
           OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}

@@ -4,7 +4,7 @@
 
 | GPU | Runner label | GPUs / node | Image platform | Result cluster |
 | --- | --- | ---: | --- | --- |
-| H100 | `cluster:h100-dgxc` (default) | 8 | `linux/amd64` | `h100_dgxc_8x` |
+| H100 | `cluster:h100-dsxe` (default) | 8 | `linux/amd64` | `h100_dgxc_8x` |
 | H200 | `cluster:h200-dgxc` | 8 | `linux/amd64` | `h200_dgxc_8x` |
 | B200 | `cluster:b200-nscale` | 8 | `linux/amd64` | `b200_nscale_8x` |
 | B300 | `cluster:b300-dsxe` | 8 | `linux/amd64` | `b300_dsxe_8x` |
@@ -18,7 +18,7 @@
 
 ```bash
 gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
-  --ref <branch> -f runner=cluster:h100-dgxc -f backends=vllm \
+  --ref <branch> -f runner=cluster:h100-dsxe -f backends=vllm \
   -f testlists=gemm -f world_sizes=1 -f chunk_size=500 -f ingest=false
 ```
 
@@ -28,7 +28,7 @@ gh workflow run operatorx-sweep.yml --repo SemiAnalysisAI/InferenceX \
 
 ## Execution contract
 
-- Planning: shards per backend image, `parallel` split and InferenceX recipe (`recipes.py`: image, launch env, `vllm serve` args), chunked by `chunk_size`; at most 256 shards; a case with no recipe runs on the backend's image from `containers.toml`.
+- Planning: shards per backend image, `parallel` split and InferenceX recipe (`recipes.py`: image, launch env, `vllm serve` args), chunked by `chunk_size`; at most 256 shards; a case with no recipe runs on the image InferenceX serves the backend with on that hardware (`containers.toml` only where it serves none). Digest-pinned images import by digest (InferenceX's `enroot_uri`).
 - One exclusive Slurm node per shard (GB200/GB300: one 4-GPU tray, no world size 8); 45 min allocation, 70 min job.
 - Image: digest resolved at planning, imported with enroot on the allocated node, cached by image + digest + arch; a tag that moved since planning fails the shard.
 - Ranks: one process per GPU of the split's world size, env:// rendezvous; runner settings from CollectiveX's platform registry overlaid by `platforms.json`.

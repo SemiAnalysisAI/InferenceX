@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent
 # runner label (as InferenceX's workflows request) -> (Slurm cluster id, CollectiveX
 # platform profile in configs/platform_config.json)
 RUNNERS = {
-    "cluster:h100-dgxc": ("h100_dgxc_8x", "h100-dgxc"),
+    "cluster:h100-dsxe": ("h100_dgxc_8x", "h100-dgxc"),
     "cluster:h200-dgxc": ("h200_dgxc_8x", "h200-dgxc"),
     "cluster:b200-nscale": ("b200_nscale_8x", "b200-nscale"),
     "cluster:b300-dsxe": ("b300_dsxe_8x", "b300"),
@@ -163,6 +163,7 @@ def plan(
     platforms: dict[str, dict],
     mode: str = "timing",
     find_recipe=None,
+    default_image=None,
 ) -> dict:
     """Shards for a selection, one per (parallel split, InferenceX recipe). A case whose
     source checkpoint InferenceX serves on this hardware runs under that recipe
@@ -219,7 +220,9 @@ def plan(
                 {"testlist": name, "shape": shape})
     image_groups = defaultdict(list)
     for backend in sorted(set(backends)):
-        image_groups[images[backend]["image"]].append(backend)
+        # the image InferenceX serves the backend with on this hardware, else operatorx's own
+        image = default_image and default_image(backend, family(runner))
+        image_groups[image or images[backend]["image"]].append(backend)
     cells = []
     shards = []
     for (split, recipe, _state), cases in sorted(groups.items()):
@@ -331,6 +334,11 @@ def cleanup(root: Path, timeout_seconds: int) -> None:
             )
 
 
+def _pinned_digest(image: str) -> str:
+    """The digest of a digest-pinned reference (image:tag@sha256:...), else empty."""
+    return image.rpartition("@")[2] if "@sha256:" in image else ""
+
+
 def image_key(image: str, digest: str, image_platform: str) -> str:
     # keep the existing amd64 cache keys; Arm imports get their own
     suffix = "" if image_platform == "linux/amd64" else f":{image_platform}"
@@ -389,8 +397,11 @@ def import_image(args) -> None:
         temporary = squash.with_suffix(".partial")
         temporary.unlink(missing_ok=True)
         try:
-            host, repository, tag = probe_module().registry_reference(image)
-            uri = f"docker://{host}#{repository}:{tag}"
+            # the planner's InferenceX import URI (by digest for a pinned image), else by tag
+            uri = getattr(args, "uri", "")
+            if not uri:
+                host, repository, tag = probe_module().registry_reference(image)
+                uri = f"docker://{host}#{repository}:{tag}"
             # B300 homes are node-local: private temp paths unless a shared cache is configured
             with tempfile.TemporaryDirectory(prefix="operatorx-enroot-") as scratch:
                 env = dict(os.environ)
@@ -410,8 +421,8 @@ def import_image(args) -> None:
                     env=env,
                 )
             subprocess.run(["unsquashfs", "-s", str(temporary)], check=True)
-            # imported by tag (as CollectiveX); refuse a tag that moved since planning
-            if probe_module().resolve_image_digest(image) != digest:
+            # imported by tag: refuse a tag that moved since planning
+            if not _pinned_digest(image) and probe_module().resolve_image_digest(image) != digest:
                 raise RuntimeError(
                     "image tag moved or digest verification failed; dispatch again"
                 )
@@ -576,6 +587,8 @@ def execute(args) -> None:
             cell["image"],
             "--digest",
             cell["digest"],
+            "--uri",
+            cell.get("import_uri", ""),
             "--image-platform",
             image_platform,
         ]
@@ -651,7 +664,7 @@ def execute(args) -> None:
         ]
         if hw in ("h200", "b300", "h100", "gb200", "gb300") or is_amd(cell["runner"]):
             run.append("--container-remap-root")
-        # the AWS dsxe pools (b300, h100-dgxc) share one Slurm and pyxis setup
+        # the AWS dsxe pools (b300, h100) share one Slurm and pyxis setup
         if hw in ("b300", "h100"):
             run.append("--mpi=none")
         # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's
@@ -812,6 +825,7 @@ def main() -> None:
     p.add_argument("--cache", required=True, type=Path)
     p.add_argument("--image", required=True)
     p.add_argument("--digest", required=True)
+    p.add_argument("--uri", default="")
     p.add_argument(
         "--image-platform", required=True, choices=("linux/amd64", "linux/arm64")
     )
@@ -860,11 +874,11 @@ def main() -> None:
             load_platforms(args.platform_config),
             args.mode,
             find_recipe=recipes.find,
+            default_image=recipes.default_image,
         )
         digests = {c["image"]: "" for c in result["include"]}
-        pinned = {v["image"]: v["digest"] for v in images.values() if v.get("digest")}
         for image in digests:
-            digests[image] = probe_module().resolve_image_digest(image) or pinned.get(image, "")
+            digests[image] = _pinned_digest(image) or probe_module().resolve_image_digest(image)
         for cell in result["include"]:
             # recipe image tag gone from the registry (pruned nightly): backend image + recipe
             # env; the manifest records the swap
@@ -872,13 +886,17 @@ def main() -> None:
                 cell["recipe_image_unavailable"] = cell["image"]
                 cell["image"] = images[cell["backends"][0]]["image"]
                 if not digests.get(cell["image"]):
-                    digests[cell["image"]] = (probe_module().resolve_image_digest(cell["image"])
-                                              or pinned.get(cell["image"], ""))
+                    digests[cell["image"]] = (_pinned_digest(cell["image"])
+                                              or probe_module().resolve_image_digest(cell["image"]))
         for image in {c["image"] for c in result["include"]}:
             if not digests.get(image):
                 raise RuntimeError(f"cannot resolve image digest: {image}")
+        from infx.launch.backends.slurm.squash import enroot_uri
+
         for cell in result["include"]:
             cell["digest"] = digests[cell["image"]]
+            # InferenceX's import URI: a digest-pinned image imports by digest
+            cell["import_uri"] = enroot_uri(cell["image"])
             cell["queue-token"] = hashlib.sha256(
                 f"{args.run_id}:{args.attempt}:{cell['id']}".encode()
             ).hexdigest()[:32]
