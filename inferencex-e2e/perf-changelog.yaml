@@ -10778,3 +10778,15 @@
     - "Enable --monokernel-backend amd on concurrency <= 16."
     - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 on all points. Enable SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 only on the non-monokernel points (TP2 c32, DP2 c32 and c64); the monokernel refuses that layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4367
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move to lmsysorg/sglang:nightly-dev-20261019-3c560089 and its bundled Dynamo 1.6.0.dev20261018."
+    - "Disagg: replace the DEP8 prefill + Mooncake store ladder with TP1 x PP8 prefill workers that keep a 2x HiCache host tier, and run W4A4 MegaMoE for the target model on prefill and decode while the DSpark draft MoE stays at the image default (W4A8)."
+    - "Disagg points: 1P+DEP16 at concurrency 80, 160 and 200 with the KV router and token-balanced decode; 1P+DEP16 c300, 2P+DEP16 c720, 2P+DEP12 c800 and 2P+DEP8 c880 with a round-robin frontend and request-balanced decode. DSpark block size 6, 6, 5, 5 and 4, matched on prefill and decode."
+    - "Agg: TP8 over two nodes at concurrency 1; TP4 on one node at concurrency 1 and 4 with the fastokens tokenizer. DSpark block size 6."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
