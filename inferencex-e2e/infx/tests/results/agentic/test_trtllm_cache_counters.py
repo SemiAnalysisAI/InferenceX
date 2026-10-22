@@ -191,11 +191,12 @@ def test_idle_domain_and_series_order_do_not_change_weighted_rate():
     assert nested["tokens"]["prompt_total"] == 4000
 
 
-@pytest.mark.parametrize("mode", [None, "", "router"])
-def test_explicit_invalid_role_cannot_fall_back_to_aggregated_deployment(mode):
+@pytest.mark.parametrize("label", ["disaggregation_mode", "dynamo_component"])
+@pytest.mark.parametrize("mode", [None, "", "router", "unexpected"])
+def test_explicit_invalid_role_cannot_fall_back_to_aggregated_deployment(label, mode):
     export = _pair()
     for entry in export["metrics"].values():
-        entry["series"][0]["labels"]["disaggregation_mode"] = mode
+        entry["series"][0]["labels"] = {label: mode}
     assert _run(export, False)["cache"]["overall_cache_hit_rate"] is None
 
 

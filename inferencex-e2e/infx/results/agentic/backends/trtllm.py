@@ -9,7 +9,6 @@ from typing import Any
 from infx.results.agentic.cache_validity import modern_profile_error
 from infx.results.agentic.common import (
     gauge_stat,
-    label_value,
     metric_series,
     normalize_fraction,
     rate,
@@ -314,19 +313,20 @@ def _endpoint_role_sets(
                 continue
             endpoint = str(series.get("endpoint_url", ""))
             labels = series.get("labels")
-            component = label_value(series, "dynamo_component")
             if isinstance(labels, dict) and "disaggregation_mode" in labels:
                 mode = labels["disaggregation_mode"]
                 role = _normalize_role(mode) if isinstance(mode, str) and mode else "unknown"
                 explicit.setdefault(endpoint, set()).add(role)
-            elif component:
+            elif isinstance(labels, dict) and "dynamo_component" in labels:
+                component = labels["dynamo_component"]
                 role = (
-                    "combined"
+                    "unknown"
+                    if not isinstance(component, str) or not component
+                    else "combined"
                     if component == "backend" and disaggregated is False
                     else _normalize_role(component)
                 )
-                if role in ("prefill", "decode", "combined"):
-                    inferred.setdefault(endpoint, set()).add(role)
+                inferred.setdefault(endpoint, set()).add(role)
     roles = {**inferred, **explicit}
     for endpoint, role in (declared or {}).items():
         roles.setdefault(endpoint, set()).add(_normalize_role(role))
