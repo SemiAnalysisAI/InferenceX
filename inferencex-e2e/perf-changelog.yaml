@@ -10778,3 +10778,31 @@
     - "Enable --monokernel-backend amd on concurrency <= 16."
     - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 on all points. Enable SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 only on the non-monokernel points (TP2 c32, DP2 c32 and c64); the monokernel refuses that layout."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4367
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 DSpark FP4/FP8-KV AgentX on GB200 behind the llm-d router (EPP and pd-sidecar from llm-d-router v0.10.0, Envoy) through srt-slurm's llm-d frontend: disagg 1P1D DEP8/DEP8 (conc 64/128/160/256) and 2P1D DEP8/DEP16 (conc 256/384/576) with NIXL P/D KV and a Mooncake prefix-cache store on prefill at 66.7% node DRAM; agg TP8 (conc 1-12), DEP8 (conc 12-32), and DEP8 with Mooncake at 45% node DRAM (conc 52/72)."
+    - "Each DEP worker is one vllm serve that balances its DP ranks itself, so the EPP routes to workers. Throughput uses committed golden synthetic acceptance (TP8 K=5, DEP K=3 on both prefill and decode); evals use real verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Match the Sep 28 standalone llm-d AgentX speculative policy: disagg and agg DEP8 (including Mooncake) use adaptive verification with prefill K=1 and decode/agg K=3; only agg TP8 keeps golden synthetic acceptance at K=5 (3.61). The srt-slurm synthetic-acceptance connector skips golden AL injection when enable_adaptive_verification is true."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-disagg
+    - dsv4-fp4-gb200-llmd-vllm-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Route llm-d DEP8 disagg and agg workers with data-parallel-external-lb (one vLLM API per DP rank for the EPP) and VLLM_USE_RUST_FRONTEND=1, matching the Sep 28 standalone llm-d wide-EP launch; agg TP8 keeps a single TP8 worker without external LB. Drop 2P×1D disagg agentic concurrency 576 from the master search space after repeated warmup stalls."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
