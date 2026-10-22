@@ -10752,3 +10752,11 @@
   description:
     - "Update ATOM image from atom20260511 to the v0.1.8 nightly_202610190554 build"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4347
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM image from nightly-49cb2bbf to the digest-pinned nightly-8e2beaa3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4388
