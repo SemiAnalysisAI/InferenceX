@@ -159,7 +159,9 @@ class TestPairedCounterBounds:
 
 
 class TestDeploymentRolesAndCounterPairs:
-    @pytest.mark.parametrize("explicit_mode, expected", [(None, 0.9), ("decode", None)])
+    @pytest.mark.parametrize(
+        "explicit_mode, expected", [(None, 0.9), ("decode", None), ("garbage", None)]
+    )
     def test_aggregated_backend_component_does_not_override_explicit_mode(
         self, explicit_mode, expected
     ) -> None:
