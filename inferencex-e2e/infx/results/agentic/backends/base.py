@@ -63,6 +63,7 @@ def empty_server_metrics(present: bool, metric_count: int) -> dict[str, Any]:
         "present": present,
         "adapter": "none",
         "metric_count": metric_count,
+        "cache_validity": None,
         "cache": {
             "gpu_cache_hit_rate": None,
             "cpu_cache_hit_rate": None,
@@ -81,7 +82,6 @@ def empty_server_metrics(present: bool, metric_count: int) -> dict[str, Any]:
             "overall_source": None,
             "role_scope": None,
         },
-        "cache_validity": None,
         "kv_cache": {
             "gpu_usage_pct": None,
             "gpu_total_tokens": None,

@@ -75,13 +75,13 @@ SERVER_METRICS_KEYS = {
     "present",
     "adapter",
     "metric_count",
+    "cache_validity",
+    "validity",
     "cache",
     "kv_cache",
     "kv_offload",
     "tokens",
     "sources",
-    "cache_validity",
-    "validity",
 }
 SERVER_CACHE_KEYS = {
     "gpu_cache_hit_rate",
@@ -341,7 +341,8 @@ def _run_processor(
         timeout=30,
     )
     assert proc.returncode == 0, (
-        f"processor exited {proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        f"processor exited {proc.returncode}\n"
+        f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     )
     out = output_dir / "agg_test.json"
     assert out.exists(), f"missing output {out}; stdout:\n{proc.stdout}"
@@ -367,6 +368,55 @@ def test_processor_records_run_attempt(tmp_path: Path):
     assert retried["run_attempt"] == 4
     local = _run_processor(result_dir, tmp_path / "b", {"GITHUB_RUN_ATTEMPT": ""})
     assert "run_attempt" not in local
+
+
+def test_processor_uses_launcher_roles_for_atom_cache_counts(tmp_path: Path) -> None:
+    result_dir = _write_fixture(tmp_path)
+    metrics = {
+        f"atom:prefix_cache_{stem}_tokens": {
+            "series": [
+                {"endpoint_url": f"http://{endpoint}/metrics", "stats": {"total": value}}
+                for endpoint, value in values.items()
+            ]
+        }
+        for stem, values in (
+            ("full", {"prefill:8000": 1000, "decode:8000": 1000}),
+            ("cached", {"prefill:8000": 600, "decode:8000": 0}),
+            ("offload", {"prefill:8000": 100, "decode:8000": 0}),
+        )
+    }
+    (result_dir / "aiperf_artifacts" / "server_metrics_export.json").write_text(
+        json.dumps({"metrics": metrics})
+    )
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        {
+            "FRAMEWORK": "mooncake-atom",
+            "DISAGG": "true",
+            "IS_MULTINODE": "true",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "4",
+            "PREFILL_EP": "1",
+            "DECODE_NUM_WORKERS": "1",
+            "DECODE_TP": "4",
+            "DECODE_EP": "1",
+            "SRT_PREFILL_ENDPOINTS": "prefill:8000",
+            "SRT_DECODE_ENDPOINTS": "decode:8000",
+            "SRT_AGG_ENDPOINTS": "",
+            "AIPERF_SERVER_METRICS_URLS": "",
+            "SRTCTL_FRONTEND_TYPE": "",
+            "KV_OFFLOADING": "dram",
+            "KV_OFFLOAD_BACKEND": "lmcache",
+            "KV_OFFLOAD_BACKEND_METADATA": '{"name":"lmcache","version":"0.4.5"}',
+        },
+    )
+    cache = agg["server_metrics"]["cache"]
+    assert cache["gpu_cache_hit_rate"] == 0.6
+    assert cache["cpu_cache_hit_rate"] == cache["external_cache_hit_rate"] == 0.1
+    assert cache["overall_cache_hit_rate"] == 0.7
+    assert cache["prefix_cache_queries"] == cache["external_prefix_cache_queries"] == 1000
+    assert agg["num_gpus"] == 8
 
 
 def test_processor_preserves_dataset_provenance(tmp_path: Path):
@@ -405,54 +455,27 @@ def test_processor_omits_component_metadata_when_absent(tmp_path: Path):
     assert "kv_p2p_transfer" not in agg
 
 
-@pytest.mark.parametrize(
-    "parser",
-    [
-        _optional_component_metadata,
-        _optional_kv_offload_backend_metadata,
-    ],
-)
+@pytest.mark.parametrize("parser", [
+    _optional_component_metadata, _optional_kv_offload_backend_metadata,
+])
 @pytest.mark.parametrize("raw", [None, "", "null"])
 def test_optional_metadata_accepts_unset_values(parser, raw):
     env = {} if raw is None else {"TEST_METADATA": raw}
     assert parser(env, "TEST_METADATA") is None
 
 
-@pytest.mark.parametrize(
-    ("parser", "raw", "message"),
-    [
-        (_optional_component_metadata, "{", "must contain valid JSON"),
-        (_optional_component_metadata, "[]", "must contain exactly 'name' and 'version'"),
-        (
-            _optional_component_metadata,
-            '{"name":"router"}',
-            "must contain exactly 'name' and 'version'",
-        ),
-        (
-            _optional_component_metadata,
-            '{"name":"router","version":0}',
-            "name and version must be non-empty strings",
-        ),
-        (_optional_kv_offload_backend_metadata, "{", "must contain valid JSON"),
-        (_optional_kv_offload_backend_metadata, "[]", "may contain only 'name' and 'version'"),
-        (
-            _optional_kv_offload_backend_metadata,
-            '{"name":"cache","extra":1}',
-            "may contain only 'name' and 'version'",
-        ),
-        (_optional_kv_offload_backend_metadata, "{}", "must contain 'name' and optional 'version'"),
-        (
-            _optional_kv_offload_backend_metadata,
-            '{"version":"1"}',
-            "must contain 'name' and optional 'version'",
-        ),
-        (
-            _optional_kv_offload_backend_metadata,
-            '{"name":"cache","version":""}',
-            "values must be non-empty strings",
-        ),
-    ],
-)
+@pytest.mark.parametrize(("parser", "raw", "message"), [
+    (_optional_component_metadata, "{", "must contain valid JSON"),
+    (_optional_component_metadata, "[]", "must contain exactly 'name' and 'version'"),
+    (_optional_component_metadata, '{"name":"router"}', "must contain exactly 'name' and 'version'"),
+    (_optional_component_metadata, '{"name":"router","version":0}', "name and version must be non-empty strings"),
+    (_optional_kv_offload_backend_metadata, "{", "must contain valid JSON"),
+    (_optional_kv_offload_backend_metadata, "[]", "may contain only 'name' and 'version'"),
+    (_optional_kv_offload_backend_metadata, '{"name":"cache","extra":1}', "may contain only 'name' and 'version'"),
+    (_optional_kv_offload_backend_metadata, "{}", "must contain 'name' and optional 'version'"),
+    (_optional_kv_offload_backend_metadata, '{"version":"1"}', "must contain 'name' and optional 'version'"),
+    (_optional_kv_offload_backend_metadata, '{"name":"cache","version":""}', "values must be non-empty strings"),
+])
 def test_optional_metadata_preserves_cli_errors(parser, raw, message):
     with pytest.raises(SystemExit) as error:
         parser({"TEST_METADATA": raw}, "TEST_METADATA")
@@ -834,82 +857,49 @@ def test_gpu_shape_defaults_empty_parallelism_to_one(env):
     assert _gpu_shape(env) == ({"pp": 1, "dcp_size": 1, "pcp_size": 1}, 1, 1, 1, "false")
 
 
-@pytest.mark.parametrize(
-    "decode_workers,expected_gpus,expected_decode",
-    [
-        ("3", 78, (2, 11, 1, 9, 5)),
-        ("0", 48, (0, 0, 1, 1, 1)),
-    ],
-)
+@pytest.mark.parametrize("decode_workers,expected_gpus,expected_decode", [
+    ("3", 78, (2, 11, 1, 9, 5)),
+    ("0", 48, (0, 0, 1, 1, 1)),
+])
 def test_gpu_shape_counts_workers_and_normalizes_absent_decode(
-    decode_workers,
-    expected_gpus,
-    expected_decode,
+    decode_workers, expected_gpus, expected_decode,
 ):
     env = {
-        "IS_MULTINODE": "true",
-        "PREFILL_NUM_WORKERS": "2",
-        "PREFILL_TP": "3",
-        "PREFILL_PP_SIZE": "2",
-        "PREFILL_PCP_SIZE": "4",
-        "PREFILL_DCP_SIZE": "7",
-        "PREFILL_EP": "8",
-        "PREFILL_DP_ATTN": "YES",
-        "DECODE_NUM_WORKERS": decode_workers,
-        "DECODE_TP": "2",
-        "DECODE_EP": "11",
-        "DECODE_PP_SIZE": "1",
-        "DECODE_DCP_SIZE": "9",
-        "DECODE_PCP_SIZE": "5",
-        "DECODE_DP_ATTN": "false",
-        "PREFILL_GPUS": "999",
-        "DECODE_GPUS": "999",
+        "IS_MULTINODE": "true", "PREFILL_NUM_WORKERS": "2", "PREFILL_TP": "3",
+        "PREFILL_PP_SIZE": "2", "PREFILL_PCP_SIZE": "4", "PREFILL_DCP_SIZE": "7",
+        "PREFILL_EP": "8", "PREFILL_DP_ATTN": "YES", "DECODE_NUM_WORKERS": decode_workers,
+        "DECODE_TP": "2", "DECODE_EP": "11", "DECODE_PP_SIZE": "1",
+        "DECODE_DCP_SIZE": "9", "DECODE_PCP_SIZE": "5", "DECODE_DP_ATTN": "false",
+        "PREFILL_GPUS": "999", "DECODE_GPUS": "999",
     }
     fields, num_gpus, tp, ep, attention = _gpu_shape(env)
     assert num_gpus == expected_gpus
     assert fields["num_prefill_gpu"] == 48
     assert fields["num_decode_gpu"] == (30 if decode_workers == "3" else 0)
-    assert (
-        tuple(
-            fields[key]
-            for key in ("decode_tp", "decode_ep", "decode_pp", "decode_dcp_size", "decode_pcp_size")
-        )
-        == expected_decode
-    )
+    assert tuple(fields[key] for key in ("decode_tp", "decode_ep", "decode_pp",
+                                        "decode_dcp_size", "decode_pcp_size")) == expected_decode
     assert (tp, ep, attention) == ((5, 11, "true") if decode_workers == "3" else (3, 8, "true"))
     assert fields["prefill_dp_attention"] == "YES"
     assert fields["decode_dp_attention"] == "false"
 
 
-@pytest.mark.parametrize(
-    "env,error_type,message",
-    [
-        ({"IS_MULTINODE": "true", "TP": "bad"}, ValueError, "invalid literal for int"),
-        (
-            {"IS_MULTINODE": "true", "PREFILL_PP_SIZE": "0", "PREFILL_HARDWARE": "gpu"},
-            SystemExit,
-            "Multinode PP, DCP, and PCP sizes must be positive integers.",
-        ),
-        (
-            {"IS_MULTINODE": "true", "DECODE_NUM_WORKERS": "0", "DECODE_PCP_SIZE": "0"},
-            SystemExit,
-            "Multinode PP, DCP, and PCP sizes must be positive integers.",
-        ),
-    ],
-)
+@pytest.mark.parametrize("env,error_type,message", [
+    ({"IS_MULTINODE": "true", "TP": "bad"}, ValueError, "invalid literal for int"),
+    ({"IS_MULTINODE": "true", "PREFILL_PP_SIZE": "0", "PREFILL_HARDWARE": "gpu"},
+     SystemExit, "Multinode PP, DCP, and PCP sizes must be positive integers."),
+    ({"IS_MULTINODE": "true", "DECODE_NUM_WORKERS": "0", "DECODE_PCP_SIZE": "0"},
+     SystemExit, "Multinode PP, DCP, and PCP sizes must be positive integers."),
+])
 def test_gpu_shape_preserves_parsing_and_validation_order(env, error_type, message):
     with pytest.raises(error_type, match=message):
         _gpu_shape(env)
 
 
-@pytest.mark.parametrize(
-    "error,category",
-    [
-        ({"type": "HTTPStatusError", "message": "500 server error"}, "HTTPStatusError"),
-        (" \t\r\n", "unknown"),
-        ({"message": " \t\r\n"}, "unknown"),
-    ],
-)
+@pytest.mark.parametrize("error,category", [
+    ({"type": "HTTPStatusError", "message": "500 server error"}, "HTTPStatusError"),
+    (" \t\r\n", "unknown"),
+    ({"message": " \t\r\n"}, "unknown"),
+])
 def test_processor_surfaces_request_accounting(tmp_path: Path, error, category):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
@@ -1409,7 +1399,9 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: s
             },
             "sglang:realtime_tokens": {
                 "type": "counter",
-                "series": [{"labels": {"mode": "prefill_compute"}, "stats": {"total": 500.0}}],
+                "series": [
+                    {"labels": {"mode": "prefill_compute"}, "stats": {"total": 500.0}}
+                ],
             },
         }
     }
@@ -1454,7 +1446,9 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path, framework: s
     if framework == "dynamo-sglang":
         assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] is None
         assert agg["kv_cache_pool_tokens"] is None
-        assert any("rank replicas are not normalized" in warning for warning in agg["warnings"])
+        assert any(
+            "rank replicas are not normalized" in warning for warning in agg["warnings"]
+        )
 
 
 def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
@@ -1744,7 +1738,9 @@ def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
     assert proc.returncode == 0, proc.stderr
     agg = json.loads((tmp_path / "out" / "agg_test.json").read_text())
     assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] == pytest.approx(0.25)
-    assert agg["request_metrics"]["tokens"]["output_expected"]["mean"] == pytest.approx(55.0)
+    assert agg["request_metrics"]["tokens"]["output_expected"]["mean"] == pytest.approx(
+        55.0
+    )
 
 
 @pytest.mark.parametrize("cache_state", ["matching", "missing", "ambiguous", "no_identity"])
@@ -1813,61 +1809,29 @@ def test_processor_supports_per_run_subdir_layout(tmp_path: Path):
 
 def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeypatch):
     records = [
-        _make_record(
-            conv_id="root",
-            turn_index=0,
-            isl=100,
-            osl=50,
-            ttft_ms=30,
-            e2e_ms=1000,
-            itl_ms=10,
-            start_ns=1_000_000_000,
-            end_ns=2_000_000_000,
-        ),
-        _make_record(
-            conv_id="root::sa:child",
-            turn_index=1,
-            isl=200,
-            osl=100,
-            ttft_ms=50,
-            e2e_ms=2000,
-            itl_ms=20,
-            start_ns=2_000_000_000,
-            end_ns=4_000_000_000,
-        ),
+        _make_record(conv_id="root", turn_index=0, isl=100, osl=50,
+                     ttft_ms=30, e2e_ms=1000, itl_ms=10,
+                     start_ns=1_000_000_000, end_ns=2_000_000_000),
+        _make_record(conv_id="root::sa:child", turn_index=1, isl=200, osl=100,
+                     ttft_ms=50, e2e_ms=2000, itl_ms=20,
+                     start_ns=2_000_000_000, end_ns=4_000_000_000),
     ]
     aggregate = {"metadata": {"dataset": {"hf_dataset_name": "example/traces"}}}
-    server_metrics = {
-        "metrics": {
-            "vllm:prefix_cache_hits": {
-                "series": [{"stats": {"total": 10}}],
-            },
-            "vllm:prefix_cache_queries": {"series": [{"stats": {"total": 40}}]},
-        }
-    }
-    traces = [
-        {
-            "id": "root",
-            "requests": [
-                {"type": "n", "out": 11},
-                {"type": "tool", "out": 999},
-                {"type": "s", "output_length": 29},
-            ],
-        }
-    ]
+    server_metrics = {"metrics": {"vllm:prefix_cache_hits": {
+        "series": [{"stats": {"total": 10}}],
+    }, "vllm:prefix_cache_queries": {"series": [{"stats": {"total": 40}}]}}}
+    traces = [{"id": "root", "requests": [
+        {"type": "n", "out": 11}, {"type": "tool", "out": 999},
+        {"type": "s", "output_length": 29},
+    ]}]
     logs = [
         "INFO (EngineCore_DP0 pid=10) GPU KV cache size: 800 tokens\n"
         "INFO (EngineCore_DP0 pid=10) GPU KV cache size: 800 tokens",
         "INFO (EngineCore_DP0 pid=11) GPU KV cache size: 1,200 tokens",
     ]
-    accounting = {
-        "records_total": 4,
-        "records_profiled": 2,
-        "records_dropped_total": 2,
-        "records_warmup_dropped": 1,
-        "records_error_dropped": 1,
-        "error_categories": {"Timeout": 1},
-    }
+    accounting = {"records_total": 4, "records_profiled": 2, "records_dropped_total": 2,
+                  "records_warmup_dropped": 1, "records_error_dropped": 1,
+                  "error_categories": {"Timeout": 1}}
     env = {"KV_OFFLOADING": "none", "TP": "4", "FRAMEWORK": "vllm"}
     before = deepcopy((records, aggregate, server_metrics, traces, logs, accounting, env))
 
@@ -1882,20 +1846,13 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
         isolated.setattr("builtins.open", forbidden)
         isolated.setattr(Path, "open", forbidden)
         result = build_result(
-            records,
-            aggregate,
-            server_metrics,
-            MappingProxyType(env),
-            request_accounting=accounting,
-            traces=iter(traces),
-            server_logs=iter(logs),
+            records, aggregate, server_metrics, MappingProxyType(env),
+            request_accounting=accounting, traces=iter(traces), server_logs=iter(logs),
         )
         second = build_result(records, aggregate, {}, {**env, "TP": "2"})
 
     assert result["request_metrics"]["throughput"]["per_gpu"] == {
-        "total_tput_tps": 37.5,
-        "output_tput_tps": 12.5,
-        "input_tput_tps": 25.0,
+        "total_tput_tps": 37.5, "output_tput_tps": 12.5, "input_tput_tps": 25.0,
     }
     assert second["request_metrics"]["throughput"]["per_gpu"]["total_tput_tps"] == 75.0
     assert result["request_metrics"]["tokens"]["output_expected"]["mean"] == 20
@@ -1908,23 +1865,18 @@ def test_builder_uses_explicit_inputs_without_environment_or_file_access(monkeyp
     assert (records, aggregate, server_metrics, traces, logs, accounting, env) == before
 
 
-@pytest.mark.parametrize(
-    "framework,metric_names",
-    [
-        ("atom", ["atom:prompt_tokens"]),
-        ("trtllm", ["trtllm_kv_cache_max_blocks"]),
-        ("dynamo-sglang", ["sglang:num_requests_total"]),
-    ],
-)
+@pytest.mark.parametrize("framework,metric_names", [
+    ("atom", ["atom:prompt_tokens"]),
+    ("trtllm", ["trtllm_kv_cache_max_blocks"]),
+    ("dynamo-sglang", ["sglang:num_requests_total"]),
+])
 def test_builder_does_not_consume_logs_when_backend_does_not_use_them(framework, metric_names):
     def unavailable_logs():
         raise OSError("unreadable optional log")
         yield
 
     result = build_result(
-        [],
-        {},
-        {"metrics": {name: {"series": []} for name in metric_names}},
+        [], {}, {"metrics": {name: {"series": []} for name in metric_names}},
         {"KV_OFFLOADING": "none", "FRAMEWORK": framework},
         server_logs=unavailable_logs(),
     )
@@ -1936,47 +1888,30 @@ def test_builder_does_not_consume_logs_when_backend_does_not_use_them(framework,
         ]
 
 
-@pytest.mark.parametrize(
-    "override,message",
-    [
-        ({"KV_OFFLOADING": ""}, "Missing required environment variable: KV_OFFLOADING"),
-        ({"PP_SIZE": "0"}, "PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers."),
-        ({"ROUTER_METADATA": "{"}, "ROUTER_METADATA must contain valid JSON"),
-        ({}, "invalid literal for int() with base 10: 'bad-output'"),
-    ],
-)
+@pytest.mark.parametrize("override,message", [
+    ({"KV_OFFLOADING": ""}, "Missing required environment variable: KV_OFFLOADING"),
+    ({"PP_SIZE": "0"}, "PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers."),
+    ({"ROUTER_METADATA": "{"}, "ROUTER_METADATA must contain valid JSON"),
+    ({}, "invalid literal for int() with base 10: 'bad-output'"),
+])
 def test_processor_preserves_validation_before_optional_trace_reads(tmp_path, override, message):
     result_dir = _write_fixture(tmp_path)
     cache = tmp_path / "hf"
     snapshot = cache / "datasets--semianalysisai--cc-traces-weka-062126" / "snapshots" / "one"
     snapshot.mkdir(parents=True)
-    (snapshot / "traces.json").write_text(
-        json.dumps(
-            {
-                "id": "trace-A",
-                "requests": [{"type": "n", "out": "bad-output"}],
-            }
-        )
-    )
+    (snapshot / "traces.json").write_text(json.dumps({
+        "id": "trace-A", "requests": [{"type": "n", "out": "bad-output"}],
+    }))
     out = tmp_path / "out"
     env = {
-        "PATH": os.environ.get("PATH", ""),
-        "PYTHONPATH": str(REPO_ROOT),
-        "RESULT_DIR": str(result_dir),
-        "AGENTIC_OUTPUT_DIR": str(out),
-        "RESULT_FILENAME": "agg_test",
-        "KV_OFFLOADING": "none",
-        "FRAMEWORK": "vllm",
-        "HF_HUB_CACHE": str(cache),
-        **override,
+        "PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(REPO_ROOT),
+        "RESULT_DIR": str(result_dir), "AGENTIC_OUTPUT_DIR": str(out),
+        "RESULT_FILENAME": "agg_test", "KV_OFFLOADING": "none",
+        "FRAMEWORK": "vllm", "HF_HUB_CACHE": str(cache), **override,
     }
     proc = subprocess.run(
         [sys.executable, "-m", "infx.results.agentic.process_agentic_result"],
-        cwd=REPO_ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=30,
+        cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30,
     )
     assert proc.returncode == 1
     assert proc.stderr.rstrip().endswith(message)
@@ -1992,14 +1927,9 @@ def test_processor_trace_cache_precedence_and_last_duplicate(tmp_path, cache_env
     snapshot.mkdir(parents=True)
     trace = {"id": "trace-A", "requests": [{"type": "n", "out": 17}] * 3}
     (snapshot / "a.jsonl").write_text("{bad json\n" + json.dumps(trace) + "\n")
-    (snapshot / "z.json").write_text(
-        json.dumps(
-            {
-                **trace,
-                "requests": [{"type": "s", "output_length": 23}] * 3,
-            }
-        )
-    )
+    (snapshot / "z.json").write_text(json.dumps({
+        **trace, "requests": [{"type": "s", "output_length": 23}] * 3,
+    }))
     (snapshot / "zz.json").write_text(json.dumps({"id": "trace-A", "requests": []}))
     env = {"HF_HUB_CACHE": "", "HUGGINGFACE_HUB_CACHE": "", "HF_HOME": ""}
     env[cache_env] = str(cache)
@@ -2019,20 +1949,13 @@ def test_processor_trace_cache_precedence_and_last_duplicate(tmp_path, cache_env
     assert expected["std"] == 0
 
 
-@pytest.mark.parametrize(
-    "offsets,expected_mean,expected_p95,windows",
-    [
-        ([0, 500_000_000, 1_000_000_000, 1_500_000_000, 2_000_000_000], 2, 2, 2),
-        ([0, 1_000_000_000, 1_000_000_000, 2_000_000_000], 1.5, 1.95, 2),
-        ([0, 250_000_000, 500_000_000], 6, None, 0),
-    ],
-)
-def test_qps_windows_exclude_right_boundary_and_preserve_duplicates(
-    offsets, expected_mean, expected_p95, windows
-):
-    records = [
-        {"metadata": {"request_end_ns": 1_000_000_000 + offset}} for offset in reversed(offsets)
-    ]
+@pytest.mark.parametrize("offsets,expected_mean,expected_p95,windows", [
+    ([0, 500_000_000, 1_000_000_000, 1_500_000_000, 2_000_000_000], 2, 2, 2),
+    ([0, 1_000_000_000, 1_000_000_000, 2_000_000_000], 1.5, 1.95, 2),
+    ([0, 250_000_000, 500_000_000], 6, None, 0),
+])
+def test_qps_windows_exclude_right_boundary_and_preserve_duplicates(offsets, expected_mean, expected_p95, windows):
+    records = [{"metadata": {"request_end_ns": 1_000_000_000 + offset}} for offset in reversed(offsets)]
     flat, nested = compute_qps_stats(records)
     assert nested["samples"] == windows
     assert flat["mean_qps"] == pytest.approx(expected_mean)
@@ -2044,11 +1967,10 @@ def test_qps_windows_exclude_right_boundary_and_preserve_duplicates(
 
 @pytest.mark.parametrize("invalid_turn", [-1, -3, 2])
 def test_expected_output_tokens_ignore_out_of_range_trace_turns(invalid_turn):
-    records = [
-        {"metadata": {"conversation_id": "root", "turn_index": index}}
-        for index in (0, 1, invalid_turn)
-    ]
-    traces = [{"id": "root", "requests": [{"type": "n", "out": 11}, {"type": "s", "out": 29}]}]
+    records = [{"metadata": {"conversation_id": "root", "turn_index": index}}
+               for index in (0, 1, invalid_turn)]
+    traces = [{"id": "root", "requests": [{"type": "n", "out": 11},
+                                           {"type": "s", "out": 29}]}]
     _, metrics = compute_request_metrics(records, traces=traces)
     assert metrics["tokens"]["output_expected"]["mean"] == 20
     assert metrics["tokens"]["output_expected"]["std"] == 9
