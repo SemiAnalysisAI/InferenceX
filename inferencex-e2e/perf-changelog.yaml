@@ -10758,3 +10758,14 @@
   description:
     - "Update SGLang image from v0.5.12-rocm700-mi35x to v0.5.22-rocm720-mi35x and use Triton FP8 GEMMs at TP4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4283
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294 to vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392, which includes vllm-project/vllm#60683 (Kimi-K3 specialized decode on MI355X)."
+    - "dcp1 concurrency 1 and 2 run additional-config {\"decode_backend\":\"latency_specialized\"} with VLLM_USE_V2_MODEL_RUNNER=1: pure spec-verify steps of at most 8 rows run each MoE decoder layer as persistent FlyDSL MonoKernels with in-kernel TP all-reduces."
+    - "Add dcp1 concurrency 2 (GPU-resident): a 3-token DSpark draft so two requests verify 8 rows per step, max-num-seqs 4 and FULL_AND_PIECEWISE CUDA graphs at every even size up to 16."
+    - "dcp1 concurrency 1 drops its fp8_per_channel quantization-config: the specialized decode reads the in_proj, o_proj and shared-expert weights in place as BF16 and refuses FP8 ones."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
