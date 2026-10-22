@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -135,7 +136,7 @@ def apply_profile_totals(flat: dict[str, Any], records: list[dict[str, Any]]) ->
 
 
 def counter_int(value: float | None) -> int | None:
-    if value is None:
+    if value is None or not math.isfinite(value):
         return None
     return round(value)
 

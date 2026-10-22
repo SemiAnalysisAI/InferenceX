@@ -116,6 +116,30 @@ class TestDisaggregatedPromptTotals:
         assert flat["total_prompt_tokens"] is None
         assert nested["tokens"]["prompt_total"] is None
 
+    def test_missing_metrics_does_not_publish_a_partial_client_total(self):
+        records = [{"metrics": {"input_sequence_length": 800}}, {"metrics": {}}]
+        flat, nested, _ = compute_server_metrics(
+            {}, framework="vllm", records=records, disaggregated=True
+        )
+
+        assert flat["total_prompt_tokens"] is None
+        assert nested["tokens"]["prompt_total"] is None
+        assert nested["cache_validity"]["status_class"] == "MISSING"
+
+    @pytest.mark.parametrize("totals", [[1234, None], [-10, 1244], [True], [float("inf")]])
+    def test_incomplete_or_invalid_frontend_cannot_supply_a_prompt_total(self, totals):
+        counter = _counter(0)
+        counter["series"] = [{"stats": {"total": value}} for value in totals]
+        flat, nested, _ = compute_server_metrics(
+            {"metrics": {"dynamo_frontend_input_sequence_tokens": counter}},
+            framework="dynamo-trt",
+            records=[],
+            disaggregated=True,
+        )
+
+        assert flat["total_prompt_tokens"] is None
+        assert nested["tokens"]["prompt_total"] is None
+
     def test_frontend_total_remains_available_without_client_usage(self):
         flat, nested, _ = compute_server_metrics(
             {"metrics": {"dynamo_frontend_input_sequence_tokens": _counter(1234.0)}},
