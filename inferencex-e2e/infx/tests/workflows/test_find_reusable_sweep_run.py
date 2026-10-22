@@ -336,7 +336,6 @@ def test_validate_reusable_run_rejects_non_success_run_by_default(conclusion) ->
         reuse.validate_reusable_run(
             "SemiAnalysisAI/InferenceX",
             "run-sweep.yml",
-            1321,
             {
                 "id": 25763404168,
                 "event": "pull_request",
@@ -428,6 +427,47 @@ def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, la
     assert outputs["reuse-source-run-id"] == "25763404168"
     assert outputs["reuse-source-pr-number"] == "1321"
     assert outputs["reuse-source-head-sha"] == "abc123"
+
+
+def test_main_reports_outside_run_source_pr(monkeypatch, tmp_path) -> None:
+    run = {
+        "id": 77, "event": "pull_request", "status": "completed", "conclusion": "success",
+        "path": ".github/workflows/run-sweep.yml", "pull_requests": [],
+        "head_sha": "other-sha", "head_branch": "other-branch",
+    }
+
+    def fake_github_api(repo, path, token, params=None):
+        return {
+            "/commits/merge-sha/pulls": [{"number": 1321}],
+            "/pulls/1321": {"merged_at": "2026-05-13T00:01:00Z", "labels": []},
+            "/actions/runs/77": run,
+            "/commits/other-sha/pulls": [{"number": 900, "head": {"ref": "other-branch"}}],
+        }[path]
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        return {
+            "/issues/1321/comments": [{
+                "created_at": "2026-05-13T00:00:00Z", "author_association": "OWNER",
+                "body": "/use 77",
+            }],
+            "/pulls/1321/commits": [{"sha": "abc123"}],
+            "/actions/runs/77/artifacts": [{"name": "results_bmk"}],
+        }[path]
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse.github, "api", fake_github_api)
+    monkeypatch.setattr(reuse.github, "paginate", fake_paginated_github_api)
+    monkeypatch.setattr(reuse.sys, "argv", [
+        "find_reusable_sweep_run.py", "--repo", "SemiAnalysisAI/InferenceX",
+        "--commit-sha", "merge-sha", "--event-name", "push", "--ref", "refs/heads/main",
+        "--github-output", str(output_path),
+    ])
+
+    assert reuse.main() == 0
+    outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+    assert outputs["reuse-source-run-id"] == "77"
+    assert outputs["reuse-source-pr-number"] == "900"
 
 
 def test_main_enables_explicitly_pinned_failed_run(monkeypatch, tmp_path) -> None:

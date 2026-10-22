@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 
 
 def parse_component_metadata(
@@ -33,3 +34,9 @@ def parse_component_metadata(
         fields = "values" if version_optional else "name and version"
         raise error_type(f"{label} {fields} must be non-empty strings")
     return metadata
+
+
+def run_attempt(env: Mapping[str, str]) -> int | None:
+    """GitHub run attempt that produced a result, or None outside Actions."""
+    value = env.get("GITHUB_RUN_ATTEMPT", "")
+    return int(value) if value.isascii() and value.isdecimal() and int(value) > 0 else None
