@@ -5,7 +5,8 @@
 # pair. Under SGLANG_ENABLE_PP_SPEC the last stage holds the draft: it verifies
 # the relayed block and tail-drafts the next, while earlier stages verify the
 # same block and relay their DFLASH taps. The patch is cut against the image's
-# pinned fork, so a new image needs a new patch.
+# pinned fork, so a new image needs a new patch; upstream it is
+# sgl-project/sglang#45756.
 set -euo pipefail
 root=${SGLANG_ROOT:-/sgl-workspace/sglang-muse-spark}
 patch_file=${MUSESPARK_PP_PATCH:-/configs/patches/musespark-pp.patch}

@@ -12,10 +12,10 @@ index 536cf18..f75b75d 100644
              "Currently DFLASH speculative decoding only supports pp_size == 1."
          )
 diff --git a/python/sglang/srt/arg_groups/validation_hook.py b/python/sglang/srt/arg_groups/validation_hook.py
-index b5785fa..aeb85f4 100644
+index b5785fa..e9f363e 100644
 --- a/python/sglang/srt/arg_groups/validation_hook.py
 +++ b/python/sglang/srt/arg_groups/validation_hook.py
-@@ -51,6 +51,9 @@ def check_pipeline_parallel_compat(cfg: Any) -> None:
+@@ -51,13 +51,17 @@ def check_pipeline_parallel_compat(cfg: Any) -> None:
          assert (
              cfg.speculative_algorithm.upper() == "EAGLE"
              and not cfg.enable_multi_layer_eagle
@@ -24,7 +24,18 @@ index b5785fa..aeb85f4 100644
 +            and envs.SGLANG_ENABLE_PP_SPEC.get()
          ), (
              "Pipeline parallelism currently only supports EAGLE "
-             "(non-multi-layer) speculative decoding"
+-            "(non-multi-layer) speculative decoding"
++            "(non-multi-layer) speculative decoding, or DFLASH with "
++            "SGLANG_ENABLE_PP_SPEC=1"
+         )
+         if envs.SGLANG_ENABLE_PP_SPEC.get():
+-            # The aggregate relay carries an EAGLE-shaped tree and only
+-            # EAGLEWorkerV2 tail-drafts. PD prefill relays topk_p /
++            # The aggregate relay carries the drafted block, which
++            # EAGLEWorkerV2 and DFlashWorkerV2 tail-draft. PD prefill relays topk_p /
+             # topk_index / hidden states through RelayPayload; the gated
+             # flow replaces that relay with its own and does not carry
+             # those fields.
 diff --git a/python/sglang/srt/managers/scheduler.py b/python/sglang/srt/managers/scheduler.py
 index dad4a86..40b50b2 100644
 --- a/python/sglang/srt/managers/scheduler.py
@@ -97,51 +108,42 @@ index 0013308..747c576 100644
          ):
              tensor_dict["draft_topk_p"] = draft_input.topk_p.contiguous()
 diff --git a/python/sglang/srt/models/muse_spark.py b/python/sglang/srt/models/muse_spark.py
-index 312b342..b797707 100644
+index 312b342..111f747 100644
 --- a/python/sglang/srt/models/muse_spark.py
 +++ b/python/sglang/srt/models/muse_spark.py
-@@ -83,7 +83,39 @@ from sglang.srt.layers.vocab_parallel_embedding import (
+@@ -13,7 +13,7 @@ from __future__ import annotations
+ import contextlib
+ import functools
+ import logging
+-from typing import Iterable, List, Optional, Tuple
++from typing import Iterable, List, Optional, Tuple, Union
+ 
+ import torch
+ import torch.nn.functional as F
+@@ -44,6 +44,7 @@ from sglang.srt.configs.muse_spark import (
+     should_skip_weight_loading,
+ )
+ from sglang.srt.distributed import get_tp_group, tensor_model_parallel_all_reduce
++from sglang.srt.distributed.utils import get_pp_indices
+ from sglang.srt.environ import envs
+ from sglang.srt.layers import layernorm_sp
+ from sglang.srt.layers import muse_spark_expert_tp as expert_tp
+@@ -78,12 +79,13 @@ from sglang.srt.layers.quantization.unquant import bf16_gemm_dispatch
+ from sglang.srt.layers.quantization.utils import is_layer_skipped
+ from sglang.srt.layers.radix_attention import RadixAttention
+ from sglang.srt.layers.rotary_embedding import get_rope
++from sglang.srt.layers.utils import PPMissingLayer, get_layer_id
+ from sglang.srt.layers.vocab_parallel_embedding import (
+     ParallelLMHead,
      VocabParallelEmbedding,
      get_embedding_tp_kwargs,
  )
 -from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 +from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
-+from sglang.srt.distributed.utils import get_pp_indices
-+from sglang.srt.layers.utils import PPMissingLayer
-+import re as _re
-+_PP_LAYER_RE = _re.compile(r"\.layers\.(\d+)\.")
-+
-+
-+def _resolve_pp_dflash_layer_ids():
-+    # Under PP only the last stage builds the DFLASH worker, so earlier
-+    # stages read the draft's target layers to know what to capture.
-+    import json as _json, os as _os
-+    override = _os.environ.get("SGLANG_MUSE_PP_DFLASH_TARGET_LAYERS")
-+    if override:
-+        return [int(v) for v in override.split(",") if v.strip()]
-+    from sglang.srt.runtime_context import get_spec as _get_spec
-+    spec = _get_spec()
-+    algo = str(spec.speculative_algorithm or "").upper()
-+    if "DFLASH" not in algo or not spec.speculative_draft_model_path:
-+        return []
-+    path = spec.speculative_draft_model_path
-+    if _os.path.isdir(path):
-+        cfg_path = _os.path.join(path, "config.json")
-+    else:
-+        from huggingface_hub import hf_hub_download
-+        cfg_path = hf_hub_download(path, "config.json")
-+    with open(cfg_path) as f:
-+        cfg = _json.load(f)
-+    ids = (cfg.get("dflash_config") or {}).get("target_layer_ids") or cfg.get(
-+        "target_layer_ids"
-+    )
-+    if not ids:
-+        raise ValueError(f"DFLASH draft {path} declares no target_layer_ids")
-+    return [int(v) for v in ids]
  from sglang.srt.model_executor.forward_context import (
      get_attn_backend,
      get_token_to_kv_pool,
-@@ -1143,7 +1175,16 @@ class MuseSpark1xModel(nn.Module):
+@@ -1143,7 +1145,16 @@ class MuseSpark1xModel(nn.Module):
          # torch.cuda.Stream() raises outright in a CPU-only build, so the CPU
          # path never builds one; _forward_experts skips the overlap there.
          side_stream = None if _is_cpu else torch.cuda.Stream()
@@ -158,7 +160,7 @@ index 312b342..b797707 100644
              layer_prefix = add_prefix(f"layers.{layer_idx}", prefix)
              layer = MuseSpark1xDecoderLayer(
                  config,
-@@ -1156,7 +1197,8 @@ class MuseSpark1xModel(nn.Module):
+@@ -1156,7 +1167,8 @@ class MuseSpark1xModel(nn.Module):
                  layer.mlp.side_stream = side_stream
              _install_pre_attn_norm(config, layer)
              self.layers.append(layer)
@@ -168,7 +170,7 @@ index 312b342..b797707 100644
              layer.bind_next_pre_attn_norm(next_layer.input_layernorm)
              layer.bind_next_layer(next_layer)
          self._sp_moe_dispatcher = None
-@@ -1181,7 +1223,7 @@ class MuseSpark1xModel(nn.Module):
+@@ -1181,7 +1193,7 @@ class MuseSpark1xModel(nn.Module):
                      "without DP attention. Using separate finalize and AR."
                  )
              else:
@@ -177,7 +179,7 @@ index 312b342..b797707 100644
                  comm = tp_group.ca_comm
                  if not moe_layers:
                      logger.warning("Finalize AR fusion unavailable: no MoE layers")
-@@ -1216,13 +1258,13 @@ class MuseSpark1xModel(nn.Module):
+@@ -1216,13 +1228,13 @@ class MuseSpark1xModel(nn.Module):
          if layernorm_sp.layernorm_sp_enabled():
              # Scope CUTLASS collectives to Muse; leave the generic Qwen SP
              # path unchanged. Decode never calls the SP participant hooks.
@@ -193,19 +195,7 @@ index 312b342..b797707 100644
              if moe_layers and not getattr(
                  get_parallel(), "enable_megamoe_for_layernorm_sp", False
              ):
-@@ -1252,6 +1294,11 @@ class MuseSpark1xModel(nn.Module):
-         )
-         # Layer indices whose output residual stream feeds the DFLASH draft context.
-         self.layers_to_capture: List[int] = []
-+        self.pp_dflash_layer_ids = (
-+            _resolve_pp_dflash_layer_ids() if self.pp_group.world_size > 1 else []
-+        )
-+        if not self.pp_group.is_last_rank:
-+            self.layers_to_capture = list(self.pp_dflash_layer_ids)
- 
-     def forward(
-         self,
-@@ -1259,11 +1306,14 @@ class MuseSpark1xModel(nn.Module):
+@@ -1259,11 +1271,14 @@ class MuseSpark1xModel(nn.Module):
          positions: torch.Tensor,
          forward_batch: ForwardBatch,
          input_embeds: Optional[torch.Tensor] = None,
@@ -221,20 +211,23 @@ index 312b342..b797707 100644
  
      def _forward(
          self,
-@@ -1271,24 +1321,48 @@ class MuseSpark1xModel(nn.Module):
+@@ -1271,24 +1286,51 @@ class MuseSpark1xModel(nn.Module):
          positions: torch.Tensor,
          forward_batch: ForwardBatch,
          input_embeds: Optional[torch.Tensor],
-+        pp_proxy_tensors: Optional[PPProxyTensors] = None,
-     ) -> torch.Tensor:
+-    ) -> torch.Tensor:
 -        hidden_states = (
 -            self.embed_tokens(input_ids) if input_embeds is None else input_embeds
 -        )
 -        if input_embeds is None and self.embed_norm is not None:
 -            hidden_states = self.embed_norm(hidden_states)
++        pp_proxy_tensors: Optional[PPProxyTensors] = None,
++    ) -> Union[torch.Tensor, PPProxyTensors]:
          sp_active = layernorm_sp.runs_sp(forward_batch.forward_mode)
-+        if self.pp_group.world_size > 1 and sp_active:
-+            raise ValueError("Muse Spark pipeline parallelism does not support layernorm SP")
++        if sp_active and self.pp_group.world_size > 1:
++            raise ValueError(
++                "Muse Spark pipeline parallelism does not support layernorm SP"
++            )
          get_forward().set("sp_active", sp_active)
 -        if sp_active:
 -            hidden_states = layernorm_sp.sp_entry_scatter(hidden_states)
@@ -242,6 +235,7 @@ index 312b342..b797707 100644
 -        attn_input = self.layers[0].self_attn_input_norm(stream)
 -        aux_hidden_states = []
 -        for layer_idx, layer in enumerate(self.layers):
+-            stream, attn_input = layer(positions, stream, attn_input, forward_batch)
 +        if self.pp_group.is_first_rank:
 +            hidden_states = (
 +                self.embed_tokens(input_ids) if input_embeds is None else input_embeds
@@ -261,13 +255,14 @@ index 312b342..b797707 100644
 +            relayed = pp_proxy_tensors.tensors.get("dspark_hidden_states")
 +            aux_hidden_states = (
 +                list(relayed.split(self.config.hidden_size, dim=-1))
-+                if self.layers_to_capture and relayed is not None
++                if relayed is not None
 +                else []
 +            )
 +        attn_input = self.layers[self.start_layer].self_attn_input_norm(stream)
 +        for layer_idx in range(self.start_layer, self.end_layer):
-+            layer = self.layers[layer_idx]
-             stream, attn_input = layer(positions, stream, attn_input, forward_batch)
++            stream, attn_input = self.layers[layer_idx](
++                positions, stream, attn_input, forward_batch
++            )
              if layer_idx in self.layers_to_capture:
                  # Draft context projection reads operator dtype, not residual_dtype.
                  aux_hidden_states.append(stream.to(self.operator_dtype))
@@ -281,7 +276,7 @@ index 312b342..b797707 100644
          norm_input = stream.to(self.operator_dtype)
          hidden_states = self.norm(norm_input).to(self.operator_dtype)
          if aux_hidden_states:
-@@ -1303,11 +1377,25 @@ class MuseSparkModel(nn.Module):
+@@ -1303,11 +1345,25 @@ class MuseSparkModel(nn.Module):
              config, quant_config, add_prefix("language_model", prefix)
          )
  
@@ -309,7 +304,7 @@ index 312b342..b797707 100644
      @property
      def layers(self):
          return self.language_model.layers
-@@ -1360,9 +1448,27 @@ class MuseSpark1xForCausalLM(nn.Module):
+@@ -1360,9 +1416,28 @@ class MuseSpark1xForCausalLM(nn.Module):
          positions: torch.Tensor,
          forward_batch: ForwardBatch,
          input_embeds: Optional[torch.Tensor] = None,
@@ -322,23 +317,24 @@ index 312b342..b797707 100644
 +            )
 +
 +    @property
-+    def start_layer(self):
++    def start_layer(self) -> int:
 +        return self.model.language_model.start_layer
 +
 +    @property
-+    def end_layer(self):
++    def end_layer(self) -> int:
 +        return self.model.language_model.end_layer
 +
 +    def get_pp_proxy_dspark_hidden_size(self) -> int:
-+        # Width of the DFLASH taps earlier stages relay to this one.
-+        lm = self.model.language_model
++        """Width of the DFLASH taps the earlier stages relay to this one."""
++        language_model = self.model.language_model
 +        return self.config.hidden_size * sum(
-+            layer < lm.start_layer for layer in lm.pp_dflash_layer_ids
++            layer < language_model.start_layer
++            for layer in language_model.layers_to_capture
 +        )
  
      def _forward(
          self,
-@@ -1370,10 +1476,17 @@ class MuseSpark1xForCausalLM(nn.Module):
+@@ -1370,10 +1445,17 @@ class MuseSpark1xForCausalLM(nn.Module):
          positions: torch.Tensor,
          forward_batch: ForwardBatch,
          input_embeds: Optional[torch.Tensor],
@@ -357,20 +353,20 @@ index 312b342..b797707 100644
          aux_hidden_states = None
          if self.capture_aux_hidden_states:
              hidden_states, aux_hidden_states = hidden_states
-@@ -1614,8 +1727,12 @@ class MuseSpark1xForCausalLM(nn.Module):
+@@ -1614,8 +1696,12 @@ class MuseSpark1xForCausalLM(nn.Module):
          stacked.append((".qkv_proj", ".gate_proj", "g"))
  
          skipped = 0
 +        start_layer, end_layer = self.start_layer, self.end_layer
          for raw_name, loaded_weight in weights:
              name = raw_name
-+            layer_match = _PP_LAYER_RE.search(name)
-+            if layer_match and not start_layer <= int(layer_match.group(1)) < end_layer:
++            layer_id = get_layer_id(name)
++            if layer_id is not None and not start_layer <= layer_id < end_layer:
 +                continue
              if name.endswith((".self_attn.q_proj.weight", ".self_attn.k_proj.weight")):
                  # For below, using padding logic will have this "original_",
                  # and currently it only exists under CPU path. Thus no impacts on others paths.
-@@ -1697,6 +1814,8 @@ class MuseSpark1xForCausalLM(nn.Module):
+@@ -1697,6 +1783,8 @@ class MuseSpark1xForCausalLM(nn.Module):
      @torch.no_grad()
      def post_load_weights(self) -> None:
          for layer in self.model.language_model.layers:
@@ -380,14 +376,23 @@ index 312b342..b797707 100644
                  layer.post_attention_residual_gate,
                  layer.post_feedforward_residual_gate,
 diff --git a/python/sglang/srt/models/muse_spark_omni.py b/python/sglang/srt/models/muse_spark_omni.py
-index 15183f3..68eda20 100644
+index 15183f3..7dad705 100644
 --- a/python/sglang/srt/models/muse_spark_omni.py
 +++ b/python/sglang/srt/models/muse_spark_omni.py
+@@ -31,7 +31,7 @@ from sglang.srt.managers.schedule_batch import (
+     MultimodalDataItem,
+     MultimodalInputs,
+ )
+-from sglang.srt.model_executor.forward_batch_info import ForwardBatch
++from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
+ from sglang.srt.model_loader.weight_utils import default_weight_loader
+ from sglang.srt.models.muse_spark import MuseSpark1xForCausalLM
+ from sglang.srt.multimodal.encoder_preprocessing import EncoderMediaProcessorConfig
 @@ -243,10 +243,13 @@ class MuseSparkForConditionalGeneration(MuseSpark1xForCausalLM):
          positions: torch.Tensor,
          forward_batch: ForwardBatch,
          input_embeds: Optional[torch.Tensor] = None,
-+        pp_proxy_tensors=None,
++        pp_proxy_tensors: Optional[PPProxyTensors] = None,
      ):
          # Covers the text embedding norm too; the decoder's own scope nests.
          with expert_tp.default_fused_ops_for_single_request(forward_batch):
@@ -402,7 +407,7 @@ index 15183f3..68eda20 100644
          positions: torch.Tensor,
          forward_batch: ForwardBatch,
          input_embeds: Optional[torch.Tensor],
-+        pp_proxy_tensors=None,
++        pp_proxy_tensors: Optional[PPProxyTensors] = None,
      ):
 +        if not self.model.language_model.pp_group.is_first_rank:
 +            # Later stages read the stream from the proxy, not embeddings.
@@ -412,7 +417,7 @@ index 15183f3..68eda20 100644
          if input_ids is None:
              if input_embeds is None:
                  raise ValueError("input_embeds is required for multimodal forwarding")
-diff --git b/python/sglang/srt/speculative/dflash_pp.py b/python/sglang/srt/speculative/dflash_pp.py
+diff --git c/python/sglang/srt/speculative/dflash_pp.py c/python/sglang/srt/speculative/dflash_pp.py
 new file mode 100644
 index 0000000..4815ac1
 --- /dev/null
@@ -496,7 +501,7 @@ index 0000000..4815ac1
 +    result.can_run_cuda_graph = can_run_cuda_graph
 +    return result, verify_out_cache_loc
 diff --git a/python/sglang/srt/speculative/dflash_worker_v2.py b/python/sglang/srt/speculative/dflash_worker_v2.py
-index a91ffd6..688c1af 100644
+index a91ffd6..b543053 100644
 --- a/python/sglang/srt/speculative/dflash_worker_v2.py
 +++ b/python/sglang/srt/speculative/dflash_worker_v2.py
 @@ -422,6 +422,7 @@ class DFlashWorkerV2(BaseSpecWorker):
@@ -511,7 +516,7 @@ index a91ffd6..688c1af 100644
          on_publish=None,
          grammar_barrier=None,
          pp_proxy_tensors=None,
-+        _pp_tail_draft=False,
++        _draft_only=False,
      ) -> GenerationBatchResult:
          self._validate_phase1_sampling_support(batch)
  
@@ -533,7 +538,7 @@ index a91ffd6..688c1af 100644
          draft_input = batch.spec_info
          if not isinstance(draft_input, DFlashDraftInputV2):
              raise RuntimeError(
-@@ -2600,178 +2613,190 @@ class DFlashWorkerV2(BaseSpecWorker):
+@@ -2600,178 +2613,194 @@ class DFlashWorkerV2(BaseSpecWorker):
                      seq_lens_cpu[i] = req.kv.kv_allocated_len
                  draft_seq_lens_sum = int(seq_lens_cpu.sum())
  
@@ -564,11 +569,15 @@ index a91ffd6..688c1af 100644
 -        draft_plan = (
 -            kv_loc_plan.reads_from(
 -                draft_translator,
-+        if (
++        # Under PP the previous round's tail draft already drafted the relayed
++        # block from this same state, so verify it without drafting it again.
++        # Selector heads still draft: their accept reads the draft's samples.
++        reuse_relayed = (
 +            pp_relayed_block is not None
 +            and self.selector is None
 +            and self.lilicorr is None
-+        ):
++        )
++        if reuse_relayed:
 +            draft_next = pp_relayed_block[:, 1:]
 +        else:
 +            forward_batch = ForwardBatch(
@@ -682,10 +691,7 @@ index a91ffd6..688c1af 100644
 -                self.selector is not None
 -                and not _is_all_greedy(batch.sampling_info)
 -                and self._selector_sampling_enabled
-+            with (
-+                torch.inference_mode(),
-+                draft_tp_context(self.draft_owns_attention),
-             ):
+-            ):
 -                self._selector_sample = (
 -                    self._draft_sampler.candidate_out[:bs],
 -                    self._draft_sampler.q_out[:bs],
@@ -694,7 +700,10 @@ index a91ffd6..688c1af 100644
 -                self.lilicorr is not None
 -                and self._lilicorr_sampling_enabled
 -                and not _is_all_greedy(batch.sampling_info)
--            ):
++            with (
++                torch.inference_mode(),
++                draft_tp_context(self.draft_owns_attention),
+             ):
 -                self._selector_sample = (
 -                    self._draft_sampler.candidate_out[:bs],
 -                    self._draft_sampler.q_out[:bs],
@@ -872,15 +881,15 @@ index a91ffd6..688c1af 100644
          draft_tokens = self._draft_block_tokens_buf[:bs]
          draft_tokens[:, 0].copy_(block_ids[:, 0])
          draft_tokens[:, 1:].copy_(draft_next)
-+        if _pp_tail_draft:
++        if _draft_only:
 +            return draft_tokens.clone()
-+        if pp_relayed_block is not None:
-+            # Earlier stages already verified the relayed block.
-+            draft_tokens.copy_(pp_relayed_block)
++        if pp_relayed_block is not None and not reuse_relayed:
++            # Verify the block the earlier stages already ran.
++            draft_tokens[:, 1:].copy_(pp_relayed_block[:, 1:])
  
          # Must stay ahead of the target verify launch below.
          grammar_tree = (
-@@ -2835,6 +2860,7 @@ class DFlashWorkerV2(BaseSpecWorker):
+@@ -2835,6 +2864,7 @@ class DFlashWorkerV2(BaseSpecWorker):
          target_out = self.target_worker.forward_batch_generation(
              batch=None,
              forward_batch=verify_forward_batch,
@@ -888,7 +897,7 @@ index a91ffd6..688c1af 100644
              is_verify=True,
              skip_attn_backend_init=True if not _is_npu else None,
          )
-@@ -2986,7 +3012,15 @@ class DFlashWorkerV2(BaseSpecWorker):
+@@ -2986,7 +3016,15 @@ class DFlashWorkerV2(BaseSpecWorker):
              new_seq_lens=new_seq_lens,
          )
  
@@ -905,14 +914,21 @@ index a91ffd6..688c1af 100644
              logits_output=logits_output,
              next_token_ids=out_tokens.reshape(-1),
              accept_lens=commit_lens,
-@@ -2999,3 +3033,35 @@ class DFlashWorkerV2(BaseSpecWorker):
+@@ -2999,3 +3037,42 @@ class DFlashWorkerV2(BaseSpecWorker):
              routed_experts_output=target_out.routed_experts_output,
              indexer_topk_output=target_out.indexer_topk_output,
          )
 +        result.next_verify_chain = pp_next_chain
 +        return result
 +
-+    def _pp_tail_draft(self, batch, next_draft_input):
++    def _pp_tail_draft(self, batch, next_draft_input) -> torch.Tensor:
++        """Draft the next round's block from the post-accept state.
++
++        Under PP the earlier stages verify the next block before this stage sees
++        it again, so the block is drafted at the end of this round instead of the
++        start of the next one. Returns the flattened ``[bs * block_size]`` block,
++        column 0 the bonus token.
++        """
 +        saved = (
 +            batch.spec_info,
 +            batch.seq_lens,
@@ -929,7 +945,7 @@ index a91ffd6..688c1af 100644
 +            batch.seq_lens_sum = int(batch.seq_lens_cpu.sum())
 +            batch.forward_mode = ForwardMode.DECODE
 +            batch.input_ids = None
-+            tokens = self.forward_batch_generation(batch, _pp_tail_draft=True)
++            tokens = self.forward_batch_generation(batch, _draft_only=True)
 +        finally:
 +            (
 +                batch.spec_info,
@@ -942,16 +958,18 @@ index a91ffd6..688c1af 100644
 +            ) = saved
 +        return tokens.reshape(-1)
 diff --git a/python/sglang/srt/speculative/spec_utils.py b/python/sglang/srt/speculative/spec_utils.py
-index e398261..dc5a3a0 100644
+index e398261..a30354c 100644
 --- a/python/sglang/srt/speculative/spec_utils.py
 +++ b/python/sglang/srt/speculative/spec_utils.py
-@@ -1184,7 +1184,11 @@ def spec_prepare_for_decode(batch: ScheduleBatch) -> None:
+@@ -1184,7 +1184,13 @@ def spec_prepare_for_decode(batch: ScheduleBatch) -> None:
              mamba_track_grid(batch.tree_cache.page_size),
              max_speculative_num_draft_tokens(),
          )
 -    if batch.spec_algorithm.is_dflash_family():
 +    from sglang.srt.speculative.pp_spec_relay import PPSpecRelayInput
 +
++    # Under PP the requests carry the relayed block rather than DFLASH draft
++    # state, so they take the generic decode KV reservation below.
 +    if batch.spec_algorithm.is_dflash_family() and not isinstance(
 +        batch.spec_info, PPSpecRelayInput
 +    ):
