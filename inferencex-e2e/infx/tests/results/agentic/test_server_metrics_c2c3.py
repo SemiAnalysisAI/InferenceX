@@ -199,6 +199,20 @@ class TestVllmPrefillDecodeRoles:
             assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.3)
             assert nested["cache"]["role_scope"] == "combined"
 
+    @pytest.mark.parametrize("mode", ["garbage", None])
+    def test_explicit_unknown_mode_does_not_become_combined(self, mode: str | None) -> None:
+        metrics = {
+            "vllm:prompt_tokens_by_source": _counter(
+                [(PRE, {"disaggregation_mode": mode, "source": "external_kv_transfer"}, 1000)]
+            )
+        }
+        _, nested, _ = compute_server_metrics(
+            {"metrics": metrics}, framework="vllm", records=[], disaggregated=False
+        )
+        assert nested["cache"]["overall_cache_hit_rate"] is None
+        assert nested["cache"]["role_scope"] == "unresolved"
+        assert nested["cache_validity"]["published"] is False
+
 
 class TestSglangNonDeviceTiers:
     @staticmethod

@@ -327,6 +327,8 @@ def _series_role(series: dict[str, Any], disaggregated: bool | None = None) -> s
         return "decode"
     if mode in ("combined", "unified", "prefill_and_decode"):
         return "combined"
+    if "disaggregation_mode" in labels:
+        return "unknown"
     component = str(labels.get("dynamo_component") or labels.get("component") or "")
     if component == "prefill":
         return "prefill"
@@ -351,10 +353,10 @@ def _cache_role_filter(
         scope = "mixed" if "combined" in roles else "prefill"
     else:
         scope = "unresolved" if "decode" in roles or disaggregated is True else "combined"
-    if disaggregated is True and "combined" in roles:
+    if "unknown" in roles or (disaggregated is True and "combined" in roles):
         scope = "unresolved"
     # Known decode counters measure KV transfer, including alongside unlabelled workers.
-    return scope, lambda series: _series_role(series, disaggregated) not in ("decode", "router")
+    return scope, lambda series: _series_role(series, disaggregated) in ("prefill", "combined")
 
 
 def _source_id(series: dict[str, Any], disaggregated: bool | None) -> str:
