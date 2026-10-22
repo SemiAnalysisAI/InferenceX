@@ -1,10 +1,30 @@
 name: Klaud Cold auto-sweep
+# lifecycle.resume_title matches the resume runs' names.
+run-name: >-
+  ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
+  inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
+  || 'Klaud Cold auto-sweep' }}
 
 # Overlapping waves are intentional; candidate ownership claims prevent duplicate work.
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
+    # Recovery dispatches a resume run with these to continue an unfinished session; a manual
+    # dispatch leaves them empty and runs a normal wave.
+    inputs:
+      resume-parent:
+        description: Planner run that owns the session to resume
+        type: string
+        default: ''
+      resume-candidate:
+        description: Candidate whose session resumes
+        type: string
+        default: ''
+      resume-session:
+        description: Number of the resumed session
+        type: string
+        default: ''
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '0 */6 * * *'
 
 permissions:
   contents: read
@@ -12,7 +32,7 @@ permissions:
   pull-requests: read # Read PR metadata.
 
 env:
-  # Total candidates per invocation; selected candidates run in parallel.
+  # Total candidates per invocation, resumed sessions included; they run in parallel.
   MAX_CANDIDATES_PER_RUN: '5'
 
 jobs:
@@ -21,7 +41,7 @@ jobs:
   # temp directory or tool caches and only consume its validated structured output as data.
   recover:
     name: Reconcile interrupted candidates
-    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent == ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,6 +50,8 @@ jobs:
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       blocked-families: ${{ steps.recover.outputs.blocked-families }}
+      # Unfinished sessions recovery resumed in new runs; they share this wave's cap.
+      resumed: ${{ steps.recover.outputs.resumed }}
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -69,7 +91,7 @@ jobs:
           # Repository automation credential; the planner runs only on main.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
-          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-resumes "$MAX_CANDIDATES_PER_RUN"
           echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
 
   review:
@@ -80,6 +102,7 @@ jobs:
       contents: read
       actions: read # Read workflow runs and artifacts.
       pull-requests: read # Read PR metadata.
+      issues: read # Read klaud-abort labels and Klaud outcome comments.
     env:
       REVIEW_BATCH_SIZE: '64'
       CANDIDATE_COOLDOWN_HOURS: '24'
@@ -168,7 +191,7 @@ jobs:
             --allowedTools "Read,Glob,Grep,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api --method GET:*),Bash(git status:*),Bash(git ls-tree:*)"
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
           prompt: |
-            Use Read on candidates.json, open-prs.json and capacity.json under ${{ runner.temp }}/klaud/.
+            Use Read on candidates.json and open-prs.json under ${{ runner.temp }}/klaud/.
             Review candidates in the supplied shuffled order against current recipes and the open-PR index,
             including drafts and arbitrary branches. The index omits PRs idle for ${{ env.STALE_PR_DAYS }} days
             (other than Klaud candidate PRs); those no longer own any family. Changed-file paths are already fetched;
@@ -186,19 +209,14 @@ jobs:
             Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
             a different family. For every proceed decision, resolve baseline-model to the exact display
             model accepted by the public benchmark API using the supplied OpenAPI schema.
-            Resolve ALL possible target clusters from its runner and inferencex-e2e/configs/runners.yaml
-            (cluster:NAME labels, written as NAME) to the exact IDs in capacity.json. Same-hardware sibling
-            clusters cannot stand in for the recipe's target. Proceed only if every target is in eligible-clusters;
-            unproven mappings or unavailable targets mean uncertain. Continue to later candidates
-            to fill the cap. Never copy private eligibility data into reasons or reports.
+            Target clusters and their capacity are resolved and checked in code, not by this review.
             Mark duplicate when an open PR owns that family's image refresh or overlapping
             compatibility work, even with another image tag; unrelated work on the same hardware
             is not a duplicate. A cross-cutting PR (launcher, telemetry, refactor or shared-schema
             work spanning many families) is a duplicate only if its diff changes this family's
             image or the exact engine flags/environment a refresh edits; touching the same recipe
             file for unrelated settings is not overlap. Return the supplied schema: candidate-id, decision
-            (proceed/duplicate/uncertain), family (null if unresolved), clusters (exact
-            target IDs, empty if unresolved), pull-requests (overlapping
+            (proceed/duplicate/uncertain), family (null if unresolved), pull-requests (overlapping
             PR numbers), baseline-model (required for proceed; otherwise null), reason (brief evidence).
             Missing evidence or ambiguity means uncertain.
             Review EVERY supplied candidate in shuffled order, returning exactly one decision per ID.
@@ -283,7 +301,8 @@ jobs:
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
           KLAUD_PR_REVIEW: ${{ needs.review.outputs.review }}
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
-        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
+          KLAUD_RESUMED: ${{ needs.recover.outputs.resumed }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --resumed "${KLAUD_RESUMED:-0}" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-ownership
@@ -294,7 +313,7 @@ jobs:
         if: always()
         with:
           name: klaud-plan
-          # Deliberately exclude private capacity.json and arbitrary agent scratch files.
+          # Deliberately exclude arbitrary agent scratch files.
           path: |
             ${{ runner.temp }}/klaud/candidates.json
             ${{ runner.temp }}/klaud/open-prs.json
@@ -316,6 +335,24 @@ jobs:
     with:
       candidate: ${{ matrix.candidate }}
       tooling-ref: ${{ needs.select.outputs.tooling-ref }}
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AGENT_PAT: ${{ secrets.AGENT_PAT }}
+      DASH_API_KEY: ${{ secrets.DASH_API_KEY }}
+
+  # A resume run continues one unfinished session. Only recovery, as Klaud-Cold, starts one, and
+  # klaud-candidate.yml's gate starts its agent only with recovery's grant for that session.
+  resume:
+    name: Run candidate ${{ inputs.resume-candidate }}
+    if: >-
+      github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent != ''
+      && github.actor == 'Klaud-Cold'
+    uses: $/.github/workflows/klaud-candidate.yml
+    with:
+      candidate: ${{ inputs.resume-candidate }}
+      tooling-ref: ${{ github.sha }}
+      parent-run: ${{ inputs.resume-parent }}
+      session: ${{ inputs.resume-session }}
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AGENT_PAT: ${{ secrets.AGENT_PAT }}

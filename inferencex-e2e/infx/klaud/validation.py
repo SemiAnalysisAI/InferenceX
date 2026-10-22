@@ -8,7 +8,7 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from infx.results import artifacts, eval_artifacts
 
@@ -18,6 +18,13 @@ from .models import OwnedCandidate, utc
 
 if TYPE_CHECKING:
     from infx.matrix.revision import Revision
+
+# Klaud autosweeps cover only AgentX; fixed-seq-len points are out of scope.
+SCENARIO = "agentic-coding"
+
+
+def in_scope(entry: dict) -> bool:
+    return entry.get("scenario-type") == SCENARIO
 
 
 def benchmark_entries(matrix: dict) -> list[dict]:
@@ -44,7 +51,7 @@ def project_prefix(repository: str, head: str) -> str:
 
 
 def canonical_matrix(repository: str, head: str, family: str) -> dict:
-    """Generate the unfiltered family from exact-head YAML using trusted local code.
+    """Generate the family's AgentX points from exact-head YAML using trusted local code.
 
     Candidate source is data only. A future generator-policy change can require manual
     inspection of an older run; it cannot silently waive points or required evals.
@@ -77,12 +84,16 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         for path in [*paths, *blocks]:
             (root / path).parent.mkdir(parents=True, exist_ok=True)
             (root / path).write_bytes(github.file_at(repository, head, prefix + path))
-        entries = generate_test_config_sweep(
-            SimpleNamespace(config_keys=[key]),
-            validate_master_config(family_config, root),
-            validate_runner_config(runners),
-            root,
-        )
+        entries = [
+            entry
+            for entry in generate_test_config_sweep(
+                SimpleNamespace(config_keys=[key]),
+                validate_master_config(family_config, root),
+                validate_runner_config(runners),
+                root,
+            )
+            if in_scope(entry)
+        ]
         fingerprinted = [
             {**row, "recipe-fingerprint": recipe_fingerprint(row, root)} for row in entries
         ]
@@ -133,6 +144,7 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
             rows = throughput_rows(producer, family.split(":", 1)[1])
             if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
                 raise ValueError("the generator did not print a list of matrix rows")
+            rows = [row for row in rows if in_scope(row)]
             fingerprints = producer.fingerprints(rows)
     except subprocess.SubprocessError as error:
         stderr = getattr(error, "stderr", None) or b""
@@ -215,7 +227,12 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
 
 
 def expected_evals(matrix: dict) -> set[tuple]:
-    expected = set()
+    return {key for key, _, _ in eval_identities(matrix)}
+
+
+def eval_identities(matrix: dict) -> list[tuple[tuple, dict, Any]]:
+    """Each default eval's artifact identity with its matrix entry and concurrency."""
+    identities = []
     for bucket in (
         "evals",
         "agentic_evals",
@@ -245,8 +262,10 @@ def expected_evals(matrix: dict) -> set[tuple]:
                 if multi and entry.get("eval-all-concs")
                 else [entry["eval-conc"] if multi else entry["conc"]]
             )
-            expected.update(eval_artifacts.eval_key({**row, "conc": conc}) for conc in concs)
-    return expected
+            identities.extend(
+                (eval_artifacts.eval_key({**row, "conc": conc}), entry, conc) for conc in concs
+            )
+    return identities
 
 
 def check_coverage(

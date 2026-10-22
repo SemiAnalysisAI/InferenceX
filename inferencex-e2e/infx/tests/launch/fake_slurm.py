@@ -111,13 +111,13 @@ else:
 output = base / "42"
 logs = output / "logs"
 logs.mkdir(parents=True, exist_ok=True)
-(logs / "sweep_42.log").write_text("benchmark complete\n")
+(logs / "sweep_42.log").write_text(os.environ.get("FAKE_SWEEP_LOG", "benchmark complete\n"))
 result = os.environ["RESULT_FILENAME"]
 mode = os.environ["FAKE_RESULTS"]
 if mode == "single":
     (logs / "power").mkdir()
     (logs / "power/samples.csv").write_text("retained native samples\n")
-    (logs / f"{result}.json").write_text('{"completed": 2}')
+    (logs / f"{result}.json").write_text(os.environ.get("FAKE_RESULT", '{"completed": 2}'))
 elif mode == "fixed":
     point = logs / "sweep_isl_1024_osl_1024"
     point.mkdir()
@@ -236,7 +236,10 @@ def base_env(*, fakes: Path, logs: Path, workspace: Path, sandbox: Path) -> dict
         key: value
         for key, value in os.environ.items()
         if not key.startswith(("SLURM_", "FAKE_", "SRT_", "INFERENCEX_", "INFX_", "UV_"))
-        and key not in {"VIRTUAL_ENV", "MODEL_PATH", "CONFIG_FILE", "EVAL_SRT_RECIPE", "BENCH_SCRIPT_OVERRIDE"}
+        and key not in {
+            "VIRTUAL_ENV", "MODEL_PATH", "CONFIG_FILE", "EVAL_SRT_RECIPE", "BENCH_SCRIPT_OVERRIDE",
+            "GITHUB_ACTIONS",
+        }
     }
     env.update(
         PATH=f"{fakes}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}/usr/bin{os.pathsep}/bin",
