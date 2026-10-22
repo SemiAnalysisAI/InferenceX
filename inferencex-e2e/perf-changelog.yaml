@@ -10758,3 +10758,23 @@
   description:
     - "Update SGLang image from v0.5.12-rocm700-mi35x to v0.5.22-rocm720-mi35x and use Triton FP8 GEMMs at TP4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4283
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:muse-spark-open-1020."
+    - "Run TP8/EP8 only: concurrency 1, 2, 4 and 8 with GPU-only KV; 16, 32, 48 and 64 with a 253 GB-per-rank HiCache DRAM tier (kernel I/O, page_first layout)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4377
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261021."
+    - "Drop AITER_BF16_FP8_MOE_BOUND=0. The image runs DeepSeek-V4.1's FP4 routed experts on FP8 activations by default (sgl-project/sglang#45480)."
+    - "Enable --monokernel-backend amd on concurrency <= 16."
+    - "Enable SGLANG_HIP_FP4_INDEXER_ROWGROUP=1 on all points. Enable SGLANG_HIP_DSV41_INDEX_K_PAGE8=1 only on the non-monokernel points (TP2 c32, DP2 c32 and c64); the monokernel refuses that layout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4367
