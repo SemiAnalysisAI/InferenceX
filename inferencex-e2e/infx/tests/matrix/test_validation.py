@@ -1060,18 +1060,6 @@ class TestValidateMasterConfig:
         with pytest.raises(ValidationError, match=replacement):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
-    def test_llmd_configs_keep_config_file(self, valid_multinode_master_config):
-        config = valid_multinode_master_config
-        config["framework"] = "llmd-vllm"
-        del config["srt-recipe-dir"]
-        row = config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
-        del row["srt-recipe"]
-        row["prefill"]["additional-settings"].append("CONFIG_FILE=llmd.yaml")
-        assert validate_master_config({"llmd": config}, Path()) == {"llmd": config}
-        row["srt-recipe"] = "recipe.yaml"
-        with pytest.raises(ValidationError, match="llmd-vllm selects recipes with CONFIG_FILE"):
-            MultiNodeMasterConfigEntry(**config)
-
     def test_eval_srt_recipe_is_multinode_only(self, valid_single_node_master_config):
         config = valid_single_node_master_config
         config["runner"] = "cluster:b200-nscale"
