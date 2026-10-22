@@ -94,8 +94,8 @@ base:
 
 override_1p1d_mcstore:
   sbatch_directives:
-    # Node A/B for c112: g37 runs the prefill host path as fast as ATOM CI's nodes; g09/g11/g14/g15/g18 run it ~2.5x slower.
-    nodelist: mia1-p01-g37
+    # c112 re-run on g11 after its DC power cycle (InferenceX#4339); same recipe as the g37 run.
+    nodelist: mia1-p01-g11
   host_setup:
     nodes: all
     timeout_seconds: 1800
