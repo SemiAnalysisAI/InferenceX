@@ -10768,4 +10768,4 @@
     - "dcp1 concurrency 1 and 2 run additional-config {\"decode_backend\":\"latency_specialized\"} with VLLM_USE_V2_MODEL_RUNNER=1: pure spec-verify steps of at most 8 rows run each MoE decoder layer as persistent FlyDSL MonoKernels with in-kernel TP all-reduces."
     - "Add dcp1 concurrency 2 (GPU-resident): a 3-token DSpark draft so two requests verify 8 rows per step, max-num-seqs 4 and FULL_AND_PIECEWISE CUDA graphs at every even size up to 16."
     - "dcp1 concurrency 1 drops its fp8_per_channel quantization-config: the specialized decode reads the in_proj, o_proj and shared-expert weights in place as BF16 and refuses FP8 ones."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4393
