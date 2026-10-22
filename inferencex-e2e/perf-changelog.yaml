@@ -10648,3 +10648,107 @@
   description:
     - "Update SGLang image from nightly-dev-cu13-20260901-07c8f729 to v0.5.22-cu130 and pin Dynamo b4540b87"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4370
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang
+  description:
+    - "Update SGLang ROCm image to v0.5.22-rocm720-mi30x; rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4380
+
+- config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  description:
+    - "Update SGLang to v0.5.22-cu130 and use the Dynamo 1.6.0.dev20261015 bundled in the image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4278
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open GB300 AgentX on Dynamo + SGLang (KV router, session affinity, DFLASH) with TP4 points at concurrency 8, 16, 20, 32, and 40 and two-node TP8 points at concurrency 3, 4, 10, and 14."
+    - "Enable 120-175 GB per-rank HiCache with 0.80 DRAM utilization at concurrency 20, 32, and 40; set per-point prefill-decode interval, memory, SWA ratio, and admission limits in the variants file."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4344
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune Muse Spark Open GB300 SGLang AgentX per concurrency (1, 5, 8, 10, 15, 16, 20, 24, 34, 40): scheduling, memory allocation, request admission and decode graph limits, tokenizer workers, and draft attention."
+    - "Use 120-150 GB per-rank HiCache (write_through, 0.80 DRAM utilization) at concurrency 16 to 40; set SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS=4 at concurrency 34 and 40."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4342
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Retune Muse Spark Open GB200 SGLang AgentX concurrency 1, 4, 6, 8, and 10 request admission, decode graph batch limits, prefill-decode interval, and memory allocation; run concurrency 1 without HiCache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4343
+
+- config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Replace the Muse Spark Open B300 TP8/EP8 search space with per-concurrency AgentX settings: TP8/EP8 with GPU-resident KV at concurrency 1, 4, 8 and 14; TP4/EP4 with GPU-resident KV at concurrency 4; TP4/EP4 with 120-175 GB per-rank DRAM HiCache at concurrency 10, 16, 20, 28, 36 and 40."
+    - "Tune request admission, decode graph batch limits, memory fraction, SWA/full ratio, prefill-decode interval and chunked prefill per concurrency; enable layernorm SP and MegaMoE at the HiCache points and shortest-prefill-first from concurrency 16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Configure Muse Spark Open B200 SGLang AgentX request admission, scheduling, memory allocation, HiCache, and draft attention per concurrency, adding TP4/EP4 at concurrency 8, 10, 16, and 24 and TP8 at concurrency 6, 10, and 56."
+    - "Drop TP8 concurrency 12, 16, 24, 32, 48, and 64."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4282
+
+- config-keys:
+    - dsr1-fp4-mi355x-atom
+  description:
+    - "Update ATOM image from v0.1.7 nightly_202610080328 to the v0.1.8 nightly_202610190554 build"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4358
+
+- config-keys:
+    - dsr1-fp8-h200-trt
+  description:
+    - "Update TensorRT-LLM image from 1.4.0rc0 to 1.4.0rc1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4359
+
+- config-keys:
+    - dsr1-fp8-mi300x-sglang
+  description:
+    - "Update SGLang image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4363
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Update SGLang image to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4313
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20261014-684fea8a to nightly-dev-cu13-20261021-c1c287a4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4365
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang
+  description:
+    - "Update SGLang image from v0.5.12-rocm720-mi30x to v0.5.22-rocm720-mi30x; use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4312
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom
+  description:
+    - "Update ATOM image from atom20260511 to the v0.1.8 nightly_202610190554 build"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4347

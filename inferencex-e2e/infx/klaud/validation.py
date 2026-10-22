@@ -8,7 +8,7 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from infx.results import artifacts, eval_artifacts
 
@@ -227,7 +227,12 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
 
 
 def expected_evals(matrix: dict) -> set[tuple]:
-    expected = set()
+    return {key for key, _, _ in eval_identities(matrix)}
+
+
+def eval_identities(matrix: dict) -> list[tuple[tuple, dict, Any]]:
+    """Each default eval's artifact identity with its matrix entry and concurrency."""
+    identities = []
     for bucket in (
         "evals",
         "agentic_evals",
@@ -257,8 +262,10 @@ def expected_evals(matrix: dict) -> set[tuple]:
                 if multi and entry.get("eval-all-concs")
                 else [entry["eval-conc"] if multi else entry["conc"]]
             )
-            expected.update(eval_artifacts.eval_key({**row, "conc": conc}) for conc in concs)
-    return expected
+            identities.extend(
+                (eval_artifacts.eval_key({**row, "conc": conc}), entry, conc) for conc in concs
+            )
+    return identities
 
 
 def check_coverage(
