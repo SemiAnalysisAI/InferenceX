@@ -150,9 +150,9 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        # vLLM's custom all-gather inside CUDA graphs, with async scheduling,
-        # leaves one prefill GPU idle mid-graph under this workload; use NCCL.
-        disable-custom-all-reduce: true
+        # With async scheduling, one prefill GPU stops mid-CUDA-graph under this
+        # Mooncake EFA workload while its peers spin; run synchronously.
+        no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10
@@ -184,9 +184,9 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        # vLLM's custom all-gather inside CUDA graphs, with async scheduling,
-        # leaves one prefill GPU idle mid-graph under this workload; use NCCL.
-        disable-custom-all-reduce: true
+        # With async scheduling, one prefill GPU stops mid-CUDA-graph under this
+        # Mooncake EFA workload while its peers spin; run synchronously.
+        no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10
