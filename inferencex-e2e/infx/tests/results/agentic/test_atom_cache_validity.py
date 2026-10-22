@@ -69,6 +69,9 @@ def _rates(result, gpu, cpu, overall):
 @pytest.mark.parametrize("unified", [False, True])
 def test_modern_pd_and_unified_totals_match_the_successful_cohort(unified):
     export = _export()
+    export["metrics"]["atom:lmcache_loaded_tokens"] = {
+        "type": "counter", "series": [{"endpoint_url": P, "stats": {}}],
+    }
     if unified:
         for entry in export["metrics"].values():
             entry["series"] = entry["series"][:1]
