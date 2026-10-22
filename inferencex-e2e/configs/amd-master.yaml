@@ -512,7 +512,7 @@ qwen3.5-fp8-mi300x-sglang:
       osl: 1024
       search-space:
       - tp: 8
-        conc-start: 4
+        conc-start: 1
         conc-end: 64
         srt-recipe: 8k1k.yaml
 
