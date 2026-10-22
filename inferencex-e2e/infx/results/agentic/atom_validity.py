@@ -176,7 +176,9 @@ def account_cache(
         result["replace_telemetry"] = True
         return refuse("INVALID_COUNTER", "duplicate or unidentifiable cache counter series")
     keys = set(series[FULL])
-    if {key[0] for key in keys} != set(accounted) or not keys or set(series[CACHED]) != keys:
+    if set(accounted) - {key[0] for key in keys}:
+        return refuse("ROLE_OR_COVERAGE_UNRESOLVED", "accounted endpoints missing full counters")
+    if not keys or set(series[CACHED]) != keys:
         return refuse("MISSING_OBSERVATION", "full/cached series coverage differs")
     scoped = {stem: {key: _total(s) for key, s in group.items()} for stem, group in series.items()}
     raw = {
