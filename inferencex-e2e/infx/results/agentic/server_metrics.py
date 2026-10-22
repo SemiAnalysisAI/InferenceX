@@ -12,6 +12,7 @@ from .backends.base import (
     apply_profile_totals,
     empty_server_metrics,
 )
+from .cache_validity import summarize_cache_validity
 from .common import index_server_metrics
 
 
@@ -53,17 +54,6 @@ def deployment_from_env(env: Mapping[str, str]) -> dict[str, Any]:
         "disagg": {"true": True, "false": False}.get((env.get("DISAGG") or "").lower()),
         "kv_offloading": offload,
     }
-
-
-def _profiling_window(server_metrics: dict[str, Any]) -> tuple[int, int] | None:
-    summary = server_metrics.get("summary")
-    ranges = summary.get("phase_time_ranges") if isinstance(summary, dict) else None
-    profiling = ranges.get("profiling") if isinstance(ranges, dict) else None
-    if isinstance(profiling, dict):
-        start, end = profiling.get("start_ns"), profiling.get("end_ns")
-        if type(start) is int and type(end) is int and start < end:
-            return start, end
-    return None
 
 
 def endpoint_roles_from_env(env: Mapping[str, str]) -> dict[str, str] | None:
@@ -116,6 +106,7 @@ def compute_server_metrics(
         nested["tokens"]["prompt_total"] = flat["total_prompt_tokens"]
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
         nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
+        nested["cache_validity"] = summarize_cache_validity(nested)
         return flat, nested, warnings
 
     if adapter is None:
@@ -127,7 +118,6 @@ def compute_server_metrics(
     nested["adapter"] = adapter.name
     if getattr(adapter, "accepts_context", False):
         source_env = env or {}
-        warmup = server_metrics.get("warmup_metrics")
         adapter.populate(
             metrics,
             flat,
@@ -137,8 +127,6 @@ def compute_server_metrics(
                 "endpoint_roles": endpoint_roles
                 if endpoint_roles is not None
                 else endpoint_roles_from_env(source_env),
-                "profiling_window": _profiling_window(server_metrics),
-                "warmup_metrics": warmup if isinstance(warmup, dict) else None,
                 "request_scope": request_scope,
                 **deployment_from_env(source_env),
                 **dict(deployment or {}),
@@ -166,4 +154,5 @@ def compute_server_metrics(
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
     nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
 
+    nested["cache_validity"] = summarize_cache_validity(nested)
     return flat, nested, warnings
