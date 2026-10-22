@@ -140,12 +140,62 @@ class TestDisaggregatedPromptTotals:
         assert flat["total_prompt_tokens"] is None
         assert nested["tokens"]["prompt_total"] is None
 
-    def test_frontend_total_remains_available_without_client_usage(self):
+    @pytest.mark.parametrize("metric_type, key", [("counter", "total"), ("histogram", "sum")])
+    def test_frontend_total_remains_available_without_client_usage(self, metric_type, key):
+        export = {
+            "metrics": {
+                name: {"type": metric_type, "series": [{"stats": {key: value, "count": 10}}]}
+                for name, value in (
+                    ("dynamo_frontend_input_sequence_tokens", 1000.0),
+                    ("dynamo_frontend_cached_tokens", 800.0),
+                )
+            }
+        }
         flat, nested, _ = compute_server_metrics(
-            {"metrics": {"dynamo_frontend_input_sequence_tokens": _counter(1234.0)}},
-            framework="dynamo-trt",
-            records=[],
+            export, framework="dynamo-vllm", records=[], disaggregated=True
+        )
+
+        assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 1000
+        assert flat["server_overall_cache_hit_rate"] == pytest.approx(0.8)
+        assert nested["cache"]["frontend_cache_hit_rate"] == pytest.approx(0.8)
+
+    def test_replacing_worker_scope_clears_normalized_tiers_and_keeps_raw_diagnostics(self):
+        export = {
+            "metrics": {
+                "sglang:prompt_tokens": {
+                    "type": "counter",
+                    "series": [
+                        {"endpoint_url": endpoint, "stats": {"total": 1000}}
+                        for endpoint in ("http://prefill/metrics", "http://decode/metrics")
+                    ],
+                },
+                "sglang:cached_tokens": {
+                    "type": "counter",
+                    "series": [
+                        {
+                            "endpoint_url": endpoint,
+                            "labels": {"cache_source": source},
+                            "stats": {"total": total},
+                        }
+                        for source, total in (("device", 900), ("host", 100))
+                        for endpoint in ("http://prefill/metrics", "http://decode/metrics")
+                    ],
+                },
+            }
+        }
+        flat, nested, _ = compute_server_metrics(
+            export,
+            framework="sglang",
+            records=[{"metrics": {"input_sequence_length": 1000}}],
             disaggregated=True,
         )
 
-        assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 1234
+        assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 1000
+        assert nested["tokens"]["prompt_by_source"] == {
+            "gpu_cache_hit": None,
+            "cpu_or_external_cache_hit": None,
+            "computed": None,
+            "raw": {"device": 1800, "host": 200},
+        }
+        assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(1.0)
+        assert nested["cache_validity"]["pricing_eligible"] is False
