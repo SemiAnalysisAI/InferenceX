@@ -16,6 +16,15 @@ on:
       candidate:
         type: string
         required: true
+      # A resume run continues the session of this planner run, as session number `session`.
+      parent-run:
+        type: string
+        required: false
+        default: ''
+      session:
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -30,7 +39,9 @@ jobs:
       # Repair attempts after the initial update; the baseline is already published.
       MAX_REPAIRS: '5'
       KLAUD_BRANCH: klaud/auto-${{ inputs.candidate }}
-      KLAUD_TEST_NAME: klaud-${{ github.run_id }}-${{ inputs.candidate }}
+      KLAUD_PARENT_RUN: ${{ inputs.parent-run || github.run_id }}
+      KLAUD_SESSION: ${{ inputs.session || '1' }}
+      KLAUD_TEST_NAME: klaud-${{ inputs.parent-run || github.run_id }}-${{ inputs.candidate }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,9 +71,18 @@ jobs:
             .infx-tooling/inferencex-e2e/pyproject.toml
             .infx-tooling/inferencex-e2e/uv.lock
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: inputs.parent-run == ''
         with:
           name: klaud-plan
           path: ${{ runner.temp }}/plan
+      - name: Download the planner run's candidate context
+        if: inputs.parent-run != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: klaud-plan
+          path: ${{ runner.temp }}/plan
+          run-id: ${{ inputs.parent-run }}
+          github-token: ${{ github.token }}
       - name: Prepare candidate context
         id: context
         env:
@@ -74,9 +94,9 @@ jobs:
           rm -r "$RUNNER_TEMP/plan"
           outcome_schema=$(uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud outcome-schema)
           echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
-      # A rerun of the planner's failed jobs runs only a session that recovery granted to it. A
-      # resumable session without that grant fails here, skipping every later step, so a later
-      # rerun can still resume it. lifecycle.GATE_STEP and AGENT_STEP name these steps.
+      # A planner run's own session runs in its first attempt. A resume run that recovery
+      # dispatched runs only the session it granted; anything else skips the steps below.
+      # lifecycle.GATE_STEP and AGENT_STEP name these steps.
       - name: Check whether this session should run
         id: gate
         env:
