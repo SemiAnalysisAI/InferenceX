@@ -14,6 +14,7 @@ from infx.klaud import __main__ as klaud
 from infx.klaud import api, claims, github, lifecycle, reporting, validation
 from infx.klaud.models import CandidateOutcome, Feed, OwnedCandidate, Ownership, identity, stamp
 from infx.tests.historical_revision import (
+    AGENTX_MASTER,
     FAMILY,
     KEY,
     POINTS,
@@ -1598,6 +1599,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             public_row,
         ],
         "workflow-info": info,
+        "evaluations": [],
     }
 
     def fetch(resource, **_kwargs):
@@ -1705,19 +1707,21 @@ def family_configs():
             "model-prefix": "dsr1",
             "precision": "fp8",
             "framework": "sglang",
-            "runner": "fixture",
+            "runner": "cluster:fixture",
             "multinode": False,
             "srt-recipe-dir": "fixture",
             "scenarios": {
-                "fixed-seq-len": [{
-                    "isl": 1024, "osl": 1024,
-                    "search-space": [{"tp": 1, "conc-list": [2, 6], "srt-recipe": "recipe.yaml"}],
+                "agentic-coding": [{
+                    "search-space": [{
+                        "tp": 1, "kv-offloading": "none", "conc-list": [2, 6],
+                        "srt-recipe": "recipe.yaml",
+                    }],
                 }],
             },
         },
     }
     runners = {
-        "labels": {"fixture": ["node-a"], "cluster:fixture": ["node-a"]},
+        "labels": {"cluster:fixture": ["node-a"]},
         "clusters": {"fixture": {
             "gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
             "slurm": {"partition": "batch", "exclusive": True},
@@ -1735,6 +1739,11 @@ def write_fixture_recipe(root: Path) -> None:
 @pytest.mark.parametrize("prefix", ["", "inferencex-e2e/"])
 def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_configs, prefix):
     master, runners = family_configs
+    # A fixed-seq-len curve of the same family is outside Klaud's AgentX scope.
+    master["fixture"]["scenarios"]["fixed-seq-len"] = [{
+        "isl": 8192, "osl": 1024,
+        "search-space": [{"tp": 1, "conc-list": [4], "srt-recipe": "recipe.yaml"}],
+    }]
     files = {
         prefix + "configs/nvidia-master.yaml": yaml.safe_dump(master),
         prefix + "configs/runners.yaml": yaml.safe_dump(runners),
@@ -1752,15 +1761,15 @@ def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_confi
         matrix = validation.canonical_matrix(
             "example/project", "a" * 40, "configs/nvidia-master.yaml:fixture",
         )
-        assert matrix["evals"] == []
+        assert [row["conc"] for row in matrix["evals"]] == [6]
         return matrix["single_node"]["all"]
 
     rows = family()
-    assert [(row["model"], row["conc"], row["image"]) for row in rows] == [
-        ("example/model", 2, "example/image:stable"),
-        ("example/model", 6, "example/image:stable"),
+    assert [(row.get("scenario-type"), row["conc"], row["image"]) for row in rows] == [
+        ("agentic-coding", 2, "example/image:stable"),
+        ("agentic-coding", 6, "example/image:stable"),
     ]
-    block = prefix + "configs/srt-recipes/fixed-sequence-single.yaml"
+    block = prefix + "configs/srt-recipes/agentic.yaml"
     files[block] = files[block] + b"  env: {EXTRA: '1'}\n"
     changed = family()
     assert [row["conc"] for row in changed] == [2, 6]
@@ -1777,9 +1786,10 @@ def publish(monkeypatch, head):
     image = "example/image:stable"
     published = [
         {
+            "id": str(conc), "workflow_run_id": "7",
             "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
             "spec_method": "none", "disagg": False, "is_multinode": False,
-            "benchmark_type": "single_turn", "isl": 8192, "osl": 1024, "offload_mode": "off",
+            "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "off",
             "conc": conc, "image": image, "prefill_tp": 1, "prefill_ep": 1,
             "prefill_dp_attention": False, "prefill_num_workers": 0, "decode_tp": 1,
             "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 0,
@@ -1796,6 +1806,10 @@ def publish(monkeypatch, head):
             "runConfigs": [{"github_run_id": "42", "head_sha": head}],
             "changelogs": [{"workflow_run_id": "42", "config_keys": [KEY]}],
         },
+        "benchmark-siblings": {
+            "sku": {"github_run_id": 42, "dataset_slug": "cc-traces-weka-062126"},
+        },
+        "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
         url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
@@ -1829,7 +1843,7 @@ def review_candidate(directory, monkeypatch, source):
 def test_select_builds_baselines_from_regenerated_producers_without_starting_a_process(
     tmp_path, monkeypatch, regenerated, selected, deferred
 ):
-    _, head = commit_history(tmp_path, "inferencex-e2e")
+    _, head = commit_history(tmp_path, "inferencex-e2e", master=AGENTX_MASTER)
     monkeypatch.chdir(tmp_path)
     base_family = validation.producer_matrix("example/project", head, FAMILY)
     monkeypatch.setattr(validation, "canonical_matrix", lambda *_: base_family)
@@ -1860,10 +1874,11 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
             (point.conc, point.result, point.head, point.values.total_tps_gpu)
             for point in preflight.baseline.points
         ] == [(2, "passed", head, 10.0), (6, "passed", head, 30.0)]
+        assert {point.dataset for point in preflight.baseline.points} == {"cc-traces-weka-062126"}
 
 
 def test_select_defers_a_baseline_the_current_family_no_longer_generates(tmp_path, monkeypatch):
-    _, head = commit_history(tmp_path, "inferencex-e2e")
+    _, head = commit_history(tmp_path, "inferencex-e2e", master=AGENTX_MASTER)
     monkeypatch.chdir(tmp_path)
     producer_family = validation.producer_matrix("example/project", head, FAMILY)
     shrunk = {"single_node": {"all": [
@@ -1962,6 +1977,7 @@ def serve_dsr1_baseline(monkeypatch, current, markdown):
             "runConfigs": [{"github_run_id": "42", "head_sha": PRODUCER}],
             "changelogs": [{"workflow_run_id": "42", "config_keys": [KEY]}],
         },
+        "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
         url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
@@ -2452,7 +2468,7 @@ def test_removing_klaud_abort_lifts_the_cooldown_of_an_aborted_candidate(
 def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_path, monkeypatch):
     remote = tmp_path / "remote"
     remote.mkdir()
-    base, head = commit_history(remote)
+    base, head = commit_history(remote, master=AGENTX_MASTER)
 
     def remote_git(*args):
         subprocess.run(["git", *args], cwd=remote, check=True, capture_output=True)
@@ -2484,7 +2500,7 @@ def test_producer_outside_the_local_clone_is_fetched_from_its_repository(tmp_pat
 def test_producer_predating_no_evals_regenerates_throughput_rows(tmp_path, monkeypatch):
     from infx.tests.historical_revision import GENERATOR
 
-    commit_history(tmp_path)
+    commit_history(tmp_path, master=AGENTX_MASTER)
     legacy = GENERATOR.replace(
         '    parser.add_argument("--no-evals", action="store_true")\n', ""
     ).replace(
@@ -2539,8 +2555,8 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
     families = klaud.live_families(tmp_path if from_repository_root else project)
 
     assert families == {
-        ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {
+        ("dsr1", "fixture", "sglang", "fp8", "none", False, "agentic_traces",
+         None, None, "example/image:stable"): {
             "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1),
         },
     }
@@ -2576,8 +2592,8 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
     families = klaud.live_families(tmp_path)
 
     assert families == {
-        ("dsr1", "fixture", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {
+        ("dsr1", "fixture", "sglang", "fp8", "none", False, "agentic_traces",
+         None, None, "example/image:stable"): {
             "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1),
         },
     }
@@ -2590,19 +2606,18 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
     fixture, record = master["fixture"], runners["clusters"]["fixture"]
     worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
     master = {
-        "spanning": {**fixture, "runner": "h100"},
         "exact": {**fixture, "runner": "cluster:h100-dsxe"},
         "wide": {**fixture, "runner": "cluster:h100-dsxe", "multinode": True, "scenarios": {
-            "fixed-seq-len": [{"isl": 1024, "osl": 1024, "search-space": [
-                {"num-nodes": nodes, "worker": worker, "conc-list": [4], "srt-recipe": "wide.yaml"}
+            "agentic-coding": [{"search-space": [
+                {"num-nodes": nodes, "worker": worker, "kv-offloading": "none", "conc-list": [4],
+                 "srt-recipe": "wide.yaml"}
                 for nodes in (2, 4, 3)
             ]}],
         }},
-        "unmapped": {**fixture, "runner": "h100-retired"},
+        "unmapped": {**fixture, "runner": "cluster:h100-retired"},
     }
     runners = {
         "labels": {
-            "h100": ["h100-cw_00", "h100-dsxe_00"],
             "cluster:h100-cw": ["h100-cw_00"],
             "cluster:h100-dsxe": ["h100-dsxe_00"],
         },
@@ -2623,17 +2638,16 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
         "::warning::Klaud live-family-clusters-unresolved: configs/nvidia-master.yaml:unmapped\n"
     )
     assert families == {
-        ("dsr1", "h100", "sglang", "fp8", "none", False, "single_turn",
-         1024, 1024, "example/image:stable"): {
-            "configs/nvidia-master.yaml:spanning": ({"h100-cw", "h100-dsxe"}, 1),
+        ("dsr1", "h100", "sglang", "fp8", "none", False, "agentic_traces",
+         None, None, "example/image:stable"): {
             "configs/nvidia-master.yaml:exact": ({"h100-dsxe"}, 1),
             "configs/nvidia-master.yaml:wide": ({"h100-dsxe"}, 4),
         },
     }  # fmt: skip
     source = {
         "model": "dsr1", "hardware": "h100", "framework": "sglang", "precision": "fp8",
-        "spec_method": "none", "disagg": False, "benchmark_type": "single_turn", "isl": 1024,
-        "osl": 1024, "image": "example/image:stable", "date": "2026-09-19",
+        "spec_method": "none", "disagg": False, "benchmark_type": "agentic_traces", "isl": None,
+        "osl": None, "image": "example/image:stable", "date": "2026-09-19",
     }  # fmt: skip
     items = [{"source-status": "baseline", "source-id": "1", "source": source}]
 
@@ -2647,6 +2661,104 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
     assert chosen({"h100-cw": 1}) == []
     assert chosen({"h100-dsxe": 3}) == [("exact", ["h100-dsxe"], 1)]
     assert chosen({"h100-cw": 1, "h100-dsxe": 4}) == [
-        ("exact", ["h100-dsxe"], 1), ("spanning", ["h100-cw", "h100-dsxe"], 1),
-        ("wide", ["h100-dsxe"], 4),
+        ("exact", ["h100-dsxe"], 1), ("wide", ["h100-dsxe"], 4),
     ]
+
+
+def agentx_point(dataset, **values):
+    return reporting.Point(
+        key="d" * 64, label="AgentX c4 TP8 EP1 dddddd", conc=4, scenario="agentic-coding",
+        dataset=dataset, values=reporting.Values(**values), result="passed",
+    )  # fmt: skip
+
+
+@pytest.mark.parametrize(("old", "new", "cell", "note"), [
+    pytest.param("cc-traces-weka-062126", "semianalysis_cc_traces_weka_062126", "12 (+20%)", None,
+                 id="loader-matches-dashboard-slug"),
+    pytest.param("cc-traces-weka-062126", "semianalysisai/cc-traces-weka-062126", "12 (+20%)",
+                 None, id="hf-id-matches-dashboard-slug"),
+    pytest.param(None, "cc-traces-weka-062126", "12 (N/A)", "baseline dataset unknown",
+                 id="legacy-baseline"),
+    pytest.param("cc-traces-weka-062126", "cc-traces-weka-062126-256k", "12 (N/A)",
+                 "dataset cc-traces-weka-062126 vs cc-traces-weka-062126-256k", id="other-corpus"),
+])  # fmt: skip
+def test_agentx_deltas_compare_only_the_same_replay_corpus(old, new, cell, note):
+    baseline = reporting.Baseline(
+        family=f"configs/nvidia-master.yaml:{KEY}", date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[],
+        points=[agentx_point(old, output_tps_gpu=10.0, ttft_ms=100.0, tpot_ms=10.0)],
+    )  # fmt: skip
+    point = agentx_point(new, output_tps_gpu=12.0, ttft_ms=90.0, tpot_ms=11.0, request_errors=0)
+
+    text = reporting.point_table([point], baseline)
+
+    assert f"| 4 | {cell} |" in text
+    notes = [line for line in text.splitlines() if "Δ N/A" in line]
+    assert notes == ([f"**Note:** All rows: Δ N/A: {note}."] if note else [])
+
+
+def eval_entry(tp):
+    return {
+        "model-prefix": "dsr1", "runner": "cluster:fixture-a", "framework": "sglang",
+        "precision": "fp8", "spec-decoding": "none", "disagg": False,
+        "scenario-type": "agentic-coding", "tp": tp, "ep": 1, "dp-attn": False, "conc": 8,
+        "image": "example/image:stable", "run-eval": True, "eval-only": True,
+    }  # fmt: skip
+
+
+def public_eval(run, score, tp=8, workers=0):
+    return {
+        "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
+        "spec_method": "none", "disagg": bool(workers), "is_multinode": False, "prefill_tp": tp,
+        "prefill_ep": 1, "prefill_dp_attention": False, "prefill_num_workers": workers,
+        "decode_tp": tp, "decode_ep": 1, "decode_dp_attention": False,
+        "decode_num_workers": workers,
+        "task": "gsm8k", "conc": 8, "metrics": {"em_strict": score, "n_eff": 1319},
+        "run_url": f"https://github.com/example/project/actions/runs/{run}",
+    }  # fmt: skip
+
+
+@pytest.mark.parametrize(("rows", "frozen"), [
+    pytest.param([public_eval(42, 0.95), public_eval(99, 0.5), public_eval(42, 0.5, tp=4)], 0.95,
+                 id="only-verified-producer-and-current-topology"),
+    pytest.param([public_eval(42, 0.95, workers=1)], 0.95, id="single-node-worker-encoding"),
+    pytest.param([public_eval(42, 0.95), public_eval(43, 0.5)], None, id="conflicting-producers"),
+])  # fmt: skip
+def test_baseline_evals_use_artifact_keys_of_verified_producers(monkeypatch, rows, frozen):
+    monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
+        url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
+        retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64, payload=rows,
+    ))  # fmt: skip
+    matrix = {"evals": [eval_entry(8)]}
+
+    _, evals = reporting.published_evals("example/project", matrix, {42, 43})
+
+    if frozen is None:
+        assert evals == []
+        return
+    [(key, _, _)] = validation.eval_identities(matrix)
+    assert [(row.key, row.label, row.score, row.samples) for row in evals] == [
+        (identity(key), "c8", frozen, 1319)
+    ]
+    baseline = reporting.Baseline(
+        family=f"configs/nvidia-master.yaml:{KEY}", date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[], points=[],
+        evals=evals,
+    )  # fmt: skip
+    attempt = evals[0].model_copy(update={"score": 0.96, "run_id": 7})
+    assert "| gsm8k/em_strict · c8 | 96% (+1.00 pp) | 1,319 each |" in reporting.eval_table(
+        [attempt], baseline
+    )
+
+
+def test_attempt_rejects_unnumbered_infrastructure_retries():
+    record = {
+        "kind": "infrastructure-retry", "number": 0, "head": "c" * 40, "image": "example/image:2",
+        "run-id": 7, "run-attempt": 2, "status": "queued",
+        "change": {"en": "Rerun.", "zh": "重跑。"}, "next": {"en": "Wait.", "zh": "等待。"},
+        "benchmarks-expected": 0, "benchmarks-passed": 0, "evals-expected": 0,
+        "evals-passed": 0, "points": [],
+    }  # fmt: skip
+    with pytest.raises(ValueError, match="numbered 1 or 2"):
+        reporting.Attempt.model_validate(record)
+    assert reporting.Attempt.model_validate({**record, "number": 2}).number == 2
