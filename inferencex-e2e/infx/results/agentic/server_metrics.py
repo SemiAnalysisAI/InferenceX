@@ -117,11 +117,12 @@ def _disaggregated_prompt_total(
     frontend = metrics.get("dynamo_frontend_input_sequence_tokens")
     if frontend is not None:
         series = frontend.get("series")
-        if not isinstance(series, list):
+        key = {"counter": "total", "histogram": "sum"}.get(frontend.get("type"))
+        if not isinstance(series, list) or key is None:
             return None
         return _integer_total(
             [
-                item.get("stats", {}).get("total")
+                item.get("stats", {}).get(key)
                 if isinstance(item, dict) and isinstance(item.get("stats"), dict)
                 else None
                 for item in series
@@ -141,7 +142,8 @@ def _apply_disaggregated_prompt_total(
 ) -> None:
     prompt = _disaggregated_prompt_total(metrics, records, nested)
     if prompt != nested["tokens"]["prompt_total"]:
-        nested["tokens"]["prompt_by_source"]["computed"] = None
+        for field in ("gpu_cache_hit", "cpu_or_external_cache_hit", "computed"):
+            nested["tokens"]["prompt_by_source"][field] = None
     flat["total_prompt_tokens"] = nested["tokens"]["prompt_total"] = prompt
 
 
