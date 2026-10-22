@@ -10841,3 +10841,11 @@
     - "Request thinking explicitly on the AgentX client and enable checkpoint prefetch and multithreaded weight loading."
     - "Read SGLang dcp-size in the single-node recipe validator so SGLang points can use dcp-size > 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4389
+
+- config-keys:
+  - qwen3.5-fp4-b200-sglang-agentic-mtp
+  description:
+  - "Serve nvidia/Qwen3.5-397B-A17B-NVFP4-V2, the checkpoint the B200 fixed-sequence SGLang keys already use; the original nvidia/Qwen3.5-397B-A17B-NVFP4 directory was removed from the B200 node-local model volume on 2026-10-13 at NVIDIA SRE's request, so the key failed at srtctl startup with Model path does not exist."
+  - "Run on lmsysorg/sglang:v0.5.19-cu130, the image the B200 fixed-sequence SGLang key already serves V2 on: v0.5.16 loads the V2 checkpoint but hangs while capturing the target prefill CUDA graph at 16384 tokens (sweep 38618495491 canary, 2 h health timeout)."
+  - "Keep the deployment topology, speculative mode, concurrency points and evaluation coverage unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4066
