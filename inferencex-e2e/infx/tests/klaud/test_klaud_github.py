@@ -1599,6 +1599,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             public_row,
         ],
         "workflow-info": info,
+        "evaluations": [],
     }
 
     def fetch(resource, **_kwargs):
@@ -1785,6 +1786,7 @@ def publish(monkeypatch, head):
     image = "example/image:stable"
     published = [
         {
+            "id": str(conc), "workflow_run_id": "7",
             "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
             "spec_method": "none", "disagg": False, "is_multinode": False,
             "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "off",
@@ -1804,6 +1806,10 @@ def publish(monkeypatch, head):
             "runConfigs": [{"github_run_id": "42", "head_sha": head}],
             "changelogs": [{"workflow_run_id": "42", "config_keys": [KEY]}],
         },
+        "benchmark-siblings": {
+            "sku": {"github_run_id": 42, "dataset_slug": "cc-traces-weka-062126"},
+        },
+        "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
         url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
@@ -1868,6 +1874,7 @@ def test_select_builds_baselines_from_regenerated_producers_without_starting_a_p
             (point.conc, point.result, point.head, point.values.total_tps_gpu)
             for point in preflight.baseline.points
         ] == [(2, "passed", head, 10.0), (6, "passed", head, 30.0)]
+        assert {point.dataset for point in preflight.baseline.points} == {"cc-traces-weka-062126"}
 
 
 def test_select_defers_a_baseline_the_current_family_no_longer_generates(tmp_path, monkeypatch):
@@ -1970,6 +1977,7 @@ def serve_dsr1_baseline(monkeypatch, current, markdown):
             "runConfigs": [{"github_run_id": "42", "head_sha": PRODUCER}],
             "changelogs": [{"workflow_run_id": "42", "config_keys": [KEY]}],
         },
+        "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
         url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
@@ -2655,3 +2663,102 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
     assert chosen({"h100-cw": 1, "h100-dsxe": 4}) == [
         ("exact", ["h100-dsxe"], 1), ("wide", ["h100-dsxe"], 4),
     ]
+
+
+def agentx_point(dataset, **values):
+    return reporting.Point(
+        key="d" * 64, label="AgentX c4 TP8 EP1 dddddd", conc=4, scenario="agentic-coding",
+        dataset=dataset, values=reporting.Values(**values), result="passed",
+    )  # fmt: skip
+
+
+@pytest.mark.parametrize(("old", "new", "cell", "note"), [
+    pytest.param("cc-traces-weka-062126", "semianalysis_cc_traces_weka_062126", "12 (+20%)", None,
+                 id="loader-matches-dashboard-slug"),
+    pytest.param("cc-traces-weka-062126", "semianalysisai/cc-traces-weka-062126", "12 (+20%)",
+                 None, id="hf-id-matches-dashboard-slug"),
+    pytest.param(None, "cc-traces-weka-062126", "12 (N/A)", "baseline dataset unknown",
+                 id="legacy-baseline"),
+    pytest.param("cc-traces-weka-062126", "cc-traces-weka-062126-256k", "12 (N/A)",
+                 "dataset cc-traces-weka-062126 vs cc-traces-weka-062126-256k", id="other-corpus"),
+])  # fmt: skip
+def test_agentx_deltas_compare_only_the_same_replay_corpus(old, new, cell, note):
+    baseline = reporting.Baseline(
+        family=f"configs/nvidia-master.yaml:{KEY}", date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[],
+        points=[agentx_point(old, output_tps_gpu=10.0, ttft_ms=100.0, tpot_ms=10.0)],
+    )  # fmt: skip
+    point = agentx_point(new, output_tps_gpu=12.0, ttft_ms=90.0, tpot_ms=11.0, request_errors=0)
+
+    text = reporting.point_table([point], baseline)
+
+    assert f"| 4 | {cell} |" in text
+    notes = [line for line in text.splitlines() if "Δ N/A" in line]
+    assert notes == ([f"**Note:** All rows: Δ N/A: {note}."] if note else [])
+
+
+def eval_entry(tp):
+    return {
+        "model-prefix": "dsr1", "runner": "cluster:fixture-a", "framework": "sglang",
+        "precision": "fp8", "spec-decoding": "none", "disagg": False,
+        "scenario-type": "agentic-coding", "tp": tp, "ep": 1, "dp-attn": False, "conc": 8,
+        "image": "example/image:stable", "run-eval": True, "eval-only": True,
+    }  # fmt: skip
+
+
+def public_eval(run, score, tp=8, workers=0):
+    return {
+        "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
+        "spec_method": "none", "disagg": bool(workers), "is_multinode": False, "prefill_tp": tp,
+        "prefill_ep": 1, "prefill_dp_attention": False, "prefill_num_workers": workers,
+        "decode_tp": tp, "decode_ep": 1, "decode_dp_attention": False,
+        "decode_num_workers": workers,
+        "task": "gsm8k", "conc": 8, "metrics": {"em_strict": score, "n_eff": 1319},
+        "run_url": f"https://github.com/example/project/actions/runs/{run}",
+    }  # fmt: skip
+
+
+@pytest.mark.parametrize(("rows", "frozen"), [
+    pytest.param([public_eval(42, 0.95), public_eval(99, 0.5), public_eval(42, 0.5, tp=4)], 0.95,
+                 id="only-verified-producer-and-current-topology"),
+    pytest.param([public_eval(42, 0.95, workers=1)], 0.95, id="single-node-worker-encoding"),
+    pytest.param([public_eval(42, 0.95), public_eval(43, 0.5)], None, id="conflicting-producers"),
+])  # fmt: skip
+def test_baseline_evals_use_artifact_keys_of_verified_producers(monkeypatch, rows, frozen):
+    monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
+        url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
+        retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64, payload=rows,
+    ))  # fmt: skip
+    matrix = {"evals": [eval_entry(8)]}
+
+    _, evals = reporting.published_evals("example/project", matrix, {42, 43})
+
+    if frozen is None:
+        assert evals == []
+        return
+    [(key, _, _)] = validation.eval_identities(matrix)
+    assert [(row.key, row.label, row.score, row.samples) for row in evals] == [
+        (identity(key), "c8", frozen, 1319)
+    ]
+    baseline = reporting.Baseline(
+        family=f"configs/nvidia-master.yaml:{KEY}", date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[], points=[],
+        evals=evals,
+    )  # fmt: skip
+    attempt = evals[0].model_copy(update={"score": 0.96, "run_id": 7})
+    assert "| gsm8k/em_strict · c8 | 96% (+1.00 pp) | 1,319 each |" in reporting.eval_table(
+        [attempt], baseline
+    )
+
+
+def test_attempt_rejects_unnumbered_infrastructure_retries():
+    record = {
+        "kind": "infrastructure-retry", "number": 0, "head": "c" * 40, "image": "example/image:2",
+        "run-id": 7, "run-attempt": 2, "status": "queued",
+        "change": {"en": "Rerun.", "zh": "重跑。"}, "next": {"en": "Wait.", "zh": "等待。"},
+        "benchmarks-expected": 0, "benchmarks-passed": 0, "evals-expected": 0,
+        "evals-passed": 0, "points": [],
+    }  # fmt: skip
+    with pytest.raises(ValueError, match="numbered 1 or 2"):
+        reporting.Attempt.model_validate(record)
+    assert reporting.Attempt.model_validate({**record, "number": 2}).number == 2

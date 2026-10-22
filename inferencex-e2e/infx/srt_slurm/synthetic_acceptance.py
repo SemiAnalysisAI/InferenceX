@@ -24,6 +24,7 @@ ENGINES = {
     "vllm-disagg": "vllm",
     "vllm": "vllm",
     "dynamo-vllm": "vllm",
+    "llmd-vllm": "vllm",
     "dynamo-sglang": "sglang",
     "trt": "trtllm",
     "dynamo-trt": "trtllm",
@@ -185,7 +186,16 @@ def build_overrides(
         if worker_engine == "vllm":
             if not worker_spec:
                 continue
-            if worker_al is not None:
+            if worker_spec.get("enable_adaptive_verification") is True:
+                if (
+                    worker_spec.get("rejection_sample_method") == "synthetic"
+                    or "synthetic_acceptance_length" in worker_spec
+                ):
+                    worker_spec["rejection_sample_method"] = "block"
+                    worker_spec.pop("synthetic_acceptance_length", None)
+                else:
+                    continue
+            elif worker_al is not None:
                 worker_spec.update(
                     rejection_sample_method="synthetic", synthetic_acceptance_length=worker_al
                 )

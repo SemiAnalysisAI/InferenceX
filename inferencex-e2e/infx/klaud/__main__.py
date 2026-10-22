@@ -18,6 +18,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
+
 from .api import PUBLIC, ReadError, fetch_capacity, fetch_catalog
 from .github import (
     VerificationError,
@@ -1151,7 +1153,15 @@ def main() -> int:
     try:
         if args.command in ("report", "report-schema", "prepare-baseline"):
             from .lifecycle import current_session
-            from .reporting import Attempt, Baseline, Prose, baseline_for, prepare_baseline, publish
+            from .reporting import (
+                Attempt,
+                Baseline,
+                Prose,
+                baseline_for,
+                check_reported_datasets,
+                prepare_baseline,
+                publish,
+            )
 
             if args.command == "prepare-baseline":
                 if args.output.exists():
@@ -1174,7 +1184,10 @@ def main() -> int:
             if args.command == "report-schema":
                 print(json.dumps(model.model_json_schema(by_alias=True)))
             else:
-                publish(current_session(), model.model_validate_json(args.file.read_text()))
+                record = model.model_validate_json(args.file.read_text())
+                if isinstance(record, Attempt):
+                    check_reported_datasets(record)
+                publish(current_session(), record)
             return 0
         if args.command == "check-final":
             from .lifecycle import current_session
@@ -1299,11 +1312,18 @@ def main() -> int:
         TypeError,
         subprocess.SubprocessError,
     ) as error:
-        reason = (
-            str(error)
-            if isinstance(error, VerificationError)
-            else "State unavailable or invalid; inspect GitHub before retrying"
-        )
+        if isinstance(error, VerificationError):
+            reason = str(error)
+        elif isinstance(error, ValidationError) and args.command == "report":
+            # Name the failing fields of the agent's own record without echoing its values.
+            reason = "Invalid record: " + "; ".join(
+                ".".join(str(part) for part in item["loc"]) + ": " + item["msg"]
+                if item["loc"]
+                else item["msg"]
+                for item in error.errors(include_url=False)
+            )
+        else:
+            reason = "State unavailable or invalid; inspect GitHub before retrying"
         print(f"::error::Klaud: {reason}.")
         return 1
 
