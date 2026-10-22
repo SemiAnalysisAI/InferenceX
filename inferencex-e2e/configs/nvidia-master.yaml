@@ -7153,24 +7153,8 @@ glm5.2-fp4-b200-sglang-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
 
-# First GLM-5.2 FP8 AgentX recipe on B200, the FP8 precision sibling of
-# glm5.2-fp4-b200-sglang-agentic-mtp. Same spec-decode-only shape per the AgentX
-# policy (docs/MODELS.md): SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps
-# 3, eagle-topk 1, 4 draft tokens = 3 speculative tokens) with acceptance pinned
-# to the golden AL 2.99 (infx/golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
-# K=3) through SGLANG_SIMULATE_ACC_*. That curve was measured on glm-5.2-fp8,
-# i.e. on this checkpoint. Pinned to the 2026-09-08 cu13 dev nightly (the first that carries sgl-project/sglang#38318, the guard for the EAGLE DSA fp8 read-door crash seen on the 2026-09-07 build), the same
-# tag the B200 Qwen3.5 FP8/FP4 SGLang AgentX recipes moved to that day.
-#
-# Same single arm and concurrency grid as the NVFP4 B200 and B300 siblings:
-# cookbook low-latency TP8 with HiCache host-DRAM offload, conc
-# [1, 4, 8, 12, 16] (steps of at least 2, hard stop at 16). TP8-only for
-# memory as well as comparability -- the ~756 GB block-FP8 checkpoint needs
-# ~94.5 GB/GPU across 8 B200s and does not fit below 8; the fp8 KV pool that
-# remains inside --mem-fraction-static 0.83 is ~55 GB/GPU against ~91 GB/GPU
-# on NVFP4, which HiCache absorbs as host spill.
 glm5.2-fp8-b200-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:b200-nscale
@@ -7182,7 +7166,8 @@ glm5.2-fp8-b200-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12], srt-recipe: agentic.yaml }
+      - { tp: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [16, 17, 18, 24], srt-recipe: agentic.yaml }
 
 # GLM-5.2 NVFP4 B200 AgentX on Dynamo + SGLang. EAGLE uses the model's
 # built-in nextn head, with acceptance pinned to the golden thinking-on AL in
@@ -9322,13 +9307,13 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261015-a6a8c560@sha256:0a1ba33aa4e032b8c5bcebdc69c45664074c032074add4f7db01629ec1fcc381
+  image: lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0.dev20261014" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261019" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
@@ -9339,11 +9324,11 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
       search-space:
       - spec-decoding: mtp
         conc-list: [1228]
-        srt-recipe: disagg-variants.yaml:override_4p1d_dep2_dep16_c1228
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep2_dep16_c1228
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         prefill:
-          num-worker: 4
+          num-worker: 3
           tp: 2
           ep: 2
           dp-attn: true
@@ -9354,11 +9339,26 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [2884]
-        srt-recipe: disagg-variants.yaml:override_6p1d_dep2_dep16_c2884
+        srt-recipe: disagg-variants.yaml:override_5p1d_dep2_dep16_c2884
         kv-offloading: dram
-        kv-offload-backend: { name: hicache }
+        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
         prefill:
-          num-worker: 6
+          num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [4096]
+        srt-recipe: disagg-variants.yaml:override_8p1d_dep2_dep16_c4096
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.13.post1" }
+        prefill:
+          num-worker: 8
           tp: 2
           ep: 2
           dp-attn: true
@@ -10170,3 +10170,20 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg:
           ep: 1
           dp-attn: false
         decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
+
+glm5.3-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
+  model: nvidia/GLM-5.3-NVFP4
+  model-prefix: glm5.3
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 10, 13, 14], srt-recipe: agentic.yaml }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [22, 24, 25, 28], srt-recipe: agentic.yaml }

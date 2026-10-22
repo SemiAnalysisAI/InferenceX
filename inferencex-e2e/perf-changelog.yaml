@@ -10808,6 +10808,41 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Include the unchanged aggregated TP4 c1/c4/c16 and TP2 c16 points in the sweep and evaluation coverage, retaining their pinned October 15 image."
+    - "Move the disaggregated points to lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4 (digest sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb) with the ai-dynamo 1.6.0.dev20261019 it ships and the ZMQ event plane. One CPU node hosts etcd, the Mooncake master, the frontend and the AgentX client."
+    - "Replace prefill HiCache DRAM offload with the Mooncake external cache linker on both roles (MOONCAKE_GLOBAL_SEGMENT_SIZE 80gb on prefill, 140gb on decode). The higher prefix hit rate lets c1228 run 3x DEP2 prefill instead of 4x and c2884 5x instead of 6x."
+    - "Add c4096 with 8x DEP2 prefill (4 nodes) and one DEP16 decode: 64 requests per decode rank, 128 extra decode slots."
+    - "Other engine changes: flashmla_mega attention and local DP control broadcast on both roles; on decode, 2048 SWA prefix tails, decoder SWA bounded replay, stream interval 32 and polling interval 8, with the NCCL DP-batch sync env removed; c2884 and c4096 cap prefill batches at 32768 tokens."
+    - "Use the image's upstream DeepSeek-V4.1 external linker pool support (sgl-project/sglang#44623) without SGLang source patches."
+    - "Keep KV routing and session affinity on prefill; use round-robin routing on decode so SGLang places requests with total_tokens load balancing."
+    - "Use fastokens in both worker roles and BF16 decode index logits."
+    - "Disable decode KV-event publishing for round-robin routing; retain prefill KV events and metrics on both roles."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4303
+
+- config-keys:
+    - glm5.3-fp4-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 NVFP4 B300 AgentX on SGLang v0.5.20 (lmsysorg/sglang:v0.5.20-cu130), TP8 with NEXTN MTP K3."
+    - "Concurrency 1, 4, 8, 10, 13 and 14 run without host offload; concurrency 22, 24, 25 and 28 use a 300 GB/rank HiCache host tier."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3930
+
+- config-keys:
+    - glm5.2-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image to nightly-dev-20261020-ab580b2e, pinned by digest."
+    - "Replace the TP8 HiCache c1-c16 grid with TP8 HiCache at c1 (MTP 6 steps, ratio 0.75 write_back) and c4/c8/c12 (MTP 5 steps, mem-fraction 0.88, 169 GB/rank write_through), plus TP8 + DCP8 without host offload at c16/c17/c18/c24 (MTP 5 steps, 16k prefill chunks, prefill delayer batching 2-3 prefills)."
+    - "Request thinking explicitly on the AgentX client and enable checkpoint prefetch and multithreaded weight loading."
+    - "Read SGLang dcp-size in the single-node recipe validator so SGLang points can use dcp-size > 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4389
+
+- config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
