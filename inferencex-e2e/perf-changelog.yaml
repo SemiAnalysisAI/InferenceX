@@ -10784,7 +10784,11 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add Qwen3.5-397B-A17B-FP8 AgentX on MI355X via ATOM, following the standalone recipe (ROCm/ATOM PR 2592), on rocm/atom-dev:nightly_202610181506."
-    - "TP4 with MTP at 3 draft tokens; throughput runs take the golden AL from golden_al_distribution/qwen3.5_mtp.yaml, evaluations use real acceptance."
-    - "Eleven points: CONC 1, 4, 8, 16, 24, 32 and 40 on the GPU prefix cache, and CONC 48, 56, 64 and 80 with the LMCache DRAM tier (0.5.6.dev139+gf22dec28) at 253 GB of KV plus 110 GB of GDN state per rank, 1452 GB in total within the 1499 GB TP4 share at dram-utilization 1.0."
+    - "Add Qwen3.5-397B-A17B-FP8 AgentX on MI355X via ATOM on rocm/atom-dev:nightly_202610181506 (ATOM 0.1.8.dev77+gdf86c4829), following the standalone recipe in ROCm/ATOM PR 2592."
+    - "Eleven TP4 points with MTP at 3 draft tokens: CONC 1, 4, 8, 16, 24, 32 and 40 on the GPU prefix cache, and CONC 48, 56, 64 and 80 with the LMCache (0.5.6.dev139+gf22dec28) DRAM tier at 253 GB of KV plus 110 GB of GDN state per rank, 1452 GB in total within the 1499 GB TP4 share at dram-utilization 1.0. Only CONC 80 runs the eval."
+    - "Every point serves FP8 KV cache with prefix caching, max-num-seqs 1024, timeout-keep-alive 1800, GDN state checkpoints every 16384 prompt tokens, ATOM_GDN_STATE_MIDSTEP=1, ATOM_STATE_CHECKPOINT_END_MARGIN=5, ATOM_PA_FLYDSL=1, ATOM_PREFILL_DECODE_INTERVAL=4, AITER_QUICK_REDUCE_QUANTIZATION=INT4 and CUDA graphs at every batch size up to max(8, 2x CONC)."
+    - "From CONC 32, ATOM_PREFILL_DELAYER_STALL_TICKS and ATOM_PREFILL_DELAYER_TTFT_MAX_TICKS are 15. From CONC 48, LMCache offloads with 256-token chunks and OFFLOAD_MIN_LOAD_TOKENS=8192."
+    - "Throughput runs take the golden AL 3.39 (3 draft tokens) from golden_al_distribution/qwen3.5_mtp.yaml; the eval uses real acceptance."
+    - "The image's ATOM revision is the merge of ROCm/ATOM#2591 (midstep GDN state checkpoints, MTP draft KV slot and lookahead allocation) and includes #2549 (GDN state image pack), #2588 and #2599 (prompt hashing and prefix walk off the scheduler thread), #2589 (prompt-end checkpoint margin), #2590 (one-copy accepted-token publish) and #2609 (FlyDSL head-256 plan cap)."
+    - "The MTP draft runs as shipped: the checkpoint's FP8 E4M3 128x128-block weights on attention projections, shared and routed experts, BF16 on fc, router gate, shared_expert_gate and norms, with the target's FP8 KV cache. The recipe sets no online quantization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4309
