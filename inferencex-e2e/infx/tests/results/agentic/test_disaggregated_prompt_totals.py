@@ -60,10 +60,13 @@ class TestDisaggregatedPromptTotals:
         assert nested["tokens"]["prompt_total"] is None
         assert nested["cache_validity"]["status_class"] == "MISSING"
 
-    @pytest.mark.parametrize("totals", [[1234, None], [-10, 1244], [True], [float("inf")]])
+    @pytest.mark.parametrize("totals", [None, [1234, None], [-10, 1244], [True], [float("inf")]])
     def test_incomplete_or_invalid_frontend_cannot_supply_a_prompt_total(self, totals):
         counter = _counter(0)
-        counter["series"] = [{"stats": {"total": value}} for value in totals]
+        if totals is None:
+            counter = []
+        else:
+            counter["series"] = [{"stats": {"total": value}} for value in totals]
         flat, nested, _ = compute_server_metrics(
             {"metrics": {"dynamo_frontend_input_sequence_tokens": counter}},
             framework="dynamo-trt",
