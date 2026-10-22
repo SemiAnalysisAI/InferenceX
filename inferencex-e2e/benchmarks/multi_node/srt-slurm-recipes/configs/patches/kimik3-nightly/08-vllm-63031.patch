@@ -1,0 +1,172 @@
+From fcd71bb9a36adb63b9ce9f43c7e4170ffadb595c Mon Sep 17 00:00:00 2001
+From: Yichao Zhu <Yichao.Zhu@amd.com>
+Date: Thu, 22 Oct 2026 12:08:07 +0800
+Subject: [PATCH] [ROCm][Kimi-K3] Support MoRIIO consumers with specialized
+ decode
+
+Allow the built-in MoRIIO consumer in READ and WRITE modes. Reuse the existing transfer completion guarantees, and keep other connectors and producer-side specialized execution unsupported. Add configuration coverage and document the supported deployment.
+
+Signed-off-by: Yichao Zhu <Yichao.Zhu@amd.com>
+(cherry picked from commit e34bf5f4784569ca3c2381312f2e7e4d512434de)
+---
+ docs/features/moriio_connector_usage.md       |  8 ++++
+ .../amd_specialized_decode/test_runtime.py    | 46 ++++++++++++++++++-
+ .../kimi_k3/amd/specialized_decode/README.md  |  9 +++-
+ .../specialized_decode/runtime/__init__.py    | 16 ++++++-
+ 4 files changed, 75 insertions(+), 4 deletions(-)
+
+diff --git a/docs/features/moriio_connector_usage.md b/docs/features/moriio_connector_usage.md
+index 2fe1ffa63..7da33d6a4 100644
+--- a/docs/features/moriio_connector_usage.md
++++ b/docs/features/moriio_connector_usage.md
+@@ -144,6 +144,14 @@ For DSpark, configure the same draft model on both instances through `--speculat
+ 
+ Hybrid READ keeps its existing single-transferable-attention-group requirement. Plain-attention WRITE retains its existing notification format.
+ 
++### Kimi-K3 specialized decode
++
++Kimi-K3 on MI355X supports `--additional-config '{"decode_backend":"latency_specialized"}'` on a MoRIIO READ or WRITE consumer. Use `VLLM_USE_V2_MODEL_RUNNER=1`, TP8, DCP1 or DCP8, DSpark with up to seven speculative tokens, and BF16 convolution / FP32 recurrent state on both instances. Keep the producer on the default decode backend and use the same transfer mode and cache layouts on both instances.
++
++The specialized kernels serve pure speculative verification steps of at most eight token rows. For example, with seven speculative tokens and `--max-num-seqs 1`, a verification step has eight rows; use `--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,8]}'` on the consumer. Prefill, mixed, and wider steps use the regular model layers. All transferred attention and recurrent states are ready before the forward, so FULL graph replay does not need per-layer transfer hooks.
++
++Producers using the specialized backend and other connectors remain unsupported.
++
+ ### Different prefill and decode TP sizes
+ 
+ In WRITE mode, the prefill and decode instances can use different tensor-parallel sizes, as long as one is a multiple of the other. Each prefill rank writes its shard into the decode ranks that hold it:
+diff --git a/tests/models/kimi_k3/amd_specialized_decode/test_runtime.py b/tests/models/kimi_k3/amd_specialized_decode/test_runtime.py
+index 6cc5c793c..5fde9359c 100644
+--- a/tests/models/kimi_k3/amd_specialized_decode/test_runtime.py
++++ b/tests/models/kimi_k3/amd_specialized_decode/test_runtime.py
+@@ -8,7 +8,7 @@ from types import SimpleNamespace
+ import pytest
+ import torch
+ 
+-from vllm.config import CompilationMode, CUDAGraphMode
++from vllm.config import CompilationMode, CUDAGraphMode, KVTransferConfig
+ from vllm.models.kimi_k3.amd.specialized_decode import runtime
+ from vllm.models.kimi_k3.amd.specialized_decode.runtime import (
+     FFN,
+@@ -141,6 +141,41 @@ def test_supported_config_is_accepted(on_mi355x):
+     assert specialized_decode_config(_vllm_config()) == DecodeConfig(q=8)
+ 
+ 
++@pytest.mark.parametrize("read_mode", [False, True])
++@pytest.mark.parametrize("backend", ["rdma", "xgmi"])
++def test_moriio_consumer_is_supported(read_mode, backend):
++    config = KVTransferConfig(
++        kv_connector="MoRIIOConnector",
++        kv_role="kv_consumer",
++        kv_connector_extra_config={"read_mode": read_mode, "backend": backend},
++    )
++    assert runtime.supports_kv_transfer(config)
++
++
++@pytest.mark.parametrize(
++    "overrides",
++    [
++        {"kv_connector": "NixlConnector"},
++        {"kv_connector": "MultiConnector"},
++        {"kv_connector_module_path": "custom.connector"},
++        {"kv_role": "kv_producer"},
++        {"kv_role": "kv_both"},
++    ],
++)
++def test_unsupported_kv_transfer_is_refused(overrides):
++    config = KVTransferConfig(
++        **(
++            {
++                "kv_connector": "MoRIIOConnector",
++                "kv_role": "kv_consumer",
++                "kv_connector_extra_config": {"read_mode": True},
++            }
++            | overrides
++        )
++    )
++    assert not runtime.supports_kv_transfer(config)
++
++
+ @pytest.mark.parametrize(
+     "over, reason",
+     [
+@@ -153,7 +188,14 @@ def test_supported_config_is_accepted(on_mi355x):
+         ),
+         ({"parallel_config.pipeline_parallel_size": 2}, "pipeline parallelism"),
+         ({"parallel_config.decode_context_parallel_size": 2}, "decode context"),
+-        ({"kv_transfer_config": object()}, "KV transfer connectors"),
++        (
++            {
++                "kv_transfer_config": KVTransferConfig(
++                    kv_connector="NixlConnector", kv_role="kv_consumer"
++                )
++            },
++            "KV transfer connectors",
++        ),
+         ({"speculative_config": None}, "without speculative decoding"),
+         ({"speculative_config.num_speculative_tokens": 8}, "more than 7"),
+         ({"speculative_config.enable_adaptive_verification": True}, "adaptive"),
+diff --git a/vllm/models/kimi_k3/amd/specialized_decode/README.md b/vllm/models/kimi_k3/amd/specialized_decode/README.md
+index 3e0e048b8..602fb2613 100644
+--- a/vllm/models/kimi_k3/amd/specialized_decode/README.md
++++ b/vllm/models/kimi_k3/amd/specialized_decode/README.md
+@@ -31,11 +31,18 @@ TP8 on MI355X with all 256 CUs, decode context parallel 1 or 8, speculative
+ decoding with at most 7 speculative tokens, Model Runner V2, BF16 conv / FP32
+ recurrent KDA states.
+ 
++MoRIIO READ and WRITE consumers are supported. READ finishes all attention and
++recurrent-state loads before the forward; WRITE requests wait for transfer
++completion before admission. Neither requires per-layer transfer hooks during
++FULL graph replay. Keep the producer on the stock decode backend and use
++matching cache layouts. Other KV connector configurations remain unsupported.
++
+ If you request the specialized decode for anything else, startup fails with one
+ `ValueError` that lists every unsupported setting:
+ 
+ - **Config, in the model's `__init__`:** pipeline, data, expert or prefill
+-  context parallelism, EPLB, DBO, LoRA, KV connectors, routed-expert capture,
++  context parallelism, EPLB, DBO, LoRA, unsupported KV connectors,
++  routed-expert capture,
+   sleep mode, CPU weight offload, weight updates, no speculative decoding,
+   adaptive verification, dynamic speculative decoding, ReplaySSM / RecoverSSM,
+   the V1 model runner, `STOCK_TORCH_COMPILE`, another model's shapes, another GPU.
+diff --git a/vllm/models/kimi_k3/amd/specialized_decode/runtime/__init__.py b/vllm/models/kimi_k3/amd/specialized_decode/runtime/__init__.py
+index e17a0e3ff..4dd549911 100644
+--- a/vllm/models/kimi_k3/amd/specialized_decode/runtime/__init__.py
++++ b/vllm/models/kimi_k3/amd/specialized_decode/runtime/__init__.py
+@@ -13,6 +13,7 @@ from dataclasses import dataclass
+ 
+ import torch
+ 
++from vllm.config import KVTransferConfig
+ from vllm.logger import init_logger
+ 
+ logger = init_logger(__name__)
+@@ -103,7 +104,10 @@ def unsupported(vllm_config) -> list[str]:
+         # the kernels read one batch's attention metadata per step
+         (pc.use_ubatching, "DBO (dual-batch overlap)"),
+         (vllm_config.lora_config is not None, "LoRA"),
+-        (vllm_config.kv_transfer_config is not None, "KV transfer connectors"),
++        (
++            not supports_kv_transfer(vllm_config.kv_transfer_config),
++            "KV transfer connectors other than a MoRIIO consumer",
++        ),
+         (
+             vllm_config.aux_output_config.enable_return_routed_experts,
+             "routed-expert capture",
+@@ -162,6 +166,16 @@ def unsupported(vllm_config) -> list[str]:
+     return reasons + platform_reasons()
+ 
+ 
++def supports_kv_transfer(config: KVTransferConfig | None) -> bool:
++    # MoRIIO completes READs before forward and WRITE receives before admission;
++    # neither consumer needs the per-layer hooks specialized layers bypass.
++    return config is None or (
++        config.kv_connector == "MoRIIOConnector"
++        and config.kv_connector_module_path is None
++        and config.kv_role == "kv_consumer"
++    )
++
++
+ def text_shapes(text) -> tuple:
+     kda = getattr(text, "linear_attn_config", None) or {}
+     return (

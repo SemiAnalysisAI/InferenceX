@@ -1,0 +1,181 @@
+From 983548e8aa73a29b1d8b5543ac83d231350440f8 Mon Sep 17 00:00:00 2001
+From: Yichao Zhu <Yichao.Zhu@amd.com>
+Date: Mon, 19 Oct 2026 18:34:00 +0800
+Subject: [PATCH] Select compatible ROCm KDA backends for BF16 states
+
+Keep FP32-only Gluon and HIP decode paths out of BF16 recurrent-state execution. Preserve FP32 backend priority and validate BF16 decode state writes and backend selection.
+
+Signed-off-by: Yichao Zhu <Yichao.Zhu@amd.com>
+(cherry picked from commit 149262f3ca7c3a07837797942342d45f0abe9f64)
+---
+ tests/models/kimi_k3/test_amd_kda_decode.py | 59 ++++++++++++++++++++-
+ vllm/models/kimi_k3/amd/kda.py              | 14 +++--
+ vllm/models/kimi_k3/amd/ops/kda_decode.py   |  2 +
+ 3 files changed, 71 insertions(+), 4 deletions(-)
+
+diff --git a/tests/models/kimi_k3/test_amd_kda_decode.py b/tests/models/kimi_k3/test_amd_kda_decode.py
+index fc6039ee5..8b12d31c8 100644
+--- a/tests/models/kimi_k3/test_amd_kda_decode.py
++++ b/tests/models/kimi_k3/test_amd_kda_decode.py
+@@ -14,6 +14,8 @@ Every output of each is compared against the unfused path the AMD layer falls
+ back to, with the argument layout the layer itself uses.
+ """
+ 
++from functools import partial
++
+ import pytest
+ import torch
+ 
+@@ -335,7 +337,11 @@ def test_fused_kda_decode_skips_null_block_padding() -> None:
+ 
+ 
+ @requires_hip_kernel_arch
+-def test_decode_weights_staged_after_loading(dist_init) -> None:
++@pytest.mark.parametrize("state_dtype", ["float32", "bfloat16"])
++@pytest.mark.parametrize("aiter_available", [False, True])
++def test_decode_weights_staged_after_loading(
++    dist_init, monkeypatch, state_dtype: str, aiter_available: bool
++) -> None:
+     """The fused-decode weight copies must not depend on the weight loaders.
+ 
+     Loaders that bypass ``weight_loader`` (e.g. ``--load-format dummy``) left
+@@ -344,11 +350,20 @@ def test_decode_weights_staged_after_loading(dist_init) -> None:
+     """
+     _requires_kernel()
+     from tests.v1.attention.utils import create_vllm_config
++    from vllm._aiter_ops import rocm_aiter_ops
+     from vllm.config import set_current_vllm_config
+     from vllm.model_executor.model_loader.utils import process_weights_after_loading
+     from vllm.models.kimi_k3.amd.kda import KimiK3DeltaAttention
++    from vllm.models.kimi_k3.amd.ops.kda_chunk import is_fused_kda_chunk_supported
+     from vllm.transformers_utils.configs.kimi_linear import KimiLinearConfig
+ 
++    monkeypatch.setenv("VLLM_SSM_CONV_STATE_LAYOUT", "SD")
++    monkeypatch.setattr(
++        rocm_aiter_ops, "is_kda_gluon_decode_available", lambda: aiter_available
++    )
++    monkeypatch.setattr(
++        rocm_aiter_ops, "is_kda_gluon_prefill_available", lambda: aiter_available
++    )
+     config = KimiLinearConfig(
+         hidden_size=256,
+         linear_attn_config={
+@@ -362,10 +377,26 @@ def test_decode_weights_staged_after_loading(dist_init) -> None:
+         },
+     )
+     vllm_config = create_vllm_config(model_name="Qwen/Qwen3.5-0.8B", dtype=DTYPE)
++    vllm_config.cache_config.mamba_ssm_cache_dtype = state_dtype
+     with set_current_vllm_config(vllm_config), torch.device("cuda"):
+         layer = KimiK3DeltaAttention(
+             config, vllm_config, prefix="model.layers.0.self_attn"
+         )
++    use_aiter = aiter_available and state_dtype == "float32"
++    assert layer.use_aiter_decode == use_aiter
++    expected_prefill = (
++        "gluon"
++        if use_aiter
++        else "fused"
++        if is_fused_kda_chunk_supported()
++        else "triton"
++    )
++    assert layer.kda_prefill_backend == expected_prefill
++    if state_dtype == "bfloat16":
++        # Neither FP32-only decode backend may stage weights or take its fast path.
++        assert layer.decode_conv1d_weight is None
++        assert layer.decode_norm_weight is None
++        return
+     assert layer.decode_conv1d_weight is not None
+     # The AITER Gluon decode path takes o_norm.weight directly, so only the HIP
+     # kernel gets an fp32 norm copy.
+@@ -625,6 +656,32 @@ def _run_aiter_spec(
+     return core_attn_out, conv_state, recurrent_state
+ 
+ 
++@pytest.mark.parametrize("num_spec", [0, 3])
++@torch.inference_mode()
++def test_triton_decode_with_bf16_recurrent_state(num_spec: int) -> None:
++    """BF16 fallback reads rounded states and preserves paged writeback semantics."""
++    if num_spec:
++        batch = SpecBatch([4, 2, 1], [1, 2, 4], 12, num_spec, seed=5)
++        inp = batch.inp
++        run = partial(_run_spec_triton_chain, batch)
++    else:
++        inp = KdaDecodeInputs(3, 12, num_slots=8, seed=5)
++        run = partial(_run_triton_chain, inp)
++
++    initial_state = inp.recurrent_state.bfloat16()
++    inp.recurrent_state = initial_state.float()
++    expected_out, expected_conv, expected_state = run()
++    inp.recurrent_state = initial_state
++    actual_out, actual_conv, actual_state = run()
++
++    assert actual_state.dtype == torch.bfloat16
++    torch.testing.assert_close(actual_out, expected_out, atol=3e-2, rtol=3e-2)
++    torch.testing.assert_close(actual_conv, expected_conv, atol=0, rtol=0)
++    torch.testing.assert_close(
++        actual_state, expected_state.bfloat16(), atol=2e-3, rtol=3e-2
++    )
++
++
+ @requires_aiter_gluon_kda
+ @pytest.mark.parametrize("num_heads", [12, 24])
+ @pytest.mark.parametrize(
+diff --git a/vllm/models/kimi_k3/amd/kda.py b/vllm/models/kimi_k3/amd/kda.py
+index 4216c6f94..8460c09f7 100644
+--- a/vllm/models/kimi_k3/amd/kda.py
++++ b/vllm/models/kimi_k3/amd/kda.py
+@@ -194,8 +194,11 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+         # ROCm can fuse the whole decode step (conv + recurrence + gated norm)
+         # into one kernel, which wants a width-major fp32 conv weight staged at
+         # load time. Everything else keeps the [channel, width] layout.
+-        conv_state_dtype, _ = self.get_state_dtype()
+-        self.use_aiter_decode = bool(rocm_aiter_ops.is_kda_gluon_decode_available())
++        conv_state_dtype, recurrent_state_dtype = self.get_state_dtype()
++        # AITER's Gluon kernels currently require FP32 recurrent states.
++        self.use_aiter_decode = recurrent_state_dtype == torch.float32 and bool(
++            rocm_aiter_ops.is_kda_gluon_decode_available()
++        )
+         use_hip_decode = not self.use_aiter_decode and is_fused_kda_decode_supported(
+             self.local_num_heads,
+             self.head_dim,
+@@ -203,6 +206,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+             self.num_spec,
+             vllm_config.model_config.dtype,
+             conv_state_dtype,
++            recurrent_state_dtype,
+         )
+         if use_hip_decode:
+             logger.info_once("Fused KDA decode kernel (conv+KDA+norm) is enabled.")
+@@ -256,7 +260,11 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
+             )
+         self.kda_prefill_backend = backend
+         if backend == "auto":
+-            if self.use_safe_gate and rocm_aiter_ops.is_kda_gluon_prefill_available():
++            if (
++                recurrent_state_dtype == torch.float32
++                and self.use_safe_gate
++                and rocm_aiter_ops.is_kda_gluon_prefill_available()
++            ):
+                 self.kda_prefill_backend = "gluon"
+             elif is_fused_kda_chunk_supported():
+                 self.kda_prefill_backend = "fused"
+diff --git a/vllm/models/kimi_k3/amd/ops/kda_decode.py b/vllm/models/kimi_k3/amd/ops/kda_decode.py
+index d944e1eb0..236a95d72 100644
+--- a/vllm/models/kimi_k3/amd/ops/kda_decode.py
++++ b/vllm/models/kimi_k3/amd/ops/kda_decode.py
+@@ -30,6 +30,7 @@ def is_fused_kda_decode_supported(
+     num_spec: int,
+     input_dtype: torch.dtype,
+     conv_state_dtype: torch.dtype,
++    recurrent_state_dtype: torch.dtype,
+ ) -> bool:
+     """Whether the fused decode kernel can serve this layer on this device."""
+     from vllm.platforms.rocm import on_gfx942, on_gfx950
+@@ -41,6 +42,7 @@ def is_fused_kda_decode_supported(
+         or num_spec != 0
+         or input_dtype != torch.bfloat16
+         or conv_state_dtype != torch.bfloat16
++        or recurrent_state_dtype != torch.float32
+         or is_conv_state_dim_first()
+         or not hasattr(torch.ops._C, "fused_kda_decode")
+     ):
