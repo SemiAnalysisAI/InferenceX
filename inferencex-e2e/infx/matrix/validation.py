@@ -20,7 +20,6 @@ from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
 MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
-LLMD_FRAMEWORK = "llmd-vllm"
 RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
 
 
@@ -872,12 +871,6 @@ _RECIPE_SETTINGS = {"CONFIG_FILE": Fields.SRT_RECIPE, "EVAL_CONFIG_FILE": Fields
 
 def _validate_srt_recipes(self: Any) -> Any:
     entries = _master_search_space_entries(self)
-    if self.multinode and self.framework == LLMD_FRAMEWORK:
-        if self.srt_recipe_dir is not None or any(
-            entry.srt_recipe or entry.eval_srt_recipe for entry in entries
-        ):
-            raise ValueError(f"{LLMD_FRAMEWORK} selects recipes with CONFIG_FILE, not srt-recipe")
-        return self
     if self.srt_recipe_dir is None:
         raise ValueError(f"srt-slurm configs require {Fields.SRT_RECIPE_DIR.value}")
     for entry in entries:
