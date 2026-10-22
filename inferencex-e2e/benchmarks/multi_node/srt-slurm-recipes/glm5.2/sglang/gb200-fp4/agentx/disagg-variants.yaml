@@ -50,9 +50,6 @@ base:
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
         NVSHMEM_REMOTE_TRANSPORT: none
-        # NIXL moves P->D KV over multi-node NVLink (UCX cuda_ipc), not the network.
-        UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
-        UCX_CUDA_IPC_ENABLE_MNNVL: 'y'
         # The default 9,9,10,10,10,10,10,10 split also gives the last stage the LM head and MTP draft layer.
         SGLANG_PP_LAYER_PARTITION: 10,10,10,10,10,10,10,8
       args:
@@ -105,8 +102,6 @@ base:
         NCCL_MNNVL_ENABLE: '1'
         NCCL_CUMEM_ENABLE: '1'
         NVSHMEM_REMOTE_TRANSPORT: none
-        UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
-        UCX_CUDA_IPC_ENABLE_MNNVL: 'y'
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true
