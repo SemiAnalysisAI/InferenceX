@@ -37,12 +37,13 @@ def modern_profile_error(export: Mapping[str, Any], endpoints: Iterable[str] = (
         and 0 <= window["start_ns"] < window["end_ns"]
     ):
         return "profiling time bounds missing or invalid"
+    expected = set(endpoints)
     for key in ("endpoints_configured", "endpoints_successful"):
         covered = summary.get(key)
         if (
             not isinstance(covered, list)
             or not all(isinstance(url, str) for url in covered)
-            or not set(endpoints).issubset(covered)
+            or not expected.issubset(covered)
         ):
             return "profiling endpoint coverage incomplete"
     return None

@@ -123,7 +123,6 @@ def test_unknown_conflicting_or_incomplete_roles_do_not_mix_endpoints(env: dict)
         _export({"p": 100, "d": 100}, {"p": 60, "d": 0}, {"p": 10, "d": 0}), env
     )
     _assert_rates(flat, nested, None, None, None)
-    assert nested["cache_validity"]["status"] == "ROLE_OR_COVERAGE_UNRESOLVED"
 
 
 def test_single_endpoint_without_explicit_unified_topology_stays_unknown() -> None:

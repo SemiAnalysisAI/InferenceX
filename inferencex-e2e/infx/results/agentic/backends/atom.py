@@ -7,14 +7,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-from infx.results.agentic.atom_validity import (
-    CACHED,
-    FULL,
-    LOADED,
-    OFFLOAD,
-    REQUESTS,
-    account_cache,
-)
+from infx.results.agentic.atom_validity import account_cache
 from infx.results.agentic.common import (
     gauge_stat,
     metric_series,
@@ -130,14 +123,11 @@ class AtomBackend(ServerMetricsBackend):
         nested: dict[str, Any],
         *,
         context: Mapping[str, Any] | None = None,
-        endpoint_roles: Mapping[str, str] | None = None,
-        disaggregated: bool | None = None,
-        cpu_offload_disabled: bool = False,
     ) -> None:
         context = context or {}
-        endpoint_roles = context.get("endpoint_roles", endpoint_roles)
-        disaggregated = context.get("disagg", disaggregated)
-        cpu_offload_disabled = context.get("kv_offloading") == "none" or cpu_offload_disabled
+        endpoint_roles = context.get("endpoint_roles")
+        disaggregated = context.get("disagg")
+        cpu_offload_disabled = context.get("kv_offloading") == "none"
         prompt_names = _atom_counter_names("prompt_tokens")
         prompt_endpoints = {s.get("endpoint_url") for s in metric_series(metrics, prompt_names)}
         if endpoint_roles is None:
@@ -170,26 +160,21 @@ class AtomBackend(ServerMetricsBackend):
         full_tokens, cached_tokens, external_tokens = _cache_counts(
             metrics, endpoint_roles, disaggregated, cpu_offload_disabled
         )
-        accounting = account_cache(
+        counts, detail = account_cache(
             metrics,
-            framework=str(context.get("framework") or "atom"),
             endpoint_roles=endpoint_roles,
-            profiling_window=context.get("profiling_window"),
-            warmup_metrics=context.get("warmup_metrics"),
             request_scope=context.get("request_scope"),
             disagg=disaggregated,
             kv_offloading=context.get("kv_offloading"),
-            collector_export=context.get("collector_export"),
+            collector_export=context.get("collector_export") or {},
         )
-        if accounting["replace_telemetry"]:
-            full_tokens, cached_tokens, external_tokens = (
-                accounting[key] for key in ("full", "cached", "offload")
-            )
+        if counts is not None:
+            full_tokens, cached_tokens, external_tokens = counts
             flat["total_prompt_tokens"] = counter_int(full_tokens)
-        nested["cache_validity"] = accounting["validity"]
+        nested["cache_validity"] = detail
         sink = context.get("warnings")
         if isinstance(sink, list):
-            sink.extend(accounting["warnings"])
+            sink.extend(f"atom cache accounting: {reason}" for reason in detail["reasons"])
         cache_hit_rate = rate(cached_tokens, full_tokens)
         # Offload is CPU reuse beyond the GPU prefix; loaded tokens measure transfer volume.
         external_hit_rate = rate(external_tokens, full_tokens)
@@ -227,25 +212,12 @@ class AtomBackend(ServerMetricsBackend):
             }
         )
         nested["kv_cache"]["gpu_usage_pct"] = flat["gpu_kv_cache_usage_pct"]
-        if accounting["replace_telemetry"]:
-            by_source = nested["tokens"]["prompt_by_source"]
-            if full_tokens is not None and external_tokens is not None:
-                by_source.update(
-                    gpu_cache_hit=cached_tokens,
-                    cpu_or_external_cache_hit=external_tokens,
-                    computed=full_tokens - cached_tokens - external_tokens,
-                )
-            by_source["raw"] = {
-                f"atom:{stem}": accounting[key]
-                for stem, key in (
-                    (FULL, "full"),
-                    (CACHED, "cached"),
-                    (OFFLOAD, "offload"),
-                    (LOADED, "loaded"),
-                    (REQUESTS, "requests"),
-                )
-                if accounting[key] is not None
-            }
+        if counts is not None and full_tokens is not None and external_tokens is not None:
+            nested["tokens"]["prompt_by_source"].update(
+                gpu_cache_hit=cached_tokens,
+                cpu_or_external_cache_hit=external_tokens,
+                computed=full_tokens - cached_tokens - external_tokens,
+            )
         nested["tokens"].update(
             {
                 "prompt_total": flat["total_prompt_tokens"],
