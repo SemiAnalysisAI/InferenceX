@@ -213,7 +213,11 @@ def _reuse_rate(metrics: dict[str, dict[str, Any]], context: PhaseContext) -> di
             "endpoint_url": str(series.get("endpoint_url", "")),
             "role": role,
         }
-        if role == "unknown" and context.disaggregated is False:
+        if (
+            role == "unknown"
+            and context.disaggregated is False
+            and not label_value(series, "disaggregation_mode")
+        ):
             role = "combined"
         if scope is not None and role == scope:
             record = classify_series(
