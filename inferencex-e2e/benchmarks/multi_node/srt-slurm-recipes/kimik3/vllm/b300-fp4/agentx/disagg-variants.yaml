@@ -150,8 +150,8 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        # With async scheduling, prefill TP0 blocks in kernel launch on an idle
-        # GPU 0 under Mooncake EFA traffic and the engine stops serving.
+        # Diagnostic: async scheduling is off while the EFA prefill hang (TP0
+        # blocked in kernel launch on an idle GPU 0) is root-caused.
         no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
@@ -184,8 +184,8 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
-        # With async scheduling, prefill TP0 blocks in kernel launch on an idle
-        # GPU 0 under Mooncake EFA traffic and the engine stops serving.
+        # Diagnostic: async scheduling is off while the EFA prefill hang (TP0
+        # blocked in kernel launch on an idle GPU 0) is root-caused.
         no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512

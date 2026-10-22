@@ -258,8 +258,8 @@ a primary sweep label on the PR, although staging its results requires one:
 ```
 
 Keep the command and required run ID on one line. This pins an eligible completed
-`run-sweep.yml` PR run whose commit remains in the PR, including failed or cancelled
-runs with usable results.
+`run-sweep.yml` PR run, including failed or cancelled runs with usable results. The
+run may come from any PR; its commit need not be part of this one.
 
 The legacy `/reuse-sweep-run <run_id>` remains equivalent. Bare `/reuse-sweep-run`
 selects the latest successful eligible run automatically; bare `/use` is rejected.
@@ -271,9 +271,10 @@ certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
 The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
-The bot reacts with 👍 after validating the request, or 👎 on rejection; details
-are in the Actions run summary. Edits replace the bot's old reaction. The reuse
-check posts no comment, but `/use <run_id>` also triggers `stage-results.yml`.
+The bot reacts with 👍 after validating the request, or 👎 on rejection. When the
+pinned run's commit is not part of the PR, it also posts one warning comment for
+that request and run; reuse still proceeds. Details are in the Actions run summary.
+Edits replace the bot's old reaction. `/use <run_id>` also triggers `stage-results.yml`.
 Staging requires a primary sweep label on the PR and a source run created while
 one was applied. It posts a staging comment, or a rejection comment when the PR
 has no primary label. Comments do not trigger or cancel GPU sweeps. Later commits
