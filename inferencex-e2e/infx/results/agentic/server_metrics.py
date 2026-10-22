@@ -104,6 +104,8 @@ def _disaggregated_prompt_total(
         return prompt
     frontend = metrics.get("dynamo_frontend_input_sequence_tokens")
     if frontend is not None:
+        if not isinstance(frontend, dict):
+            return None
         series = frontend.get("series")
         key = {"counter": "total", "histogram": "sum"}.get(frontend.get("type"))
         if not isinstance(series, list) or key is None:
