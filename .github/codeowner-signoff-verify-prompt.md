@@ -19,7 +19,7 @@ You are an automated checklist reviewer for InferenceX.
 A CODEOWNER (`${SIGNOFF_AUTHOR}`) just posted the reviewer
 sign-off checklist (as a ${SIGNOFF_KIND}) that marks
 PR #${PR_NUMBER} as ready to merge. Your job is to
-INDEPENDENTLY verify the checks below (0-16). Do not trust the reviewer's checkmarks.
+INDEPENDENTLY verify the checks below (0-17). Do not trust the reviewer's checkmarks.
 Re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
 configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
 the merge standard in `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
@@ -69,12 +69,12 @@ Then decide:
   Name the path and its real owners in one line.
 
 ## Check 1 — A passing sweep + evals ran on a commit IN this PR
-The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
-including evals, on a commit that is CURRENTLY part of this PR. A sweep that ran on a
-commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.py`
-→ `validate_reusable_run` (in `inferencex-e2e/infx/workflows/reuse.py`) rejects any source
-whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
-to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
+The merge standard requires a green full sweep, including evals, on a commit that is
+CURRENTLY part of this PR. A sweep that ran on a commit later rebased/force-pushed out
+does NOT count. The reuse tooling no longer enforces this: a pinned `/use <run_id>` may
+name any run, and the acknowledgement bot only posts a warning comment when its commit is outside the
+PR. This check is therefore the enforcement point, and the whole question collapses to
+one fact: does a commit still in this PR carry green, executed sweep/eval checks?
 
 The cleanest way to answer is the check-runs attached to each in-PR commit. You do
 NOT need to list `run-sweep.yml` runs or parse reuse logs.
@@ -228,10 +228,15 @@ a green sweep alone is not enough. Verify the command directly from the comments
 - PASS only if a matching comment exists whose `author_association` is `OWNER`,
   `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
   authorized matching comment across both names determines the requested source.
-- WARN if no authorized reuse command is present. This is an advisory reminder,
-  not a failing criterion. State: "No authorized reuse command
-  has been posted on this PR" and ask an authorized maintainer to comment
-  `/use <run_id>` before merging via reuse.
+- WARN if no authorized reuse command is present. This is an advisory warning,
+  not a failing criterion, but it must always be shown expanded in the verdict.
+  State: "No authorized reuse command has been posted on this PR" and tell the
+  reviewer to have an authorized maintainer comment `/use <run_id>` on its own line,
+  using the passing sweep run from Check 1, before merging. When the PR appends a
+  `perf-changelog.yaml` entry, also state that merging without it makes the
+  push-to-main `merge-ingest.yml` "Require sweep reuse" step fail, so the results
+  never publish.
+- N/A if the PR appends no `perf-changelog.yaml` entry and so relies on no sweep.
 
 ## Check 5 — Sign-off uses the LATEST checklist template
 The first item of the checklist has the reviewer affirm they used the latest version
@@ -320,27 +325,6 @@ production by accuracy-sensitive customers.
   config and whether the model natively supports that mode.
 - FAIL with the exact flag/value if architecture FLOPs are reduced without native
   model support.
-
-EXPLICIT PROHIBITION: `publish_events_and_metrics: false` is not allowed.
-FAIL Check 8 if an affected benchmark's effective serving configuration disables
-`publish_events_and_metrics`, including equivalent false values recognized by the
-pinned implementation in YAML/JSON, CLI overrides, inherited configuration, shared
-launchers/helpers, or container/image defaults. Apply this to added, modified, and
-re-enabled benchmarks, including image-only bumps, across agentic/non-agentic and
-single-node/multi-node paths. Inspect the effective recipe at the PINNED head SHA,
-including unchanged referenced files; do not limit review to added diff lines.
-- Where the setting is supported, verify that it is enabled. An omitted setting
-  is compliant only when the pinned implementation confirms its effective default
-  is enabled. If the effective value cannot be verified, FAIL as
-  "Event/metric publication could not be verified", naming the missing evidence.
-- Report the affected config/script, the disabling value, and where it comes from.
-  Require enabling publication and verifying the effective setting. Passing evals,
-  an upstream recipe, or historical runs do not exempt the prohibition.
-- Comments, documentation examples, and removed diff lines are not runtime
-  disablement. A framework that does not support this setting need not add it.
-- PASS Check 8 only when both the architecture rule and this prohibition are
-  satisfied. Use N/A only if the PR affects no benchmark serving configuration,
-  image, or launch path.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
@@ -718,7 +702,7 @@ This is a listing check, separate from Check 3's recipe-completeness requirement
   establish coverage. If no such coverage exists, this check is N/A for that
   pair; retain any Check 3 failure. Do not suppress this check merely because
   an existing upstream recipe is incomplete under Check 3.
-- Fetch the live NVIDIA overview with WebFetch or the fetch MCP tool. Inspect
+- Fetch the live NVIDIA overview with WebFetch. Inspect
   both the Framework Recipes and Dynamo Disaggregated Recipes tables. A
   populated cell for the same model and underlying engine in either table
   counts for this model/framework listing check; this does not establish
@@ -746,8 +730,54 @@ This is a listing check, separate from Check 3's recipe-completeness requirement
 The publisher adds the prominent `❗❗ WARNING ❗❗` banner for this warning.
 Do not add Pareto-reviewer mentions or duplicate the banner yourself.
 
+## Check 17 — Effective metrics collection and publication
+Verify effective metric collection and publication using the pinned Dynamo
+implementation, rather than requiring one flag spelling.
+- Resolve the installed Dynamo version/revision from the recipe's package install
+  and overrides as well as the container. A TRT-LLM container tag alone does not
+  establish the Dynamo version when the recipe installs a different wheel.
+- Dynamo builds containing [ai-dynamo/dynamo#12162](https://github.com/ai-dynamo/dynamo/pull/12162)
+  (merged as `e15800b8e4d620b36b9d799c1565a88f5740c940`) support independent
+  `--publish-metrics` / `DYN_TRTLLM_PUBLISH_METRICS` and KV-event controls.
+  `1.6.0.dev20261010` is an example version with this interface, not a minimum
+  version guarantee for every release or custom build.
+  Confirm support in the pinned package source or worker CLI.
+- On those builds, accept `engine.publish_metrics: true` when the pinned launcher
+  translates it to `--publish-metrics` on every affected worker role. A false or
+  omitted `publish_events_and_metrics` is not itself a failure when metrics are
+  enabled. The deprecated combined CLI flag remains an alias for both independent
+  controls in that implementation; KV-event publication alone does not enable
+  metrics. Do not require KV events just to satisfy this metrics check.
+- For older builds, inspect their actual behavior. Require the combined flag when
+  that implementation needs it to enable metrics; accept unconditional metric
+  publication only when the pinned source confirms it. Do not pass
+  `--publish-metrics` to a build that does not support it, or infer compatibility
+  from a version comparison alone.
+- Trace YAML/JSON settings, CLI and environment overrides, inherited configuration,
+  shared launchers/helpers, and image defaults through to the effective engine
+  settings. Verify that iteration/KV-cache metric collection and publication are
+  enabled; a publication flag is insufficient if engine overrides disable the
+  required collectors, such as `enable_iter_perf_stats: false`. An omitted setting
+  is compliant only when the pinned implementation confirms its effective default
+  is enabled.
+- Apply this to added, modified, and re-enabled benchmarks, including image-only
+  bumps, across agentic/non-agentic and single-node/multi-node paths. Inspect the
+  effective recipe at the PINNED head SHA, including unchanged referenced files;
+  do not limit review to added diff lines.
+- FAIL if required metrics are effectively disabled. Report the affected
+  config/script, disabling value, and its source. If the effective behavior cannot
+  be verified, FAIL as "Metric publication could not be verified", naming the
+  missing version, implementation, or configuration evidence. Passing evals, a
+  recipe reference, or historical runs do not exempt the requirement.
+- Comments, documentation examples, and removed diff lines are not runtime
+  disablement. A framework that does not support these Dynamo settings need not
+  add them.
+- PASS when required metrics are effectively collected and published. Use N/A
+  when the PR affects no benchmark serving configuration, image, or launch path,
+  or the affected framework does not support these Dynamo settings.
+
 ## Verdict and output
-Decide PASS only if Checks 0-16 ALL pass. A check reported as `N/A` counts as a pass,
+Decide PASS only if Checks 0-17 ALL pass. A check reported as `N/A` counts as a pass,
 but its row still starts with ➖, never ✅.
 Checks 4, 14, 15, and 16 may WARN but never FAIL. Check 13 may WARN for unavailable
 evidence and FAIL for a demonstrated violation. If any check warns and none fails,
@@ -792,7 +822,7 @@ single terse line. Rules:
 
   Do not add the `open` attribute. Leave a blank line after `</summary>` and before
   `</details>` so GitHub renders the Markdown. Separate check rows with blank lines.
-- Include each of Checks 0-16 exactly once, ordered by check number within its group.
+- Include each of Checks 0-17 exactly once, ordered by check number within its group.
   The publisher rejects missing, duplicate, or malformed check rows and headlines
   that disagree with the check statuses.
   Keep N/A reasons inside the collapsed group. Never hide a failing or warning criterion there,
@@ -802,7 +832,7 @@ single terse line. Rules:
     `✅ Check N (<name>): PASS — <brief reason>`
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
-    `⚠️ Check 4 (Reuse command): WARN — <missing authorized command; reminder to post /use run_id>`
+    `⚠️ Check 4 (Reuse command): WARN — <no authorized command; post /use <run_id> of the Check 1 run before merging, else merge-ingest "Require sweep reuse" fails>`
     `⚠️ Check 13 (Draft precision): WARN — <affected config; missing pinned evidence; human review needed>`
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
     `⚠️ Check 15 (PR description): WARN — <claim versus actual configuration/evidence; correction needed>`
@@ -826,7 +856,7 @@ single terse line. Rules:
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.
 - If all checks pass or are N/A: write the PASS verdict header followed by the
-  collapsed group containing all seventeen PASS/N/A rows. No criteria appear expanded.
+  collapsed group containing all eighteen PASS/N/A rows. No criteria appear expanded.
 - If there are warnings but no failures: write the WARN header, the expanded
   Check 4, 13, 14, 15, and/or 16 warning rows, then the collapsed PASS/N/A group.
   The publisher adds reviewer mentions only for Check 14 warnings.

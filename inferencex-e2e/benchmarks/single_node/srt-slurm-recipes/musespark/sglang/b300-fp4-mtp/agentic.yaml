@@ -1,0 +1,298 @@
+base:
+  schema: 2
+  name: musespark-fp4-b300-sglang-agentic
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        attention-backend: trtllm_mha
+        page-size: 128
+        cuda-graph-backend-prefill: breakable
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-num-draft-tokens: 8
+        speculative-use-block-verification: true
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+        tokenizer-worker-num: 4
+        enable-http2: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        HF_HUB_OFFLINE: '1'
+        OMP_NUM_THREADS: '8'
+        TVM_FFI_CUDA_ARCH_LIST: 10.3a
+        SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN: '1'
+        SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
+        SGLANG_DFLASH_EAGER_DRAFT_SAMPLER: '1'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  # Cold 533 GB weight loads from shared storage plus graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable with the job token; tokenize from the staged checkpoint.
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        swa-full-tokens-ratio: 0.3
+        speculative-draft-attention-backend: fa4
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c14:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        max-running-requests: 14
+        cuda-graph-max-bs-decode: 14
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '14'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.88
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c10:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.88
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 120
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: dram
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 96
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 120
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp4_c20:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 80
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 170
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
+
+override_tp4_c28:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 80
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 170
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: dram
+
+override_tp4_c36:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 24
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 175
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+  benchmark:
+    env:
+      CONC: '36'
+      KV_OFFLOADING: dram
+
+override_tp4_c40:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 170
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram

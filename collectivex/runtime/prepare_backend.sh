@@ -325,7 +325,7 @@ PY
 # already carry .ready are rebuilt rather than reused. PER_EXPERT_BATCHING is off by default
 # upstream but is UCCL's documented drop-in deep_ep build, and it changes the low-latency kernels.
 readonly -a UCCL_BUILD_FLAGS=(USE_DMABUF=1 PER_EXPERT_BATCHING=1)
-readonly UCCL_BUILD_GEN=rec1
+readonly UCCL_BUILD_GEN=rec2
 readonly UCCL_BUILD_RECORD=collx_uccl_build.json
 
 uccl_probe() {
@@ -414,6 +414,34 @@ uccl_install() {
     sed -i 's/cudaMallocManaged/cudaMallocHost/g' \
       "$source_dir/ep/src/uccl_ep.cc" "$source_dir/ep/src/uccl_proxy.cpp" \
       || { collx_log "ERROR: UCCL AMD managed-memory patch failed"; return 1; }
+    # Plain launch on AMD: hipify cannot map the cooperative cudaLaunchKernelEx path, which also
+    # costs ~30 us per launch on gfx942. Defined ahead of the #ifndef-guarded upstream macros.
+    python3 - "$source_dir/ep/include/ep_launch.cuh" <<'PY' \
+      || { collx_log "ERROR: UCCL AMD launch patch failed"; return 1; }
+import sys
+path = sys.argv[1]
+src = open(path).read()
+plain = r"""
+#define SETUP_LAUNCH_CONFIG(sms, threads, stream) \
+  int __num_sms = (sms);                          \
+  int __num_threads = (threads);                  \
+  auto __stream = (stream)
+#define LAUNCH_KERNEL(config, kernel, ...)                          \
+  do {                                                              \
+    kernel<<<__num_sms, __num_threads, 0, __stream>>>(__VA_ARGS__); \
+    cudaError_t e = cudaGetLastError();                             \
+    if (e != cudaSuccess) {                                         \
+      EPException cuda_exception("CUDA", __FILE__, __LINE__,        \
+                                 cudaGetErrorString(e));            \
+      fprintf(stderr, "%s\n", cuda_exception.what());               \
+      throw cuda_exception;                                         \
+    }                                                               \
+  } while (0)
+"""
+anchor = '#include "exception.cuh"\n'
+assert src.count(anchor) == 1, "ep_launch.cuh changed shape"
+open(path, "w").write(src.replace(anchor, anchor + plain, 1))
+PY
   else
     arch_env="TORCH_CUDA_ARCH_LIST=$arch"
   fi

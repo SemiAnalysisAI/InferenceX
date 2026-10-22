@@ -43,14 +43,17 @@ class _Launch(NamedTuple):
 
 
 # vLLM's MoriAll2AllManager: one node runs IntraNode under both mori_* selectors; multi-node
-# mori_high_throughput runs InterNodeV1 with a per-arch tuple; num_qp_per_pe is MoRI's default 1.
+# mori_high_throughput runs InterNodeV1 and mori_low_latency InterNodeV1LL, each with the arch's
+# tuple; num_qp_per_pe is MoRI's default 1.
 _VLLM_INTRANODE = _Launch("IntraNode", "intranode-vllm", "vllm", 80, 0, 16, 1)
 _VLLM_INTERNODE_V1 = {
     "gfx950": _Launch("InterNodeV1", "inter-node-v1-vllm", "vllm", 64, 32, 8, 1),
     "gfx942": _Launch("InterNodeV1", "inter-node-v1-vllm", "vllm", 32, 16, 16, 1),
 }
-# vLLM has no single-node low-latency kernel; SGLang's moriep runs EpMode.LOW_LATENCY as AsyncLL.
-_SGLANG_ASYNC_LL = _Launch("AsyncLL", "async-ll-sglang", "sglang", 64, 32, 8, 2)
+_VLLM_INTERNODE_V1LL = {
+    "gfx950": _Launch("InterNodeV1LL", "inter-node-v1ll-vllm", "vllm", 64, 32, 8, 1),
+    "gfx942": _Launch("InterNodeV1LL", "inter-node-v1ll-vllm", "vllm", 32, 16, 16, 1),
+}
 
 
 def _gfx_arch(device) -> str:
@@ -106,7 +109,7 @@ class MoRIBackend(EPBackend):
     # slices by the per-rung `recv_tokens`, fixed for a rung, so it is safe to capture.
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     requires_fresh_pair = True
-    # AsyncLL takes a caller-quantized tensor, as IntraNode does.
+    # InterNodeV1LL takes the caller-quantized tensor vLLM's prepare() builds, as IntraNode does.
     ll_quantizes_in_kernel = False
 
     @property
@@ -125,29 +128,23 @@ class MoRIBackend(EPBackend):
         arch = _gfx_arch(device)
         scale_out = args.scope == "scale-out"
         if self.mode == "low-latency":
-            if scale_out:
+            # On one node vLLM's mori_low_latency runs IntraNode, the normal decode row's kernel.
+            if not scale_out:
                 raise RuntimeError(
-                    "MoRI low-latency is scale-up EP8 only (scale-out EP16 low-latency "
-                    "is out of scope; see platform_config ll_backends)"
+                    "MoRI low-latency is scale-out only: on one node vLLM's mori_low_latency runs "
+                    "IntraNode, which the normal decode row measures"
                 )
-            self.launch = _SGLANG_ASYNC_LL
-            # AsyncLL as SGLang deploys it on AMD, on the copy engines; an explicit setting wins. Set
-            # here because MoRI snapshots it at shmem init, in create_buffer.
-            os.environ.setdefault("MORI_ENABLE_SDMA", "1")
+            self.launch = _VLLM_INTERNODE_V1LL[arch]
         else:
             self.launch = _VLLM_INTERNODE_V1[arch] if scale_out else _VLLM_INTRANODE
-        # Of the EP kernels only AsyncLL's same-node transfer changes with it (copy engines instead
-        # of one thread per peer and queue pair); vLLM leaves it unset (off).
+        # vLLM never sets MORI_ENABLE_SDMA (MoRI's default is off); a caller's setting is recorded.
         self._sdma = _env_enabled("MORI_ENABLE_SDMA")
         self.kernel_generation = self.launch.generation + ("-sdma" if self._sdma else "")
         kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
         if kernel_enum is None or not hasattr(kernel_enum, self.launch.kernel):
             raise RuntimeError(f"this MoRI image lacks EpDispatchCombineKernelType.{self.launch.kernel}")
         self._kernel_type = getattr(kernel_enum, self.launch.kernel)
-        # AsyncLL's dispatch()/combine() launch only the send kernels and the payload lands in the
-        # recv phase, so each timed component runs send+recv back-to-back, as SGLang's _b steps do.
-        self._split_phase = self.launch.kernel == "AsyncLL"
-        self._inter_node = self.launch.kernel == "InterNodeV1"
+        self._inter_node = self.launch.kernel in ("InterNodeV1", "InterNodeV1LL")
         self._fp8_dtype = None
         if self._fp8:
             if args.hidden % _FP8_BLOCK:
@@ -182,7 +179,7 @@ class MoRIBackend(EPBackend):
         heap_mode = os.environ.get("MORI_SHMEM_MODE", "STATIC_HEAP").upper()
         if self._inter_node and heap_mode != "STATIC_HEAP":
             raise RuntimeError(
-                "MoRI scale-out requires STATIC_HEAP; VMM_HEAP corrupts InterNodeV1 combine on "
+                "MoRI scale-out requires STATIC_HEAP; VMM_HEAP corrupts inter-node combine on "
                 "ROCm 7.2 (ROCm/mori#610)"
             )
         mori.shmem.shmem_torch_process_group_init("default")
@@ -227,16 +224,6 @@ class MoRIBackend(EPBackend):
         self.op = mori.ops.EpDispatchCombineOp(self.config)
         if getattr(self.op, "launch_config_mode", None) != "MANUAL":
             raise RuntimeError("MoRI explicit launch configuration was not applied")
-        # Fail closed rather than measure a silent send-only AsyncLL: without the recv
-        # methods the single-call dispatch returns before any payload lands.
-        if self._split_phase and not (
-            callable(getattr(self.op, "dispatch_recv", None))
-            and callable(getattr(self.op, "combine_recv", None))
-        ):
-            raise RuntimeError(
-                "this MoRI image's AsyncLL lacks the split-phase "
-                "dispatch_recv/combine_recv API the deployed low-latency path drives"
-            )
         # Read back the handle's realized config (MoRI's get_handle_info snapshot, in its key names).
         requested = {
             "block_num": launch.block_num,
@@ -281,8 +268,6 @@ class MoRIBackend(EPBackend):
         # Quantize inside dispatch, where vLLM's prepare() pays it, then make vLLM's call.
         x, scales = self._quant(p.dispatch_x) if self._fp8 else (p.dispatch_x, None)
         output, weights, out_scales, indices, recv_num = self.op.dispatch(x, p.weights, scales, p.indices)
-        if self._split_phase:
-            self.op.dispatch_recv()
         return types.SimpleNamespace(
             dispatch_output=output,
             dispatch_scales=out_scales,
@@ -310,16 +295,14 @@ class MoRIBackend(EPBackend):
 
     def combine(self, p, h):
         # `indices` must be this rank's own [T, topk] routing -- the tensor handed to
-        # dispatch() -- never dispatch()'s returned recv-slot-layout indices. InterNodeV1's
-        # combine keys tokenIndices by this rank's own token id (the interNodeDispSendMap
+        # dispatch() -- never dispatch()'s returned recv-slot-layout indices. The inter-node
+        # combines key tokenIndices by this rank's own token id (the interNodeDispSendMap
         # key), so recv-layout indices make its node predicate answer from an unrelated
         # token's routing and silently drop or pollute cross-node partials (ROCm/mori#475;
         # upstream now rejects the mismatched row count, ROCm/mori#546). The intranode
         # kernels reach the gather through dispatch-side metadata instead and do not
         # consume the routing content, which is why EP8 was always clean.
         combined, _weights = self.op.combine(h.combine_input, None, p.indices)
-        if self._split_phase:
-            self.op.combine_recv()
         return combined[:p.T]
 
     def inspect_dispatch(self, p, h):
