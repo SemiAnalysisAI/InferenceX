@@ -63,6 +63,7 @@ def _cache_counts(
     metrics: dict[str, dict[str, Any]],
     endpoint_roles: Mapping[str, str] | None,
     disaggregated: bool | None,
+    cpu_offload_disabled: bool = False,
 ) -> tuple[float | None, float | None, float | None]:
     names = [
         name
@@ -85,10 +86,16 @@ def _cache_counts(
         return None, None, None
     full_total = cached_total = offload_total = 0.0
     cpu_complete = True
+    offload_absent = not any(
+        s.get("endpoint_url") in accounted
+        for s in metric_series(metrics, _atom_counter_names("prefix_cache_offload_tokens"))
+    )
     for endpoint in accounted:
         full, cached, offload = (
             _counter_total(metrics, stem, endpoint) for stem in ("full", "cached", "offload")
         )
+        if cpu_offload_disabled and offload_absent:
+            offload = 0.0
         if full is None or cached is None or cached > full:
             return None, None, None
         full_total += full
@@ -125,11 +132,32 @@ class AtomBackend(ServerMetricsBackend):
         context: Mapping[str, Any] | None = None,
         endpoint_roles: Mapping[str, str] | None = None,
         disaggregated: bool | None = None,
+        cpu_offload_disabled: bool = False,
     ) -> None:
+        context = context or {}
+        endpoint_roles = context.get("endpoint_roles", endpoint_roles)
+        disaggregated = context.get("disagg", disaggregated)
+        cpu_offload_disabled = context.get("kv_offloading") == "none" or cpu_offload_disabled
+        prompt_names = _atom_counter_names("prompt_tokens")
+        prompt_endpoints = {s.get("endpoint_url") for s in metric_series(metrics, prompt_names)}
+        if endpoint_roles is None:
+            accounted = (
+                prompt_endpoints if disaggregated is False and len(prompt_endpoints) == 1 else set()
+            )
+        else:
+            accounted = {
+                url for url, role in endpoint_roles.items() if role in {"prefill", "unified"}
+            }
+            if prompt_endpoints - endpoint_roles.keys():
+                accounted = set()
+        accounted = {url for url in accounted if isinstance(url, str) and url}
+        if accounted - prompt_endpoints:
+            accounted = set()
         prompt_total = sum_stat(
             metrics,
-            _atom_counter_names("prompt_tokens"),
-            preferred_keys=("total", "sum", "max", "avg"),
+            prompt_names,
+            preferred_keys=("total",),
+            series_filter=lambda s: s.get("endpoint_url") in accounted,
         )
         generation_total = sum_stat(
             metrics,
@@ -139,11 +167,8 @@ class AtomBackend(ServerMetricsBackend):
         flat["total_prompt_tokens"] = counter_int(prompt_total)
         flat["total_generation_tokens"] = counter_int(generation_total)
 
-        context = context or {}
-        endpoint_roles = context.get("endpoint_roles", endpoint_roles)
-        disaggregated = context.get("disagg", disaggregated)
         full_tokens, cached_tokens, external_tokens = _cache_counts(
-            metrics, endpoint_roles, disaggregated
+            metrics, endpoint_roles, disaggregated, cpu_offload_disabled
         )
         accounting = account_cache(
             metrics,

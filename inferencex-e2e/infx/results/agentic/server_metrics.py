@@ -67,8 +67,10 @@ def _profiling_window(server_metrics: dict[str, Any]) -> tuple[int, int] | None:
 
 
 def endpoint_roles_from_env(env: Mapping[str, str]) -> dict[str, str] | None:
-    if env.get("AIPERF_SERVER_METRICS_URLS") or env.get("SRTCTL_FRONTEND_TYPE") == "dynamo":
+    if env.get("SRTCTL_FRONTEND_TYPE") == "dynamo":
         return {}
+    if env.get("AIPERF_SERVER_METRICS_URLS"):
+        return None
     groups = (
         [("unified", env["SRT_AGG_ENDPOINTS"])]
         if env.get("SRT_AGG_ENDPOINTS")
