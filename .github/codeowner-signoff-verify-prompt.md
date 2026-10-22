@@ -69,12 +69,12 @@ Then decide:
   Name the path and its real owners in one line.
 
 ## Check 1 — A passing sweep + evals ran on a commit IN this PR
-The merge standard (and InferenceX's own reuse gate) requires a green full sweep,
-including evals, on a commit that is CURRENTLY part of this PR. A sweep that ran on a
-commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.py`
-→ `validate_reusable_run` (in `inferencex-e2e/infx/workflows/reuse.py`) rejects any source
-whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
-to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
+The merge standard requires a green full sweep, including evals, on a commit that is
+CURRENTLY part of this PR. A sweep that ran on a commit later rebased/force-pushed out
+does NOT count. The reuse tooling no longer enforces this: a pinned `/use <run_id>` may
+name any run, and the acknowledgement bot only posts a warning comment when its commit is outside the
+PR. This check is therefore the enforcement point, and the whole question collapses to
+one fact: does a commit still in this PR carry green, executed sweep/eval checks?
 
 The cleanest way to answer is the check-runs attached to each in-PR commit. You do
 NOT need to list `run-sweep.yml` runs or parse reuse logs.
@@ -228,10 +228,15 @@ a green sweep alone is not enough. Verify the command directly from the comments
 - PASS only if a matching comment exists whose `author_association` is `OWNER`,
   `MEMBER`, or `COLLABORATOR`. Both command names share this requirement; the newest
   authorized matching comment across both names determines the requested source.
-- WARN if no authorized reuse command is present. This is an advisory reminder,
-  not a failing criterion. State: "No authorized reuse command
-  has been posted on this PR" and ask an authorized maintainer to comment
-  `/use <run_id>` before merging via reuse.
+- WARN if no authorized reuse command is present. This is an advisory warning,
+  not a failing criterion, but it must always be shown expanded in the verdict.
+  State: "No authorized reuse command has been posted on this PR" and tell the
+  reviewer to have an authorized maintainer comment `/use <run_id>` on its own line,
+  using the passing sweep run from Check 1, before merging. When the PR appends a
+  `perf-changelog.yaml` entry, also state that merging without it makes the
+  push-to-main `merge-ingest.yml` "Require sweep reuse" step fail, so the results
+  never publish.
+- N/A if the PR appends no `perf-changelog.yaml` entry and so relies on no sweep.
 
 ## Check 5 — Sign-off uses the LATEST checklist template
 The first item of the checklist has the reviewer affirm they used the latest version
@@ -827,7 +832,7 @@ single terse line. Rules:
     `✅ Check N (<name>): PASS — <brief reason>`
     `❌ Check N (<name>): FAIL — <root issue>`
     `➖ Check N (<name>): N/A — <reason>`
-    `⚠️ Check 4 (Reuse command): WARN — <missing authorized command; reminder to post /use run_id>`
+    `⚠️ Check 4 (Reuse command): WARN — <no authorized command; post /use <run_id> of the Check 1 run before merging, else merge-ingest "Require sweep reuse" fails>`
     `⚠️ Check 13 (Draft precision): WARN — <affected config; missing pinned evidence; human review needed>`
     `⚠️ Check 14 (Pareto coverage): WARN — <curve, count or unverifiable reason; admin-exception state; evidence>`
     `⚠️ Check 15 (PR description): WARN — <claim versus actual configuration/evidence; correction needed>`
