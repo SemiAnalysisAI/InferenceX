@@ -10752,3 +10752,10 @@
   description:
     - "Update ATOM image from atom20260511 to the v0.1.8 nightly_202610190554 build"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4347
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  description:
+    - "Use the ROCm nightly image and BF16 SSM states for the throughput points."
+    - "Replace 1P1D c56 and 1P3D c12 with 1P1D c1, K7 specialized decode, and FP32 SSM states."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
