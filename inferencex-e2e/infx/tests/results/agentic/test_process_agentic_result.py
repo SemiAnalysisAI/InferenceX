@@ -67,6 +67,7 @@ REQUEST_ACCOUNTING_KEYS = {
     "records_dropped_total",
     "records_warmup_dropped",
     "records_error_dropped",
+    "records_profiling_error_dropped",
     "error_categories",
 }
 
@@ -74,6 +75,7 @@ SERVER_METRICS_KEYS = {
     "present",
     "adapter",
     "metric_count",
+    "cache_validity",
     "cache",
     "kv_cache",
     "kv_offload",
@@ -952,6 +954,7 @@ def test_processor_surfaces_request_accounting(tmp_path: Path, error, category):
         "records_dropped_total": 2,
         "records_warmup_dropped": 1,
         "records_error_dropped": 1,
+        "records_profiling_error_dropped": 1,
         "error_categories": {category: 1},
     }
     assert agg["server_metrics"]["tokens"]["requests_completed"] == 1
