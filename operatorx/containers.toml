@@ -8,3 +8,4 @@ image = "vllm/vllm-openai-rocm:v0.19.0"
 
 [amd.vllm]
 image = "vllm/vllm-openai-rocm:nightly-rocm100-3df4ae153eb385e27b52f26c81f8edb9e20b9984"
+digest = "sha256:eccb72b74b8c04ce7406d9212e200b129f58e24be642795a857f755a94fdb3a1"
