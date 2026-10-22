@@ -16,7 +16,10 @@ base:
     agg:
       nodes: 1
       workers: 1
+      gpus: 8
       args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
         served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
         attention-backend: aiter
         page-size: 16
@@ -32,6 +35,13 @@ base:
         tool-call-parser: muse
         watchdog-timeout: 1800
         enable-metrics: true
+        prefill-decode-interval: 20
+        scheduler-recv-interval: 20
+        tokenizer-worker-num: 4
+        # SWA layers only need the 2047-token window.
+        swa-full-tokens-ratio: 0.2
+        speculative-draft-window-size: 2048
+        random-seed: 42
       env:
         PYTHONNOUSERSITE: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
@@ -49,138 +59,82 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# TP8/EP8 adds KV headroom at higher concurrency.
-# Above conc 8 both layouts add a 180 GB-per-rank HiCache DRAM tier
-# (720 GB at TP4, 1.44 TB at TP8).
-
-override_tp4_c1:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: none
-
-override_tp4_c4:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-  benchmark:
-    env:
-      CONC: '4'
-      KV_OFFLOADING: none
-
-override_tp4_c8:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-  benchmark:
-    env:
-      CONC: '8'
-      KV_OFFLOADING: none
-
-override_tp4_c12_hicache:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        enable-hierarchical-cache: true
-        hicache-size: 180
-        hicache-write-policy: write_through
-  benchmark:
-    env:
-      CONC: '12'
-      KV_OFFLOADING: dram
-
-override_tp4_c16_hicache:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor-parallel-size: 4
-        expert-parallel-size: 4
-        enable-hierarchical-cache: true
-        hicache-size: 180
-        hicache-write-policy: write_through
-  benchmark:
-    env:
-      CONC: '16'
-      KV_OFFLOADING: dram
-
 override_tp8_c1:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
   benchmark:
     env:
       CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  benchmark:
+    env:
+      CONC: '2'
       KV_OFFLOADING: none
 
 override_tp8_c4:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
   benchmark:
     env:
       CONC: '4'
       KV_OFFLOADING: none
 
 override_tp8_c8:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
   benchmark:
     env:
       CONC: '8'
       KV_OFFLOADING: none
 
-override_tp8_c12_hicache:
+override_tp8_c16:
   roles:
     agg:
-      gpus: 8
       args:
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
         enable-hierarchical-cache: true
-        hicache-size: 180
+        hicache-size: 253
         hicache-write-policy: write_through
-  benchmark:
-    env:
-      CONC: '12'
-      KV_OFFLOADING: dram
-
-override_tp8_c16_hicache:
-  roles:
-    agg:
-      gpus: 8
-      args:
-        tensor-parallel-size: 8
-        expert-parallel-size: 8
-        enable-hierarchical-cache: true
-        hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp8_c32:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_tp8_c48:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp8_c64:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 253
+        hicache-write-policy: write_through
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+  benchmark:
+    env:
+      CONC: '64'
       KV_OFFLOADING: dram
