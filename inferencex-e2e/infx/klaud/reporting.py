@@ -27,6 +27,8 @@ from pydantic import (
     model_validator,
 )
 
+from infx.bench.agentic.traces import LOADERS
+
 from . import github
 from .github import VerificationError
 from .models import ABORT_LABEL, Contract, identity, normalized_image
@@ -65,23 +67,58 @@ class Values(Contract):
     request_errors: Annotated[int, Field(ge=0)] | None = None
 
 
+def dataset_slug(value: str) -> str | None:
+    """The dashboard slug of an AgentX replay corpus: its Hugging Face ID's last component.
+
+    Known AIPerf loader names map to their corpus, so every spelling compares alike.
+    """
+    dataset = LOADERS.get(value.strip(), value.strip()).rstrip("/")
+    return dataset.rsplit("/", 1)[-1] or None
+
+
+def row_dataset(row: dict) -> str | None:
+    """The slug of an aggregate result row's public-dataset provenance, as ingest derives it."""
+    dataset = row.get("dataset")
+    if not isinstance(dataset, dict) or dataset.get("source_type") != "public_dataset":
+        return None
+    name = dataset.get("hf_dataset_name")
+    return dataset_slug(name) if isinstance(name, str) and name.strip() else None
+
+
 class Point(Contract):
-    key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    key: str = Field(
+        pattern=r"^[0-9a-f]{64}$", description="point_key of the generated matrix entry"
+    )
     label: str = Field(pattern=r"^[A-Za-z0-9_.:+ /=-]{1,150}$")
     conc: int = Field(gt=0)
     scenario: Literal["fixed-seq-len", "agentic-coding"]
-    dataset: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_./:+-]{1,200}$")
+    dataset: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9_.:+-]{1,200}$",
+        description="AgentX replay corpus: the result row's dataset.hf_dataset_name "
+        "(normalized to its dashboard slug, e.g. cc-traces-weka-062126)",
+    )
     values: Values
     result: Literal["passed", "failed", "cancelled", "pending", "unavailable"]
     run_id: Annotated[int, Field(gt=0)] | None = None
     head: SHA | None = None
     run_attempt: Annotated[int, Field(gt=0)] | None = None
 
+    @field_validator("dataset", mode="before")
+    @classmethod
+    def canonical_dataset(cls, value: Any) -> Any:
+        return dataset_slug(value) if isinstance(value, str) else value
+
 
 class Evaluation(Contract):
-    key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    key: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="identity(eval_key(row)) of the aggregate eval row, never a point key",
+    )
     suite: str = Field(pattern=r"^[A-Za-z0-9_.-]{1,100}$")
-    metric: str = Field(pattern=r"^[A-Za-z0-9_,.-]{1,100}$")
+    metric: str = Field(
+        pattern=r"^[A-Za-z0-9_,.-]{1,100}$", description="The row's score_name, else em_strict"
+    )
     label: str = Field(default="", pattern=r"^[A-Za-z0-9_.:+ /=-]{0,150}$")
     score: Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)] | None = None
     samples: Annotated[int, Field(gt=0)] | None = None
@@ -168,7 +205,11 @@ class BaselinePreflight(Contract):
 
 class Attempt(Contract):
     kind: Literal["initial", "repair", "infrastructure-retry", "final"]
-    number: int = Field(ge=0)
+    number: int = Field(
+        ge=0,
+        description="0 for initial and final, repair 1-5, or infrastructure retry 1-2 of the "
+        "attempt it retries",
+    )
     head: SHA
     image: str = Field(pattern=r"^[A-Za-z0-9_./:@+-]+$")
     run_id: int = Field(gt=0)
@@ -197,6 +238,8 @@ class Attempt(Contract):
             self.kind == "repair" and not 1 <= self.number <= 5
         ):
             raise ValueError("Initial update is separate from the five-repair budget")
+        if self.kind == "infrastructure-retry" and not 1 <= self.number <= 2:
+            raise ValueError("Infrastructure retries are numbered 1 or 2 per attempt")
         if any(
             p.run_id not in (None, self.run_id)
             or p.head not in (None, self.head)
@@ -363,6 +406,26 @@ def measured(new: float | None, old: float | None, comparable: bool) -> str:
     return "N/A" if new is None else f"{number(new)} ({delta(old, new, comparable)})"
 
 
+def mismatch(previous: Point | None, point: Point) -> str | None:
+    """Why ``point`` cannot be compared with its frozen baseline point, or None."""
+    if not previous:
+        return "no matched baseline"
+    if previous.result != "passed" or point.result != "passed":
+        return "point unavailable"
+    if previous.scenario != point.scenario:
+        return "scenario mismatch"
+    if previous.values.latency_statistic != point.values.latency_statistic:
+        return "latency statistic mismatch"
+    if point.scenario == "agentic-coding":
+        if not previous.dataset:
+            return "baseline dataset unknown"
+        if not point.dataset:
+            return "dataset unknown"
+        if previous.dataset != point.dataset:
+            return f"dataset {previous.dataset} vs {point.dataset}"
+    return None
+
+
 def point_table(
     points: list[Point], baseline: Baseline | None = None, *, context: bool = True
 ) -> str:
@@ -371,16 +434,8 @@ def point_table(
     rows, issues = [], {}
     for point, label in zip(points, labels, strict=False):
         previous = old.get(point.key)
-        comparable = bool(
-            previous
-            and previous.result == point.result == "passed"
-            and previous.scenario == point.scenario
-            and (
-                point.scenario != "agentic-coding"
-                or (point.dataset and point.dataset == previous.dataset)
-            )
-            and previous.values.latency_statistic == point.values.latency_statistic
-        )
+        unmatched = mismatch(previous, point)
+        comparable = unmatched is None
         a, b = previous.values if previous else Values(), point.values
         rows.append(
             [
@@ -399,14 +454,8 @@ def point_table(
             )
         elif b.request_errors is None:
             reasons.append("request errors unavailable")
-        if not comparable:
-            reasons.append(
-                "Δ N/A: no matched baseline"
-                if not previous
-                else "Δ N/A: point unavailable"
-                if previous.result != "passed" or point.result != "passed"
-                else "Δ N/A: dataset/scenario/statistic mismatch"
-            )
+        if unmatched:
+            reasons.append(f"Δ N/A: {unmatched}")
         elif any(
             new is not None and (old is None or old == 0)
             for old, new in (
@@ -447,11 +496,11 @@ def eval_table(rows: list[Evaluation], baseline: Baseline | None, *, compare: bo
         if compare and row.score is not None:
             score += f" ({change})"
         samples = number(row.samples)
-        if compare:
+        if compare and old:
             samples = (
                 f"{samples} each"
-                if old and row.samples is not None and old.samples == row.samples
-                else f"{number(old.samples if old else None)}/{samples} (old/new)"
+                if row.samples is not None and old.samples == row.samples
+                else f"{number(old.samples)}/{samples} (old/new)"
             )
         label = f"{row.suite}/{row.metric}" + (f" · {short_label(row.label)}" if row.label else "")
         values.append([label, score, samples])
@@ -565,8 +614,8 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
         "initial": ("Initial attempt", "初次尝试"),
         "repair": (f"Repair {record.number}/5", f"修复 {record.number}/5"),
         "infrastructure-retry": (
-            f"Infrastructure retry {record.number}",
-            f"基础设施重试 {record.number}",
+            f"Infrastructure retry {record.number}/2",
+            f"基础设施重试 {record.number}/2",
         ),
         "final": ("Final full sweep", "最终完整 sweep"),
     }
@@ -720,6 +769,17 @@ def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
     github.write(session.repository, f"pulls/{pull['number']}", "PATCH", {"body": body})
 
 
+def check_reported_datasets(record: Attempt) -> None:
+    """A hand-written attempt must name each passed AgentX point's corpus, or deltas stay N/A."""
+    if any(
+        point.scenario == "agentic-coding" and point.result == "passed" and not point.dataset
+        for point in record.points
+    ):
+        raise VerificationError(
+            "Each passed AgentX point needs dataset: its result row's dataset.hf_dataset_name"
+        )
+
+
 def publish(session: Session, record: Baseline | Attempt) -> None:
     pull = session.pulls()[0]
     session.refresh(pull)
@@ -817,7 +877,7 @@ def publish_final(
                 label=point_label(entry),
                 conc=int(row["conc"]),
                 scenario=entry.get("scenario-type", "fixed-seq-len"),
-                dataset=(row.get("dataset") or {}).get("loader"),
+                dataset=row_dataset(row),
                 values=values(row),
                 result="passed",
                 run_id=run["id"],
@@ -1188,6 +1248,90 @@ def retirements(
     ]
 
 
+# Eval rows carry no workload, offload or image. Eval ingest also encodes an aggregate
+# multi-node deployment as disaggregated without decode workers, unlike benchmark rows.
+EVAL_IDENTITY_OMITS = (
+    "benchmark_type",
+    "isl",
+    "osl",
+    "offload_mode",
+    "image",
+    "disagg",
+    "decode_num_workers",
+)
+
+
+def eval_identity(entry: dict, conc: int) -> dict:
+    """The public eval-row fields that identify a default eval of ``entry`` at ``conc``."""
+    point = public_point({**entry, "conc": conc})
+    omitted = (
+        EVAL_IDENTITY_OMITS
+        if point["is_multinode"]
+        else (*EVAL_IDENTITY_OMITS, "prefill_num_workers")
+    )
+    return {name: value for name, value in point.items() if name not in omitted}
+
+
+def published_evals(repository: str, matrix: dict, runs: set[int]) -> tuple[str, list[Evaluation]]:
+    """Public default evals that the verified producer ``runs`` published, keyed like artifacts.
+
+    A row counts only when exactly one current default eval has its suite, topology and
+    concurrency, ignoring fields eval ingest encodes differently (single-node rows can carry
+    a worker count). Conflicting rows for one eval drop it, so its delta stays N/A.
+    """
+    from .api import fetch
+    from .validation import eval_identities
+
+    feed = fetch("evaluations")
+    wanted = [
+        (identity(key), entry.get("eval-suite") or "gsm8k", eval_identity(entry, int(concs[0])))
+        for key, entry, conc in eval_identities(matrix)
+        if len(concs := conc if isinstance(conc, list) else [conc]) == 1
+    ]
+    found: dict[str, Evaluation | None] = {}
+    for row in feed.payload if isinstance(feed.payload, list) else []:
+        if not isinstance(row, dict) or not isinstance(row.get("metrics"), dict):
+            continue
+        producer = re.fullmatch(
+            r"https://github.com/"
+            + re.escape(repository)
+            + r"/actions/runs/(\d+)(?:/attempts/\d+)?",
+            row.get("run_url") or "",
+        )
+        if not producer or int(producer[1]) not in runs:
+            continue
+        matches = [
+            (key, suite)
+            for key, suite, point in wanted
+            if suite == row.get("task") and all(row.get(name) == point[name] for name in point)
+        ]
+        if len(matches) != 1:
+            continue
+        [(key, suite)] = matches
+        samples = row["metrics"].get("n_eff")
+        try:
+            evaluation = Evaluation(
+                key=key,
+                suite=suite,
+                metric="em_strict",
+                label=f"c{row['conc']}",
+                score=row["metrics"].get("em_strict"),
+                samples=samples if isinstance(samples, int) and samples > 0 else None,
+                result="passed",
+                run_id=int(producer[1]),
+            )
+        except ValueError:
+            continue
+        if key in found and found[key] != evaluation:
+            found[key] = None
+        else:
+            found.setdefault(key, evaluation)
+    return feed.url, sorted(
+        (evaluation for evaluation in found.values() if evaluation),
+        key=lambda evaluation: (evaluation.suite, int(evaluation.label[1:])),
+    )
+
+
 def resolve_baseline(
     repository: str,
     candidate: OwnedCandidate,
@@ -1205,6 +1349,7 @@ def resolve_baseline(
     """
     from fnmatch import fnmatchcase
 
+    from .api import fetch
     from .validation import PRODUCER_UNAVAILABLE, canonical_matrix
 
     matrix = canonical_matrix(repository, candidate.base, candidate.family)
@@ -1231,6 +1376,25 @@ def resolve_baseline(
     historical: dict[str, list[dict]] = {}
     published: dict[str, Point] = {}
     unverified: list[dict] = []
+    sources = list(public.sources)
+    datasets: dict[tuple[int, int | None], str | None] = {}
+
+    def dataset(row: dict, run_id: int, run_attempt: int | None) -> str | None:
+        """The corpus the dashboard linked to the producer run of a published AgentX row."""
+        if row.get("benchmark_type") != "agentic_traces" or row.get("id") is None:
+            return None
+        if (run_id, run_attempt) not in datasets:
+            feed = fetch("benchmark-siblings", benchmark=int(row["id"]))
+            sku = feed.payload.get("sku") if isinstance(feed.payload, dict) else None
+            if not isinstance(sku, dict) or str(sku.get("github_run_id")) != str(run_id):
+                raise VerificationError("Public baseline dataset provenance is unavailable")
+            slug = sku.get("dataset_slug")
+            datasets[run_id, run_attempt] = (
+                dataset_slug(slug) if isinstance(slug, str) and slug.strip() else None
+            )
+            sources.append(feed.url)
+        return datasets[run_id, run_attempt]
+
     family_runs = {
         int(change["workflow_run_id"])
         for change in public.changelogs
@@ -1274,6 +1438,7 @@ def resolve_baseline(
             label=point_label(entry),
             conc=entry["conc"],
             scenario=entry.get("scenario-type", "fixed-seq-len"),
+            dataset=dataset(row, run_id, run_attempt),
             values=values(row),
             result="passed",
             run_id=run_id,
@@ -1300,13 +1465,19 @@ def resolve_baseline(
         ),
         key=lambda point: (point.label.split(" c")[0], point.conc, point.label),
     )
+    eval_source, evals = published_evals(
+        repository,
+        matrix,
+        {point.run_id for point in published.values() if point.run_id is not None},
+    )
     return Baseline(
         family=candidate.family,
         date=context["source"]["date"],
         image=old_image,
         goal=goal,
-        sources=public.sources,
+        sources=[*sources, eval_source],
         points=points,
+        evals=evals,
         retirements=retirements(
             repository, candidate.base, context["source"]["date"], points, current
         ),
