@@ -31,6 +31,7 @@ ENDPOINTS = {
     "benchmarks": PUBLIC + "/api/v1/benchmarks",
     "workflow-info": PUBLIC + "/api/v1/workflow-info",
     "evaluations": PUBLIC + "/api/v1/evaluations",
+    "benchmark-siblings": PUBLIC + "/api/v1/benchmark-siblings",
 }
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
@@ -72,11 +73,16 @@ def fetch(
     token: str | None = None,
     model: str | None = None,
     date: str | None = None,
+    benchmark: int | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     opener: Callable[..., Any] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> Feed:
     query = {}
+    if resource == "benchmark-siblings":
+        if benchmark is None:
+            raise ReadError("benchmark-id-required")
+        query["id"] = str(benchmark)
     if resource == "benchmarks" and model:
         query["model"] = model
     if resource in ("benchmarks", "workflow-info") and date:
