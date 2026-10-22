@@ -1567,10 +1567,11 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
     assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] is None
     validity = agg["server_metrics"]["validity"]
     assert validity["cache_rate"]["status"] == "UNKNOWN"
-    assert "phase_window_missing" in validity["cache_rate"]["reasons"]
-    gauge = validity["diagnostics"]["trtllm_kv_cache_hit_rate"]
-    assert gauge["all_series_avg"] == pytest.approx(0.5)
-    assert gauge["by_role"] == pytest.approx({"prefill": 0.4, "decode": 0.6})
+    assert agg["server_metrics"]["cache_validity"]["pricing_eligible"] is False
+    assert {source["prefix_cache_hit_rate"] for source in agg["server_metrics"]["sources"]} == {
+        0.4,
+        0.6,
+    }
     assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.8)
     assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.25)
     assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 19_200

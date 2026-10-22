@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from infx.results.agentic.phase_validity import PhaseContext
+from typing import Any
 
 SERVER_CACHE_FLAT_FIELDS = {
     "server_gpu_cache_hit_rate": None,
@@ -47,15 +44,6 @@ class ServerMetricsBackend:
         metrics: dict[str, dict[str, Any]],  # noqa: ARG002
         server_logs: Iterable[str | None],  # noqa: ARG002
     ) -> int | None:
-        return None
-
-    def apply_validity(
-        self,
-        metrics: dict[str, dict[str, Any]],  # noqa: ARG002
-        flat: dict[str, Any],  # noqa: ARG002
-        nested: dict[str, Any],  # noqa: ARG002
-        context: PhaseContext,  # noqa: ARG002
-    ) -> None:
         return None
 
 
@@ -109,18 +97,13 @@ def empty_server_metrics(present: bool, metric_count: int) -> dict[str, Any]:
         },
         "sources": [],
         "validity": {
-            "phase_windows": None,
-            "endpoints": {"configured": 0, "unscraped": []},
             "deployment": {"disaggregated": None},
-            "series_by_status": {},
-            "metrics_by_status": {},
             "cache_rate": {
                 "status": "NOT_EVALUATED",
                 "published": False,
                 "eligible_exact_actual": False,
                 "reasons": ["adapter_does_not_assess_cache_rate"],
             },
-            "diagnostics": {},
         },
     }
 
