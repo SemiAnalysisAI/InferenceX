@@ -10668,4 +10668,4 @@
   description:
     - "Add Muse Spark Open GB300 AgentX on Dynamo + SGLang (KV router, session affinity, DFLASH) with TP4 points at concurrency 8, 16, 20, 32, and 40 and two-node TP8 points at concurrency 3, 4, 10, and 14."
     - "Enable 120-175 GB per-rank HiCache with 0.80 DRAM utilization at concurrency 20, 32, and 40; set per-point prefill-decode interval, memory, SWA ratio, and admission limits in the variants file."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4344
