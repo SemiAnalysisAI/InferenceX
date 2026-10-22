@@ -27,7 +27,7 @@ base:
         num-continuous-decode-steps: 8
         max-prefill-tokens: 196608
         kv-cache-dtype: fp8_e4m3
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         data-parallel-size: 1
         expert-parallel-size: 1
         served-model-name: deepseek-ai/DeepSeek-R1-0528
@@ -40,7 +40,9 @@ zip_override_tp4_ep1:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [32, 64]
+        cuda-graph-max-bs-decode: [32, 64]
+        # AITER CK bpreshuffle rejects the TP4 dense gate_up GEMM (N=9216, K=7168) at 8k prefill.
+        fp8-gemm-backend: triton
   benchmark:
     env:
       CONC: ['32', '64']
@@ -49,7 +51,7 @@ zip_override_tp8_ep1:
     agg:
       gpus: 8
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64]
         tensor-parallel-size: 8
   benchmark:
     env:
