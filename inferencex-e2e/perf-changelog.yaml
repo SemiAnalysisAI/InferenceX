@@ -10806,3 +10806,11 @@
   description:
     - "Route llm-d DEP8 disagg and agg workers with data-parallel-external-lb (one vLLM API per DP rank for the EPP) and VLLM_USE_RUST_FRONTEND=1, matching the Sep 28 standalone llm-d wide-EP launch; agg TP8 keeps a single TP8 worker without external LB. Drop 2P×1D disagg agentic concurrency 576 from the master search space after repeated warmup stalls."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3741
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4396
