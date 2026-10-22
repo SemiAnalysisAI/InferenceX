@@ -16,8 +16,10 @@ from .common import index_server_metrics
 
 
 def endpoint_roles_from_env(env: Mapping[str, str]) -> dict[str, str] | None:
-    if env.get("AIPERF_SERVER_METRICS_URLS") or env.get("SRTCTL_FRONTEND_TYPE") == "dynamo":
+    if env.get("SRTCTL_FRONTEND_TYPE") == "dynamo":
         return {}
+    if env.get("AIPERF_SERVER_METRICS_URLS"):
+        return None
     groups = (
         [("unified", env["SRT_AGG_ENDPOINTS"])]
         if env.get("SRT_AGG_ENDPOINTS")
@@ -77,6 +79,11 @@ def compute_server_metrics(
             nested,
             endpoint_roles=endpoint_roles_from_env(source_env),
             disaggregated={"true": True, "false": False}.get(source_env.get("DISAGG", "").lower()),
+            cpu_offload_disabled=(source_env.get("KV_OFFLOADING", "").strip().lower() == "none")
+            and not (
+                source_env.get("KV_OFFLOAD_BACKEND")
+                or source_env.get("KV_OFFLOAD_BACKEND_METADATA")
+            ),
         )
     else:
         adapter.populate(metrics, flat, nested)
