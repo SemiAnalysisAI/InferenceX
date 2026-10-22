@@ -32,7 +32,9 @@ def install(environ: Mapping[str, str]) -> None:
         return
     if "atom" in environ.get("IMAGE", ""):
         _pip(environ, "uninstall", "torchvision")
-    _pip(environ, "install", "lm-eval[api]")
+    # lm-eval does not depend on transformers, so without this range its resolution
+    # upgrades huggingface-hub past what transformers 5.x accepts.
+    _pip(environ, "install", "lm-eval[api]", "huggingface-hub>=1.5,<2")
     pinned = ("install", "--no-deps", "--reinstall")
     git = shutil.which("git", path=environ.get("PATH"))
     if git and _pip(environ, *pinned, f"git+{REPOSITORY}.git@{REF}"):
