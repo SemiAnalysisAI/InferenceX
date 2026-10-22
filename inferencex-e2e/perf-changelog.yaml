@@ -11106,4 +11106,5 @@
   description:
     - "Use the ROCm nightly image and BF16 SSM states for the throughput points."
     - "Replace 1P1D c56 and 1P3D c12 with 1P1D c1, K7 specialized decode, and FP32 SSM states."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - "Apply vLLM #60683, #58743, #60808, and #63031 from their source commits."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4391
