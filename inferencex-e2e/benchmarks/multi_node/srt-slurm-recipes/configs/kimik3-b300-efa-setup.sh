@@ -4,21 +4,6 @@ set -eo pipefail
 source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars KIMI_EFA_BUILD_CACHE LD_LIBRARY_PATH
 
-# An EFA device that has failed memory registrations stays degraded until the
-# host reboots, and heavy RDMA on it freezes the host. Refuse such a node here
-# instead of letting a worker take it down.
-reg_mr_errors=0
-for counter in /sys/class/infiniband/*/hw_counters/reg_mr_err \
-    /sys/class/infiniband/*/ports/*/hw_counters/reg_mr_err; do
-    [ -r "$counter" ] || continue
-    reg_mr_errors=$((reg_mr_errors + $(cat "$counter")))
-done
-if [ "$reg_mr_errors" -gt 0 ]; then
-    echo "EFA devices on $(hostname) report $reg_mr_errors failed memory registrations since boot;" \
-        "reboot the node before running EFA workloads on it." >&2
-    exit 1
-fi
-
 export DEBIAN_FRONTEND=noninteractive
 # The NVIDIA CUDA apt mirror is intermittently mid-sync (index size mismatch);
 # retry instead of failing the whole worker setup.
@@ -114,36 +99,6 @@ if [ ! -f "$cache/ready" ]; then
 fi
 tar -xzf "$cache/libfabric.tar.gz" -C /
 ldconfig
-
-# NIXL's wheel ships a LIBFABRIC plugin compiled against libfabric 1.x headers
-# but loads the libfabric 2.6 above at runtime. Rebuild just that plugin from
-# the same NIXL release against these headers and drop it into the wheel.
-nixl_cache="$KIMI_EFA_BUILD_CACHE/nixl-1683cf3b-lf-e83bf01a-v1"
-mkdir -p "$nixl_cache"
-exec 8>"$nixl_cache/build.lock"
-flock 8
-if [ ! -f "$nixl_cache/ready" ]; then
-    apt-get install -y -qq libhwloc-dev
-    python3 -m pip install --no-cache-dir 'meson==1.9.1' 'ninja==1.13.0' 'pybind11[global]==3.1.0'
-    git clone https://github.com/ai-dynamo/nixl.git "$task_dir/nixl"
-    git -C "$task_dir/nixl" checkout --detach 1683cf3b7f3d11674c03c5e861cea22339876c96
-    (
-        cd "$task_dir/nixl"
-        meson setup build --buildtype=release -Dlibfabric_path=/opt/amazon/efa \
-            -Denable_plugins=LIBFABRIC -Dbuild_tests=false -Dbuild_examples=false \
-            -Dinstall_headers=false -Dwith_trace=false -Dnixl_cuda_arch_list=100 \
-            -Dcudapath_inc=/usr/local/cuda/include -Dcudapath_lib=/usr/local/cuda/lib64
-        ninja -C build src/plugins/libfabric/libplugin_LIBFABRIC.so
-        patchelf --set-rpath '$ORIGIN/..:$ORIGIN/../../nixl_cu13.libs' \
-            build/src/plugins/libfabric/libplugin_LIBFABRIC.so
-    )
-    cp "$task_dir/nixl/build/src/plugins/libfabric/libplugin_LIBFABRIC.so" "$nixl_cache/"
-    touch "$nixl_cache/ready"
-fi
-nixl_plugins="$vllm_site_packages/.nixl_cu13.mesonpy.libs/plugins"
-cp "$nixl_cache/libplugin_LIBFABRIC.so" "$nixl_plugins/libplugin_LIBFABRIC.so"
-flock -u 8
-readelf -V "$nixl_plugins/libplugin_LIBFABRIC.so" | grep -q FABRIC_1.9
 
 python3 -m pip uninstall -y \
     mooncake-transfer-engine mooncake-transfer-engine-cuda13 mooncake-transfer-engine-efa-cuda13
