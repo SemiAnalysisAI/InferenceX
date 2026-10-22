@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .backends import detect_backend
+from .backends.atom import AtomBackend
 from .backends.base import (
     SERVER_CACHE_FLAT_FIELDS,
     apply_profile_totals,
@@ -14,12 +15,34 @@ from .backends.base import (
 from .common import index_server_metrics
 
 
+def endpoint_roles_from_env(env: Mapping[str, str]) -> dict[str, str] | None:
+    if env.get("AIPERF_SERVER_METRICS_URLS") or env.get("SRTCTL_FRONTEND_TYPE") == "dynamo":
+        return {}
+    groups = (
+        [("unified", env["SRT_AGG_ENDPOINTS"])]
+        if env.get("SRT_AGG_ENDPOINTS")
+        else [
+            ("prefill", env.get("SRT_PREFILL_ENDPOINTS", "")),
+            ("decode", env.get("SRT_DECODE_ENDPOINTS", "")),
+        ]
+    )
+    roles: dict[str, str] = {}
+    for role, endpoints in groups:
+        for endpoint in endpoints.split(","):
+            if endpoint:
+                url = f"http://{endpoint}/metrics"
+                if roles.setdefault(url, role) != role:
+                    return {}
+    return roles or None
+
+
 def compute_server_metrics(
     server_metrics: dict[str, Any],
     *,
     framework: str,
     records: list[dict[str, Any]],
     server_logs: Iterable[str | None] = (),
+    env: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     metrics = index_server_metrics(server_metrics)
     flat = SERVER_CACHE_FLAT_FIELDS.copy()
@@ -46,7 +69,17 @@ def compute_server_metrics(
             f"framework={framework.lower()!r}, metric_names=[{preview}]"
         )
     nested["adapter"] = adapter.name
-    adapter.populate(metrics, flat, nested)
+    if isinstance(adapter, AtomBackend):
+        source_env = env or {}
+        adapter.populate(
+            metrics,
+            flat,
+            nested,
+            endpoint_roles=endpoint_roles_from_env(source_env),
+            disaggregated={"true": True, "false": False}.get(source_env.get("DISAGG", "").lower()),
+        )
+    else:
+        adapter.populate(metrics, flat, nested)
 
     if framework.lower() == "dynamo-sglang" and adapter.name == "sglang":
         nested["kv_cache"]["gpu_total_tokens"] = None
