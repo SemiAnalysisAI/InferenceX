@@ -45,6 +45,21 @@ def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
     }
 
 
+def run_pr_number(repo: str, run: dict[str, Any], token: str) -> int | None:
+    """Return the run's PR; ``run.pull_requests`` is empty once that PR's head moves."""
+    for pull in run.get("pull_requests") or []:
+        if pull.get("number"):
+            return int(pull["number"])
+    head_sha = str(run.get("head_sha") or "")
+    if not head_sha:
+        return None
+    pulls = github.api(repo, f"/commits/{head_sha}/pulls", token)
+    for pull in pulls if isinstance(pulls, list) else []:
+        if pull.get("head", {}).get("ref") == run.get("head_branch") and pull.get("number"):
+            return int(pull["number"])
+    return None
+
+
 def has_reusable_result_artifacts(names: set[str]) -> bool:
     """Return whether a run produced ingest-relevant result artifacts."""
     return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
