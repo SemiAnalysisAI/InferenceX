@@ -391,19 +391,15 @@ def import_image(args) -> None:
         try:
             host, repository, tag = probe_module().registry_reference(image)
             uri = f"docker://{host}#{repository}:{tag}"
-            # B300 homes are node-local: private temp paths unless a shared cache is
-            # configured; where /tmp can't hold overlay whiteouts (H100 DGXC) keep the
-            # node's enroot paths, as its InferenceX launcher does
+            # B300 homes are node-local: private temp paths unless a shared cache is configured
             with tempfile.TemporaryDirectory(prefix="operatorx-enroot-") as scratch:
                 env = dict(os.environ)
-                private = os.environ.get("OPERATORX_ENROOT_DEFAULTS") != "1"
-                if private:
-                    env["TMPDIR"] = scratch
-                for name in ("TEMP", "DATA", "RUNTIME") if private else ():
+                env["TMPDIR"] = scratch
+                for name in ("TEMP", "DATA", "RUNTIME"):
                     directory = Path(scratch) / name.lower()
                     directory.mkdir()
                     env[f"ENROOT_{name}_PATH"] = str(directory)
-                if private and "ENROOT_CACHE_PATH" not in env:
+                if "ENROOT_CACHE_PATH" not in env:
                     cache = Path(scratch) / "cache"
                     cache.mkdir()
                     env["ENROOT_CACHE_PATH"] = str(cache)
@@ -552,7 +548,7 @@ def execute(args) -> None:
             if profile.get(field):
                 allocation.append(f"--{flag}={profile[field]}")
         hw = family(cell["runner"])
-        if hw in ("b200", "b300", "gb200", "gb300"):
+        if hw in ("b200", "b300", "h100", "gb200", "gb300"):
             allocation.append("--mem=0")
         if hw in ("gb200", "gb300"):
             allocation.append("--cpus-per-task=35")
@@ -587,8 +583,6 @@ def execute(args) -> None:
         import_env = dict(os.environ)
         if profile.get("enroot_cache_path"):
             import_env["ENROOT_CACHE_PATH"] = profile["enroot_cache_path"]
-        if hardware.get("enroot_defaults"):
-            import_env["OPERATORX_ENROOT_DEFAULTS"] = "1"
         command(import_command, root / "import.log", env=import_env)
         key = image_key(cell["image"], cell["digest"], image_platform)
         env = dict(os.environ)
@@ -655,9 +649,10 @@ def execute(args) -> None:
             "--container-writable",
             "--export=ALL",
         ]
-        if hw in ("h200", "b300", "gb200", "gb300") or is_amd(cell["runner"]):
+        if hw in ("h200", "b300", "h100", "gb200", "gb300") or is_amd(cell["runner"]):
             run.append("--container-remap-root")
-        if hw == "b300":
+        # the AWS dsxe pools (b300, h100-dgxc) share one Slurm and pyxis setup
+        if hw in ("b300", "h100"):
             run.append("--mpi=none")
         # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's
         run += ["python3", "/opx/source/operatorx/ci.py", "rank"]

@@ -1,7 +1,5 @@
 # OperatorX GitHub Actions
 
-**English** | [中文](CI_zh.md)
-
 [OperatorX Sweep](../.github/workflows/operatorx-sweep.yml) runs on `workflow_dispatch` only (pull requests run just the hosted planner).
 
 | GPU | Runner label | GPUs / node | Image platform | Result cluster |

@@ -24,9 +24,6 @@
         "partition": "compute",
         "cpus_per_node": 128
       }
-    },
-    "cluster:h100-dgxc": {
-      "enroot_defaults": true
     }
   }
 }

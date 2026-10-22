@@ -88,7 +88,7 @@ jobs:
           PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_RUNNER OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_MODE OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
           # Cases take InferenceX's srt-slurm recipes, expanded by InferenceX's own code (srtctl).
           git submodule update --init inferencex-e2e/utils/srt-slurm
@@ -175,7 +175,7 @@ jobs:
           OPERATORX_RUNNER: ${{ matrix.runner }}
         run: |
           set -eo pipefail
-          source inferencex-e2e/benchmarks/benchmark_lib.sh --validation-only
+          source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars RUNNER_TEMP OPERATORX_RECOVERY_RUN OPERATORX_RUNNER OPERATORX_CLEANUP_SECONDS
           python3 -m operatorx.ci recover --artifacts operatorx-recovery \
             --run-id "$OPERATORX_RECOVERY_RUN" --runner "$OPERATORX_RUNNER" \

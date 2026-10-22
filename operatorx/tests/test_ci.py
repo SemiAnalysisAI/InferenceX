@@ -468,8 +468,12 @@ if name == 'srun' and sys.argv[-1] == 'rank':
         assert Path(imported["argv"][0]).name == "srun"
         launched = next(c["argv"] for c in calls if c["argv"][-1] == "rank")
         assert "--ntasks=1" in launched
-        if runner in ("cluster:gb200-nv", "cluster:gb300-nv", "cluster:b300-dsxe", "cluster:mi300x-amd", "cluster:mi355x-amds"):
+        if runner in ("cluster:gb200-nv", "cluster:gb300-nv", "cluster:b300-dsxe", "cluster:h100-dgxc",
+                      "cluster:mi300x-amd", "cluster:mi355x-amds"):
             assert "--container-remap-root" in launched
+        if runner in ("cluster:b300-dsxe", "cluster:h100-dgxc"):
+            assert "--mpi=none" in launched
+            assert "--mem=0" in allocation
         if runner == "cluster:mi300x-amd":
             mounts = next(
                 arg for arg in launched if arg.startswith("--container-mounts=")
