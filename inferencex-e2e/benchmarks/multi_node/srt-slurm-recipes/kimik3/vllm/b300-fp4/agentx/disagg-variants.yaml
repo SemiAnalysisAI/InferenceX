@@ -113,6 +113,10 @@ base:
         # off by two: GPU 0 could never transfer (AddressNotRegistered, 0% store
         # hits) and other GPUs posted through a neighbouring GPU's NICs.
         MC_MS_FILTERS: "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
+        # Route same-node EFA peers through the EFA device instead of libfabric's
+        # shm provider, which would run CUDA IPC copies on Mooncake's device-less
+        # CQ poller thread in a GPU-0 context.
+        FI_EFA_ENABLE_SHM_TRANSFER: "0"
         NCCL_MNNVL_ENABLE: "0"
         NCCL_NVLS_ENABLE: "1"
         VLLM_SERVER_DEV_MODE: "1"
@@ -146,6 +150,9 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
+        # With async scheduling, prefill TP0 blocks in kernel launch on an idle
+        # GPU 0 under Mooncake EFA traffic and the engine stops serving.
+        no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10
@@ -177,6 +184,9 @@ base:
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
         no-enable-flashinfer-autotune: true
+        # With async scheduling, prefill TP0 blocks in kernel launch on an idle
+        # GPU 0 under Mooncake EFA traffic and the engine stops serving.
+        no-async-scheduling: true
         trust-remote-code: true
         max-cudagraph-capture-size: 512
         stream-interval: 10

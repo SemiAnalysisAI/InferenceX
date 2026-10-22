@@ -1,0 +1,170 @@
+From 7ff6bf7f72f15aba7289bc25c87cf491e04efc6f Mon Sep 17 00:00:00 2001
+From: tensorcopy <macular.tapes_0b@icloud.com>
+Date: Sun, 18 Oct 2026 01:56:03 -0700
+Subject: [PATCH] [TransferEngine] EFA: release the endpoint state lock during
+ handshake RPC (#4704)
+
+setupConnectionsByActive() held the endpoint RWSpinlock across the
+transfer-metadata handshake RPC. The handshake is reciprocal: the peer's
+passive handler must take the same lock on its own endpoint, so a
+bilateral active setup (both sides dialing at once) deadlocked.
+
+Serialize active setup with a dedicated mutex that passive handlers never
+take, and hold the state lock only while reading local state and while
+publishing the reply, so three properties hold:
+
+- Active callers are serialized into one handshake RPC; the state lock is
+  released while the RPC is in flight.
+- A reply that crosses a disconnect, a nic-path change or endpoint teardown
+  is stale: a generation counter, bumped on every disconnect/path change,
+  rejects it instead of publishing a connection against dead state.
+- A passive handshake that connected the endpoint while the RPC was in
+  flight wins: the active caller returns success and discards its own
+  reply, even if the RPC failed or the generation moved.
+
+Also qualify efa_context.h includes as
+"transport/efa_transport/efa_context.h" so the endpoint header can be
+included from tests that shadow the context boundary
+(tests/efa_endpoint_handshake_test.cpp compiles the real endpoint source
+against a scripted RPC/address-vector fake and runs without an EFA
+device).
+---
+ .../transport/efa_transport/efa_endpoint.h    |  8 ++-
+ .../transport/efa_transport/efa_endpoint.cpp  | 64 ++++++++++++-------
+ 2 files changed, 48 insertions(+), 24 deletions(-)
+
+diff --git a/mooncake-transfer-engine/include/transport/efa_transport/efa_endpoint.h b/mooncake-transfer-engine/include/transport/efa_transport/efa_endpoint.h
+index 550f6b68..e472a0d3 100644
+--- a/mooncake-transfer-engine/include/transport/efa_transport/efa_endpoint.h
++++ b/mooncake-transfer-engine/include/transport/efa_transport/efa_endpoint.h
+@@ -20,11 +20,12 @@
+ 
+ #include <atomic>
+ #include <cstdint>
++#include <mutex>
+ #include <string>
+ #include <vector>
+ 
+ #include "common.h"
+-#include "efa_context.h"
++#include "transport/efa_transport/efa_context.h"
+ #include "transfer_metadata.h"
+ #include "transport/transport.h"
+ 
+@@ -117,7 +118,12 @@ class EfaEndPoint {
+     EfaContext& context_;
+     std::atomic<Status> status_;
+ 
++    // Only active callers take this mutex. Passive RPC handlers must not.
++    std::mutex active_setup_mutex_;
+     RWSpinlock lock_;  // protects peer_nic_path_ and status_
++    // Bumped (under lock_) on every disconnect, nic-path change and teardown,
++    // so a handshake reply that crosses one of them can be rejected.
++    uint64_t generation_ = 0;
+     std::string peer_nic_path_;
+     fi_addr_t peer_fi_addr_;  // slot in context_.av()
+     // Last peer EFA address successfully inserted into the AV.  Used to
+diff --git a/mooncake-transfer-engine/src/transport/efa_transport/efa_endpoint.cpp b/mooncake-transfer-engine/src/transport/efa_transport/efa_endpoint.cpp
+index 7357a22f..6b72196c 100644
+--- a/mooncake-transfer-engine/src/transport/efa_transport/efa_endpoint.cpp
++++ b/mooncake-transfer-engine/src/transport/efa_transport/efa_endpoint.cpp
+@@ -36,41 +36,57 @@ void EfaEndPoint::setPeerNicPath(const std::string& peer_nic_path) {
+                   << peer_nic_path_ << " -> " << peer_nic_path;
+         disconnectUnlocked();
+     }
++    ++generation_;
+     peer_nic_path_ = peer_nic_path;
+ }
+ 
+ int EfaEndPoint::setupConnectionsByActive() {
+-    RWSpinlock::WriteGuard guard(lock_);
+-    if (status_.load(std::memory_order_relaxed) == CONNECTED) return 0;
+-
+-    // Loopback: handshake against ourselves.  Use the binary overload
+-    // so we avoid hex-encoding the local address just to have
+-    // insertPeerAddr decode it right back.
+-    if (context_.nicPath() == peer_nic_path_) {
+-        const auto& bytes = context_.localEpAddrBytes();
+-        int ret = context_.insertPeerAddrBytes(bytes.data(), bytes.size(),
+-                                               peer_fi_addr_);
+-        if (ret != 0) return ret;
+-        status_.store(CONNECTED, std::memory_order_release);
+-        LOG(INFO) << "EFA loopback connection established: " << toString();
+-        return 0;
+-    }
+-
+-    // Exchange addresses via the transfer-metadata handshake RPC.
++    std::lock_guard<std::mutex> setup_guard(active_setup_mutex_);
+     TransferMetadata::HandShakeDesc local_desc, peer_desc;
+-    local_desc.local_nic_path = context_.nicPath();
+-    local_desc.peer_nic_path = peer_nic_path_;
+-    local_desc.efa_addr = context_.localEpAddr();
++    uint64_t generation;
++    {
++        RWSpinlock::WriteGuard guard(lock_);
++        if (status_.load(std::memory_order_relaxed) == CONNECTED) return 0;
++
++        if (context_.nicPath() == peer_nic_path_) {
++            // Loopback: handshake against ourselves.  Use the binary overload
++            // so we avoid hex-encoding the local address just to have
++            // insertPeerAddr decode it right back.
++            const auto& bytes = context_.localEpAddrBytes();
++            int ret = context_.insertPeerAddrBytes(bytes.data(), bytes.size(),
++                                                   peer_fi_addr_);
++            if (ret != 0) return ret;
++            status_.store(CONNECTED, std::memory_order_release);
++            LOG(INFO) << "EFA loopback connection established: " << toString();
++            return 0;
++        }
++        generation = generation_;
++        // Exchange addresses via the transfer-metadata handshake RPC.
++        local_desc.local_nic_path = context_.nicPath();
++        local_desc.peer_nic_path = peer_nic_path_;
++        local_desc.efa_addr = context_.localEpAddr();
++    }
+ 
+-    auto peer_server_name = getServerNameFromNicPath(peer_nic_path_);
+-    auto peer_nic_name = getNicNameFromNicPath(peer_nic_path_);
++    auto peer_server_name = getServerNameFromNicPath(local_desc.peer_nic_path);
++    auto peer_nic_name = getNicNameFromNicPath(local_desc.peer_nic_path);
+     if (peer_server_name.empty() || peer_nic_name.empty()) {
+-        LOG(ERROR) << "Parse peer EFA nic path failed: " << peer_nic_path_;
++        LOG(ERROR) << "Parse peer EFA nic path failed: "
++                   << local_desc.peer_nic_path;
+         return ERR_INVALID_ARGUMENT;
+     }
+ 
++    // A reciprocal RPC needs our passive handler, which takes lock_.
+     int rc = context_.engine().sendHandshake(peer_server_name, local_desc,
+                                              peer_desc);
++
++    RWSpinlock::WriteGuard guard(lock_);
++    // A passive handshake may have connected the endpoint while the RPC was
++    // in flight; reuse that connection and discard this reply.
++    if (status_.load(std::memory_order_relaxed) == CONNECTED) return 0;
++    if (generation != generation_) {
++        LOG(WARNING) << "Discarding stale EFA handshake reply: " << toString();
++        return ERR_ENDPOINT;
++    }
+     if (rc) return rc;
+ 
+     if (peer_desc.efa_addr.empty()) {
+@@ -157,6 +173,7 @@ void EfaEndPoint::disconnect() {
+ }
+ 
+ void EfaEndPoint::disconnectUnlocked() {
++    ++generation_;
+     if (peer_fi_addr_ != FI_ADDR_UNSPEC) {
+         context_.removePeerAddr(peer_fi_addr_);
+         peer_fi_addr_ = FI_ADDR_UNSPEC;
+@@ -167,6 +184,7 @@ void EfaEndPoint::disconnectUnlocked() {
+ 
+ void EfaEndPoint::markDetachedForTeardown() {
+     RWSpinlock::WriteGuard guard(lock_);
++    ++generation_;
+     peer_fi_addr_ = FI_ADDR_UNSPEC;
+     cached_peer_addr_.clear();
+     status_.store(UNCONNECTED, std::memory_order_release);
+-- 
+2.50.1 (Apple Git-155)
+

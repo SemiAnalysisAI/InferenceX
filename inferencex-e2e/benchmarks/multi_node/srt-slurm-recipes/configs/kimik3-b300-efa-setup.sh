@@ -20,7 +20,13 @@ if [ "$reg_mr_errors" -gt 0 ]; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+# The NVIDIA CUDA apt mirror is intermittently mid-sync (index size mismatch);
+# retry instead of failing the whole worker setup.
+for attempt in 1 2 3 4 5; do
+    apt-get update -qq && break
+    [ "$attempt" = 5 ] && exit 1
+    sleep $((attempt * 15))
+done
 apt-get install -y -qq --no-install-recommends \
     autoconf automake build-essential ca-certificates curl git libboost-filesystem-dev \
     libboost-system-dev libcurl4-openssl-dev libgflags-dev libgoogle-glog-dev \
@@ -47,7 +53,7 @@ tar -xzf "$task_dir/efa.tar.gz" -C "$task_dir"
     ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify --skip-mpi
 )
 
-cache="$KIMI_EFA_BUILD_CACHE/c3fa13ec-e83bf01a-collapse-v3"
+cache="$KIMI_EFA_BUILD_CACHE/c3fa13ec-e83bf01a-collapse-hs-lb-v1"
 mkdir -p "$cache"
 exec 9>"$cache/build.lock"
 flock 9
@@ -78,6 +84,14 @@ if [ ! -f "$cache/ready" ]; then
     git -C "$task_dir/Mooncake" checkout --detach c3fa13ecaf1038df933dcb784ff8ffe026381100
     git -C "$task_dir/Mooncake" apply \
         "$(dirname "${BASH_SOURCE[0]}")/mooncake-efa-collapse-host-chunks.patch"
+    # Upstream #4704: do not hold the endpoint lock across the handshake RPC;
+    # bilateral active setup deadlocks both peers otherwise.
+    git -C "$task_dir/Mooncake" apply \
+        "$(dirname "${BASH_SOURCE[0]}")/mooncake-efa-handshake-lock.patch"
+    # Loopback copies on a private non-blocking stream instead of a synchronous
+    # legacy-stream cudaMemcpy that can deadlock against concurrent collectives.
+    git -C "$task_dir/Mooncake" apply \
+        "$(dirname "${BASH_SOURCE[0]}")/mooncake-efa-loopback-stream.patch"
     git -C "$task_dir/Mooncake" submodule update --init --recursive
     (
         cd "$task_dir/Mooncake"
@@ -90,7 +104,7 @@ if [ ! -f "$cache/ready" ]; then
             -DBUILD_BENCHMARK=OFF -DBUILD_EXAMPLES=ON
         cmake --build build --parallel 12 --target \
             engine store mooncake_master mooncake_client transfer_engine_bench build_nvlink_allocator
-        sed -i 's/^version = .*/version = "0.3.13.post1+gc3fa13ec.collapse1"/' \
+        sed -i 's/^version = .*/version = "0.3.13.post1+gc3fa13ec.collapse1.hs1.lb1"/' \
             mooncake-wheel/pyproject.toml
         mkdir -p "$task_dir/wheels"
         EFA_CU13_BUILD=1 OUTPUT_DIR="$task_dir/wheels" bash scripts/build_wheel.sh
@@ -100,6 +114,37 @@ if [ ! -f "$cache/ready" ]; then
 fi
 tar -xzf "$cache/libfabric.tar.gz" -C /
 ldconfig
+
+# NIXL's wheel ships a LIBFABRIC plugin compiled against libfabric 1.x headers
+# but loads the libfabric 2.6 above at runtime. Rebuild just that plugin from
+# the same NIXL release against these headers and drop it into the wheel.
+nixl_cache="$KIMI_EFA_BUILD_CACHE/nixl-1683cf3b-lf-e83bf01a-v1"
+mkdir -p "$nixl_cache"
+exec 8>"$nixl_cache/build.lock"
+flock 8
+if [ ! -f "$nixl_cache/ready" ]; then
+    apt-get install -y -qq libhwloc-dev
+    python3 -m pip install --no-cache-dir 'meson==1.9.1' 'ninja==1.13.0' 'pybind11[global]==3.1.0'
+    git clone https://github.com/ai-dynamo/nixl.git "$task_dir/nixl"
+    git -C "$task_dir/nixl" checkout --detach 1683cf3b7f3d11674c03c5e861cea22339876c96
+    (
+        cd "$task_dir/nixl"
+        meson setup build --buildtype=release -Dlibfabric_path=/opt/amazon/efa \
+            -Denable_plugins=LIBFABRIC -Dbuild_tests=false -Dbuild_examples=false \
+            -Dinstall_headers=false -Dwith_trace=false -Dnixl_cuda_arch_list=100 \
+            -Dcudapath_inc=/usr/local/cuda/include -Dcudapath_lib=/usr/local/cuda/lib64
+        ninja -C build src/plugins/libfabric/libplugin_LIBFABRIC.so
+        patchelf --set-rpath '$ORIGIN/..:$ORIGIN/../../nixl_cu13.libs' \
+            build/src/plugins/libfabric/libplugin_LIBFABRIC.so
+    )
+    cp "$task_dir/nixl/build/src/plugins/libfabric/libplugin_LIBFABRIC.so" "$nixl_cache/"
+    touch "$nixl_cache/ready"
+fi
+nixl_plugins="$vllm_site_packages/.nixl_cu13.mesonpy.libs/plugins"
+cp "$nixl_cache/libplugin_LIBFABRIC.so" "$nixl_plugins/libplugin_LIBFABRIC.so"
+flock -u 8
+readelf -V "$nixl_plugins/libplugin_LIBFABRIC.so" | grep -q FABRIC_1.9
+
 python3 -m pip uninstall -y \
     mooncake-transfer-engine mooncake-transfer-engine-cuda13 mooncake-transfer-engine-efa-cuda13
 python3 -m pip install --no-deps "$cache/"*.whl
@@ -140,6 +185,6 @@ from mooncake.store import MooncakeDistributedStore
 fabric = ctypes.CDLL("libfabric.so.1")
 fabric.fi_version.restype = ctypes.c_uint32
 assert fabric.fi_version() == (2 << 16 | 6)
-assert importlib.metadata.version("mooncake-transfer-engine-efa-cuda13") == "0.3.13.post1+gc3fa13ec.collapse1"
+assert importlib.metadata.version("mooncake-transfer-engine-efa-cuda13") == "0.3.13.post1+gc3fa13ec.collapse1.hs1.lb1"
 print("EFA libfabric 2.6 and THP-enabled Mooncake Store are available")
 PY
