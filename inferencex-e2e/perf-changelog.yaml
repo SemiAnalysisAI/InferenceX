@@ -10656,6 +10656,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4380
 
 - config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  description:
+    - "Update SGLang to v0.5.22-cu130 and use the Dynamo 1.6.0.dev20261015 bundled in the image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4278
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open GB300 AgentX on Dynamo + SGLang (KV router, session affinity, DFLASH) with TP4 points at concurrency 8, 16, 20, 32, and 40 and two-node TP8 points at concurrency 3, 4, 10, and 14."
+    - "Enable 120-175 GB per-rank HiCache with 0.80 DRAM utilization at concurrency 20, 32, and 40; set per-point prefill-decode interval, memory, SWA ratio, and admission limits in the variants file."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4344
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Tune Muse Spark Open GB300 SGLang AgentX per concurrency (1, 5, 8, 10, 15, 16, 20, 24, 34, 40): scheduling, memory allocation, request admission and decode graph limits, tokenizer workers, and draft attention."
+    - "Use 120-150 GB per-rank HiCache (write_through, 0.80 DRAM utilization) at concurrency 16 to 40; set SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS=4 at concurrency 34 and 40."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4342
+
+- config-keys:
     - glm5.2-fp8-b200-sglang-agentic-mtp
   description:
     - "Update the SGLang image to nightly-dev-20261020-ab580b2e, pinned by digest."
