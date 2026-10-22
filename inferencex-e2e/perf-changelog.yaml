@@ -10863,8 +10863,10 @@
   scenario-type:
     - agentic-coding
   description:
+    - "Image unchanged: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f (same as #4319)."
     - "Run TP4 at c1 and c2 only; remove the TP4 c4, c8, c16, c32 and c64 points. TP2 keeps c1-c64."
     - "TP2 c16: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 4."
     - "TP2 c32: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 8."
-    - "Image (vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f, same as #4319), DSpark settings and all other points are unchanged."
+    - "The TP4 c16 and c32 recipe variants get the same settings but are no longer in the search space. DSpark settings and all other points are unchanged."
+    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), and inherits the target KV cache dtype."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4409
