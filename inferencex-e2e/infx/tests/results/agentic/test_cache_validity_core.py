@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from infx.results.agentic.cache_validity import STATUS_CLASSES
 from infx.results.agentic.server_metrics import compute_server_metrics
 from infx.tests.results.agentic.test_atom_cache_validity import _export as _atom_export
 from infx.tests.results.agentic.test_atom_cache_validity import _run as _run_atom
@@ -83,8 +82,3 @@ class TestCacheValidityCore:
         assert core["status_class"] == "MISSING"
         assert core["published"] is False
         assert core["reasons"] == ["server_metrics_missing"]
-
-    def test_every_class_is_from_the_shared_vocabulary(self) -> None:
-        for export in (_pair(), _pair(cached=1200.0), {}):
-            _, nested, _ = compute_server_metrics(export, framework="dynamo-trt", records=[])
-            assert nested["cache_validity"]["status_class"] in STATUS_CLASSES

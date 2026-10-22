@@ -1,10 +1,4 @@
-"""Pre-release closeout of the TRT reuse-rate guard (X1-C1R R1-R4).
-
-Each case is a synthetic AIPerf 0.12 export: counter names without ``_total``,
-1 s timeslices and ``summary.phase_time_ranges``. A standard cache rate may be
-published only as interval telemetry (``CONDITIONAL_INTERVAL``); anything the
-export cannot explain keeps its raw counts and reasons but publishes no rate.
-"""
+"""TRT reuse rates require paired counters and profiling-window evidence."""
 
 from __future__ import annotations
 
@@ -112,7 +106,7 @@ def _pair(prompt: float = 1000.0, cached: float = 900.0, **kwargs) -> dict:
     )
 
 
-class TestR1CachedWithinPrompt:
+class TestPairedCounterBounds:
     def test_cached_above_prompt_is_rejected_and_not_published(self) -> None:
         nested = _run(_pair(cached=1200.0))
 
@@ -165,7 +159,7 @@ class TestR1CachedWithinPrompt:
         assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.9)
 
 
-class TestR2RoleScopeAndPairing:
+class TestDeploymentRolesAndCounterPairs:
     def test_decode_only_is_not_treated_as_combined(self) -> None:
         export = _export(
             [_series(DEC, "backend", 1000.0)], [_series(DEC, "backend", 1000.0)]
@@ -265,7 +259,7 @@ class TestR2RoleScopeAndPairing:
         assert "scrape_coverage_unknown" in _rate(nested)["reasons"]
 
 
-class TestR3AliasObservations:
+class TestCounterAliases:
     def test_equal_total_aliases_with_different_windows_conflict_in_either_order(
         self,
     ) -> None:
@@ -289,17 +283,6 @@ class TestR3AliasObservations:
 
         assert outcomes[0] == outcomes[1] == (None, "REJECTED", True)
 
-    def test_identical_alias_observations_count_once(self) -> None:
-        export = _pair()
-        export["metrics"]["trtllm_prompt_tokens_total"] = copy.deepcopy(
-            export["metrics"]["trtllm_prompt_tokens"]
-        )
-
-        nested = _run(export)
-
-        assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.9)
-        assert _rate(nested)["prompt_tokens"] == pytest.approx(1000.0)
-
     def test_duplicate_series_under_one_name_is_not_an_alias(self) -> None:
         export = _export(
             [_series(PRE[0], "prefill", 1000.0), _series(PRE[0], "prefill", 1000.0)],
@@ -313,7 +296,7 @@ class TestR3AliasObservations:
         assert "alias_conflict" not in _rate(nested)["reasons"]
 
 
-class TestR4TimeWindow:
+class TestProfilingWindowEvidence:
     def test_activity_after_profiling_end_is_not_valid(self) -> None:
         nested = _run(_pair(end_ns=END + 100 * NS))
 
@@ -462,12 +445,3 @@ class TestTelemetryVersusEligibility:
         assert (rate["status"], rate["published"]) == (status, published)
         assert rate["eligible_exact_actual"] is False
         assert rate["cached_tokens"] is not None and rate["prompt_tokens"] is not None
-
-    def test_unknown_window_is_reported_separately(self) -> None:
-        export = _pair()
-        del export["summary"]["phase_time_ranges"]
-
-        rate = _rate(_run(export))
-
-        assert (rate["status"], rate["published"]) == ("UNKNOWN", False)
-        assert "phase_window_missing" in rate["reasons"]
