@@ -1,11 +1,3 @@
-"""Consumer-facing cache validity core, filled for every adapter.
-
-``status`` keeps the adapter's own state and ``status_class`` maps it onto one vocabulary, so a
-consumer can apply a single rule to every producer. ``published`` says whether any standard cache
-rate was written, ``pricing_eligible`` whether it may be priced as an exact actual observation, and
-``basis`` whether the written rates are disjoint tiers or one combined total.
-"""
-
 from __future__ import annotations
 
 from typing import Any

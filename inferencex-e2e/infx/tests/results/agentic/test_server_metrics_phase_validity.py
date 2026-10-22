@@ -1,12 +1,3 @@
-"""Phase validity of AIPerf server-metric counters and the TensorRT-LLM reuse rate.
-
-Fixtures follow the AIPerf 0.12 ``server_metrics_export.json`` shape: counter
-names without the Prometheus ``_total`` suffix, 1 s timeslices per series and
-``summary.phase_time_ranges``. The P/D topology mirrors the Dynamo TRT runs
-(``prefill`` and ``backend`` components); decode workers report every
-transferred prompt token as cached.
-"""
-
 from __future__ import annotations
 
 import copy

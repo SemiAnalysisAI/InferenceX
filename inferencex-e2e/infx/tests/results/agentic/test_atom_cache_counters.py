@@ -41,9 +41,16 @@ def test_prefill_counters_exclude_decode_and_transfer_volume(decode_cached: floa
     export["metrics"]["atom:lmcache_loaded_tokens"] = {
         "series": [{"endpoint_url": "http://p/metrics", "stats": {"total": 900}}]
     }
+    export["metrics"]["atom:prompt_tokens"] = {
+        "series": [
+            {"endpoint_url": f"http://{endpoint}/metrics", "stats": {"total": 1000}}
+            for endpoint in ("p", "d")
+        ]
+    }
     flat, nested = _compute(
         export, {"SRT_PREFILL_ENDPOINTS": "p", "SRT_DECODE_ENDPOINTS": "d", "DISAGG": "true"}
     )
+    assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 1000
     _assert_rates(flat, nested, 0.6, 0.1, 0.7)
     assert nested["cache"]["prefix_cache_queries"] == 1000
     assert nested["cache"]["external_prefix_cache_hits"] == 100
@@ -55,6 +62,7 @@ def test_prefill_counters_exclude_decode_and_transfer_volume(decode_cached: floa
     [
         ({"SRT_AGG_ENDPOINTS": "worker", "SRT_PREFILL_ENDPOINTS": "unused"}, 50, 0.5),
         ({"DISAGG": "false"}, 0, 0),
+        ({"DISAGG": "false", "AIPERF_SERVER_METRICS_URLS": "http://worker/metrics"}, 50, 0.5),
     ],
 )
 def test_unified_zero_gpu_and_offload_counter_alias(
@@ -189,8 +197,30 @@ def test_unknown_cache_roles_preserve_other_atom_telemetry() -> None:
             "atom:kv_cache_usage_ratio": {"series": [{"stats": {"max": 0.75}}]},
         }
     )
-    flat, nested = _compute(export, {})
+    flat, nested, _ = compute_server_metrics(
+        export,
+        framework="mooncake-atom",
+        records=[{"metrics": {"input_sequence_length": {"value": 123}}}],
+        env={},
+    )
     _assert_rates(flat, nested, None, None, None)
-    assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 200
+    assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 123
     assert flat["total_generation_tokens"] == nested["tokens"]["generation_total"] == 30
     assert flat["gpu_kv_cache_usage_pct"] == nested["kv_cache"]["gpu_usage_pct"] == 0.75
+
+
+@pytest.mark.parametrize(
+    ("env", "cpu", "overall"),
+    [
+        ({"KV_OFFLOADING": " NONE "}, 0, 0.6),
+        ({"KV_OFFLOADING": "dram"}, None, None),
+        ({"KV_OFFLOADING": "none", "KV_OFFLOAD_BACKEND": "mooncake"}, None, None),
+    ],
+)
+def test_missing_offload_is_zero_only_with_confirmed_disabled_tier(
+    env: dict, cpu: float | None, overall: float | None
+) -> None:
+    flat, nested = _compute(
+        _export({"worker": 100}, {"worker": 60}, {}), {"DISAGG": "false", **env}
+    )
+    _assert_rates(flat, nested, 0.6, cpu, overall)

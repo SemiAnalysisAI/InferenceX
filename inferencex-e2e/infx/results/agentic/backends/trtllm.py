@@ -35,8 +35,7 @@ from .base import ServerMetricsBackend, counter_int
 PROMPT_TOKENS = "trtllm_prompt_tokens"
 CACHED_TOKENS = "trtllm_prompt_cached_tokens"
 GENERATION_TOKENS = "trtllm_generation_tokens"
-# Server counters are interval totals: the producer cannot bind them to the
-# billed request set or check them against the expected worker count.
+# Interval counters do not identify the billed cohort or prove expected worker coverage.
 UNBOUND_REASONS = ("request_scope_not_bound", "expected_instances_not_verified")
 KNOWN_ROLES = ("prefill", "decode", "combined")
 
@@ -56,7 +55,9 @@ class TrtllmBackend(ServerMetricsBackend):
         flat: dict[str, Any],
         nested: dict[str, Any],
     ) -> None:
-        prompt_total = _first_total(metrics, "dynamo_frontend_input_sequence_tokens", PROMPT_TOKENS)
+        prompt_total = sum_stat(
+            metrics, "dynamo_frontend_input_sequence_tokens", preferred_keys=("total", "sum")
+        )
         generation_total = _first_total(metrics, "dynamo_frontend_output_tokens", GENERATION_TOKENS)
         diagnostic = _hit_rate_gauge_diagnostic(metrics)
         if diagnostic is not None:
@@ -128,9 +129,12 @@ class TrtllmBackend(ServerMetricsBackend):
     ) -> None:
         reuse = _reuse_rate(metrics, context)
         nested["validity"]["cache_rate"] = reuse
+        nested["sources"] = _trtllm_sources(metrics, reuse=reuse)
         if not reuse["published"]:
             return
         cached, prompt = reuse["cached_tokens"], reuse["prompt_tokens"]
+        if flat["total_prompt_tokens"] is None:
+            flat["total_prompt_tokens"] = nested["tokens"]["prompt_total"] = counter_int(prompt)
         flat["server_overall_cache_hit_rate"] = reuse["raw_rate"]
         nested["cache"].update(
             {
@@ -139,7 +143,10 @@ class TrtllmBackend(ServerMetricsBackend):
             }
         )
         nested["tokens"]["prompt_by_source"].update(
-            {"computed": prompt - cached, "raw": {"combined": cached}}
+            {
+                "computed": prompt - cached if nested["tokens"]["prompt_total"] == prompt else None,
+                "raw": {"combined": cached},
+            }
         )
 
     def gpu_kv_capacity_tokens(
@@ -165,15 +172,7 @@ class TrtllmBackend(ServerMetricsBackend):
 
 
 def _reuse_rate(metrics: dict[str, dict[str, Any]], context: PhaseContext) -> dict[str, Any]:
-    """Cached/prompt counters in one deployment scope, classified and never corrected.
-
-    In P/D deployments decode workers report every transferred prompt token as
-    cached, so only prefill series measure reuse; a unified deployment needs an
-    authoritative mode or explicit combined labels. Numerator and denominator
-    are paired per endpoint and label set and must satisfy 0 <= cached <=
-    prompt in every pair. The cached counter can include host-tier reuse, so
-    the result is a combined-tier rate.
-    """
+    # Decode transfers are not reuse; pair prefill counters within each endpoint and label domain.
     findings: list[tuple[str, str]] = []
     if context.windows is None:
         findings.append((UNKNOWN, "phase_window_missing"))
@@ -182,19 +181,28 @@ def _reuse_rate(metrics: dict[str, dict[str, Any]], context: PhaseContext) -> di
     for metric in (PROMPT_TOKENS, CACHED_TOKENS):
         resolved[metric], metric_conflicts = resolve_aliases(metrics, metric)
         conflicts.extend(metric_conflicts)
-    findings.extend((REJECTED, conflict["kind"]) for conflict in conflicts)
-
-    endpoint_roles = _endpoint_role_sets(metrics)
+    endpoint_roles = _endpoint_role_sets(metrics, context.disaggregated)
     labelled = []
     for metric, series_list in resolved.items():
         for series in series_list:
-            role = _series_role(series, endpoint_roles)
+            role = _series_role(series, endpoint_roles, context.disaggregated)
             labelled.append((metric, series, role if role in KNOWN_ROLES else "unknown"))
-    if any(len(roles) > 1 for roles in endpoint_roles.values()):
-        findings.append((UNKNOWN, "role_conflict"))
     present = {role for _, _, role in labelled}
     scope, scope_findings = _deployment_scope(present, context.disaggregated)
     findings.extend(scope_findings)
+    scoped_endpoints = {
+        str(series.get("endpoint_url", ""))
+        for _, series, role in labelled
+        if role == scope or (role == "unknown" and context.disaggregated is False)
+    }
+    if any(len(endpoint_roles.get(url, set())) > 1 for url in scoped_endpoints):
+        findings.append((UNKNOWN, "role_conflict"))
+    findings.extend(
+        (REJECTED, conflict["kind"])
+        for conflict in conflicts
+        if conflict["endpoint_url"] in scoped_endpoints
+        or _series_role(conflict, endpoint_roles, context.disaggregated) != "decode"
+    )
 
     in_scope: dict[str, list[dict[str, Any]]] = {PROMPT_TOKENS: [], CACHED_TOKENS: []}
     excluded: list[dict[str, Any]] = []
@@ -390,37 +398,51 @@ def _finite_sum(values: Iterable[float | None]) -> float | None:
     return total if found else None
 
 
-def _label_role(series: dict[str, Any]) -> str | None:
-    mode = label_value(series, "disaggregation_mode") or label_value(series, "dynamo_component")
-    return _normalize_role(mode) if mode else None
+def _label_role(series: dict[str, Any], disaggregated: bool | None = None) -> str | None:
+    mode = label_value(series, "disaggregation_mode")
+    if mode:
+        role = _normalize_role(mode)
+        return role if role in KNOWN_ROLES else "unknown"
+    component = label_value(series, "dynamo_component")
+    if component == "backend" and disaggregated is False:
+        return "combined"
+    role = _normalize_role(component) if component else None
+    return role if role in KNOWN_ROLES else None
 
 
-def _endpoint_role_sets(metrics: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
-    roles: dict[str, set[str]] = {}
+def _endpoint_role_sets(
+    metrics: dict[str, dict[str, Any]], disaggregated: bool | None = None
+) -> dict[str, set[str]]:
+    explicit: dict[str, set[str]] = {}
+    inferred: dict[str, set[str]] = {}
     for entry in metrics.values():
         if not isinstance(entry, dict):
             continue
         series_list = entry.get("series")
-        if not isinstance(series_list, list):
-            continue
-        for series in series_list:
+        for series in series_list if isinstance(series_list, list) else []:
             if not isinstance(series, dict) or not series.get("endpoint_url"):
                 continue
-            role = _label_role(series)
-            if role:
-                roles.setdefault(str(series["endpoint_url"]), set()).add(role)
-    return roles
+            role = _label_role(series, disaggregated)
+            if role in KNOWN_ROLES:
+                target = explicit if label_value(series, "disaggregation_mode") else inferred
+                target.setdefault(str(series["endpoint_url"]), set()).add(role)
+    return {**inferred, **explicit}
 
 
-def _series_role(series: dict[str, Any], roles: dict[str, set[str]]) -> str:
-    own = _label_role(series)
-    if own:
-        return own
+def _series_role(
+    series: dict[str, Any], roles: dict[str, set[str]], disaggregated: bool | None = None
+) -> str:
     endpoint_roles = roles.get(str(series.get("endpoint_url", "")), set())
-    return next(iter(endpoint_roles)) if len(endpoint_roles) == 1 else "unknown"
+    if label_value(series, "disaggregation_mode"):
+        return _label_role(series, disaggregated) or "unknown"
+    if len(endpoint_roles) == 1:
+        return next(iter(endpoint_roles))
+    return _label_role(series, disaggregated) or "unknown"
 
 
-def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _trtllm_sources(
+    metrics: dict[str, dict[str, Any]], *, reuse: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     endpoints: set[str] = set()
     for entry in metrics.values():
         if not isinstance(entry, dict):
@@ -433,7 +455,9 @@ def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 endpoints.add(str(series["endpoint_url"]))
     roles = {
         endpoint: next(iter(found)) if len(found) == 1 else "unknown"
-        for endpoint, found in _endpoint_role_sets(metrics).items()
+        for endpoint, found in _endpoint_role_sets(
+            metrics, reuse.get("deployment_disaggregated") if reuse else None
+        ).items()
     }
 
     sources: list[dict[str, Any]] = []
@@ -444,7 +468,6 @@ def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
 
         prompt_tokens = _alias_total(metrics, PROMPT_TOKENS, series_filter)
         generation_tokens = _alias_total(metrics, GENERATION_TOKENS, series_filter)
-        cached_tokens = _alias_total(metrics, CACHED_TOKENS, series_filter)
         hit_rate = normalize_fraction(
             gauge_stat(
                 metrics,
@@ -453,8 +476,12 @@ def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 series_filter=series_filter,
             )
         )
-        if hit_rate is None:
-            hit_rate = rate(cached_tokens, prompt_tokens)
+        if hit_rate is None and reuse is not None and reuse["published"]:
+            domains = [d for d in reuse["domains"] if d["endpoint_url"] == endpoint]
+            if domains:
+                hit_rate = rate(
+                    sum(d["cached"] for d in domains), sum(d["prompt"] for d in domains)
+                )
         sources.append(
             {
                 "id": f"{roles.get(endpoint, 'worker')}|{endpoint}",

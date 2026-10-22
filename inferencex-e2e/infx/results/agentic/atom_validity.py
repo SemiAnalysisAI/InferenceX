@@ -1,5 +1,3 @@
-"""Qualify ATOM cache counters against the successful profiling cohort."""
-
 from __future__ import annotations
 
 import math
@@ -25,7 +23,9 @@ def _series(section: Mapping[str, Any], stem: str) -> tuple[dict[tuple, dict], s
     found: dict[tuple, dict] = {}
     duplicates: set[str | None] = set()
     for series in metric_series(dict(section), names):
-        url, labels = series.get("endpoint_url"), series.get("labels", {})
+        url, labels = series.get("endpoint_url"), series.get("labels")
+        if labels is None:
+            labels = {}
         if not isinstance(url, str) or not url or not isinstance(labels, dict):
             duplicates.add(None)
             continue
@@ -117,11 +117,7 @@ def account_cache(
     kv_offloading: str | None = None,
     collector_export: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Recover legacy windows or use phase-scoped totals, then prove request conservation.
-
-    Unqualified cumulative telemetry remains the counter adapter's responsibility. The
-    internal ``replace_telemetry`` flag only selects a proven window or rejects ambiguity.
-    """
+    """Qualify counter totals against the profiling window and successful request cohort."""
     result: dict[str, Any] = dict.fromkeys(
         ("gpu", "cpu", "overall", "full", "cached", "offload", "loaded", "requests")
     )

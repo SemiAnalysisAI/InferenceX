@@ -1,5 +1,3 @@
-"""TRT reuse rates require paired counters and profiling-window evidence."""
-
 from __future__ import annotations
 
 import copy
@@ -114,6 +112,7 @@ class TestPairedCounterBounds:
         assert nested["tokens"]["prompt_by_source"]["computed"] is None
         assert _rate(nested)["status"] == "REJECTED"
         assert "cached_exceeds_prompt" in _rate(nested)["reasons"]
+        assert nested["sources"][0]["prefix_cache_hit_rate"] is None
         assert _rate(nested)["raw_rate"] == pytest.approx(1.2)
 
     def test_one_domain_above_prompt_is_not_offset_by_the_sum(self) -> None:
@@ -160,6 +159,42 @@ class TestPairedCounterBounds:
 
 
 class TestDeploymentRolesAndCounterPairs:
+    @pytest.mark.parametrize("explicit_mode, expected", [(None, 0.9), ("decode", None)])
+    def test_aggregated_backend_component_does_not_override_explicit_mode(
+        self, explicit_mode, expected
+    ) -> None:
+        labels = {"disaggregation_mode": explicit_mode} if explicit_mode else {}
+        export = _export(
+            [_series(PRE[0], "backend", 1000.0, labels=labels)],
+            [_series(PRE[0], "backend", 900.0, labels=labels)],
+        )
+        nested = _run(export, disaggregated=False)
+
+        assert nested["cache"]["overall_cache_hit_rate"] == expected
+        assert nested["cache_validity"]["pricing_eligible"] is False
+        assert nested["sources"][0]["prefix_cache_hit_rate"] == expected
+
+    def test_non_role_components_do_not_conflict_with_explicit_worker_roles(self) -> None:
+        export = _export(
+            [
+                _series(PRE[0], None, 1000.0, labels={"disaggregation_mode": "prefill"}),
+                _series(DEC, None, 1000.0, labels={"disaggregation_mode": "decode"}),
+            ],
+            [
+                _series(PRE[0], None, 900.0, labels={"disaggregation_mode": "prefill"}),
+                _series(DEC, None, 1000.0, labels={"disaggregation_mode": "decode"}),
+            ],
+        )
+        export["metrics"]["other_metric"] = {
+            "type": "gauge",
+            "series": [_series(PRE[0], "tensorrt_llm", 1.0), _series(DEC, "tensorrt_llm", 1.0)],
+        }
+        nested = _run(export, disaggregated=True)
+
+        assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.9)
+        assert _rate(nested)["role_scope"] == "prefill"
+        assert {s["endpoint_url"] for s in _rate(nested)["excluded"]} == {DEC}
+
     def test_decode_only_is_not_treated_as_combined(self) -> None:
         export = _export(
             [_series(DEC, "backend", 1000.0)], [_series(DEC, "backend", 1000.0)]

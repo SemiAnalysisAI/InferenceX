@@ -153,6 +153,6 @@ def _record_token_sum(records: list[dict[str, Any]], metric_name: str) -> int | 
         try:
             total += int(value)
             found = True
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
     return total if found else None
