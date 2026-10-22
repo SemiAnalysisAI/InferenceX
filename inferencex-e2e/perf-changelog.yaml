@@ -10602,6 +10602,54 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4258
 
 - config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update the SGLang image from v0.5.18-cu130 to v0.5.22-cu130 and pin Dynamo b4540b87 for compatibility."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4277
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 for MI355X DSv4 disaggregated DSpark AgentX."
+    - "Replace concurrency 4 with 1 using eight request slots and decode graph batches 1-8; enable FP8 unified KV at concurrency 1-48, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4186
+
+- config-keys:
+    - glm5.2-fp8-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image to v0.5.22-cu130 and pass the graph batch as cuda-graph-max-bs-decode after alias removal"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4316
+
+- config-keys:
+    - dsv41flash-fp4-h100-sglang-agentic-dspark-dpa
+  description:
+    - "Update the DeepSeek-V4.1-Flash FP4 H100 SGLang AgentX DPA image from nightly 20260922-582389ce to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4324
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 for MI355X DSv4 disaggregated DSpark AgentX."
+    - "Replace concurrency 4 with 1 using eight request slots and decode graph batches 1-8; enable FP8 unified KV at concurrency 1-48, power-of-two decode routing at concurrency 192-512, and MegaMoE prefill EPLB at concurrency 512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4386
+
+- config-keys:
+    - dsr1-fp8-mi325x-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4368
+
+- config-keys:
+    - glm5.2-fp4-b200-dynamo-sglang-agentic-agg
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260901-07c8f729 to v0.5.22-cu130 and pin Dynamo b4540b87"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4370
+
+- config-keys:
     - dsr1-fp8-mi325x-sglang
   description:
     - "Update SGLang ROCm image to v0.5.22-rocm720-mi30x; rename cuda-graph-max-bs to cuda-graph-max-bs-decode."
