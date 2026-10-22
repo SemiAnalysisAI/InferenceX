@@ -1,0 +1,21 @@
+diff --git a/vllm/envs.py b/vllm/envs.py
+--- a/vllm/envs.py
++++ b/vllm/envs.py
+@@ -1659,3 +1659,7 @@
++    # The fused Kimi K3 latent MoE tail requires NVLink multicast.
++    "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION": lambda: bool(
++        int(os.getenv("VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION", "1"))
++    ),
+     # Use the SM100 BF16 GEMM-AR kernel for eligible Kimi-K3 row-parallel
+     # attention projections. All TP ranks must belong to one NVLink domain.
+     "VLLM_KIMI_K3_GEMM_AR": lambda: bool(int(os.getenv("VLLM_KIMI_K3_GEMM_AR", "1"))),
+diff --git a/vllm/models/kimi_k3/nvidia/latent_moe_runner.py b/vllm/models/kimi_k3/nvidia/latent_moe_runner.py
+--- a/vllm/models/kimi_k3/nvidia/latent_moe_runner.py
++++ b/vllm/models/kimi_k3/nvidia/latent_moe_runner.py
+@@ -75,4 +75,5 @@
+         self.enable_k3_latent_moe_tail_fusion = (
+-            current_platform.is_cuda()
++            envs.VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION
++            and current_platform.is_cuda()
+             and current_platform.is_device_capability_family(100)
+         )

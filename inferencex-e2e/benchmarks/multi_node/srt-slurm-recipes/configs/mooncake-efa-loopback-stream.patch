@@ -1,0 +1,46 @@
+diff --git a/mooncake-transfer-engine/src/transport/efa_transport/efa_context.cpp b/mooncake-transfer-engine/src/transport/efa_transport/efa_context.cpp
+index fd323c23..b950526d 100644
+--- a/mooncake-transfer-engine/src/transport/efa_transport/efa_context.cpp
++++ b/mooncake-transfer-engine/src/transport/efa_transport/efa_context.cpp
+@@ -815,6 +815,27 @@ void EfaContext::removePeerAddr(fi_addr_t fi_addr) {
+     }
+ }
+ 
++#if defined(USE_CUDA)
++// Per-thread, per-device non-blocking stream for loopback copies.  The legacy
++// default stream implicitly orders against every blocking stream on the
++// device, so a synchronous cudaMemcpy + cudaStreamSynchronize(0) here can wait
++// on unrelated work (e.g. a collective that needs other ranks to launch) while
++// holding the context lock those ranks' launches need.  The stream is created
++// in, and only used with, the device's primary context.
++static cudaStream_t loopbackStream(int device, cudaError_t& rc) {
++    thread_local std::unordered_map<int, cudaStream_t> streams;
++    auto it = streams.find(device);
++    if (it != streams.end()) {
++        rc = cudaSuccess;
++        return it->second;
++    }
++    cudaStream_t stream = nullptr;
++    rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
++    if (rc == cudaSuccess) streams.emplace(device, stream);
++    return stream;
++}
++#endif
++
+ bool EfaContext::tryLoopbackCopy(Transport::Slice* slice) {
+     // Only intra-process self-transfers qualify.  We compare the SERVER name
+     // (host:rpc_port), NOT the full nic path: local_server_name embeds this
+@@ -883,8 +904,11 @@ bool EfaContext::tryLoopbackCopy(Transport::Slice* slice) {
+             return true;
+         }
+ 
+-        cudaError_t rc = cudaMemcpy(dst, src, len, cudaMemcpyDefault);
+-        if (rc == cudaSuccess) rc = cudaStreamSynchronize(0);
++        cudaError_t rc;
++        cudaStream_t stream = loopbackStream(device, rc);
++        if (rc == cudaSuccess)
++            rc = cudaMemcpyAsync(dst, src, len, cudaMemcpyDefault, stream);
++        if (rc == cudaSuccess) rc = cudaStreamSynchronize(stream);
+         context.restore();
+         if (rc != cudaSuccess) {
+             LOG(ERROR) << "EFA loopback CUDA copy failed: "

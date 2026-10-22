@@ -1,0 +1,21 @@
+diff --git a/mooncake-transfer-engine/src/transport/efa_transport/efa_transport.cpp b/mooncake-transfer-engine/src/transport/efa_transport/efa_transport.cpp
+--- a/mooncake-transfer-engine/src/transport/efa_transport/efa_transport.cpp
++++ b/mooncake-transfer-engine/src/transport/efa_transport/efa_transport.cpp
+@@ -408,4 +408,17 @@ int EfaTransport::registerLocalMemory(void* addr, size_t length,
+                 if (ci > 0) rollbackChunks(ci - 1);
+                 return ret;
+             }
++#ifdef MADV_COLLAPSE
++            // Small-page gaps reduce the hardware page size for the entire MR.
++            // Collapse before registration pins pages and prevents compaction.
++            constexpr size_t kHugePageSize = 2 * 1024 * 1024;
++            if (reinterpret_cast<uintptr_t>(chunk_addr) % kHugePageSize == 0 &&
++                chunk_len % kHugePageSize == 0 &&
++                madvise(chunk_addr, chunk_len, MADV_COLLAPSE) != 0) {
++                // Older kernels or non-anonymous buffers may not support this.
++                // Preserve their existing registration path.
++                PLOG(WARNING) << "Could not collapse EFA host registration chunk "
++                              << ci;
++            }
++#endif
+         }
