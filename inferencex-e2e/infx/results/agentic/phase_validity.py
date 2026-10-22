@@ -1,14 +1,3 @@
-"""Phase validity of AIPerf server-metric counter and histogram series.
-
-AIPerf exports each series' profiling delta (``stats``) next to 1 s timeslices
-whose window runs from the first to the last PROFILING-tagged sample of that
-series. ``stats`` minus the timeslice sum is the increment between the reference
-sample and the first PROFILING sample. Series are classified here and never
-corrected: the exporter clamps negative deltas, so the values cannot be repaired
-from the export alone, and no time tolerance is used to treat activity at or
-outside the phase boundary as profiling traffic.
-"""
-
 from __future__ import annotations
 
 import math

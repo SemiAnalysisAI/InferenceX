@@ -13,7 +13,7 @@ from .backends.base import (
     empty_server_metrics,
 )
 from .cache_validity import summarize_cache_validity
-from .common import index_server_metrics
+from .common import index_server_metrics, sum_stat
 from .phase_validity import PhaseContext, export_context, phase_windows, summarize, warmup_totals
 
 
@@ -87,6 +87,42 @@ def endpoint_roles_from_env(env: Mapping[str, str]) -> dict[str, str] | None:
                 if roles.setdefault(url, role) != role:
                     return {}
     return roles or None
+
+
+def _disaggregated_prompt_total(
+    metrics: dict[str, dict[str, Any]], records: list[dict[str, Any]], nested: dict[str, Any]
+) -> int | None:
+    values = []
+    for record in records:
+        metric = record.get("metrics", {}).get("input_sequence_length")
+        value = metric.get("value") if isinstance(metric, dict) else metric
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+            or int(value) != value
+        ):
+            break
+        values.append(int(value))
+    if records and len(values) == len(records):
+        return sum(values)
+    frontend = sum_stat(
+        metrics, "dynamo_frontend_input_sequence_tokens", preferred_keys=("total", "sum")
+    )
+    if (
+        frontend is not None
+        and math.isfinite(frontend)
+        and frontend >= 0
+        and int(frontend) == frontend
+    ):
+        return int(frontend)
+    reuse = nested["validity"]["cache_rate"]
+    if reuse.get("published") and reuse.get("role_scope") == "prefill":
+        prompt = reuse.get("prompt_tokens")
+        if isinstance(prompt, (int, float)) and math.isfinite(prompt) and prompt >= 0:
+            return round(prompt)
+    return None
 
 
 def compute_server_metrics(
@@ -182,6 +218,12 @@ def compute_server_metrics(
     if nested["tokens"]["generation_total"] is None:
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
     nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
+
+    if disaggregated is True and adapter.name != "atom":
+        prompt = _disaggregated_prompt_total(metrics, records, nested)
+        if prompt != nested["tokens"]["prompt_total"]:
+            nested["tokens"]["prompt_by_source"]["computed"] = None
+        flat["total_prompt_tokens"] = nested["tokens"]["prompt_total"] = prompt
 
     nested["cache_validity"] = summarize_cache_validity(nested)
     return flat, nested, warnings

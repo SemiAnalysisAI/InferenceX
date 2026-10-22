@@ -1,6 +1,6 @@
-"""The cache validity core is filled for every adapter, so one consumer rule covers every producer."""
-
 from __future__ import annotations
+
+import pytest
 
 from infx.results.agentic.server_metrics import compute_server_metrics
 from infx.tests.results.agentic.test_atom_cache_validity import _export as _atom_export
@@ -82,3 +82,46 @@ class TestCacheValidityCore:
         assert core["status_class"] == "MISSING"
         assert core["published"] is False
         assert core["reasons"] == ["server_metrics_missing"]
+
+
+class TestDisaggregatedPromptTotals:
+    @pytest.mark.parametrize(
+        "framework, metric",
+        [
+            ("vllm", "vllm:prompt_tokens"),
+            ("sglang", "sglang:prompt_tokens"),
+            ("trtllm", "trtllm_prompt_tokens"),
+        ],
+    )
+    def test_complete_profile_records_replace_duplicate_worker_prompts(self, framework, metric):
+        export = {"metrics": {metric: _counter(2000.0)}}
+        records = [{"metrics": {"input_sequence_length": {"value": n}}} for n in (800, 200)]
+        flat, nested, _ = compute_server_metrics(
+            export, framework=framework, records=records, disaggregated=True
+        )
+
+        assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 1000
+        assert nested["cache_validity"]["pricing_eligible"] is False
+
+    @pytest.mark.parametrize("value", [None, True, -1, 1.5, float("inf")])
+    def test_partial_or_invalid_profile_records_do_not_supply_a_total(self, value):
+        records = [{"metrics": {"input_sequence_length": n}} for n in (800, value)]
+        flat, nested, _ = compute_server_metrics(
+            {"metrics": {"vllm:prompt_tokens": _counter(2000.0)}},
+            framework="vllm",
+            records=records,
+            disaggregated=True,
+        )
+
+        assert flat["total_prompt_tokens"] is None
+        assert nested["tokens"]["prompt_total"] is None
+
+    def test_frontend_total_remains_available_without_client_usage(self):
+        flat, nested, _ = compute_server_metrics(
+            {"metrics": {"dynamo_frontend_input_sequence_tokens": _counter(1234.0)}},
+            framework="dynamo-trt",
+            records=[],
+            disaggregated=True,
+        )
+
+        assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 1234
