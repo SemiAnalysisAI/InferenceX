@@ -71,7 +71,7 @@ jobs:
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           cache-dependency-glob: |
             pyproject.toml
@@ -122,7 +122,7 @@ jobs:
       - name: Verify sign-off with Claude
         id: claude
         if: steps.resolve.outputs.proceed == 'true'
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@374f254f5efaf968abfe15d399fd90972e8138b9 # v1.0.251
         env:
           # Read-only job token: the agent reads untrusted PR content and never publishes.
           GH_TOKEN: ${{ github.token }}
@@ -170,7 +170,7 @@ jobs:
 
       - name: Upload verdict
         if: always() && steps.outcome.outputs.succeeded == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: codeowner-signoff-verdict
           path: /tmp/codeowner-signoff-verdict.md
@@ -206,7 +206,7 @@ jobs:
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           cache-dependency-glob: |
             pyproject.toml
@@ -217,7 +217,7 @@ jobs:
       # Any download failure fails this job rather than posting a false rejection.
       - name: Download verdict
         if: needs.verify.outputs.verification-succeeded == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: codeowner-signoff-verdict
           path: /tmp
