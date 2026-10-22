@@ -3,7 +3,7 @@
 # DEP8, or DEP8 with an embedded Mooncake prefix-cache store. DEP8 uses
 # data-parallel-external-lb so srtctl launches one Rust-fronted `vllm serve` per DP rank
 # and the EPP routes to each rank (agg TP8 stays a single TP8 worker).
-# Select one with CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/agg-llm-d.yaml:override_<name>.
+# Select one with srt-recipe: agg-llm-d.yaml:override_<name>.
 
 schema: 2
 

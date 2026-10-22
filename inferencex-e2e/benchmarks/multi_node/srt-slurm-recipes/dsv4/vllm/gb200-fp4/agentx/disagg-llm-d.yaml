@@ -5,7 +5,7 @@
 # srtctl launches one `vllm serve` per DP rank (Rust frontend) and the EPP routes to each
 # rank. Prefill drafts one DSpark token and decode three, both with adaptive verification on
 # throughput (golden synthetic acceptance applies only to agg TP8).
-# Select one with CONFIG_FILE=recipes/dsv4/vllm/gb200-fp4/agentx/disagg-llm-d.yaml:override_<name>.
+# Select one with srt-recipe: disagg-llm-d.yaml:override_<name>.
 
 schema: 2
 
