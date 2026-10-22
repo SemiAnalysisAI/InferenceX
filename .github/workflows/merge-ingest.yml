@@ -66,7 +66,7 @@ jobs:
               with:
                   script: |
                       await core.summary.addTable([
-                        ['Source PR', `#${process.env.SOURCE_PR}`],
+                        ['Source PR', process.env.SOURCE_PR ? `#${process.env.SOURCE_PR}` : 'unknown'],
                         ['Source run', process.env.SOURCE_RUN_URL],
                         ['Reused benchmark source', process.env.SOURCE_SHA],
                       ]).write();

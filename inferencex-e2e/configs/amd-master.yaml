@@ -1166,7 +1166,7 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.21-rocm724-mi35x-20261001
+  image: lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1180,13 +1180,11 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # All arms offload to umbp-linker. The recipe carries each point's sizing and
-      # DSpark draft length (6 at c4/c16, 3 above).
       - spec-decoding: "draft_model"
-        conc-list: [4]
+        conc-list: [1]
         kv-offloading: dram
         kv-offload-backend: { name: umbp-linker }
-        srt-recipe: disagg-umbp-dspark.yaml:override_c4
+        srt-recipe: disagg-umbp-dspark.yaml:override_c1
         prefill:
           num-worker: 1
           tp: 4
