@@ -1,7 +1,3 @@
-# GLM-5.3 NVFP4 AgentX on B300 with upstream SGLang TP8 and NEXTN off the
-# checkpoint's built-in MTP head (K=3, 4 draft tokens). Two arms share this base:
-# the interactive arm (c1-c14) keeps the whole working set in HBM, and the
-# throughput arm (c22-c28) spills evicted prefixes to a HiCache host-DRAM tier.
 base:
   schema: 2
   name: glm5.3-fp4-b300-sglang-agentic
@@ -56,23 +52,18 @@ base:
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# Interactive arm: no host tier. Expandable segments and symmetric-memory
-# all-reduce lift tokens/s/GPU at the same interactivity.
-# c1/c4 cap admission at 2x CONC with a matching decode graph batch. They stay
-# at K=3 because glm5.3_mtp.yaml only carries a golden AL for K=3.
 override_c1:
   roles:
     agg:
       args:
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        # With expandable segments, lifts tokens/s/GPU at the same interactivity.
         enable-torch-symm-mem: true
       env:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -143,14 +134,13 @@ override_c14:
       CONC: '14'
       KV_OFFLOADING: none
 
-# Throughput arm: MLA-family, so every TP rank holds complete per-token KV and
-# the host pool is an absolute 300 GB/rank; the DSA indexer pool rides on top
-# (about 69 GB/rank), about 2.95 TB per node in total.
 override_c22:
   roles:
     agg:
       args:
         enable-hierarchical-cache: true
+        # GB per rank; each TP rank holds full MLA KV. The DSA indexer pool adds
+        # about 69 GB/rank, about 2.95 TB of host DRAM per node in total.
         hicache-size: 300
         hicache-write-policy: write_back
         hicache-io-backend: direct
