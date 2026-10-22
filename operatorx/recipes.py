@@ -1,7 +1,8 @@
 """The InferenceX recipe a case runs under.
 
-InferenceX serves every single-node configuration from a native srt-slurm recipe
-(inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<model>/<framework>/<hardware>-<precision>*/*.yaml).
+InferenceX serves every single-node configuration from a configs/*-master.yaml entry (model,
+image, runner) whose search space names native srt-slurm recipes
+(inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<srt-recipe-dir>/<srt-recipe>).
 A case takes the recipe InferenceX runs for its source checkpoint on the runner's
 hardware - the variant with the case's parallel split, else any of the checkpoint's - for
 the recipe's image, launch env and server arguments. InferenceX's own code expands a
@@ -38,7 +39,9 @@ _NOT_APPLIED = {"model", "tokenizer", "tokenizer-mode", "reasoning-parser", "too
 
 @functools.cache
 def _variants(framework: str, hardware: str) -> tuple[tuple[str, dict], ...]:
-    """Every expanded variant InferenceX runs for a framework on a hardware family."""
+    """Every expanded variant InferenceX runs for a framework on a hardware family: the
+    single-node entries of configs/*-master.yaml (model, image, runner) and the srt-slurm
+    recipes their search spaces name, expanded by InferenceX's own code."""
     import yaml
 
     for path in (str(REPO), str(REPO / "utils/srt-slurm/src")):
@@ -46,10 +49,25 @@ def _variants(framework: str, hardware: str) -> tuple[tuple[str, dict], ...]:
             sys.path.append(path)
     from infx.srt_slurm.synthetic_acceptance import selected_recipes
 
-    out = []
-    for f in sorted(RECIPES.glob(f"*/{framework}/{hardware}-*/*.yaml")):
-        for name, recipe in selected_recipes(yaml.safe_load(f.read_text()), None):
-            out.append((str(f.relative_to(REPO)) + (f":{name}" if name else ""), recipe))
+    out, seen = [], set()
+    for master in sorted((REPO / "configs").glob("*-master.yaml")):
+        for entry in (yaml.safe_load(master.read_text()) or {}).values():
+            if (not isinstance(entry, dict) or entry.get("multinode") or entry.get("framework") != framework
+                    or entry.get("runner", "").removeprefix("cluster:").split("-")[0] != hardware
+                    or not entry.get("srt-recipe-dir")):
+                continue
+            refs = {s["srt-recipe"] for arms in (entry.get("scenarios") or {}).values() for arm in arms or ()
+                    for s in arm.get("search-space") or () if s.get("srt-recipe")}
+            for ref in sorted(refs):
+                path, _, selector = ref.partition(":")
+                f = RECIPES / entry["srt-recipe-dir"] / path
+                key = (str(f), selector, entry["model"], entry["image"])
+                if key in seen or not f.is_file():
+                    continue
+                seen.add(key)
+                for name, recipe in selected_recipes(yaml.safe_load(f.read_text()), selector or None):
+                    recipe = {**recipe, "model": {"path": f"hf:{entry['model']}", "container": entry["image"]}}
+                    out.append((str(f.relative_to(REPO)) + (f":{name}" if name else ""), recipe))
     return tuple(out)
 
 
