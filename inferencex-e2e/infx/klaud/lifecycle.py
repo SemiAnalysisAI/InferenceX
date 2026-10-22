@@ -35,18 +35,29 @@ RERUN_GRACE_SECONDS = 30 * 60
 # Recovery stops waiting for a preempted final sweep that stayed cancelled this long.
 RERUN_GIVE_UP_SECONDS = 24 * 60 * 60
 MAX_SWEEP_ATTEMPTS = 10
-# Sessions per candidate in its planner run: the planner's session plus three resumes.
+# Sessions per candidate: its planner run's session plus three resume runs.
 MAX_SESSIONS = 4
 # Planner waves start this often (klaud-plan.yml's schedule).
 WAVE_HOURS = 6
-# Recovery stops resuming, or keeping unreconciled sessions, this long after their run ended.
+# Recovery stops resuming, or keeping unreconciled sessions, this long after the last ended.
 RESUME_GIVE_UP_SECONDS = 24 * 60 * 60
-# The klaud-candidate.yml step that lets a rerun candidate job run only a granted session.
+# The klaud-candidate.yml step that lets a resume run start only a session recovery granted.
 GATE_STEP = "Check whether this session should run"
 # The klaud-candidate.yml step that runs the session's agent.
 AGENT_STEP = "Let Klaud Cold own the candidate PR"
 # GitHub concludes a job stopped at its timeout-minutes as cancelled, with this annotation.
 TIMEOUT_ANNOTATION = "exceeded the maximum execution time"
+
+
+def resume_title(parent: int, candidate: str, session: int) -> str:
+    """The run name klaud-plan.yml gives the resume run of ``candidate``'s ``session``."""
+    return f"Klaud Cold resume {parent} {candidate} session {session}"
+
+
+def resume_parent(title: str) -> int | None:
+    """The planner run whose session a resume run named ``title`` continues, else None."""
+    match = re.fullmatch(rf"Klaud Cold resume (\d+) {CANDIDATE_ID} session [1-9][0-9]*", title)
+    return int(match[1]) if match else None
 
 
 class PendingCleanup(VerificationError):  # noqa: N818
@@ -61,7 +72,7 @@ class ResumeSession(PendingCleanup):
     """Recovery may resume this unfinished session; keep its PR, branch, claim and lease."""
 
     def __init__(self, pull: dict) -> None:
-        super().__init__("Unfinished session approved to resume in its planner run")
+        super().__init__("Unfinished session approved to resume in a new run")
         self.pull = pull
 
 
@@ -100,7 +111,7 @@ class Session:
     def pull_window_end(self) -> datetime | None:
         """When the planner run's first attempt ended, or None while it runs.
 
-        Only a planner run's first session opens its candidate PR; later attempts resume it.
+        Only a planner run's first session opens its candidate PR; later sessions resume it.
         """
         if self.parent["run_attempt"] == 1:
             return utc(self.parent["updated_at"]) if terminal(self.parent) else None
@@ -132,8 +143,49 @@ class Session:
                 raise VerificationError("Candidate ownership mismatch")
         return pulls
 
+    def resume_runs(self) -> list[dict]:
+        """Recovery's resume runs of this candidate's session, oldest first."""
+        prefix = resume_title(self.parent["id"], self.candidate.id, 0).removesuffix("0")
+        # A session resumes within RESUME_GIVE_UP_SECONDS of the last one ending, and each
+        # session lasts at most a GitHub job's 6 hours, so every resume run starts by then.
+        until = utc(self.parent["created_at"]) + MAX_SESSIONS * timedelta(
+            seconds=RESUME_GIVE_UP_SECONDS, hours=6
+        )
+        runs = github.items(
+            self.repository,
+            "actions/workflows/klaud-plan.yml/runs?"
+            + urlencode(
+                {
+                    "event": "workflow_dispatch",
+                    "actor": BOT,
+                    "created": f"{self.parent['created_at']}..{until:%Y-%m-%dT%H:%M:%SZ}",
+                    "per_page": 100,
+                }
+            ),
+            "workflow_runs",
+        )
+        return sorted(
+            (
+                run
+                for run in runs
+                if run["display_title"].startswith(prefix)
+                and run["display_title"].removeprefix(prefix).isdigit()
+                and run["head_branch"] == "main"
+                and run["actor"]["login"] == BOT
+            ),
+            key=lambda run: run["created_at"],
+        )
+
+    def last_session_end(self) -> str | None:
+        """When this candidate's latest session run ended, or None while one is active."""
+        runs = [self.parent, *self.resume_runs()]
+        if not all(terminal(run) for run in runs):
+            return None
+        return max((run["updated_at"] for run in runs), key=utc)
+
     def runs(self) -> list[dict]:
-        end = self.parent["updated_at"] if terminal(self.parent) else "*"
+        ended = self.last_session_end()
+        end = ended or "*"
         query = {"per_page": 100, "created": f"{self.parent['created_at']}..{end}"}
         targeted = github.items(
             self.repository,
@@ -175,7 +227,7 @@ class Session:
             )
         ]
         if self.recovering and any(
-            utc(run["created_at"]) > utc(self.parent["updated_at"]) and run["actor"]["login"] != BOT
+            ended and utc(run["created_at"]) > utc(ended) and run["actor"]["login"] != BOT
             for run in sweeps
         ):
             raise VerificationError("Maintainer started runs after the session; leave them intact")
@@ -196,10 +248,11 @@ class Session:
         return current
 
     def check_parent(self) -> None:
-        if self.recovering and not terminal(
-            github.read(self.repository, f"actions/runs/{self.parent['id']}")
+        if self.recovering and (
+            not terminal(github.read(self.repository, f"actions/runs/{self.parent['id']}"))
+            or not all(terminal(run) for run in self.resume_runs())
         ):
-            raise VerificationError("Parent resumed; leave active session intact")
+            raise VerificationError("Session resumed; leave the active session intact")
 
     def report(self, pull: dict) -> dict | None:
         comments = github.items(self.repository, f"issues/{pull['number']}/comments?per_page=100")
@@ -490,8 +543,9 @@ def current_session() -> Session:
         {key: context[key] for key in ("id", "family", "base")}
     )
     repository = os.environ["GITHUB_REPOSITORY"]
-    parent = github.read(repository, f"actions/runs/{int(os.environ['GITHUB_RUN_ID'])}")
-    return Session(repository, parent, candidate)
+    # A resume run continues the session of the planner run that owns the candidate.
+    parent = os.environ.get("KLAUD_PARENT_RUN") or os.environ["GITHUB_RUN_ID"]
+    return Session(repository, github.read(repository, f"actions/runs/{int(parent)}"), candidate)
 
 
 def hit_timeout(repository: str, job: dict) -> bool:
@@ -559,29 +613,32 @@ def resumable(session: Session, pull: dict | None) -> bool:
 
 
 def candidate_jobs(session: Session) -> list[dict]:
-    """The candidate's job in each attempt of its planner run that ran rather than copied it.
+    """The candidate's job in its planner run's attempts and its resume runs, oldest first.
 
-    Rerunning failed jobs copies the other jobs into the new attempt with their original start.
+    Rerunning failed jobs copies the other jobs into the new attempt with their original start;
+    those copies are left out.
     """
     prefix = f"Run candidate {session.candidate.id}"
-    return [
-        job
-        for job in github.items(
-            session.repository,
-            f"actions/runs/{session.parent['id']}/jobs?filter=all&per_page=100",
-            "jobs",
-        )
-        if job["name"].startswith(prefix)
-        and job["started_at"]
-        and utc(job["started_at"]) >= utc(job["created_at"])
-    ]
+    runs = [session.parent["id"], *(run["id"] for run in session.resume_runs())]
+    return sorted(
+        (
+            job
+            for run in runs
+            for job in github.items(
+                session.repository, f"actions/runs/{run}/jobs?filter=all&per_page=100", "jobs"
+            )
+            if job["name"].startswith(prefix)
+            and job["started_at"]
+            and utc(job["started_at"]) >= utc(job["created_at"])
+        ),
+        key=lambda job: job["created_at"],
+    )
 
 
 def started_session(job: dict) -> bool:
     """Whether a candidate job started its agent, or still may while its gate runs.
 
-    A planner run from before resumption skips the candidate job when rerun, and a rerun job
-    without a grant skips the agent step.
+    A rerun planner job skips the agent step, and so does a resume run without its grant.
     """
     return job["conclusion"] != "skipped" and not any(
         step["name"] == AGENT_STEP and step["conclusion"] == "skipped" for step in job["steps"]
@@ -589,26 +646,25 @@ def started_session(job: dict) -> bool:
 
 
 def sessions_started(session: Session) -> int:
-    """Sessions the planner run started for the candidate, a running one included."""
+    """Sessions started for the candidate, a running one included."""
     return sum(started_session(job) for job in candidate_jobs(session))
 
 
 def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
-    """Whether rerunning its planner run's failed jobs would continue this unfinished session."""
-    parent = session.parent
-    if now - utc(parent["updated_at"]) >= timedelta(seconds=RESUME_GIVE_UP_SECONDS):
+    """Whether a new resume run would continue this unfinished session."""
+    if session.last_session_end() is None or not resumable(session, pull):
         return False
-    if not resumable(session, pull):
-        return False
-    jobs = candidate_jobs(session)
-    return sum(started_session(job) for job in jobs) < MAX_SESSIONS and any(
-        job["run_attempt"] == parent["run_attempt"]
-        # A planner run from before resumption has no gate; its reruns skip the candidate.
-        and any(step["name"] == GATE_STEP for step in job["steps"])
+    started = [job for job in candidate_jobs(session) if started_session(job)]
+    return (
+        0 < len(started) < MAX_SESSIONS
+        # Runs that failed before their agent started never extend this.
+        and bool(started[-1].get("completed_at"))
+        and now - utc(started[-1]["completed_at"]) < timedelta(seconds=RESUME_GIVE_UP_SECONDS)
+        # A planner run from before resumption has no gate.
+        and any(step["name"] == GATE_STEP for step in started[-1]["steps"])
         # A session that runs out fails its job, and a cancelled session was preempted like any
         # other Klaud work; only klaud-abort stops a candidate.
-        and job["conclusion"] in ("failure", "timed_out", "cancelled")
-        for job in jobs
+        and started[-1]["conclusion"] in ("failure", "timed_out", "cancelled")
     )
 
 
@@ -618,13 +674,13 @@ def resume(session: Session, pull: dict | None, now: datetime) -> None:
         raise ResumeSession(pull)
 
 
-def resume_marker(parent: int, candidate: str, attempt: int) -> str:
-    return f"<!-- klaud-resume:{parent}:{candidate}:attempt-{attempt} -->"
+def resume_marker(parent: int, candidate: str, number: int) -> str:
+    return f"<!-- klaud-resume:{parent}:{candidate}:session-{number} -->"
 
 
-def granted(session: Session, pull: dict, attempt: int) -> bool:
-    """Whether recovery granted this session the planner run's ``attempt``."""
-    marker = resume_marker(session.parent["id"], session.candidate.id, attempt)
+def granted(session: Session, pull: dict, number: int) -> bool:
+    """Whether recovery granted this candidate's session ``number``."""
+    marker = resume_marker(session.parent["id"], session.candidate.id, number)
     return any(
         comment["user"]["login"] == BOT and comment["body"].startswith(marker)
         for comment in github.items(
@@ -633,68 +689,64 @@ def granted(session: Session, pull: dict, attempt: int) -> bool:
     )
 
 
-def allot(approved: dict[int, list], budget: int) -> list[int]:
-    """Planner runs to resume: whole runs, oldest first, until one exceeds ``budget``.
-
-    One rerun restarts every failed candidate job of its run. A run has at most the wave's
-    candidate cap of sessions, so the oldest run always fits a full budget.
-    """
-    runs = []
-    for run_id in sorted(approved):
-        if len(approved[run_id]) > budget:
-            break
-        budget -= len(approved[run_id])
-        runs.append(run_id)
-    return runs
-
-
-def grant(repository: str, parent: dict, sessions: list[tuple[Session, dict]]) -> None:
-    """Grant each approved session the planner run's next attempt, then rerun its failed jobs."""
-    current = github.read(repository, f"actions/runs/{parent['id']}")
-    if not terminal(current) or current["run_attempt"] != parent["run_attempt"]:
-        raise VerificationError("Planner run changed after recovery read it")
-    attempt = current["run_attempt"] + 1
-    link = f"https://github.com/{repository}/actions/runs/{parent['id']}"
-    posted = []
+def grant(session: Session, pull: dict) -> int:
+    """Grant an unfinished session its next session, then dispatch the resume run that runs it."""
+    repository, parent = session.repository, session.parent["id"]
+    session.refresh(pull)
+    number = sessions_started(session) + 1
+    if not 2 <= number <= MAX_SESSIONS:
+        raise VerificationError(f"Session {number} cannot resume")
+    posted = None
+    if not granted(session, pull, number):
+        link = f"https://github.com/{repository}/actions/runs/{parent}"
+        body = (
+            resume_marker(parent, session.candidate.id, number)
+            + "\n"
+            + translated(
+                f"**resumed** · The session ended before finishing; session {number} continues "
+                f"it in a new run of [its planner]({link}).",
+                f"**resumed** · 会话未完成即已结束；第 {number} 个会话将在"
+                f"[其规划运行]({link})的新运行中继续。",
+            )
+        )
+        posted = github.write(
+            repository, f"issues/{pull['number']}/comments", "POST", {"body": body}
+        )["id"]
     try:
-        for session, pull in sessions:
-            session.refresh(pull)
-            if granted(session, pull, attempt):
-                continue
-            body = (
-                resume_marker(parent["id"], session.candidate.id, attempt)
-                + "\n"
-                + translated(
-                    f"**resumed** · The session ended before finishing; attempt {attempt} of "
-                    f"[its planner run]({link}) continues it.",
-                    f"**resumed** · 会话未完成即已结束；[其规划运行]({link})"
-                    f"的第 {attempt} 次尝试将继续该会话。",
-                )
-            )
-            comment = github.write(
-                repository, f"issues/{pull['number']}/comments", "POST", {"body": body}
-            )
-            posted.append(comment["id"])
-        github.write(repository, f"actions/runs/{parent['id']}/rerun-failed-jobs", "POST")
+        github.write(
+            repository,
+            "actions/workflows/klaud-plan.yml/dispatches",
+            "POST",
+            {
+                "ref": "main",
+                "inputs": {
+                    "resume-parent": str(parent),
+                    "resume-candidate": session.candidate.id,
+                    "resume-session": str(number),
+                },
+            },
+        )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        # A grant without its rerun could let a later rerun of this attempt start uncounted.
-        for comment in posted:
+        # A grant without its resume run would let a later run start an uncounted session.
+        if posted is not None:
             with contextlib.suppress(
                 OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError
             ):
-                github.write(repository, f"issues/comments/{comment}", "DELETE")
+                github.write(repository, f"issues/comments/{posted}", "DELETE")
         raise
+    return number
 
 
 def retained(session: Session, now: datetime) -> bool:
     """Whether recovery keeps a session it could not reconcile for a later pass.
 
-    Until RESUME_GIVE_UP_SECONDS after its planner run ended, an open draft PR may still resume;
-    a PR that cannot be read counts as one.
+    Until RESUME_GIVE_UP_SECONDS after its last session ended, an open draft PR may still
+    resume; a PR or run that cannot be read counts as one.
     """
-    if now - utc(session.parent["updated_at"]) >= timedelta(seconds=RESUME_GIVE_UP_SECONDS):
-        return False
     try:
+        ended = session.last_session_end()
+        if ended and now - utc(ended) >= timedelta(seconds=RESUME_GIVE_UP_SECONDS):
+            return False
         pulls = session.pulls()
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         return True
@@ -825,7 +877,7 @@ def recover(max_resumes: int) -> None:
     results = {}
     blocked = set()
     live = set()
-    approved: dict[int, list[tuple[Session, dict]]] = {}
+    approved: list[tuple[Session, dict]] = []
     for owner, _ in sorted(owners, key=lambda pair: pair[0].run_id, reverse=True):
         parent = parents[owner.run_id]
         for candidate in owner.candidates:
@@ -839,6 +891,10 @@ def recover(max_resumes: int) -> None:
                 continue
             session = Session(repository, parent, candidate, recovering=True)
             try:
+                if not all(terminal(run) for run in session.resume_runs()):
+                    blocked.add(candidate.family)
+                    live.add(candidate.id)
+                    continue
                 if not claims.recovery_lease(repository, parent["id"], candidate):
                     blocked.add(candidate.family)
                     live.add(candidate.id)
@@ -855,7 +911,7 @@ def recover(max_resumes: int) -> None:
                 blocked.add(candidate.family)
                 if isinstance(error, ResumeSession):
                     live.add(candidate.id)
-                    approved.setdefault(parent["id"], []).append((session, error.pull))
+                    approved.append((session, error.pull))
                     continue
                 if isinstance(error, AwaitingRerun) or retained(session, now):
                     live.add(candidate.id)
@@ -875,26 +931,30 @@ def recover(max_resumes: int) -> None:
             if status:
                 summarize(repository, candidate, parent["id"], status)
     resumed = 0
-    allotted = allot(approved, max_resumes)
-    for run_id, sessions in sorted(approved.items()):
-        if run_id not in allotted:
+    # Oldest planner runs first; resumed sessions share this wave's candidate cap.
+    approved.sort(key=lambda pair: (pair[0].parent["id"], pair[0].candidate.id))
+    for index, (session, pull) in enumerate(approved):
+        run_id = session.parent["id"]
+        if index >= max_resumes:
             status = "pending / 等待后续收尾 (resume deferred: no slot left in this wave)"
         else:
             try:
-                grant(repository, parents[run_id], sessions)
+                number = grant(session, pull)
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
                 reason = (
                     str(error)
                     if isinstance(error, VerificationError)
                     else "state unavailable or invalid"
                 )
-                print(f"::warning::Klaud: resuming planner run {run_id} failed: {reason}.")
+                print(
+                    f"::warning::Klaud: resuming candidate {session.candidate.id} of planner run "
+                    f"{run_id} failed: {reason}."
+                )
                 status = f"pending / 等待后续收尾 (resume failed, retrying next pass: {reason})"
             else:
-                resumed += len(sessions)
-                status = f"resumed / 已恢复 (attempt {parents[run_id]['run_attempt'] + 1})"
-        for session, _ in sessions:
-            summarize(repository, session.candidate, run_id, status)
+                resumed += 1
+                status = f"resumed / 已恢复 (session {number})"
+        summarize(repository, session.candidate, run_id, status)
     for owner, artifact in owners:
         if artifact and all(
             results[(owner.run_id, candidate.id)] for candidate in owner.candidates
