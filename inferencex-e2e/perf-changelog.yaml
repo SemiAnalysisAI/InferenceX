@@ -10841,3 +10841,13 @@
     - "Request thinking explicitly on the AgentX client and enable checkpoint prefetch and multithreaded weight loading."
     - "Read SGLang dcp-size in the single-node recipe validator so SGLang points can use dcp-size > 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4389
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Update the SGLang image from lmsysorg/sglang:v0.5.12-rocm720-mi30x to lmsysorg/sglang:v0.5.19-rocm720-mi30x. On v0.5.12 every scheduler rank crashes on the first EAGLE draft-extend step that falls back to eager mode: the aiter backend calls generate_attn_arg_prefill on EagleDraftInput, which does not define it (AttributeError), and the server never becomes healthy."
+    - "v0.5.19 builds draft extend from EagleDraftExtendInput (sgl-project/sglang#24860) and fixes the eager aiter draft-extend metadata (sgl-project/sglang#36915), but its eager aiter draft extend still memory-faults (sgl-project/sglang#39517). Startup reaches that path at concurrency 4: the six tokenizer workers each send a warmup request, so the first batch holds 6 sequences while graphs are captured only up to batch 4."
+    - "Set max-running-requests equal to the concurrency at every point, as the mi355x MTP recipe already does, so admission never exceeds the captured graph batch and verify, draft-decode and draft-extend always replay a graph. The client keeps exactly CONC requests in flight, so the measured points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3972
