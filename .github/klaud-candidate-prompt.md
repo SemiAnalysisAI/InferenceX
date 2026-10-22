@@ -25,13 +25,13 @@ Create one draft PR after a real change, titled `[Klaud Cold] English / 简体�
 Start its body with only `<!-- klaud-baseline -->`; the report helper fills it.
 
 When KLAUD_RESUME=true, an earlier session ended (ran out or was cancelled) before finishing
-this candidate and this session continues it in the same run. The branch, draft PR, frozen
-baseline (prepare-baseline returns it), attempt comments and runs are yours; never recreate
-them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt counter, repairs used
-and run IDs from your attempt comments; a commit pushed after the head of your last attempt
-comment, other than the perf-changelog entry, counts as a used repair. Inspect those runs
-(queued, running, preempted or finished) and continue. Repair budget, infrastructure-retry
-limits and failure rules carry over.
+this candidate, and recovery started this session in a new run to continue it. The branch,
+draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
+never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
+counter, repairs used and run IDs from your attempt comments; a commit pushed after the head
+of your last attempt comment, other than the perf-changelog entry, counts as a used repair.
+Inspect those runs (queued, running, preempted or finished) and continue. Repair budget,
+infrastructure-retry limits and failure rules carry over.
 
 Compare the actual old/new bundled engine source at its tags/commits in vLLM, SGLang,
 ATOM or TensorRT-LLM, including coupled dependencies and used flags/config parsers.
@@ -81,6 +81,8 @@ concurrency/dataset identities. Use `infx.klaud`'s typed reporting commands:
 The goal record has `en` and `zh` sentences naming the exact old/new images.
 Read `report-schema --kind attempt` once and publish/update each typed record with
 `report --kind attempt --file "$KLAUD_EVIDENCE/attempt.json"`.
+In attempts, copy each AgentX point's `dataset` from its result row's `dataset.hf_dataset_name`
+and key evals by `identity(eval_key(row))` of the aggregate eval row, never by a point key.
 Schemas, arithmetic and rendering live in inferencex-e2e/infx/klaud/reporting.py;
 candidate.json provides the planner-verified exact `baseline-model`; use that value unchanged.
 The planner supplies `baseline-preflight.json` beside candidate.json. It contains the verified
@@ -88,8 +90,9 @@ benchmark roster bound to the selected candidate, base SHA, source observation a
 After resolving the exact old/new image goal, prepare-baseline checks this binding and uses
 that roster without refetching it. If the preflight is absent or invalid, stop with
 `baseline-preflight-mismatch`.
-The preflight is not a published or final baseline. Supplement verified public
-eval/dataset evidence before freezing; never replace a failed lookup with a partial roster.
+The preflight is not a published or final baseline. It already holds the verified public evals
+and AgentX replay datasets of its producer runs: publish them unchanged, never hand-build or
+rekey baseline points or evals, and never replace a failed lookup with a partial roster.
 Never reduce the baseline to overlapping points, displayed rows or a smaller current family. Never dispatch the old
 image. Unproven deltas are N/A with a reason; N/A never excuses missing updated-image results.
 The baseline remains fixed across attempts. Keep the preflight's `retirements` exactly as given:
@@ -100,7 +103,8 @@ never treat a point's absence from the current family as its retirement.
 Keep targeted work draft with no sweep labels. Dispatch ONLY updated-image e2e-tests.yml
 from main, with ref=exact measured SHA, fail-fast=true, klaud-run=true,
 test-name=$KLAUD_TEST_NAME, and
-`generate-cli-command="test-config --config-files FILE --config-keys FAMILY --smoke"`.
+`generate-cli-command="test-config --config-files FILE --config-keys FAMILY --scenario-type agentic-coding --smoke"`.
+Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
 it is startup evidence, not a full curve. Persist each run ID/head/attempt and typed progress
 comment immediately, before waiting. Use `gh run watch --interval 60`, resume after tool
@@ -110,20 +114,23 @@ Empty aggregates or green collectors do not prove success.
 
 One initial update plus $MAX_REPAIRS repairs TOTAL, including final-sweep repairs.
 A confirmed transient client-download/runner/network retry does not consume a recipe
-repair: keep the same head and classify it as infrastructure-retry, at most two per attempt.
+repair: keep the same head and classify it as infrastructure-retry, numbered 1 then 2 per attempt.
 Do not repeat deterministic failures as infrastructure retries. Stop after validation,
 exhausted repairs, or the same failure twice without progress.
 Benchmarks may take three hours. Do not cancel healthy or queued work to fit the agent job
 limit; leave it queued when the session ends, and a later session resumes it.
 
 After smoke benchmarks AND selected evals pass, append one exact-family inferencex-e2e/perf-changelog.yaml
-entry at the physical tail with this PR URL, preserving every prior byte. Omit scenario,
-append-only and eval-selection modifiers. Its description must be one plain-English sentence
+entry at the physical tail with this PR URL, preserving every prior byte. Set exactly
+`scenario-type: [agentic-coding]`; omit append-only and eval-selection modifiers.
+Its description must be one plain-English sentence
 of at most 120 characters: state the engine image version change and, only when necessary,
 one essential compatibility adjustment. Do not include evidence, benchmark results, upstream
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
+If main later appends another perf-changelog entry, merge main, keep your entry at the physical
+tail and dispatch the final sweep again as a `final` attempt; that merge is not a repair.
 Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
 sweep label. Never switch labels while owned jobs are active.
 Fail-fast cancels siblings within a matrix, not every matrix; wait for all owned jobs.
