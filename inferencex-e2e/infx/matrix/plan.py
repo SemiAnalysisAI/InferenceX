@@ -46,8 +46,13 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
         raise RuntimeError(f"git diff of {filepath} failed: {result.stderr.strip()}")
 
     added_lines = []
+    in_hunk = False
     for line in result.stdout.split("\n"):
-        if line.startswith("-") and not line.startswith("---"):
+        if line.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk:
+            continue
+        elif line.startswith("-"):
             deleted_content = line[1:]
             if deleted_content.strip():
                 raise ValueError(
@@ -55,7 +60,7 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
                     f"Only additions to the changelog are permitted. "
                     f"Found deleted line: {deleted_content}"
                 )
-        elif line.startswith("+") and not line.startswith("+++"):
+        elif line.startswith("+"):
             added_lines.append(line[1:])
 
     return "\n".join(added_lines)

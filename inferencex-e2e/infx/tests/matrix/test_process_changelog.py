@@ -844,3 +844,16 @@ def test_added_lines_report_a_failing_git_diff(commit_changelog, tmp_path, monke
 
     with pytest.raises(RuntimeError, match="fatal: diff exploded"):
         process_changelog.get_added_lines(base, head, "perf-changelog.yaml")
+
+
+def test_added_lines_reject_deleting_a_line_that_starts_with_dashes(commit_changelog):
+    base = commit_changelog("- a\n---\n- b\n")
+    head = commit_changelog("- a\n- b\n- c\n")
+    with pytest.raises(ValueError, match="Deletions are not allowed.*Found deleted line: ---"):
+        process_changelog.get_added_lines(base, head, "perf-changelog.yaml")
+
+
+def test_added_lines_keep_an_added_line_that_starts_with_pluses(commit_changelog):
+    base = commit_changelog("- a\n")
+    head = commit_changelog("- a\n++ b\n")
+    assert process_changelog.get_added_lines(base, head, "perf-changelog.yaml") == "++ b"
