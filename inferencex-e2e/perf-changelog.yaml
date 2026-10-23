@@ -10879,5 +10879,5 @@
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV) AgentX on GB200 and GB300 with vLLM image minimax-m31-flash-arm64-cu134 (https://vllm.ai/blog/2026-10-23-minimax-m31-flash)."
     - "Serve flags follow the recipes.vllm.ai GB200 TP4 recipe: block size 128, nvfp4 KV and indexer cache, prefill query quantization, FULL_AND_PIECEWISE graphs, hybrid KV cache manager disabled, minimax_m3 reasoning and tool parsers, 1M context."
     - "Search space: TP4 at conc 1-64 and DEP4 (TP1 x DP4 + EP4, vLLM Router) at conc 64-256, no KV offloading. DSpark is off until a golden AL curve exists."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4419
   scenario-type: [agentic-coding]
