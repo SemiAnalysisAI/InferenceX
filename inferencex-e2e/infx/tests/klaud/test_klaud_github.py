@@ -2403,6 +2403,49 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
     return report.split("\n-->\n", 1)[1]
 
 
+@pytest.mark.parametrize("ended", [True, False], ids=["ended-meanwhile", "still-running"])
+def test_finish_tolerates_only_a_cancel_refused_because_the_run_already_ended(
+    monkeypatch, ended
+):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+    )
+    pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": True,
+            "state": "closed", "labels": []}
+    run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
+           "created_at": "2026-10-15T00:00:00Z", "status": "in_progress", "conclusion": None}
+    finished = {**run, "status": "completed", "conclusion": "success"}
+    current, writes = [run], []
+
+    def write(_repository, path, method, _payload=None):
+        writes.append((method, path))
+        if path == "actions/runs/9/cancel":
+            if ended:
+                current[0] = finished
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return {}
+
+    monkeypatch.setattr(session, "pulls", lambda: [pull])
+    monkeypatch.setattr(session, "runs", lambda: list(current))
+    monkeypatch.setattr(session, "refresh", lambda _pull: pull)
+    monkeypatch.setattr(claims, "release_family", lambda *_: None)
+    monkeypatch.setattr(github, "items", lambda *_args: [])
+    monkeypatch.setattr(github, "read", lambda _repository, path: (
+        current[0] if path == "actions/runs/9" else pytest.fail(path)))
+    monkeypatch.setattr(github, "write", write)
+    outcome = CandidateOutcome(outcome="failed", phase="targeted", pull_request=7, run_ids=[9],
+                               repairs_used=0)
+
+    if ended:
+        assert session.finish(outcome).run_ids == [9]
+        assert writes == [("POST", "issues/7/comments"), ("POST", "actions/runs/9/cancel"),
+                          ("POST", "issues/7/comments")]
+    else:
+        with pytest.raises(subprocess.CalledProcessError):
+            session.finish(outcome)
+        assert writes == [("POST", "issues/7/comments"), ("POST", "actions/runs/9/cancel")]
+
+
 @pytest.mark.parametrize(("labels", "accepted"), [
     (["full-sweep-fail-fast"], True),
     (["full-sweep-enabled"], False),

@@ -426,7 +426,12 @@ class Session:
                     self.check_parent()
                     if pull:
                         self.refresh(pull)
-                    github.write(self.repository, f"actions/runs/{run['id']}/cancel", "POST")
+                    try:
+                        github.write(self.repository, f"actions/runs/{run['id']}/cancel", "POST")
+                    except (OSError, subprocess.SubprocessError):
+                        # GitHub refuses to cancel a run that ended after it was listed.
+                        if not terminal(github.read(self.repository, f"actions/runs/{run['id']}")):
+                            raise
             if any(not terminal(run) for run in self.runs()):
                 raise PendingCleanup(
                     "Cancellation requested; wait for terminal jobs then finish again"
