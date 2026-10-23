@@ -285,7 +285,8 @@ def validate_agentic_artifacts(
     artifacts_dir: Path,
 ) -> list[str]:
     """Validate agentic point, raw, and aggregate artifacts agree."""
-    point_rows = agentic_keys_from_paths(agentic_point_files(artifacts_dir))
+    point_files = agentic_point_files(artifacts_dir)
+    point_rows = agentic_keys_from_paths(point_files)
     errors = duplicate_identity_errors("agentic point", point_rows)
 
     results_bmk = artifacts_dir / "results_bmk"
@@ -301,14 +302,18 @@ def validate_agentic_artifacts(
         )
 
     point_names = {
-        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_")
-        for path in agentic_point_files(artifacts_dir)
+        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_") for path in point_files
     }
+    # A rerun attempt's results replace an earlier attempt whose raw dir still downloads.
+    superseded_names = {
+        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_")
+        for path in artifacts_dir.glob("bmk_agentic_*/**/*.json")
+    } - point_names
     raw_names = {
         path.name
         for path in artifacts_dir.iterdir()
         if path.is_dir() and path.name.startswith("agentic_")
-    }
+    } - superseded_names
     if point_names != raw_names:
         missing_raw = point_names - raw_names
         extra_raw = raw_names - point_names

@@ -947,6 +947,19 @@ def test_agentic_validation_requires_point_and_raw_artifacts(
     assert "agentic aggregate artifacts contain 1 unexpected row(s)" in errors
 
 
+def test_agentic_validation_ignores_raw_dir_of_superseded_attempt(tmp_path: Path) -> None:
+    for attempt in (1, 2):
+        name = f"agentic_dsv4_conc16_a{attempt}_runner"
+        point_dir = tmp_path / f"bmk_{name}"
+        point_dir.mkdir()
+        (point_dir / "point.json").write_text(
+            json.dumps({**agentic_result(), "run_attempt": attempt})
+        )
+        (tmp_path / name).mkdir()
+
+    assert validate_agentic_artifacts(tmp_path) == []
+
+
 def test_agentic_validation_rejects_duplicate_point_identity(
     tmp_path: Path,
 ) -> None:
