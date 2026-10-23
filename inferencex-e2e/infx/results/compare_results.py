@@ -102,7 +102,7 @@ BASELINE_QUERY = """
     JOIN workflow_runs wr ON wr.id = br.workflow_run_id
     WHERE c.hardware = %(hardware)s
       AND c.framework = %(framework)s
-      AND c.model LIKE %(model)s || '%%'
+      AND c.model = %(model)s
       AND c.precision = %(precision)s
       AND c.spec_method = %(spec_method)s
       AND c.disagg = %(disagg)s
