@@ -204,3 +204,10 @@ def test_goodput_counts_requests_within_the_slo(monkeypatch):
 
     assert result['duration'] == 4.0
     assert result['request_goodput'] == 0.25
+
+
+def test_profiler_shutdown_is_not_part_of_the_measured_duration(monkeypatch):
+    result = run_benchmark(monkeypatch, {'a': 0.1, 'b': 0.1}, profile=True)
+
+    assert result['duration'] == 4.0
+    assert result['request_throughput'] == 0.5
