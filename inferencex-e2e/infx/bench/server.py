@@ -98,8 +98,10 @@ def wait_chat_route(
     while True:
         now = time.monotonic()
         models = http_json(f"{base_url}/v1/models")
-        entries = models.get("data", []) if isinstance(models, dict) else []
-        served = any(isinstance(entry, dict) and entry.get("id") == model for entry in entries)
+        entries = models.get("data") if isinstance(models, dict) else None
+        served = isinstance(entries, list) and any(
+            isinstance(entry, dict) and entry.get("id") == model for entry in entries
+        )
         if served and http_status(chat_url) in {401, 403, 405}:
             break
         status = http_status(f"{base_url}/health")

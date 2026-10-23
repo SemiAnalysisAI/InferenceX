@@ -74,6 +74,24 @@ def test_chat_route_is_ready_once_the_model_is_served_or_health_holds(
     assert capsys.readouterr().out == f"{waited}OpenAI chat endpoint ready for model 'm': {chat}\n"
 
 
+def test_chat_route_keeps_waiting_through_a_null_model_list(http_server, capsys):
+    health = iter([503, 200])
+
+    def respond(_method: str, path: str) -> tuple[int, object]:
+        if path == "/v1/models":
+            return 200, {"data": None}
+        return (next(health), {}) if path == "/health" else (404, {})
+
+    url = http_server(respond)
+    chat = f"{url}/v1/chat/completions"
+
+    server.wait_chat_route(url, "m", (5, 0), poll_s=0.01)
+
+    assert capsys.readouterr().out == (
+        f"Waiting for {chat} ('m'): 0/5s\nOpenAI chat endpoint ready for model 'm': {chat}\n"
+    )
+
+
 def test_chat_route_gives_up_after_its_timeout(http_server, capsys):
     url = http_server(frontend(None, chat=404, health=503))
     chat = f"{url}/v1/chat/completions"
