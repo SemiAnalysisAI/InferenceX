@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:32c81e56e4680065b6ea3e0ca8363a00cd3ccb932d8990e83d799b8bbb58a4b3
+    container_image: rocm/atom-dev@sha256:05322b8651303be041b7adf2ee7d562815688ebe88ae2a11b3f8f2fc89adde61
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -54,9 +54,9 @@ base:
 
 # One variant per point. Every point admits 128 sequences and captures every
 # decode size through 32 plus 48, 64 and 128. The _dpa points (concurrency 32
-# and above) run DP attention with prefill TBO, keep each AIPerf session on one
-# DP rank and defer prefill so that at least 10 decode passes run between
-# prefills.
+# and above) run DP attention without TBO (TBO does not support SWA bounded
+# replay), keep each AIPerf session on one DP rank and defer prefill so that at
+# least 10 decode passes run between prefills.
 
 override_tp2_c1:
   roles:
@@ -104,7 +104,6 @@ override_tp2_c32_dpa:
       gpus: 2
       args: &dpa_args
         enable-dp-attention: true
-        enable-tbo: true
         # ATOM_DP_LB_REQ_EQUIV weights in-flight requests under least_tokens.
         dp-load-balance: least_tokens
       env: &dpa_env
