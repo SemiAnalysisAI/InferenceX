@@ -1048,6 +1048,18 @@ def bot_committed(commits: list[dict]) -> bool:
 def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
     sessions, targeted, planners = owned_activity(repository)
     live = live | sessions
+    claimed = []
+    for owner in claims.family_owners(repository):
+        candidate = owner.candidates[0]
+        if candidate.id in live:
+            continue
+        try:
+            parent = github.read(repository, f"actions/runs/{owner.run_id}")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            # A claim whose planner run cannot be read may still own live work.
+            live.add(candidate.id)
+            continue
+        claimed.append((owner, candidate, parent))
     pulls = github.items(repository, "pulls?state=open&per_page=100")
     abandoned = []
     for pull in pulls:
@@ -1069,17 +1081,8 @@ def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
         if candidate not in live:
             for run in runs:
                 github.write(repository, f"actions/runs/{run}/cancel", "POST")
-    for owner in claims.family_owners(repository):
-        candidate = owner.candidates[0]
-        if candidate.id in live:
-            continue
-        try:
-            parent = github.read(repository, f"actions/runs/{owner.run_id}")
-        except (OSError, ValueError, subprocess.SubprocessError):
-            # A claim whose planner run cannot be read may still own live work.
-            live.add(candidate.id)
-            continue
-        if terminal(parent):
+    for owner, candidate, parent in claimed:
+        if candidate.id not in live and terminal(parent):
             claims.release_family(repository, candidate, owner.run_id)
     if planners <= {int(os.environ.get("GITHUB_RUN_ID", "0"))}:
         finished: dict[int, bool] = {}

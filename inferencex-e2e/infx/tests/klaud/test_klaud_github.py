@@ -937,14 +937,24 @@ def test_abandoned_work_sweep_keeps_a_claim_whose_planner_run_is_gone(monkeypatc
     other = OwnedCandidate(id=f"{identity(family)[:16]}-{'6' * 16}", family=family, base="a" * 40)
     monkeypatch.setattr(claims, "family_owners", lambda _r: [
         Ownership(run_id=42, candidates=[candidate]), Ownership(run_id=77, candidates=[other])])
-    read = github.read
+    read, serve = github.read, github.items
+    draft = {**world.pull, "number": 8,
+             "head": {**world.pull["head"], "ref": f"klaud/auto-{other.id}"}}
 
     def gone(repository, path):
         if path == "actions/runs/77":
             raise subprocess.CalledProcessError(1, ["gh", "api"])
         return read(repository, path)
 
+    def items(repository, path, key=None):
+        if path == "pulls?state=open&per_page=100":
+            return [world.pull, draft]
+        if path == "pulls/8/commits?per_page=100":
+            return [{"committer": {"login": "github-actions[bot]"}}]
+        return serve(repository, path, key)
+
     monkeypatch.setattr(github, "read", gone)
+    monkeypatch.setattr(github, "items", items)
 
     assert lifecycle.sweep_abandoned("example/project", set()) == {other.id}
     assert world.released == [(candidate.id, 42)]
