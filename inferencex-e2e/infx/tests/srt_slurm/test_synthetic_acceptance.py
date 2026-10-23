@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.synthetic_acceptance import (
+    acceptance_length,
     build_overrides,
     plan_commands,
     selected_recipes,
@@ -200,6 +201,21 @@ def test_adaptive_dspark_skips_golden_acceptance_on_throughput(golden_dir: Path)
     spec = json.loads(tp8["roles"]["agg"]["args"]["speculative-config"])
     assert spec["synthetic_acceptance_length"] == 2.7
     assert spec["rejection_sample_method"] == "synthetic"
+
+
+def test_adaptive_verification_records_no_golden_acceptance(golden_dir: Path) -> None:
+    adaptive = {
+        "args": {
+            "speculative-config": json.dumps(
+                {"method": "dspark", "num_speculative_tokens": 5, "enable_adaptive_verification": True}
+            )
+        }
+    }
+    recipe = {"roles": {"prefill": adaptive, "decode": adaptive}}
+    env = {**ENV, "SPEC_DECODING": "dspark"}
+
+    assert acceptance_length(recipe, "vllm-disagg", env, golden_dir=golden_dir) is None
+    assert build_overrides(recipe, "vllm-disagg", env, golden_dir=golden_dir) == []
 
 
 @pytest.mark.parametrize("sampling", [None, "unknown"])

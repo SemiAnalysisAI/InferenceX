@@ -129,6 +129,13 @@ def acceptance_length(
     spec = spec_parameters(generation, engine)
     if not (synthetic and spec):
         return None
+    if engine == "vllm" and all(
+        spec_parameters(role, engine).get("enable_adaptive_verification") is True
+        for name, role in roles.items()
+        if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
+    ):
+        # build_overrides leaves adaptive verification real, so no golden AL is simulated.
+        return None
     al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)
     if (
         engine == "sglang"
