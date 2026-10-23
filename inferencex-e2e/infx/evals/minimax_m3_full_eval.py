@@ -59,7 +59,7 @@ class FullSuiteError(RuntimeError):
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
         """Refuse every redirect by returning None."""
-        return None  # noqa: RET501
+        return
 
 
 _NO_REDIRECT_OPENER = urllib.request.build_opener(_RejectRedirects())

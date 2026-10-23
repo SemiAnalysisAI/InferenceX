@@ -14,6 +14,7 @@ Usage:
     python collect_sweep_results.py <artifacts_dir> <output_dir>
 """
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -150,12 +151,8 @@ def load_experiment(exp_dir: Path) -> dict | None:
             metadata_file = exp_dir / "benchmark_metadata.json"
             total_time_sec = None
             if metadata_file.exists():
-                try:
-                    with open(metadata_file) as f:
-                        metadata = json.load(f)
-                    total_time_sec = metadata.get("benchmark_runtime_sec")
-                except Exception:  # noqa: BLE001, S110
-                    pass
+                with contextlib.suppress(Exception), open(metadata_file) as f:
+                    total_time_sec = json.load(f).get("benchmark_runtime_sec")
 
             if not total_time_sec or total_time_sec <= 0:
                 first_start_ms = df["start_time_ms"].min()

@@ -54,7 +54,7 @@ class NoRedirects(urllib.request.HTTPRedirectHandler):
         newurl: str,  # noqa: ARG002
     ) -> None:
         """Refuse every redirect by returning None."""
-        return None  # noqa: RET501
+        return
 
 
 def reject_nonfinite(value: str) -> Never:  # noqa: ARG001

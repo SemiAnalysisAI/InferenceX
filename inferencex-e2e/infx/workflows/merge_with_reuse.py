@@ -34,6 +34,18 @@ from typing import TYPE_CHECKING
 
 from infx.config import git_repository_root, project_root
 
+from .prepare_perf_changelog_merge import (
+    canonicalize_appended_links,
+    resolve_conflict_bytes,
+)
+from .sweep_runs import (
+    artifact_names,
+    completed_pr_runs,
+    has_reusable_result_artifacts,
+    pr_commit_shas,
+)
+from .validate_perf_changelog import read_git_file
+
 try:
     import git as gitpython
     import requests
@@ -70,17 +82,6 @@ if TYPE_CHECKING:
     from github.PullRequest import PullRequest
     from github.Repository import Repository
 
-from .prepare_perf_changelog_merge import (  # noqa: E402
-    canonicalize_appended_links,
-    resolve_conflict_bytes,
-)
-from .sweep_runs import (  # noqa: E402
-    artifact_names,
-    completed_pr_runs,
-    has_reusable_result_artifacts,
-    pr_commit_shas,
-)
-from .validate_perf_changelog import read_git_file  # noqa: E402
 
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
 DEFAULT_CHECK_TIMEOUT = 900

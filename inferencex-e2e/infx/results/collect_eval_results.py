@@ -1,3 +1,4 @@
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -59,14 +60,12 @@ def find_eval_sets(root: Path) -> list[Path]:
     extracted flat into root (no subdirectory), so check root itself too.
     """
     out: list[Path] = []
-    try:
+    with contextlib.suppress(Exception):
         if (root / "meta_env.json").exists():
             out.append(root)
         out.extend(
             d for d in sorted(root.iterdir()) if d.is_dir() and (d / "meta_env.json").exists()
         )
-    except Exception:  # noqa: BLE001, S110
-        pass
     return out
 
 
