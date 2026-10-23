@@ -464,6 +464,9 @@ def _validate_conc_fields(self: Any) -> Any:
     if has_list and not all(x > 0 for x in self.conc_list):
         raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0.")
 
+    if has_list and len(set(self.conc_list)) != len(self.conc_list):
+        raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must not repeat.")
+
     return self
 
 

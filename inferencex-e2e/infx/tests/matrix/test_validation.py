@@ -632,6 +632,13 @@ class TestSingleNodeSearchSpaceEntry:
             })
         assert "must be greater than 0" in str(exc_info.value)
 
+    def test_conc_list_values_must_be_unique(self):
+        with pytest.raises(ValidationError, match="must not repeat"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "conc-list": [4, 8, 4],
+            })
+
 
 class TestMultiNodeSearchSpaceEntry:
 
