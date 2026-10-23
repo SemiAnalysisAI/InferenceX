@@ -24,7 +24,7 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线。所有评估同一模型和模式的提交都使用同一条曲线。
 
-对于 Qwen3.5 的 srt-slurm 启动，`apply_srt_recipe` 通过 `infx/srt_slurm/synthetic_acceptance.py` 连接器，在应用调用方覆盖设置后，根据生成角色的 `speculative-num-steps` 和 `THINKING_MODE` 选择已提交的曲线。验证 token 不计为额外的 MTP 步数。对于采用合成接受的 SGLang MTP 吞吐测试，如果生成角色缺少 `speculative-num-draft-tokens`，或者其值不是等于 `speculative-num-steps + 1` 的整数，连接器会拒绝启动。无需手动设置接受长度。仅评测运行会移除合成设置并使用真实验证。
+对于 Qwen3.5 的 srt-slurm 启动，srt 驱动会运行 `infx/srt_slurm/synthetic_acceptance.py` 连接器，在应用调用方覆盖设置后，根据生成角色的 `speculative-num-steps` 和 `THINKING_MODE` 选择已提交的曲线。验证 token 不计为额外的 MTP 步数。对于采用合成接受的 SGLang MTP 吞吐测试，如果生成角色缺少 `speculative-num-draft-tokens`，或者其值不是等于 `speculative-num-steps + 1` 的整数，连接器会拒绝启动。无需手动设置接受长度。仅评测运行会移除合成设置并使用真实验证。
 
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
@@ -78,11 +78,11 @@ python -m atom.entrypoints.openai_server \
 
 一键触发的 [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.yml) 工作流最初由 [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) 引入，随后在 [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706) 中扩展到更多 MTP 和 EAGLE3 模型。它取代了 [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592) 中早期手工整理的参考值，使精确命令、日志、输出和生成的 YAML 都可以从同一次运行中审计。其流程如下：
 
-1. 维护者触发工作流，指定模型、模型前缀、vLLM 镜像、草稿长度（通常为 1–8）、思考模式、`category=coding` 和 `output-len=4096`。
-2. 工作流在 B300 runner 上启动模型，并选择 [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench) 下对应的收集脚本。
-3. 对每个“思考模式 × 草稿长度”组合，收集脚本使用真实 MTP 或 EAGLE3 解码以及该模型的生产采样和聊天模板设置，启动一个干净的 vLLM 服务。
-4. 收集脚本读取 vLLM 累计的已接受 token 和验证草稿计数器，通过 `vllm bench serve` 运行 SPEED-Bench Qualitative `coding` 类别中的全部提示词，然后再次读取计数器。
-5. 按以下公式计算平均接受长度：
+1. 维护者触发工作流，指定模型、模型前缀、服务框架（`vllm` 或 `sglang`）、镜像、草稿长度（通常为 1–8）、思考模式、`category=coding` 和 `output-len=4096`。
+2. 工作流在 B300 runner 上启动模型，并选择 [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench) 下对应的 `<model-prefix>_fp4_b300_<framework>.sh` 收集脚本。
+3. 对每个“思考模式 × 草稿长度”组合，收集脚本使用真实投机解码以及该模型的生产采样和聊天模板设置，启动一个干净的 vLLM 或 SGLang 服务。
+4. vLLM 收集脚本读取 vLLM 累计的已接受 token 和验证草稿计数器，通过 `vllm bench serve` 运行 SPEED-Bench Qualitative `coding` 类别中的全部提示词，然后再次读取计数器。SGLang 收集脚本通过 `sglang.bench_serving` 运行相同的提示词，并记录其报告的 `accept_length`。
+5. vLLM 收集脚本按以下公式计算平均接受长度：
 
    ```text
    AL = 1 + (delta accepted draft tokens / delta verification drafts)
@@ -159,7 +159,7 @@ python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39（默
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```
 
-`lookup` 接受 InferenceX 模型前缀、引擎的方法名（`mtp`、`eagle`、`nextn`、`eagle3`、`dspark`）以及 `num_speculative_tokens`。`--draft-model` 用于选择 MiniMax GQA 曲线，`--draft-sample-method` 用于在两条 Kimi DSpark 曲线之间选择。缺少曲线或数值时以非零状态退出，与启动时的失败方式一致。
+`lookup` 接受 InferenceX 模型前缀、引擎的方法名（`mtp`、`eagle`、`nextn`、`eagle3`、`dspark`、`dflash`）以及 `num_speculative_tokens`。`--draft-model` 用于选择 MiniMax GQA 曲线，`--draft-sample-method` 用于在两条 Kimi DSpark 曲线之间选择。缺少曲线或数值时以非零状态退出，与启动时的失败方式一致。
 
 ## 主要参考资料
 

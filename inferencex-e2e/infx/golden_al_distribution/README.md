@@ -24,8 +24,8 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 
 Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves. All submissions evaluating the same model and mode use the same curve.
 
-For Qwen3.5 srt-slurm launches, `apply_srt_recipe` uses the
-`infx/srt_slurm/synthetic_acceptance.py` connector to select the committed curve
+For Qwen3.5 srt-slurm launches, the srt driver runs the
+`infx/srt_slurm/synthetic_acceptance.py` connector, which selects the committed curve
 from the generation role's `speculative-num-steps` and `THINKING_MODE` after
 caller overrides. The verification token is not an additional MTP step. For
 SGLang MTP synthetic throughput, the connector rejects a generation role whose
@@ -85,11 +85,11 @@ This policy follows the same broad principle as MLPerf Inference: prescribe the 
 
 The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.yml) workflow, introduced in [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) and extended to additional MTP and EAGLE3 models in [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706), performs the following process. It superseded the early manually assembled reference in [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592), making the exact commands, logs, outputs, and generated YAML auditable from one run.
 
-1. A maintainer dispatches the workflow with a model, model prefix, vLLM image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
-2. The workflow launches the model on a B300 runner and selects the matching collector under [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench).
-3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM server with real MTP or EAGLE3 decoding and the model's production sampling/chat-template settings.
-4. The collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again.
-5. It computes the mean acceptance length as:
+1. A maintainer dispatches the workflow with a model, model prefix, serving framework (`vllm` or `sglang`), image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
+2. The workflow launches the model on a B300 runner and selects the matching `<model-prefix>_fp4_b300_<framework>.sh` collector under [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench).
+3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM or SGLang server with real speculative decoding and the model's production sampling/chat-template settings.
+4. A vLLM collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again. The SGLang collector runs the same prompts through `sglang.bench_serving` and records the `accept_length` it reports.
+5. A vLLM collector computes the mean acceptance length as:
 
    ```text
    AL = 1 + (delta accepted draft tokens / delta verification drafts)
@@ -166,7 +166,7 @@ python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39 (thin
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```
 
-`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
+`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`, `dflash`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
 
 ## Primary references
 
