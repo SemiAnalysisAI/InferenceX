@@ -563,7 +563,7 @@ def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
             reason = f"{number(point.values.request_errors)} request error" + (
                 "s" if point.values.request_errors != 1 else ""
             )
-            issues.setdefault(reason, []).append(label)
+            issues.setdefault(reason, []).append(shown)
     return "\n\n".join(
         part
         for part in (

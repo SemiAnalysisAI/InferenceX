@@ -2746,6 +2746,23 @@ def test_agentx_deltas_compare_only_the_same_replay_corpus(old, new, cell, note)
     assert notes == ([f"**Note:** All rows: Δ N/A: {note}."] if note else [])
 
 
+def test_baseline_notes_name_concurrency_rows_like_their_table():
+    points = [
+        agentx_point("cc", output_tps_gpu=10.0, request_errors=2),
+        agentx_point("cc", output_tps_gpu=10.0).model_copy(update={
+            "key": "e" * 64, "label": "AgentX c8 TP8 EP1 eeeeee", "conc": 8}),
+    ]  # fmt: skip
+    baseline = reporting.Baseline(
+        family=f"configs/nvidia-master.yaml:{KEY}", date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[], points=points,
+    )  # fmt: skip
+
+    text = reporting.baseline_table(baseline)
+
+    assert "| 4 | N/A | 10 | N/A | N/A |" in text
+    assert text.endswith("**Note:** c4: 2 request errors.")
+
+
 def eval_entry(tp):
     return {
         "model-prefix": "dsr1", "runner": "cluster:fixture-a", "framework": "sglang",
