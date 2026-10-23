@@ -170,6 +170,19 @@ def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, ex
     assert {name: env[name] for name in HOST} == expected
 
 
+def test_a_role_without_additional_settings_arrives_as_null_and_sets_no_names():
+    record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
+    cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    request = _request(
+        PREFILL_ADDITIONAL_SETTINGS='["SHARED=point"]', DECODE_ADDITIONAL_SETTINGS="null",
+        **{**HOST, "SHARED": "point"},
+    )
+
+    env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
+
+    assert {name: env[name] for name in HOST} == {"CLUSTER": "cluster", "LATER": "later", "SHARED": "point"}
+
+
 @pytest.mark.parametrize(("settings", "kind"), [("5", "int"), ("true", "bool"), ('{"SHARED=point": 1}', "dict")])
 def test_additional_settings_that_are_not_a_list_are_rejected(settings, kind):
     record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}

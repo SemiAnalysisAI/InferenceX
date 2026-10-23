@@ -141,6 +141,9 @@ def point_settings(request: LaunchRequest) -> frozenset[str]:
             values = json.loads(request.env.get(name) or "[]")
         except ValueError:
             continue
+        # The workflow passes toJSON of a role without additional-settings, which is null.
+        if values is None:
+            continue
         if not isinstance(values, list):
             kind = type(values).__name__
             raise RequestError(f"{name} must be a JSON list of NAME=value strings, got {kind}")
