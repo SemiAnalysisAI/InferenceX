@@ -1069,9 +1069,15 @@ def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
                 github.write(repository, f"actions/runs/{run}/cancel", "POST")
     for owner in claims.family_owners(repository):
         candidate = owner.candidates[0]
-        if candidate.id not in live and terminal(
-            github.read(repository, f"actions/runs/{owner.run_id}")
-        ):
+        if candidate.id in live:
+            continue
+        try:
+            parent = github.read(repository, f"actions/runs/{owner.run_id}")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            # A claim whose planner run cannot be read may still own live work.
+            live.add(candidate.id)
+            continue
+        if terminal(parent):
             claims.release_family(repository, candidate, owner.run_id)
     if planners <= {int(os.environ.get("GITHUB_RUN_ID", "0"))}:
         finished: dict[int, bool] = {}

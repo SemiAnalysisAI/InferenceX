@@ -868,8 +868,8 @@ def test_recovery_skips_an_unreadable_owner_and_reconciles_the_others(
     monkeypatch, tmp_path, capsys, stale
 ):
     world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
-    other = OwnedCandidate(id="5" * 16 + "-" + "6" * 16,
-                           family="configs/amd-master.yaml:other", base="a" * 40)
+    family = "configs/amd-master.yaml:other"
+    other = OwnedCandidate(id=f"{identity(family)[:16]}-{'6' * 16}", family=family, base="a" * 40)
     owners = [Ownership(run_id=42, candidates=[world.session.candidate])]
     if stale == "deleted-claim-parent":
         owners.append(Ownership(run_id=77, candidates=[other]))
@@ -910,6 +910,31 @@ def test_recovery_skips_an_unreadable_owner_and_reconciles_the_others(
         assert summary.read_text() == rerun
         assert "::warning::Klaud: ownership artifact 5 is unreadable; skipped.\n" in (
             capsys.readouterr().out)
+
+
+def test_abandoned_work_sweep_keeps_a_claim_whose_planner_run_is_gone(monkeypatch):
+    world = ended_session_sweep(monkeypatch, sessions=("failure",))
+    candidate = world.session.candidate
+    family = "configs/amd-master.yaml:other"
+    other = OwnedCandidate(id=f"{identity(family)[:16]}-{'6' * 16}", family=family, base="a" * 40)
+    monkeypatch.setattr(claims, "family_owners", lambda _r: [
+        Ownership(run_id=42, candidates=[candidate]), Ownership(run_id=77, candidates=[other])])
+    read = github.read
+
+    def gone(repository, path):
+        if path == "actions/runs/77":
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return read(repository, path)
+
+    monkeypatch.setattr(github, "read", gone)
+
+    assert lifecycle.sweep_abandoned("example/project", set()) == {other.id}
+    assert world.released == [(candidate.id, 42)]
+    assert world.writes == [
+        ("DELETE", f"git/refs/heads/klaud/recovery-42-{candidate.id}"),
+        ("POST", "issues/7/comments"), ("PATCH", "pulls/7"),
+        ("DELETE", f"git/refs/heads/klaud/auto-{candidate.id}"),
+    ]
 
 
 def test_recovery_warns_why_a_passed_final_sweep_failed_validation(monkeypatch, capsys):
