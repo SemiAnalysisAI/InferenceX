@@ -11016,5 +11016,5 @@
     - "GB200 has no cookbook cell; it runs the GB300 (4-GPU) layouts, with B200's sm_100 High-Throughput memory settings (mem-fraction-static 0.75, prefill graphs to 16384)."
     - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
     - "Search space: Balanced TP4 at conc 1-32; TP4 + EP4 at conc 64-128."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4444
   scenario-type: [agentic-coding]
