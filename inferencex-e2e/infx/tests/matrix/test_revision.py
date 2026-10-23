@@ -271,6 +271,8 @@ from {origin} import NAME
 print(json.dumps({{"planner": NAME, "args": sys.argv[1:], "cwd": os.getcwd(),
                   "root": os.environ["INFERENCEX_REPOSITORY_ROOT"], "env": dict(os.environ)}}))
 print("planner diagnostics", file=sys.stderr)
+if "--kill" in sys.argv:
+    os.kill(os.getpid(), 9)
 sys.exit(int(sys.argv[sys.argv.index("--exit") + 1]) if "--exit" in sys.argv else 0)
 """
 
@@ -316,6 +318,14 @@ def test_cli_runs_the_checkouts_own_planner_and_forwards_its_output_and_status(t
         "cwd": str(checkout.resolve()), "root": str(checkout.resolve()),
     }
     assert result.stderr == "planner diagnostics\n"
+
+
+def test_cli_exits_128_plus_the_signal_that_killed_the_tool(tmp_path):
+    checkout = planner_checkout(tmp_path / "checkout", "module")
+
+    result = run_cli(tmp_path, "plan", str(checkout), "--kill")
+
+    assert result.returncode == 137, result.stderr
 
 
 def test_cli_runs_the_tool_without_the_callers_credentials(tmp_path):

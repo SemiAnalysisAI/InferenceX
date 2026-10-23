@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
+from infx.bench.proc import status
 from infx.config import MASTER_CONFIGS, git_repository_root, project_root
 
 
@@ -349,7 +350,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         command, env = revision.invocation(TOOLS[options.tool], options.args)
     except ValueError as error:
         parser.error(str(error))
-    raise SystemExit(subprocess.run(command, cwd=revision.root, env=env, check=False).returncode)
+    raise SystemExit(
+        status(subprocess.run(command, cwd=revision.root, env=env, check=False).returncode)
+    )
 
 
 if __name__ == "__main__":
