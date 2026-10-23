@@ -37,7 +37,7 @@ from infx.config import git_repository_root, project_root
 try:
     import git as gitpython
 
-    from github import Github, GithubException
+    from github import Github, GithubException, RateLimitExceededException
 except ImportError:
     gitpython = None  # type: ignore[assignment]
     Github = None  # type: ignore[assignment, misc]
@@ -48,6 +48,9 @@ except ImportError:
         status = 0
         data: object = None
         headers: dict = {}  # type: ignore[type-arg]  # noqa: RUF012
+
+    class RateLimitExceededException(GithubException):  # type: ignore[no-redef]
+        """Stub when PyGithub is not installed."""
 
 
 _WORKFLOWS_AVAILABLE = gitpython is not None
@@ -143,15 +146,17 @@ def _make_github(token: str) -> Github:
     return Github(login_or_token=token, base_url=base_url)
 
 
-_TRANSIENT_HTTP_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
+_TRANSIENT_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 def _is_transient_error(exc: Exception) -> bool:
     """Return True for API errors safe to retry during check polling.
 
-    Covers server errors (5xx), rate limits (403/429), and connection-level
-    failures from requests/urllib3.
+    Covers server errors (5xx), rate limits (429, and 403 rate-limit
+    responses), and connection-level failures from requests/urllib3.
     """
+    if isinstance(exc, RateLimitExceededException):
+        return True
     if isinstance(exc, GithubException):
         return exc.status in _TRANSIENT_HTTP_STATUSES
     return isinstance(exc, (ConnectionError, TimeoutError))

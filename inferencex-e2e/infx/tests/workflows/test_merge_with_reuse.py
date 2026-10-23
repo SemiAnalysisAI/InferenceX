@@ -619,6 +619,19 @@ class TestTransientErrors:
         )
         assert _is_transient_error(exc) is True
 
+    @pytest.mark.parametrize(
+        ("exc_type", "message", "expected"),
+        [
+            ("GithubException", "Resource not accessible by integration", False),
+            ("RateLimitExceededException", "API rate limit exceeded for user", True),
+        ],
+    )
+    def test_github_403_is_transient_only_when_rate_limited(self, exc_type, message, expected):
+        import github
+
+        exc = getattr(github, exc_type)(status=403, data={"message": message}, headers={})
+        assert _is_transient_error(exc) is expected
+
     def test_github_404_is_not_transient(self):
         from github import GithubException
 
