@@ -1557,7 +1557,7 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
 # with DP attention (no TBO) from concurrency 32.
 # Five-token DSpark uses golden AL 3.51 for throughput and real acceptance for eval.
 dsv41flash-fp4-mi355x-atom-agentic-dspark:
-  image: rocm/atom-dev:nightly_202610231458
+  image: rocm/atom-dev:nightly_202610231734
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
