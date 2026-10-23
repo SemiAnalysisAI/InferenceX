@@ -23,8 +23,9 @@ base:
       nodes: 1
       workers: 1
       # Serve flags follow the Blackwell TP4 recipe at
-      # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash, without DSpark:
-      # MiniMax-M3.1-Flash has no golden AL curve yet.
+      # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash. DSpark uses the
+      # checkpoint's built-in drafter; throughput runs replace block rejection
+      # with the golden AL (infx/golden_al_distribution/minimaxm31flash_dspark.yaml).
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -61,6 +62,8 @@ zip_override_tp4:
       args:
         tensor-parallel-size: 4
         max-num-seqs: [2, 8, 16, 32, 64]
+        # Seven-token DSpark, as in the vLLM day-0 GB300 AgentX frontier.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: ['1', '4', '8', '16', '32']
@@ -84,6 +87,8 @@ zip_override_dep4:
         data-parallel-size: 4
         enable-expert-parallel: true
         max-num-seqs: [32, 64, 128]
+        # Three-token DSpark, as in the recipes.vllm.ai Blackwell recipe.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: ['64', '128', '256']

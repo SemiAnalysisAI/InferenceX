@@ -10873,11 +10873,11 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
-    - minimaxm31flash-fp4-b300-vllm-agentic
-    - minimaxm31flash-fp4-b200-vllm-agentic
+    - minimaxm31flash-fp4-b300-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
-    - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX recipes on B300 and B200 with the vLLM day-0 image vllm/vllm-openai:minimax-m31-flash."
+    - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX recipe on B300 with the vLLM day-0 image vllm/vllm-openai:minimax-m31-flash."
     - "Serve flags follow recipes.vllm.ai Blackwell TP4: block-size 128, nvfp4 KV and indexer cache, prefill query quantization, FULL_AND_PIECEWISE graphs, minimax_m3 parsers, text-only."
-    - "TP4 c1-c32 and DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c256 on B300, c64-c128 on B200. DSpark is off until a golden AL curve exists for this model."
+    - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); synthetic acceptance from the golden curve minimaxm31flash_dspark.yaml (#4425)."
+    - "TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c256 drafting 3 tokens (golden AL 2.88)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4421
