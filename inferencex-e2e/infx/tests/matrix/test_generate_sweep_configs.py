@@ -2361,6 +2361,19 @@ class TestCommandLine:
             ([4], False, False), ([64], True, True)]
         assert result[1]['eval-conc'] == 64
 
+    def test_smoke_does_not_turn_a_standalone_eval_into_an_idle_row(self):
+        from infx.matrix.generate import smoke_entries
+        shape = {'tp': 4, 'model': 'm'}
+        vendor = {**shape, 'conc': 4, 'run-eval': True, 'eval-framework': 'minimax-vendor'}
+        gsm8k = {**shape, 'conc': 8, 'run-eval': True, 'eval-only': True,
+                 'eval-framework': 'lm-eval'}
+
+        result = smoke_entries([vendor, gsm8k])
+
+        assert [
+            (row['conc'], row.get('eval-only', False), row['run-eval']) for row in result
+        ] == [(4, False, False), (4, True, True), (8, True, True)]
+
     def test_all_evals_batches_each_multinode_concurrency(
         self,
         monkeypatch,

@@ -116,7 +116,9 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
 
 def smoke_entries(entries: list[dict]) -> list[dict]:
-    benchmarks = trim_conc([{**row, "run-eval": False} for row in entries])
+    benchmarks = trim_conc(
+        [{**row, "run-eval": False} for row in entries if not row.get(Fields.EVAL_ONLY.value)]
+    )
     evals = []
     for row in entries:
         if not row.get("run-eval"):
