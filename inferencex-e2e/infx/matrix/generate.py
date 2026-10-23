@@ -1650,25 +1650,31 @@ def main() -> list[dict]:
         "--min-conc",
         type=int,
         required=False,
-        help="Minimum concurrency value to include (filters out lower concurrency values)",
+        help=(
+            "Drop concurrencies below this value. A single-node fixed-sequence "
+            "conc-start/conc-end range that begins lower starts at this value instead."
+        ),
     )
     full_sweep_parser.add_argument(
         "--max-conc",
         type=int,
         required=False,
-        help="Maximum concurrency value to include (filters out higher concurrency values)",
+        help=(
+            "Drop concurrencies above this value. A single-node fixed-sequence range that "
+            "ends higher ends at it, and a fixed-sequence config with nothing left runs at it."
+        ),
     )
     full_sweep_parser.add_argument(
         "--max-tp",
         type=int,
         required=False,
-        help="Maximum tensor parallelism value to include (single-node only)",
+        help="Drop single-node fixed-sequence configs whose TP exceeds this value",
     )
     full_sweep_parser.add_argument(
         "--max-ep",
         type=int,
         required=False,
-        help="Maximum expert parallelism value to include (single-node only)",
+        help="Cap the EP of single-node fixed-sequence configs at this value",
     )
     full_sweep_parser.add_argument(
         "--single-node",
