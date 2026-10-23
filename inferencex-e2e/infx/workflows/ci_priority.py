@@ -17,6 +17,21 @@ import yaml
 from infx.config import repository_root
 
 SCORE_QUANTUM = Decimal("0.001")
+POLICY_KEYS = frozenset({"version", "base-score", "adjustments", "patchwork-score"})
+ADJUSTMENT_KEYS = frozenset(
+    {
+        "additional-node",
+        "event",
+        "multi-node",
+        "agentic",
+        "eval-only",
+        "checklist-complete",
+        "precision",
+        "spec-decoding",
+        "framework-prefix",
+        "model-prefix",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +50,11 @@ def load_policy(path: str | Path) -> dict[str, Any]:
         policy = yaml.safe_load(policy_file)
     if policy.get("version") != 1:
         raise ValueError(f"Unsupported CI priority policy version: {policy.get('version')}")
+    unknown = sorted(set(policy) - POLICY_KEYS) + sorted(
+        f"adjustments.{key}" for key in set(policy.get("adjustments") or {}) - ADJUSTMENT_KEYS
+    )
+    if unknown:
+        raise ValueError(f"Unknown CI priority policy keys: {', '.join(unknown)}")
     return policy
 
 
