@@ -6,6 +6,16 @@ base:
     source:
       wheel: 1.6.0.dev20261016
     request_plane: tcp
+    sidecar: true
+    sidecar_args:
+      - --grpc-connections
+      - "8"
+      - --grpc-startup-deadline-secs
+      - "3600"
+      - --dyn-tool-call-parser
+      - minimax_m3
+      - --dyn-reasoning-parser
+      - minimax_m3
   health_check:
     max_attempts: 270
     interval_seconds: 10
@@ -16,7 +26,6 @@ base:
     type: trtllm
     numa_memory_bind: true
     served_model_name: nvidia/MiniMax-M3-NVFP4
-    publish_metrics: true
   roles:
     prefill:
       nodes: 1
@@ -65,6 +74,7 @@ base:
         DYN_PUBLISH_KV_EVENTS: '0'
         DYN_REASONING_PARSER: minimax_m3
         DYN_TOOL_CALL_PARSER: minimax_m3
+        PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: upb
       args:
         num_postprocess_workers: 4
         cuda_graph_config:
@@ -84,7 +94,7 @@ base:
           enable_block_reuse: true
           block_reuse_config:
             policy: per_conversation
-          host_cache_size: 171798691840
+          host_cache_size: 240518168576
           disk_cache_size: 0
           dtype: nvfp4
           tokens_per_block: 128
@@ -122,8 +132,8 @@ base:
         trust_remote_code: true
         max_seq_len: 1048576
         print_iter_log: true
-        enable_iter_perf_stats: true
         iter_perf_stats_interval: 20
+        enable_iter_perf_stats: true
         enable_autotuner: true
         max_batch_size: 32
         max_num_tokens: 8192
@@ -178,6 +188,7 @@ base:
         DYN_PUBLISH_KV_EVENTS: '0'
         DYN_REASONING_PARSER: minimax_m3
         DYN_TOOL_CALL_PARSER: minimax_m3
+        PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: upb
       args:
         enable_lm_head_tp_in_adp: false
         num_postprocess_workers: 4
@@ -223,9 +234,9 @@ base:
         trust_remote_code: true
         max_seq_len: 1048576
         print_iter_log: true
+        enable_iter_perf_stats: true
         iter_perf_stats_interval: 20
         enable_autotuner: true
-        enable_iter_perf_stats: true
         max_num_tokens: 120
         enable_attention_dp: false
         tensor_parallel_size: 4
@@ -254,7 +265,7 @@ base:
   benchmark:
     use_chat_template: true
     env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: ''
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
       SERVED_MODEL_NAME: nvidia/MiniMax-M3-NVFP4

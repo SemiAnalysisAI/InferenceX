@@ -21,3 +21,67 @@ index d0d2bae3..96fb0f56 100644
          )
 
          while proc.poll() is None:
+diff --git a/tests/test_post_eval.py b/tests/test_post_eval.py
+index d0e1b309..58439deb 100644
+--- a/tests/test_post_eval.py
++++ b/tests/test_post_eval.py
+@@ -7,6 +7,7 @@ from __future__ import annotations
+
+ import os
+ import threading
++from dataclasses import replace
+ from pathlib import Path
+ from unittest.mock import MagicMock, patch
+
+@@ -115,3 +116,51 @@ def test_validation() -> None:
+         _load("post_eval:\n  passthrough_env:\n    - 'not a name'\n")
+     with pytest.raises(ValidationError, match="command, if set, must be non-empty"):
+         _load("post_eval:\n  command: []\n")
++
++
++@pytest.mark.parametrize("placement, expected_node", [("head", "node0"), ("first_decode", "node1")])
++@pytest.mark.parametrize("custom_command", [False, True])
++@pytest.mark.parametrize("heterogeneous", [False, True])
++def test_eval_runs_on_public_endpoint_node(
++    tmp_path: Path, placement: str, expected_node: str, custom_command: bool, heterogeneous: bool
++) -> None:
++    data = yaml.safe_load(RECIPE)
++    data["frontend"]["placement"] = {"node": placement}
++    data["roles"] = {
++        "prefill": {"nodes": 1, "workers": 1, "gpus": 8},
++        "decode": {"nodes": 1, "workers": 1, "gpus": 8},
++    }
++    if custom_command:
++        data["post_eval"] = {"command": ["bash", "/eval.sh", "{endpoint}"]}
++    config = SrtConfig.Schema().load(data)
++    runtime = replace(
++        _runtime(tmp_path),
++        nodes=Nodes(
++            head="node0",
++            bench="node0",
++            infra="node0",
++            worker=("node0", "node1"),
++            het=heterogeneous,
++            prefill_group=("node0",),
++            decode_group=("node1",),
++        ),
++    )
++    orchestrator = SweepOrchestrator(config=config, runtime=runtime)
++    proc = MagicMock()
++    proc.poll.return_value = 0
++    proc.returncode = 0
++    with (
++        patch.dict(os.environ, {"RUN_EVAL": "true", "EVAL_ONLY": "false"}),
++        patch("srtctl.cli.do_sweep.wait_for_port", return_value=True),
++        patch("srtctl.cli.do_sweep.start_srun_process", return_value=proc) as srun,
++    ):
++        assert orchestrator._run_post_eval(threading.Event()) == 0
++    launched = srun.call_args.kwargs
++    assert launched["nodelist"] == [expected_node]
++    assert launched["het_group"] == ((0 if placement == "head" else 1) if heterogeneous else None)
++    assert launched["command"] == [
++        "bash",
++        "/eval.sh" if custom_command else "/srtctl-benchmarks/lm-eval/bench.sh",
++        "http://localhost:8000",
++        *([] if custom_command else ["/infmax-workspace"]),
++    ]

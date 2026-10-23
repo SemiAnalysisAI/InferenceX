@@ -6,6 +6,16 @@ base:
     source:
       wheel: 1.6.0.dev20261016
     request_plane: tcp
+    sidecar: true
+    sidecar_args:
+      - --grpc-connections
+      - "8"
+      - --grpc-startup-deadline-secs
+      - "3600"
+      - --dyn-tool-call-parser
+      - minimax_m3
+      - --dyn-reasoning-parser
+      - minimax_m3
   health_check:
     max_attempts: 270
     interval_seconds: 10
@@ -16,7 +26,6 @@ base:
     type: trtllm
     numa_memory_bind: true
     served_model_name: nvidia/MiniMax-M3-NVFP4
-    publish_metrics: true
   roles:
     agg:
       nodes: 1
@@ -39,28 +48,28 @@ base:
         PYTHONNOUSERSITE: '1'
         TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
         TRTLLM_TORCH_COMPILE_CONTEXT_ONLY: '1'
+        TRTLLM_M3_NVFP4_STANDARD_STAGE: '1'
+        TRTLLM_M3_BLACKWELL_RUBIN_OPTS: '1'
+        M3AX_STACK_A: '1'
+        M3AX_MSA_PREWARM_VARIANTS: '1'
+        M3AX_SPARSE_DECODE_PREWARM: '1'
+        M3_O8_SPARSE_TABLES: '1'
+        M3_O12A_PROXY_SPLIT: '0'
+        M3_L1_FMHA: '1'
         TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
         DYN_TRTLLM_KV_BLOCK_SIZE: '128'
         DYN_TOKENIZER: fastokens
         DYN_PUBLISH_KV_EVENTS: '0'
         DYN_REASONING_PARSER: minimax_m3
         DYN_TOOL_CALL_PARSER: minimax_m3
+        PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: upb
       args:
         max_seq_len: 1048576
         max_num_tokens: 16384
         cuda_graph_config:
           enable_padding: true
-        torch_compile_config:
-          enable_fullgraph: true
-          enable_inductor: false
-          enable_userbuffers: true
-          max_num_streams: 3
-          enable_piecewise_cuda_graph: true
-          capture_num_tokens:
-          - 1
-          - 512
-          - 1024
-          - 2048
+        prefill_cuda_graph_backend: breakable
+        prefill_capture_num_tokens: [1, 512, 1024, 2048]
         moe_config:
           backend: TRTLLM
           use_low_precision_moe_combine: true
@@ -79,7 +88,7 @@ base:
           use_kv_cache_manager_v2: true
           dtype: nvfp4
           event_buffer_max_size: 0
-          host_cache_size: 171798691840
+          host_cache_size: 225485783040
           iteration_stats_interval: 20
         speculative_config:
           decoding_type: Eagle3
@@ -122,7 +131,7 @@ base:
   benchmark:
     use_chat_template: true
     env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: ''
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
       SERVED_MODEL_NAME: nvidia/MiniMax-M3-NVFP4
@@ -146,8 +155,6 @@ override_tp2_mtp5_c25:
         max_batch_size: 25
         cuda_graph_config:
           batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 19, 21, 23, 25]
-        speculative_config:
-          max_draft_len: 5
 
 override_tp2_mtp3_c30:
   name: dynamo-agg-gb300-tp2-mtp3-c30-eagle3
