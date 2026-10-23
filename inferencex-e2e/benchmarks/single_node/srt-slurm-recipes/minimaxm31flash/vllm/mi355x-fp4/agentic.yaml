@@ -5,7 +5,7 @@
 # experts stored in OCP MXFP4, run as W4A4 on the AITER MoE; every other layer
 # and the dspark/ draft as in MiniMaxAI/MiniMax-M3.1-Flash). Long prefill
 # steps run with dual-batch overlap (DBO). Sequence-parallel prefill
-# (VLLM_ROCM_MINIMAX_M3_SP_PREFILL) stays off: the released image does not
+# (VLLM_ROCM_MINIMAX_M3_SP_PREFILL) stays off: the image does not
 # enable it on this checkpoint.
 base:
   schema: 2
