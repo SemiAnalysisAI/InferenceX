@@ -707,6 +707,23 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "SetupFailed", "srt-setup.log")
 
 
+def test_a_failed_uv_download_fails_the_uv_install(harness):
+    fakes = Path(harness.env["PATH"].split(os.pathsep)[0])
+    (fakes / "uv").unlink()
+    (fakes / "curl").write_text("#!/bin/bash\necho 'curl: (6) Could not resolve host' >&2\nexit 6\n")
+    (fakes / "curl").chmod(0o755)
+    env = lane_env(
+        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1
+    error = job_event(harness.workspace)["error"]
+    assert (error["stage"], error["type"], error["message"]) == (
+        "prepare", "LaunchError", "installing uv failed (exit 6)",
+    )  # fmt: skip
+
+
 @pytest.mark.parametrize(("cluster_id", "env", "message"), [
     ("h200-dgxc", dict(MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-vllm"), "Unsupported framework"),
     ("b200-nscale", dict(MODEL_PREFIX="dsv4", PRECISION="fp4", FRAMEWORK="dynamo-trt"), "only dynamo-vllm"),

@@ -113,7 +113,8 @@ def _uv(run: SrtRun) -> str:
     install_dir = root / "bin" if root is not None else Path.home() / ".local/bin"
     install_dir.mkdir(parents=True, exist_ok=True)
     env = {**run.env, "UV_INSTALL_DIR": str(install_dir), "UV_NO_MODIFY_PATH": "1"}
-    _checked(proc.run(["sh", "-c", f"curl -LsSf {UV_INSTALLER} | sh"], env=env), "installing uv")
+    installer = f"curl -LsSf {UV_INSTALLER} | sh"
+    _checked(proc.run(["bash", "-o", "pipefail", "-c", installer], env=env), "installing uv")
     run.prepend_path(install_dir)
     return str(install_dir / "uv")
 
