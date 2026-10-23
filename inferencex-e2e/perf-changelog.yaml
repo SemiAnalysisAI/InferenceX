@@ -10920,3 +10920,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/yichaozhu/k3-umbp-distributed-scale
   scenario-type: [agentic-coding]
   no-evals: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale
+  description:
+    - "Collect c70 startup memory diagnostics and one routed request without AgentX profiling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/yichaozhu/k3-c70-load-diagnostic
+  scenario-type: [agentic-coding]
+  no-evals: true

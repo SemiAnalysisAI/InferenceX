@@ -2,7 +2,7 @@ base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-umbp-agentic
   slurm:
-    time_limit: 03:00:00
+    time_limit: 01:00:00
   sbatch_directives:
     mem: '0'
   srun_options:
@@ -130,17 +130,25 @@ base:
   benchmark:
     placement:
       node: head
-  setup_script: k3-umbp-pool.sh
+    env:
+      K3_STARTUP_DIAGNOSTIC: '1'
+  setup_script: k3-load-diagnostic.sh
   host_setup:
     nodes: workers
     timeout_seconds: 1800
     commands:
+    - python3 "${GITHUB_WORKSPACE}/infx/bench/load_diagnostic.py" snapshot --phase before-host-setup
     - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
     - >-
       page_kb=$(awk '/^Hugepagesize:/ {print $2}' /proc/meminfo);
       pages=$(( (1799000000000 / (page_kb * 1024) + 1) * 102 / 100 ));
       HUGEPAGES_TARGET=$pages HUGEPAGE_GROW_TOLERANCE_PCT=1 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
     teardown:
+    - python3 "${GITHUB_WORKSPACE}/infx/bench/load_diagnostic.py" snapshot --phase after-workers
+    - sleep 10
+    - python3 "${GITHUB_WORKSPACE}/infx/bench/load_diagnostic.py" snapshot --phase after-workers-10s
+    - sleep 50
+    - python3 "${GITHUB_WORKSPACE}/infx/bench/load_diagnostic.py" snapshot --phase after-workers-60s
     - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
   services:
   - name: umbp-master

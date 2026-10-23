@@ -552,7 +552,7 @@ jobs:
     collect-results:
         name: collect-results
         needs: [get-jobs, test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
-        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
+        if: false
         uses: $/.github/workflows/collect-results.yml
         with:
             result-prefix: "bmk"
@@ -561,7 +561,7 @@ jobs:
     collect-evals:
         name: collect-evals
         needs: [get-jobs, test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-multi-node-agentic-evals]
-        if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-multi-node-agentic-evals.result != 'skipped') }}
+        if: false
         uses: $/.github/workflows/collect-evals.yml
         with:
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
@@ -569,7 +569,7 @@ jobs:
     collect-job-events:
         name: collect-job-events
         needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals]
-        if: ${{ !cancelled() && needs.get-jobs.result == 'success' }}
+        if: false
         permissions:
             actions: read # List the run's jobs to record the jobs that wrote no event.
             contents: read
@@ -580,7 +580,7 @@ jobs:
     calc-success-rate:
         name: calc-success-rate
         needs: [get-jobs, collect-results, collect-evals]
-        if: ${{ always() && needs.get-jobs.outputs.tooling-ref != '' }}
+        if: false
         runs-on: ubuntu-latest
         permissions:
             actions: read # Read job timings for run statistics.

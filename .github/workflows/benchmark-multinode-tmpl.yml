@@ -400,7 +400,7 @@ jobs:
 
       - name: Upload result
         id: upload-result
-        if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -413,7 +413,7 @@ jobs:
 
       - name: Retry upload result (attempt 2)
         id: retry-upload-result
-        if: ${{ always() && steps.upload-result.outcome == 'failure' }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -426,7 +426,7 @@ jobs:
         run: sleep 30
 
       - name: Retry upload result (attempt 3)
-        if: ${{ always() && steps.retry-upload-result.outcome == 'failure' }}
+        if: false
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
@@ -434,7 +434,7 @@ jobs:
           path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
 
       - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only }}
+        if: false
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
@@ -451,7 +451,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload server logs
-        if: always()
+        if: false
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}${{ inputs.eval-only && format('_{0}_{1}', env.EVAL_FRAMEWORK, env.EVAL_SUITE) || '' }}
@@ -463,7 +463,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload job event
-        if: always()
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -473,7 +473,7 @@ jobs:
 
       - name: Upload agentic aggregated result
         id: upload-agentic-aggregated
-        if: ${{ always() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -486,7 +486,7 @@ jobs:
 
       - name: Retry upload agentic aggregated result (attempt 2)
         id: retry-upload-agentic-aggregated
-        if: ${{ always() && steps.upload-agentic-aggregated.outcome == 'failure' }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -499,7 +499,7 @@ jobs:
         run: sleep 30
 
       - name: Retry upload agentic aggregated result (attempt 3)
-        if: ${{ always() && steps.retry-upload-agentic-aggregated.outcome == 'failure' }}
+        if: false
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
@@ -508,7 +508,7 @@ jobs:
 
       - name: Upload agentic raw results
         id: upload-agentic-raw
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -525,7 +525,7 @@ jobs:
 
       - name: Retry upload agentic raw results (attempt 2)
         id: retry-upload-agentic-raw
-        if: ${{ always() && steps.upload-agentic-raw.outcome == 'failure' }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -542,7 +542,7 @@ jobs:
         run: sleep 30
 
       - name: Retry upload agentic raw results (attempt 3)
-        if: ${{ always() && steps.retry-upload-agentic-raw.outcome == 'failure' }}
+        if: false
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
@@ -555,7 +555,7 @@ jobs:
 
       - name: Upload eval results (if any)
         id: upload-eval
-        if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -579,7 +579,7 @@ jobs:
 
       - name: Retry upload eval results (attempt 2)
         id: retry-upload-eval
-        if: ${{ always() && steps.upload-eval.outcome == 'failure' }}
+        if: false
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -603,7 +603,7 @@ jobs:
         run: sleep 30
 
       - name: Retry upload eval results (attempt 3)
-        if: ${{ always() && steps.retry-upload-eval.outcome == 'failure' }}
+        if: false
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           overwrite: true
@@ -630,6 +630,14 @@ jobs:
             expected_concs="$(printf '%s\n' "${CONC_LIST}" | tr ' ' '\n' | sort -n | tail -1)"
           fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.evals.validate_scores --expected-concs "${expected_concs}"
+
+      - name: Preserve startup diagnostics on the cluster
+        if: always()
+        env:
+          DIAGNOSTIC_RUN_ID: ${{ github.run_id }}
+        run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          python3 infx/bench/load_diagnostic.py preserve --workspace "$PWD" --run-id "$DIAGNOSTIC_RUN_ID"
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
