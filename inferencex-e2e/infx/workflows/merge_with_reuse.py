@@ -38,7 +38,7 @@ try:
     import git as gitpython
     import requests
 
-    from github import Github, GithubException, RateLimitExceededException
+    from github import Auth, Github, GithubException, RateLimitExceededException
 
     # PyGithub surfaces network failures as requests exceptions, which are not builtin ones,
     # and raises RetryError once its own 5xx and rate-limit retries run out.
@@ -52,6 +52,7 @@ try:
 except ImportError:
     gitpython = None  # type: ignore[assignment]
     Github = None  # type: ignore[assignment, misc]
+    Auth = None  # type: ignore[assignment]
     _NETWORK_ERRORS = (ConnectionError, TimeoutError)
 
     class GithubException(Exception):  # type: ignore[no-redef]  # noqa: N818
@@ -155,7 +156,7 @@ def _resolve_token() -> str:
 def _make_github(token: str) -> Github:
     """Build a PyGithub ``Github`` client, respecting ``GITHUB_API_URL``."""
     base_url = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
-    return Github(login_or_token=token, base_url=base_url)
+    return Github(auth=Auth.Token(token), base_url=base_url)
 
 
 _TRANSIENT_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
