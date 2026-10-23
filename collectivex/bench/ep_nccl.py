@@ -7,7 +7,7 @@ GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per c
   normal      -> HIGH_THROUGHPUT (HT), the Hybrid-EP-derived prefill/train path. FLAT recv
                  layout ``[N, hidden]`` (one row per received token, no expert structure) with
                  an unweighted rank-sum combine — identical semantics to deepep-v2 normal.
-  low-latency -> LOW_LATENCY (LL), the rank-major decode path. This uses the pre-reduced
+  low-latency -> LOW_LATENCY (LL), the rank-major prefill/decode path. This uses the pre-reduced
                  contract used by inference frameworks, followed by an unweighted rank-sum combine.
 Both modes use the existing CollectiveX combine oracle.
 
@@ -20,7 +20,7 @@ that configuration: its group capacity, its staged dispatch under CUDA graph cap
 window-backed zero-copy dispatch eager. HT, expert-major LL and DS-FP8 are modes no engine runs;
 they stay library (`candidate`) rows.
 
-FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency decode only. No engine selects it,
+FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency prefill and decode. No engine selects it,
 so the matrix runs it only when named (sweep_matrix.OFF_PATH_PRECISIONS). Received E4M3 values
 are dequantized into a BF16 staging plane, so the BF16 combine and correctness oracle remain the
 common comparison contract. Normal mode remains BF16-only.
@@ -170,9 +170,8 @@ class NCCLEPBackend(EPBackend):
 
     @property
     def cuda_graph_supported(self) -> bool:
-        # HT replays at decode only, as a captured decode step runs it (engines run prefill
-        # uncaptured); see methodology, CUDA Graph Replay.
-        if self.mode == "normal" and getattr(self.args, "phase", None) != "decode":
+        # Inference engines capture decode and run prefill uncaptured.
+        if getattr(self.args, "phase", None) != "decode":
             return False
         return super().cuda_graph_supported
 
@@ -191,8 +190,8 @@ class NCCLEPBackend(EPBackend):
         self._internode = world_size > int(args.scale_up_domain)
         self._ll = self.mode == "low-latency"
         self._fp8 = getattr(self, "precision", "bf16") == "fp8"
-        if self._fp8 and (not self._ll or args.phase != "decode"):
-            raise ValueError("NCCL EP FP8 is enabled for low-latency decode only")
+        if self._fp8 and not self._ll:
+            raise ValueError("NCCL EP FP8 is enabled for low-latency mode only")
         self.stage_device_work = self._fp8
         # LL layout: rank-major (TensorRT-LLM's NCCL EP contract, the default) or expert-major
         # (DeepEP LL's contract, as vLLM/SGLang decode consume it). Both are native LL layouts.
@@ -205,15 +204,10 @@ class NCCLEPBackend(EPBackend):
             "tensorrt-llm" if self._ll and not self._ll_expert_major and not self._fp8 else None
         )
         self.maturity = "production" if self.engine_contract else "candidate"
-        # HT needs its windows in both regimes (`_bind_ht_recv_count`). LL rank-major follows
-        # TensorRT-LLM: eager, dispatch writes into a registered NCCL window, but under CUDA graph
-        # capture it writes into a plain context-owned tensor, which the library stages
-        # (nccl_ep.py:305-327). So graphed rows run the staged dispatch and eager rows
-        # (COLLX_CUDA_GRAPH=0) the window. Either way the library zero-copies only NVLink-only,
-        # rank-major NONE/FWD dispatch (nccl_ep.cc:4589-4600): scale-out, expert-major and
-        # DS_FP8E3M4, which generates its scales internally, always stage.
+        # HT always uses zero-copy; LL uses it for eager rank-major dispatch within
+        # one NVLink domain, for both BF16 and FP8.
         self.zero_copy = not self._ll or not (
-            self._internode or self._ll_expert_major or self._fp8 or self.cuda_graph_enabled
+            self._internode or self._ll_expert_major or self.cuda_graph_enabled
         )
         if self._ll_expert_major:
             # Weighted source-side combine over a per-expert padded receive: deepep-v2 LL's
@@ -446,6 +440,8 @@ class NCCLEPBackend(EPBackend):
             )
             self._ht_disp_counts_t = self._t(self._ht_disp_counts)
 
+        # Register receive windows when zero-copy is selected.
+        self._recv_scales_window = None
         if self.zero_copy:
             self._recv_window = self._comm.register_window(
                 self._recv_x, flags=nccl_core.WindowFlag.COLL_SYMMETRIC
@@ -458,9 +454,26 @@ class NCCLEPBackend(EPBackend):
         else:
             self._recv_window = None
             self._recv_x_t = self._t(self._recv_x)
-            if self._fp8:
+        if self._fp8:
+            if self.zero_copy:
+                self._recv_scales_window = self._comm.register_window(
+                    self._recv_scales, flags=nccl_core.WindowFlag.COLL_SYMMETRIC
+                )
+                if not self._recv_scales_window.is_valid:
+                    self._recv_scales_window.close()
+                    self._recv_scales_window = None
+                    self._recv_window.close()
+                    self._recv_window = None
+                    self._ep_group.destroy()
+                    self._ep_group = None
+                    raise RuntimeError("NCCL-EP zero-copy scale window registration failed")
+                self._recv_scales_t = Tensor(
+                    self._recv_scales, window=self._recv_scales_window, window_offset=0
+                )
+            else:
                 self._recv_scales_t = self._t(self._recv_scales)
-                self._combine_x_t = self._t(self._combine_scratch)
+            # LL combine remains BF16 and staged even when dispatch writes direct windows.
+            self._combine_x_t = self._t(self._combine_scratch)
 
     def _ensure_handle(self, p):
         """Bind the group's single handle to p's routing, creating it on first use.
@@ -808,6 +821,9 @@ class NCCLEPBackend(EPBackend):
         try:
             dist.barrier()
             self._destroy_handles()
+            if self._recv_scales_window is not None:
+                self._recv_scales_window.close()
+                self._recv_scales_window = None
             if self._recv_window is not None:
                 self._recv_window.close()
                 self._recv_window = None

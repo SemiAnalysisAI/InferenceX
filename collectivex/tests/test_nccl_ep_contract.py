@@ -105,11 +105,13 @@ class LowLatencyFollowsTensorRTLLM(unittest.TestCase):
         self.assertTrue(details["zero_copy"])
         self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-zc-cap512-{VERSION}")
 
-    def test_paths_the_library_cannot_zero_copy_stage_in_both_regimes(self):
+    def test_policy_keeps_excluded_paths_staged_in_both_regimes(self):
         cases = {
             "scale-out": {"world_size": 16},
             "expert-major": {"env": {"COLLX_NCCL_LL_LAYOUT": "expert-major"}},
-            "ds-fp8": {"precision": "fp8"},
+            "fp8-scale-out": {"world_size": 16, "precision": "fp8"},
+            "fp8-expert-major": {"precision": "fp8",
+                                 "env": {"COLLX_NCCL_LL_LAYOUT": "expert-major"}},
         }
         for name, case in cases.items():
             for graph in ("1", "0"):
@@ -122,6 +124,28 @@ class LowLatencyFollowsTensorRTLLM(unittest.TestCase):
                     self.assertFalse(details["zero_copy"])
                     self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.OFF)
                     self.assertNotIn("-zc", backend.kernel_generation)
+
+    def test_fp8_dispatch_uses_windows_only_when_eager_in_either_phase(self):
+        for phase in ("prefill", "decode"):
+            for graph in ("0", "1"):
+                with self.subTest(phase=phase, graph=graph):
+                    module, backend, handle, details = _backend(
+                        phase=phase, precision="fp8", env={"COLLX_CUDA_GRAPH": graph},
+                        capacity=8192 if phase == "prefill" else 512,
+                    )
+                    _dispatch(backend)
+                    expected = phase == "prefill" or graph == "0"
+                    self.assertEqual(details["zero_copy"], expected)
+                    self.assertEqual(module.recorded["group"][0]["zero_copy"],
+                                     module.ZeroCopyMode.ON if expected else module.ZeroCopyMode.OFF)
+                    self.assertEqual(backend._comm.register_window.call_count, 2 if expected else 0)
+                    self.assertIs(handle.outputs.tokens.window,
+                                  backend._recv_window if expected else None)
+                    self.assertIs(handle.outputs.scales.window,
+                                  backend._recv_scales_window if expected else None)
+                    self.assertIs(backend._combine_x_t.buffer, backend._combine_scratch)
+                    self.assertIsNone(backend._combine_x_t.window)
+                    self.assertEqual("-zc" in backend.kernel_generation, expected)
 
     def test_group_is_sized_and_configured_like_trtllm(self):
         # TensorRT-LLM: GroupConfig(LOW_LATENCY, num_experts, max_tokens_per_rank,

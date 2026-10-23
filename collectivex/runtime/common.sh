@@ -37,7 +37,7 @@ COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 # low-latency ladder clamp. nccl4py is pinned alongside so a rebuild resolves the same tree. Two
 # whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
 # string keys the shared cache dir.
-COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
+COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261015 nccl4py[cu13]==0.5.0"
 # aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards whose host plugin predates
 # 1.21 (h100's 1.20). That proxy thread applies every GIN signal with an inline gdrcopy
 # read-modify-write of device memory; 1.21 hands signals to a worker and drops the read (1.3-4.5x on

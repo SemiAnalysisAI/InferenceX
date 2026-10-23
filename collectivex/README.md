@@ -23,7 +23,7 @@ holds the evidence behind them.
 
 Physical host count does not determine scope: both GB topologies stay inside one 72-GPU MNNVL
 scale-up domain. `configs/platform_config.json` registers which backend runs where. `normal` mode
-runs the decode and prefill ladders; `low-latency` is decode-only.
+runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for NCCL EP.
 
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
@@ -34,10 +34,10 @@ runs the decode and prefill ladders; `low-latency` is decode-only.
 | `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8, EP16: GB200, GB300 | none |
 
 Every backend runs a BF16 dispatch control and an FP8 dispatch, except that nccl-ep's FP8 (its
-internal DS_FP8E3M4 recipe, low-latency decode only) is off every engine's path and runs only when
+internal DS_FP8E3M4 recipe, low-latency prefill and decode) is off every engine's path and runs only when
 `--precisions fp8` names it. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 195 requested cases, of which 163 are
+`results/cases.json` is the committed copy of the full matrix: 204 requested cases, of which 172 are
 runnable EP cases, 18 are swap-blocks cases (two per pool) and 14 are unsupported EP cells (UCCL-EP
 EP16 on H100, H200, MI300X, MI325X and MI355X, and MoRI EP16 on MI300X and MI325X, once per phase).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and

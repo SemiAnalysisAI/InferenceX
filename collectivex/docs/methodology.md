@@ -28,13 +28,13 @@ and one pinned resource configuration per backend/topology, the one its referenc
 token ladders live with the workload in `configs/sweep.json`: decode T=1..512 and prefill
 T=1024..8192 tokens per rank, powers of two. `normal` mode runs both ladders with
 `layout-and-dispatch-v1` semantics; `low-latency` runs each backend's decode-kernel semantics on the
-decode ladder only. Its runnable set is narrower than and distinct from `normal`'s, so it is enabled
+decode ladder, plus prefill for NCCL EP via `backend_mode_phases` in `configs/sweep.json`. Its runnable set is narrower than and distinct from `normal`'s, so it is enabled
 cell by cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, modes, precisions and ladders
 into shards of one allocation each. A filter produces a smaller matrix, not a different contract.
-`results/cases.json` is the committed snapshot of the full matrix, and a unit test fails when it no
-longer matches the configs. A cell whose backend runs on that SKU at another EP size is classified
+`results/cases.json` is the committed snapshot of the full matrix; CI regenerates it and fails on
+drift. A cell whose backend runs on that SKU at another EP size is classified
 `unsupported` rather than silently skipped. Low-latency adds only runnable cells, so a low-latency
 wall is recorded in prose under [Backends](#backends) rather than as a matrix row. Whether a cell is
 attempted is a capability fact; whether it succeeded is decided only by the benchmark's return code.
@@ -79,8 +79,8 @@ for a precision it does not support. Every FP8 codec here is per-128-block e4m3 
   vLLM's `per_token_group_quant_fp8` rounds them to powers of two whenever DeepGEMM's E8M0 path is on
   (vLLM main a9fe30e9f6 `fp8_utils.py:663-664`): byte-identical and timing-neutral, but not
   bit-identical to vLLM's quantize.
-- NCCL EP's FP8 is its internal DS_FP8E3M4 recipe, for low-latency decode only, staged (never
-  zero-copy) with a BF16 combine. It is the one realizable (backend, precision) pair off every
+- NCCL EP's FP8 is its internal DS_FP8E3M4 recipe, for low-latency prefill and decode, with
+  BF16 combine. FP8 dispatch uses zero-copy under the same conditions as BF16. It is the one realizable (backend, precision) pair off every
   deployed path: TensorRT-LLM's `NcclEP`, the only engine integration, sends DeepSeek-FP8 activations
   in BF16 (`uses_internal_fp8_dispatch = False`). So `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps
   it out of the default matrix, and naming the precision (`--precisions fp8`) opts it back in: the
@@ -465,8 +465,8 @@ changing its contract. Prefill stays eager on every backend, as the engines run 
 `COLLX_CUDA_GRAPH=0` restores the eager pipeline everywhere.
 
 - **deepep-v2** `normal` and `low-latency` decode (see [DeepEP V2](#deepep-v2)).
-- **nccl-ep** low-latency and HT decode. Graphed low-latency dispatch writes a plain tensor that the
-  library stages, as TensorRT-LLM's captured decode does, so it carries no `-zc`; eager rows within
+- **nccl-ep** low-latency and HT decode; prefill stays eager. Graphed low-latency dispatch writes
+  a plain tensor that the library stages, as TensorRT-LLM's captured decode does, so it carries no `-zc`; eager rows within
   one domain take the window path (`-zc`). HT's per-step routing `ncclAllGather` is the one host
   NCCL collective in any capture, so nccl-ep's communicator runs NCCL graph usage mode 1 (one graph
   at a time): the default mixing mode wraps every captured collective in an external event wait and

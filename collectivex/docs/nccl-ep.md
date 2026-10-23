@@ -7,7 +7,7 @@ strategy runs NCCL EP's low-latency algorithm with the rank-major layout, and no
 auto-selected after TensorRT-LLM's NVLink one- and two-sided strategies, or forced with
 `TRTLLM_FORCE_COMM_METHOD=NCCL_EP`. Claims below were checked against TensorRT-LLM main
 `a6142c920` (`tensorrt_llm/_torch/moe/fused_moe/`) and nccl-extensions `1ee7136`, the last commit
-before the pinned nightly.
+before the October 5 nightly (the historical source baseline cited below).
 
 | Row | Configuration | `maturity` |
 |---|---|---|
@@ -26,7 +26,7 @@ The registry's per-backend `backend_maturity` still says `candidate`.
   left to the library, which gives low-latency every SM (`nccl_ep_utils.py:251-257`).
 - **Capacity.** TensorRT-LLM sizes its one group to `min(max_num_tokens, moe_max_num_tokens)`
   (`nccl_ep.py:98-103`, default 8192) and rejects a step above it (`nccl_ep.py:124-129`). Here the
-  capacity is exactly the ladder's top, 512 for decode: the smallest TensorRT-LLM configuration that
+  capacity is exactly the ladder's top, 512 for decode and 8192 for prefill: the smallest TensorRT-LLM configuration that
   admits every rung, so low-latency runs the 512 rung that the other backends' fixed 256-token
   receive drops. Capacity changes what LL measures: each rank-major dispatch resets every routing
   slot of the receive plane, `EP x capacity x top-k` entries (`ll_dispatch_lsa.cuh:652-659`).
@@ -35,11 +35,11 @@ The registry's per-backend `backend_maturity` still says `candidate`.
   library copies every received token out of its staging buffer (`nccl_ep.py:305-327`,
   `ll_dispatch_lsa.cuh:484-490`). So graphed rows, the default, run the staged dispatch, and eager
   rows (`COLLX_CUDA_GRAPH=0`) write the window directly. The window path exists only within one
-  NVLink domain, for rank-major dispatch without internal quantization (`nccl_ep.cc:4589-4600`).
-  Scale-out, expert-major and DS-FP8 rows stage in both regimes. A zero-copy row creates its group
+  NVLink domain, for rank-major dispatch. FP8 follows the same policy, registering both
+  token and scale windows. Scale-out and expert-major rows stage in both regimes. A zero-copy row creates its group
   with `ZeroCopyMode.ON`, which fails any dispatch that lacks the window, so the `-zc` label cannot
   name a path that did not run. A staged row uses `OFF`, which equals TensorRT-LLM's default `AUTO`
-  at this pin. Combine always stages in low-latency mode.
+  at the historical baseline. Combine always stages in low-latency mode.
 - **Handle.** One handle, rebound to each ladder point's routing in untimed code. TensorRT-LLM
   also creates one handle and updates it every step. A low-latency update does no device work
   (`nccl_ep.cc:4014-4020`).
@@ -62,7 +62,7 @@ scales (`QUANT_FWD`), which this suite does not measure.
 
 ## FP8
 
-FP8 uses NCCL EP's internal `DS_FP8E3M4` recipe, for low-latency decode only. TensorRT-LLM never
+FP8 uses NCCL EP's internal `DS_FP8E3M4` recipe, for low-latency prefill and decode. TensorRT-LLM never
 selects it: `NcclEP` sets `uses_internal_fp8_dispatch = False` and transports DeepSeek-FP8
 activations in BF16 (`nccl_ep.py:78-79`). The default matrix therefore omits nccl-ep FP8
 (`sweep_matrix.OFF_PATH_PRECISIONS`, which lists no other precision for any backend).
@@ -95,9 +95,12 @@ resolution: 16 for HT and every SM for low-latency, then `NCCL_EP_COMM_SMS`, the
 
 ## Nightly version
 
-`runtime/common.sh` pins `nccl-extensions[cu13]==0.2.0.dev20261005` alongside
+`runtime/common.sh` pins `nccl-extensions[cu13]==0.2.0.dev20261015` alongside
 `nccl4py[cu13]==0.5.0`. Installation uses `--pre --extra-index-url https://pypi.nvidia.com`;
 the package specification keys the backend cache. Each result records the installed
 wheel version verbatim in `implementation.library_version`, including the nightly date, and in
 `kernel_generation`. The value comes from distribution metadata, not the requested pin or native
 library version.
+
+Prefill runs eager; decode remains graph-capable. FP8 zero-copy on the October 15 wheel
+still needs GPU validation. Combine remains BF16 and staged for both LL phases.
