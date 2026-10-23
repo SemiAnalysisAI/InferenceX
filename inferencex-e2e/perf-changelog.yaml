@@ -10963,6 +10963,16 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add a TP4 c24 point (max-num-seqs 48, DSpark 7)."
+    - "Replace DEP4 c64/c128 with DEP8 (TP1 x DP8 + EP8 behind vllm-router) at c64, c96 and c128, max-num-seqs 16/24/32 per rank, DSpark 3."
+    - "Add host-DRAM KV offload (vLLM SimpleCPUOffload, lazy) above c24: TP4 c32 at 1073 GB, DEP8 c64-c128 at 1932 GB (241.5 GB per rank)."
+    - "Image and serve flags are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4431
+
+- config-keys:
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash AgentX on MI355X with vLLM image vllm/vllm-openai-rocm:minimax-m31-flash (https://vllm.ai/blog/2026-10-23-minimax-m31-flash), on AMD's Quark export amd/MiniMax-M3.1-Flash-Quark-MXFP4 (MXFP4 routed experts + NVFP4 KV)."
