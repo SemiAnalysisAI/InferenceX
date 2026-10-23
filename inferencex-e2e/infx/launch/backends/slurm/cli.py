@@ -19,6 +19,7 @@ from infx.launch import proc
 from infx.launch.backends.base import BackendError, Job, JobState, JobStatus
 
 _GRANTED = re.compile(r"Granted job allocation ([1-9][0-9]*)")
+SQUEUE_RETRY_S = 5.0
 
 
 class SlurmError(BackendError):
@@ -125,15 +126,23 @@ def sbatch(
     return Job(job_id)
 
 
-def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
-    """The job's squeue state, or None once squeue no longer lists it (or cannot run)."""
+def _listed_state(job: Job, *, echo_command: bool) -> str | None:
+    """The job's squeue state, or None if squeue answers without it or is not installed.
+
+    A failing squeue (a busy controller times out) is retried, then raises ``SlurmError``.
+    """
     argv = ["squeue", "-j", job.id, "--noheader", "--format=%i|%T"]
-    try:
-        result = proc.run(argv, capture=True, echo_command=echo_command)
-    except FileNotFoundError:
-        return None
-    if result.returncode != 0:
-        return None
+    for attempt in range(3):
+        if attempt:
+            time.sleep(SQUEUE_RETRY_S)
+        try:
+            result = proc.run(argv, capture=True, echo_command=echo_command)
+        except FileNotFoundError:
+            return None
+        if result.returncode == 0:
+            break
+    else:
+        raise SlurmError(f"squeue failed for job {job.id} (exit {result.returncode})")
     for line in result.stdout.splitlines():
         job_id, _, state = line.strip().partition("|")
         if job_id == job.id:
@@ -141,8 +150,20 @@ def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
     return None
 
 
+def queue_state(job: Job, *, echo_command: bool = True) -> str | None:
+    """The job's squeue state, or None once squeue no longer lists it (or cannot run)."""
+    try:
+        return _listed_state(job, echo_command=echo_command)
+    except SlurmError:
+        return None
+
+
 def is_active(job: Job) -> bool:
-    return queue_state(job) is not None
+    """Whether squeue lists the job; a squeue that keeps failing cannot rule it out."""
+    try:
+        return _listed_state(job, echo_command=True) is not None
+    except SlurmError:
+        return True
 
 
 def cancel(job: Job) -> None:

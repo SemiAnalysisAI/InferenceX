@@ -11,6 +11,7 @@ import pytest
 from infx.clusters import load_inventory
 from infx.launch.backends import slurm
 from infx.launch.backends.base import Job, JobState
+from infx.launch.backends.slurm import cli
 from infx.launch.backends.slurm.cli import (
     ContainerSpec,
     Resources,
@@ -128,6 +129,14 @@ def test_queue_state_reads_only_the_named_job(fake_bin):
     assert queue_state(Job("7")) is None
 
 
+def test_queue_state_retries_a_failed_squeue_instead_of_reporting_the_job_gone(fake_bin, tmp_path, monkeypatch):
+    failed = tmp_path / "failed"
+    fake_bin("squeue", f"if [ ! -e {failed} ]; then touch {failed}; "
+             "echo 'slurm_load_jobs error: Socket timed out' >&2; exit 1; fi; echo '42|RUNNING'")
+    monkeypatch.setattr(cli, "SQUEUE_RETRY_S", 0)
+    assert queue_state(Job("42")) == "RUNNING"
+
+
 def test_waiting_for_a_log_fails_when_the_job_dies_before_it(fake_bin, tmp_path):
     log = tmp_path / "scontrol.log"
     fake_bin("squeue", "exit 0")
@@ -156,6 +165,18 @@ def test_backend_cancel_waits_until_a_listed_job_leaves_the_queue(fake_bin, tmp_
 
     assert cancelled.exists()
     assert queue_state(Job("4242")) is None
+
+
+def test_backend_cancel_scancels_even_when_squeue_fails(fake_bin, tmp_path, monkeypatch):
+    log = tmp_path / "scancel.log"
+    fake_bin("squeue", "exit 1")
+    fake_bin("scancel", recorder(log))
+    monkeypatch.setattr(cli, "SQUEUE_RETRY_S", 0)
+    backend = slurm_backend()
+
+    backend.cancel(backend.attach("4242"))
+
+    assert calls(log) == [["4242"]]
 
 
 def test_workflow_cleanup_cancels_the_runners_jobs_and_those_srtctl_submitted(fake_bin, tmp_path, monkeypatch):
