@@ -151,9 +151,9 @@ def run_batch(launch: Launch) -> int:
         backend.stream_logs(job)
     except BackendError:
         return 1
-    succeeded = backend.state(job).succeeded
+    status = backend.state(job)
     event.adopt_reentry()
-    return 0 if succeeded else 1
+    return 0 if status.succeeded else status.exit_code or 1
 
 
 def run_multinode(launch: Launch) -> int:

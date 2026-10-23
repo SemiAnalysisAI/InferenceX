@@ -52,7 +52,8 @@ exit 0
 """,
     "sacct": r"""
 state="${FAKE_STATE:-COMPLETED|0:0}"
-if [[ " $* " == *" 4242 "* && "$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)" != 0 ]]; then state="FAILED|1:0"; fi
+rc="$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)"
+if [[ " $* " == *" 4242 "* && -n "$rc" && "$rc" != 0 ]]; then state="FAILED|$rc:0"; fi
 echo "$state"
 """,
     "scontrol": "exit 1",

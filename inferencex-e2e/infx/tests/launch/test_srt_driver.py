@@ -610,6 +610,15 @@ def test_a_failed_batch_wrapped_point_reports_the_wrapped_failure_once(harness):
     assert (result.stdout + result.stderr).count("::error") == 1
 
 
+def test_a_batch_wrapped_point_exits_with_the_wrapped_launchs_code(harness):
+    env = batch_env(harness, FAKE_SRTCTL_RC="7")
+    result = launch(env, harness.config, harness.workspace)
+    assert (harness.logs / "batch-rc").read_text() == "7"
+    assert result.returncode == 7, result.stderr[-4000:]
+    error = job_event(harness.workspace)["error"]
+    assert (error["type"], error["exit_code"]) == ("SubmitFailed", 7)
+
+
 def test_tilert_uses_upstream_submission_and_prepared_weights(harness):
     env = lane_env(
         harness, "mi355x-amds", MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert",
