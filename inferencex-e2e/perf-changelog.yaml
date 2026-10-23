@@ -10871,3 +10871,10 @@
     - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4395
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260918-20518d85 to v0.5.22-cu130."
+    - "Start TP4/EP1 at concurrency 1 (cuda-graph-max-bs-decode 1, scheduler-recv-interval 10)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4412
