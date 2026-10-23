@@ -279,18 +279,21 @@ def find_eligible_run(
     return None
 
 
-def _latest_check_runs(check_runs: list) -> list:
-    """Dedupe check runs by name, keeping the one with the latest started_at/id.
+def _latest_check_runs(check_runs: list, suite_workflows: dict | None = None) -> list:
+    """Dedupe check runs, keeping the one with the latest started_at/id.
 
     GitHub can return superseded re-runs for the same check name.  This mirrors
-    ``gh pr checks --watch --fail-fast`` which only considers the latest run
-    per check name.
+    ``gh pr checks --watch --fail-fast``, which keys Actions check runs on
+    name, workflow and event, and other check runs on name alone.
+    *suite_workflows* maps a check suite id to its ``(workflow_id, event)``.
     """
-    by_name: dict[str, object] = {}
+    suite_workflows = suite_workflows or {}
+    by_key: dict[tuple, object] = {}
     for cr in check_runs:
-        existing = by_name.get(cr.name)
+        key = (cr.name, suite_workflows.get(getattr(cr, "check_suite_id", None)))
+        existing = by_key.get(key)
         if existing is None:
-            by_name[cr.name] = cr
+            by_key[key] = cr
             continue
         cr_key = (str(cr.started_at or ""), getattr(cr, "id", 0))
         ex_key = (
@@ -298,8 +301,16 @@ def _latest_check_runs(check_runs: list) -> list:
             getattr(existing, "id", 0),
         )
         if cr_key > ex_key:
-            by_name[cr.name] = cr
-    return list(by_name.values())
+            by_key[key] = cr
+    return list(by_key.values())
+
+
+def _suite_workflows(gh_repo: Repository, sha: str) -> dict:
+    """Map each Actions check suite on *sha* to its ``(workflow_id, event)``."""
+    return {
+        run.check_suite_id: (run.workflow_id, run.event)
+        for run in gh_repo.get_workflow_runs(head_sha=sha)
+    }
 
 
 def _latest_statuses(statuses: list) -> list:
@@ -344,8 +355,9 @@ def wait_for_checks(
     is treated as pending (the check needs re-evaluation).  ``skipped``
     and ``neutral`` count as passing.
 
-    Check runs are deduped by name (latest ``started_at``/``id`` wins) and
-    commit statuses by context to ignore superseded re-runs.
+    Check runs are deduped by name, workflow and event (latest
+    ``started_at``/``id`` wins) and commit statuses by context to ignore
+    superseded re-runs.
 
     Transient API errors (5xx, rate limits, connection failures) are retried
     with backoff until the timeout expires.
@@ -359,7 +371,9 @@ def wait_for_checks(
 
     while time.monotonic() < deadline:
         try:
-            check_runs = _latest_check_runs(list(commit.get_check_runs()))
+            check_runs = _latest_check_runs(
+                list(commit.get_check_runs()), _suite_workflows(gh_repo, sha)
+            )
 
             all_completed = True
             for cr in check_runs:

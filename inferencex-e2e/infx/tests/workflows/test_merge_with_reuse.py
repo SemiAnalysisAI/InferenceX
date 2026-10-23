@@ -100,6 +100,7 @@ def make_check_run(
     started_at: str = "2024-01-01T00:00:00Z",
     details_url: str = "",
     cr_id: int = 1,
+    check_suite_id: int | None = None,
 ) -> MagicMock:
     """Build a mock CheckRun."""
     cr = MagicMock()
@@ -109,6 +110,7 @@ def make_check_run(
     cr.started_at = started_at
     cr.details_url = details_url
     cr.id = cr_id
+    cr.check_suite_id = check_suite_id
     return cr
 
 
@@ -540,6 +542,43 @@ class TestWaitForChecks:
             mock_time.side_effect = [0, 0, 0, 0, 0]
             result = wait_for_checks(pull, sha, gh_repo, timeout=60)
         assert result == 0
+
+    @pytest.mark.parametrize(
+        ("second_workflow_id", "expected"),
+        [(2, 1), (1, 0)],
+        ids=["other-workflow-failure-blocks", "same-workflow-rerun-supersedes"],
+    )
+    def test_same_job_name_in_two_workflows(self, second_workflow_id, expected):
+        gh_repo = MagicMock()
+        commit = MagicMock()
+        gh_repo.get_commit.return_value = commit
+        commit.get_check_runs.return_value = [
+            make_check_run(
+                name="setup",
+                conclusion="failure",
+                started_at="2024-01-01T00:00:00Z",
+                cr_id=10,
+                check_suite_id=100,
+            ),
+            make_check_run(
+                name="setup",
+                conclusion="success",
+                started_at="2024-01-01T01:00:00Z",
+                cr_id=20,
+                check_suite_id=200,
+            ),
+        ]
+        gh_repo.get_workflow_runs.return_value = [
+            SimpleNamespace(check_suite_id=100, workflow_id=1, event="pull_request"),
+            SimpleNamespace(
+                check_suite_id=200, workflow_id=second_workflow_id, event="pull_request"
+            ),
+        ]
+        commit.get_combined_status.return_value = SimpleNamespace(statuses=[])
+
+        result = wait_for_checks(MagicMock(), "a" * 40, gh_repo, timeout=10)
+
+        assert result == expected
 
 
 
