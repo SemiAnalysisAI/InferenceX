@@ -18,7 +18,8 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SECRET_NAME = re.compile(r"TOKEN|SECRET", re.IGNORECASE)
+# TOKENS and TOKENIZER name token counts and tokenizer paths, never credentials.
+_SECRET_NAME = re.compile(r"TOKEN(?!S|IZER)|SECRET|API_?KEY|PASSWORD", re.IGNORECASE)
 
 
 def status(returncode: int) -> int:
@@ -27,7 +28,7 @@ def status(returncode: int) -> int:
 
 
 def echo(argv: Sequence[str | os.PathLike[str]], env: Mapping[str, str] | None = None) -> None:
-    """Print ``+ <argv>`` to stderr, masking the values of ``*TOKEN*`` and ``*SECRET*`` variables."""
+    """Print ``+ <argv>`` to stderr, masking the values of credential variables."""
     text = shlex.join(map(os.fspath, argv))
     secrets = {
         value
