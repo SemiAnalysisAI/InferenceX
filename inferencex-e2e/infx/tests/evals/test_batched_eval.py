@@ -275,8 +275,20 @@ def test_validate_scores_fails_when_thresholds_cannot_be_loaded(
             "FAIL: gsm8k exact_match,strict-match = 0.8700 (< 0.9 from default)",
         ),
         (
+            "default:\n  gsm8k: 0.9\nmodels:\n  dsr1:\n",
+            "FAIL: gsm8k exact_match,strict-match = 0.8700 (< 0.9 from default)",
+        ),
+        (
             "default:\n  gsm8k: 0.9\nmodels: [dsr1]\n",
             "thresholds config 'models' must be a mapping",
+        ),
+        (
+            "default:\n  gsm8k: .nan\n",
+            "thresholds config default.gsm8k must be a finite number, got nan",
+        ),
+        (
+            "default:\n  gsm8k: 0.8\nmodels:\n  dsr1:\n    gsm8k: '0.9'\n",
+            "thresholds config models.dsr1.gsm8k must be a finite number, got '0.9'",
         ),
     ],
 )

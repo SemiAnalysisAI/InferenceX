@@ -37,11 +37,26 @@ def load_config(path: str) -> dict:
     if not isinstance(cfg, dict):
         raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
-        return {"default": cfg, "models": {}}
+        cfg = {"default": cfg}
     sections = {"default": cfg.get("default") or {}, "models": cfg.get("models") or {}}
     for name, section in sections.items():
         if not isinstance(section, dict):
             raise ValueError(f"thresholds config {name!r} must be a mapping")
+    sections["models"] = {prefix: tasks or {} for prefix, tasks in sections["models"].items()}
+    tables = {"default": sections["default"]}
+    tables.update((f"models.{prefix}", tasks) for prefix, tasks in sections["models"].items())
+    for name, tasks in tables.items():
+        if not isinstance(tasks, dict):
+            raise ValueError(f"thresholds config {name!r} must be a mapping")
+        for task, value in tasks.items():
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                raise ValueError(
+                    f"thresholds config {name}.{task} must be a finite number, got {value!r}"
+                )
     return sections
 
 
