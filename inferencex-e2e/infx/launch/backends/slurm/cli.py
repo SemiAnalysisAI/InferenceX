@@ -266,10 +266,17 @@ def observe(job: Job) -> JobStatus:
 
 
 def job_status(state: str, exit_code: str) -> JobStatus:
-    """Only ``COMPLETED`` with ``0:0`` succeeds; any other state after the job ran failed."""
-    code, _, _ = exit_code.partition(":")
+    """Only ``COMPLETED`` with ``0:0`` succeeds; any other state after the job ran failed.
+
+    Slurm's ``ExitCode`` is ``status:signal``, and a death by signal N reads as 128 + N.
+    """
+    code, _, signal = exit_code.partition(":")
     raw = f"{state}|{exit_code}"
-    exit_status = int(code) if code.isdigit() else None
+    # Linux signals stop at 64. OUT_OF_MEMORY reports the marker 0:125, not a signal.
+    if signal.isdigit() and 0 < int(signal) <= 64:
+        exit_status: int | None = 128 + int(signal)
+    else:
+        exit_status = int(code) if code.isdigit() else None
     if state == "COMPLETED" and exit_code == "0:0":
         return JobStatus(JobState.SUCCEEDED, raw, 0)
     if not state:

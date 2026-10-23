@@ -80,7 +80,9 @@ def test_salloc_without_a_grant_fails(fake_bin, body):
 @pytest.mark.parametrize("record,state,exit_code,nodes", [
     ("COMPLETED|0:0|gpu[01-02]", JobState.SUCCEEDED, 0, "gpu[01-02]"),
     ("FAILED|1:0|gpu03", JobState.FAILED, 1, "gpu03"),
-    ("COMPLETED|0:15", JobState.FAILED, 0, None),
+    ("COMPLETED|0:15", JobState.FAILED, 143, None),
+    ("FAILED|0:9|gpu03", JobState.FAILED, 137, "gpu03"),
+    ("OUT_OF_MEMORY|0:125|gpu03", JobState.FAILED, 0, "gpu03"),
     ("CANCELLED by 1001|0:0|None assigned", JobState.CANCELLED, 0, None),
 ])
 def test_final_status_maps_allocation_accounting(fake_bin, tmp_path, record, state, exit_code, nodes):
