@@ -10901,3 +10901,12 @@
     - "Update the SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4408
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X Qwen3.5 FP8 AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261020 (amd64 digest sha256:3a75c91365cc4f4e1194bf5d64b92f2f1ef134d8b9045da165fba28a8dada464)."
+    - "Switch every HiCache override on this arm from hicache-write-policy write_through_selective to write_through. At concurrency 80 the cache hit rate moves from 51% to about 95%. GPU-resident points and HiCache sizes stay the same."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
