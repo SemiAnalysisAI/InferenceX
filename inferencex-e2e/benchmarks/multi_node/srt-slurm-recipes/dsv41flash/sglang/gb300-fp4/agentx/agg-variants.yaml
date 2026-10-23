@@ -102,6 +102,7 @@ override_tp2_c16:
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
+        dsv4-attn-backend: flashmla
         enable-decoder-swa-bounded-replay: true
         cuda-graph-backend-prefill: disabled
         prefill-decode-interval: 96
@@ -171,6 +172,7 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        dsv4-attn-backend: flashmla
         prefill-decode-interval: 0
         swa-prefix-tails: 4096
         max-running-requests: 128
@@ -187,6 +189,7 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        dsv4-attn-backend: flashmla
         prefill-decode-interval: 192
         swa-prefix-tails: 4096
         max-running-requests: 128
