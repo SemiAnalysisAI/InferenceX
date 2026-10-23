@@ -1,6 +1,9 @@
 # MiniMax-M3.1-Flash AgentX on MI355X with vLLM, following the MI355X TP4
 # recipe at https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash and
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, with native DSpark.
+# Checkpoint: AMD's Quark export amd/MiniMax-M3.1-Flash-Quark-MXFP4 (routed
+# experts stored in OCP MXFP4, run as W4A4 on the AITER MoE; every other layer
+# and the dspark/ draft as in MiniMaxAI/MiniMax-M3.1-Flash).
 base:
   schema: 2
   name: minimaxm31flash-fp4-mi355x-vllm-agentic
@@ -17,8 +20,8 @@ base:
   engine:
     type: vllm
     connector: null
-  # Cold loads of the 250 GB checkpoint plus the MXFP8 expert conversion can
-  # take the full VLLM_ENGINE_READY_TIMEOUT_S.
+  # Cold loads of the 240 GB checkpoint can take the full
+  # VLLM_ENGINE_READY_TIMEOUT_S.
   health_check:
     interval_seconds: 10
     max_attempts: 720
@@ -28,7 +31,7 @@ base:
       workers: 1
       gpus: 4
       args:
-        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4
         gpu-memory-utilization: 0.9
         language-model-only: true
@@ -42,18 +45,19 @@ base:
         # scoring splits across TP ranks by context.
         kv-cache-dtype: nvfp4
         attention-config: '{"indexer_kv_dtype":"nvfp4","indexer_decode_cp":true}'
-        # NVFP4 routed experts are converted to MXFP8 at load for the AITER MoE.
-        # (upstream spells this --quantization-config.moe mxfp8).
-        quantization-config: '{"moe":"mxfp8"}'
+        # The export's MXFP4 experts load as stored (W4A4, AITER_MXFP4_MXFP4).
+        moe-backend: aiter
         disable-hybrid-kv-cache-manager: true
         enable-prefix-caching: true
         max-model-len: 1048576
         max-num-batched-tokens: 8192
         disable-uvicorn-access-log: true
       env:
-        # Upstream AMD recipe environment.
+        # The export's recommended MoE setup: AITER MoE, and the MXFP8 shared
+        # expert stays a separate MLP (no shared-expert fusion).
         VLLM_ROCM_USE_AITER: '1'
-        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '1'
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -80,7 +84,7 @@ zip_override_tp4_dspark3:
     agg:
       args:
         speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [16, 32, 64, 128, 256]
+        max-num-seqs: [16, 32, 64, 128]
   benchmark:
     env:
-      CONC: ['8', '16', '32', '64', '128']
+      CONC: ['8', '16', '32', '64']
