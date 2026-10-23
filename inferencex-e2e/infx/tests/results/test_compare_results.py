@@ -28,14 +28,13 @@ INSERT INTO workflow_runs VALUES (1, 'main');
 class Database:
     """An in-memory SQL database behind psycopg2's pyformat parameters."""
 
-    def __init__(self, configs: list[tuple[str, str, str, float]]):
+    def __init__(self, configs: list[tuple[str, str, str, float]], framework: str = "sglang"):
         self.connection = sqlite3.connect(":memory:")
         self.connection.executescript(SCHEMA)
         for index, (model, hardware, date, tput) in enumerate(configs, start=1):
             self.connection.execute(
-                "INSERT INTO configs VALUES"
-                " (?, ?, 'sglang', ?, 'fp4', 'none', 0, 0, 8, 1, 0, 8, 1, 0)",
-                (index, hardware, model),
+                "INSERT INTO configs VALUES (?, ?, ?, ?, 'fp4', 'none', 0, 0, 8, 1, 0, 8, 1, 0)",
+                (index, hardware, framework, model),
             )
             self.connection.execute(
                 "INSERT INTO benchmark_results VALUES (?, 1, ?, 8192, 1024, 4, ?, NULL)",
@@ -98,5 +97,18 @@ def test_a_runner_label_finds_the_baseline_of_its_gpu(
     database = Database([("dsv4", hardware, "2026-10-01", 100.0)])
 
     out = summary(tmp_path, monkeypatch, capsys, database, hw=runner)
+
+    assert r"\text{+10.00}$ (+10.0%)" in out
+
+
+def test_sglang_disagg_finds_the_baseline_ingestion_stored_as_mori_sglang(
+    tmp_path, monkeypatch, capsys
+):
+    database = Database([("dsr1", "mi355x", "2026-10-01", 100.0)], framework="mori-sglang")
+
+    out = summary(
+        tmp_path, monkeypatch, capsys, database,
+        hw="cluster:mi355x-amds", infmax_model_prefix="dsr1", framework="sglang-disagg",
+    )  # fmt: skip
 
     assert r"\text{+10.00}$ (+10.0%)" in out
