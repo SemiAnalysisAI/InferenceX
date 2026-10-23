@@ -1376,7 +1376,8 @@ def resolve_baseline(
             raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
         return keys[0] if keys else None
 
-    historical: dict[str, list[dict]] = {}
+    historical: dict[str, list[tuple[dict, dict]]] = {}
+    additions: dict[str, list[tuple[str, dict]]] = {}
     published: dict[str, Point] = {}
     unverified: list[dict] = []
     sources = list(public.sources)
@@ -1410,10 +1411,10 @@ def resolve_baseline(
         if head not in historical:
             if head not in producers:
                 raise VerificationError(PRODUCER_UNAVAILABLE)
-            historical[head] = matrix_points(producers[head])
-        matches = [
-            entry for entry in historical[head] if _matches_public_point(row, public_point(entry))
-        ]
+            historical[head] = [
+                (entry, public_point(entry)) for entry in matrix_points(producers[head])
+            ]
+        matches = [entry for entry, point in historical[head] if _matches_public_point(row, point)]
         if not matches:
             continue
         if row.get("recipe_fingerprint"):
@@ -1429,12 +1430,14 @@ def resolve_baseline(
         key = current_key(matches[0]) or point_key(matches[0])
         if key in published:
             raise VerificationError("Duplicate public baseline point")
-        entries.update(
-            (point_key(point), point)
-            for point in historical[head]
-            if normalized_image(point["image"]) == normalized_image(old_image)
-            and current_key(point) is None
-        )
+        if head not in additions:
+            additions[head] = [
+                (point_key(point), point)
+                for point, _ in historical[head]
+                if normalized_image(point["image"]) == normalized_image(old_image)
+                and current_key(point) is None
+            ]
+        entries.update(additions[head])
         entry = entries[key]
         published[key] = Point(
             key=key,
