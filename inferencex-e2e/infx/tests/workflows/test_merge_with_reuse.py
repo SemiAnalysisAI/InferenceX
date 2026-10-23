@@ -352,6 +352,27 @@ class TestWaitForCheck:
             result = wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60)
         assert result == 0
 
+    def test_unstarted_rerun_supersedes_completed_failure(self):
+        old = make_check_run(
+            name="check-changelog", conclusion="failure", started_at="2024-01-01T00:00:00Z", cr_id=10
+        )
+        queued = make_check_run(
+            name="check-changelog", status="queued", conclusion=None, started_at=None, cr_id=20
+        )
+        passed = make_check_run(
+            name="check-changelog", started_at="2024-01-01T01:00:00Z", cr_id=20
+        )
+        first, second = MagicMock(), MagicMock()
+        first.get_check_runs.return_value = [old, queued]
+        second.get_check_runs.return_value = [old, passed]
+        gh_repo = MagicMock()
+        gh_repo.get_commit.side_effect = [first, second]
+
+        with patch("infx.workflows.merge_with_reuse.time.sleep"):
+            result = wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60)
+
+        assert result == 0
+
 
 
 
@@ -580,6 +601,26 @@ class TestWaitForChecks:
 
         assert result == expected
 
+    def test_unstarted_rerun_supersedes_completed_failure(self):
+        old = make_check_run(
+            name="build", conclusion="failure", started_at="2024-01-01T00:00:00Z", cr_id=10
+        )
+        queued = make_check_run(
+            name="build", status="queued", conclusion=None, started_at=None, cr_id=20
+        )
+        passed = make_check_run(name="build", started_at="2024-01-01T01:00:00Z", cr_id=20)
+        first, second = MagicMock(), MagicMock()
+        first.get_check_runs.return_value = [old, queued]
+        second.get_check_runs.return_value = [old, passed]
+        for commit in (first, second):
+            commit.get_combined_status.return_value = SimpleNamespace(statuses=[])
+        gh_repo = MagicMock()
+        gh_repo.get_commit.side_effect = [first, second]
+
+        with patch("infx.workflows.merge_with_reuse.time.sleep"):
+            result = wait_for_checks(MagicMock(), "a" * 40, gh_repo, timeout=60)
+
+        assert result == 0
 
 
 

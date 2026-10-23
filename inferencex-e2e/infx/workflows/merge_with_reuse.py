@@ -284,8 +284,14 @@ def find_eligible_run(
     return None
 
 
+def _check_run_recency(cr: object) -> tuple:
+    """Order check runs oldest first. A queued run without started_at counts as newest."""
+    started_at = getattr(cr, "started_at", None)
+    return (started_at is None, str(started_at or ""), getattr(cr, "id", 0))
+
+
 def _latest_check_runs(check_runs: list, suite_workflows: dict | None = None) -> list:
-    """Dedupe check runs, keeping the one with the latest started_at/id.
+    """Dedupe check runs, keeping the most recent per key.
 
     GitHub can return superseded re-runs for the same check name.  This mirrors
     ``gh pr checks --watch --fail-fast``, which keys Actions check runs on
@@ -300,12 +306,7 @@ def _latest_check_runs(check_runs: list, suite_workflows: dict | None = None) ->
         if existing is None:
             by_key[key] = cr
             continue
-        cr_key = (str(cr.started_at or ""), getattr(cr, "id", 0))
-        ex_key = (
-            str(getattr(existing, "started_at", "") or ""),
-            getattr(existing, "id", 0),
-        )
-        if cr_key > ex_key:
+        if _check_run_recency(cr) > _check_run_recency(existing):
             by_key[key] = cr
     return list(by_key.values())
 
@@ -442,7 +443,7 @@ def wait_for_check(
             check_runs = list(commit.get_check_runs())
             matching = [cr for cr in check_runs if cr.name == check_name]
             if matching:
-                matching.sort(key=lambda cr: str(cr.started_at or ""))
+                matching.sort(key=_check_run_recency)
                 latest = matching[-1]
 
                 if latest.status == "completed":
