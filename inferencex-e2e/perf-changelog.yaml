@@ -10956,3 +10956,16 @@
     - "Search space: TP8 only, conc 1-24, no KV offloading. Throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 2.88 at 3 draft tokens, #4425)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4423
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the aggregated points to lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4 (digest sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb) with the ai-dynamo 1.6.0.dev20261019 it ships, the image the disaggregated points already use. The TP4 c4/c16 and TP2/EP2 c16 engine settings are unchanged; they run the image as shipped, without the megakernel or the setup script. They were not rerun on c1c287a4; the CI sweep is their first run."
+    - "TP4 c1 becomes a strict batch-1 NVIDIA megakernel point: max-running-requests 1, cuda-graph-max-bs-decode 1, --enable-nvidia-megakernel with 42 kernel slots, the sglang#45450 decode-graph gates, SWA prefix tails 128, prefill-decode interval 16, LPM scheduling and NCCL_CUMEM_ENABLE/NCCL_MNNVL_ENABLE off."
+    - "TP4 c1 also sets kv-cache-dtype fp8_e4m3 and SGLANG_SPEC_TP_SYNC=rng,-dspark-accept-sample as in the reference BS1 recipe, and mem-fraction-static 0.91 (the reference launch's resolved default; the base recipe sets 0.8). It drops cuda-graph-backend-prefill: disabled, so prefill uses the image default, which disables the prefill CUDA graph for DeepSeek-V4."
+    - "Only TP4 c1 applies sglang#45450 (merged after the October 21 nightly) and checks out sgl-nvidia-mega 3333e4cf over the image's d47deb33 at startup (dsv41flash-sglang-patches.sh); waiver in docs/waiver/4434.md."
+    - "Include the unchanged disaggregated points in the sweep so the curve is complete."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4434
