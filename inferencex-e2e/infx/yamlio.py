@@ -7,11 +7,14 @@ import io
 import os
 import re
 from collections.abc import Iterator
+from contextlib import suppress
 from typing import IO, Any
 
 import yaml
 from yaml.constructor import ConstructorError
 from yaml.resolver import BaseResolver
+
+from infx import fastcopy
 
 _C_SAFE_LOADER = (
     None if os.environ.get("INFX_PURE_YAML") == "1" else getattr(yaml, "CSafeLoader", None)
@@ -53,6 +56,9 @@ _FLOW_TOKENS = {
     yaml.FlowMappingEndToken: -1,
     yaml.FlowSequenceEndToken: -1,
 }
+# The largest srt recipe is 110 KiB; master configs and the changelog are parsed once a run.
+_CACHED_TEXT_CHARACTERS = 128 * 1024
+_PYYAML = object()
 
 
 class _NamedText(io.StringIO):
@@ -107,11 +113,30 @@ def _needs_pyyaml(text: str, fast: type) -> bool:
     return False
 
 
+def _libyaml_load(text: str, fast: type) -> Any:
+    """libyaml's result for ``text``, or ``_PYYAML`` where PyYAML has to decide."""
+    if _DIVERGENT.search(text) or yaml.reader.Reader.NON_PRINTABLE.search(text):
+        return _PYYAML
+    try:
+        if _needs_pyyaml(text, fast):
+            return _PYYAML
+        return yaml.load(text, Loader=fast)  # noqa: S506
+    except yaml.YAMLError:
+        return _PYYAML
+
+
+@functools.lru_cache(maxsize=512)
+def _cached_libyaml_load(text: str, fast: type) -> Any:
+    """Planner runs bind the same recipes and shared blocks once per matrix row."""
+    return _libyaml_load(text, fast)
+
+
 def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
     """Return exactly what ``yaml.load(stream, Loader=loader)`` returns or raises.
 
     Documents libyaml accepts are parsed by libyaml, which builds the same nodes as PyYAML;
-    PyYAML reparses everything else, so errors and their marks are PyYAML's own.
+    PyYAML reparses everything else, so errors and their marks are PyYAML's own. Texts up to
+    128 KiB are parsed once per process and returned as fresh deep copies.
     ``INFX_PURE_YAML=1`` turns libyaml off.
     """
     fast = _fast_loader(loader)
@@ -122,12 +147,16 @@ def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
     else:
         text = stream.read()
         fallback = _NamedText(text, getattr(stream, "name", "<file>"))
-    if not _DIVERGENT.search(text) and not yaml.reader.Reader.NON_PRINTABLE.search(text):
-        try:
-            if not _needs_pyyaml(text, fast):
-                return yaml.load(text, Loader=fast)  # noqa: S506
-        except yaml.YAMLError:
-            pass
+    if len(text) <= _CACHED_TEXT_CHARACTERS:
+        value = _cached_libyaml_load(text, fast)
+        if value is not _PYYAML:
+            # Chains of aliases can nest values far deeper than the document's own syntax.
+            with suppress(RecursionError):
+                return fastcopy.deepcopy(value)
+    else:
+        value = _libyaml_load(text, fast)
+        if value is not _PYYAML:
+            return value
     return yaml.load(fallback, Loader=loader)  # noqa: S506
 
 

@@ -85,3 +85,32 @@ def test_safe_unique_key_loader_allows_overriding_a_mapping_flattened_elsewhere_
 def test_safe_unique_key_loader_reports_a_non_mapping_map_as_safeloader_does():
     with pytest.raises(yaml.constructor.ConstructorError, match="expected a mapping node"):
         yamlio.load("a: !!map x\n", yamlio.UniqueKeySafeLoader)
+
+
+def test_repeated_loads_return_independent_values():
+    text = "roles:\n  agg: {gpus: 8}\n"
+    first = yamlio.safe_load(text)
+    first["roles"]["agg"]["gpus"] = 4
+
+    assert yamlio.safe_load(text) == {"roles": {"agg": {"gpus": 8}}}
+
+
+def test_repeated_loads_keep_anchor_sharing():
+    text = "base: &env {A: '1'}\nother: *env\n"
+    yamlio.safe_load(text)
+
+    loaded = yamlio.safe_load(text)
+
+    assert loaded["base"] is loaded["other"]
+
+
+def test_a_deep_alias_chain_loads_as_pyyaml_builds_it():
+    chain = "".join(f"k{i}: &a{i} [{f'*a{i - 1}' if i else 'x'}]\n" for i in range(1200))
+    text = "first: null\n" + chain + "first: *a1199\n"
+
+    loaded = yamlio.safe_load(text)
+
+    depth, node = 0, loaded["first"]
+    while isinstance(node, list):
+        depth, node = depth + 1, node[0]
+    assert (depth, node, loaded["first"] is loaded["k1199"]) == (1200, "x", True)
