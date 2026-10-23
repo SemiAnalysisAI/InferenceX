@@ -10877,3 +10877,4 @@
   description:
     - "Start TP4/EP1 8k1k concurrency at 1 instead of 4 (cuda-graph-max-bs-decode and max-running-requests follow concurrency)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4416
+  append-only: true
