@@ -106,6 +106,12 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--sampling", choices=("top", "recent", "random"), default="top")
     p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Salt for --sampling random (required by the sampler in that mode).",
+    )
+    p.add_argument(
         "--exclude-dynamic-workflow-bug",
         action="store_true",
         help="Drop sessions hit by the Claude Code CLI<2.1.174 "
@@ -177,6 +183,7 @@ def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
         ("--require-cli-min", args.require_cli_min),
         ("--max-parallel-subagents", args.max_parallel_subagents),
         ("--limit", args.limit),
+        ("--seed", args.seed),
     ]:
         if val is not None:
             cmd += [flag, str(val)]
@@ -662,6 +669,7 @@ def _reconstruct_sampler_cmd(args: argparse.Namespace) -> list:
         ("--require-cli-min", args.require_cli_min),
         ("--max-parallel-subagents", args.max_parallel_subagents),
         ("--limit", args.limit),
+        ("--seed", args.seed),
     ]:
         if val is not None:
             cmd += [flag, str(val)]

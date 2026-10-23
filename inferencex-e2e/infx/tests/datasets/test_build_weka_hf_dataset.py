@@ -84,6 +84,16 @@ def test_db_url_reaches_sampler_without_being_echoed(
     assert "hunter2-secret" not in out + err
 
 
+def test_random_sampling_forwards_seed_to_sampler_and_readme(build, tmp_path: Path) -> None:
+    record = build("s1", "--sampling", "random", "--seed", "7", "--limit", "3")
+
+    argv = record["argv"]
+    assert argv[argv.index("--sampling") + 1] == "random"
+    assert argv[argv.index("--seed") + 1] == "7"
+    readme = (tmp_path / "work/base/README.md").read_text()
+    assert "--seed 7" in readme
+
+
 def _request(t: float, api_time: float, tokens: int = 1) -> dict:
     return {
         "t": t,
