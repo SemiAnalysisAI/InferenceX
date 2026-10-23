@@ -781,7 +781,10 @@ def check_reported_datasets(record: Attempt) -> None:
 
 
 def publish(session: Session, record: Baseline | Attempt) -> None:
-    pull = session.pulls()[0]
+    pulls = session.pulls()
+    if not pulls:
+        raise VerificationError("Candidate PR not found")
+    pull = pulls[0]
     session.refresh(pull)
     if isinstance(record, Baseline):
         if record.family != session.candidate.family:

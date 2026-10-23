@@ -240,6 +240,23 @@ def test_finish_requires_specific_baseline_reason_before_touching_session(
     )
 
 
+@pytest.mark.parametrize("command", ["report", "check-final"])
+def test_pr_commands_fail_cleanly_before_the_candidate_pr_exists(
+    tmp_path, monkeypatch, capfd, command
+):
+    record = tmp_path / "record.json"
+    record.write_text(reporting.Baseline(
+        family=FAMILY, date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[], points=[],
+    ).model_dump_json(by_alias=True))  # fmt: skip
+    options = (["--kind", "baseline", "--file"] if command == "report" else ["--matrix-file"])
+    monkeypatch.setattr(sys, "argv", ["klaud", command, *options, str(record)])
+    monkeypatch.setattr(lifecycle, "current_session", lambda: SimpleNamespace(pulls=lambda: []))
+
+    assert klaud.main() == 1
+    assert capfd.readouterr().out == "::error::Klaud: Candidate PR not found.\n"
+
+
 def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferrals(
     monkeypatch,
 ):

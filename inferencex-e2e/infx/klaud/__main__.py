@@ -1195,7 +1195,10 @@ def main() -> int:
             from .validation import canonical_matrix, check_matrix
 
             session = current_session()
-            pull = session.pulls()[0]
+            pulls = session.pulls()
+            if not pulls:
+                raise VerificationError("Candidate PR not found")
+            pull = pulls[0]
             head = pull["head"]["sha"]
             matrix = json.loads(args.matrix_file.read_text())
             canonical = canonical_matrix(session.repository, head, session.candidate.family)
