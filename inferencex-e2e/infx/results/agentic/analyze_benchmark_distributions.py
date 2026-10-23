@@ -10,20 +10,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
+
+from .artifacts import load_records as load_profiled_records
 
 
 def load_records(artifacts_dir: Path) -> list[dict]:
-    """Load per-request records from profile_export.jsonl."""
-    jsonl_path = artifacts_dir / "profile_export.jsonl"
-    records = []
-    with open(jsonl_path) as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                records.append(json.loads(line))
-    return records
+    """Load successful profiling records from profile_export.jsonl."""
+    return load_profiled_records(artifacts_dir / "profile_export.jsonl")
 
 
 def _stats(values: list[int]) -> dict[str, float]:
