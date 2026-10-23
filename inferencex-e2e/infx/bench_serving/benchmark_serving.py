@@ -270,7 +270,7 @@ def sample_random_requests(
 
     input_lens = sample_uniform(input_len)
     output_lens = sample_uniform(output_len)
-    offsets = np.random.randint(0, vocab_size, size=num_prompts)  # noqa: NPY002
+    offsets = np.random.randint(0, vocab_size, size=num_prompts).tolist()  # noqa: NPY002
 
     # Local padding draws keep downstream arrival times independent of num_workers.
     local_rng = np.random.RandomState(
@@ -297,7 +297,7 @@ def sample_random_requests(
                     prefix_token_ids,
                     input_lens[start:end],
                     output_lens[start:end],
-                    offsets[start:end].tolist(),
+                    offsets[start:end],
                     prefix_len,
                     vocab_size,
                     use_chat_template,
