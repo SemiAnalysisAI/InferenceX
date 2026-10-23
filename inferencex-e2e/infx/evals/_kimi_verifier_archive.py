@@ -14,6 +14,10 @@ from urllib.request import Request, urlopen
 
 
 def archive_member_parts(name: str) -> tuple[str, ...]:
+    """Split an archive member name into its path parts.
+
+    Raises ValueError if the name is absolute, empty or escapes the archive root.
+    """
     if not name or "\x00" in name or "\\" in name or name.startswith("/"):
         raise ValueError(f"unsafe archive member path: {name!r}")
     normalized = name.rstrip("/")
@@ -24,6 +28,11 @@ def archive_member_parts(name: str) -> tuple[str, ...]:
 
 
 def main() -> None:
+    """Download the pinned verifier archive, check its SHA256 and extract the required files.
+
+    Takes repo URL, commit SHA, archive SHA256 and checkout directory from argv. Exits 1 after
+    printing the failed stage.
+    """
     repo_url, verifier_ref, expected_archive_sha256, checkout_dir_arg = sys.argv[1:]
     checkout_dir = Path(checkout_dir_arg)
     stage = "derive the pinned archive URL"

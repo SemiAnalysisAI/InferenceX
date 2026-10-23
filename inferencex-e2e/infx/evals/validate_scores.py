@@ -247,6 +247,10 @@ def validate_batch_manifest(
 
 
 def main() -> int:
+    """Check each eval result file against its score threshold, printing PASS or FAIL per metric.
+
+    Returns 0 if all metrics pass, 1 if any fail or none matched.
+    """
     for _stream in (sys.stdout, sys.stderr):
         with contextlib.suppress(AttributeError, ValueError):
             _stream.reconfigure(line_buffering=True)

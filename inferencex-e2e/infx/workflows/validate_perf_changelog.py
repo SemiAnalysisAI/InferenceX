@@ -46,7 +46,11 @@ def read_git_file(ref: str, path: str) -> bytes:
 
 
 def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
-    """Validate file-level invariants and return raw YAML entry mappings."""
+    """Validate file-level invariants and return raw YAML entry mappings.
+
+    Rejects NEL, LS and PS because YAML breaks lines there while the
+    byte-level append checks only see newlines.
+    """
     if not raw.endswith(b"\n"):
         raise ChangelogValidationError(f"{label} does not end with a newline")
     if b"\r" in raw:
@@ -60,7 +64,6 @@ def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ChangelogValidationError(f"{label} is not UTF-8: {exc}") from exc
-    # YAML also breaks lines at NEL, LS and PS; the byte-level append checks only see "\n".
     if any(line_break in text for line_break in "\x85\u2028\u2029"):
         raise ChangelogValidationError(f"{label} contains a line break other than newline")
 
