@@ -1,21 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 r"""Benchmark online serving throughput.
 
-On the server side, run one of the following commands:
-    vLLM OpenAI API server
+On the server side, start an OpenAI-compatible server, for example:
     vllm serve <your_model> \
         --swap-space 16 \
         --disable-log-requests
-
-    (TGI backend)
-    ./launch_tgi_server.sh <your_model> <max_batch_total_tokens>
 
 On the client side, run:
     python -m infx.bench_serving.benchmark_serving \
         --backend <backend> \
         --model <your_model> \
-        --dataset-name sharegpt \
-        --dataset-path <path to dataset> \
+        --dataset-name random \
+        --random-input-len <input_len> \
+        --random-output-len <output_len> \
         --request-rate <request_rate> \ # By default <request_rate> is inf
         --num-prompts <num_prompts> # By default <num_prompts> is 1000
 
