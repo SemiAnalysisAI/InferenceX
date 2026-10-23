@@ -12,7 +12,7 @@ Run commands from the repository root, in the Python environment containing `tor
 
 ```bash
 ASCEND_SCRIPTS="$PWD/operatorx/scripts/ascend"
-ASCEND_RESULTS="$PWD/ascend-results"
+ASCEND_RESULTS="/tmp/ascend-results"
 mkdir -p "$ASCEND_RESULTS"
 ```
 
