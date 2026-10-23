@@ -136,7 +136,7 @@ if os.environ.get("RUN_EVAL") == "true" or os.environ.get("EVAL_ONLY") == "true"
 if os.environ.get("FAKE_ACTIVE"):
     pathlib.Path(os.environ["FAKE_ACTIVE"]).touch()
 if "--json" in argv:
-    print(json.dumps({"status": "submitted", "slurm_job_id": "42", "output_dir": str(output)}))
+    print(os.environ.get("FAKE_MANIFEST") or json.dumps({"status": "submitted", "slurm_job_id": "42", "output_dir": str(output)}))
 else:
     print("✅ Job 42 submitted!")
 sys.exit(int(os.environ.get("FAKE_SRTCTL_RC", "0")))

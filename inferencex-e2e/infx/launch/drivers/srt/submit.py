@@ -185,7 +185,7 @@ class Submitted:
         """Adopt the job srtctl reported in its ``--json`` manifest."""
         try:
             job_id, output = submission_fields(self.manifest)
-        except (OSError, ValueError, KeyError, TypeError) as error:
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
             raise LaunchError(
                 f"srtctl did not report one submitted job in {self.manifest}: {error}"
             ) from error

@@ -515,6 +515,21 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
 
 
 @pytest.mark.parametrize("shape", ["single", "multi"])
+def test_a_manifest_that_is_not_a_json_object_fails_as_a_launch_error(harness, shape):
+    if shape == "single":
+        env = single_node_env(harness, "mi355x-amds", FAKE_MANIFEST='["42"]')
+    else:
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+                       MODEL="deepseek-r1-fp4", FAKE_MANIFEST='["42"]')  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 1, result.stderr[-4000:]
+    assert "Traceback" not in result.stderr
+    error = job_event(harness.workspace)["error"]
+    assert error["type"] == "LaunchError"
+    assert error["message"].startswith("srtctl did not report one submitted job")
+
+
+@pytest.mark.parametrize("shape", ["single", "multi"])
 def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     active, tailing = harness.tmp / "active", harness.tmp / "tailing"
     extra = {"FAKE_ACTIVE": str(active), "FAKE_TAIL_MARKER": str(tailing)}
