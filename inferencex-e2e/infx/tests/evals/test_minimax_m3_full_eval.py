@@ -138,6 +138,40 @@ def test_fetch_source_reports_exhausted_retries(
     assert sleeps == [0.5]
 
 
+def test_fetch_source_retries_a_truncated_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    content = b"pinned source"
+    monkeypatch.setattr(
+        full, "REQUIRED_SOURCE_SHA256", {"verify.py": hashlib.sha256(content).hexdigest()}
+    )
+    monkeypatch.setattr(full.time, "sleep", lambda _: None)
+    bodies = [content[:6], content]
+
+    class Response:
+        status = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def geturl(self) -> str:
+            return full.source_url("verify.py")
+
+        def read(self, _: int) -> bytes:
+            return bodies.pop(0)
+
+    class Opener:
+        def open(self, request, *, timeout):
+            return Response()
+
+    monkeypatch.setattr(full, "_NO_REDIRECT_OPENER", Opener())
+
+    assert full._fetch_source("verify.py") == content
+    assert bodies == []
+
+
 def test_verifier_command_is_one_102_row_run_with_fixed_m3_settings(
     tmp_path: Path,
 ) -> None:

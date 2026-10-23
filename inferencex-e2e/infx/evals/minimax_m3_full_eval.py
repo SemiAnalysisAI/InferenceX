@@ -111,6 +111,7 @@ def _fetch_source(relative_path: str) -> bytes:
                 if declared_size is not None and int(declared_size) > MAX_SOURCE_BYTES:
                     raise FullSuiteError(f"pinned source {relative_path} exceeds the size limit")
                 content = response.read(MAX_SOURCE_BYTES + 1)
+            verify_source_content(relative_path, content)
         except (
             FullSuiteError,
             OSError,
@@ -122,7 +123,6 @@ def _fetch_source(relative_path: str) -> bytes:
                 time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
                 continue
             break
-        verify_source_content(relative_path, content)
         return content
     raise FullSuiteError(
         f"failed to download pinned source {relative_path} after "
