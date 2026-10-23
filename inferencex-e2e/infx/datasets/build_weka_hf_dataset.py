@@ -102,7 +102,7 @@ def parse_args() -> argparse.Namespace:
         "--limit",
         type=int,
         default=None,
-        help="Cap session count (for smoke tests). Implies --sampling top.",
+        help="Cap session count (smoke tests), taking the first sessions in --sampling order.",
     )
     p.add_argument("--sampling", choices=("top", "recent", "random"), default="top")
     p.add_argument(
