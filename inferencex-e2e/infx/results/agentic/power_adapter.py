@@ -85,7 +85,9 @@ def build_power_window(
     try:
         aggregate = load_aggregate(aggregate_path)
         records = load_records(records_path)
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+    except (AttributeError, OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None, ["profile_artifacts_invalid"]
+    if not isinstance(aggregate, dict):
         return None, ["profile_artifacts_invalid"]
 
     raw_start = aggregate.get("start_time")
