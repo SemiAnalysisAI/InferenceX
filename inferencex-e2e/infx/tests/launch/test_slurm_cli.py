@@ -194,6 +194,21 @@ def test_workflow_cleanup_cancels_the_runners_jobs_and_those_srtctl_submitted(fa
     assert "--name=b300-dsxe_03,inferencex-b300-dsxe_03" in query
 
 
+def test_workflow_cleanup_stops_waiting_for_a_job_that_never_leaves_the_queue(fake_bin, monkeypatch, capsys):
+    fake_bin("scancel", "exit 0")
+    fake_bin("squeue", "echo 4242")
+    monkeypatch.setattr(cli, "CANCEL_NAMED_WAIT_S", 0)
+
+    def stuck(seconds: float) -> None:
+        raise AssertionError("cleanup kept waiting past its deadline")
+
+    monkeypatch.setattr(cli.time, "sleep", stuck)
+
+    slurm.SlurmBackend.cleanup(None, "b300-dsxe_03")
+
+    assert "WARNING: jobs 4242 still in the queue" in capsys.readouterr().err
+
+
 def test_a_container_step_killed_by_a_signal_reports_the_shell_exit_code():
     step = subprocess.Popen(["bash", "-c", "kill -KILL $$"])
     step.wait()

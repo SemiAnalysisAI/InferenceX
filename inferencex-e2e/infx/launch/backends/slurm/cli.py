@@ -20,6 +20,7 @@ from infx.launch.backends.base import BackendError, Job, JobState, JobStatus
 
 _GRANTED = re.compile(r"Granted job allocation ([1-9][0-9]*)")
 SQUEUE_RETRY_S = 5.0
+CANCEL_NAMED_WAIT_S = 300.0
 
 
 class SlurmError(BackendError):
@@ -173,19 +174,28 @@ def cancel(job: Job) -> None:
 
 
 def cancel_named(names: Sequence[str]) -> None:
-    """``scancel`` this user's jobs named any of ``names`` and wait until squeue drops them."""
+    """``scancel`` this user's jobs named any of ``names`` and wait until squeue drops them.
+
+    A job stuck in the queue (e.g. ``COMPLETING`` on a hung node) is given up on after
+    ``CANCEL_NAMED_WAIT_S`` with a warning.
+    """
     user = os.environ.get("USER") or getpass.getuser()
     for name in names:
         proc.run(["scancel", f"--user={user}", f"--name={name}"])
     query = ["squeue", f"--user={user}", "--name=" + ",".join(names), "--noheader", "--format=%i"]
+    deadline = time.monotonic() + CANCEL_NAMED_WAIT_S
     while True:
         result = subprocess.run(query, capture_output=True, text=True, check=False)
         if result.returncode != 0 or not result.stdout.strip():
             return
-        print(
-            f"Waiting for jobs {' '.join(result.stdout.split())} to leave the queue",
-            file=sys.stderr,
-        )
+        jobs = " ".join(result.stdout.split())
+        if time.monotonic() >= deadline:
+            print(
+                f"WARNING: jobs {jobs} still in the queue after {CANCEL_NAMED_WAIT_S:.0f}s",
+                file=sys.stderr,
+            )
+            return
+        print(f"Waiting for jobs {jobs} to leave the queue", file=sys.stderr)
         time.sleep(5)
 
 
