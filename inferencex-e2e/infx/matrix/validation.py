@@ -181,7 +181,7 @@ class WorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     num_worker: int = Field(alias=Fields.NUM_WORKER.value)
-    tp: int
+    tp: int = Field(gt=0)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -210,7 +210,7 @@ class AggregateWorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
-    tp: int
+    tp: int = Field(gt=0)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
@@ -531,7 +531,7 @@ RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    tp: int
+    tp: int = Field(gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -619,7 +619,7 @@ class MultiNodeSeqLenConfig(BaseModel):
 class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    tp: int | None = None
+    tp: int | None = Field(default=None, gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value

@@ -101,7 +101,7 @@ The below list describes what each field is:
     - `isl`: An integer representing the input sequence length, e.g., `1024`
     - `osl`: An integer representing the output sequence length, e.g., `8192`
     - `search-space`: A list of configurations to run with respective `isl` and `osl`, each entry must be a dict with the following fields:
-      - `tp`: An integer representing the tensor parallelism level that the configuration will be served at.
+      - `tp`: A positive integer representing the tensor parallelism level that the configuration will be served at.
       - `conc-start`: An integer representing the starting level of concurrency e.g., `4`
       - `conc-end`: An integer representing the ending level of concurrency (inclusive) e.g., `128`
       - Note: the step factor between `conc-start` and `conc-end` is 2, so if `conc-start` is 4 and `conc-end` is 128, all concurrencies `4, 8, 16, 32, ..., 128` will be run.

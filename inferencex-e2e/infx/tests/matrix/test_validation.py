@@ -649,6 +649,18 @@ class TestSingleNodeSearchSpaceEntry:
             })
 
 
+@pytest.mark.parametrize(("schema", "entry"), [
+    (SingleNodeSearchSpaceEntry, {"tp": 0, "conc-list": [4]}),
+    (AgenticCodingSearchSpaceEntry, {"tp": -2, "kv-offloading": "none", "conc-list": [4]}),
+    (WorkerConfig, {"num-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}),
+    (MultiNodeSearchSpaceEntry,
+     {"worker": {"tp": 0, "ep": 1, "dp-attn": False}, "num-nodes": 1, "conc-list": [4]}),
+])  # fmt: skip
+def test_tensor_parallelism_must_be_positive(schema, entry):
+    with pytest.raises(ValidationError, match="greater than 0"):
+        schema(**entry)
+
+
 class TestMultiNodeSearchSpaceEntry:
 
     def test_valid_aggregate_worker(self):
