@@ -5531,7 +5531,7 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml:override_tp4_c32_dram }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [38], srt-recipe: agentic.yaml:override_tp4_c38_dram }
 minimaxm3-fp4-b200-vllm-agentic-mtp-c10:
-  image: vllm/vllm-openai:nightly-ac7509e2b1db40fec2f03dde1ed4e9dfdc2338c9@sha256:98adb2311118263a453ec0acd5d4b72bda3db26cecc0fe8ffc94b9ab03c951f9
+  image: vllm/vllm-openai:nightly-ac68c3087215e0a4f3cdfa218508c6aada57235d@sha256:98adb2311118263a453ec0acd5d4b72bda3db26cecc0fe8ffc94b9ab03c951f9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b200-nscale
