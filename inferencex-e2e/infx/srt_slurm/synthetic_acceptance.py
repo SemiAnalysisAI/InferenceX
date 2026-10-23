@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 import yaml
 
 from infx import yamlio
+from infx.bench.proc import status
 from infx.golden_al_distribution import GOLDEN_DIR, golden_length
 from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
@@ -372,7 +373,7 @@ def main(argv: list[str] | None = None) -> int:
     for plan in plans:
         result = subprocess.run(plan.command, check=False)
         if result.returncode:
-            return result.returncode
+            return status(result.returncode)
     return 0
 
 

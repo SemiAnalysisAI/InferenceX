@@ -646,7 +646,12 @@ def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_di
     }
 
 
-def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("ending", "returncode"), [("sys.exit(7)", 7), ("os.kill(os.getpid(), signal.SIGKILL)", 137)]
+)
+def test_cli_forwards_options_and_submission_failure(
+    tmp_path: Path, ending: str, returncode: int
+) -> None:
     recipe = tmp_path / "recipe.yaml"
     recipe.write_text(
         yaml.safe_dump(
@@ -655,7 +660,8 @@ def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     )
     binary = tmp_path / "srtctl"
     binary.write_text(
-        f"#!{sys.executable}\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\nsys.exit(7)\n"
+        f"#!{sys.executable}\nimport json,os,signal,sys\n"
+        f"print(json.dumps(sys.argv[1:]), flush=True)\n{ending}\n"
     )
     binary.chmod(0o755)
     record = tmp_path / "acceptance.json"
@@ -676,7 +682,7 @@ def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 7, result.stderr
+    assert result.returncode == returncode, result.stderr
     assert json.loads(record.read_text()) == {"golden_acceptance_length": None}
     argv = json.loads(result.stdout)
     assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
