@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import git as gitpython
 import pytest
+import requests
 
 from infx.workflows.merge_with_reuse import (
     changelog_path,
@@ -679,8 +680,17 @@ class TestTransientErrors:
         exc = GithubException(status=404, data={"message": "Not Found"}, headers={})
         assert _is_transient_error(exc) is False
 
-    def test_connection_error_is_transient(self):
-        assert _is_transient_error(ConnectionError("refused")) is True
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ConnectionError("refused"),
+            requests.exceptions.ConnectionError("refused"),
+            requests.exceptions.ReadTimeout("read timed out"),
+        ],
+        ids=["builtin", "requests-connection", "requests-read-timeout"],
+    )
+    def test_connection_error_is_transient(self, exc):
+        assert _is_transient_error(exc) is True
 
     def test_timeout_error_is_transient(self):
         assert _is_transient_error(TimeoutError("timed out")) is True

@@ -36,11 +36,21 @@ from infx.config import git_repository_root, project_root
 
 try:
     import git as gitpython
+    import requests
 
     from github import Github, GithubException, RateLimitExceededException
+
+    # PyGithub surfaces network failures as requests exceptions, which are not builtin ones.
+    _NETWORK_ERRORS: tuple[type[Exception], ...] = (
+        ConnectionError,
+        TimeoutError,
+        requests.ConnectionError,
+        requests.Timeout,
+    )
 except ImportError:
     gitpython = None  # type: ignore[assignment]
     Github = None  # type: ignore[assignment, misc]
+    _NETWORK_ERRORS = (ConnectionError, TimeoutError)
 
     class GithubException(Exception):  # type: ignore[no-redef]  # noqa: N818
         """Stub when PyGithub is not installed."""
@@ -159,7 +169,7 @@ def _is_transient_error(exc: Exception) -> bool:
         return True
     if isinstance(exc, GithubException):
         return exc.status in _TRANSIENT_HTTP_STATUSES
-    return isinstance(exc, (ConnectionError, TimeoutError))
+    return isinstance(exc, _NETWORK_ERRORS)
 
 
 def _retry_delay(exc: Exception) -> float:
