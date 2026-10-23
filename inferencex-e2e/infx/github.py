@@ -19,7 +19,8 @@ class APIError(RuntimeError):
     """Authenticated gh failure, with an HTTP status when gh reports one."""
 
     def __init__(self, path: str, stderr: str) -> None:
-        match = re.search(r"\(HTTP ([1-5][0-9]{2})\)\s*$", stderr)
+        # gh can print scope or SSO hints after its "(HTTP nnn)" line.
+        match = re.search(r"\(HTTP ([1-5][0-9]{2})\)\s*$", stderr, re.MULTILINE)
         self.status = int(match[1]) if match else None
         super().__init__(f"GitHub API {path} failed: {stderr.strip()}")
 
