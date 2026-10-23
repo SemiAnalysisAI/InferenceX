@@ -11055,6 +11055,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4382
 
 - config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-39983a5e to nightly-83c078d9, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4429
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - qwen3.5-fp8-gb200-dynamo-sglang
     - qwen3.5-fp8-gb300-dynamo-sglang
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
