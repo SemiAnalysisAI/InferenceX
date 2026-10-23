@@ -804,3 +804,43 @@ def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, m
     git("commit", "-qam", "append entry")
     monkeypatch.chdir(tmp_path / "inferencex-e2e")
     assert process_changelog.get_added_lines(base, "HEAD", "perf-changelog.yaml") == "new entry"
+
+
+@pytest.fixture
+def commit_changelog(tmp_path, monkeypatch):
+    """Commit ``perf-changelog.yaml`` with the given text in a scratch repo; return the SHA."""
+    monkeypatch.chdir(tmp_path)
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], check=True, capture_output=True, text=True,
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+
+    def commit(text):
+        (tmp_path / "perf-changelog.yaml").write_text(text)
+        git("add", ".")
+        git("commit", "-qm", "changelog")
+        return git("rev-parse", "HEAD")
+
+    return commit
+
+
+def test_added_lines_report_a_failing_git_diff(commit_changelog, tmp_path, monkeypatch):
+    base = commit_changelog("- old\n")
+    head = commit_changelog("- old\n- new\n")
+    stub = tmp_path / "bin/git"
+    stub.parent.mkdir()
+    stub.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = diff ]; then echo "fatal: diff exploded" >&2; exit 128; fi\n'
+        f'exec {shutil.which("git")} "$@"\n'
+    )
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stub.parent}{os.pathsep}{os.environ['PATH']}")
+
+    with pytest.raises(RuntimeError, match="fatal: diff exploded"):
+        process_changelog.get_added_lines(base, head, "perf-changelog.yaml")

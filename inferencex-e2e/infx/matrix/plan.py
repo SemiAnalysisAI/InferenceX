@@ -42,6 +42,8 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
         capture_output=True,
         text=True,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"git diff of {filepath} failed: {result.stderr.strip()}")
 
     added_lines = []
     for line in result.stdout.split("\n"):
