@@ -65,7 +65,7 @@ override_tp8_c1:
     agg:
       args:
         max-running-requests: 2
-        cuda-graph-max-bs: 2
+        cuda-graph-max-bs-decode: 2
   benchmark:
     env:
       CONC: '1'
@@ -75,7 +75,7 @@ override_tp8_c2:
     agg:
       args:
         max-running-requests: 4
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
   benchmark:
     env:
       CONC: '2'
@@ -85,7 +85,7 @@ override_tp8_c3:
     agg:
       args:
         max-running-requests: 6
-        cuda-graph-max-bs: 6
+        cuda-graph-max-bs-decode: 6
   benchmark:
     env:
       CONC: '3'
@@ -95,7 +95,7 @@ override_tp8_c4:
     agg:
       args:
         max-running-requests: 8
-        cuda-graph-max-bs: 8
+        cuda-graph-max-bs-decode: 8
   benchmark:
     env:
       CONC: '4'
@@ -105,7 +105,7 @@ override_tp8_c5:
     agg:
       args:
         max-running-requests: 10
-        cuda-graph-max-bs: 10
+        cuda-graph-max-bs-decode: 10
   benchmark:
     env:
       CONC: '5'
@@ -115,7 +115,7 @@ override_tp8_c6:
     agg:
       args:
         max-running-requests: 12
-        cuda-graph-max-bs: 12
+        cuda-graph-max-bs-decode: 12
   benchmark:
     env:
       CONC: '6'
@@ -125,7 +125,7 @@ override_tp8_c8:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
   benchmark:
     env:
       CONC: '8'
