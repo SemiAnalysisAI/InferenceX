@@ -10873,10 +10873,10 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
-    - minimaxm31flash-fp4-mi355x-vllm-agentic
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV) AgentX on MI355X with vLLM image vllm/vllm-openai-rocm:minimax-m31-flash (https://vllm.ai/blog/2026-10-23-minimax-m31-flash)."
-    - "Serve flags follow the recipes.vllm.ai MI355X TP4 recipe: block size 128, nvfp4 KV and indexer cache with indexer decode CP, MoE requantized to MXFP8, hybrid KV cache manager disabled, AITER + fused shared experts, minimax_m3 reasoning and tool parsers, 1M context."
-    - "Search space: TP4 at conc 1-128, no KV offloading. DSpark is off until a golden AL curve exists."
+    - "Serve flags follow the recipes.vllm.ai MI355X TP4 recipe: block size 128, nvfp4 KV and indexer cache with indexer decode CP, MoE requantized to MXFP8, hybrid KV cache manager disabled, AITER + fused shared experts, minimax_m3 reasoning and tool parsers, 1M context, native DSpark (TRITON_ATTN drafter, fp8 draft KV, probabilistic draft sampling)."
+    - "Search space: TP4 at conc 1-128, no KV offloading. DSpark draft length 7 at conc 1-4 and 3 from conc 8, per the blog's MI355X runs; throughput runs use the minimaxm31flash_dspark golden AL curve."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4420
   scenario-type: [agentic-coding]

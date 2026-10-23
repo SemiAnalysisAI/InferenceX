@@ -1,7 +1,6 @@
 # MiniMax-M3.1-Flash AgentX on MI355X with vLLM, following the MI355X TP4
 # recipe at https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash and
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash. DSpark is off until a
-# MiniMax-M3.1-Flash golden AL curve is committed.
+# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, with native DSpark.
 base:
   schema: 2
   name: minimaxm31flash-fp4-mi355x-vllm-agentic
@@ -63,12 +62,25 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # Native zip expansion creates one variant per concurrency. TP4 is the
-# upstream MI355X layout; admission is 2x CONC.
-zip_override_tp4:
+# upstream MI355X layout; admission is 2x CONC. DSpark draft length follows
+# the blog's MI355X runs: 7 tokens at low concurrency, 3 from c8. Throughput
+# runs replace block rejection with the golden acceptance length.
+zip_override_tp4_dspark7:
   roles:
     agg:
       args:
-        max-num-seqs: [2, 4, 8, 16, 32, 64, 128, 256]
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [2, 4, 8]
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8', '16', '32', '64', '128']
+      CONC: ['1', '2', '4']
+
+zip_override_tp4_dspark3:
+  roles:
+    agg:
+      args:
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [16, 32, 64, 128, 256]
+  benchmark:
+    env:
+      CONC: ['8', '16', '32', '64', '128']
