@@ -141,9 +141,10 @@ def test_import_producing_invalid_squash_fails_without_replacing(tools, tmp_path
     assert sorted(p.name for p in (tmp_path / "squash").iterdir()) == [f"{SQUASH_NAME}.lock"]
 
 
-def test_submit_host_import_without_unsquashfs_keeps_the_existing_squash(tools, tmp_path):
+def test_submit_host_import_without_unsquashfs_keeps_the_existing_squash(tools, tmp_path, monkeypatch):
     _, logs = tools
     (tmp_path / "bin" / "unsquashfs").unlink()
+    monkeypatch.setenv("PATH", str(tmp_path / "bin"))
     squash = tmp_path / "squash" / SQUASH_NAME
     squash.parent.mkdir()
     squash.write_text(VALID)
