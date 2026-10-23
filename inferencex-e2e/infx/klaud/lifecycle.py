@@ -851,22 +851,43 @@ def recover(max_resumes: int) -> None:
     for artifact in inventory:
         if artifact["expired"]:
             continue
-        parent = github.read(repository, f"actions/runs/{artifact['workflow_run']['id']}")
-        if (
-            parent["head_branch"] != "main"
-            or parent["path"] != ".github/workflows/klaud-plan.yml"
-            or parent["event"] not in ("schedule", "workflow_dispatch")
-        ):
+        try:
+            parent = github.read(repository, f"actions/runs/{artifact['workflow_run']['id']}")
+            if (
+                parent["head_branch"] != "main"
+                or parent["path"] != ".github/workflows/klaud-plan.yml"
+                or parent["event"] not in ("schedule", "workflow_dispatch")
+            ):
+                continue
+            with tempfile.TemporaryDirectory(prefix="klaud-ownership-") as temp:
+                github.download_json(repository, artifact, Path(temp))
+                owner = Ownership.model_validate_json((Path(temp) / "ownership.json").read_text())
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            print(f"::warning::Klaud: ownership artifact {artifact['id']} is unreadable; skipped.")
             continue
-        with tempfile.TemporaryDirectory(prefix="klaud-ownership-") as temp:
-            github.download_json(repository, artifact, Path(temp))
-            owner = Ownership.model_validate_json((Path(temp) / "ownership.json").read_text())
         if owner.run_id != parent["id"]:
             raise VerificationError("Ownership parent mismatch")
         owners.append((owner, artifact))
-    parents = {
-        owner.run_id: github.read(repository, f"actions/runs/{owner.run_id}") for owner, _ in owners
-    }
+    results = {}
+    blocked = set()
+    live = set()
+    parents = {}
+    for owner, _ in owners:
+        if owner.run_id in parents:
+            continue
+        try:
+            parents[owner.run_id] = github.read(repository, f"actions/runs/{owner.run_id}")
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            for candidate in owner.candidates:
+                results[(owner.run_id, candidate.id)] = False
+                blocked.add(candidate.family)
+                summarize(
+                    repository,
+                    candidate,
+                    owner.run_id,
+                    "needs inspection / 需要检查 (state unavailable or invalid)",
+                )
+    owners = [pair for pair in owners if pair[0].run_id in parents]
     if any(
         parent["head_branch"] != "main"
         or parent["path"] != ".github/workflows/klaud-plan.yml"
@@ -874,9 +895,6 @@ def recover(max_resumes: int) -> None:
         for parent in parents.values()
     ):
         raise VerificationError("Untrusted ownership parent")
-    results = {}
-    blocked = set()
-    live = set()
     approved: list[tuple[Session, dict]] = []
     for owner, _ in sorted(owners, key=lambda pair: pair[0].run_id, reverse=True):
         parent = parents[owner.run_id]

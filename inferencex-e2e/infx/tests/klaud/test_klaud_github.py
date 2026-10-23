@@ -828,6 +828,55 @@ def test_recovery_keeps_the_pr_claim_and_lease_of_a_rerun_final_sweep(monkeypatc
         "sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
 
 
+@pytest.mark.parametrize("stale", ["deleted-claim-parent", "corrupt-artifact"])
+def test_recovery_skips_an_unreadable_owner_and_reconciles_the_others(
+    monkeypatch, tmp_path, capsys, stale
+):
+    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
+    other = OwnedCandidate(id="5" * 16 + "-" + "6" * 16,
+                           family="configs/amd-master.yaml:other", base="a" * 40)
+    owners = [Ownership(run_id=42, candidates=[world.session.candidate])]
+    if stale == "deleted-claim-parent":
+        owners.append(Ownership(run_id=77, candidates=[other]))
+    monkeypatch.setattr(claims, "family_owners", lambda _r: owners)
+    serve, read = github.items, github.read
+
+    def items(repository, path, key=None):
+        if path.startswith("actions/artifacts?") and stale == "corrupt-artifact":
+            return [{"id": 5, "expired": False, "size_in_bytes": 10, "workflow_run": {"id": 42}}]
+        return serve(repository, path, key)
+
+    def gone(repository, path):
+        if path == "actions/runs/77":
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return read(repository, path)
+
+    def corrupt(*_args):
+        raise github.VerificationError("Invalid artifact archive")
+
+    monkeypatch.setattr(github, "items", items)
+    monkeypatch.setattr(github, "read", gone)
+    monkeypatch.setattr(github, "download_json", corrupt)
+
+    summary, _ = recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == [("POST", "actions/runs/9/rerun-failed-jobs")]
+    rerun = (f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted "
+             "final sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
+             "\n\n")
+    if stale == "deleted-claim-parent":
+        assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [
+            "configs/amd-master.yaml:other", FAMILY]
+        assert summary.read_text() == (
+            f"Klaud `{other.id}`: needs inspection / 需要检查 (state unavailable or invalid). "
+            "[Parent run / 父运行](https://github.com/example/project/actions/runs/77)\n\n" + rerun)
+    else:
+        assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+        assert summary.read_text() == rerun
+        assert "::warning::Klaud: ownership artifact 5 is unreadable; skipped.\n" in (
+            capsys.readouterr().out)
+
+
 def test_recovery_warns_why_a_passed_final_sweep_failed_validation(monkeypatch, capsys):
     world = ended_session_sweep(monkeypatch, attempt=2, conclusion="success", artifacts=[{
         "id": 1, "name": "klaud-sweep-manifest", "expired": False,
