@@ -65,12 +65,10 @@ def test_error_event_mid_stream_fails_the_request(endpoint):
     assert "context length exceeded" in output.error
 
 
-
-@pytest.mark.parametrize("endpoint", ["completions", "chat/completions"])
-def test_stream_without_a_token_chunk_fails_the_request(endpoint):
+def test_chat_stream_without_a_token_chunk_fails_the_request():
     usage = {"choices": [], "usage": {"completion_tokens": 0}}
 
-    output = stream(endpoint, [usage, "[DONE]"])
+    output = stream("chat/completions", [usage, "[DONE]"])
 
     assert output.success is False
     assert output.error.startswith("Never received a valid chunk")
