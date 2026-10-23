@@ -10980,3 +10980,10 @@
     - "Search space: TP8 only, conc 1-24, no KV offloading. Throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 2.88 at 3 draft tokens, #4425)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4423
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from dev-muse-spark-open to nightly-dev-20261021-c1c287a4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4430
+  scenario-type: [agentic-coding]
