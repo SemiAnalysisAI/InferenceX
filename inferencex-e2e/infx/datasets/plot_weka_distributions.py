@@ -214,9 +214,12 @@ def _draw_histogram(
             ax.set_title(f"{title}\n(no positive values)")
             ax.axis("off")
             return
-        lo = max(positive.min(), 1e-3)
         hi = float(positive.max())
-        edges = np.geomspace(lo, hi, bins + 1)
+        lo = max(float(positive.min()), 1e-3) if hi > 1e-3 else float(positive.min())
+        # geomspace(v, v) can round to non-monotonic edges; centre a single value instead.
+        edges = (
+            np.geomspace(lo, hi, bins + 1) if hi > lo else np.geomspace(lo / 2, hi * 2, bins + 1)
+        )
         ax.hist(positive, bins=edges, color="#888", edgecolor="#222", linewidth=0.4)
         ax.set_xscale("log")
     else:
