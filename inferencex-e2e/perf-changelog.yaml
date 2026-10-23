@@ -11060,6 +11060,7 @@
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-agg
     - kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg
     - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-tp8pp2
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
   scenario-type:
