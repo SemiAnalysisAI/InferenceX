@@ -2295,6 +2295,16 @@ class TestCommandLine:
         assert result[0]['eval-conc'] == 4
         assert result[0]['run-eval'] is True
 
+    def test_trim_conc_merges_concurrencies_whose_recipe_variants_differ(self):
+        # A single-node bundle selects one variant per CONC, so each point has its own fingerprint.
+        shape = {'tp': 8, 'model': 'm', 'srt-recipe': 'agentic.yaml'}
+        rows = [
+            {**shape, 'conc': 8, 'recipe-fingerprint': 'b' * 64},
+            {**shape, 'conc': 2, 'recipe-fingerprint': 'a' * 64},
+        ]
+
+        assert trim_conc(rows) == [{**shape, 'conc': 2, 'recipe-fingerprint': 'a' * 64}]
+
     def test_trim_conc_never_merges_a_standalone_eval_into_another_suite(self):
         shape = {'tp': 8, 'model': 'm'}
         vendor = {**shape, 'conc': 16, 'run-eval': True,

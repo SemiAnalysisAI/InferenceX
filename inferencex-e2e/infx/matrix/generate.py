@@ -58,6 +58,8 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     ignored_fields = {
         "conc",
         "exp-name",
+        # Single-node bundles bind one variant per CONC, so the fingerprint varies with it.
+        Fields.RECIPE_FINGERPRINT.value,
         "run-eval",
         "eval-only",
         "eval-conc",
