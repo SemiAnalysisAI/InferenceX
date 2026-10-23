@@ -15,6 +15,7 @@ from pydantic import (
     model_validator,
 )
 
+from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
@@ -976,7 +977,7 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         if not (root / path).is_file():
             raise ValueError(f"{reference} does not exist")
         try:
-            recipes[path] = yaml.safe_load((root / path).read_text())
+            recipes[path] = yamlio.safe_load((root / path).read_text())
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML") from error
     recipe = recipes[path]
@@ -1129,7 +1130,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
     for config_file in config_files:
         try:
             with open(config_file) as f:
-                config_data = yaml.safe_load(f)
+                config_data = yamlio.safe_load(f)
                 if not isinstance(config_data, dict):
                     raise ValueError(f"Config file '{config_file}' must contain a dictionary")
 
@@ -1162,7 +1163,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
 def load_runner_file(runner_file: str, validate: bool = True) -> dict:
     try:
         with open(runner_file) as f:
-            runner_config = yaml.safe_load(f)
+            runner_config = yamlio.safe_load(f)
     except FileNotFoundError as e:
         raise ValueError(f"Runner config file '{runner_file}' does not exist.") from e
 

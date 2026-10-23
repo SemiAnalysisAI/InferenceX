@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+from infx import yamlio
 
 GOLDEN_DIR = Path(__file__).resolve().parent
 THINKING_MODES = ("thinking_on", "thinking_off")
@@ -66,7 +66,7 @@ def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
     path = golden_dir / f"{name}.yaml"
     if not path.is_file():
         raise ValueError(f"No committed golden curve {path.name} in {golden_dir}")
-    data = yaml.safe_load(path.read_text())
+    data = yamlio.safe_load(path.read_text())
     if not isinstance(data, dict) or len(data) != 1:
         raise ValueError(f"Expected one model in golden curve {path.name}")
     [(model, modes)] = data.items()

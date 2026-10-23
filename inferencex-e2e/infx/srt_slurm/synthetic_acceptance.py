@@ -15,6 +15,7 @@ from typing import Any, NamedTuple
 
 import yaml
 
+from infx import yamlio
 from infx.golden_al_distribution import GOLDEN_DIR, golden_length
 from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
@@ -294,7 +295,7 @@ def plan_commands(
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
+    raw = yamlio.safe_load(Path(path).read_text())
     if not isinstance(raw, dict):
         raise ValueError("Recipe must be a mapping")
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)

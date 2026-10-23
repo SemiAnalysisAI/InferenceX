@@ -19,6 +19,7 @@ from typing import Any
 
 import yaml
 
+from infx import yamlio
 from infx.config import repository_root
 from infx.results.metadata import parse_component_metadata
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
@@ -158,7 +159,7 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
 
 
 def _block(path: Path) -> dict[str, Any]:
-    block = yaml.safe_load(path.read_text())
+    block = yamlio.safe_load(path.read_text())
     if not isinstance(block, dict):
         raise ValueError(f"{path}: shared block must be a mapping")
     return block
@@ -193,7 +194,7 @@ def compose_recipe(
 
     ``power_port`` adds the DCGM telemetry block with its exporter on that port.
     """
-    raw = yaml.safe_load(path.read_text())
+    raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
     check_fragment(raw, path, agentic=agentic, multinode=multinode)

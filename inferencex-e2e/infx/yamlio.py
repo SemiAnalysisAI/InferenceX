@@ -1,0 +1,131 @@
+"""PyYAML loading through libyaml, with PyYAML's own results and errors."""
+
+from __future__ import annotations
+
+import functools
+import io
+import os
+import re
+from typing import IO, Any
+
+import yaml
+
+_C_SAFE_LOADER = (
+    None if os.environ.get("INFX_PURE_YAML") == "1" else getattr(yaml, "CSafeLoader", None)
+)
+_TABLES = (
+    "yaml_constructors",
+    "yaml_multi_constructors",
+    "yaml_implicit_resolvers",
+    "yaml_path_resolvers",
+)
+_CLASS_ATTRIBUTES = {
+    *_TABLES,
+    "__module__",
+    "__qualname__",
+    "__doc__",
+    "__firstlineno__",
+    "__static_attributes__",
+}
+# libyaml accepts documents PyYAML rejects when they hold directives, tabs, byte order marks, a
+# comment glued to a block scalar header, or characters PyYAML's reader refuses. Line breaks
+# other than "\n" go to PyYAML too, because the line-start patterns here only see "\n".
+_DIVERGENT = re.compile(r"(?m)^%|[\t\ufeff\r\x85\u2028\u2029]|[|>][-+0-9]*#")
+# Deeper documents are left to PyYAML: its recursive composer raises RecursionError near 500
+# levels, where libyaml's recursive C composer returns a value or overflows the C stack.
+# Indentless sequences add at most one level per counted collection token.
+_MAX_TOKEN_DEPTH = 50
+_OPENING_TOKENS = (
+    yaml.BlockMappingStartToken,
+    yaml.BlockSequenceStartToken,
+    yaml.FlowMappingStartToken,
+    yaml.FlowSequenceStartToken,
+)
+_CLOSING_TOKENS = (yaml.BlockEndToken, yaml.FlowMappingEndToken, yaml.FlowSequenceEndToken)
+_FLOW_TOKENS = {
+    yaml.FlowMappingStartToken: 1,
+    yaml.FlowSequenceStartToken: 1,
+    yaml.FlowMappingEndToken: -1,
+    yaml.FlowSequenceEndToken: -1,
+}
+
+
+class _NamedText(io.StringIO):
+    """Text that reports the original stream's name in PyYAML error marks."""
+
+    def __init__(self, text: str, name: str) -> None:
+        super().__init__(text)
+        self.name = name
+
+
+@functools.cache
+def _fast_loader(loader: type) -> type | None:
+    """libyaml twin of a SafeLoader subclass that only customizes its lookup tables."""
+    if _C_SAFE_LOADER is None or not issubclass(loader, yaml.SafeLoader):
+        return None
+    mro = loader.__mro__
+    if any(set(vars(cls)) - _CLASS_ATTRIBUTES for cls in mro[: mro.index(yaml.SafeLoader)]):
+        return None
+    return type(
+        f"Fast{loader.__name__}", (_C_SAFE_LOADER,), {t: getattr(loader, t) for t in _TABLES}
+    )
+
+
+def _may_nest_deeply(text: str) -> bool:
+    """Whether the token depth can exceed the limit: flow nesting is at most the number of
+    openers, and block nesting at most one more than the longest run of spaces and block
+    indicators that starts a line."""
+    room = _MAX_TOKEN_DEPTH - 1 - text.count("[") - text.count("{")
+    return room < 0 or re.search(rf"(?m)^[ ?:-]{{{room + 1},}}", text) is not None
+
+
+def _needs_pyyaml(text: str, fast: type) -> bool:
+    """Whether the document has a tag, which libyaml and PyYAML scan differently, nesting too
+    deep for libyaml's composer, or a plain scalar inside a flow collection holding ``?``,
+    which ends it in PyYAML."""
+    if "?" not in text and "!" not in text and not _may_nest_deeply(text):
+        return False
+    depth = flow = 0
+    for token in yaml.scan(text, Loader=fast):
+        kind = type(token)
+        if kind in _OPENING_TOKENS:
+            depth += 1
+            if depth > _MAX_TOKEN_DEPTH:
+                return True
+        elif kind in _CLOSING_TOKENS:
+            depth -= 1
+        elif kind is yaml.TagToken or (
+            flow and kind is yaml.ScalarToken and token.plain and "?" in token.value
+        ):
+            return True
+        flow += _FLOW_TOKENS.get(kind, 0)
+    return False
+
+
+def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
+    """Return exactly what ``yaml.load(stream, Loader=loader)`` returns or raises.
+
+    Documents libyaml accepts are parsed by libyaml, which builds the same nodes as PyYAML;
+    PyYAML reparses everything else, so errors and their marks are PyYAML's own.
+    ``INFX_PURE_YAML=1`` turns libyaml off.
+    """
+    fast = _fast_loader(loader)
+    if fast is None or not isinstance(stream, str | io.TextIOBase):
+        return yaml.load(stream, Loader=loader)  # noqa: S506
+    if isinstance(stream, str):
+        text, fallback = stream, stream
+    else:
+        text = stream.read()
+        fallback = _NamedText(text, getattr(stream, "name", "<file>"))
+    if not _DIVERGENT.search(text) and not yaml.reader.Reader.NON_PRINTABLE.search(text):
+        try:
+            if not _needs_pyyaml(text, fast):
+                return yaml.load(text, Loader=fast)  # noqa: S506
+        except yaml.YAMLError:
+            pass
+    return yaml.load(fallback, Loader=loader)  # noqa: S506
+
+
+def safe_load(stream: str | IO[str]) -> Any:
+    """Drop-in for ``yaml.safe_load`` on text."""
+    return load(stream, yaml.SafeLoader)

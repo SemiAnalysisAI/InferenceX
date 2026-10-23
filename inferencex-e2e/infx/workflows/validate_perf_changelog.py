@@ -15,6 +15,7 @@ import yaml
 from yaml.constructor import ConstructorError
 from yaml.resolver import BaseResolver
 
+from infx import yamlio
 from infx.config import git_path_at_ref
 from infx.matrix.validation import ChangelogEntry
 
@@ -102,7 +103,7 @@ def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
         raise ChangelogValidationError(f"{label} is not UTF-8: {exc}") from exc
 
     try:
-        data = yaml.load(text, Loader=UniqueKeyLoader)  # noqa: S506
+        data = yamlio.load(text, UniqueKeyLoader)
     except yaml.YAMLError as exc:
         raise ChangelogValidationError(f"{label} is not valid YAML: {exc}") from exc
 

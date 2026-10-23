@@ -10,8 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
-import yaml
-
+from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
 from infx.srt_slurm.variants import deep_merge, expand_variants
@@ -236,7 +235,7 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
 def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
-    recipe = yaml.safe_load(recipe_path.read_text())
+    recipe = yamlio.safe_load(recipe_path.read_text())
     if "base" in recipe:
         if not (selector == "base" or selector.startswith("override_")):
             return None
@@ -274,7 +273,7 @@ def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
 
 def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data: dict) -> None:
     path, _, selector = srt_recipe.partition(":")
-    variants = expand_variants(yaml.safe_load((root / path).read_text()), selector or None)
+    variants = expand_variants(yamlio.safe_load((root / path).read_text()), selector or None)
     fabrics = {
         f"cluster {cluster_id!r}": fabric.rendered()
         for cluster_id, fabric in _label_fabrics(label, runner_data).items()

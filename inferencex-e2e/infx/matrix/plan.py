@@ -6,8 +6,7 @@ import traceback
 from collections import defaultdict
 from contextlib import ExitStack
 
-import yaml
-
+from infx import yamlio
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
 from .fingerprint import recipe_fingerprint
@@ -468,7 +467,7 @@ def main() -> None:
     if not added_yaml.strip():
         raise ValueError("No additions found in the changelog file.")
 
-    changelog_data = yaml.safe_load(added_yaml)
+    changelog_data = yamlio.safe_load(added_yaml)
 
     try:
         result = build_plan(

@@ -11,7 +11,6 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal, Self
 
-import yaml
 from pydantic import (
     Field,
     PrivateAttr,
@@ -21,6 +20,7 @@ from pydantic import (
     model_validator,
 )
 
+from infx import yamlio
 from infx.clusters.base import Record, SchedulerSettings
 from infx.clusters.slurm import Fabric, SlurmSettings
 from infx.config import RUNNER_CONFIG, repository_root
@@ -220,7 +220,7 @@ def load_inventory(runner_config: str | Path | Mapping[str, Any] | None = None) 
         data = runner_config
     else:
         with open(runner_config) as file:
-            data = yaml.safe_load(file)
+            data = yamlio.safe_load(file)
         if not isinstance(data, Mapping):
             raise ValueError(f"{runner_config}: runner config must be a mapping")
     return RunnerInventory.model_validate(data)
