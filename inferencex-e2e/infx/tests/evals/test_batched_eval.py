@@ -283,6 +283,14 @@ def test_validate_scores_fails_when_thresholds_cannot_be_loaded(
             "thresholds config 'models' must be a mapping",
         ),
         (
+            "default: []\n",
+            "thresholds config 'default' must be a mapping",
+        ),
+        (
+            "default:\n  gsm8k: 0.9\nmodels:\n  dsr1: 0\n",
+            "thresholds config 'models.dsr1' must be a mapping",
+        ),
+        (
             "default:\n  gsm8k: .nan\n",
             "thresholds config default.gsm8k must be a finite number, got nan",
         ),

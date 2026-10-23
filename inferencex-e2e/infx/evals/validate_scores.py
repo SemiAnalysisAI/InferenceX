@@ -38,11 +38,13 @@ def load_config(path: str) -> dict:
         raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
         cfg = {"default": cfg}
-    sections = {"default": cfg.get("default") or {}, "models": cfg.get("models") or {}}
+    sections = {name: {} if cfg.get(name) is None else cfg[name] for name in ("default", "models")}
     for name, section in sections.items():
         if not isinstance(section, dict):
             raise ValueError(f"thresholds config {name!r} must be a mapping")
-    sections["models"] = {prefix: tasks or {} for prefix, tasks in sections["models"].items()}
+    sections["models"] = {
+        prefix: {} if tasks is None else tasks for prefix, tasks in sections["models"].items()
+    }
     tables = {"default": sections["default"]}
     tables.update((f"models.{prefix}", tasks) for prefix, tasks in sections["models"].items())
     for name, tasks in tables.items():
