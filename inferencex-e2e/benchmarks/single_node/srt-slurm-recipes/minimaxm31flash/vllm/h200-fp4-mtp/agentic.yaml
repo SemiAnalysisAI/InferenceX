@@ -38,9 +38,10 @@ base:
         kv-cache-dtype: fp8
         attention-config: '{"indexer_kv_dtype":"fp8"}'
         moe-backend: marlin
-        # Three-token DSpark. Throughput runs switch to synthetic rejection at the
-        # golden acceptance length.
-        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","rejection_sample_method":"block"}'
+        # Three-token DSpark with probabilistic drafting and block rejection, as
+        # measured for minimaxm31flash_dspark. Throughput runs switch to synthetic
+        # rejection at the golden acceptance length.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","rejection_sample_method":"block"}'
         disable-hybrid-kv-cache-manager: true
         enable-prefix-caching: true
         # Upstream caps Hopper at 256K, but the AgentX corpus for this prefix is
