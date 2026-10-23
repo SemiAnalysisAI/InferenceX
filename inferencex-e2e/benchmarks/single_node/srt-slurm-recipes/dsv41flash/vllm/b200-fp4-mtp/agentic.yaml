@@ -63,7 +63,7 @@ zip_override_tp4:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true,"use_thp":true}'
-        max-num-seqs: [8, 8, 16, 32, 64, 128, 256]
+        max-num-seqs: [8, 8, 16, 32, 128, 256]
         compilation-config:
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
@@ -71,16 +71,18 @@ zip_override_tp4:
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
           - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
-          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
-        max-cudagraph-capture-size: [4092, 4092, 8190, 8190, 8190, 8190, 8190]
-        max-num-batched-tokens: [4096, 4096, 8192, 8192, 8192, 8192, 8192]
+        max-cudagraph-capture-size: [4092, 4092, 8190, 8190, 8190, 8190]
+        max-num-batched-tokens: [4096, 4096, 8192, 8192, 8192, 8192]
   benchmark:
     env:
-      CONC: ['1', '4', '8', '16', '32', '64', '128']
+      CONC: ['1', '4', '8', '16', '32', '128']
 
 # DEP2: TP1 x DP2 + EP2 with MegaMoE behind a consistent-hash router. Each
-# B200 rank holds ~150 GiB of weights, so batched tokens stay at 4096 and
-# graph capture stops at 576 tokens.
+# B200 rank holds ~150 GiB of weights, so batched tokens stay at 4096. Graph
+# capture stops at 576 tokens for c8/c16. At c32, piecewise graphs extend to
+# 4096 tokens so prefill-bearing steps replay graphs, and new prefills are
+# admitted every 64 engine steps, aligned across DP ranks. A value of 1 is the
+# vLLM default (admit on every step).
 zip_override_dep2:
   frontend:
     type: vllm-router
@@ -101,14 +103,20 @@ zip_override_dep2:
         kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
         engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
         max-num-seqs: [16, 16, 32]
-        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
-        max-cudagraph-capture-size: 576
+        compilation-config:
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
+          - '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,640,768,896,1024,1280,1536,1792,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+        max-cudagraph-capture-size: [576, 576, 4096]
         max-num-batched-tokens: 4096
+        prefill-schedule-interval: [1, 1, 64]
   benchmark:
     env:
       CONC: ['8', '16', '32']
 
-# DEP4: TP1 x DP4 + EP4 with MegaMoE behind a consistent-hash router.
+# DEP4: TP1 x DP4 + EP4 with MegaMoE behind a consistent-hash router. At
+# c128, new prefills are admitted every 48 engine steps, aligned across DP
+# ranks.
 zip_override_dep4:
   frontend:
     type: vllm-router
@@ -128,8 +136,151 @@ zip_override_dep4:
         enable-expert-parallel: true
         kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
         engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
-        max-num-seqs: [64, 128]
+        max-num-seqs: [128]
+        prefill-schedule-interval: [48]
         compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
   benchmark:
     env:
-      CONC: ['64', '128']
+      CONC: ['128']
+
+# TP2 c1: the TP4 c1 settings on two GPUs.
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        engram-config: '{"cpu_offload":true,"use_thp":true}'
+        max-num-seqs: 8
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+        max-cudagraph-capture-size: 4092
+        max-num-batched-tokens: 4096
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+# DEP2 c128 with a host-DRAM KV tier: the DEP2 c8-c16 settings plus vLLM's
+# native CPU offloading at 32 GiB per DP rank (64 GiB per server). GPU memory
+# utilization drops to 0.955 to keep headroom for the indexer logits at this
+# batch. max-num-seqs is 48, so up to 80 of the 128 clients wait in the queue.
+override_dep2_c128_dram:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        enable-expert-parallel: true
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        max-num-seqs: 48
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
+        max-cudagraph-capture-size: 576
+        max-num-batched-tokens: 4096
+        gpu-memory-utilization: 0.955
+        kv-offloading-backend: native
+        kv-offloading-size: 32
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: dram
+
+# DEP2 c24: the DEP2 c32 settings (piecewise graphs to 4096 tokens,
+# prefill-schedule-interval 64) at concurrency 24.
+override_dep2_c24:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        enable-expert-parallel: true
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        max-num-seqs: 32
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,640,768,896,1024,1280,1536,1792,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+        max-cudagraph-capture-size: 4096
+        max-num-batched-tokens: 4096
+        prefill-schedule-interval: 64
+  benchmark:
+    env:
+      CONC: '24'
+
+# DEP4 c96: the DEP4 c128 settings (prefill-schedule-interval 48) at
+# concurrency 96.
+override_dep4_c96:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 4
+        enable-expert-parallel: true
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        max-num-seqs: 96
+        prefill-schedule-interval: 48
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+  benchmark:
+    env:
+      CONC: '96'
+
+# DEP2 c64 host KV: the DEP2 c128 host-KV settings at concurrency 64.
+override_dep2_c64_dram:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        enable-expert-parallel: true
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe"}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        max-num-seqs: 48
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
+        max-cudagraph-capture-size: 576
+        max-num-batched-tokens: 4096
+        gpu-memory-utilization: 0.955
+        kv-offloading-backend: native
+        kv-offloading-size: 32
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
