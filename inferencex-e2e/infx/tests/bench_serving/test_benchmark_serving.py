@@ -103,6 +103,17 @@ def test_non_positive_request_rate_is_rejected_before_the_run(tmp_path, monkeypa
     assert benchmark.await_count == 0
 
 
+def test_missing_result_dir_is_rejected_before_the_run(tmp_path, monkeypatch):
+    benchmark = stub_benchmark(monkeypatch, {'completed': 1})
+    missing = tmp_path / 'missing'
+
+    with pytest.raises(ValueError, match=f'--result-dir {missing} is not an existing directory'):
+        client.main(cli_args(tmp_path, result_dir=str(missing)))
+
+    assert benchmark.await_count == 0
+    assert not missing.exists()
+
+
 class WordTokenizer:
     """One token per whitespace-separated word."""
 

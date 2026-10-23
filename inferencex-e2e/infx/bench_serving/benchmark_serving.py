@@ -36,6 +36,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -827,6 +828,8 @@ def main(args: argparse.Namespace) -> None:
     print(args)
     if args.request_rate <= 0:
         raise ValueError(f"--request-rate must be positive, got {args.request_rate}")
+    if args.save_result and args.result_dir and not Path(args.result_dir).is_dir():
+        raise ValueError(f"--result-dir {args.result_dir} is not an existing directory")
     random.seed(args.seed)
     np.random.seed(args.seed)  # noqa: NPY002
 
