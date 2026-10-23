@@ -11060,4 +11060,4 @@
   description:
     - "Set TP4 concurrency 16, 24 and 32 to the FLASHINFER_TS DSpark attention backend and VLLM_HTTP_TIMEOUT_KEEP_ALIVE=300. Use prefill-schedule-interval 64 at concurrency 16 and 24, and 32 at concurrency 32."
     - "Add TP4 concurrency 24 with max-num-seqs 48."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4451
