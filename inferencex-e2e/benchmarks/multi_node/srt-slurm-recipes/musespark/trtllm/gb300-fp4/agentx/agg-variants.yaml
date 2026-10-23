@@ -58,8 +58,7 @@ base:
         disable_overlap_scheduler: false
         enable_attention_dp: false
         enable_chunked_prefill: true
-        enable_iter_perf_stats: true
-        iter_perf_stats_interval: 20
+        enable_iter_perf_stats: false
         enable_iter_req_stats: false
         iter_stats_max_iterations: 10000
         request_stats_max_iterations: 10000
@@ -69,7 +68,6 @@ base:
         perf_metrics_max_requests: 100000
         perf_metrics_output_dir: /logs/perf_metrics/agg
         kv_cache_config:
-          iteration_stats_interval: 20
           use_kv_cache_manager_v2: true
           block_reuse_config:
             policy: all_reusable
@@ -101,7 +99,6 @@ base:
   benchmark:
     env:
       SERVED_MODEL_NAME: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
-      # The HF repo is gated; tokenize from the mounted checkpoint.
       TOKENIZER: /model
       AIPERF_HTTP_TCP_USER_TIMEOUT: '1000000'
 
@@ -114,6 +111,7 @@ override_tep8_c1:
       env:
         TRTLLM_DFLASH_WINDOWED_CTX_ARENA: null
         MUSESPARK_OPEN_LL_QKV_WEIGHT_LAYOUT: '0'
+        TRTLLM_KV_HOST_TIER_DROP_PAGE_CACHE: '1'
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -123,6 +121,8 @@ override_tep8_c1:
           enable_padding: true
           max_batch_size: 1
           batch_sizes: [1]
+        kv_cache_config:
+          host_cache_size: 0
 
 override_tep4_c1:
   name: musespark-trt-agg-gb300-tep4-c1-dflash7
@@ -135,68 +135,100 @@ override_tep4_c1:
           max_batch_size: 1
           batch_sizes: [1]
 
-override_tep4_c2:
-  name: musespark-trt-agg-gb300-tep4-c2-dflash7
+override_tep4_c4:
+  name: musespark-trt-agg-gb300-tep4-c4-b2-dflash7
   roles:
     agg:
+      env: &large_batch_env
+        MUSESPARK_OPEN_FUSED_FINALIZE_AR_CHUNKED: '1'
+        MUSESPARK_OPEN_FULL_ROUTING_ALL_BATCHES: '1'
+        MUSESPARK_OPEN_FULL_ROUTING_TORCH_ORDER: '1'
+        MUSESPARK_OPEN_LARGE_NORM_GATE: '1'
+        MUSESPARK_OPEN_LARGE_PREPARE_OVERLAP: '1'
+        MUSESPARK_OPEN_LARGE_FINALIZE_SPARSE: '1'
+        TRTLLM_KV_HOST_TIER_DROP_PAGE_CACHE: '1'
+        TRTLLM_KV_HOST_TIER_COLLAPSE: '1'
       args:
         max_batch_size: 2
         cuda_graph_config:
           enable_padding: true
           max_batch_size: 2
           batch_sizes: [1, 2]
+        prefill_capture_num_tokens: &prefill_capture
+          [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560, 2816,
+           3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
 
-override_tep4_c4:
-  name: musespark-trt-agg-gb300-tep4-c4-dflash7
+override_tep4_c8:
+  name: musespark-trt-agg-gb300-tep4-c8-b4-dflash7
   roles:
     agg:
+      env:
+        <<: *large_batch_env
+        TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '64'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
       args:
         max_batch_size: 4
         cuda_graph_config:
           enable_padding: true
           max_batch_size: 4
-          batch_sizes: [1, 2, 4]
+          batch_sizes: [1, 2, 3, 4]
+        prefill_capture_num_tokens: *prefill_capture
 
-override_tep4_c8:
-  name: musespark-trt-agg-gb300-tep4-c8-dflash7
+override_tep4_c20:
+  name: musespark-trt-agg-gb300-tep4-c20-b20-dflash7
   roles:
     agg:
+      env:
+        <<: *large_batch_env
+        TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '48'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
       args:
-        max_batch_size: 8
+        max_batch_size: 20
         cuda_graph_config:
           enable_padding: true
-          max_batch_size: 8
-          batch_sizes: [1, 2, 4, 8]
-
-override_tep4_c16:
-  name: musespark-trt-agg-gb300-tep4-c16-dflash7
-  roles:
-    agg:
-      args:
-        max_batch_size: 16
-        cuda_graph_config:
-          enable_padding: true
-          max_batch_size: 16
-          batch_sizes: [1, 2, 4, 8, 16]
+          max_batch_size: 20
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        prefill_capture_num_tokens: *prefill_capture
+        kv_cache_config:
+          host_cache_size: 171798691840
+          pool_ratio: [0.25, 0.75]
 
 override_tep4_c32:
-  name: musespark-trt-agg-gb300-tep4-c32-dflash7
+  name: musespark-trt-agg-gb300-tep4-c32-b32-dflash7
   roles:
     agg:
+      env:
+        <<: *large_batch_env
+        TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '32'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
       args:
         max_batch_size: 32
         cuda_graph_config:
           enable_padding: true
           max_batch_size: 32
-          batch_sizes: [1, 2, 4, 8, 16, 32]
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                        24, 25, 26, 27, 28, 29, 30, 31, 32]
+        prefill_capture_num_tokens: *prefill_capture
+        kv_cache_config:
+          host_cache_size: 171798691840
+          pool_ratio: [0.25, 0.75]
 
-override_tep4_c64:
-  name: musespark-trt-agg-gb300-tep4-c64-dflash7
+override_tep4_c48:
+  name: musespark-trt-agg-gb300-tep4-c48-b24-dflash7
   roles:
     agg:
+      env:
+        <<: *large_batch_env
+        TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '16'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
       args:
-        max_batch_size: 64
+        max_batch_size: 24
         cuda_graph_config:
           enable_padding: true
-          max_batch_size: 64
-          batch_sizes: [1, 2, 4, 8, 16, 32, 64]
+          max_batch_size: 24
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                        24]
+        prefill_capture_num_tokens: *prefill_capture
+        kv_cache_config:
+          host_cache_size: 171798691840
+          pool_ratio: [0.25, 0.75]

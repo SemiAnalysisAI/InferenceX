@@ -72,7 +72,9 @@ base:
 # One variant per point, concurrency 1 through 64 on both TP arms (c128 and
 # c192 excluded). Engram tables move to pinned host memory at TP2, where
 # resident tables leave too little KV. Graph capture covers 2x CONC x
-# (1 + 5 drafts). The prefill chunk is the upstream 16384 everywhere.
+# (1 + 5 drafts). The prefill chunk is the upstream 16384, except at c16 and
+# c32, which run 8192-token chunks and admit at most 4 (c16) or 8 (c32)
+# running sequences.
 override_tp4_c1:
   roles:
     agg:
@@ -133,7 +135,8 @@ override_tp4_c16:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
         max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-num-batched-tokens: 8192
+        max-num-seqs: 4
   benchmark:
     env:
       CONC: '16'
@@ -146,7 +149,8 @@ override_tp4_c32:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
         max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-num-batched-tokens: 8192
+        max-num-seqs: 8
   benchmark:
     env:
       CONC: '32'
@@ -224,7 +228,8 @@ override_tp2_c16:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-num-batched-tokens: 8192
+        max-num-seqs: 4
   benchmark:
     env:
       CONC: '16'
@@ -237,7 +242,8 @@ override_tp2_c32:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-num-batched-tokens: 8192
+        max-num-seqs: 8
   benchmark:
     env:
       CONC: '32'
