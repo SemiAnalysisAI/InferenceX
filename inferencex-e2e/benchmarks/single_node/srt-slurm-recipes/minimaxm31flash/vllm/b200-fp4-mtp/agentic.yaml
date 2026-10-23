@@ -54,14 +54,34 @@ zip_override_tp4:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: [2, 8, 16, 32, 64]
+        max-num-seqs: [2, 8, 16, 32, 48]
         # Golden AL 4.04.
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['1', '4', '8', '16', '32']
+      CONC: ['1', '4', '8', '16', '24']
+      KV_OFFLOADING: none
 
-zip_override_dep4:
+# DRAM points give SimpleCPUOffload the whole host budget (TOTAL_CPU_DRAM_GB
+# decimal GB) with lazy offload.
+override_tp4_c32_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 64
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1073'
+
+zip_override_dep8:
   frontend:
     type: vllm-router
     args:
@@ -73,14 +93,19 @@ zip_override_dep4:
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 4
+      gpus: 8
       args:
         tensor-parallel-size: 1
-        data-parallel-size: 4
+        data-parallel-size: 8
         enable-expert-parallel: true
-        max-num-seqs: [32, 64]
+        max-num-seqs: [16, 24, 32]
         # Golden AL 2.88.
         speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"lazy_offload":true}}'
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
-      CONC: ['64', '128']
+      CONC: ['64', '96', '128']
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1932'
