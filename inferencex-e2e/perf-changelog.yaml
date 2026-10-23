@@ -10980,3 +10980,10 @@
     - "Search space: TP8 only, conc 1-24, no KV offloading. Throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 2.88 at 3 draft tokens, #4425)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4423
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-cd10ed6f to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4428
+  scenario-type: [agentic-coding]
