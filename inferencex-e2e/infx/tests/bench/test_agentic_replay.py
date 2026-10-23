@@ -62,6 +62,7 @@ def test_opt_in_inputs_add_their_flags_in_place():
         WEKA_LOADER_OVERRIDE=traces.UNCAPPED,
         AIPERF_APPLY_CHAT_TEMPLATE="true",
         AIPERF_BENCHMARK_GRACE_PERIOD="1800",
+        AIPERF_SLICE_DURATION="3600",
     )
 
     assert argv == [
@@ -77,6 +78,7 @@ def test_opt_in_inputs_add_their_flags_in_place():
         "--output-artifact-dir", "/results/aiperf_artifacts",
         "--public-dataset", traces.UNCAPPED,
         "--apply-chat-template", "--benchmark-grace-period", "1800",
+        "--slice-duration", "3600",
     ]  # fmt: skip
 
 

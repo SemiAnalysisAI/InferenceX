@@ -52,6 +52,8 @@ class ReplayConfig:
     dataset: str
     apply_chat_template: bool
     benchmark_grace_period: str | None
+    slice_duration: str | None
+    """``AIPERF_SLICE_DURATION``: timeslice width in seconds; unset leaves the scenario default."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], result_dir: Path) -> ReplayConfig:
@@ -98,6 +100,7 @@ class ReplayConfig:
             dataset=dataset,
             apply_chat_template=env.get("AIPERF_APPLY_CHAT_TEMPLATE") == "true",
             benchmark_grace_period=inputs.optional("AIPERF_BENCHMARK_GRACE_PERIOD", env),
+            slice_duration=inputs.optional("AIPERF_SLICE_DURATION", env),
         )
 
 
@@ -164,4 +167,6 @@ def replay_argv(cfg: ReplayConfig, cli: str | Path) -> list[str]:
         argv.append("--apply-chat-template")
     if cfg.benchmark_grace_period is not None:
         argv += ["--benchmark-grace-period", cfg.benchmark_grace_period]
+    if cfg.slice_duration is not None:
+        argv += ["--slice-duration", cfg.slice_duration]
     return argv
