@@ -13,7 +13,6 @@ import json
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +20,7 @@ import yaml
 
 from infx import yamlio
 from infx.config import repository_root
+from infx.fastcopy import deepcopy
 from infx.results.metadata import parse_component_metadata
 from infx.srt_slurm.synthetic_acceptance import selected_recipes, spec_parameters
 

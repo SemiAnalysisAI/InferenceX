@@ -8,8 +8,9 @@ selectors a master config accepts.
 from __future__ import annotations
 
 import re
-from copy import deepcopy
 from typing import Any
+
+from infx.fastcopy import deepcopy
 
 ZIP_VARIANT = re.compile(r"(zip_override_[\w-]+)\[(\d+)\]")
 
