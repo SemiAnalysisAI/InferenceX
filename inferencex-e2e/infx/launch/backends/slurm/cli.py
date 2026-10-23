@@ -283,6 +283,10 @@ def follow_log(job: Job, path: Path) -> None:
     tail_argv = ["tail", "-F", "-s", "2", "-n+1", str(path), f"--pid={sentinel.pid}"]
     echo(tail_argv)
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
+    # HACK (manual e2e only): also stream srtctl's engine log once it appears.
+    logs, pid = f"{path.parent}/*_agg_w*.out", sentinel.pid
+    subprocess.Popen(["bash", "-c", f"while kill -0 {pid} && ! ls {logs}; do sleep 5; done &>/dev/null;"
+                      f" exec tail -F -s 2 -n+1 --pid={pid} {logs}"], stderr=subprocess.DEVNULL)
     try:
         while queue_state(job, echo_command=False) is not None:
             time.sleep(10)
