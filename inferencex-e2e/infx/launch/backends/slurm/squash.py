@@ -11,6 +11,7 @@ import fcntl
 import glob
 import os
 import re
+import shutil
 import socket
 import stat
 import sys
@@ -157,6 +158,8 @@ def _locked(path: Path, timeout_s: int) -> Iterator[None]:
 def _import_here(image: str, policy: SquashPolicy) -> None:
     """Import on this host into a temp file, validate, ``chmod a+r``, rename into place."""
     path = squash_path(image, policy)
+    if shutil.which("unsquashfs") is None:
+        raise _PermanentImageError(f"unsquashfs is not installed here; cannot validate {path}")
     with _locked(lock_path(image, policy), policy.lock_timeout_s):
         if is_valid_squash(path):
             print(
