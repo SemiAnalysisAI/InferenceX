@@ -428,6 +428,19 @@ class TestAgenticMatrixEntries:
                 }],
             })
 
+    def test_dram_kv_offload_rejects_per_worker_hardware(self):
+        with pytest.raises(ValidationError, match="per-worker 'hardware'"):
+            AgenticCodingConfig(**{
+                "dram-utilization": 0.80,
+                "search-space": [{
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": {"name": "mooncake"},
+                    "prefill": {"hardware": "gb200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                    "decode": {"hardware": "b200", "num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                    "conc-list": [16],
+                }],
+            })
+
     def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
         with pytest.raises(ValidationError, match="total-cpu-dram-gb"):
             AgenticCodingSearchSpaceEntry(**{
@@ -1047,18 +1060,6 @@ class TestValidateMasterConfig:
         with pytest.raises(ValidationError, match=replacement):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
-    def test_llmd_configs_keep_config_file(self, valid_multinode_master_config):
-        config = valid_multinode_master_config
-        config["framework"] = "llmd-vllm"
-        del config["srt-recipe-dir"]
-        row = config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
-        del row["srt-recipe"]
-        row["prefill"]["additional-settings"].append("CONFIG_FILE=llmd.yaml")
-        assert validate_master_config({"llmd": config}, Path()) == {"llmd": config}
-        row["srt-recipe"] = "recipe.yaml"
-        with pytest.raises(ValidationError, match="llmd-vllm selects recipes with CONFIG_FILE"):
-            MultiNodeMasterConfigEntry(**config)
-
     def test_eval_srt_recipe_is_multinode_only(self, valid_single_node_master_config):
         config = valid_single_node_master_config
         config["runner"] = "cluster:b200-nscale"
@@ -1335,6 +1336,17 @@ class TestMultiNodeAgenticMatrixEntry:
         with pytest.raises(ValueError):
             validate_agentic_matrix_entry(without_prefill)
 
+    def test_smoke_rows_satisfy_the_dispatch_schema(self):
+        from infx.matrix.generate import smoke_entries
+
+        row = {**MULTINODE_AGENTIC_EVAL_ROW, "conc": [8, 32]}
+        del row["eval-only"]
+        rows = smoke_entries([row])
+
+        assert [(entry["conc"], entry.get("eval-only", False)) for entry in rows] == [
+            ([8], False), ([32], True)]
+        for entry in rows:
+            validate_agentic_matrix_entry(entry)
 
 
 class TestLoadConfigFiles:

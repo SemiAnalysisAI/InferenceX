@@ -139,14 +139,14 @@ override_tp4_c15_dram:
         tensor-parallel-size: 4
         max-num-seqs: 30
         max-cudagraph-capture-size: 120
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '15'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c20_dram:
   roles:
@@ -156,14 +156,14 @@ override_tp4_c20_dram:
         tensor-parallel-size: 4
         max-num-seqs: 40
         max-cudagraph-capture-size: 160
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '20'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c25_dram:
   roles:
@@ -173,14 +173,14 @@ override_tp4_c25_dram:
         tensor-parallel-size: 4
         max-num-seqs: 50
         max-cudagraph-capture-size: 200
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '25'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c30_dram:
   roles:
@@ -189,15 +189,17 @@ override_tp4_c30_dram:
       args:
         tensor-parallel-size: 4
         max-num-seqs: 60
-        max-cudagraph-capture-size: 240
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        max-cudagraph-capture-size: 4096
+        cudagraph-capture-sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 256, 320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '30'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c32_dram:
   roles:
@@ -207,14 +209,14 @@ override_tp4_c32_dram:
         tensor-parallel-size: 4
         max-num-seqs: 64
         max-cudagraph-capture-size: 256
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c34_dram:
   roles:
@@ -224,14 +226,14 @@ override_tp4_c34_dram:
         tensor-parallel-size: 4
         max-num-seqs: 68
         max-cudagraph-capture-size: 272
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '34'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c36_dram:
   roles:
@@ -241,14 +243,14 @@ override_tp4_c36_dram:
         tensor-parallel-size: 4
         max-num-seqs: 72
         max-cudagraph-capture-size: 288
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '36'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c38_dram:
   roles:
@@ -257,15 +259,17 @@ override_tp4_c38_dram:
       args:
         tensor-parallel-size: 4
         max-num-seqs: 76
-        max-cudagraph-capture-size: 304
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        max-cudagraph-capture-size: 4096
+        cudagraph-capture-sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        attention-config: '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '38'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
 
 override_tp4_c40_dram:
   roles:
@@ -275,11 +279,141 @@ override_tp4_c40_dram:
         tensor-parallel-size: 4
         max-num-seqs: 80
         max-cudagraph-capture-size: 320
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1082000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
     env:
       CONC: '40'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1082'
+      TOTAL_CPU_DRAM_GB: '1073'
+
+# Low-concurrency arms that cap the number of sequences the scheduler keeps active
+# (max-num-active-seqs) below CONC, with a three- or five-token draft. Selected by
+# name from the master config.
+
+override_cap1_k5_tp4_c10:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-active-seqs: 1
+        gpu-memory-utilization: 0.925
+        max-cudagraph-capture-size: 4096
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096]
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":5,"attention_backend":"FLASHINFER"}'
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+override_cap1_k5_tp8_c10:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        max-num-active-seqs: 1
+        gpu-memory-utilization: 0.9
+        max-cudagraph-capture-size: 4096
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096]
+        no-enable-flashinfer-autotune: false
+        enable-flashinfer-autotune: true
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":5,"attention_backend":"FLASHINFER"}'
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+# TP4 DRAM concurrency 20 with 4 and 3 active sequences on the c10 key's image; the CPU KV
+# pool is the 1,073 GB node allowance.
+override_cap4_tp4_c20_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-active-seqs: 4
+        gpu-memory-utilization: 0.9
+        max-cudagraph-capture-size: 8192
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192]
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1073'
+
+override_cap3_tp4_c20_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-active-seqs: 3
+        gpu-memory-utilization: 0.9
+        max-cudagraph-capture-size: 8192
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192]
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1073'
+
+# CONC 32 with active sequences capped below CONC on the c10 key's image; the CPU KV pool is cut to the 1,073 GB node allowance.
+
+override_cap6_tp4_c32_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-active-seqs: 6
+        gpu-memory-utilization: 0.925
+        max-cudagraph-capture-size: 4096
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096]
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1073'
+
+override_cap16_tp4_c32_dram:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-active-seqs: 16
+        gpu-memory-utilization: 0.925
+        max-cudagraph-capture-size: 4096
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 640, 768, 1024, 1536, 2048, 3072, 4096]
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: mnnvl
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1073'

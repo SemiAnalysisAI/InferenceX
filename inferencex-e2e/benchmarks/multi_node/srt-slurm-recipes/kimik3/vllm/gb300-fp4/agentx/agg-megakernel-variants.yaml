@@ -1,0 +1,89 @@
+schema: 2
+base:
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      vllm: 1b2a666391f2a24228a1436b64d547c34cc6b6ce
+  dynamo:
+    install: false
+  slurm:
+    time_limit: 04:00:00
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  engine:
+    type: vllm
+    connector: null
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+        VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: '1'
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+        VLLM_RPC_TIMEOUT: '600000'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        VLLM_USE_RUST_FRONTEND: '0'
+        VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
+        VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+      args:
+        served-model-name: moonshotai/Kimi-K3
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        load-format: fastsafetensors
+        kv-cache-dtype: fp8
+        mamba-ssm-cache-dtype: float32
+        gpu-memory-utilization: 0.92
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        trust-remote-code: true
+        stream-interval: 10
+        language-model-only: true
+        moe-backend: auto
+        no-enable-flashinfer-autotune: true
+        attention-backend: TOKENSPEED_MLA
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+        enable-prefix-caching: true
+        prefix-match-unit: 128
+        max-num-seqs: 8
+        max-num-batched-tokens: 16384
+        additional-config: '{"decode_backend":"latency_specialized"}'
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '72'
+    comment: '''{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will take extra loading time."}}'''
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  telemetry:
+    collector_join_timeout_seconds: 12
+  benchmark:
+    env:
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    placement:
+      node: head
+override_tp16_dspark5:
+  roles:
+    agg:
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        decode-context-parallel-size: 16
+        max-cudagraph-capture-size: 48
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,10,12,20,24,40,48]}'
+        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
