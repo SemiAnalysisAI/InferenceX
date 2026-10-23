@@ -193,7 +193,7 @@ def validate_raw_change(
                 raise ChangelogValidationError(
                     "appended changelog entries must have exactly one empty separator line"
                 )
-        if head_raw.endswith(b"\n\n"):
+        if re.search(rb"\n *\n\Z", head_raw):
             raise ChangelogValidationError(
                 "the final appended changelog entry must end with one newline"
             )

@@ -182,13 +182,14 @@ def test_raw_append_requires_exact_separator_and_final_newline() -> None:
             corrections=0,
         )
 
-    with pytest.raises(ChangelogValidationError, match="end with one newline"):
-        validate_raw_change(
-            base,
-            base + b"\n" + first + b"\n",
-            additions=1,
-            corrections=0,
-        )
+    for trailing in (b"\n", b"\n \n", b" \n"):
+        with pytest.raises(ChangelogValidationError, match="end with one newline"):
+            validate_raw_change(
+                base,
+                base + b"\n" + first + trailing,
+                additions=1,
+                corrections=0,
+            )
 
 
 def test_raw_correction_rejects_whitespace_only_history_change() -> None:
