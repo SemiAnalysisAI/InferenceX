@@ -5,6 +5,8 @@ import re
 import sqlite3
 import sys
 
+import pytest
+
 import infx.results.compare_results as compare
 
 SCHEMA = """
@@ -31,7 +33,8 @@ class Database:
         self.connection.executescript(SCHEMA)
         for index, (model, hardware, date, tput) in enumerate(configs, start=1):
             self.connection.execute(
-                "INSERT INTO configs VALUES (?, ?, 'sglang', ?, 'fp4', 'none', 0, 0, 8, 1, 0, 8, 1, 0)",
+                "INSERT INTO configs VALUES"
+                " (?, ?, 'sglang', ?, 'fp4', 'none', 0, 0, 8, 1, 0, 8, 1, 0)",
                 (index, hardware, model),
             )
             self.connection.execute(
@@ -82,5 +85,18 @@ def test_a_model_prefix_is_not_compared_with_a_longer_prefix_it_begins(
     )
 
     out = summary(tmp_path, monkeypatch, capsys, database)
+
+    assert r"\text{+10.00}$ (+10.0%)" in out
+
+
+@pytest.mark.parametrize(
+    ("runner", "hardware"), [("cluster:b200-nscale", "b200"), ("gb300-nv", "gb300")]
+)
+def test_a_runner_label_finds_the_baseline_of_its_gpu(
+    tmp_path, monkeypatch, capsys, runner, hardware
+):
+    database = Database([("dsv4", hardware, "2026-10-01", 100.0)])
+
+    out = summary(tmp_path, monkeypatch, capsys, database, hw=runner)
 
     assert r"\text{+10.00}$ (+10.0%)" in out

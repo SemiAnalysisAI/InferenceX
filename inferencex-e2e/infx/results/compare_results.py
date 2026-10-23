@@ -44,8 +44,8 @@ def compute_delta_str(
 
 
 def extract_hardware(runner: str) -> str:
-    """Strip suffixes like -multinode, -trt, -disagg from runner to get hardware name."""
-    return re.split(r"-(multinode|trt|disagg)$", runner)[0].lower()
+    """The GPU of a runner label such as cluster:b200-nscale, the key ingestion stores."""
+    return runner.lower().rpartition(":")[2].split("-", 1)[0]
 
 
 def build_config_params(result: dict) -> dict:
