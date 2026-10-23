@@ -158,11 +158,13 @@ def test_submit_host_import_without_unsquashfs_keeps_the_existing_squash(tools, 
     ("pre-staged", "shared", None, rf"pre-staged image .* missing or invalid at .*{SQUASH_NAME}", 0),
     ("pre-staged", "node-local", Job("7"), "stage it there", 1),
     ("compute", "node-local", None, "requires a job allocation", 0),
+    ("all-nodes", "shared", None, "needs a job allocation", 0),
 ])  # fmt: skip
 def test_an_image_that_cannot_be_staged_fails_at_once(tools, tmp_path, mode, visibility, job, message, steps):
     _, logs = tools
-    with pytest.raises(ImageError, match=message):
+    with pytest.raises(ImageError, match=message) as error:
         ensure_image(IMAGE, policy(tmp_path, mode, visibility), job=job)
+    assert error.value.retriable is False
     assert len(calls(logs["srun"])) == steps
     assert calls(logs["enroot"]) == []
 

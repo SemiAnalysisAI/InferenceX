@@ -308,7 +308,9 @@ def ensure_image(
         return str(path)
     node_local = policy.visibility == "node-local"
     if node_local and job is None:
-        raise ImageError(f"node-local image storage for {image} requires a job allocation")
+        raise _PermanentImageError(
+            f"node-local image storage for {image} requires a job allocation"
+        )
     if mode == "pre-staged":
         if node_local:
             _retrying(
@@ -316,7 +318,7 @@ def ensure_image(
                 lambda: _run_node_script(image, policy, "validate", job=job, alloc_args=()),
             )
         elif not is_valid_squash(path):
-            raise ImageError(
+            raise _PermanentImageError(
                 f"pre-staged image {image} is missing or invalid at {path}; stage it there before running"
             )
         return str(path)
@@ -327,7 +329,9 @@ def ensure_image(
         print(f"Squash file already exists and is valid, skipping import: {path}", file=sys.stderr)
         return str(path)
     if job is None and (mode == "all-nodes" or not alloc_args):
-        raise ImageError(f"{mode} import of {image} needs a job allocation or allocation arguments")
+        raise _PermanentImageError(
+            f"{mode} import of {image} needs a job allocation or allocation arguments"
+        )
     _retrying(
         f"import of {image}",
         lambda: _run_node_script(image, policy, "import", job=job, alloc_args=alloc_args),
