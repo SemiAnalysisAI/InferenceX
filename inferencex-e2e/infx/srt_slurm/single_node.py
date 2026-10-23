@@ -223,6 +223,8 @@ def main() -> None:
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
+    if parsed.command == "prepare" and parsed.output.name == BOUND_RECIPE:
+        parser.error(f"{parsed.output} would overwrite the bound recipe written beside it")
     try:
         if parsed.command == "prepare":
             selected, recipe = select_recipe(parsed.recipe, os.environ)
