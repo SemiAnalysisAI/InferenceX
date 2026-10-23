@@ -66,6 +66,24 @@ def test_wait_follows_a_truncated_log_and_split_characters(
     assert capsys.readouterr().out == out
 
 
+def test_wait_restarts_a_log_replaced_by_a_longer_file(http_server, tmp_path, capsys):
+    log = tmp_path / "server.log"
+    log.write_bytes(b"old\n")
+    statuses = iter([503, 200])
+
+    def respond(_method: str, _path: str) -> tuple[int, object]:
+        status = next(statuses)
+        if status == 503:
+            fresh = tmp_path / "server.log.new"
+            fresh.write_bytes(b"restarted server\n")
+            fresh.replace(log)
+        return status, {}
+
+    server.wait_ready(f"{http_server(respond)}/health", log=log, poll_s=0.01)
+
+    assert capsys.readouterr().out == "old\nrestarted server\n"
+
+
 def test_wait_fails_once_the_server_process_is_gone():
     dead = subprocess.Popen(["true"])
     dead.wait()

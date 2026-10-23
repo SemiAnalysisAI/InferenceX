@@ -64,12 +64,14 @@ def wait_ready(
 ) -> None:
     """Poll ``url`` until it answers below 400, streaming ``log``; fail once ``pid`` exits."""
     offset = 0
+    inode: int | None = None
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     while True:
         if log is not None and log.exists():
             with log.open("rb") as stream:
-                if os.fstat(stream.fileno()).st_size < offset:
-                    offset = 0
+                stat = os.fstat(stream.fileno())
+                if stat.st_ino != inode or stat.st_size < offset:
+                    offset, inode = 0, stat.st_ino
                     decoder.reset()
                 stream.seek(offset)
                 chunk = stream.read()
