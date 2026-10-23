@@ -11060,3 +11060,12 @@
     - "Update the vLLM image from nightly-39983a5e to nightly-83c078d9, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4429
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the FA3 attention backend for the H200 Qwen3.5-397B-A17B-FP8 SGLang TP8/EP1 HiCache AgentX points at concurrency 4, 8, 12 and 24, and add FA3 points at concurrency 32 and 48."
+    - "Update the SGLang image from v0.5.21-cu130 to nightly-dev-20261021-c1c287a4, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4455
