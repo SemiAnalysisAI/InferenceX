@@ -258,6 +258,9 @@ def cleanup_outputs(root: Path, *, sleep: Callable[[float], None] = time.sleep) 
         except FileNotFoundError:
             break
         except OSError:
+            if attempt == attempts:
+                print(f"outputs still busy after {attempts} attempts; leaving it", flush=True)
+                break
             print(f"Retry {attempt}/{attempts}: Waiting for NFS locks to release...", flush=True)
             sleep(10)
     for directory, dirnames, filenames in os.walk(root, topdown=False):

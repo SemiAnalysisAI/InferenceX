@@ -77,7 +77,8 @@ def test_bundle_skips_empty_logs_and_archives_contents(tmp_path):
         assert "./worker.log" in tar.getnames()
 
 
-def test_cleanup_outputs_retries_then_removes_nfs_files(tmp_path, monkeypatch):
+@pytest.mark.parametrize(("busy", "removed"), [(2, True), (5, False)], ids=["frees", "stays-busy"])
+def test_cleanup_outputs_retries_then_removes_nfs_files(tmp_path, monkeypatch, busy, removed):
     (tmp_path / "outputs" / "job").mkdir(parents=True)
     (tmp_path / "keep" / ".nfs0001").parent.mkdir()
     (tmp_path / "keep" / ".nfs0001").write_text("")
@@ -86,15 +87,15 @@ def test_cleanup_outputs_retries_then_removes_nfs_files(tmp_path, monkeypatch):
 
     def flaky_rmtree(path):
         calls.append(path)
-        if len(calls) < 3:
+        if len(calls) <= busy:
             raise OSError("Device or resource busy")
         real_rmtree(path)
 
     monkeypatch.setattr(collect.shutil, "rmtree", flaky_rmtree)
     sleeps = []
     cleanup_outputs(tmp_path, sleep=sleeps.append)
-    assert len(calls) == 3 and sleeps == [10, 10]
-    assert not (tmp_path / "outputs").exists()
+    assert len(calls) == min(busy + 1, 5) and sleeps == [10] * min(busy, 4)
+    assert (tmp_path / "outputs").exists() is not removed
     assert sorted(p.name for p in (tmp_path / "keep").iterdir()) == ["log"]
 
 
