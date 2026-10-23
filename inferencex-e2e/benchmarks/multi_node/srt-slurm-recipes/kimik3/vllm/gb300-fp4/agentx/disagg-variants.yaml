@@ -184,156 +184,145 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
 
-override_1p4d_cap2:
+# Specialized decode backend (latency_specialized) for the low-concurrency points:
+# decode max-num-seqs = 64 // (K + 1) with DSpark K4, FP32 SSM state, and CUDA
+# graphs captured for every batch size up to 64. The DCP KV interleave is pinned to 1
+# on both roles: otherwise NIXL P/D raises it to the KV block size after the
+# specialized decode has read it, and its spec-verify causal mask uses the stale value.
+override_1p3d_specdecode:
   roles:
-    prefill: &override_1p4d_cap2_prefill
+    prefill: &override_1p3d_specdecode_prefill
       nodes: 2
       workers: 1
-      args: &override_1p4d_cap2_prefill_args {}
-    decode: &override_1p4d_cap2_decode
+      args: &override_1p3d_specdecode_prefill_args
+        mamba-ssm-cache-dtype: "float32"
+        cp-kv-cache-interleave-size: 1
+        enable-flashinfer-autotune: null
+        no-enable-flashinfer-autotune: true
+    decode: &override_1p3d_specdecode_decode
+      nodes: 6
+      workers: 3
+      args: &override_1p3d_specdecode_decode_args
+        mamba-ssm-cache-dtype: "float32"
+        cp-kv-cache-interleave-size: 1
+        enable-flashinfer-autotune: null
+        no-enable-flashinfer-autotune: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+        max-num-seqs: 12
+        max-cudagraph-capture-size: 64
+        compilation-config: '{"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]}'
+
+override_1p3d_specdecode_eval:
+  roles:
+    prefill:
+      <<: *override_1p3d_specdecode_prefill
+      args:
+        <<: *override_1p3d_specdecode_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p3d_specdecode_decode
+      args:
+        <<: *override_1p3d_specdecode_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_1p2d_specdecode:
+  roles:
+    prefill: &override_1p2d_specdecode_prefill
+      nodes: 2
+      workers: 1
+      args: &override_1p2d_specdecode_prefill_args
+        <<: *override_1p3d_specdecode_prefill_args
+    decode: &override_1p2d_specdecode_decode
+      nodes: 4
+      workers: 2
+      args: &override_1p2d_specdecode_decode_args
+        <<: *override_1p3d_specdecode_decode_args
+
+override_1p2d_specdecode_eval:
+  roles:
+    prefill:
+      <<: *override_1p2d_specdecode_prefill
+      args:
+        <<: *override_1p2d_specdecode_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p2d_specdecode_decode
+      args:
+        <<: *override_1p2d_specdecode_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# Regular decode without a batch cap (base max-num-seqs 128), so TTFT is not
+# traded for ITL by a standing decode queue.
+override_1p2d_cap128:
+  roles:
+    prefill: &override_1p2d_cap128_prefill
+      nodes: 2
+      workers: 1
+      args: &override_1p2d_cap128_prefill_args {}
+    decode: &override_1p2d_cap128_decode
+      nodes: 4
+      workers: 2
+      args: &override_1p2d_cap128_decode_args
+        max-num-seqs: 128
+
+override_1p2d_cap128_eval:
+  roles:
+    prefill:
+      <<: *override_1p2d_cap128_prefill
+      args:
+        <<: *override_1p2d_cap128_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p2d_cap128_decode
+      args:
+        <<: *override_1p2d_cap128_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_3p4d_cap128:
+  roles:
+    prefill: &override_3p4d_cap128_prefill
+      nodes: 6
+      workers: 3
+      args: &override_3p4d_cap128_prefill_args {}
+    decode: &override_3p4d_cap128_decode
       nodes: 8
       workers: 4
-      args: &override_1p4d_cap2_decode_args
-        max-num-seqs: 2
+      args: &override_3p4d_cap128_decode_args
+        max-num-seqs: 128
 
-override_1p4d_cap2_eval:
+override_3p4d_cap128_eval:
   roles:
     prefill:
-      <<: *override_1p4d_cap2_prefill
+      <<: *override_3p4d_cap128_prefill
       args:
-        <<: *override_1p4d_cap2_prefill_args
+        <<: *override_3p4d_cap128_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_1p4d_cap2_decode
+      <<: *override_3p4d_cap128_decode
       args:
-        <<: *override_1p4d_cap2_decode_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-
-override_1p3d_cap4:
-  roles:
-    prefill: &override_1p3d_cap4_prefill
-      nodes: 2
-      workers: 1
-      args: &override_1p3d_cap4_prefill_args {}
-    decode: &override_1p3d_cap4_decode
-      nodes: 6
-      workers: 3
-      args: &override_1p3d_cap4_decode_args
-        max-num-seqs: 4
-
-override_1p3d_cap4_eval:
-  roles:
-    prefill:
-      <<: *override_1p3d_cap4_prefill
-      args:
-        <<: *override_1p3d_cap4_prefill_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-    decode:
-      <<: *override_1p3d_cap4_decode
-      args:
-        <<: *override_1p3d_cap4_decode_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-
-override_1p2d_cap8:
-  roles:
-    prefill: &override_1p2d_cap8_prefill
-      nodes: 2
-      workers: 1
-      args: &override_1p2d_cap8_prefill_args {}
-    decode: &override_1p2d_cap8_decode
-      nodes: 4
-      workers: 2
-      args: &override_1p2d_cap8_decode_args
-        max-num-seqs: 8
-
-override_1p2d_cap8_eval:
-  roles:
-    prefill:
-      <<: *override_1p2d_cap8_prefill
-      args:
-        <<: *override_1p2d_cap8_prefill_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-    decode:
-      <<: *override_1p2d_cap8_decode
-      args:
-        <<: *override_1p2d_cap8_decode_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-
-override_2p5d_cap16:
-  roles:
-    prefill: &override_2p5d_cap16_prefill
-      nodes: 4
-      workers: 2
-      args: &override_2p5d_cap16_prefill_args {}
-    decode: &override_2p5d_cap16_decode
-      nodes: 10
-      workers: 5
-      args: &override_2p5d_cap16_decode_args
-        max-num-seqs: 16
-
-override_2p5d_cap16_eval:
-  roles:
-    prefill:
-      <<: *override_2p5d_cap16_prefill
-      args:
-        <<: *override_2p5d_cap16_prefill_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-    decode:
-      <<: *override_2p5d_cap16_decode
-      args:
-        <<: *override_2p5d_cap16_decode_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-
-override_2p3d_cap24:
-  roles:
-    prefill: &override_2p3d_cap24_prefill
-      nodes: 4
-      workers: 2
-      args: &override_2p3d_cap24_prefill_args {}
-    decode: &override_2p3d_cap24_decode
-      nodes: 6
-      workers: 3
-      args: &override_2p3d_cap24_decode_args
-        max-num-seqs: 24
-
-override_2p3d_cap24_eval:
-  roles:
-    prefill:
-      <<: *override_2p3d_cap24_prefill
-      args:
-        <<: *override_2p3d_cap24_prefill_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-    decode:
-      <<: *override_2p3d_cap24_decode
-      args:
-        <<: *override_2p3d_cap24_decode_args
+        <<: *override_3p4d_cap128_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
