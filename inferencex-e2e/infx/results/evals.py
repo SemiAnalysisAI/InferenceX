@@ -103,6 +103,11 @@ def select_latest_results(paths: Iterable[Path], *, batched: bool = False) -> li
 
 
 _SCORE_NAMES = {"strict": "em_strict", "accuracy": "accuracy", "flex": "em_flexible"}
+_PARALLELISM_SIZE_KEYS = (
+    "pp", "dcp_size", "pcp_size",
+    "prefill_pp", "prefill_dcp_size", "prefill_pcp_size", "prefill_dwdp_size",
+    "decode_pp", "decode_dcp_size", "decode_pcp_size",
+)  # fmt: skip
 
 
 def is_valid_score(value: object) -> bool:
@@ -293,6 +298,10 @@ def build_row(meta: dict[str, Any], m: dict[str, Any]) -> dict[str, Any]:
 
     if "eval_suite" in meta:
         row["eval_suite"] = meta["eval_suite"]
+    # Raw artifact identities include these sizes, so rows must carry them to match.
+    for key in _PARALLELISM_SIZE_KEYS:
+        if key in meta:
+            row[key] = as_int(meta[key], 1)
 
     primary = _primary_metric(m)
     row["score"] = m[primary] if primary is not None else None

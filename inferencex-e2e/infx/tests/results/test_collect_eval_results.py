@@ -21,6 +21,37 @@ from infx.results.evals import (
 )
 
 
+@pytest.mark.parametrize("environ", [
+    {"IS_MULTINODE": "false", "TP": "8", "PP_SIZE": "2", "DCP_SIZE": "8"},
+    {"IS_MULTINODE": "true", "PREFILL_TP": "4", "PREFILL_PP_SIZE": "2",
+     "DECODE_TP": "8", "DECODE_DCP_SIZE": "4", "DECODE_PCP_SIZE": "2"},
+    {"IS_MULTINODE": "true", "PREFILL_TP": "1", "PREFILL_DWDP_SIZE": "8", "DECODE_TP": "8"},
+])
+def test_collected_rows_match_raw_identity_with_parallelism(
+    tmp_path: Path, environ: dict[str, str],
+) -> None:
+    from infx.bench.eval import meta
+    from infx.results.eval_artifacts import inspect_eval_artifacts
+
+    raw = tmp_path / "eval_point"
+    raw.mkdir()
+    meta.write(raw / "meta_env.json", meta.build(
+        {"RUNNER_TYPE": "b200", "FRAMEWORK": "vllm", "PRECISION": "fp8", **environ},
+        conc=4, suite="gsm8k",
+    ))
+    (raw / "results_2026-01-01T00-00-00.json").write_text(json.dumps({
+        "lm_eval_version": "0.4.0",
+        "results": {"gsm8k": {"exact_match,strict-match": 0.9}},
+        "configs": {"gsm8k": {"filter_list": [{"name": "strict-match"}]}},
+    }))
+    (tmp_path / "eval_results_all").mkdir()
+    (tmp_path / "eval_results_all" / "agg_eval_all.json").write_text(
+        json.dumps(collect_eval_rows(tmp_path))
+    )
+
+    assert inspect_eval_artifacts(tmp_path)[1] == []
+
+
 @pytest.mark.parametrize("batched", [False, True])
 def test_result_selection_accepts_empty_candidates(batched: bool) -> None:
     assert select_latest_results(iter(()), batched=batched) == []
