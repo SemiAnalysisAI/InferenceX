@@ -1365,7 +1365,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
         ]
     }
 
-    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+    def resolve(_repository, candidate, _context, _model, _goal, _producers, _matrix):
         if candidate.id == first_id:
             raise OSError("transient")
         return reporting.Baseline(
@@ -1428,7 +1428,7 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
         for context in contexts
     ]}  # fmt: skip
 
-    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+    def resolve(_repository, candidate, _context, _model, _goal, _producers, _matrix):
         return reporting.Baseline(
             family=candidate.family, date="2026-09-19", image="example/image:1",
             goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
@@ -1473,7 +1473,7 @@ def test_select_leaves_the_slots_of_resumed_sessions_to_them(
         for context in contexts
     ]}  # fmt: skip
 
-    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+    def resolve(_repository, candidate, _context, _model, _goal, _producers, _matrix):
         return reporting.Baseline(
             family=candidate.family, date="2026-09-19", image="example/image:1",
             goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
@@ -1673,10 +1673,6 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "changelogs": [{"workflow_run_id": "42", "config_keys": ["test-family"]}],
     }
 
-    def canonical_matrix(_repository, head, _family):
-        assert head == base
-        return current
-
     feeds = {
         "benchmarks": [
             {**public_row, "image": None},
@@ -1694,7 +1690,6 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             payload=feeds[resource],
         )
 
-    monkeypatch.setattr(validation, "canonical_matrix", canonical_matrix)
     monkeypatch.setattr(api, "fetch", fetch)
     producers = {historical_head: historical_matrix}
     candidate = OwnedCandidate(
@@ -1722,6 +1717,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "Model",
         reporting.Prose(en="Update the image.", zh="更新镜像。"),
         producers,
+        current,
     )
 
     assert [(point.conc, point.result) for point in baseline.points] == [
@@ -1745,6 +1741,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             "Model",
             reporting.Prose(en="Update the image.", zh="更新镜像。"),
             producers,
+            current,
         )
 
 
@@ -2173,6 +2170,7 @@ def test_final_coverage_exempts_retired_points_and_reports_their_evidence(monkey
         "DeepSeek-R1",
         reporting.Prose(en="Update the image.", zh="更新镜像。"),
         producers,
+        {"single_node": {"all": current}},
     )
     retired, kept = baseline.points
 
@@ -2263,11 +2261,12 @@ def test_baselines_without_retirements_keep_the_earlier_record_format():
 def frozen_dsr1_baseline(monkeypatch):
     """The planner's baseline for a base family of 8k/1k c1 and c2 whose MODELS.md deprecated
     1k/1k after the 2026-05-22 publication: points are 1k/1k c1 (retired), 8k/1k c1 and c2."""
-    producers, source = serve_dsr1_baseline(monkeypatch, [dsr1_point(8192, [1, 2])], models_md())
+    current = [dsr1_point(8192, [1, 2])]
+    producers, source = serve_dsr1_baseline(monkeypatch, current, models_md())
     return reporting.resolve_baseline(
         "example/project", OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
         {"source": source}, "DeepSeek-R1", reporting.Prose(en="Update the image.", zh="更新镜像。"),
-        producers,
+        producers, {"single_node": {"all": current}},
     )
 
 

@@ -882,6 +882,9 @@ def select(
             {key: candidate[key] for key in ("id", "family", "base")}
         )
         try:
+            matrix = validation.canonical_matrix(
+                os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
+            )
             baseline = resolve_baseline(
                 os.environ["GITHUB_REPOSITORY"],
                 owned,
@@ -892,6 +895,7 @@ def select(
                     zh="在调度候选任务前验证完整的已发布基线。",
                 ),
                 producers.get(candidate["family"], {}),
+                matrix,
             )
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
@@ -900,12 +904,7 @@ def select(
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-            missing = missing_baseline_points(
-                validation.canonical_matrix(
-                    os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
-                ),
-                baseline,
-            )
+            missing = missing_baseline_points(matrix, baseline)
         except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = str(error)

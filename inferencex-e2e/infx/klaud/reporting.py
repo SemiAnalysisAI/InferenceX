@@ -1342,20 +1342,20 @@ def resolve_baseline(
     model: str,
     goal: Prose,
     producers: Mapping[str, dict],
+    matrix: dict,
 ) -> Baseline:
     """Freeze source-date rows against their own producer's complete family.
 
-    ``producers`` holds the families producer revisions regenerated themselves, so nothing
-    here runs a revision's code. Legacy fingerprints may be absent, but exact producer
-    provenance and a unique workload/topology/concurrency match are required. Raw API data
-    stays private.
+    ``matrix`` is the candidate family's canonical matrix at the candidate base. ``producers``
+    holds the families producer revisions regenerated themselves, so nothing here runs a
+    revision's code. Legacy fingerprints may be absent, but exact producer provenance and a
+    unique workload/topology/concurrency match are required. Raw API data stays private.
     """
     from fnmatch import fnmatchcase
 
     from .api import fetch
-    from .validation import PRODUCER_UNAVAILABLE, canonical_matrix
+    from .validation import PRODUCER_UNAVAILABLE
 
-    matrix = canonical_matrix(repository, candidate.base, candidate.family)
     public = publication(repository, context, model)
     old_image = context["source"]["image"]
     entries = {point_key(entry): entry for entry in matrix_points(matrix)}
