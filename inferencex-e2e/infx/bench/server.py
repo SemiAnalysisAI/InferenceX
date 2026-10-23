@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import http.client
 import json
 import os
@@ -63,13 +64,17 @@ def wait_ready(
 ) -> None:
     """Poll ``url`` until it answers below 400, streaming ``log``; fail once ``pid`` exits."""
     offset = 0
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     while True:
         if log is not None and log.exists():
             with log.open("rb") as stream:
+                if os.fstat(stream.fileno()).st_size < offset:
+                    offset = 0
+                    decoder.reset()
                 stream.seek(offset)
                 chunk = stream.read()
             offset += len(chunk)
-            sys.stdout.write(chunk.decode(errors="replace"))
+            sys.stdout.write(decoder.decode(chunk))
             sys.stdout.flush()
         status = http_status(url)
         if status is not None and status < 400:

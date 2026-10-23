@@ -42,6 +42,30 @@ def test_wait_streams_new_server_log_until_health_answers(http_server, tmp_path,
     assert capsys.readouterr().out == "loading\nGET /health\n"
 
 
+@pytest.mark.parametrize(
+    ("before", "mode", "written", "out"),
+    [(b"loading\n", "wb", b"ok\n", "loading\nok\n"), (b"caf\xc3", "ab", b"\xa9\n", "caf\u00e9\n")],
+    ids=["truncated", "split-utf8"],
+)
+def test_wait_follows_a_truncated_log_and_split_characters(
+    http_server, tmp_path, capsys, before, mode, written, out
+):
+    log = tmp_path / "server.log"
+    log.write_bytes(before)
+    statuses = iter([503, 200])
+
+    def respond(_method: str, _path: str) -> tuple[int, object]:
+        status = next(statuses)
+        if status == 503:
+            with log.open(mode) as stream:
+                stream.write(written)
+        return status, {}
+
+    server.wait_ready(f"{http_server(respond)}/health", log=log, poll_s=0.01)
+
+    assert capsys.readouterr().out == out
+
+
 def test_wait_fails_once_the_server_process_is_gone():
     dead = subprocess.Popen(["true"])
     dead.wait()
