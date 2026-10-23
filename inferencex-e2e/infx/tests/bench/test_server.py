@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -101,3 +102,27 @@ def test_chat_route_gives_up_after_its_timeout(http_server, capsys):
 
     assert str(raised.value) == f"chat endpoint for model 'm' not ready within 1s: {chat}"
     assert capsys.readouterr().out == f"Waiting for {chat} ('m'): 0/1s\n"
+
+
+def test_chat_route_deadline_counts_time_spent_in_slow_probes(http_server, monkeypatch, capsys):
+    clock = SimpleNamespace(now=0.0)
+
+    def sleep(seconds: float) -> None:
+        clock.now += seconds
+
+    monkeypatch.setattr(server, "time", SimpleNamespace(monotonic=lambda: clock.now, sleep=sleep))
+    respond = frontend(None, chat=404, health=503)
+
+    def slow_health(method: str, path: str) -> tuple[int, object]:
+        if path == "/health":
+            clock.now += 8
+        return respond(method, path)
+
+    url = http_server(slow_health)
+
+    with pytest.raises(server.NotReadyError):
+        server.wait_chat_route(url, "m", (10, 0), poll_s=1)
+
+    assert clock.now == 17
+    chat = f"{url}/v1/chat/completions"
+    assert capsys.readouterr().out == f"Waiting for {chat} ('m'): 8/10s\n"
