@@ -1,7 +1,7 @@
 """Convert flat per-session JSONL dumps into weka-format trace JSON.
 
 Reads <in-dir>/<session_id>.jsonl produced by `sample_proxy_traces.py`
-and writes <in-dir>/../<out-dir>/<session_id>.json in the v1 weka trace
+and writes <out-dir>/<session_id>.json in the v1 weka trace
 format consumed by the kv-cache-tester replayer (see
 agentx-harness: src/aiperf/dataset/loader/weka_trace_models.py).
 
