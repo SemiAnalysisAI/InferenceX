@@ -466,6 +466,8 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
     'random' mode, so deterministic-random output is identical to the
     one-pass version.
     """
+    # Phase 1 has no ORDER BY, so pre-sort by session_id to make ties reproducible.
+    rows = sorted(rows, key=lambda r: r["session_id"])
     if args.sampling == "top":
         rows = sorted(rows, key=lambda r: r["req_count"], reverse=True)
     elif args.sampling == "recent":
