@@ -227,7 +227,8 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
         json.loads((output_dir / NATIVE_REPORT_FILENAME).read_text(encoding="utf-8")),
         "native summary",
     )
-    result_lines = (output_dir / NATIVE_RESULTS_FILENAME).read_text(encoding="utf-8").splitlines()
+    result_text = (output_dir / NATIVE_RESULTS_FILENAME).read_text(encoding="utf-8")
+    result_lines = result_text.removesuffix("\n").split("\n")
     if len(result_lines) != 1 or not result_lines[0].strip():
         raise SmokeSuiteError("native results must contain exactly one row")
     result = _mapping(json.loads(result_lines[0]), "native result")

@@ -294,7 +294,7 @@ def _read_native_report(path: Path) -> dict[str, Any]:
 
 def _read_native_results(path: Path) -> list[dict[str, Any]]:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8").removesuffix("\n").split("\n")
     except OSError as exc:
         raise FullSuiteError(f"native results are unavailable: {exc}") from exc
     if len(lines) != EXPECTED_RESULT_COUNT or any(not line.strip() for line in lines):

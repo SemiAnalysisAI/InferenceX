@@ -271,6 +271,23 @@ def test_projection_rejects_incomplete_or_transport_failed_native_results(
         full.project_native_artifacts(output_dir=tmp_path, model="MiniMax-M3")
 
 
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\x85"])
+def test_projection_counts_rows_whose_text_holds_unicode_line_separators(
+    tmp_path: Path, separator: str
+) -> None:
+    _write_native_run(tmp_path)
+    rows = [{"data_index": index, "status": "success"} for index in range(1, 103)]
+    rows[4]["response"] = f"first{separator}second"
+    (tmp_path / full.NATIVE_RESULTS_FILENAME).write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
+    )
+
+    compatibility_path = full.project_native_artifacts(output_dir=tmp_path, model="MiniMax-M3")
+
+    compatibility = json.loads(compatibility_path.read_text(encoding="utf-8"))
+    assert compatibility["n-samples"]["minimax_m3_full"] == {"original": 102, "effective": 102}
+
+
 def test_upstream_process_failure_is_nonzero_and_publishes_all_failure_artifacts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
