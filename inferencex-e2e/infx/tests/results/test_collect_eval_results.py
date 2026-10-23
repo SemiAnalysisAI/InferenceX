@@ -168,6 +168,29 @@ def test_invalid_primary_does_not_fall_back_to_valid_secondary(tmp_path: Path, s
     }
 
 
+def test_one_sample_stderr_sentinel_is_published_as_null(tmp_path: Path) -> None:
+    # lm-eval writes the string "N/A" as the stderr of a metric with one sample.
+    (tmp_path / "meta_env.json").write_text("{}")
+    (tmp_path / "results.json").write_text(json.dumps({
+        "lm_eval_version": "test",
+        "results": {"gsm8k": {
+            "exact_match,strict-match": 1.0, "exact_match_stderr,strict-match": "N/A",
+            "exact_match,flexible-extract": 0.0, "exact_match_stderr,flexible-extract": "N/A",
+        }},
+        "configs": {"gsm8k": {"filter_list": [
+            {"name": "strict-match"}, {"name": "flexible-extract"},
+        ]}},
+        "n-samples": {"gsm8k": {"original": 1319, "effective": 1}},
+    }))
+
+    [row] = collect_eval_rows(tmp_path)
+
+    assert (row["score"], row["em_strict"], row["em_flexible"]) == (1.0, 1.0, 0.0)
+    assert (row["score_se"], row["em_strict_se"], row["em_flexible_se"]) == (None, None, None)
+    assert row["infrastructure_success"] is True
+
+
+
 @pytest.mark.parametrize("error,expected", [
     (None, None),
     ("", {"type": "IntegrationError", "message": ""}),

@@ -130,6 +130,15 @@ def is_valid_effective_count(value: object) -> bool:
     )
 
 
+def _is_standard_error(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
 def metric_family(name: str) -> str | None:
     """Classify a filter name or metric key; strict takes precedence."""
     if "strict" in name:
@@ -336,6 +345,10 @@ def build_rows(
                     "type": "InvalidPrimaryScore",
                     "message": f"invalid primary score: {score!r}",
                 }
+        for name in _SCORE_NAMES:
+            # lm-eval reports a one-sample metric's stderr as the string "N/A".
+            if not _is_standard_error(metrics[f"{name}_se"]):
+                metrics[f"{name}_se"] = None
         rows.append(build_row(meta, metrics))
     return rows
 
