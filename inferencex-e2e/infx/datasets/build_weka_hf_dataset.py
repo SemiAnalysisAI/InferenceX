@@ -464,7 +464,7 @@ def _build_payload(
     parent_repo_id: str | None = None,
 ) -> dict:
     """Assemble traces.jsonl + stats + plots + README into payload_dir."""
-    payload_dir.mkdir(parents=True, exist_ok=True)
+    _recreate(payload_dir)
     n = _concat_traces_jsonl(per_trace_dir, payload_dir / "traces.jsonl")
     print(f"[payload] wrote traces.jsonl with {n} traces")
 

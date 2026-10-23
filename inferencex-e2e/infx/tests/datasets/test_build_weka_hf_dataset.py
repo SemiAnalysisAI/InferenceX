@@ -32,17 +32,30 @@ for sid in os.environ["STUB_SESSIONS"].split(","):
 """
 
 
+STUB_PLOT = """
+import os, sys
+from pathlib import Path
+
+if os.environ.get("STUB_PLOT_FAIL"):
+    sys.exit(1)
+out = Path(sys.argv[sys.argv.index("--out-dir") + 1])
+(out / f"{Path(sys.argv[0]).stem}.png").write_bytes(b"png")
+"""
+
+
 @pytest.fixture
 def build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Run the build CLI with the DB sampler stubbed to write STUB_SESSIONS, plots skipped."""
+    """Run the build CLI with the DB sampler stubbed to write STUB_SESSIONS and the plot
+    scripts stubbed to write a PNG, or to fail when STUB_PLOT_FAIL is set."""
     sampler = tmp_path / "stub_sampler.py"
     sampler.write_text(STUB_SAMPLER)
     record = tmp_path / "sampler-record.json"
-    no_plot = tmp_path / "no_plot.py"
-    no_plot.write_text("")
+    plot = tmp_path / "stub_plot.py"
+    plot.write_text(STUB_PLOT)
+    monkeypatch.delenv("STUB_PLOT_FAIL", raising=False)
     monkeypatch.setattr(build_weka_hf_dataset, "SAMPLER", sampler)
-    monkeypatch.setattr(build_weka_hf_dataset, "PLOT_WEKA", no_plot)
-    monkeypatch.setattr(build_weka_hf_dataset, "PLOT_SUBAGENT", no_plot)
+    monkeypatch.setattr(build_weka_hf_dataset, "PLOT_WEKA", plot)
+    monkeypatch.setattr(build_weka_hf_dataset, "PLOT_SUBAGENT", plot)
     monkeypatch.setenv("STUB_SAMPLER_RECORD", str(record))
     # setenv first so teardown also removes the value main() exports.
     monkeypatch.setenv("AGENTIC_PROXY_DB_URL", "")
@@ -70,6 +83,20 @@ def test_rebuild_in_same_work_dir_publishes_only_this_runs_sessions(build, tmp_p
     work = tmp_path / "work"
     assert _trace_ids(work / "base/traces.jsonl") == ["new-c"]
     assert _trace_ids(work / "256k/traces.jsonl") == ["new-c"]
+
+
+def test_failed_plots_do_not_republish_the_previous_builds_pngs(
+    build, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    build("s1")
+    plots = tmp_path / "work/base/plots"
+    assert [p.name for p in plots.iterdir()] == ["stub_plot.png"]
+
+    monkeypatch.setenv("STUB_PLOT_FAIL", "1")
+    build("s2")
+
+    assert list(plots.iterdir()) == []
+    assert _trace_ids(tmp_path / "work/base/traces.jsonl") == ["s2"]
 
 
 def test_db_url_reaches_sampler_without_being_echoed(
