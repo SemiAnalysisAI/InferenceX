@@ -13,12 +13,12 @@ import yaml
 
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG
 
-from .fingerprint import recipe_fingerprint
+from .fingerprint import recipe_fingerprint, row_fingerprint
 from .generate import generate_config_matrix
 from .revision import snapshot
 from .validation import config_root, load_config_files, load_runner_file
 
-Matrix = dict[str, tuple[dict[tuple[str | None, int], dict[str, Any]], list[str]]]
+Matrix = dict[str, tuple[dict[tuple[str, int], dict[str, Any]], list[str]]]
 
 
 def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
@@ -26,11 +26,13 @@ def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
     for row in rows:
         try:
             fingerprint = recipe_fingerprint(row, root)
+            identity = fingerprint
         except ValueError as error:
             fingerprint = None
+            identity = row_fingerprint(row)
             errors.append(str(error))
         for conc in row["conc"] if isinstance(row["conc"], list) else [row["conc"]]:
-            points[fingerprint, conc] = {**row, "conc": conc, "recipe-fingerprint": fingerprint}
+            points[identity, conc] = {**row, "conc": conc, "recipe-fingerprint": fingerprint}
     return points, errors
 
 

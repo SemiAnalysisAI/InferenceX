@@ -78,3 +78,22 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
 
     changed.main(["--base", "base"])
     assert capsys.readouterr().out.splitlines()[-1] == "3 of 4 config keys changed since base."
+
+
+def test_rows_without_fingerprints_are_compared_individually(tmp_path):
+    def matrix(*tps: int) -> changed.Matrix:
+        rows = [
+            {"exp-name": f"key_tp{tp}", "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
+            for tp in tps
+        ]
+        return {"key": changed._points(rows, tmp_path)}
+
+    base, head = matrix(4, 8), matrix(4, 2)
+
+    assert [len(errors) for _, errors in (base["key"], head["key"])] == [2, 2]
+    assert [
+        (change["base-points"], change["head-points"],
+         [point["tp"] for point in change["added"]], [point["tp"] for point in change["removed"]],
+         [point["recipe-fingerprint"] for point in change["added"] + change["removed"]])
+        for change in changed.compare(base, head)
+    ] == [(2, 2, [2], [8], [None, None])]  # fmt: skip
