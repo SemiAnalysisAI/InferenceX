@@ -240,3 +240,28 @@ def test_validate_scores_fails_a_non_finite_or_boolean_score(
     captured = capsys.readouterr()
     assert f"FAIL: gsm8k exact_match,strict-match = {shown} is not a finite number" in captured.err
     assert "PASS" not in captured.out
+
+
+def test_validate_scores_fails_when_thresholds_cannot_be_loaded(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    thresholds = tmp_path / "thresholds.yaml"
+    thresholds.write_text("default: [gsm8k\n")
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({"results": {"gsm8k": {"exact_match,strict-match": 0.87}}}))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--thresholds",
+        str(thresholds),
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
+
+    assert validate_scores_main() == 1
+    captured = capsys.readouterr()
+    assert f"FAIL: could not load thresholds from {thresholds}: invalid YAML" in captured.err
+    assert "PASS" not in captured.out

@@ -287,9 +287,10 @@ def main() -> int:
             print(f"Loaded thresholds from {thresholds_path}")
         except (json.JSONDecodeError, OSError, ValueError) as e:
             print(
-                f"WARN: could not load thresholds from {thresholds_path}: {e}",
+                f"FAIL: could not load thresholds from {thresholds_path}: {e}",
                 file=sys.stderr,
             )
+            return 1
 
     prefix = detect_model_prefix(args.meta_env, args.model_prefix)
     if prefix and prefix in config.get("models", {}):
