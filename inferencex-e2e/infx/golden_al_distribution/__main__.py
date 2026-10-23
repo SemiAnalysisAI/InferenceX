@@ -71,7 +71,7 @@ def show_command(args: argparse.Namespace) -> None:
     print("  ".join(["tokens", *modes]))
     for tokens in sorted({token for mode in modes for token in curve.tokens(mode)}):
         cells = [
-            f"{float(curve.modes[mode][tokens]):.2f}" if tokens in curve.modes[mode] else "-"
+            f"{float(curve.modes[mode][tokens]):.2f}" if tokens in curve.tokens(mode) else "-"
             for mode in modes
         ]
         print(

@@ -107,3 +107,14 @@ def test_a_thinking_mode_written_as_a_list_is_rejected(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="thinking_on of golden curve m_mtp.yaml"):
         golden_length("m", spec, "thinking_on", tmp_path)
+
+
+def test_cli_show_marks_every_cell_of_an_empty_thinking_mode(tmp_path, capsys) -> None:
+    (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on:\n    1: 1.5\n  thinking_off:\n")
+
+    assert main(["--golden-dir", str(tmp_path), "show", "m_mtp"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "m_mtp (m)",
+        "tokens  thinking_on  thinking_off",
+        "1       1.50         -",
+    ]
