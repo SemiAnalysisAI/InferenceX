@@ -25,7 +25,9 @@ def test_fixed_sequence_results_use_bounded_point_names(tmp_path):
     point = logs / "cfg_isl1024_osl128"
     (point / "nested").mkdir(parents=True)
     (point / "results_concurrency_4_gpus_8.json").write_text("agg")
+    (point / "results_concurrency_4_gpus_8.pytorch.json").write_text("agg sidecar")
     (point / "nested" / "results_concurrency_16_gpus_12_ctx_2_gen_3.json").write_text("disagg")
+    (point / "nested" / "results_concurrency_16_gpus_12_ctx_2_gen_3.pytorch.json").write_text("[]")
     (logs / "unrelated").mkdir()
     (logs / "unrelated" / "results_concurrency_1_gpus_1.json").write_text("ignored")
 

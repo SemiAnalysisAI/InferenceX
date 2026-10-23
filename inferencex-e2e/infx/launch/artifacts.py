@@ -85,7 +85,8 @@ def copy_fixed_sequence_results(logs_dir: Path, workspace: Path, result_filename
         _say(f"Processing result subdirectory: {subdir}")
         config_name = subdir.name
         for result_file in sorted(subdir.rglob("results_concurrency_*.json")):
-            if not result_file.is_file():
+            # benchmark_serving's PyTorch-format sidecar shares the point's name prefix.
+            if not result_file.is_file() or result_file.name.endswith(".pytorch.json"):
                 continue
             concurrency, gpus, ctx, gen = _point_fields(result_file.name)
             _say(
