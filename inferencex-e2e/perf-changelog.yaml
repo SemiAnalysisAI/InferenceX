@@ -11015,5 +11015,5 @@
     - "Serve flags follow the cookbook's MI355X Low-Latency (TP4) and High-Throughput (TP4, HiCache, fp8 draft KV): DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
     - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
     - "Search space: Low-Latency TP4 at conc 1-32; TP4 + HiCache (180 GB per rank) and fp8 draft KV at conc 48-64."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4445
   scenario-type: [agentic-coding]
