@@ -10879,5 +10879,6 @@
     - "Serve flags follow the recipes.vllm.ai GB200 TP4 recipe: block size 128, nvfp4 KV and indexer cache, prefill query quantization, FULL_AND_PIECEWISE graphs, hybrid KV cache manager disabled, minimax_m3 reasoning and tool parsers, 1M context."
     - "Search space: TP4 at conc 1-64 and DEP4 (TP1 x DP4 + EP4, vLLM Router) at conc 64-256, no KV offloading."
     - "Seven-token DSpark from the checkpoint's dspark/ head with the FLASHINFER_TS drafter, probabilistic drafting and block verification (vLLM blog GB300 AgentX setup). Throughput runs use the minimaxm31flash_dspark golden AL curve."
+    - "Raise VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT from the 30 s default to 600 s: chat-template rendering of long AgentX conversations timed out during warmup and vLLM aborted the requests."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4419
   scenario-type: [agentic-coding]
