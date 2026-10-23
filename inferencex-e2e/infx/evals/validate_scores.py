@@ -116,8 +116,15 @@ def metric_prefixes(data: dict, task: str, override: str | None) -> tuple[str, .
     """Resolve score metric prefixes from an explicit override or task config."""
     if override is not None:
         return (override,)
-    task_config = data.get("configs", {}).get(task, {})
+    configs = data.get("configs", {})
+    if not isinstance(configs, dict):
+        raise ValueError("'configs' is not a mapping")
+    task_config = configs.get(task, {})
+    if not isinstance(task_config, dict):
+        raise ValueError("'configs' entry is not a mapping")
     metric_list = task_config.get("metric_list", [])
+    if not isinstance(metric_list, list):
+        raise ValueError("'metric_list' is not a list")
     declared = tuple(
         f"{item['metric']},"
         for item in metric_list
@@ -355,7 +362,7 @@ def main() -> int:
             print(f"FAIL: unreadable result file {f}: invalid JSON: {exc}", file=sys.stderr)
             failed = True
             continue
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
             print(f"FAIL: unreadable result file {f}: {exc}", file=sys.stderr)
             failed = True
             continue
@@ -386,8 +393,20 @@ def main() -> int:
                 )
                 failed = True
                 continue
+            if not isinstance(metrics, dict):
+                print(
+                    f"FAIL: {conc_label}{task} malformed result: 'results' entry is not a mapping",
+                    file=sys.stderr,
+                )
+                failed = True
+                continue
             min_score, source = resolve_threshold(config, prefix, task, args.min_score)
-            prefixes = metric_prefixes(data, task, args.metric_prefix)
+            try:
+                prefixes = metric_prefixes(data, task, args.metric_prefix)
+            except ValueError as exc:
+                print(f"FAIL: {conc_label}{task} malformed result: {exc}", file=sys.stderr)
+                failed = True
+                continue
             for name, val in metrics.items():
                 if not name.startswith(prefixes) or "stderr" in name:
                     continue
