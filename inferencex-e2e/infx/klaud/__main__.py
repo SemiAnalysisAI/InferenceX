@@ -89,6 +89,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
     from infx.matrix.validation import load_config_files, load_runner_file
+    from infx.results.identity import public_framework
 
     from .validation import in_scope
 
@@ -122,7 +123,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
                 row = {
                     "model": entry["model-prefix"],
                     "hardware": _hardware_family(entry["runner"]),
-                    "framework": entry["framework"],
+                    "framework": public_framework(entry["framework"]),
                     "precision": entry["precision"],
                     "spec_method": entry["spec-decoding"],
                     "disagg": entry.get("disagg", False),

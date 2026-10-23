@@ -935,6 +935,7 @@ def publish_final(
 def public_point(entry: dict) -> dict:
     """Project generated settings onto the public BenchmarkRow identity (not metrics)."""
     from infx.matrix.generate import _hardware_family
+    from infx.results.identity import public_framework
 
     from .models import normalized_image
 
@@ -943,7 +944,7 @@ def public_point(entry: dict) -> dict:
     point = {
         "model": entry["model-prefix"],
         "hardware": _hardware_family(entry["runner"]),
-        "framework": entry["framework"],
+        "framework": public_framework(entry["framework"]),
         "precision": entry["precision"],
         "spec_method": entry["spec-decoding"],
         "disagg": entry.get("disagg", False),

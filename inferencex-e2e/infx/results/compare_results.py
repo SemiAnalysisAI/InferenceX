@@ -7,6 +7,8 @@ from pathlib import Path
 import psycopg2
 from tabulate import tabulate
 
+from infx.results.identity import public_framework
+
 
 def parse_bool(value: object) -> bool:
     if isinstance(value, bool):
@@ -43,15 +45,6 @@ def compute_delta_str(
     return colorize_delta(delta, pct, higher_is_better, fmt)
 
 
-# InferenceX-app ingestion stores these frameworks under their canonical names.
-FRAMEWORK_ALIASES = {
-    "atom-disagg": "mooncake-atom",
-    "sglang-disagg": "mori-sglang",
-    "trtllm": "trt",
-    "dynamo-trtllm": "dynamo-trt",
-}
-
-
 def extract_hardware(runner: str) -> str:
     """The GPU of a runner label such as cluster:b200-nscale, the key ingestion stores."""
     return runner.lower().rpartition(":")[2].split("-", 1)[0]
@@ -62,7 +55,7 @@ def build_config_params(result: dict) -> dict:
     is_multinode = result.get("is_multinode", False)
     hw = extract_hardware(result["hw"])
     model = result["infmax_model_prefix"].lower()
-    framework = FRAMEWORK_ALIASES.get(result["framework"].lower(), result["framework"].lower())
+    framework = public_framework(result["framework"])
     precision = result["precision"].lower()
     spec_method = result.get("spec_decoding", "none").lower()
     disagg = parse_bool(result.get("disagg", False))

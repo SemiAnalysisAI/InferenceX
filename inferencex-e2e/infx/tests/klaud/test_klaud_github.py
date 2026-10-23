@@ -1845,6 +1845,26 @@ def test_multinode_identity_matches_published_aggregate_encodings(
     assert reporting._matches_public_point(row, reporting.public_point(entry)) is matches
 
 
+def test_sglang_disagg_identity_matches_its_published_mori_sglang_rows():
+    worker = {"num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False}
+    entry = {
+        "model-prefix": "dsv4", "runner": "cluster:mi355x-amds", "framework": "sglang-disagg",
+        "precision": "fp4", "spec-decoding": "draft_model", "disagg": True,
+        "scenario-type": "agentic-coding", "kv-offloading": "dram", "conc": 16,
+        "image": "example/image:1", "prefill": worker, "decode": worker,
+    }  # fmt: skip
+    row = {
+        "model": "dsv4", "hardware": "mi355x", "framework": "mori-sglang", "precision": "fp4",
+        "spec_method": "draft_model", "disagg": True, "is_multinode": True,
+        "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "on",
+        "conc": 16, "image": "example/image:1", "prefill_tp": 4, "prefill_ep": 1,
+        "prefill_dp_attention": False, "prefill_num_workers": 1, "decode_tp": 4,
+        "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 1,
+    }  # fmt: skip
+
+    assert reporting._matches_public_point(row, reporting.public_point(entry)) is True
+
+
 @pytest.fixture
 def family_configs():
     master = {
@@ -2760,6 +2780,21 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
             "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1),
         },
     }
+
+
+def test_live_families_name_atom_disagg_as_its_published_mooncake_atom(tmp_path, family_configs):
+    master, runners = family_configs
+    master["fixture"]["framework"] = "atom-disagg"
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "amd-master.yaml").write_text(yaml.safe_dump(master))
+    (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(tmp_path)
+
+    families = klaud.live_families(tmp_path)
+
+    assert [key[2] for key in families] == ["mooncake-atom"]
+
 
 
 def test_historical_families_ignore_leftover_nested_results(tmp_path, family_configs):
