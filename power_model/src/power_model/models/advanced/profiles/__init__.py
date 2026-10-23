@@ -47,6 +47,60 @@ GPU_INPUT = Provenance(
     kind="input",
     input_boundary="GPU electrical power, excluding board and host overhead",
 )
+GRACE_SOCKET_INPUT = Provenance(
+    profile_id="grace-socket-input",
+    version="1",
+    source=(
+        "cpu_and_dram_measured_power_per_socket argument; "
+        "ACPI Grace Power Socket average per socket"
+    ),
+    kind="measured",
+    input_boundary="One Grace socket as reported by the ACPI Grace Power Socket sensor",
+    assumptions=(
+        "Covers CPU and SysIO rails, LPDDR5X and socket regulator loss: inferred from NVIDIA's "
+        "socket-total statement and a ~42 W GB300 remainder above CPU plus SysIO.",
+        "GB200 firmware that reported the extra regulator rail only in module power under-reports.",
+        "DCGM field 1130 is the CPU rail alone and is not a valid input.",
+        "Replaces modeled GraceCPU and LPDDR5XMemory; no Grace-side loss is added.",
+        "Assumed downstream of the compute-tray DC/DC converter, which stays modeled.",
+        "Tray air takes only the modeled LPDDR5X share; the rest, including regulator loss, is "
+        "cold-plate heat. Routing all ~42 W to air would add up to ~0.5 kW of rack IT power.",
+    ),
+)
+X86_CPU_SOCKET_INPUT = Provenance(
+    profile_id="x86-cpu-socket-input",
+    version="1",
+    source=(
+        "cpu_measured_power_per_socket argument; "
+        "RAPL package-N energy averaged over the window, per socket"
+    ),
+    kind="measured",
+    input_boundary="One x86 CPU package as reported by RAPL; excludes DIMMs",
+    assumptions=(
+        "Replaces the modeled X86CPU only.",
+        "DDR5 DIMMs stay modeled. AMD EPYC RAPL has no DRAM domain; package power excludes DIMMs.",
+        "Sits downstream of the PSU, so PSU loss and fan draw respond.",
+        "Fan sizing keeps the modeled design-state CPU.",
+        "AMD Zen RAPL is not validated against wall power. Schöne et al. (TU Dresden, 2021) found "
+        "Zen 2 RAPL inaccurate, so treat the value as measured with that caveat.",
+    ),
+)
+X86_CPU_AND_DRAM_SOCKET_INPUT = Provenance(
+    profile_id="x86-cpu-and-dram-socket-input",
+    version="1",
+    source="cpu_and_dram_measured_power_per_socket argument",
+    kind="measured",
+    input_boundary="One x86 CPU and its attached DDR5 DIMMs, per socket",
+    assumptions=("Replaces modeled X86CPU and DDR5DIMM power.",),
+)
+GRACE_CPU_SOCKET_INPUT = Provenance(
+    profile_id="grace-cpu-socket-input",
+    version="1",
+    source="cpu_measured_power_per_socket argument",
+    kind="measured",
+    input_boundary="One Grace CPU without its LPDDR5X memory pool",
+    assumptions=("Replaces modeled GraceCPU power; LPDDR5X remains modeled.",),
+)
 NVME_BASELINE = Provenance(
     profile_id="hgx-idle-nvme",
     version="1",

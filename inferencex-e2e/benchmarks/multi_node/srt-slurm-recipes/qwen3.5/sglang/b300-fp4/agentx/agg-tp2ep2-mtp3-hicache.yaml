@@ -1,0 +1,97 @@
+schema: 2
+name: agg-b300-tp2ep2-highthroughput-nightly-20261013
+slurm:
+  time_limit: '08:00:00'
+identity:
+  frameworks: {sglang: nightly-dev-20261013-7224fce1}
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+resources:
+  gpu_type: b300
+  gpus_per_node: 8
+frontend:
+  type: sglang-router
+  enable_multiple_frontends: false
+engine: sglang
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 2
+    env:
+      SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '2'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      NO_COLOR: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+      NCCL_MNNVL_ENABLE: '1'
+      NCCL_CUMEM_ENABLE: '1'
+      NCCL_NVLS_ENABLE: '0'
+      SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+      SGLANG_MOE_NVFP4_DISPATCH: '1'
+      FLASHINFER_DISABLE_VERSION_CHECK: '1'
+      SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+      SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+      SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
+      SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+      SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
+      SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+    args:
+      served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+      enable-cache-report: true
+      model-path: /model/
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      tensor-parallel-size: 2
+      pipeline-parallel-size: 1
+      data-parallel-size: 1
+      expert-parallel-size: 2
+      mamba-ssm-dtype: bfloat16
+      mamba-radix-cache-strategy: extra_buffer
+      mamba-track-interval: 1048576
+      mamba-max-states-per-path: 1
+      max-mamba-cache-size: 512
+      context-length: 262144
+      page-size: 64
+      attention-backend: trtllm_mha
+      moe-runner-backend: flashinfer_cutedsl
+      linear-attn-prefill-backend: flashinfer
+      speculative-algorithm: NEXTN
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      speculative-moe-runner-backend: flashinfer_trtllm
+      enable-linear-replayssm-spec: true
+      mem-fraction-static: 0.85
+      max-prefill-tokens: 16384
+      chunked-prefill-size: 16384
+      max-running-requests: 224
+      cuda-graph-max-bs-decode: 224
+      tokenizer-worker-num: 6
+      stream-interval: 50
+      scheduler-recv-interval: 10
+      allow-auto-truncate: true
+      enable-hierarchical-cache: true
+      hicache-ratio: 1.8
+      hicache-mem-layout: page_first_direct
+      hicache-write-policy: write_back
+      watchdog-timeout: 1000000
+      enable-metrics: true
+      weight-loader-drop-cache-after-load: true
+sbatch_directives:
+  mem: '0'
+srun_options:
+  mem: '0'
+  container-remap-root: ''
+benchmark:
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    PORT: '8000'
+    TP: '2'
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

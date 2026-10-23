@@ -45,7 +45,7 @@ def cluster(tmp_path, single_node_models: str = "staged") -> Cluster:
     return load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
 
 
-MULTI = dict(IS_MULTINODE="true", CONFIG_FILE="recipes/x.yaml")
+MULTI = dict(IS_MULTINODE="true")
 SINGLE = dict(IS_MULTINODE="false")
 
 
@@ -55,7 +55,6 @@ SINGLE = dict(IS_MULTINODE="false")
     ("b200-nscale", dict(MULTI, MODEL_PREFIX="glm5.3", PRECISION="fp8", FRAMEWORK="tilert", SPEC_DECODING="mtp"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(IS_MULTINODE="true", FRAMEWORK="atom-disagg"), LaunchPath.SRT_MULTI),
     ("mi355x-amds", dict(MULTI, FRAMEWORK="sglang-disagg"), LaunchPath.SRT_MULTI),
-    ("gb200-nv", dict(MULTI, FRAMEWORK="llmd-vllm", MODEL_PREFIX="dsv4", PRECISION="fp4", SPEC_DECODING="mtp"), LaunchPath.LLMD),
     ("gb200-nv", dict(MULTI, FRAMEWORK="tilert"), LaunchPath.SRT_MULTI),
     ("b300-dsxe", dict(SINGLE, MODEL_PREFIX="dsv41flash", FRAMEWORK="sglang", IS_AGENTIC="1"), LaunchPath.SRT_BATCH),
     ("b300-dsxe", dict(SINGLE, MODEL_PREFIX="dsv41flash", FRAMEWORK="sglang", IS_AGENTIC="1", INFX_BATCH_REENTRY="1"), LaunchPath.SRT_SINGLE),
@@ -69,8 +68,8 @@ def test_each_cluster_routes_requests_to_its_launch_path(cluster_id, env, path):
 
 
 def test_a_path_without_a_lane_on_the_cluster_is_refused():
-    with pytest.raises(LaunchError, match="cluster 'b200-cw' has no srt-multi srt-slurm lane"):
-        srt_lane("b200-cw", LaunchPath.SRT_MULTI)
+    with pytest.raises(LaunchError, match="cluster 'h100-cw' has no srt-multi srt-slurm lane"):
+        srt_lane("h100-cw", LaunchPath.SRT_MULTI)
 
 
 OVERRIDES = (
@@ -96,6 +95,15 @@ def test_models_resolve_by_basename_with_overrides(tmp_path, monkeypatch, env, p
     assert single_node_model_path(cluster(tmp_path, "hub"), point) == f"hf:{env['MODEL']}"
 
 
+def test_single_node_staging_can_be_selected_for_one_workload(tmp_path, monkeypatch):
+    monkeypatch.setitem(models.OVERRIDES, "c", (
+        Override(Match(model_glob="org/M"), single_node_staged=True),
+    ))
+    c = cluster(tmp_path, "hub")
+    assert single_node_model_path(c, request(MODEL="org/M")) == str(tmp_path / "nvme/m")
+    assert single_node_model_path(c, request(MODEL="org/S")) == "hf:org/S"
+
+
 def test_a_checkpoint_that_must_be_readable_fails_before_submission(tmp_path, monkeypatch):
     monkeypatch.setitem(models.OVERRIDES, "c", OVERRIDES)
     with pytest.raises(LaunchError, match="no readable .*/s/config.json"):
@@ -117,38 +125,25 @@ def test_a_points_own_model_path_is_what_its_job_serves(tmp_path, monkeypatch):
     assert job_env(c, point, served)["MODEL_PATH"] == "/point/m"
 
 
-BUNDLE = """base:
-  model: {path: alias-a}
-override_x:
-  model: {path: alias-b}
-zip_override_y:
-  model: {path: [alias-c, "hf:org/M"]}
-"""
-
-
-@pytest.mark.parametrize(("recipe", "model", "paths"), [
-    (BUNDLE, "org/M", {"alias-a": "nvme/m", "alias-b": "nvme/m", "alias-c": "nvme/m"}),
-    ("model: {path: /abs/m}\n", "org/Unstaged", {}),
-    ("model: {path: alias-a}\n", "org/Unstaged", LaunchError),
+@pytest.mark.parametrize(("model", "agentic", "overrides", "paths"), [
+    ("org/M", "0", (), {"hf:org/M": "nvme/m"}),
+    ("org/Unstaged", "0", (), LaunchError),
+    ("org/Unstaged", "1", (), {}),
+    ("org/M", "0", (Override(Match(), hub=True),), {}),
+    ("org/Unstaged", "0", (Override(Match(), hub=True),), {}),
 ])  # fmt: skip
-def test_every_recipe_alias_maps_to_the_checkpoint_and_literals_pass_through(tmp_path, recipe, model, paths):
-    mirror = tmp_path / "ws/benchmarks/multi_node/srt-slurm-recipes/r.yaml"
-    mirror.parent.mkdir(parents=True)
-    mirror.write_text(recipe)
-    c = cluster(tmp_path)
-    point = request(MODEL=model, GITHUB_WORKSPACE=str(tmp_path / "ws"))
+def test_the_bound_model_maps_to_its_checkpoint_unless_served_from_the_hub(
+    tmp_path, monkeypatch, model, agentic, overrides, paths
+):
+    monkeypatch.setitem(models.OVERRIDES, "c", overrides)
+    c, point = cluster(tmp_path), request(MODEL=model, IS_AGENTIC=agentic)
+    served = served_path(c, point, checkpoint(c, point))
     if paths is LaunchError:
         with pytest.raises(LaunchError, match="stages no checkpoint"):
-            model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
+            model_paths(c, point, served)
         return
-    resolved = model_paths(c, point, "recipes/r.yaml:override_x", served_path(c, point, checkpoint(c, point)))
-    assert resolved == {alias: str(tmp_path / path) for alias, path in paths.items()}
-
-
-def test_missing_recipe_fails_before_model_resolution(tmp_path):
-    c, point = cluster(tmp_path), request(MODEL="org/M", GITHUB_WORKSPACE=str(tmp_path))
-    with pytest.raises(LaunchError, match="not in the recipe mirror"):
-        model_paths(c, point, "recipes/missing.yaml", "/m")
+    resolved = model_paths(c, point, served)
+    assert resolved == {name: str(tmp_path / path) for name, path in paths.items()}
 
 
 def test_matching_single_node_points_read_the_shared_hub_cache(tmp_path, monkeypatch):

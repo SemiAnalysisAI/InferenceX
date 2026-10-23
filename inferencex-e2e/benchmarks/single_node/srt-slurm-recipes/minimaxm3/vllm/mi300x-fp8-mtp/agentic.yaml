@@ -1,12 +1,6 @@
-# MiniMax-M3 MXFP8 AgentX on MI300X with vLLM EAGLE3 (GQA draft). The KV cache
-# is GPU-resident, or backed by an LMCache MP DRAM server at the offload point.
 base:
   schema: 2
   name: minimaxm3-fp8-mi300x-vllm-agentic
-  model:
-    path: hf:MiniMaxAI/MiniMax-M3-MXFP8
-    container: vllm/vllm-openai-rocm:v0.30.0
-    precision: fp8
   resources:
     gpu_type: mi300x
     gpus_per_node: 8
@@ -54,7 +48,6 @@ base:
         speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN"}'
       env:
         PYTHONNOUSERSITE: '1'
-        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1800'
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         VLLM_ROCM_USE_AITER: '1'
@@ -63,16 +56,12 @@ base:
         NCCL_MIN_NCHANNELS: '112'
         GPU_MAX_HW_QUEUES: '2'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: MiniMaxAI/MiniMax-M3-MXFP8
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
 # One variant per point. Admission is 2x CONC. The DRAM point runs one
-# lmcache-server service on the node with the 8 x 162 GB L1 the per-rank
-# servers used to split between them.
+# lmcache-server service on the node with the whole 1280 GB DRAM budget as L1.
 override_tp8_c2:
   roles:
     agg:
@@ -138,7 +127,7 @@ override_tp8_c16_lmcache:
         timeout_seconds: 900
       args:
         - --l1-size-gb
-        - '1296'
+        - '1280'
         - --l1-init-size-gb
         - '10'
         - --l1-read-ttl-seconds
@@ -162,4 +151,4 @@ override_tp8_c16_lmcache:
     env:
       CONC: '16'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1298'
+      TOTAL_CPU_DRAM_GB: '1280'

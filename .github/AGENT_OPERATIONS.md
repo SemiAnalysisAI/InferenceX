@@ -26,9 +26,9 @@ Write natural technical Chinese used by ML infrastructure engineers. Preserve mo
 
 ## Sweep labels and reuse
 
-Primary labels, modifiers, canary, fail-fast, and the fork dispatch path are owned by [PR primary and modifier labels](../inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels) and [canary and fail-fast semantics](../inferencex-e2e/docs/ci-procedures.md#canary-and-fail-fast-semantics). Apply exactly one primary label, normally `full-sweep-fail-fast`.
+Primary labels, modifiers, canary, fail-fast, and the fork dispatch path are documented in [PR sweep labels](workflows/README.md#pr-sweep-labels). Apply exactly one primary label, normally `full-sweep-fail-fast`.
 
-Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, run `python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict` while the conflict stages are present, as in [changelog conflict recovery](../inferencex-e2e/docs/ci-procedures.md#changelog-conflict-recovery). It keeps main's bytes and re-appends only the PR's entry. Never hand-merge, 3-way merge, or reformat the changelog.
+Sweeps do not trigger while a PR has merge conflicts. For `inferencex-e2e/perf-changelog.yaml` conflicts, run `python3 -m infx.workflows.prepare_perf_changelog_merge resolve-conflict --pr-number <PR>` from `inferencex-e2e/` while the conflict stages are present, as in [changelog conflict recovery](workflows/README.md#changelog-conflict-recovery). It keeps main's bytes and re-appends only the PR's entry. Never hand-merge, 3-way merge, or reformat the changelog.
 
 Pushes to `main` never run a sweep: `.github/workflows/run-sweep.yml` is PR-only. A push that changes `inferencex-e2e/perf-changelog.yaml` runs `.github/workflows/merge-ingest.yml` (Merge Ingest). Its single `ingest` job validates the merged PR's authorized `/use <run_id>` (or legacy `/reuse-sweep-run`) command and source run, then dispatches ingest of that reused PR sweep. Without valid reuse authorization the run fails, and nothing is benchmarked or ingested. `[skip-sweep]` only skips PR benchmark setup; changelog validation and reuse authorization checks still run, and Merge Ingest ignores it.
 
@@ -48,7 +48,7 @@ gh api -X POST \
   -f 'inputs[duration-override]='
 ```
 
-The top-level `ref` selects the workflow definition and is normally `main`. `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]` with paths relative to the selected checkout's `inferencex-e2e/` directory. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid multi-node power telemetry fatal.
+The top-level `ref` selects the workflow definition and is normally `main`. `inputs[ref]` selects the repository revision under test. Direct config dispatches set `inputs[generate-cli-command]` with paths relative to the selected checkout's `inferencex-e2e/` directory. Trusted changelog-driven dispatches instead set both `inputs[changelog-base-ref]` and `inputs[changelog-head-ref]`. `duration-override` replaces per-config seconds, and `require-power` makes invalid power telemetry fatal for multi-node jobs and native single-node throughput and AgentX jobs; single-node matrix rows cannot set it.
 
 For AgentX preflight, add `-F 'inputs[agentx-fast]=true'`. Official runs use 10 warmup requests per lane and a one-hour profile.
 
@@ -68,15 +68,15 @@ Eval selection, the `--no-evals` / `--evals-only` / `--all-evals` flags, and cha
 
 ## Power telemetry
 
-Multinode srt-slurm results may include `power_valid`, `avg_power_w`, `avg_total_gpu_power_w`, `total_gpu_energy_j`, and joules per query/input/output/total token. Invalid telemetry records `power_valid: 0` without energy metrics and fails only with `REQUIRE_POWER=1`. Single-node results carry no power fields until srt-slurm telemetry covers those lanes.
+Multinode srt-slurm results, and single-node fixed-sequence and AgentX results with a retained native telemetry package, may include `power_valid`, `avg_power_w`, `avg_total_gpu_power_w`, `total_gpu_energy_j`, and joules per query/input/output/total token. Invalid telemetry records `power_valid: 0` without energy metrics and fails only with `REQUIRE_POWER=1`.
 
 Multinode disaggregated results add `prefill_gpu_energy_j`, `decode_gpu_energy_j`, `prefill_avg_power_w`, `decode_avg_power_w`, `prefill_joules_per_input_token`, and `decode_joules_per_output_token`. Role energy covers the full formal benchmark window, not kernel-level phases, and the role watts are that energy divided by the same window and by the role's GPU count.
 
 Every power result, valid or invalid, carries `power_metric_schema_version`. Version 2 defines each unprefixed `joules_per_*` field as whole-deployment GPU-board energy over the named denominator; role-scoped energy uses the explicit `prefill_*` / `decode_*` keys. Rows without the field predate the whole-deployment switch and their unprefixed joules are not comparable across topologies.
 
-For srt-slurm recipes, `telemetry.enabled: true` with `telemetry.dcgm_exporter` enables official energy collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for every srt-slurm job, including TileRT. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible recipe-gated `dynamo-sglang` dcgm-power lanes are validated.
+A multinode master row with `power: true` enables official energy collection through the shared telemetry fragment; native single-node throughput and AgentX jobs enable telemetry through their bound recipe. Native single-node jobs inherit the exporter image, labels and metrics from the cluster's `default_gpu_exporter` in `inferencex-e2e/configs/runners.yaml`: DCGM on NVIDIA, the `kind: custom` AMD device-metrics-exporter on AMD. Multi-node power rows keep their shared DCGM telemetry block. Eval-only jobs omit collection. The Git submodule pointer at `inferencex-e2e/utils/srt-slurm` is the source of truth for every srt-slurm job, including TileRT. CI derives `POWER_PRODUCER_SHA` from the launcher stamp. The aggregate-power and AgentX power tests validate telemetry and provenance. These local tests do not prove hardware power collection. Eligible `dynamo-sglang` dcgm-power lanes are validated.
 
-Power audit artifacts are named `power_audit_<result>` and contain the multinode `power_validation_<result>_*.json` sidecars. They are uploaded even when validation fails.
+Power audit artifacts are named `power_audit_<result>` and contain the `power_validation*.json` sidecars plus, for native telemetry jobs, `LOGS/power/` (`samples.csv` v3 with `temperature_c`, `manifest.json`, `windows/`). They are uploaded even when validation fails.
 
 ## Result artifacts and metrics
 

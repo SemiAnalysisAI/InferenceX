@@ -1,5 +1,3 @@
-# YAML from https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/gsm8k/gsm8k.yaml 
-# Changed doc_to_text so model answers properly. Also see lm-evaluation-harness#3411.
 dataset_path: Idavidrein/gpqa
 dataset_name: gpqa_diamond
 task: gpqa_diamond_cot_n_shot 
@@ -25,7 +23,6 @@ filter_list:
   - name: extract_abcd
     filter:
       - function: regex
-        # last standalone A-D, optionally in parentheses
         regex_pattern: "(?i)\\b\\(?([A-D])\\)?\\b"
         group_select: -1
       - function: take_first

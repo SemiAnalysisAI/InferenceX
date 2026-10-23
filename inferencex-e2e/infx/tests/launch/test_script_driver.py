@@ -14,6 +14,7 @@ import yaml
 
 from infx.clusters import load_inventory
 from infx.launch.__main__ import launch
+from infx.launch.event import JobEventBuilder
 from infx.launch.request import LaunchRequest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -203,9 +204,16 @@ def test_collector_failure_propagates_and_still_cancels_the_allocation(
     fakes, workspace, tmp_path, monkeypatch
 ):
     monkeypatch.setenv("COLLECTOR_RC", "7")
+    event = JobEventBuilder()
 
-    assert launch(cluster_for(tmp_path), request_for(workspace)) == 7
+    assert launch(cluster_for(tmp_path), request_for(workspace), event) == 7
     assert fakes()[-1] == ["scancel", "42"]
+    record = event.finish(7)
+    assert (record.slurm_job_id, list(record.stages)) == ("42", ["prepare", "queue_wait", "run"])
+    error = record.error
+    assert (error.stage, error.type, error.message, error.exit_code) == (
+        "run", "JobFailed", "container step in Slurm job 42 exited 7", 7,
+    )
 
 
 def test_unavailable_staged_checkpoint_blocks_before_the_container_starts(

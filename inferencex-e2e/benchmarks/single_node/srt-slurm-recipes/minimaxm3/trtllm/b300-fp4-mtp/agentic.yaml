@@ -1,12 +1,6 @@
-# MiniMax-M3 NVFP4 AgentX on B300 with TensorRT-LLM EAGLE3-GQA. DRAM KV offload
-# uses TRT-LLM's native secondary-memory pool, pinned per topology.
 base:
   schema: 2
   name: minimaxm3-fp4-b300-trtllm-agentic
-  model:
-    path: hf:nvidia/MiniMax-M3-NVFP4
-    container: nvcr.io#nvidia/tensorrt-llm/release:1.4.0rc0.dev202610070001
-    precision: fp4
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -98,17 +92,15 @@ base:
     max_attempts: 1440
     interval_seconds: 5
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: nvidia/MiniMax-M3-NVFP4
       # trtllm-serve exposes Prometheus text at /prometheus/metrics.
       AIPERF_SERVER_METRICS_URLS: http://localhost:8000/prometheus/metrics
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
       KV_OFFLOADING: dram
 
 # One variant per measured point. Draft length and capture ladder follow the
-# matching local ser_tp*_mtp*_c*.yaml profile.
+# matching local ser_tp*_mtp*_c*.yaml profile. The host pool is 288 GiB at TP8
+# and about 349 GiB below.
 
 override_tp2_c10:
   roles:
@@ -130,11 +122,11 @@ override_tp2_c10:
             - 9
             - 10
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '10'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp2_c15:
   roles:
@@ -161,11 +153,11 @@ override_tp2_c15:
             - 14
             - 15
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '15'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp2_c20:
   roles:
@@ -197,11 +189,11 @@ override_tp2_c20:
             - 19
             - 20
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '20'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp2_c25:
   roles:
@@ -233,11 +225,11 @@ override_tp2_c25:
             - 23
             - 25
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '25'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp2_c30:
   roles:
@@ -269,11 +261,11 @@ override_tp2_c30:
             - 27
             - 30
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '30'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp2_c35:
   roles:
@@ -307,11 +299,11 @@ override_tp2_c35:
             - 34
             - 35
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '35'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp2_c40:
   roles:
@@ -347,11 +339,11 @@ override_tp2_c40:
             - 38
             - 40
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '40'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp2_c45:
   roles:
@@ -390,11 +382,11 @@ override_tp2_c45:
             - 44
             - 45
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374500000000
   benchmark:
     env:
       CONC: '45'
-      TOTAL_CPU_DRAM_GB: '599'
+      TOTAL_CPU_DRAM_GB: '749'
 
 override_tp4_c1:
   roles:
@@ -407,7 +399,7 @@ override_tp4_c1:
           batch_sizes:
             - 1
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374750000000
         torch_compile_config:
           capture_num_tokens:
             - 1
@@ -427,7 +419,7 @@ override_tp4_c1:
   benchmark:
     env:
       CONC: '1'
-      TOTAL_CPU_DRAM_GB: '1199'
+      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c5:
   roles:
@@ -444,7 +436,7 @@ override_tp4_c5:
             - 4
             - 5
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374750000000
         torch_compile_config:
           capture_num_tokens:
             - 1
@@ -464,7 +456,7 @@ override_tp4_c5:
   benchmark:
     env:
       CONC: '5'
-      TOTAL_CPU_DRAM_GB: '1199'
+      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c10:
   roles:
@@ -486,7 +478,7 @@ override_tp4_c10:
             - 9
             - 10
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374750000000
         torch_compile_config:
           capture_num_tokens:
             - 1
@@ -506,7 +498,7 @@ override_tp4_c10:
   benchmark:
     env:
       CONC: '10'
-      TOTAL_CPU_DRAM_GB: '1199'
+      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp4_c15:
   roles:
@@ -533,7 +525,7 @@ override_tp4_c15:
             - 14
             - 15
         kv_cache_config:
-          host_cache_size: 388554555392
+          host_cache_size: 374750000000
         torch_compile_config:
           capture_num_tokens:
             - 1
@@ -551,7 +543,7 @@ override_tp4_c15:
   benchmark:
     env:
       CONC: '15'
-      TOTAL_CPU_DRAM_GB: '1199'
+      TOTAL_CPU_DRAM_GB: '1499'
 
 override_tp8_c1:
   roles:
@@ -584,4 +576,4 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: '1'
-      TOTAL_CPU_DRAM_GB: '2399'
+      TOTAL_CPU_DRAM_GB: '2999'

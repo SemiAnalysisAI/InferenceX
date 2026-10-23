@@ -1,10 +1,6 @@
 base:
   schema: 2
   name: dsr1-fp8-mi355x-sglang-8k1k
-  model:
-    path: hf:deepseek-ai/DeepSeek-R1-0528
-    container: lmsysorg/sglang:v0.5.12-rocm700-mi35x
-    precision: fp8
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -31,7 +27,7 @@ base:
         num-continuous-decode-steps: 8
         max-prefill-tokens: 196608
         kv-cache-dtype: fp8_e4m3
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         data-parallel-size: 1
         expert-parallel-size: 1
         served-model-name: deepseek-ai/DeepSeek-R1-0528
@@ -40,20 +36,13 @@ base:
         SGLANG_USE_AITER: '1'
         RCCL_MSCCL_ENABLE: '0'
         ROCM_QUICK_REDUCE_QUANTIZATION: INT4
-  benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/single_node/srt_fixed_sequence.sh
-    env:
-      MODEL: deepseek-ai/DeepSeek-R1-0528
-      ISL: '8192'
-      OSL: '1024'
-      RANDOM_RANGE_RATIO: '0.8'
-      USE_CHAT_TEMPLATE: 'false'
 zip_override_tp4_ep1:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [32, 64]
+        cuda-graph-max-bs-decode: [32, 64]
+        # AITER CK bpreshuffle rejects the TP4 dense gate_up GEMM (N=9216, K=7168) at 8k prefill.
+        fp8-gemm-backend: triton
   benchmark:
     env:
       CONC: ['32', '64']
@@ -62,7 +51,7 @@ zip_override_tp8_ep1:
     agg:
       gpus: 8
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64]
         tensor-parallel-size: 8
   benchmark:
     env:

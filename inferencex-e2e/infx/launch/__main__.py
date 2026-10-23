@@ -1,7 +1,8 @@
 """Run the benchmark point the workflow environment describes, or clean up after earlier ones.
 
-``run`` exits with the point's return code (128 + N after signal N); ``cleanup`` has the
-runner's cluster backend remove what earlier launches on the runner left behind.
+``run`` exits with the point's return code (128 + N after signal N) and leaves its record,
+``job_event.json``, in the workspace; ``cleanup`` has the runner's cluster backend remove what
+earlier launches on the runner left behind.
 """
 
 from __future__ import annotations
@@ -18,28 +19,43 @@ from infx.launch import drivers
 from infx.launch.backends import BACKENDS, backend_class
 from infx.launch.backends.base import BackendError
 from infx.launch.context import LaunchError
+from infx.launch.event import JobEventBuilder
 from infx.launch.lifecycle import Lifecycle
 from infx.launch.request import LaunchRequest, RequestError
 
 
-def launch(cluster: Cluster, request: LaunchRequest) -> int:
+def launch(cluster: Cluster, request: LaunchRequest, event: JobEventBuilder | None = None) -> int:
     """Run ``request`` on ``cluster``; a launch error is one ``ERROR:`` line, not a traceback."""
-    with Lifecycle() as life:
+    with Lifecycle(event) as life:
         try:
-            life.record(drivers.run(cluster, request, life))
+            rc = drivers.run(cluster, request, life)
         except (LaunchError, BackendError, RequestError) as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            life.record(1)
+            life.event.error(error)
+            rc = 1
+        life.event.exited(rc)
+        life.record(rc)
     return life.returncode
 
 
 def _run(runner_config: Path | None) -> int:
+    event = JobEventBuilder.begin(os.environ)
+    rc = 1
     try:
         request = LaunchRequest.from_env()
+        cluster = resolve_cluster(request.runner_name, runner_config)
+        event.set(cluster=cluster.id)
+        rc = launch(cluster, request, event)
     except RequestError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
-    return launch(resolve_cluster(request.runner_name, runner_config), request)
+        event.error(error)
+    except SystemExit as stop:
+        rc = 0 if stop.code is None else stop.code if isinstance(stop.code, int) else 1
+        raise
+    except BaseException as error:
+        event.error(error, report=False)
+        raise
+    finally:
+        event.emit(rc)
+    return rc
 
 
 def _cleanup(runner_config: Path | None) -> int:

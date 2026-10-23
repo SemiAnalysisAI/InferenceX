@@ -1,0 +1,302 @@
+schema: 2
+
+base:
+  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: 1.6.0.dev20261016
+      sglang: 0.0.0.dev1+gc15edf314
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20261016
+  # Tachometer's per-node exporters slow decode steps and add host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  frontend:
+    type: dynamo
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+    enable_multiple_frontends: true
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    args:
+      router-mode: kv
+      router-replica-sync: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        watchdog-timeout: 1000000
+        quantization: modelopt_fp4
+        disaggregation-transfer-backend: nixl
+        tensor-parallel-size: 1
+        pipeline-parallel-size: 4
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        max-running-requests: 16
+        disable-cuda-graph: true
+        moe-runner-backend: flashinfer_cutedsl
+        fp4-gemm-backend: flashinfer_cutedsl
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        mem-fraction-static: 0.83
+        context-length: 1048576
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        speculative-algorithm: EAGLE
+        speculative-moe-runner-backend: flashinfer_trtllm
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        # Advertised to the frontend's prefill router: a session's turns stay on one prefill worker.
+        router-mode: kv
+        router-replica-sync: true
+        router-session-affinity-ttl-secs: '3600'
+        enable-metrics: true
+        enable-cache-report: true
+        enable-request-time-stats-logging: true
+    decode:
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+        SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+        SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        watchdog-timeout: 1000000
+        quantization: modelopt_fp4
+        disaggregation-transfer-backend: nixl
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        chunked-prefill-size: 64
+        context-length: 1048576
+        fp4-gemm-backend: flashinfer_cutedsl
+        skip-tokenizer-init: true
+        stream-interval: 30
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        mem-fraction-static: 0.9
+        disaggregation-decode-extra-slots: 0
+        # Advertised to the frontend's decode router: the active-request term
+        # dominates KV overlap, so decode picks balance request counts.
+        router-mode: kv
+        router-replica-sync: true
+        router-decode-active-request-weight: '8192'
+        enable-metrics: true
+        enable-cache-report: true
+        enable-request-time-stats-logging: true
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"enable_thinking":true},"temperature":1,"top_p":0.95}'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 64
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+
+override_1p5d_pp4_tp4_c30:
+  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-1p5d-pp4-tp4-c30
+  roles:
+    prefill:
+      args:
+        hicache-size: 100
+        active-decode-blocks-threshold: None
+        active-prefill-tokens-threshold: None
+        active-prefill-tokens-threshold-frac: None
+    decode:
+      nodes: 5
+      workers: 5
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        disaggregation-decode-enable-radix-cache: true
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+
+override_1p3d_pp4_tp4_c40:
+  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-1p3d-pp4-tp4-c40
+  roles:
+    prefill:
+      args:
+        hicache-size: 100
+        active-decode-blocks-threshold: None
+        active-prefill-tokens-threshold: None
+        active-prefill-tokens-threshold-frac: None
+    decode:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        disaggregation-decode-enable-radix-cache: true
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+
+override_1p1d_pp4_dep8_c56:
+  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-1p1d-pp4-dep8-c56
+  roles:
+    prefill:
+      args:
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.75
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        moe-a2a-backend: flashinfer
+        moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        disable-radix-cache: true
+        # Divided across the 8 DP ranks: 32 per rank, the decode graph batch.
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 32
+
+override_3p1d_pp4_dep8_c216:
+  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-c216
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      env:
+        # The default 19,19,20,20 split also gives the last stage the LM head and MTP draft layer.
+        SGLANG_PP_LAYER_PARTITION: 20,20,20,18
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        moe-a2a-backend: flashinfer
+        moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        disable-radix-cache: true
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 32
+
+override_3p1d_pp4_dep8_c264:
+  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-hicache185-c264
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      env:
+        SGLANG_PP_LAYER_PARTITION: 20,20,20,18
+      args:
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.88
+        hicache-size: 185
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        moe-a2a-backend: flashinfer
+        moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        disable-radix-cache: true
+        mem-fraction-static: 0.94
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 32
+
+override_4p1d_pp4_dep16_c256:
+  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-4p1d-pp4-dep16-c256
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        enable-dp-attention: true
+        moe-a2a-backend: flashinfer
+        moe-runner-backend: flashinfer_trtllm
+        speculative-moe-a2a-backend: none
+        speculative-moe-runner-backend: flashinfer_trtllm
+        disable-radix-cache: true
+        # Divided across the 16 DP ranks: 32 per rank, the decode graph batch.
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 32

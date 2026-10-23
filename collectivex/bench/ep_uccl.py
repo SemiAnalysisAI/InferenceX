@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""UCCL-EP adapter: the drop-in DeepEP-legacy `Buffer` API over UCCL's CPU-proxy RDMA.
+"""UCCL-EP adapter: the drop-in DeepEP-legacy `Buffer` API over UCCL's CPU-proxy RDMA, run the way
+vLLM runs it.
 
 Scale-out only: at the scoped single-node EP8 the adapter passes `is_intranode=True`, UCCL
 never starts its proxies, and both modes move data over `cudaIpc`/NVLink instead.
@@ -12,6 +13,11 @@ DeepEP — manages the CPU proxy threads internally (spun up in `__init__`'s `in
 torn down in `destroy()`'s `destroy_uccl`), so this adapter never calls those functions directly;
 it just constructs the Buffer and calls `.destroy()`.
 
+Engines deploy UCCL-EP as exactly that drop-in `deep_ep`, so vLLM's DeepEP backends drive this
+Buffer: `deepep_high_throughput` in normal mode and `deepep_low_latency` in low-latency mode. Both
+modes construct and call it as vLLM main (2026-10-15) does; `create_buffer` holds the resolved
+values, which `implementation_details` publishes.
+
 Both modes use the legacy `Buffer` surface (low-latency shares bench/ep_legacy_ll.py with
 deepep-v2's legacy-Buffer path):
   normal      -> get_dispatch_layout + dispatch + combine; per-token multi-expert recv layout;
@@ -20,16 +26,18 @@ deepep-v2's legacy-Buffer path):
                  weighted-kernel-sum combine.
 
 FP8 dispatch quantizes inside the timed dispatch in normal mode (blockwise e4m3fn, e4m3fnuz on
-gfx942); in low-latency mode the caller sends BF16 and the decode kernel quantizes to e4m3
-internally (``use_fp8``). Combine is always BF16 — the oracle applies the identical per-token cast round-trip
-via semantic_payload/oracle_x in both modes, so the tight combine gate (COMBINE_REL_TOL = 8*2^-8)
-is preserved, not loosened.
+gfx942, row-major scales as vLLM sends them); in low-latency mode the caller sends BF16 and the
+decode kernel quantizes to e4m3 internally (``use_fp8``). Combine is always BF16 — the oracle
+applies the identical per-token cast round-trip via semantic_payload/oracle_x in both modes, so the
+tight combine gate (COMBINE_REL_TOL = 8*2^-8) is preserved, not loosened.
 """
 from __future__ import annotations
 
-import os
+import json
 import sys
 import types
+from importlib import metadata
+from pathlib import Path
 
 import torch
 import torch.distributed as dist
@@ -40,11 +48,16 @@ from ep_legacy_ll import LegacyBufferLL
 try:
     # In the isolated UCCL venv `deep_ep` is UCCL's deep_ep_wrapper (a drop-in DeepEP API backed
     # by uccl.ep's CPU-proxy runtime), not DeepSeek's DeepEP. Buffer/Config come from it.
-    import deep_ep  # noqa: F401  (UCCL deep_ep_wrapper)
+    import deep_ep  # (UCCL deep_ep_wrapper)
     from deep_ep import Buffer, Config  # type: ignore
+    from uccl import ep as uccl_ep  # type: ignore
 except Exception as exc:  # pragma: no cover - requires the benchmark image
     print(f"ERROR: UCCL-EP import failed: {exc!r}", file=sys.stderr)
     raise
+# DeepSeek's DeepEP has the same legacy Buffer API, so a `deep_ep` that resolved to it would run and
+# be published under this backend's name. UCCL's wrapper re-exports uccl.ep's own Config.
+if Config is not uccl_ep.Config:
+    raise ImportError("deep_ep is not UCCL's deep_ep_wrapper: its Config is not uccl.ep.Config")
 
 
 # ---- Vendored UCCL FP8 helpers (ep/bench/utils.py) --------------------------------------
@@ -85,59 +98,80 @@ def per_token_cast_back(x_fp8: "torch.Tensor", x_scales: "torch.Tensor"):
     return (x_fp32 * x_scales).view(x_fp8.shape).to(torch.bfloat16)
 
 
-# Normal-mode legacy Config launch parameters (DeepEP-legacy Config(num_sms, chunk, nvl_buffer)).
-# These mirror UCCL's own intranode bench (nvl_buffer_size=256); num_nvl_bytes is a generous fixed
-# reservation as in that bench. The SM budget is vendor-keyed (see _normal_num_sms).
-_NORMAL_NVL_BUFFER_SIZE = 256
-_NORMAL_NVL_BYTES = int(2e9)
-# Internode (EP16) buffer-sizing Config, straight from UCCL's own test_internode bench
-# compute_buffer_sizes (nvl_chunk=8/512, rdma_chunk=16/512). Used only to size the NVLink+RDMA
-# staging; dispatch/combine themselves run on the per-world-size recommended configs.
-_INTERNODE_SIZE_CFG = (8, 512, 16, 512)
+# ---- vLLM's DeepEP configuration ---------------------------------------------------------
+# DeepEPHTAll2AllManager (vllm/distributed/device_communicators/all2all.py) gives the Buffer
+# VLLM_DEEPEP_BUFFER_SIZE_MB (default 1024) MiB of NVLink buffer, the same again of RDMA buffer when
+# the group spans nodes (none inside one), and num_sms // 2 QPs per rank there (1 inside one) from
+# its fixed num_sms = 20; DeepEPLLAll2AllManager passes the same NVLink bytes. Only dual-batch
+# overlap (off by default) calls set_num_sms, with VLLM_DBO_COMM_SMS (20) clamped to that same 20,
+# so Buffer.num_sms resolves to UCCL's class default of 20 either way, and the deepep_ht
+# prepare/finalize passes Buffer.get_dispatch_config / get_combine_config(EP size) on every call.
+_VLLM_DEEPEP_BUFFER_BYTES = 1024 * 1024 * 1024
+_VLLM_HT_NUM_SMS = 20
+
+# prepare_backend.sh records the pinned commit and build recipe beside the packages it installs.
+_BUILD_RECORD = "collx_uccl_build.json"
+
+_CONFIG_FIELDS = (
+    "num_sms", "num_max_nvl_chunked_send_tokens", "num_max_nvl_chunked_recv_tokens",
+    "num_max_rdma_chunked_send_tokens", "num_max_rdma_chunked_recv_tokens",
+)
 
 
-def _align_buffer_bytes(size, margin=1.2, alignment=128):
-    """Safety margin + alignment for a buffer-size hint (mirrors the UCCL bench helper)."""
-    return ((int(size * margin) + alignment - 1) // alignment) * alignment
+def _config_fields(config) -> dict:
+    """A launch Config as realized: the constructor rounds the RDMA receive chunk up to a multiple
+    of the RDMA send chunk, so the published values are read back rather than restated."""
+    return {field: int(getattr(config, field)) for field in _CONFIG_FIELDS}
 
 
-def _normal_num_sms() -> int:
-    """Intranode normal-mode SM budget, keyed by vendor exactly as UCCL's own bench does
-    (ep/bench/test_intranode.py: ``num_sms = 24 if torch.version.cuda else 64``): 24 on CUDA,
-    64 on HIP/ROCm. A flat 24 would materially understate AMD, whose wider CU count wants the
-    larger grid — the same reason upstream branches on the vendor."""
-    return 24 if torch.version.cuda else 64
+def _library_version() -> str:
+    """`uccl@<pin> deep_ep==<wrapper version> <build flags>`.
+
+    UCCL is built from source, and the wrapper's own version never moves upstream, so the pinned
+    commit and build recipe come from the record prepare_backend.sh writes beside the packages
+    ("unrecorded" for a run that did not go through it).
+    """
+    try:
+        record = json.loads((Path(deep_ep.__file__).resolve().parents[1] / _BUILD_RECORD).read_text())
+        source, flags = f"uccl@{record['commit'][:12]}", record["build_flags"].split()
+    except (OSError, TypeError, ValueError, KeyError, AttributeError):
+        source, flags = "uccl@unrecorded", []
+    try:
+        wrapper = metadata.version("deep_ep")
+    except metadata.PackageNotFoundError:
+        wrapper = "unknown"
+    return " ".join([source, f"deep_ep=={wrapper}", *flags])
 
 
 class UCCLEPBackend(LegacyBufferLL, EPBackend):
     name = "uccl-ep"
-    maturity = "candidate"  # no engine exposes a UCCL-EP all-to-all selector
+    # No engine ships a UCCL-EP selector; engines run it as a drop-in `deep_ep` under vLLM's DeepEP
+    # backends, whose configuration these rows use.
+    maturity = "candidate"
     # One legacy Buffer under two modes, selected by args.mode:
     #   normal      -> get_dispatch_layout/dispatch/combine; unweighted rank-sum combine.
     #   low-latency -> low_latency_dispatch/combine decode kernels; source-side weighted combine.
-    kernel_generation = "uccl-legacy-buffer"
+    # "-vllm-ht" marks normal rows on vLLM's deepep_ht launch configs with row-major FP8 scales.
+    kernel_generation = "uccl-legacy-buffer-vllm-ht"
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     # LL's only host state is the double-buffer toggle; captures hold whole pairs, so it returns
     # to where it started. Normal mode host-syncs on its receive counters.
     CUDA_GRAPH_MODES = ("low-latency",)
-
-    # (product, precision) cases measured faster eager than graphed: b200 FP8 low-latency pair
-    # period 0.98x baseline eager vs 1.04x graphed, every rung.
-    _EAGER_CASES = frozenset({("b200", "fp8")})
+    # vLLM's default (non-DBO) DeepEP low-latency path issues both collectives as a send kernel plus
+    # a receive hook (its modular kernel takes prepare_async/finalize_async), and it drives UCCL's
+    # drop-in Buffer the same way; deepep-v2 runs the same split.
+    ll_recv_hook = True
 
     @property
     def cuda_graph_supported(self) -> bool:
-        if not super().cuda_graph_supported:
+        # Intranode only: scale-out LL runs through the CPU proxy, unvalidated under capture, whose
+        # adaptive sleeper only a host call that replay skips can wake. Inside one node the proxies
+        # never start, so every intranode LL cell replays, on every SKU and precision, as vLLM's
+        # captured decode step runs it.
+        if self.world_size > int(getattr(self.args, "scale_up_domain", self.world_size)):
             return False
-        args = self.args
-        # Intranode only: scale-out LL runs through the CPU proxy, unvalidated under capture.
-        if self.world_size > int(getattr(args, "scale_up_domain", self.world_size)):
-            return False
-        if os.environ.get("UCCL_RDMA_ADAPTIVE_SLEEP", "0") not in ("", "0"):
-            return False
-        product = str(getattr(args, "runner", "")).split("-")[0]
-        return (product, self.precision) not in self._EAGER_CASES
+        return super().cuda_graph_supported
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
@@ -145,6 +179,8 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         self.experts_per_rank = args.experts // world_size
         self._internode = world_size > int(args.scale_up_domain)
         self._fp8 = self.precision == "fp8"
+        self.library_version = _library_version()
+        self._library_config = {}
         # FP8 dispatch dequantizes the received (e4m3, per-128-block scale) payload back to the
         # BF16 combine sends — real device work, hence a separately-timed stage component.
         self.stage_device_work = self._fp8
@@ -156,75 +192,64 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
             )
         if self.mode == "low-latency":
             self._enable_ll("uccl-legacy-buffer-ll")
+        # Normal dispatch polls its receive counters on the host before launching the transfer.
+        self.host_synced_dispatch = self.mode == "normal"
 
     # ---- buffer construction ---------------------------------------------------------------
 
     def create_buffer(self, spec):
-        self.max_tokens = spec.max_tokens_per_rank
         if self.mode == "low-latency":
             self._create_ll_buffer(spec)
             return
-        args, world_size = self.args, self.world_size
-        if self._internode:
-            # Internode (EP16) scale-out: the RDMA combine kernel asserts
-            # num_max_rdma_chunked_send_tokens >= num_warps_per_forwarder, which a hand-rolled
-            # Config does NOT satisfy (its rdma-chunked-send default is 6). Mirror UCCL's own
-            # internode bench: size NVLink+RDMA from a generous sizing Config, give each rank
-            # num_sms QPs, and drive dispatch/combine with the per-world-size RECOMMENDED configs
-            # (these set rdma-chunked-send to 20/12 for EP16 and satisfy the kernel constraints).
-            num_sms = Buffer.num_sms
-            self.dispatch_config = Buffer.get_dispatch_config(world_size)
-            self.combine_config = Buffer.get_combine_config(world_size)
-            self.config = self.combine_config
-            hidden_bytes = args.hidden * 2
-            size_config = Config(num_sms, *_INTERNODE_SIZE_CFG)
-            num_nvl_bytes = _align_buffer_bytes(
-                size_config.get_nvl_buffer_size_hint(hidden_bytes, world_size)
-            )
-            num_rdma_bytes = _align_buffer_bytes(
-                size_config.get_rdma_buffer_size_hint(hidden_bytes, world_size)
-            )
-            self.buffer = Buffer(
-                self.group,
-                num_nvl_bytes,
-                num_rdma_bytes,
-                low_latency_mode=False,
-                num_qps_per_rank=num_sms,
-                allow_nvlink_for_low_latency_mode=True,
-                allow_mnnvl=False,
-                explicitly_destroy=True,
-                is_intranode=False,
-            )
-            return
-        # Intranode (EP8) scale-up: validated recipe — one fixed ~2 GB NVLink buffer, no RDMA, a
-        # single QP, and the legacy 3-arg Config (rdma-chunked params unused with no RDMA path).
-        # SM budget is vendor-keyed (24 CUDA / 64 HIP), matching UCCL's intranode bench.
-        self.config = Config(_normal_num_sms(), 8, _NORMAL_NVL_BUFFER_SIZE)
-        self.dispatch_config = self.config
-        self.combine_config = self.config
+        self.max_tokens = spec.max_tokens_per_rank
+        # vLLM's deepep_ht resolves both configs from the EP size alone, on Buffer.num_sms left at
+        # UCCL's default: one 20-SM budget at EP8 and EP16, on CUDA and HIP alike (the default is
+        # not vendor-keyed). At EP16 their RDMA send chunks also meet the internode combine kernel's
+        # num_max_rdma_chunked_send_tokens >= num_warps_per_forwarder assert.
+        self.dispatch_config = Buffer.get_dispatch_config(self.world_size)
+        self.combine_config = Buffer.get_combine_config(self.world_size)
+        num_rdma_bytes = _VLLM_DEEPEP_BUFFER_BYTES if self._internode else 0
+        num_qps_per_rank = _VLLM_HT_NUM_SMS // 2 if self._internode else 1
         self.buffer = Buffer(
             self.group,
-            _NORMAL_NVL_BYTES,
-            0,
+            _VLLM_DEEPEP_BUFFER_BYTES,
+            num_rdma_bytes,
             low_latency_mode=False,
-            num_qps_per_rank=1,
-            allow_nvlink_for_low_latency_mode=True,
-            allow_mnnvl=False,
+            num_qps_per_rank=num_qps_per_rank,
             explicitly_destroy=True,
-            is_intranode=True,
+            # vLLM leaves this to UCCL's topology probe, which resolves the same value for packed
+            # placement; passing it fails closed if the group's real topology disagrees.
+            is_intranode=not self._internode,
+        )
+        self._record_buffer(
+            num_sms=int(Buffer.num_sms),
+            dispatch_config=_config_fields(self.dispatch_config),
+            combine_config=_config_fields(self.combine_config),
+            num_nvl_bytes=_VLLM_DEEPEP_BUFFER_BYTES,
+            num_rdma_bytes=num_rdma_bytes,
+            num_qps_per_rank=num_qps_per_rank,
         )
 
     def _create_ll_buffer(self, spec):
-        """Construct the legacy low-latency Buffer (the decode kernels).
+        """Construct the legacy low-latency Buffer (the decode kernels) as vLLM's DeepEP
+        low-latency manager does.
 
-        Distinct from normal mode only in allocating the RDMA staging buffer unconditionally.
-        It does NOT force the proxy path: `is_intranode` is passed below, so at EP8 UCCL
-        leaves the proxies stopped and the kernel takes its IPC branch.
+        The receive is sized to a fixed per-rank token budget, never to the ladder: vLLM passes its
+        max_num_batched_tokens (256 by default for a batched-DP low-latency deployment, our
+        LL_LADDER_CAP) both to the size hint and to every dispatch, so a partial ladder runs the
+        same receive plane as the full one. It does NOT force the proxy path: `is_intranode` is
+        passed below, so at EP8 UCCL leaves the proxies stopped and the kernel takes its IPC branch.
         """
         args, world_size = self.args, self.world_size
         assert args.experts % world_size == 0, (
             "low-latency EP requires num_experts divisible by the EP size"
         )
+        if spec.max_tokens_per_rank > self.LL_LADDER_CAP:
+            raise RuntimeError(
+                f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
+                f"buffer cap {self.LL_LADDER_CAP}"
+            )
+        self.max_tokens = self.LL_LADDER_CAP
         self.num_local_experts = args.experts // world_size
         # LL requires the QP-per-rank count to equal the number of local experts.
         num_qps_per_rank = self.num_local_experts
@@ -238,35 +263,51 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         num_rdma_bytes = Buffer.get_low_latency_rdma_size_hint(
             self.max_tokens, args.hidden, world_size, args.experts
         )
+        # vLLM also passes enable_shrink=False, which this pin's Buffer does not accept (UCCL #1043
+        # adds it); False is UCCL's behaviour either way.
         self.buffer = Buffer(
             self.group,
-            0,
+            _VLLM_DEEPEP_BUFFER_BYTES,
             num_rdma_bytes,
             low_latency_mode=True,
             num_qps_per_rank=num_qps_per_rank,
             allow_nvlink_for_low_latency_mode=True,
+            allow_mnnvl=False,
             explicitly_destroy=True,
             is_intranode=not self._internode,
         )
+        self._record_buffer(
+            receive_capacity=self.max_tokens,
+            num_nvl_bytes=_VLLM_DEEPEP_BUFFER_BYTES,
+            num_rdma_bytes=int(num_rdma_bytes),
+            num_qps_per_rank=num_qps_per_rank,
+        )
+
+    def _record_buffer(self, **arguments):
+        # What this Buffer was built with and what UCCL resolved from it, behind the identity the
+        # import checked. The proxies exist either way but start only across nodes.
+        proxies = len(getattr(self.buffer, "proxies", ())) if self._internode else 0
+        self._library_config = {"deep_ep": "uccl deep_ep_wrapper", **arguments,
+                                "is_intranode": not self._internode, "cpu_proxy_threads": proxies}
+
+    def implementation_details(self) -> dict:
+        # On top of the shared low-latency keys (ep_legacy_ll), which name the same values the same.
+        return {**super().implementation_details(), **self._library_config}
 
     # ---- transport contract (the shared low-latency pieces live in ep_legacy_ll) ---------
 
     def dispatch(self, p):
         if self.mode == "low-latency":
             return self._ll_dispatch(p)
-        # Legacy normal dispatch: compute the layout, then scatter tokens to their experts.
-        # num_tokens_per_rdma_rank is None intranode (EP8) and populated internode (EP16); pass
-        # it through so the same call serves both scopes.
+        # Legacy normal dispatch, as vLLM's deepep_ht prepare runs it: compute the layout, then
+        # scatter tokens to their experts. num_tokens_per_rdma_rank is None intranode (EP8) and
+        # populated internode (EP16); pass it through so the same call serves both scopes.
         (num_tokens_per_rank, num_tokens_per_rdma_rank, num_tokens_per_expert,
          is_token_in_rank, _) = self.buffer.get_dispatch_layout(p.topk_idx, self.args.experts)
         # Quantise here, not in make_problem: production runs one fused bf16->fp8 kernel per forward
-        # pass right before this collective. The scales need UCCL's column-major (TMA-compatible)
-        # layout, which production's kernel emits directly -- so timing the transpose over-states
-        # by one small copy.
-        dispatch_x = p.dispatch_x
-        if self._fp8:
-            fp8, scales = self._quant(dispatch_x)
-            dispatch_x = (fp8, scales.T.contiguous().T)
+        # pass right before this collective. Its scales go out row-major, as vLLM's block quantize
+        # emits them; UCCL reads them through their strides, so no layout copy joins the window.
+        dispatch_x = self._quant(p.dispatch_x) if self._fp8 else p.dispatch_x
         recv_x, recv_topk_idx, recv_topk_weights, _counts, handle, _event = self.buffer.dispatch(
             x=dispatch_x,
             num_tokens_per_rank=num_tokens_per_rank,
@@ -298,10 +339,7 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
 
     def combine(self, p, h):
         if self.mode == "low-latency":
-            combined_x, _event, _hook = self.buffer.low_latency_combine(
-                h.combine_input, p.topk_idx, p.topk_weights, h.ll_handle
-            )
-            return combined_x[: p.T]
+            return self._ll_combine(p, h, h.combine_input)
         # Normal combine is the activation-only unweighted rank-sum: topk_weights are intentionally
         # NOT passed so the kernel sums the per-token expert aggregates across ranks without
         # applying the gate (matches combine_weight_semantics and the two-level oracle).

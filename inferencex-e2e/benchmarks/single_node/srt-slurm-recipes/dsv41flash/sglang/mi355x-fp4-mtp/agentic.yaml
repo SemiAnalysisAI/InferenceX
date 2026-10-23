@@ -1,12 +1,6 @@
-# DeepSeek-V4.1-Flash AgentX on MI355X with SGLang native DSpark.
-# https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1
 base:
   schema: 2
   name: dsv41flash-fp4-mi355x-sglang-agentic
-  model:
-    path: hf:deepseek-ai/DeepSeek-V4.1-Flash
-    container: lmsysorg/sglang-rocm:v0.5.21-rocm720-mi35x-20261006
-    precision: fp4
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -53,23 +47,23 @@ base:
         SGLANG_USE_AITER: '1'
         SGLANG_USE_ROCM700A: '0'
         TRITON_HIP_USE_ASYNC_COPY: '0'
-        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
-        AITER_BF16_FP8_MOE_BOUND: '0'
+        ROCM_QUICK_REDUCE_QUANTIZATION: INT8
+        SGLANG_OPT_HIP_OPUS_SPARSE_PREFILL: 'true'
+        SGLANG_OPT_HIP_FLYDSL_MXFP8: '1'
+        SGLANG_HIP_FP4_INDEXER_ROWGROUP: '1'
         TORCH_BLAS_PREFER_HIPBLASLT: '1'
         HSA_NO_SCRATCH_RECLAIM: '0'
         GPU_MAX_HW_QUEUES: '2'
   benchmark:
-    type: custom
-    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
     env:
-      MODEL: deepseek-ai/DeepSeek-V4.1-Flash
-      # Full-context corpus for this 1M-context recipe.
-      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point; the saturation point gets a longer warmup drain.
+# One variant per point; the saturation point gets a longer warmup drain. A longer
+# prefill-decode interval trades TTFT for P90 ITL: 192 with lpm up to c8, 96 at c16
+# and 32 at c32. amd-master.yaml runs TP2 through c32, TP4 through c16; DP2 covers
+# c32 and c64.
 override_tp2_c1:
   roles:
     agg:
@@ -78,9 +72,11 @@ override_tp2_c1:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 2
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '1'
@@ -93,9 +89,11 @@ override_tp2_c2:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 4
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '2'
@@ -108,9 +106,11 @@ override_tp2_c4:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 256
         max-running-requests: 8
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '4'
@@ -123,9 +123,11 @@ override_tp2_c8:
         tensor-parallel-size: 2
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 512
         max-running-requests: 16
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '8'
@@ -138,9 +140,10 @@ override_tp2_c16:
         tensor-parallel-size: 2
         mem-fraction-static: 0.80
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 96
         swa-prefix-tails: 1024
         max-running-requests: 32
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '16'
@@ -153,9 +156,12 @@ override_tp2_c32:
         tensor-parallel-size: 2
         mem-fraction-static: 0.80
         chunked-prefill-size: 16384
-        prefill-decode-interval: 4
+        prefill-decode-interval: 32
         swa-prefix-tails: 2048
         max-running-requests: 64
+      env:
+        # The AMD monokernel refuses this page-8 index-K layout.
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
   benchmark:
     env:
       CONC: '32'
@@ -168,7 +174,7 @@ override_tp2_c64:
       args:
         tensor-parallel-size: 2
         mem-fraction-static: 0.85
-        chunked-prefill-size: 4096
+        chunked-prefill-size: 16384
         prefill-decode-interval: 4
         swa-prefix-tails: 4096
         max-running-requests: 128
@@ -176,6 +182,90 @@ override_tp2_c64:
   benchmark:
     env:
       CONC: '64'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c32_dp:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 2
+        prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
+        mem-fraction-static: 0.80
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 32
+        swa-prefix-tails: 2048
+        max-running-requests: 64
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        SGLANG_AITER_CAPTURE_COPY_IN: '1'
+        GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
+  benchmark:
+    env:
+      CONC: '32'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c64_dp:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 2
+        prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 16
+        swa-prefix-tails: 4096
+        max-running-requests: 64
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        SGLANG_AITER_CAPTURE_COPY_IN: '1'
+        GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
+  benchmark:
+    env:
+      CONC: '64'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
 override_tp4_c1:
@@ -186,9 +276,11 @@ override_tp4_c1:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 2
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '1'
@@ -201,9 +293,11 @@ override_tp4_c2:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 128
         max-running-requests: 4
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '2'
@@ -216,9 +310,11 @@ override_tp4_c4:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 256
         max-running-requests: 8
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '4'
@@ -231,9 +327,11 @@ override_tp4_c8:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 192
+        schedule-policy: lpm
         swa-prefix-tails: 512
         max-running-requests: 16
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '8'
@@ -246,9 +344,10 @@ override_tp4_c16:
         tensor-parallel-size: 4
         mem-fraction-static: 0.70
         chunked-prefill-size: 16384
-        prefill-decode-interval: 16
+        prefill-decode-interval: 96
         swa-prefix-tails: 1024
         max-running-requests: 32
+        monokernel-backend: amd
   benchmark:
     env:
       CONC: '16'

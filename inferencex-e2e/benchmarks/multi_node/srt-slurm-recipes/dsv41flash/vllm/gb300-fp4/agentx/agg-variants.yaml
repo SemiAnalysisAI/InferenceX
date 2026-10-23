@@ -1,0 +1,141 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: "1.6.0.dev20261010"
+  dynamo:
+    install: true
+    source:
+      wheel: "1.6.0.dev20261010"
+    request_plane: tcp
+    event_plane: zmq
+    sidecar: true
+    sidecar_args:
+      - --grpc-startup-deadline-secs
+      - "3600"
+      - --dyn-tool-call-parser
+      - deepseek_v41
+      - --dyn-reasoning-parser
+      - deepseek_v41
+  environment:
+    PYTHONHASHSEED: "0"
+  slurm:
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 2160
+    interval_seconds: 10
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    args:
+      router-mode: "kv"
+      router-session-affinity-ttl-secs: 14400
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_LOG: warn
+      DYN_TOKENIZER: "fastokens"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TCP_CHANNEL_BUFFER: "128"
+      DYN_TCP_REQUEST_TIMEOUT: "60"
+  engine:
+    type: vllm
+    connector:
+    dp_launch_mode: per_node
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      kv_events: true
+      env:
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        TRANSFORMERS_CACHE: "/hf_hub_cache"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+        PYTHONUNBUFFERED: "1"
+      args:
+        served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        language-model-only: true
+        tokenizer-mode: "deepseek_v41"
+        # Parse once in the Dynamo frontend.
+        reasoning-parser: None
+        tensor-parallel-size: 4
+        engram-config: '{"cpu_offload":true,"use_thp":false}'
+        kernel-config: '{"enable_flashinfer_autotune":true}'
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        kv-cache-dtype: "fp8"
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        max-model-len: 1048576
+        # Full-node CPU affinity lets vLLM detect each GPU's NUMA node.
+        numa-bind: true
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+  srun_options:
+    container-remap-root: ""
+  benchmark:
+    env:
+      INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+      PORT: "8000"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_tp4_c1:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg-tp4-c1"
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+        max-cudagraph-capture-size: 4092
+        max-num-batched-tokens: 4096
+
+override_tp4_c8:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg-tp4-c8"
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
+        max-cudagraph-capture-size: 8190
+        max-num-batched-tokens: 8192
+
+override_tp4_c1_seq1:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg-tp4-c1-seq1"
+  roles:
+    agg:
+      args:
+        max-num-seqs: 1
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,10,12,15,18,20,24,25,30,35,36,40,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+        max-cudagraph-capture-size: 4092
+        max-num-batched-tokens: 4096
+
+override_tp4_c16:
+  name: "dsv41flash-fp4-gb300-dynamo-vllm-agentx-agg-tp4-c16"
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        prefill-schedule-interval: 128
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+        max-cudagraph-capture-size: 8190
+        max-num-batched-tokens: 8192

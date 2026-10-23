@@ -1,7 +1,3 @@
-# Derived from the srt-slurm b200-fp4 1k1k recipe (recipes/b200-fp4/1k1k.yaml
-# base + zip_override_mtp_lowlat[1]): 1p6d low-latency (dep4 prefill / tep8 decode, 6 decode nodes).
-# One flat YAML per concrete topology, matching the 8k1k local recipe layout
-# (<model-prefix>/<engine>/<gpu>-<precision>/<workload>/<recipe>.yaml).
 
 schema: 2
 name: b200-fp4-mtp-low-latency-dep4-1p-tep8-6d

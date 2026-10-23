@@ -1,12 +1,12 @@
 # Contributing to InferenceX
 
-<div align="center">
-
-**English** | [中文](CONTRIBUTING_zh.md)
-
-</div>
-
 Thanks for contributing! PRs are welcome. This page covers the review process every PR goes through before it can be merged.
+
+## Documentation language
+
+Maintain contributor-facing docs in English. Only READMEs retain Chinese translations: keep existing `README_zh.md` files synchronized with their English READMEs and preserve their language switchers. Do not add or recreate Chinese versions of other docs.
+
+PR titles must still include both English and Simplified Chinese, using `<English title> / <中文标题>`. The existing bilingual requirements for issue titles, PR and issue descriptions, human-authored PR comments, and commit bodies remain unchanged; see [AGENTS.md](AGENTS.md).
 
 ## PR descriptions
 
@@ -20,14 +20,14 @@ Every PR description must include an **AI model disclosure** section inside a co
 
 ## PR review flow
 
-1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that change `inferencex-e2e/perf-changelog.yaml` (the matrix comes from the appended entries) and carry exactly one primary label, normally `full-sweep-fail-fast`. Labels, modifiers, canary, fail-fast, and the maintainer-approved fork path are described in [PR primary and modifier labels](inferencex-e2e/docs/ci-procedures.md#pr-primary-and-modifier-labels). Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
+1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that change `inferencex-e2e/perf-changelog.yaml` (the matrix comes from the appended entries) and carry exactly one primary label, normally `full-sweep-fail-fast`. Labels, modifiers, canary, fail-fast, and the maintainer-approved fork path are described in [PR sweep labels](.github/workflows/README.md#pr-sweep-labels). Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
 
    **Fork PRs:** external contributors cannot apply labels. Once the PR is open, ready for review, and free of merge conflicts, a maintainer applies the labels, which approves only the current head SHA. After each push, the maintainer must remove and re-add the primary label.
 2. For changes owned by a non-admin CODEOWNER other than `@SemiAnalysisAI/core`, ask one eligible [CODEOWNER](.github/CODEOWNERS) to review and post the **PR Review Checklist** sign-off (see below) in their approval comment.
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
-**Performance changelog requirement:** Every change that can affect benchmark performance and every recipe addition or modification **MUST** append a new entry to the physical end of `inferencex-e2e/perf-changelog.yaml`. Historical entries **MUST NOT** be edited.
+**Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
 
 ## Draft-model precision
 
@@ -112,8 +112,13 @@ name or precision label.
 For speculative-decoding changes, the CODEOWNER's additional detail section must
 identify the draft checkpoint/revision (or embedded head), the precision it ships in,
 how the pinned upstream image handles it by default, and its effective serving
-precision, so the reviewer can confirm the last two match. If this cannot be
-verified, the criterion is not satisfied. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
+precision, so the reviewer can confirm the last two match. If evidence is missing
+or inaccessible, record the uncertainty and missing evidence instead of claiming
+verification. Check 13 reports WARN and requests human review; this does not
+establish compliance or grant an exception. A demonstrated precision violation or
+prohibited enablement still FAILs, even if another affected variant is unverified.
+An unchecked draft-precision item explained this way does not independently fail
+the checklist-format check. See the [review checklist](inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md) and
 [verifier Check 13](.github/codeowner-signoff-verify-prompt.md#check-13--draft-runs-as-shipped).
 
 This follows the same principle as
@@ -155,11 +160,11 @@ The verdict records only the commit actually assessed; it does not carry approva
 
 A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
-- After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line.
+- After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line. The pinned run may come from any PR; if its commit is not part of this PR, reuse is still accepted but flagged as a warning.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
 - **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
-- Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary; source artifacts are revalidated at merge.
+- Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary, and posts a warning comment when the pinned run's commit is outside the PR; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
 - From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 

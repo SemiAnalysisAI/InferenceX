@@ -5,7 +5,8 @@ This script is used by ``merge-ingest.yml`` on push-to-main runs and by the
 commit maps unambiguously to one pull request and a maintainer has left a
 ``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
 The legacy command may omit the source run ID; without one, the latest successful
-``pull_request`` ``run-sweep.yml`` run for the PR head is used.
+``pull_request`` ``run-sweep.yml`` run for the PR head is used. A pinned run ID may
+come from any PR; its commit need not be part of the PR being merged.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from .sweep_runs import (
     completed_pr_runs,
     has_reusable_result_artifacts as has_reusable_result_artifacts,
     pr_commit_shas as pr_commit_shas,
+    run_pr_number as run_pr_number,
 )
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
@@ -142,9 +144,6 @@ def find_latest_successful_pr_run(
     if not head_branch or not valid_shas:
         return None
     runs = completed_pr_runs(repo, workflow_id, head_branch, token)
-    # GitHub returns runs newest-first.  Skip gated no-op runs (synchronize
-    # events suppressed by a /reuse-sweep-run comment) which complete as
-    # "success" but produce no benchmark or eval artifacts.
     for run in runs:
         if run.get("conclusion") != "success":
             continue
@@ -167,7 +166,6 @@ def workflow_path(workflow_id: str) -> str:
 def validate_reusable_run(
     repo: str,
     workflow_id: str,
-    pr_number: int,
     run: dict[str, Any],
     token: str,
     allow_failed: bool = False,
@@ -178,8 +176,6 @@ def validate_reusable_run(
         raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
     if run.get("status") != "completed":
         raise RuntimeError(f"Reusable source run {run_id} is not completed.")
-    # Maintainers may pin incomplete sweeps; ingestion keeps only completed points.
-    # Fail-fast can mark the run cancelled even when its benchmark jobs passed.
     allowed_conclusions = {"success", "failure", "cancelled"} if allow_failed else {"success"}
     if run.get("conclusion") not in allowed_conclusions:
         expected = "success, failure, or cancelled" if allow_failed else "success"
@@ -196,12 +192,6 @@ def validate_reusable_run(
     run_head_sha = str(run.get("head_sha") or "")
     if not run_head_sha:
         raise RuntimeError(f"Reusable source run {run_id} has no head_sha.")
-    pr_shas = pr_commit_shas(repo, pr_number, token)
-    if run_head_sha not in pr_shas:
-        raise RuntimeError(
-            f"Reusable source run {run_id} head {run_head_sha} is not in PR #{pr_number}'s "
-            f"commit list; pin a run whose commit is still part of the PR."
-        )
 
     names = artifact_names(repo, run_id, token)
     if not has_reusable_result_artifacts(names):
@@ -252,7 +242,6 @@ def resolve_reusable_run(
     validate_reusable_run(
         repo,
         workflow_id,
-        pr_number,
         run,
         token,
         allow_failed=pinned_run_id is not None,
@@ -409,6 +398,11 @@ def main() -> int:
     )
     run_id = int(run["id"])
     reason = f"PR #{pr_number} approved sweep reuse from run {run_id}"
+    head_sha = str(run.get("head_sha") or "")
+    if head_sha in pr_commit_shas(args.repo, pr_number, token):
+        source_pr: int | None = pr_number
+    else:
+        source_pr = run_pr_number(args.repo, run, token)
 
     outputs = result(
         enabled=True,
@@ -416,8 +410,8 @@ def main() -> int:
         source_run_id=str(run_id),
         source_run_attempt=str(run.get("run_attempt") or "1"),
         source_run_url=str(run.get("html_url") or ""),
-        source_pr_number=str(pr_number),
-        source_head_sha=str(run.get("head_sha") or ""),
+        source_pr_number=str(source_pr or ""),
+        source_head_sha=head_sha,
     )
     write_outputs(args.github_output, outputs)
     print(json.dumps(outputs, indent=2))
