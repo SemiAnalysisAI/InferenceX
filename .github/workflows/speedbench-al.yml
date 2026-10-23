@@ -1,12 +1,5 @@
 name: SpeedBench AL Collection
 
-# Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
-# (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
-# DeepSeek-V4-Pro). Produces the golden curve consumed by the
-# synthetic-acceptance framework and (optionally) opens a PR writing it to
-# infx/golden_al_distribution/<golden-curve>.yaml.
-
-# Independent collection requests use priority-scheduled runner slots.
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
     inputs:
@@ -37,7 +30,6 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: ''
       image:
-        # vLLM collectors need vLLM >= 0.30: thinking-on cells rely on --chat-template-kwargs (vllm-project/vllm#44244).
         description: "Container image (vLLM >= 0.30 for vLLM collectors)"
         required: false
         type: string
@@ -114,7 +106,6 @@ env:
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
-  # Matrix-collector tunables (propagated into the container via srun --export=ALL).
   MTP_LIST: ${{ inputs.mtp-list }}
   THINKING_MODES: ${{ inputs.thinking-modes }}
   CATEGORY: ${{ inputs.category }}
@@ -132,8 +123,6 @@ jobs:
       priority: ${{ steps.score.outputs.priority }}
       queue-token: ${{ steps.score.outputs.queue-token }}
     steps:
-      # Fail before the GPU run if open-pr has no curve to write. Same name rule as
-      # infx.golden_al_distribution.curves.CURVE_NAME, which keeps the path in that directory.
       - name: Validate golden curve target
         if: ${{ inputs.open-pr }}
         env:
@@ -216,7 +205,6 @@ jobs:
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
-          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
             for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
               echo "[Slurm] Cleaning up jobs with name: ${job_name} ..."
@@ -228,13 +216,9 @@ jobs:
             done
           fi
 
-          # Cleanup AL-matrix outputs from a prior job on this runner so a stale
-          # matrix from a previous run is never picked up as this job's output.
           rm -rf "${GITHUB_WORKSPACE}/speedbench_results" \
             "${GITHUB_WORKSPACE}/inferencex-e2e/speedbench_results" 2>/dev/null || true
 
-      # A cancelled or crashed job can leave git state in this persistent
-      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
       - id: checkout
         continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -270,7 +254,6 @@ jobs:
           if [[ -n "$COLLECTOR_VARIANT" ]]; then
             collector+="_${COLLECTOR_VARIANT}"
           fi
-          # The name must stay a plain file in the collector directory.
           if [[ "$collector" == */* || "$collector" == *$'\n'* || ! -f "$collector_dir/$collector.sh" ]]; then
             echo "::error::No SPEED-Bench collector $collector_dir/$collector.sh at this ref. Available collectors are listed below." >&2
             ls "$collector_dir" >&2
@@ -283,7 +266,6 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .launch-tooling
-          # Only inferencex-e2e/ is read from this checkout.
           sparse-checkout: inferencex-e2e
           persist-credentials: false
 
@@ -341,7 +323,6 @@ jobs:
       - name: Open PR updating golden AL curve
         if: ${{ inputs.open-pr && success() }}
         env:
-          # Repository write credential for authorized reference-data collection.
           GH_TOKEN: ${{ secrets.SPEEDBENCH_PAT }} # zizmor: ignore[secrets-outside-env]
           GOLDEN_CURVE: ${{ inputs.golden-curve }}
         run: |
@@ -351,14 +332,10 @@ jobs:
           check_env_vars GOLDEN_CURVE INFERENCEX_LAUNCH_PYTHON BENCH_SCRIPT_OVERRIDE
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           curve_file="infx/golden_al_distribution/${GOLDEN_CURVE}.yaml"
-          # The README requires the source run URL as the first line of a committed curve.
-          # The whole file is replaced, so cells this run did not collect are dropped.
           {
             echo "# Source GitHub Actions run: ${run_url}"
             cat speedbench-reference-al.yaml
           } > "$curve_file"
-          # Load every cell through the golden curve CLI. A failed cell (N/A) or a malformed
-          # matrix stops here instead of reaching a PR.
           PYTHONPATH="$PWD" "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.golden_al_distribution show "$GOLDEN_CURVE"
 
           BRANCH="speedbench-al/${MODEL_PREFIX}-auto-${GITHUB_RUN_ID}"
@@ -386,9 +363,6 @@ jobs:
           path: ${{ env.INFERENCEX_E2E_ROOT }}/speedbench_results/server_*.log
           if-no-files-found: ignore
 
-      # Per-request benchmark detail (vllm bench serve --save-detailed): includes
-      # the model's response text per request, so the AL of each cell can be
-      # audited for output correctness (sensible text + correct thinking mode).
       - name: Upload detailed benchmark results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

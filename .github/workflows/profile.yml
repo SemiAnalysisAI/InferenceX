@@ -1,8 +1,5 @@
 name: Profile
 
-# Runs one single-node matrix point through infx.launch. The infx launch path
-# has no profiler capture, so this workflow produces no trace.
-# Independent profiling requests use priority-scheduled runner slots.
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
     inputs:
@@ -234,8 +231,6 @@ jobs:
             done
           fi
 
-      # A cancelled or crashed job can leave git state in this persistent
-      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
       - name: Checkout code
         id: checkout
         continue-on-error: true
@@ -256,7 +251,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: *checkout-inputs
 
-      # With clean: false above, nested checkouts also persist between jobs.
       - name: Checkout result tooling
         id: checkout-tooling
         continue-on-error: true
