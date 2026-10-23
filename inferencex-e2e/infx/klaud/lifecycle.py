@@ -893,6 +893,8 @@ def recover(max_resumes: int) -> None:
             for candidate in owner.candidates:
                 results[(owner.run_id, candidate.id)] = False
                 blocked.add(candidate.family)
+                # Unreadable state counts as live work, as in retained().
+                live.add(candidate.id)
                 summarize(
                     repository,
                     candidate,

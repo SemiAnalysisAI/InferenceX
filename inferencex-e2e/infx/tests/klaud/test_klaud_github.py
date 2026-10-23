@@ -912,6 +912,24 @@ def test_recovery_skips_an_unreadable_owner_and_reconciles_the_others(
             capsys.readouterr().out)
 
 
+def test_recovery_leaves_the_draft_of_a_planner_run_it_could_not_read(monkeypatch, tmp_path):
+    world = ended_session_sweep(monkeypatch, sessions=("failure",))
+    read, failed = github.read, []
+
+    def flaky(repository, path):
+        if path == "actions/runs/42" and not failed:
+            failed.append(path)
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return read(repository, path)
+
+    monkeypatch.setattr(github, "read", flaky)
+
+    recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == world.released == []
+    assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+
+
 def test_abandoned_work_sweep_keeps_a_claim_whose_planner_run_is_gone(monkeypatch):
     world = ended_session_sweep(monkeypatch, sessions=("failure",))
     candidate = world.session.candidate
