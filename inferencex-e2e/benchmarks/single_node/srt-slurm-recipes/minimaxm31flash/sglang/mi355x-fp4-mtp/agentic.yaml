@@ -137,8 +137,10 @@ override_tp4_c32:
       KV_OFFLOADING: none
 
 # High-Throughput cell: Low-Latency plus HiCache and an fp8 DSpark draft KV cache.
-# HiCache is 180 GB per rank (720 GB for the four ranks), within the 1.5 TB that four
-# of eight MI355X GPUs may use, instead of the cookbook's auto-sized ~350 GB per rank.
+# HiCache stays on the cookbook's ratio sizing: a fixed hicache-size of 180 GB per rank
+# (host/device ~1.09) hit a HIP illegal memory access in the first prefill's write
+# backup. Ratio 1.5 instead of the default 2 sizes the host pools at ~249 GB per rank
+# (~1.0 TB for the four ranks), inside the MI355X CPU DRAM budget that ratio 2 exceeds.
 
 override_tp4_c48_hicache:
   roles:
@@ -152,7 +154,7 @@ override_tp4_c48_hicache:
         mem-fraction-static: 0.8
         prefill-decode-interval: 16
         enable-hierarchical-cache: true
-        hicache-size: 180
+        hicache-ratio: 1.5
   benchmark:
     env:
       CONC: '48'
@@ -170,7 +172,7 @@ override_tp4_c64_hicache:
         mem-fraction-static: 0.8
         prefill-decode-interval: 16
         enable-hierarchical-cache: true
-        hicache-size: 180
+        hicache-ratio: 1.5
   benchmark:
     env:
       CONC: '64'

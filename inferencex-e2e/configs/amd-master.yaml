@@ -1575,7 +1575,7 @@ minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
     - dram-utilization: 0.85
       search-space:
-      # High-Throughput: TP4 + HiCache (180 GB per rank) and an fp8 draft KV cache.
+      # High-Throughput: TP4 + HiCache (hicache-ratio 1.5, ~249 GB per rank) and an fp8 draft KV cache.
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64], srt-recipe: agentic.yaml }
 
 # DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.

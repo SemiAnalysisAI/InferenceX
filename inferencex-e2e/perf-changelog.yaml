@@ -11014,6 +11014,6 @@
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on MI355X with SGLang image lmsysorg/sglang:dev-minimax-m31-flash-mi35x (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
     - "Serve flags follow the cookbook's MI355X Low-Latency (TP4) and High-Throughput (TP4, HiCache, fp8 draft KV): DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
     - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
-    - "Search space: Low-Latency TP4 at conc 1-32; TP4 + HiCache (180 GB per rank) and fp8 draft KV at conc 48-64."
+    - "Search space: Low-Latency TP4 at conc 1-32; TP4 + HiCache (hicache-ratio 1.5, ~249 GB per rank; a fixed 180 GB hicache-size hit a HIP illegal memory access) and fp8 draft KV at conc 48-64."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4445
   scenario-type: [agentic-coding]
