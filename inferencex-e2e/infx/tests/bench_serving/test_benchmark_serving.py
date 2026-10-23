@@ -1,5 +1,6 @@
 """Exercise client result persistence without loading a model or serving requests."""
 
+import asyncio
 import json
 from argparse import Namespace
 from unittest.mock import AsyncMock
@@ -170,3 +171,36 @@ def test_pytorch_records_skip_metrics_the_run_did_not_select(tmp_path, monkeypat
     assert record['metric']['name'] == 'mean_ttft_ms'
     assert record['metric']['benchmark_values'] == [12.5]
     assert record['metric']['extra_info'] == {'p90_ttft_ms': 20.0, 'completed': 3}
+
+
+def run_benchmark(monkeypatch, ttfts, **overrides):
+    """Run ``benchmark`` against a fake server and clock; each prompt's request takes 2 s."""
+    clock = Namespace(now=0.0)
+    monkeypatch.setattr(client, 'time', Namespace(perf_counter=lambda: clock.now, time=lambda: 0))
+
+    async def serve(request_func_input, pbar=None):
+        cost = {'/start_profile': 0.0, '/stop_profile': 100.0}
+        clock.now += cost.get(request_func_input.api_url.removeprefix('http://x'), 2.0)
+        ttft = ttfts.get(request_func_input.prompt, 0.0)
+        return client.RequestFuncOutput(success=True, latency=1.0, ttft=ttft, output_tokens=3)
+
+    monkeypatch.setitem(client.ASYNC_REQUEST_FUNCS, 'fake', serve)
+    kwargs = {
+        'backend': 'fake', 'api_url': 'http://x/v1/completions', 'base_url': 'http://x',
+        'model_id': 'm', 'model_name': None, 'tokenizer': None, 'logprobs': None, 'best_of': 1,
+        'input_requests': [(prompt, 5, 3, None) for prompt in ttfts],
+        'request_rate': float('inf'), 'burstiness': 1.0, 'disable_tqdm': True, 'num_warmups': 0,
+        'profile': False, 'selected_percentile_metrics': ['ttft'], 'selected_percentiles': [99],
+        'ignore_eos': False, 'goodput_config_dict': {}, 'max_concurrency': None,
+        'lora_modules': None, **overrides,
+    }
+    return asyncio.run(client.benchmark(**kwargs))
+
+
+def test_goodput_counts_requests_within_the_slo(monkeypatch):
+    result = run_benchmark(
+        monkeypatch, {'fast': 0.1, 'slow': 0.5}, goodput_config_dict={'ttft': 200.0},
+    )
+
+    assert result['duration'] == 4.0
+    assert result['request_goodput'] == 0.25
