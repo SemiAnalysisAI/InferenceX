@@ -95,6 +95,14 @@ class Session:
         self.marker = f"<!-- klaud-outcome:{parent['id']}:{candidate.id}\n"
         self.validations = {}
         self.first_attempt_end: datetime | None = None
+        self.listings: dict[str, tuple[int, list[dict]]] = {}
+
+    def listing(self, path: str, key: str | None = None) -> list[dict]:
+        """``path``'s listing, reused until the next GitHub write or ownership check."""
+        cached = self.listings.get(path)
+        if cached is None or cached[0] != github.writes:
+            cached = self.listings[path] = (github.writes, github.items(self.repository, path, key))
+        return cached[1]
 
     def validation(self, run: dict) -> tuple[dict, list[dict], list[dict]]:
         key = (run["id"], run["head_sha"], run["run_attempt"])
@@ -131,7 +139,7 @@ class Session:
         end = self.pull_window_end()
         pulls = [
             pull
-            for pull in github.items(self.repository, "pulls?" + query)
+            for pull in self.listing("pulls?" + query)
             if utc(pull["created_at"]) >= utc(self.parent["created_at"])
             and (end is None or utc(pull["created_at"]) <= end)
         ]
@@ -151,8 +159,7 @@ class Session:
         until = utc(self.parent["created_at"]) + MAX_SESSIONS * timedelta(
             seconds=RESUME_GIVE_UP_SECONDS, hours=6
         )
-        runs = github.items(
-            self.repository,
+        runs = self.listing(
             "actions/workflows/klaud-plan.yml/runs?"
             + urlencode(
                 {
@@ -187,8 +194,7 @@ class Session:
         ended = self.last_session_end()
         end = ended or "*"
         query = {"per_page": 100, "created": f"{self.parent['created_at']}..{end}"}
-        targeted = github.items(
-            self.repository,
+        targeted = self.listing(
             "actions/workflows/e2e-tests.yml/runs?"
             + urlencode({**query, "event": "workflow_dispatch"}),
             "workflow_runs",
@@ -201,8 +207,7 @@ class Session:
             and run["actor"]["login"] == BOT
             and run["head_repository"]["full_name"] == self.repository
         ]
-        sweeps = github.items(
-            self.repository,
+        sweeps = self.listing(
             "actions/workflows/run-sweep.yml/runs?"
             + urlencode(
                 {
@@ -248,6 +253,7 @@ class Session:
         return current
 
     def check_parent(self) -> None:
+        self.listings.clear()
         if self.recovering and (
             not terminal(github.read(self.repository, f"actions/runs/{self.parent['id']}"))
             or not all(terminal(run) for run in self.resume_runs())
@@ -255,7 +261,7 @@ class Session:
             raise VerificationError("Session resumed; leave the active session intact")
 
     def report(self, pull: dict) -> dict | None:
-        comments = github.items(self.repository, f"issues/{pull['number']}/comments?per_page=100")
+        comments = self.listing(f"issues/{pull['number']}/comments?per_page=100")
         matches = [
             comment
             for comment in comments
@@ -268,7 +274,7 @@ class Session:
 
     def pending(self, pull: dict) -> CandidateOutcome | None:
         marker = self.marker.replace("klaud-outcome:", "klaud-cleanup:")
-        comments = github.items(self.repository, f"issues/{pull['number']}/comments?per_page=100")
+        comments = self.listing(f"issues/{pull['number']}/comments?per_page=100")
         matches = [
             c for c in comments if c["user"]["login"] == BOT and c["body"].startswith(marker)
         ]
@@ -284,7 +290,7 @@ class Session:
         return outcome
 
     def branch_exists(self) -> bool:
-        refs = github.items(self.repository, "git/matching-refs/heads/" + self.branch)
+        refs = self.listing("git/matching-refs/heads/" + self.branch)
         return any(ref["ref"] == "refs/heads/" + self.branch for ref in refs)
 
     def delete_branch(self, pull: dict) -> None:
@@ -534,6 +540,7 @@ class Session:
 
 
 def subprocess_ready(repository: str, number: int, *, undo: bool = True) -> None:
+    github.writes += 1
     subprocess.run(
         ["gh", "pr", "ready", str(number), "--repo", repository] + (["--undo"] if undo else []),
         check=True,
@@ -629,9 +636,7 @@ def candidate_jobs(session: Session) -> list[dict]:
         (
             job
             for run in runs
-            for job in github.items(
-                session.repository, f"actions/runs/{run}/jobs?filter=all&per_page=100", "jobs"
-            )
+            for job in session.listing(f"actions/runs/{run}/jobs?filter=all&per_page=100", "jobs")
             if job["name"].startswith(prefix)
             and job["started_at"]
             and utc(job["started_at"]) >= utc(job["created_at"])

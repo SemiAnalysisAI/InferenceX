@@ -27,7 +27,13 @@ def items(repository: str, path: str, key: str | None = None) -> list[dict]:
         raise VerificationError(str(error)) from error
 
 
+# Every write bumps this, so listings cached before it are read again.
+writes = 0
+
+
 def write(repository: str, path: str, method: str, payload: dict | None = None) -> dict:
+    global writes  # noqa: PLW0603
+    writes += 1
     return github.api(repository, path, method=method, data=payload)
 
 
