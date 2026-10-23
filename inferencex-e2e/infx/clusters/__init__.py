@@ -83,14 +83,17 @@ class Cluster(Record):
 
     @property
     def id(self) -> str:
+        """Return the cluster id this record was bound to, or an empty string."""
         return self._id
 
     def bind_id(self, cluster_id: str) -> None:
+        """Record ``cluster_id`` as this cluster's id."""
         self._id = cluster_id
 
     @field_validator("env")
     @classmethod
     def _exportable(cls, env: dict[str, str]) -> dict[str, str]:
+        """Return ``env`` unchanged, or raise ValueError if any value contains a comma."""
         if names := sorted(name for name, value in env.items() if "," in value):
             raise ValueError(f"env values cannot contain ',' (srun --export splits on it): {names}")
         return env

@@ -44,6 +44,11 @@ TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
+    """Return a role's speculative config for ``engine`` as method, draft length and draft model.
+
+    Empty when the role does not speculate. DFlash's draft length is its verify block minus the
+    current token. Raises ValueError on a malformed or conflicting config.
+    """
     args = role.get("args", {})
     if engine == "tilert":
         if args.get("with-mtp") is not True:
@@ -81,7 +86,6 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         if not algorithm:
             return {}
         if algorithm == "dflash":
-            # DFlash verifies a block of the current token plus its drafts.
             width = args.get("speculative-num-draft-tokens")
             return {
                 "method": "dflash",
@@ -135,7 +139,11 @@ def _simulated_length(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> float | None:
-    """The golden AL ``build_overrides`` sets on non-adaptive speculative roles, else None."""
+    """The golden AL ``build_overrides`` sets on non-adaptive speculative roles, else None.
+
+    Raises ValueError unless a Qwen3.5 SGLang MTP generation role's window is its draft steps
+    plus one verification token.
+    """
     engine = ENGINES.get(framework)
     if engine is None:
         return None
@@ -154,7 +162,6 @@ def _simulated_length(
         for name, role in roles.items()
         if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
     ):
-        # build_overrides leaves adaptive verification real, so no golden AL is simulated.
         return None
     al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)
     if (
@@ -162,7 +169,6 @@ def _simulated_length(
         and environment["MODEL_PREFIX"] == "qwen3.5"
         and spec.get("method") in ("eagle", "nextn", "mtp")
     ):
-        # The generation role's MTP window includes one verification token.
         drafts = generation.get("args", {}).get("speculative-num-draft-tokens")
         expected = spec["num_speculative_tokens"] + 1
         if not isinstance(drafts, int) or isinstance(drafts, bool) or drafts != expected:
@@ -352,6 +358,7 @@ def plan_commands(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Plan srtctl commands with golden acceptance from ``argv``, run them and return the rc."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--record", type=Path, help="write the plan's golden acceptance length here as JSON"

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 
 def any_of(*values: str) -> frozenset[str]:
+    """Return ``values`` as a frozenset for a ``Match`` field."""
     return frozenset(values)
 
 
@@ -37,6 +38,7 @@ class Match:
     model_glob: str | None = None
 
     def __call__(self, request: LaunchRequest) -> bool:
+        """Return whether ``request`` satisfies every set field."""
         return (
             (self.prefixes is None or request.model_prefix in self.prefixes)
             and (self.precisions is None or request.precision in self.precisions)
@@ -76,6 +78,7 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 
 
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
+    """Return the launch path that runs ``request`` on the cluster ``cluster_id``."""
     if request.is_multinode:
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
@@ -134,14 +137,17 @@ def runtime_env(
 
 
 def point_settings(request: LaunchRequest) -> frozenset[str]:
-    """The names the point's NAME=value additional-settings set; the workflow exports them."""
+    """The names the point's NAME=value additional-settings set; the workflow exports them.
+
+    A null value, which the workflow sends for a role without additional-settings, sets none.
+    Raises ``RequestError`` if a value is not a JSON list.
+    """
     names: set[str] = set()
     for name in ("PREFILL_ADDITIONAL_SETTINGS", "DECODE_ADDITIONAL_SETTINGS"):
         try:
             values = json.loads(request.env.get(name) or "[]")
         except ValueError:
             continue
-        # The workflow passes toJSON of a role without additional-settings, which is null.
         if values is None:
             continue
         if not isinstance(values, list):
@@ -155,6 +161,7 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
     """Rows of this module's tables that ``clusters`` contradicts; only ``only``'s rows if given."""
 
     def keys(table: Mapping[str, object]) -> list[str]:
+        """Return the keys of ``table`` within the checked scope."""
         return [key for key in table if only in (None, key)]
 
     tables: dict[str, Mapping[str, object]] = {

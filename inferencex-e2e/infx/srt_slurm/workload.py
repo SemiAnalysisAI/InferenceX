@@ -109,6 +109,7 @@ def merge_blocks(shared: Mapping[str, Any], fragment: Mapping[str, Any]) -> dict
 
 
 def _lookup(block: Any, key: tuple[str, ...]) -> tuple[bool, Any]:
+    """Follow ``key`` into nested mappings and return whether it is present and its value."""
     for part in key:
         if not isinstance(block, Mapping) or part not in block:
             return False, None
@@ -159,6 +160,7 @@ def check_fragment(raw: Mapping[str, Any], source: Path, *, agentic: bool, multi
 
 
 def _block(path: Path) -> dict[str, Any]:
+    """Load the YAML mapping at ``path``, or raise ValueError if it is not a mapping."""
     block = yamlio.safe_load(path.read_text())
     if not isinstance(block, dict):
         raise ValueError(f"{path}: shared block must be a mapping")
@@ -210,6 +212,7 @@ def compose_recipe(
 
 
 def _required(environment: Mapping[str, str], name: str) -> str:
+    """Return the input ``name`` from ``environment``, or raise ValueError if it is blank."""
     value = environment.get(name, "")
     if not value.strip():
         raise ValueError(f"Missing workload input: {name}")
@@ -217,6 +220,7 @@ def _required(environment: Mapping[str, str], name: str) -> str:
 
 
 def _positive(value: str, name: str) -> int:
+    """Return ``value`` as a positive int, or raise ValueError naming ``name``."""
     if not value.isascii() or not value.isdecimal() or int(value) <= 0:
         raise ValueError(f"{name} must be a positive integer: {value!r}")
     return int(value)
@@ -408,6 +412,7 @@ def add_fabric_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def _assignment(text: str) -> tuple[str, str]:
+    """Split a ``NAME=VALUE`` argument, or raise ArgumentTypeError if malformed."""
     name, separator, value = text.partition("=")
     if not separator or not name:
         raise argparse.ArgumentTypeError(f"expected NAME=VALUE, got {text!r}")
@@ -415,6 +420,7 @@ def _assignment(text: str) -> tuple[str, str]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Bind the multi-node recipe variant ``argv`` names and write it to the output path."""
     parser = argparse.ArgumentParser(description="Bind one multi-node recipe variant")
     parser.add_argument("recipe", help="fragment[:selector]")
     parser.add_argument("output", type=Path)

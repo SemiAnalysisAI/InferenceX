@@ -33,6 +33,7 @@ EDITABLE_INSTALL_IMAGE_GLOBS = (
 
 
 def container_workspace(image: str) -> PurePosixPath:
+    """Return ``/ix`` for images with an editable install there, else ``/workspace``."""
     if any(fnmatch.fnmatchcase(image, glob) for glob in EDITABLE_INSTALL_IMAGE_GLOBS):
         return PurePosixPath("/ix")
     return PurePosixPath("/workspace")
@@ -66,6 +67,7 @@ def script_outputs(request: ScriptRequest, workdir: PurePosixPath) -> tuple[Pure
 
 
 def run(launch: Launch) -> int:
+    """Run the request's benchmark script in one container and return its exit code."""
     request = ScriptRequest.from_env(launch.request.env)
     cluster, backend = launch.cluster, launch.backend
     time_limit = policy.salloc_time_limit(cluster.id, request)

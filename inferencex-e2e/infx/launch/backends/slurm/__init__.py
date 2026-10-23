@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from infx.launch.request import LaunchRequest
 
 CANCEL_POLL_S = 10.0
-# End states that lose the job to the cluster rather than fail its workload.
 _LOST_STATES = frozenset({"BOOT_FAIL", "CANCELLED", "NODE_FAIL", "PREEMPTED"})
 
 
@@ -398,6 +397,7 @@ class SlurmBackend(Backend):
         returned = False
 
         def cancel_unreturned() -> None:
+            """Cancel the runner's queued request by name if ``salloc`` never returned a job."""
             if not returned:
                 cli.cancel_named([self.request.runner_name], wait=False)
 

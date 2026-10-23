@@ -37,6 +37,7 @@ class ContainerSpec:
     env: dict[str, str] = field(default_factory=dict)
 
     def srun_args(self) -> list[str]:
+        """Return the ``srun`` container flags for this spec."""
         args = [f"--container-image={self.image}"]
         if self.mounts:
             args.append(
@@ -61,6 +62,7 @@ class Resources:
     exclude: Sequence[str] = ()
 
     def args(self) -> list[str]:
+        """Return the ``salloc``/``sbatch`` flags requesting these resources on one node."""
         args = [f"--partition={self.partition}"]
         if self.account:
             args.append(f"--account={self.account}")
@@ -205,6 +207,7 @@ def cancel_named(names: Sequence[str], *, wait: bool = True) -> None:
 
 
 def _query(argv: list[str], env: Mapping[str, str] | None = None) -> str:
+    """Run a Slurm query and return its stdout, or an empty string if it fails or is absent."""
     try:
         result = proc.run(argv, env=env, capture=True)
     except FileNotFoundError:
@@ -233,7 +236,8 @@ def _time(text: str) -> datetime | None:
 def observe(job: Job) -> JobStatus:
     """One reading of the allocation: accounting (``sacct -X``), else the controller's record.
 
-    Never raises; a job neither knows reads as ``UNKNOWN``.
+    Never raises; a job neither knows reads as ``UNKNOWN``. Start and end times are dropped while
+    the job is not yet started or finished, since scontrol projects them from the time limit.
     """
     env = {**os.environ, "SLURM_TIME_FORMAT": "%s"}
     argv = ["sacct", "-X", "-n", "-P", "-j", job.id]
@@ -253,7 +257,6 @@ def observe(job: Job) -> JobStatus:
             for name in ("JobState", "ExitCode", "NodeList", "SubmitTime", "StartTime", "EndTime")
         )
     nodes, state = nodes.strip(), state.strip()
-    # scontrol projects StartTime for pending jobs and EndTime from the time limit until the end.
     started = "" if state == "PENDING" else started
     ended = "" if state in {"PENDING", "CONFIGURING", "RUNNING"} else ended
     return replace(
@@ -269,10 +272,10 @@ def job_status(state: str, exit_code: str) -> JobStatus:
     """Only ``COMPLETED`` with ``0:0`` succeeds; any other state after the job ran failed.
 
     Slurm's ``ExitCode`` is ``status:signal``, and a death by signal N reads as 128 + N.
+    Only signals 1 to 64 count, so OUT_OF_MEMORY's ``0:125`` marker is not read as a signal.
     """
     code, _, signal = exit_code.partition(":")
     raw = f"{state}|{exit_code}"
-    # Linux signals stop at 64. OUT_OF_MEMORY reports the marker 0:125, not a signal.
     if signal.isdigit() and 0 < int(signal) <= 64:
         exit_status: int | None = 128 + int(signal)
     else:

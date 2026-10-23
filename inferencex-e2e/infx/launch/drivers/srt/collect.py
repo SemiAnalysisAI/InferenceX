@@ -164,6 +164,7 @@ def collect(
     logs_staged = False
 
     def stage_logs_on_exit() -> None:
+        """Fetch and stage the job's logs when the launch ends before collect staged them."""
         if not logs_staged:
             _stage_logs(run, backend.fetch_outputs(job, fetched) / "logs", power)
 

@@ -24,7 +24,6 @@ from infx.srt_slurm.workload import (
 )
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
-# SGLang spells decode context parallelism --dcp-size, with the vLLM name as an alias.
 DCP_FLAGS = {
     "sglang": ("dcp-size", "decode-context-parallel-size"),
     "vllm": ("decode-context-parallel-size",),
@@ -216,6 +215,7 @@ def submission_fields(path: Path) -> tuple[str, str]:
 
 
 def main() -> None:
+    """Run ``prepare`` to bind a recipe, or ``submission`` to print a job's id and output dir."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare")

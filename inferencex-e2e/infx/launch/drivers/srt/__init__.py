@@ -208,6 +208,7 @@ def run_multinode(launch: Launch) -> int:
 
 
 def _srt_settings(cluster: Cluster | None) -> SrtSlurmSettings | None:
+    """Return the cluster's srt-slurm settings, or None if it is absent or not a Slurm cluster."""
     settings = cluster.scheduler_settings if cluster is not None else None
     return settings.srt_slurm if isinstance(settings, SlurmSettings) else None
 
@@ -217,15 +218,18 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
     problems: list[str] = []
 
     def scoped(cluster_id: str) -> bool:
+        """Return whether ``cluster_id`` is within the checked scope."""
         return only in (None, cluster_id)
 
     def profile(table: str, cluster_id: str) -> SrtSlurmSettings | None:
+        """Return the srt-slurm settings of ``cluster_id``, recording a problem if it has none."""
         srt = _srt_settings(clusters.get(cluster_id))
         if srt is None:
             problems.append(f"{table}[{cluster_id!r}]: no srt-slurm cluster {cluster_id!r}")
         return srt
 
     def volume(where: str, cluster_id: str, name: str) -> None:
+        """Record a problem at ``where`` if ``cluster_id`` has no volume ``name``."""
         if name not in clusters[cluster_id].scheduler_settings.volumes:
             problems.append(f"{where}: no volume {name!r}")
 

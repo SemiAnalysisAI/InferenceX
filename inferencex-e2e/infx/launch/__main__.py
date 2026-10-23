@@ -39,6 +39,7 @@ def launch(cluster: Cluster, request: LaunchRequest, event: JobEventBuilder | No
 
 
 def _run(runner_config: Path | None) -> int:
+    """Launch the point the environment describes, emit its job record and return its exit code."""
     event = JobEventBuilder.begin(os.environ)
     rc = 1
     try:
@@ -64,6 +65,7 @@ def _run(runner_config: Path | None) -> int:
 
 
 def _cleanup(runner_config: Path | None) -> int:
+    """Remove leftovers of earlier launches on ``RUNNER_NAME`` and return 0, or 1 if it is unset."""
     runner = os.environ.get("RUNNER_NAME", "")
     if not runner:
         print("ERROR: RUNNER_NAME is required", file=sys.stderr)
@@ -80,6 +82,7 @@ def _cleanup(runner_config: Path | None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse ``argv``, run the ``run`` or ``cleanup`` command and return its exit code."""
     parser = argparse.ArgumentParser(prog="python -m infx.launch", description=__doc__)
     parser.add_argument(
         "--runner-config",

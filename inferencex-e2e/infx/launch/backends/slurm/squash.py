@@ -60,6 +60,7 @@ def squash_path(image: str, policy: SquashPolicy) -> Path:
 
 
 def lock_path(image: str, policy: SquashPolicy) -> Path:
+    """Return the lock file guarding the squash file of ``image`` under the policy's lock layout."""
     path = squash_path(image, policy)
     if policy.lock_file == "locks-dir":
         return path.parent / ".locks" / f"{squash_key(image)}.lock"
@@ -100,6 +101,7 @@ def registry_reference(image: str) -> str:
 
 
 def is_valid_squash(path: Path) -> bool:
+    """Return whether ``path`` is readable and ``unsquashfs`` can list it."""
     if not os.access(path, os.R_OK):
         return False
     try:
