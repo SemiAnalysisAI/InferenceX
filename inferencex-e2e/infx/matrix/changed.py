@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import subprocess
+import threading
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -114,11 +115,31 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--runner-config", default=RUNNER_CONFIG)
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
     args = parser.parse_args(argv)
-    head = head_matrix(args.config_files, args.runner_config)
+    # The head matrix is built in a daemon thread while the base revision's generators run, so
+    # an interrupt during base generation exits at once and head errors keep their precedence.
+    head_outcome: dict[str, Any] = {}
+
+    def build_head() -> None:
+        try:
+            head_outcome["matrix"] = head_matrix(args.config_files, args.runner_config)
+        except BaseException as error:  # noqa: BLE001
+            head_outcome["error"] = error
+
+    head_thread = threading.Thread(target=build_head, daemon=True)
+    head_thread.start()
     try:
         base = base_matrix(args.base, args.config_files)
-    except subprocess.CalledProcessError as error:
-        parser.exit(1, f"{args.base} could not generate its matrix:\n{error.stderr}")
+    except Exception as error:
+        head_thread.join()
+        if "error" in head_outcome:
+            raise head_outcome["error"] from None
+        if isinstance(error, subprocess.CalledProcessError):
+            parser.exit(1, f"{args.base} could not generate its matrix:\n{error.stderr}")
+        raise
+    head_thread.join()
+    if "error" in head_outcome:
+        raise head_outcome["error"]
+    head = head_outcome["matrix"]
     changed = compare(base, head)
     keys = _keys(base, head)
     if args.json:

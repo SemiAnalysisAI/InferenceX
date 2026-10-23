@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from infx.matrix import changed
@@ -97,3 +98,14 @@ def test_rows_without_fingerprints_are_compared_individually(tmp_path):
          [point["recipe-fingerprint"] for point in change["added"] + change["removed"]])
         for change in changed.compare(base, head)
     ] == [(2, 2, [2], [8], [None, None])]  # fmt: skip
+
+
+def test_a_head_config_error_wins_over_a_base_that_cannot_generate(tmp_path, monkeypatch):
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs/nvidia-master.yaml").write_text("key: [unclosed\n")
+    (tmp_path / "configs/amd-master.yaml").write_text("{}\n")
+    (tmp_path / "configs/runners.yaml").write_text("labels: {}\n")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(yaml.YAMLError, match="while parsing a flow sequence"):
+        changed.main(["--base", "missing-ref"])
