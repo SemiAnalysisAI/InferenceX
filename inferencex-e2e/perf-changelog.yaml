@@ -10780,6 +10780,39 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4367
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move to lmsysorg/sglang:nightly-dev-20261019-3c560089 and its bundled Dynamo 1.6.0.dev20261018."
+    - "Disagg: replace the DEP8 prefill + Mooncake store ladder with TP1 x PP8 prefill workers that keep a 2x HiCache host tier, and run W4A4 MegaMoE for the target model on prefill and decode while the DSpark draft MoE stays at the image default (W4A8)."
+    - "Disagg points: 1P+DEP16 at concurrency 80, 160 and 200 with the KV router and token-balanced decode; 1P+DEP16 c300, 2P+DEP16 c720, 2P+DEP12 c800 and 2P+DEP8 c880 with a round-robin frontend and request-balanced decode. DSpark block size 6, 6, 5, 5 and 4, matched on prefill and decode."
+    - "Agg: TP8 over two nodes at concurrency 1; TP4 on one node at concurrency 1 and 4 with the fastokens tokenizer. DSpark block size 6."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move both GB200 GLM-5.2 NVFP4 Dynamo + SGLang AgentX keys to lmsysorg/sglang:nightly-dev-20261020-ab580b2e, pinned by digest, running the ai-dynamo 1.6.0.dev20261019 bundled in the image. Remove the glm5.2-fp4-gb200-dynamo-sglang-agentic-mtp and -agentic-mtp-agg keys and their recipes."
+    - "Aggregated: replace TP8 c1, c2, c4, c8, c12 and c16 with TP4 c1 (4 running requests and decode graphs, cutedsl BF16 GEMM) and TP8 c1 (2 running requests and decode graphs), both MTP 5 steps with fp8 KV cache and 100 GB per rank of HiCache write_back."
+    - "Disaggregated: replace the TP4 1P1D, DEP8-prefill 1P4D and 1P6D and DEP8/DEP16 2P1D points with TP1/PP8 prefill workers (two nodes each, layers split 10,10,10,10,10,10,10,8, 8k chunks, HiCache write_back) feeding TP4 decode with radix cache at 1P6D c36 and 1P4D c48, DEP8 decode at 1P2D c64, 1P2D c96 and 1P1D c96, and DEP16 decode at 2P1D c224 and 3P1D c336."
+    - "Prefill HiCache is 160 GB per rank with 64 running requests except 1P1D c96 (100 GB, 16 requests); prefill mem-fraction-static is 0.93, or 0.83 at 1P4D c48 and both c96 points. Decode mem-fraction-static is 0.94 for TP4 and DEP16 and 0.9 for DEP8. KV moves over NVLink through NIXL with UCX cuda_ipc MNNVL. Every point uses fp8 KV cache and MTP 5 steps; acceptance follows the golden GLM-5.2 thinking-on AL of 3.61."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4398
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-20261021-c1c287a4 and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 and --stream-interval 20 at every concurrency."
+    - "Lower max-running-requests to 3 at concurrency 10, raise prefill-decode-interval to 96 at concurrency 24, switch HiCache to write_back, and replace concurrency 16, 20 and 40 with 28, 30, 44 and 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+
+- config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
   scenario-type:
     - agentic-coding
@@ -10956,3 +10989,11 @@
     - "Raise VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT from the 30 s default to 600 s: chat-template rendering of long AgentX conversations timed out during warmup and vLLM aborted the requests."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4419
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX on GB200, matching the B200 recipe (#4426) with the arm64 build of the same day-0 vLLM image (minimax-m31-flash-arm64-cu134)."
+    - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c128 drafting 3 tokens (golden AL 2.88)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4433
