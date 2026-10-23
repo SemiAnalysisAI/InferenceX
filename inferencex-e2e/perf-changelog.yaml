@@ -10880,4 +10880,4 @@
     - "Serve flags follow recipes.vllm.ai Blackwell TP4: block-size 128, nvfp4 KV and indexer cache, prefill query quantization, FULL_AND_PIECEWISE graphs, minimax_m3 parsers, text-only."
     - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); synthetic acceptance from the golden curve minimaxm31flash_dspark.yaml (#4425)."
     - "TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c128 drafting 3 tokens (golden AL 2.88)."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4426
