@@ -100,6 +100,16 @@ def test_rows_without_fingerprints_are_compared_individually(tmp_path):
     ] == [(2, 2, [2], [8], [None, None])]  # fmt: skip
 
 
+def test_points_sharing_a_name_and_concurrency_keep_generation_order(tmp_path):
+    tps = [8, 4, 2, 1, 16, 32, 64, 128]
+    rows = [{"exp-name": "dsr1_8k1k", "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
+    head = {"key": changed._points(rows, tmp_path)}
+
+    [change] = changed.compare({}, head)
+
+    assert [point["tp"] for point in change["added"]] == tps
+
+
 def test_a_head_config_error_wins_over_a_base_that_cannot_generate(tmp_path, monkeypatch):
     (tmp_path / "configs").mkdir()
     (tmp_path / "configs/nvidia-master.yaml").write_text("key: [unclosed\n")

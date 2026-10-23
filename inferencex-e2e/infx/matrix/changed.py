@@ -81,8 +81,8 @@ def compare(base: Matrix, head: Matrix) -> list[dict]:
     changed = []
     for key in _keys(base, head):
         before, after = base.get(key, ({}, []))[0], head.get(key, ({}, []))[0]
-        added = _sorted(after[point] for point in after.keys() - before.keys())
-        removed = _sorted(before[point] for point in before.keys() - after.keys())
+        added = _sorted(point for point_id, point in after.items() if point_id not in before)
+        removed = _sorted(point for point_id, point in before.items() if point_id not in after)
         if added or removed:
             changed.append(
                 {
