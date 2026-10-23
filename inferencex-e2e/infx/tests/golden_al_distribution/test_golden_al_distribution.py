@@ -90,3 +90,12 @@ def test_cli_list_and_show(capsys) -> None:
 def test_cli_reports_errors(capsys) -> None:
     assert main(["show", "missing_curve"]) == 1
     assert "No committed golden curve" in capsys.readouterr().err
+
+
+def test_cli_show_rejects_a_curve_outside_the_golden_dir(tmp_path, capsys) -> None:
+    golden = tmp_path / "golden"
+    golden.mkdir()
+    (tmp_path / "outside.yaml").write_text("some-model:\n  thinking_on:\n    3: 2.5\n")
+
+    assert main(["--golden-dir", str(golden), "show", "../outside"]) == 1
+    assert "Invalid golden curve identity" in capsys.readouterr().err

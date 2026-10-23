@@ -13,6 +13,7 @@ from infx import yamlio
 
 GOLDEN_DIR = Path(__file__).resolve().parent
 THINKING_MODES = ("thinking_on", "thinking_off")
+CURVE_NAME = re.compile(r"[a-z0-9_.-]+")
 
 
 @dataclass(frozen=True)
@@ -57,12 +58,14 @@ def curve_name(model: str, spec: Mapping[str, Any]) -> str:
             curve += "_probabilistic_sample_method_block_rejection_sample_method"
         elif sampling != "greedy":
             raise ValueError(f"No Kimi DSpark golden curve for draft sampling {sampling!r}")
-    if not re.fullmatch(r"[a-z0-9_.-]+", curve):
+    if not CURVE_NAME.fullmatch(curve):
         raise ValueError(f"Invalid golden curve identity: {curve!r}")
     return curve
 
 
 def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
+    if not CURVE_NAME.fullmatch(name):
+        raise ValueError(f"Invalid golden curve identity: {name!r}")
     path = golden_dir / f"{name}.yaml"
     if not path.is_file():
         raise ValueError(f"No committed golden curve {path.name} in {golden_dir}")
