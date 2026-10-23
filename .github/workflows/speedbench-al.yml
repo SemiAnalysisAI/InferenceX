@@ -26,11 +26,16 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: 'dsv4'
       framework:
-        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>.sh collector"
+        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>[_<collector-variant>].sh collector"
         required: false
         type: choice
         options: [vllm, sglang]
         default: 'vllm'
+      collector-variant:
+        description: "Collector variant suffix; non-empty selects <model-prefix>_fp4_b300_<framework>_<collector-variant>.sh (e.g. probabilistic_sample_method_block_rejection_sample_method)"
+        required: false
+        type: string
+        default: ''
       image:
         # vLLM collectors need vLLM >= 0.30: thinking-on cells rely on --chat-template-kwargs (vllm-project/vllm#44244).
         description: "Container image (vLLM >= 0.30 for vLLM collectors)"
@@ -103,7 +108,6 @@ env:
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_${{ inputs.framework }}.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
   # Matrix-collector tunables (propagated into the container via srun --export=ALL).
   MTP_LIST: ${{ inputs.mtp-list }}
@@ -239,6 +243,24 @@ jobs:
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f speedbench-reference-al.yaml || true
           rm -rf speed_bench_data || true
+
+      - name: Resolve AL collector
+        env:
+          COLLECTOR_VARIANT: ${{ inputs.collector-variant }}
+        run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          collector_dir=benchmarks/single_node/speedbench
+          collector="${MODEL_PREFIX}_fp4_b300_${FRAMEWORK}"
+          if [[ -n "$COLLECTOR_VARIANT" ]]; then
+            collector+="_${COLLECTOR_VARIANT}"
+          fi
+          # The name must stay a plain file in the collector directory.
+          if [[ "$collector" == */* || "$collector" == *$'\n'* || ! -f "$collector_dir/$collector.sh" ]]; then
+            echo "::error::No SPEED-Bench collector $collector_dir/$collector.sh at this ref. Available collectors are listed below." >&2
+            ls "$collector_dir" >&2
+            exit 1
+          fi
+          echo "BENCH_SCRIPT_OVERRIDE=$collector_dir/$collector.sh" >> "$GITHUB_ENV"
 
       - name: Checkout launch tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
