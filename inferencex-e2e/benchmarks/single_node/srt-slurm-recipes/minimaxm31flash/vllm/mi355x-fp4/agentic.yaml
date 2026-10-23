@@ -69,6 +69,10 @@ base:
         VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
         # DBO needs the V2 model runner (the V1 runner refuses DSpark).
         VLLM_USE_V2_MODEL_RUNNER: '1'
+        # Bind each HIP stream to one hardware queue. The image's HIP moves an
+        # active stream to the least loaded queue, which can put DBO's
+        # all-reduce stream on the compute stream's queue and serialize them.
+        DEBUG_HIP_DYNAMIC_QUEUES: '0'
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -106,6 +110,7 @@ zip_override_tp4_dspark7_mono:
         VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT: '1'
         VLLM_ROCM_MINIMAX_M3_MONO: '1'
         VLLM_USE_V2_MODEL_RUNNER: null
+        DEBUG_HIP_DYNAMIC_QUEUES: null
   benchmark:
     env:
       CONC: ['1', '2', '4', '8']
