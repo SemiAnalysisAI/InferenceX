@@ -809,7 +809,8 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
         )
     name = f"run-{record.run_id}-{record.run_attempt}"
     previous = stored(session, pull, name)
-    text = render_attempt(record, baseline_for(session, pull), session.repository)
+    baseline = baseline_for(session, pull)
+    text = render_attempt(record, baseline, session.repository)
     packed = record.model_dump(by_alias=True)
     chunks = []
     if len(record.points) > 20 or len(record.evals) > 20:
@@ -819,21 +820,16 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
                 "evals": packed["evals"][offset : offset + 20],
             }
             part_name = f"{name}-part-{offset // 20 + 1}-{identity(part)[:16]}"
-            part_text = point_table(
-                record.points[offset : offset + 20], baseline_for(session, pull)
-            )
+            part_text = point_table(record.points[offset : offset + 20], baseline)
             if part["evals"]:
-                part_text += "\n\n" + eval_table(
-                    record.evals[offset : offset + 20],
-                    baseline_for(session, pull),
-                )
+                part_text += "\n\n" + eval_table(record.evals[offset : offset + 20], baseline)
             upsert(session, pull, part_name, json.dumps(part), part_text)
             chunks.append(part_name)
         packed.update(points=[], evals=[])
         packed = {"record": packed, "chunks": chunks}
         text = render_attempt(
             record.model_copy(update={"points": [], "evals": []}),
-            baseline_for(session, pull),
+            baseline,
             session.repository,
         )
         note = "\n\nResults continue in numbered report comments."
