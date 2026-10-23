@@ -6,8 +6,8 @@ import functools
 import io
 import os
 import re
+import sys
 from collections.abc import Iterator
-from contextlib import suppress
 from typing import IO, Any
 
 import yaml
@@ -61,25 +61,78 @@ _CACHED_TEXT_CHARACTERS = 128 * 1024
 _PYYAML = object()
 
 
-class _NamedText(io.StringIO):
-    """Text that reports the original stream's name in PyYAML error marks."""
-
-    def __init__(self, text: str, name: str) -> None:
-        super().__init__(text)
-        self.name = name
+# Each entry is (twin, watched classes, their attributes, the loader's tables) as of the build.
+_TWINS: dict[type, tuple[type, tuple[type, ...], tuple[dict[str, Any], ...], tuple[Any, ...]]] = {}
+# libyaml skips the token after an empty explicit key in a flow collection; PyYAML rejects it.
+_AFTER_EMPTY_FLOW_KEY = (yaml.ValueToken, yaml.FlowEntryToken, yaml.FlowSequenceEndToken)
 
 
-@functools.cache
-def _fast_loader(loader: type) -> type | None:
-    """libyaml twin of a SafeLoader subclass that only customizes its lookup tables."""
-    if _C_SAFE_LOADER is None or not issubclass(loader, yaml.SafeLoader):
-        return None
-    mro = loader.__mro__
-    if any(set(vars(cls)) - _CLASS_ATTRIBUTES for cls in mro[: mro.index(yaml.SafeLoader)]):
-        return None
-    return type(
-        f"Fast{loader.__name__}", (_C_SAFE_LOADER,), {t: getattr(loader, t) for t in _TABLES}
+def _class_state(classes: tuple[type, ...]) -> tuple[dict[str, Any], ...]:
+    return tuple(
+        {key: value for key, value in dict(vars(cls)).items() if key not in _TABLES}
+        for cls in classes
     )
+
+
+_PYYAML_CLASSES = tuple(
+    dict.fromkeys(
+        cls
+        for loader in (yaml.SafeLoader, _C_SAFE_LOADER)
+        if loader is not None
+        for cls in loader.__mro__
+        if cls is not object
+    )
+)
+_PYYAML_STATE = _class_state(_PYYAML_CLASSES)
+
+
+def _table_state(loader: type) -> tuple[dict[Any, Any], ...]:
+    return tuple(
+        {key: list(value) if isinstance(value, list) else value for key, value in table.items()}
+        for table in (dict(getattr(loader, name)) for name in _TABLES)
+    )
+
+
+def _fast_loader(loader: type) -> type | None:
+    """libyaml twin of a SafeLoader subclass that only customizes its lookup tables.
+
+    The twin parses with a copy of the tables and is rebuilt, with the parse cache cleared,
+    once ``add_constructor`` and friends change them or an attribute of any class involved
+    changes. Patched PyYAML classes, metaclasses and attributes that cannot be compared leave
+    every load to PyYAML.
+    """
+    if _C_SAFE_LOADER is None or type(loader) is not type:
+        return None
+    if not issubclass(loader, yaml.SafeLoader):
+        return None
+    known = _TWINS.get(loader)
+    mro = loader.__mro__
+    try:
+        if known is not None:
+            twin, classes, attributes, tables = known
+            if all(
+                saved == vars(cls) for saved, cls in zip(attributes, classes, strict=True)
+            ) and all(
+                saved == getattr(loader, name) for saved, name in zip(tables, _TABLES, strict=True)
+            ):
+                return twin
+        if (
+            any(set(vars(cls)) - _CLASS_ATTRIBUTES for cls in mro[: mro.index(yaml.SafeLoader)])
+            or _class_state(_PYYAML_CLASSES) != _PYYAML_STATE
+        ):
+            return None
+        classes = tuple(dict.fromkeys((*mro[:-1], *_PYYAML_CLASSES)))
+        attributes = tuple(dict(vars(cls)) for cls in classes)
+        tables = _table_state(loader)
+    except Exception:  # noqa: BLE001
+        return None
+    if known is not None:
+        _cached_libyaml_load.cache_clear()
+    twin = type(
+        f"Fast{loader.__name__}", (_C_SAFE_LOADER,), dict(zip(_TABLES, tables, strict=True))
+    )
+    _TWINS[loader] = (twin, classes, attributes, tables)
+    return twin
 
 
 def _may_nest_deeply(text: str) -> bool:
@@ -97,6 +150,7 @@ def _needs_pyyaml(text: str, fast: type) -> bool:
     if "?" not in text and "!" not in text and not _may_nest_deeply(text):
         return False
     depth = flow = 0
+    previous: type | None = None
     for token in yaml.scan(text, Loader=fast):
         kind = type(token)
         if kind in _OPENING_TOKENS:
@@ -105,11 +159,14 @@ def _needs_pyyaml(text: str, fast: type) -> bool:
                 return True
         elif kind in _CLOSING_TOKENS:
             depth -= 1
-        elif kind is yaml.TagToken or (
-            flow and kind is yaml.ScalarToken and token.plain and "?" in token.value
+        if (
+            kind is yaml.TagToken
+            or (flow and kind is yaml.ScalarToken and token.plain and "?" in token.value)
+            or (flow and previous is yaml.KeyToken and kind in _AFTER_EMPTY_FLOW_KEY)
         ):
             return True
         flow += _FLOW_TOKENS.get(kind, 0)
+        previous = kind
     return False
 
 
@@ -121,43 +178,62 @@ def _libyaml_load(text: str, fast: type) -> Any:
         if _needs_pyyaml(text, fast):
             return _PYYAML
         return yaml.load(text, Loader=fast)  # noqa: S506
-    except yaml.YAMLError:
+    except Exception:  # noqa: BLE001
         return _PYYAML
 
 
 @functools.lru_cache(maxsize=512)
-def _cached_libyaml_load(text: str, fast: type) -> Any:
+def _cached_libyaml_load(text: str, fast: type, int_digits: int) -> Any:  # noqa: ARG001
     """Planner runs bind the same recipes and shared blocks once per matrix row."""
     return _libyaml_load(text, fast)
 
 
-def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
-    """Return exactly what ``yaml.load(stream, Loader=loader)`` returns or raises.
+def _fast_value(text: str, fast: type) -> Any:
+    if len(text) > _CACHED_TEXT_CHARACTERS:
+        return _libyaml_load(text, fast)
+    value = _cached_libyaml_load(text, fast, sys.get_int_max_str_digits())
+    if value is _PYYAML:
+        return _PYYAML
+    try:
+        return fastcopy.deepcopy(value)
+    except RecursionError:
+        # Chains of aliases can nest values far deeper than the document's own syntax.
+        return _PYYAML
 
-    Documents libyaml accepts are parsed by libyaml, which builds the same nodes as PyYAML;
-    PyYAML reparses everything else, so errors and their marks are PyYAML's own. Texts up to
-    128 KiB are parsed once per process and returned as fresh deep copies.
-    ``INFX_PURE_YAML=1`` turns libyaml off.
+
+def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
+    """Return exactly what ``yaml.load(stream, Loader=loader)`` returns or raises, except
+    within a few frames of the interpreter's recursion limit, where either one can raise
+    RecursionError while the other returns.
+
+    A ``str`` or a seekable ``io.TextIOWrapper``/``io.StringIO`` whose text libyaml accepts is
+    parsed by libyaml, which builds the same nodes as PyYAML; everything else, including every
+    error, goes to PyYAML from the stream's original position. Texts up to 128 KiB are parsed
+    once per process and returned as fresh deep copies. ``INFX_PURE_YAML=1`` turns libyaml off.
+    PyYAML internals patched before this module is imported, or mutated in place (such as
+    ``Scanner.ESCAPE_REPLACEMENTS``), are not detected. Each loader class is kept for the life
+    of the process.
     """
     fast = _fast_loader(loader)
-    if fast is None or not isinstance(stream, str | io.TextIOBase):
-        return yaml.load(stream, Loader=loader)  # noqa: S506
-    if isinstance(stream, str):
-        text, fallback = stream, stream
-    else:
-        text = stream.read()
-        fallback = _NamedText(text, getattr(stream, "name", "<file>"))
-    if len(text) <= _CACHED_TEXT_CHARACTERS:
-        value = _cached_libyaml_load(text, fast)
-        if value is not _PYYAML:
-            # Chains of aliases can nest values far deeper than the document's own syntax.
-            with suppress(RecursionError):
-                return fastcopy.deepcopy(value)
-    else:
-        value = _libyaml_load(text, fast)
+    if fast is not None and type(stream) is str:
+        value = _fast_value(stream, fast)
         if value is not _PYYAML:
             return value
-    return yaml.load(fallback, Loader=loader)  # noqa: S506
+    elif fast is not None and type(stream) in (io.TextIOWrapper, io.StringIO):
+        try:
+            # Iterating a file disables tell(), and a closed one fails differently from read().
+            start = stream.tell() if stream.seekable() else None
+        except (OSError, ValueError):
+            start = None
+        if start is not None:
+            try:
+                value = _fast_value(stream.read(), fast)
+            except (OSError, ValueError):
+                value = _PYYAML
+            if value is not _PYYAML:
+                return value
+            stream.seek(start)
+    return yaml.load(stream, Loader=loader)  # noqa: S506
 
 
 def safe_load(stream: str | IO[str]) -> Any:
