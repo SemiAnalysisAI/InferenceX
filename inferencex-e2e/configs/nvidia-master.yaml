@@ -5548,6 +5548,45 @@ minimaxm3-fp4-b200-trtllm-agentic-mtp:
     - dram-utilization: 0.8
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5], srt-recipe: agentic.yaml }
+
+minimaxm31flash-fp4-b300-vllm-agentic:
+  # Day-0 vLLM image for MiniMax-M3.1-Flash (vllm.ai/blog/2026-10-23-minimax-m31-flash).
+  # DSpark is off until a golden AL curve is committed for this model.
+  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/vllm/b300-fp4
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # TP4 is the upstream Blackwell layout.
+      - { tp: 4, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router.
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [64, 128, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
+minimaxm31flash-fp4-b200-vllm-agentic:
+  # Day-0 vLLM image for MiniMax-M3.1-Flash (vllm.ai/blog/2026-10-23-minimax-m31-flash).
+  # DSpark is off until a golden AL curve is committed for this model.
+  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/vllm/b200-fp4
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # TP4 is the upstream Blackwell layout.
+      - { tp: 4, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router.
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
 # Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
 # two NVL4 nodes, and TP4 lazy SimpleCPU KV offload variants. The pinned
 # runtime uses Dynamo-native MiniMax parsing on the worker without the vLLM
