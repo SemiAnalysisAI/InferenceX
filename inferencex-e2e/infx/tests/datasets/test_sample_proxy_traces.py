@@ -15,7 +15,7 @@ if "psycopg" not in sys.modules:
     sys.modules["psycopg"] = _psycopg
     sys.modules["psycopg.rows"] = _psycopg.rows
 
-from infx.datasets.sample_proxy_traces import _sort_and_limit  # noqa: E402
+from infx.datasets.sample_proxy_traces import _sort_and_limit, parse_args  # noqa: E402
 
 TIED_TS = datetime(2026, 5, 1, tzinfo=UTC)
 OLDER_TS = datetime(2026, 4, 1, tzinfo=UTC)
@@ -33,3 +33,16 @@ def test_limit_picks_the_same_sessions_whatever_order_the_db_returns(sampling: s
     picked = [_sort_and_limit(order, args)[0]["session_id"] for order in (rows, rows[::-1])]
 
     assert picked == ["sess-a", "sess-a"]
+
+
+def test_zero_limit_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = ["sample", "--out", "out", "--sampling", "top", "--limit", "0"]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    with pytest.raises(SystemExit) as exit_info:
+        parse_args()
+
+    assert exit_info.value.code == 2
+    assert "--limit must be >= 1" in capsys.readouterr().err

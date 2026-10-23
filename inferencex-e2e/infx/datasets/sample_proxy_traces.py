@@ -308,6 +308,8 @@ def parse_args() -> argparse.Namespace:
             p.error("--sampling random requires --seed")
         if args.limit is not None and args.sampling is None:
             p.error("--limit requires --sampling so the LIMIT is deterministic")
+        if args.limit is not None and args.limit < 1:
+            p.error("--limit must be >= 1")
         if args.max_parallel_subagents is not None:
             if args.max_parallel_subagents < 0:
                 p.error("--max-parallel-subagents must be >= 0")
