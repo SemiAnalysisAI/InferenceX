@@ -10873,6 +10873,54 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + MXFP8 dense) AgentX on H100 with vLLM image minimax-m31-flash (https://vllm.ai/blog/2026-10-23-minimax-m31-flash)."
+    - "Serve flags follow the recipes.vllm.ai Hopper TP8 recipe: block size 128, FP8 KV and indexer cache, Marlin MoE backend for the NVFP4 experts, FULL_AND_PIECEWISE graphs, hybrid KV cache manager disabled, minimax_m3 reasoning and tool parsers, three-token DSpark (FLASH_ATTN drafter, fp8 draft KV, probabilistic drafting, block rejection, from the GB200 recipe; upstream does not enable DSpark on Hopper). Context stays at 1M (upstream Hopper example uses 256K) because the AgentX corpus for this prefix is uncapped."
+    - "Search space: TP8 only, conc 1-12, no KV offloading. Throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 2.88 at 3 draft tokens, #4425)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4422
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX recipe on B200 with the vLLM day-0 image vllm/vllm-openai:minimax-m31-flash."
+    - "Serve flags follow recipes.vllm.ai Blackwell TP4: block-size 128, nvfp4 KV and indexer cache, prefill query quantization, FULL_AND_PIECEWISE graphs, minimax_m3 parsers, text-only."
+    - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); synthetic acceptance from the golden curve minimaxm31flash_dspark.yaml (#4425)."
+    - "TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c128 drafting 3 tokens (golden AL 2.88)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4426
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM image from nightly-49cb2bbf to the digest-pinned nightly-8e2beaa3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4388
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4396
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4402
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4408
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm31flash-fp4-h200-vllm-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + MXFP8 dense) AgentX on H200 with vLLM image minimax-m31-flash (https://vllm.ai/blog/2026-10-23-minimax-m31-flash)."
