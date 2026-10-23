@@ -66,22 +66,30 @@ def wait_ready(
     offset = 0
     inode: int | None = None
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+
+    def stream() -> None:
+        nonlocal offset, inode
+        if log is None or not log.exists():
+            return
+        with log.open("rb") as source:
+            stat = os.fstat(source.fileno())
+            if stat.st_ino != inode or stat.st_size < offset:
+                offset, inode = 0, stat.st_ino
+                decoder.reset()
+            source.seek(offset)
+            chunk = source.read()
+        offset += len(chunk)
+        sys.stdout.write(decoder.decode(chunk))
+        sys.stdout.flush()
+
     while True:
-        if log is not None and log.exists():
-            with log.open("rb") as stream:
-                stat = os.fstat(stream.fileno())
-                if stat.st_ino != inode or stat.st_size < offset:
-                    offset, inode = 0, stat.st_ino
-                    decoder.reset()
-                stream.seek(offset)
-                chunk = stream.read()
-            offset += len(chunk)
-            sys.stdout.write(decoder.decode(chunk))
-            sys.stdout.flush()
+        stream()
         status = http_status(url)
         if status is not None and status < 400:
             return
         if pid is not None and not process_alive(pid):
+            # Its last words may have landed during the probe.
+            stream()
             raise NotReadyError(f"process {pid} died before {url} became ready")
         time.sleep(poll_s)
 

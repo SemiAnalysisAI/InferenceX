@@ -98,6 +98,23 @@ def test_wait_fails_once_the_server_process_is_gone():
     assert result.stderr == f"ERROR: process {dead.pid} died before {url} became ready\n"
 
 
+def test_wait_streams_what_a_dying_server_wrote_before_failing(http_server, tmp_path, capsys):
+    log = tmp_path / "server.log"
+    log.write_text("loading\n")
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+
+    def respond(_method: str, _path: str) -> tuple[int, object]:
+        with log.open("a") as out:
+            out.write("CUDA out of memory\n")
+        return 503, {}
+
+    with pytest.raises(server.NotReadyError):
+        server.wait_ready(f"{http_server(respond)}/health", pid=dead.pid, log=log, poll_s=0.01)
+
+    assert capsys.readouterr().out == "loading\nCUDA out of memory\n"
+
+
 @pytest.mark.parametrize(
     ("models", "health", "stabilization_s", "waiting"),
     [(["m"], 503, 0, False), (["other"], 200, 1, True)],
