@@ -244,11 +244,14 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
     recipe_path = root / path
     recipe = yamlio.safe_load(recipe_path.read_text())
     if isinstance(recipe, dict) and "base" in recipe:
-        if not (selector == "base" or selector.startswith("override_")):
+        if selector.startswith("zip_override_"):
+            [(_, recipe)] = expand_variants(recipe, selector)
+        elif selector == "base" or selector.startswith("override_"):
+            schema = recipe.get("schema")
+            recipe = deep_merge(recipe["base"], recipe[selector] or {})
+            recipe.setdefault("schema", schema)
+        else:
             return None
-        schema = recipe.get("schema")
-        recipe = deep_merge(recipe["base"], recipe[selector] or {})
-        recipe.setdefault("schema", schema)
         if recipe.get("schema") != 2:
             return None
     if not isinstance(recipe, dict) or recipe.get("schema") != 2:

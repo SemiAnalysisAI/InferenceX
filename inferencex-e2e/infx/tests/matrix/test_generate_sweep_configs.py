@@ -158,7 +158,8 @@ def test_recipe_node_count_rejects_an_empty_recipe(tmp_path, multinode_recipe):
     ("base", 3),
     ("override_wide", 5),
     ("override_colocated", 2),
-    ("zip_override_sweep[0]", None),
+    ("zip_override_sweep[0]", 2),
+    ("zip_override_sweep[1]", 3),
 ])
 def test_recipe_node_count_resolves_override_selectors(tmp_path, multinode_recipe, selector, expected):
     srt_recipe = multinode_recipe({
