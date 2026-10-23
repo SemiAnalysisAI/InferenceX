@@ -53,12 +53,21 @@ def reconcile(
 ) -> list[dict[str, Any]]:
     """``events`` with their jobs' outcomes, then a record for each benchmark job without one."""
     events = [dict(event) for event in events]
+    starts = [_time(event.get("started_at")) for event in events]
     synthesized = []
     for job in jobs:
         name = job.get("name") or ""
         if job.get("conclusion") in {None, "skipped"} or not _BENCHMARK_JOB.search(name):
             continue
-        event = next((event for event in events if _ran(event, job)), None)
+        began, ended = _time(job.get("started_at")), _time(job.get("completed_at"))
+        event = next(
+            (
+                event
+                for event, started in zip(events, starts, strict=True)
+                if _ran(event, started, job, began, ended)
+            ),
+            None,
+        )
         if event is None:
             synthesized.append(_synthesized(job, run_url))
         elif isinstance(event.get("github"), dict):
@@ -66,16 +75,18 @@ def reconcile(
     return [*events, *synthesized]
 
 
-def _ran(event: dict[str, Any], job: dict[str, Any]) -> bool:
+def _ran(
+    event: dict[str, Any],
+    started: datetime | None,
+    job: dict[str, Any],
+    began: datetime | None,
+    ended: datetime | None,
+) -> bool:
     """Whether ``event`` is ``job``'s: by check-run id, else by runner and start time."""
     recorded = event.get("github")
     job_id = recorded.get("job_id") if isinstance(recorded, dict) else None
     if job_id is not None:
         return job_id == job.get("id")
-    started, began, ended = (
-        _time(value)
-        for value in (event.get("started_at"), job.get("started_at"), job.get("completed_at"))
-    )
     return (
         event.get("runner") is not None
         and event.get("runner") == job.get("runner_name")
