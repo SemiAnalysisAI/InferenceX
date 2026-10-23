@@ -11014,4 +11014,4 @@
     - agentic-coding
   description:
     - "Add Muse-Spark-Open NVFP4 GB300 TensorRT-LLM AgentX with DFlash2: TEP8 on two nodes at concurrency 1 and TEP4 on one node at concurrency 1, 2, 4, 8, 16, 32, and 64, with FP8 KV cache and native DRAM offloading."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4446
