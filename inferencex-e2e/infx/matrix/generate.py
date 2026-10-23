@@ -206,13 +206,13 @@ def _worker_node_override(worker: dict, setting_name: str) -> int | None:
 
 
 def recipe_auxiliary_node_count(recipe: dict) -> int:
-    services = [service for service in recipe.get("services", []) if service.get("enabled", True)]
+    services = [service for service in recipe.get("services") or [] if service.get("enabled", True)]
     pool_nodes = sum(service.get("nodes") or 0 for service in services)
-    infra_dedicated = recipe.get("infra", {}).get("etcd_nats_dedicated_node", False)
+    infra_dedicated = (recipe.get("infra") or {}).get("etcd_nats_dedicated_node", False)
     discovery = [service for service in services if service.get("type") in ("etcd", "nats")]
     if discovery:
         placements = {
-            service.get("placement", {}).get("node") == "dedicated" for service in discovery
+            (service.get("placement") or {}).get("node") == "dedicated" for service in discovery
         }
         if len(placements) != 1:
             raise ValueError("Recipe etcd and nats must agree on dedicated placement")
@@ -222,12 +222,12 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
         ("frontend", "dedicated_node"),
         ("benchmark", "client_dedicated_node"),
     ):
-        settings = recipe.get(section, {})
+        settings = recipe.get(section) or {}
         dedicated_roles += int(
-            settings.get("placement", {}).get("node") == "dedicated"
+            (settings.get("placement") or {}).get("node") == "dedicated"
             or settings.get(legacy_key, False)
         )
-    if dedicated_roles and recipe.get("benchmark", {}).get("colocate_with_frontend", True):
+    if dedicated_roles and (recipe.get("benchmark") or {}).get("colocate_with_frontend", True):
         dedicated_roles = 1
     return pool_nodes + dedicated_roles
 
@@ -236,7 +236,7 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
     recipe = yamlio.safe_load(recipe_path.read_text())
-    if "base" in recipe:
+    if isinstance(recipe, dict) and "base" in recipe:
         if not (selector == "base" or selector.startswith("override_")):
             return None
         schema = recipe.get("schema")
@@ -244,12 +244,12 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
         recipe.setdefault("schema", schema)
         if recipe.get("schema") != 2:
             return None
-    if recipe.get("schema") != 2:
+    if not isinstance(recipe, dict) or recipe.get("schema") != 2:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
     roles = recipe.get("roles")
     if roles:
         for name, role in roles.items():
-            if "nodes" not in role:
+            if not isinstance(role, dict) or role.get("nodes") is None:
                 raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
         worker_nodes = sum(
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()

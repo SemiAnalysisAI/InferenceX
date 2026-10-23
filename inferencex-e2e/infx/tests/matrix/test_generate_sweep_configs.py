@@ -119,6 +119,8 @@ def multinode_recipe(tmp_path):
     ({"prefill": {"nodes": 2}, "decode": {"nodes": 4}}, 6),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
     ({"prefill": {"nodes": 2}, "decode": {"workers": 1}}, None),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": None}}, None),
+    ({"prefill": {"nodes": 2}, "decode": None}, None),
 ])
 def test_multinode_node_count_reads_schema_two_roles(tmp_path, multinode_recipe, roles, expected):
     import infx.matrix.generate as generate
@@ -128,6 +130,28 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, multinode_recipe,
             generate.recipe_node_count(tmp_path, srt_recipe)
     else:
         assert generate.recipe_node_count(tmp_path, srt_recipe) == expected
+
+
+@pytest.mark.parametrize("sections", [
+    {"services": None},
+    {"infra": None},
+    {"frontend": None},
+    {"benchmark": None},
+    {"services": [{"type": "etcd", "placement": None}, {"type": "nats"}]},
+])
+def test_recipe_node_count_treats_null_sections_as_absent(tmp_path, multinode_recipe, sections):
+    import infx.matrix.generate as generate
+    srt_recipe = multinode_recipe(
+        {"schema": 2, "roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}, **sections}
+    )
+    assert generate.recipe_node_count(tmp_path, srt_recipe) == 3
+
+
+def test_recipe_node_count_rejects_an_empty_recipe(tmp_path, multinode_recipe):
+    import infx.matrix.generate as generate
+    srt_recipe = multinode_recipe(None)
+    with pytest.raises(ValueError, match="must declare schema: 2: .*test.yaml"):
+        generate.recipe_node_count(tmp_path, srt_recipe)
 
 
 @pytest.mark.parametrize("selector, expected", [
