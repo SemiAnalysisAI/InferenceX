@@ -144,7 +144,7 @@ class SlurmBackend(Backend):
         rendered = spec.srun_args()
         extra = ["--mpi=none", *(arg for arg in self.settings.srun_args if arg not in rendered)]
         argv = cli.srun_argv(allocation, container.command, container=spec, extra=extra)
-        echo(argv)
+        echo(argv, spec.env)
         step = subprocess.Popen(argv)
         self.life.callback(_stop, step)
         return SlurmJob(allocation.id, outputs=container.workspace, step=step)

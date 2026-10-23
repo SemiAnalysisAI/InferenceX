@@ -308,6 +308,17 @@ def test_salloc_exclude_escape_hatch_extends_the_cluster_exclusions(fakes, works
     assert option(allocation, "--exclude") == "bad-node,node[1,3]"
 
 
+def test_the_echoed_container_step_masks_secrets_in_the_container_env(fakes, workspace, tmp_path, capsys):
+    inventory = inventory_for(tmp_path)
+    inventory["clusters"]["fixture"]["env"]["MIRROR_TOKEN"] = "tok-cluster-only"
+
+    assert launch(load_inventory(inventory).clusters["fixture"], request_for(workspace)) == 0
+
+    assert "MIRROR_TOKEN=tok-cluster-only" in option(container_step(fakes()), "--export").split(",")
+    err = capsys.readouterr().err
+    assert "MIRROR_TOKEN=***" in err and "tok-cluster-only" not in err
+
+
 def test_sigterm_during_the_collector_cancels_the_allocation_and_exits_143(
     fakes, workspace, tmp_path
 ):
