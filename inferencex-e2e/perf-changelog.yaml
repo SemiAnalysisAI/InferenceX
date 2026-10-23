@@ -10871,3 +10871,9 @@
     - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4395
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+  description:
+    - "Extend TP8/EP8 8k1k concurrency from 4-64 to 1-128 (cuda-graph-max-bs follows concurrency)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4415
