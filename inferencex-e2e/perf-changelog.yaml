@@ -11036,6 +11036,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4309
 
 - config-keys:
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+  - agentic-coding
+  description:
+  - 'Refine GB300 Kimi-K3 AgentX points to be good on all four p90 charts: replace the decode-capped 1P2D-2P5D points with uncapped 1P2D c48-64 and 3P4D c240, add specialized-decode 1P3D c16 and 1P2D c24/32, keep 2P3D c240 and aggregated TP16 c1, and drop aggregated TP8 c2/c4. Pin cp-kv-cache-interleave-size to 1 for the specialized-decode disaggregated points.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4373
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp-c10
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the MiniMax-M3 B200 vLLM images by digest and retune the TP4 concurrency 15-38 entries, with DRAM KV offload sized to the 1,073 GB node allowance."
+    - "Add minimaxm3-fp4-b200-vllm-agentic-mtp-c10 with TP4 and TP8 concurrency 10 and TP4 DRAM concurrency 20 and 32 entries that cap active sequences."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4382
+
+- config-keys:
     - minimaxm3-fp4-gb300-dynamo-trt-agentic-disagg-mtp
     - minimaxm3-fp4-gb300-dynamo-trt-agentic-agg-mtp
   description:
