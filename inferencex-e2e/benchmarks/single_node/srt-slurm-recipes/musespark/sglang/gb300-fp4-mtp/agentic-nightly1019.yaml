@@ -1,0 +1,112 @@
+base:
+  schema: 2
+  name: musespark-fp4-gb300-sglang-agentic-nightly1019
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.95
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-attention-backend: trtllm_mha
+        # Draft KV in the target's FP8 KV dtype frees memory for target KV.
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        # DFlash2 verifies 8 tokens per step: the current token plus 7 drafts.
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        reasoning-parser: muse
+        tool-call-parser: muse
+        # Same token ids as the HF tokenizer, without the per-turn re-encode of the whole conversation.
+        tokenizer-backend: fastokens
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-hierarchical-cache: true
+        # Host KV tier per GPU (GB) for evicted prefixes, inside the 0.80 DRAM allowance.
+        hicache-size: 149
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Parallel prompt encode calls num_special_tokens_to_add, which the fastokens shim lacks.
+        SGLANG_PARALLEL_PROMPT_ENCODE: '0'
+        HF_HUB_OFFLINE: '1'
+        # Free window-layer slots outside the 2048-token window, so follow-up turns reuse the prefix.
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+  # Cold weight loads plus graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      # The gated Hub repo is unreadable with the job token; tokenize from the staged checkpoint.
+      TOKENIZER: /model
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp4_c28:
+  roles:
+    agg:
+      args:
+        # 46 of 62 layers attend to a 2048-token window; this sizes their KV pool against the full-attention pool.
+        swa-full-tokens-ratio: 0.3
+        # Admission cap below the concurrency: fewer requests decode at once, so each step is shorter; the wait shows up in TTFT.
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        # Decode steps between prefill chunks, so long prompts do not stall running streams.
+        prefill-decode-interval: 48
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        # Shortest prefill first among queued requests.
+        schedule-policy: shortest-prefill-first
+        hicache-write-policy: write_through
+      env:
+        # Size the fused-MoE workspace to the per-rank prefill chunk, which frees memory at mem-fraction-static 0.95.
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '28'
+
+override_tp4_c52:
+  roles:
+    agg:
+      args:
+        swa-full-tokens-ratio: 0.15
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        # write_back copies a prefix to host only when the GPU evicts it, so GPU and host hold different prefixes.
+        hicache-write-policy: write_back
+        # Pin the default FP4 MoE kernel: the startup autotuner sometimes picks a slower one for some batch sizes.
+        flashinfer-autotune-skip-ops: flashinfer::trtllm_fp4_block_scale_moe
+      env:
+        # Decode attention runs per length group, so the longest contexts stop setting every step's time.
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+  benchmark:
+    env:
+      CONC: '52'
