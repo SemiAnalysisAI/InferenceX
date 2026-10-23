@@ -68,3 +68,31 @@ def test_client_preserves_outcome_before_failure(
         assert 'error' not in outcome
         assert outcome['failed'] == {100: 0, 95: 5, 94: 6, 0: 100}[completed]
         assert outcome['max_failure_rate'] == 0.05
+
+
+class WordTokenizer:
+    """One token per whitespace-separated word."""
+
+    def __call__(self, text, add_special_tokens):
+        return Namespace(input_ids=text.split())
+
+
+def test_metrics_retokenize_a_success_without_reported_usage():
+    outputs = [
+        client.RequestFuncOutput(
+            generated_text='one two three four', success=True, latency=1.0, ttft=0.1,
+        ),
+        client.RequestFuncOutput(
+            generated_text='ignored', success=True, latency=1.0, ttft=0.1, output_tokens=7,
+        ),
+    ]
+    requests = [('p', 5, 4, None), ('p', 5, 7, None)]
+
+    metrics, output_lens = client.calculate_metrics(
+        requests, outputs, 2.0, WordTokenizer(), ['tpot'], [50], {},
+    )
+
+    assert output_lens == [4, 7]
+    assert metrics.total_output == 11
+    assert metrics.output_throughput == 5.5
+    assert metrics.mean_tpot_ms == pytest.approx((0.9 / 3 + 0.9 / 6) / 2 * 1000)

@@ -423,7 +423,7 @@ def calculate_metrics(
         if outputs[i].success:
             output_len = outputs[i].output_tokens
 
-            if output_len is None:
+            if not output_len:
                 # Chunks can bundle tokens; retokenization may slightly overcount.
                 output_len = len(
                     tokenizer(outputs[i].generated_text, add_special_tokens=False).input_ids
