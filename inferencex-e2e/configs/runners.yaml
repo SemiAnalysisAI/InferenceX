@@ -449,6 +449,7 @@ clusters:
     available-cpu-dram-mib: 2_047_536
     arch: x86_64
     models:
+      download-root: writable-models
       entries:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
@@ -479,6 +480,7 @@ clusters:
         aiperf-cache: {path: /data/home/sa-shared/gharunners/aiperf-cache}
         scratch: {path: /scratch/models, visibility: node-local}
         data-models: {path: /data/models, visibility: shared}
+        writable-models: {path: /data/home/sa-shared/gharunners/models}
       squash:
         dir: /data/home/sa-shared/containers
         visibility: shared
