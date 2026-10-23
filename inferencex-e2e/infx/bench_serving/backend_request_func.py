@@ -264,7 +264,11 @@ async def async_request_openai_completions(
                         if not chunk_bytes:
                             continue
 
-                        chunk = chunk_bytes.decode("utf-8").removeprefix("data: ")
+                        chunk = chunk_bytes.decode("utf-8")
+                        # SSE comments (keep-alive pings) and event-type lines carry no JSON.
+                        if chunk.startswith((":", "event:")):
+                            continue
+                        chunk = chunk.removeprefix("data: ")
                         if chunk != "[DONE]":
                             data = json.loads(chunk)
 
@@ -365,7 +369,11 @@ async def async_request_openai_chat_completions(
                         if not chunk_bytes:
                             continue
 
-                        chunk = chunk_bytes.decode("utf-8").removeprefix("data: ")
+                        chunk = chunk_bytes.decode("utf-8")
+                        # SSE comments (keep-alive pings) and event-type lines carry no JSON.
+                        if chunk.startswith((":", "event:")):
+                            continue
+                        chunk = chunk.removeprefix("data: ")
                         if chunk != "[DONE]":
                             timestamp = time.perf_counter()
                             data = json.loads(chunk)

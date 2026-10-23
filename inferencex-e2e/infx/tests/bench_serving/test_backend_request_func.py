@@ -19,13 +19,19 @@ REQUEST = {
 
 
 def stream(endpoint: str, events: list[object]) -> req.RequestFuncOutput:
-    """Serve ``events`` as one SSE stream on HTTP 200 and run the request function on it."""
+    """Serve ``events`` as one SSE stream on HTTP 200 and run the request function on it.
+
+    ``bytes`` events are written verbatim, anything else as one ``data:`` event.
+    """
 
     async def handler(request: web.Request) -> web.StreamResponse:
         await request.read()
         response = web.StreamResponse()
         await response.prepare(request)
         for event in events:
+            if isinstance(event, bytes):
+                await response.write(event)
+                continue
             data = event if isinstance(event, str) else json.dumps(event)
             await response.write(f"data: {data}\n\n".encode())
         await response.write_eof()
@@ -72,3 +78,15 @@ def test_chat_stream_without_a_token_chunk_fails_the_request():
 
     assert output.success is False
     assert output.error.startswith("Never received a valid chunk")
+
+
+@pytest.mark.parametrize("endpoint", ["completions", "chat/completions"])
+def test_sse_comment_and_event_lines_are_not_parsed_as_data(endpoint):
+    keepalive = b": keep-alive\n\n"
+    typed = b"event: message\n"
+
+    output = stream(endpoint, [keepalive, typed, CHOICE[endpoint], keepalive, "[DONE]"])
+
+    assert output.error == ""
+    assert output.success is True
+    assert output.generated_text == "hi"
