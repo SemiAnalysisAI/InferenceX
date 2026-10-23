@@ -172,3 +172,9 @@ def test_controller_rejects_changed_timing_dependency(modules, tmp_path):
     )
     with pytest.raises(ValueError, match="dependency changed"):
         batch.run_locked(args)
+
+
+def test_preflight_rejects_health_report_for_another_device(modules):
+    preflight = importlib.import_module("operatorx_fp8_l0_preflight")
+    with pytest.raises(ValueError, match="different logical device"):
+        preflight.validate_health_report({"identity": {"device": 0}}, 1)

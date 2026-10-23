@@ -17,6 +17,26 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def validate_health_report(health, device):
+    identity = health.get("identity", {})
+    if identity.get("device") != device:
+        raise ValueError("Health report belongs to a different logical device")
+    expected = hashlib.sha256(
+        json.dumps(
+            identity, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+    ).hexdigest()
+    if (
+        len(health.get("idle_observations", [])) != 2
+        or health.get("identity_sha256") != expected
+        or set(health.get("diagnostic_gate", {}))
+        != {"health", "current-fault-event", "ecc", "ecc-enable", "pcie-err"}
+    ):
+        raise ValueError(
+            "Missing or inconsistent preflight health and hardware identity"
+        )
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--plan", type=Path)
@@ -29,6 +49,14 @@ def main():
     p.add_argument("--device", type=int, required=True)
     p.add_argument("--memory-budget-bytes", type=int, required=True)
     args = p.parse_args()
+    if (
+        args.device < 0
+        or args.memory_budget_bytes <= 0
+        or not args.guard_so.is_absolute()
+    ):
+        p.error(
+            "Require a nonnegative device, positive memory budget and absolute guard-so path"
+        )
     if bool(args.plan) == bool(args.shape):
         p.error("Choose exactly one of --plan and --shape")
     if os.environ.get("TASK_QUEUE_ENABLE") != "0" or str(
@@ -77,13 +105,7 @@ def main():
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     health = json.loads(args.health_report.read_text())["before"]
-    if (
-        len(health.get("idle_observations", [])) != 2
-        or not health.get("identity_sha256")
-        or set(health.get("diagnostic_gate", {}))
-        != {"health", "current-fault-event", "ecc", "ecc-enable", "pcie-err"}
-    ):
-        raise ValueError("Missing preflight health and hardware identity")
+    validate_health_report(health, args.device)
     guard = ctypes.CDLL(str(args.guard_so))
     guard.operatorx_fp8_guard_configure.argtypes = [ctypes.c_uint32] * 3 + [
         ctypes.c_int
