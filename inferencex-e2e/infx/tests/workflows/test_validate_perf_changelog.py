@@ -43,6 +43,14 @@ def test_parse_changelog_rejects_missing_final_newline() -> None:
         parse_changelog(raw, "test changelog")
 
 
+@pytest.mark.parametrize("line_break", ["\x85", "\u2028", "\u2029"])
+def test_parse_changelog_rejects_line_breaks_other_than_newline(line_break: str) -> None:
+    raw = render([entry("config-a")]) + line_break.encode() + render([entry("config-b")])
+
+    with pytest.raises(ChangelogValidationError, match="line break"):
+        parse_changelog(raw, "test changelog")
+
+
 def test_parse_changelog_rejects_malformed_nested_entry() -> None:
     raw = b"""- config-keys:
     - config-a

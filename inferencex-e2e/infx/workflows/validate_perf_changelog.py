@@ -60,6 +60,9 @@ def parse_changelog(raw: bytes, label: str) -> list[dict[str, Any]]:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ChangelogValidationError(f"{label} is not UTF-8: {exc}") from exc
+    # YAML also breaks lines at NEL, LS and PS; the byte-level append checks only see "\n".
+    if any(line_break in text for line_break in "\x85\u2028\u2029"):
+        raise ChangelogValidationError(f"{label} contains a line break other than newline")
 
     try:
         data = yamlio.load(text, yamlio.UniqueKeyLoader)
