@@ -5271,6 +5271,52 @@ minimaxm3-fp8-h200-vllm-agentic-mtp:
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 10, 12, 14], srt-recipe: agentic.yaml }
 
+# MiniMax-M3.1-Flash AgentX on H100: day-zero vLLM image from
+# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, multiarch manifest verified
+# 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
+# Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
+# Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
+# three-token DSpark, with synthetic acceptance from minimaxm31flash_dspark.yaml.
+minimaxm31flash-fp4-h100-vllm-agentic-dspark:
+  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:h100-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/vllm/h100-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # TP8 is the upstream Hopper layout. The 250 GB checkpoint leaves ~33 GiB of
+      # KV per 80 GB GPU, about 2x MiniMax-M3 H100 (cliff c5-c6).
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 10, 12], srt-recipe: agentic.yaml }
+
+# MiniMax-M3.1-Flash AgentX on H200: day-zero vLLM image from
+# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, multiarch manifest verified
+# 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
+# Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
+# Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
+# three-token DSpark, with synthetic acceptance from minimaxm31flash_dspark.yaml.
+minimaxm31flash-fp4-h200-vllm-agentic-dspark:
+  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/vllm/h200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # TP8 is the upstream Hopper layout. The 250 GB checkpoint leaves ~88 GiB of
+      # KV per 141 GB GPU, about 1.3x MiniMax-M3 H200 (run to c14).
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 12, 16, 20, 24], srt-recipe: agentic.yaml }
+
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -8655,7 +8701,7 @@ musespark-fp4-gb200-sglang-agentic-dflash:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [2, 4, 6, 8, 10, 16, 20, 24, 28, 32], srt-recipe: agentic.yaml }
 
 musespark-fp4-b200-sglang-agentic-dflash:
-  image: lmsysorg/sglang:nightly-dev-20261019-3c560089
+  image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:b200-nscale
@@ -8668,7 +8714,7 @@ musespark-fp4-b200-sglang-agentic-dflash:
     - dram-utilization: 0.90
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 10], srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [56], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [56, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [8, 10, 16, 24], srt-recipe: agentic.yaml }
 
 musespark-fp4-h200-sglang-agentic-dflash:
@@ -8769,11 +8815,10 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       # Router; FlashInfer attention up to conc 64, MegaAttention above.
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64, 128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
-# MiniMax-M3.1-Flash AgentX on GB300: day-zero vLLM image from
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, arm64 CUDA 13.4 build,
-# verified 2026-10-23 (manifest sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c).
-# NVFP4 routed experts with MXFP8 dense layers and an NVFP4 KV cache, with
-# DSpark from the checkpoint's dspark/ head (golden AL minimaxm31flash_dspark).
+# MiniMax-M3.1-Flash AgentX on GB300: the B200 recipe and search space plus a
+# DEP4 c96 point, with the vLLM blog's FlashInfer PrimiTS DSpark drafter and the
+# day-zero arm64 CUDA 13.4 build of the same image
+# (manifest sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c).
 minimaxm31flash-fp4-gb300-vllm-agentic-dspark:
   image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -8785,12 +8830,9 @@ minimaxm31flash-fp4-gb300-vllm-agentic-dspark:
   srt-recipe-dir: minimaxm31flash/vllm/gb300-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      # TP4 is the upstream Blackwell layout.
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
-      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router.
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+    - search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 96, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.

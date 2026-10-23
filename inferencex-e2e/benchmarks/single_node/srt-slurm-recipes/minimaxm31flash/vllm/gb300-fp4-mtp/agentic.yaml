@@ -22,8 +22,6 @@ base:
     agg:
       nodes: 1
       workers: 1
-      # Serve flags follow the GB200 TP4 recipe at
-      # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash.
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -37,10 +35,6 @@ base:
         kv-cache-dtype: nvfp4
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
-        # Seven-token DSpark from the checkpoint's dspark/ head with the FlashInfer
-        # PrimiTS drafter, per the vLLM blog's GB300 AgentX runs. Throughput runs replace
-        # block rejection with the golden acceptance length.
-        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         enable-prefix-caching: true
         max-model-len: 1048576
         max-num-batched-tokens: 8192
@@ -57,21 +51,19 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# Native zip expansion creates one variant per concurrency.
-
-# TP4 is the upstream Blackwell layout and covers low to mid concurrency.
 zip_override_tp4:
   roles:
     agg:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: [8, 8, 16, 32, 64, 128]
+        max-num-seqs: [2, 8, 16, 32, 64]
+        # Golden AL 4.04. FlashInfer PrimiTS drafter, per the vLLM blog's GB300 runs.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['1', '4', '8', '16', '32', '64']
+      CONC: ['1', '4', '8', '16', '32']
 
-# DEP4: TP1 x DP4 + EP4 behind a consistent-hash router for high concurrency.
 zip_override_dep4:
   frontend:
     type: vllm-router
@@ -89,7 +81,9 @@ zip_override_dep4:
         tensor-parallel-size: 1
         data-parallel-size: 4
         enable-expert-parallel: true
-        max-num-seqs: [32, 64, 128]
+        max-num-seqs: [32, 48, 64]
+        # Golden AL 2.88. FlashInfer PrimiTS drafter, per the vLLM blog's GB300 runs.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['64', '128', '256']
+      CONC: ['64', '96', '128']
