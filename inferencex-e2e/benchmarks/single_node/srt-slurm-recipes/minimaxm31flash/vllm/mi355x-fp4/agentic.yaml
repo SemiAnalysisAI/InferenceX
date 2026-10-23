@@ -3,7 +3,10 @@
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, with native DSpark.
 # Checkpoint: AMD's Quark export amd/MiniMax-M3.1-Flash-Quark-MXFP4 (routed
 # experts stored in OCP MXFP4, run as W4A4 on the AITER MoE; every other layer
-# and the dspark/ draft as in MiniMaxAI/MiniMax-M3.1-Flash).
+# and the dspark/ draft as in MiniMaxAI/MiniMax-M3.1-Flash). Long prefill
+# steps run with dual-batch overlap (DBO). Sequence-parallel prefill
+# (VLLM_ROCM_MINIMAX_M3_SP_PREFILL) stays off: the released image does not
+# enable it on this checkpoint.
 base:
   schema: 2
   name: minimaxm31flash-fp4-mi355x-vllm-agentic
@@ -50,7 +53,13 @@ base:
         disable-hybrid-kv-cache-manager: true
         enable-prefix-caching: true
         max-model-len: 1048576
-        max-num-batched-tokens: 8192
+        # 32K-token prefill steps, so DBO (from 16384 tokens) can split them.
+        max-num-batched-tokens: 32768
+        # DBO: a prefill step of 16384+ tokens runs as two microbatches, one's
+        # all-reduce under the other's compute; decode steps stay whole.
+        enable-dbo: true
+        dbo-prefill-token-threshold: 16384
+        dbo-decode-token-threshold: 32768
         disable-uvicorn-access-log: true
       env:
         # The export's recommended MoE setup: AITER MoE, and the MXFP8 shared
@@ -58,6 +67,8 @@ base:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
         VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
+        # DBO needs the V2 model runner (the V1 runner refuses DSpark).
+        VLLM_USE_V2_MODEL_RUNNER: '1'
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
