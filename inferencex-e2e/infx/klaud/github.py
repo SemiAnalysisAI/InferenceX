@@ -43,7 +43,8 @@ def file_at(repository: str, head: str, path: str) -> bytes:
         raise VerificationError("Expected an immutable source revision")
     result = read(repository, f"contents/{quote(path, safe='/')}?ref={head}")
     if (
-        result.get("type") != "file"
+        not isinstance(result, dict)
+        or result.get("type") != "file"
         or result.get("encoding") != "base64"
         or result["size"] > 4 * 1024 * 1024
     ):

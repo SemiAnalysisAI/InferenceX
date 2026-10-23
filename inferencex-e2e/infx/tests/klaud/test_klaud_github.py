@@ -65,6 +65,24 @@ def test_delete_accepts_empty_response(monkeypatch):
     assert github.write("example/project", "git/refs/heads/claim", "DELETE") == {}
 
 
+@pytest.mark.parametrize(("contents", "data"), [
+    ({"type": "file", "encoding": "base64", "size": 3, "content": "YWJj\n"}, b"abc"),
+    ([{"type": "file", "name": "recipe.yaml", "path": "recipes/recipe.yaml"}], None),
+], ids=["file", "directory"])  # fmt: skip
+def test_source_reads_return_file_bytes_or_a_fixed_failure(monkeypatch, contents, data):
+    def run(args, **_kwargs):
+        assert args[4] == f"repos/example/project/contents/recipes?ref={'a' * 40}"
+        return subprocess.CompletedProcess(args, 0, json.dumps(contents), "")
+
+    monkeypatch.setattr(github.subprocess, "run", run)
+
+    if data is None:
+        with pytest.raises(github.VerificationError, match="Source data unavailable or too large"):
+            github.file_at("example/project", "a" * 40, "recipes")
+    else:
+        assert github.file_at("example/project", "a" * 40, "recipes") == data
+
+
 @pytest.mark.parametrize(
     "failure,reason",
     [
