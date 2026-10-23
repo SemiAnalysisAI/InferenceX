@@ -2906,6 +2906,26 @@ def test_baseline_notes_name_concurrency_rows_like_their_table():
     assert text.endswith("**Note:** c4: 2 request errors.")
 
 
+@pytest.mark.parametrize(("points", "change"), [
+    pytest.param([], "**变更：**更新镜像。  \n", id="queued-without-results"),
+    pytest.param([agentx_point("cc", output_tps_gpu=10.0, request_errors=0)],
+                 "**变更：**更新镜像。实测数值及异常说明见上表。  \n", id="with-results"),
+])  # fmt: skip
+def test_attempt_translation_points_to_a_table_only_when_one_is_shown(points, change):
+    record = reporting.Attempt(
+        kind="initial", number=0, head="c" * 40, image="example/image:2", run_id=7,
+        run_attempt=1, status="running",
+        change=reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        next=reporting.Prose(en="Wait.", zh="等待。"), benchmarks_expected=1,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=points,
+    )  # fmt: skip
+
+    english, chinese = reporting.render_attempt(record, None, "example/project").split("<details>")
+
+    assert ("| Concurrency |" in english) == bool(points)
+    assert change in chinese
+
+
 def eval_entry(tp):
     return {
         "model-prefix": "dsr1", "runner": "cluster:fixture-a", "framework": "sglang",

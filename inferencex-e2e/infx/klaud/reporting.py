@@ -656,7 +656,9 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
     chinese = (
         f"**{title_zh} · {status_zh}** · {link} · {timestamp}  \n"
         + meta.replace("Mean latency", "平均延迟").replace("Median latency", "中位延迟")
-        + f"  \n**变更：**{record.change.zh}实测数值及异常说明见上表。  \n**下一步：**{record.next.zh}"
+        + f"  \n**变更：**{record.change.zh}"
+        + ("实测数值及异常说明见上表。" if results else "")
+        + f"  \n**下一步：**{record.next.zh}"
     )
     return translated(english, chinese)
 
