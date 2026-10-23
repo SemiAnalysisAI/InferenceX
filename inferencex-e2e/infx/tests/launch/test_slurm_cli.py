@@ -227,6 +227,22 @@ def test_a_container_step_killed_by_a_signal_reports_the_shell_exit_code():
     assert (status.state, status.exit_code) == (JobState.FAILED, 137)
 
 
+@pytest.mark.parametrize(("allocation", "kind", "retriable"), [
+    ("NODE_FAIL|0:0|gpu01", "JobNodeFail", True),
+    ("RUNNING|0:0|gpu01", "JobFailed", False),
+])  # fmt: skip
+def test_a_container_step_on_a_lost_allocation_is_recorded_as_retriable(fake_bin, allocation, kind, retriable):
+    fake_bin("sacct", f"echo '{allocation}'")
+    step = subprocess.Popen(["bash", "-c", "exit 1"])
+    step.wait()
+    backend = slurm_backend()
+
+    backend.state(slurm.SlurmJob("42", step=step))
+
+    error = backend.life.event.finish(1).error
+    assert (error.type, error.retriable) == (kind, retriable)
+
+
 def test_srun_rejects_env_value_that_would_split_export():
     with pytest.raises(ValueError, match="UCX_NET_DEVICES"):
         srun_argv(None, ["true"], container=ContainerSpec(image="i", env={"UCX_NET_DEVICES": "a,b"}))

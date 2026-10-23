@@ -172,22 +172,26 @@ class SlurmBackend(Backend):
         accounting times.
         """
         job = _slurm_job(job)
+        allocation = ""
         if job.step is not None:
             rc = job.step.poll()
             if rc is None:
                 return JobStatus(JobState.RUNNING, "srun step running")
             state = JobState.SUCCEEDED if rc == 0 else JobState.FAILED
             code = rc if rc >= 0 else 128 - rc
-            status = replace(cli.observe(job), state=state, raw=f"srun exit {rc}", exit_code=code)
+            observed = cli.observe(job)
+            allocation = observed.raw
+            status = replace(observed, state=state, raw=f"srun exit {rc}", exit_code=code)
         elif (queued := cli.queue_state(job)) is not None:
             pending = queued in {"PENDING", "CONFIGURING"}
             return JobStatus(JobState.PENDING if pending else JobState.RUNNING, queued)
         else:
             status = cli.final_status(job)
-        self._record_end(job, status)
+        self._record_end(job, status, allocation)
         return status
 
-    def _record_end(self, job: SlurmJob, status: JobStatus) -> None:
+    def _record_end(self, job: SlurmJob, status: JobStatus, allocation: str) -> None:
+        """Record ``status``; ``allocation`` is a container step's allocation accounting."""
         event = self.life.event
         known = {
             "nodes": status.nodes,
@@ -202,7 +206,13 @@ class SlurmBackend(Backend):
             return
         if job.step is not None:
             message = f"container step in Slurm job {job.id} exited {status.exit_code}"
-            event.fail("JobFailed", message, stage="run")
+            lost = allocation.partition("|")[0].split(" ", 1)[0]
+            if lost in _LOST_STATES:
+                kind = "Job" + lost.title().replace("_", "")
+                message += f" after its allocation ended {lost}"
+                event.fail(kind, message, stage="run", retriable=True)
+            else:
+                event.fail("JobFailed", message, stage="run")
         elif status.state in {JobState.FAILED, JobState.CANCELLED}:
             state, _, exit_code = status.raw.partition("|")
             ended = state.split(" ", 1)[0]
