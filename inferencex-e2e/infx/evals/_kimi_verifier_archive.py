@@ -6,6 +6,7 @@ import tarfile
 import tempfile
 import time
 from hashlib import sha256
+from http.client import IncompleteRead
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -89,7 +90,6 @@ def main() -> None:
                                 )
                             archive_file.write(chunk)
                             digest.update(chunk)
-                    break
                 except HTTPError as error:
                     if error.code not in (408, 429) and not 500 <= error.code < 600:
                         raise
@@ -101,12 +101,21 @@ def main() -> None:
                         file=sys.stderr,
                     )
                     time.sleep(attempt)
-                except (TimeoutError, URLError, ConnectionError) as error:
+                except (TimeoutError, URLError, ConnectionError, IncompleteRead) as error:
                     if attempt == 3:
                         raise
                     print(
                         f"WARN: Kimi-Vendor-Verifier archive download attempt "
                         f"{attempt}/3 failed: {error}; retrying",
+                        file=sys.stderr,
+                    )
+                    time.sleep(attempt)
+                else:
+                    if digest.hexdigest() == expected_archive_sha256 or attempt == 3:
+                        break
+                    print(
+                        f"WARN: Kimi-Vendor-Verifier archive download attempt "
+                        f"{attempt}/3 failed: archive SHA256 mismatch; retrying",
                         file=sys.stderr,
                     )
                     time.sleep(attempt)
