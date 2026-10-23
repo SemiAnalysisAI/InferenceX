@@ -116,3 +116,118 @@ override_hicache_tp4_c12:
       CONC: '12'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '617'
+# EP1 HiCache arm on the FA3 attention backend, with the EAGLE depth set per concurrency.
+override_hicache_ep1_fa3_k5_c4:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
+override_hicache_ep1_fa3_k5_c8:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
+override_hicache_ep1_fa3_k5_c12:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
+override_hicache_ep1_fa3_k6_c24:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 6
+        speculative-num-draft-tokens: 7
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
+override_hicache_ep1_fa3_k6_c32:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 6
+        speculative-num-draft-tokens: 7
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
+override_hicache_ep1_fa3_k4_c48:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1234'
