@@ -1567,8 +1567,8 @@ def main() -> list[dict]:
         "--all-evals",
         action="store_true",
         help=(
-            "Expand eval selection to every generated fixed-sequence config. "
-            "Can be combined with --evals-only; used alone, it also emits eval-only jobs."
+            "Expand eval selection to every eligible 8k1k fixed-sequence and agentic config "
+            "and emit only those eval-only jobs, with or without --evals-only."
         ),
     )
     parent_parser.add_argument(
