@@ -1165,7 +1165,7 @@ def expand_full_sweep(
     configs = (
         config
         for key, config in master_config.items()
-        if (not options.model_prefix or any(key.startswith(p) for p in options.model_prefix))
+        if (not options.model_prefix or any(key.startswith(f"{p}-") for p in options.model_prefix))
         and (not options.precision or config[Fields.PRECISION.value] in options.precision)
         and (not options.framework or config[Fields.FRAMEWORK.value] in options.framework)
         and (not options.runner_type or config[Fields.RUNNER.value] in options.runner_type)

@@ -1235,21 +1235,25 @@ class TestGenerateFullSweepSingleNode:
         } == {(2, 2, 2)}
 
     def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.model_prefix = ["dsr1"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
+        entry = sample_single_node_config["dsr1-fp8-mi300x-sglang"]
+        sample_single_node_config["dsr1flash-fp8-mi300x-sglang"] = {**entry, "model-prefix": "dsr1flash"}
 
-        full_sweep_args_single_node.model_prefix = ["nonexistent"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
+        selected = {}
+        for prefixes in (["dsr1"], ["dsr1flash"], ["dsr1", "dsr1flash"], ["nonexistent"]):
+            full_sweep_args_single_node.model_prefix = prefixes
+            result = generate_full_sweep(
+                full_sweep_args_single_node,
+                sample_single_node_config,
+                sample_runner_config
+            )
+            selected[tuple(prefixes)] = sorted({row["model-prefix"] for row in result})
+
+        assert selected == {
+            ("dsr1",): ["dsr1"],
+            ("dsr1flash",): ["dsr1flash"],
+            ("dsr1", "dsr1flash"): ["dsr1", "dsr1flash"],
+            ("nonexistent",): [],
+        }
 
     def test_filter_by_precision(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.precision = ["fp8"]
