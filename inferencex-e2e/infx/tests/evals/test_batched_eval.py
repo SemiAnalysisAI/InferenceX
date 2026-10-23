@@ -265,3 +265,43 @@ def test_validate_scores_fails_when_thresholds_cannot_be_loaded(
     captured = capsys.readouterr()
     assert f"FAIL: could not load thresholds from {thresholds}: invalid YAML" in captured.err
     assert "PASS" not in captured.out
+
+
+@pytest.mark.parametrize(
+    ("thresholds_text", "expected"),
+    [
+        (
+            "default:\n  gsm8k: 0.9\nmodels:\n",
+            "FAIL: gsm8k exact_match,strict-match = 0.8700 (< 0.9 from default)",
+        ),
+        (
+            "default:\n  gsm8k: 0.9\nmodels: [dsr1]\n",
+            "thresholds config 'models' must be a mapping",
+        ),
+    ],
+)
+def test_validate_scores_handles_empty_or_malformed_threshold_sections(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    thresholds_text: str,
+    expected: str,
+) -> None:
+    thresholds = tmp_path / "thresholds.yaml"
+    thresholds.write_text(thresholds_text)
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({"results": {"gsm8k": {"exact_match,strict-match": 0.87}}}))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--thresholds",
+        str(thresholds),
+        "--model-prefix",
+        "dsr1",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
+
+    assert validate_scores_main() == 1
+    assert expected in capsys.readouterr().err

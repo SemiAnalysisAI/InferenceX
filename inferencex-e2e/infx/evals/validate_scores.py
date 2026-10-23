@@ -38,7 +38,11 @@ def load_config(path: str) -> dict:
         raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
         return {"default": cfg, "models": {}}
-    return {"default": cfg.get("default", {}), "models": cfg.get("models", {})}
+    sections = {"default": cfg.get("default") or {}, "models": cfg.get("models") or {}}
+    for name, section in sections.items():
+        if not isinstance(section, dict):
+            raise ValueError(f"thresholds config {name!r} must be a mapping")
+    return sections
 
 
 def detect_model_prefix(meta_env_path: str, override: str | None) -> str | None:
