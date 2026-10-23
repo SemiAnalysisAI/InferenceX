@@ -263,7 +263,7 @@ def parse_args() -> argparse.Namespace:
         "--seed",
         type=int,
         default=None,
-        help="Salt for --sampling random (server-side md5). Required when --sampling random.",
+        help="Salt for --sampling random (md5 of session_id + seed). Required when --sampling random.",
     )
     p.add_argument(
         "--db-url",
