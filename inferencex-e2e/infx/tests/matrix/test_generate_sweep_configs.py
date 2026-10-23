@@ -2308,6 +2308,27 @@ class TestCommandLine:
             (row['eval-framework'], row['conc'], bool(row.get('eval-only'))) for row in result
         ) == [('kimi-vendor', 1, False), ('lm-eval', 16, True)]
 
+    @pytest.mark.parametrize('multinode', [False, True])
+    def test_trimmed_all_evals_keep_gsm8k_beside_the_vendor_eval(self, multinode):
+        shape = {
+            'scenario-type': 'agentic-coding', 'model-prefix': 'minimaxm3', 'model': 'm',
+            'runner': 'r', 'framework': 'vllm', 'precision': 'fp4', 'spec-decoding': 'none',
+            'dp-attn': False, 'image': 'img', 'kv-offloading': 'none',
+        }
+        if multinode:
+            shape |= {'prefill': {'tp': 8}, 'decode': {'tp': 8}}
+            rows = [{**shape, 'conc': [4, 8]}]
+        else:
+            shape |= {'tp': 4}
+            rows = [{**shape, 'conc': 4}, {**shape, 'conc': 8}]
+
+        result = generate_sweep_configs.select_matrix_evals(rows, mode='all', trim=True)
+
+        expected_conc = [4] if multinode else 4
+        assert sorted((row['eval-framework'], row['conc']) for row in result) == [
+            ('lm-eval', expected_conc), ('minimax-vendor', expected_conc),
+        ]
+
     @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
     def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(
         self, monkeypatch, sample_single_node_config, sample_runner_config, entrypoint,

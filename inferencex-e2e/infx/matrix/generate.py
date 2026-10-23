@@ -790,6 +790,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             eval_entry = {
                 **entry,
                 Fields.RUN_EVAL.value: True,
+                Fields.EVAL_ONLY.value: True,
                 Fields.EVAL_FRAMEWORK.value: eval_framework,
                 Fields.EVAL_SUITE.value: eval_suite,
             }
