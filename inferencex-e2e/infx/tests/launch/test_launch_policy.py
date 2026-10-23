@@ -168,3 +168,14 @@ def test_cluster_settings_beat_the_host_but_never_the_points_settings(chosen, ex
     env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
 
     assert {name: env[name] for name in HOST} == expected
+
+
+@pytest.mark.parametrize("settings", ["5", "true", '{"SHARED=point": 1}'])
+def test_additional_settings_that_are_not_a_list_choose_no_names(settings):
+    record = {**RECORD, "env": {"CLUSTER": "cluster", "SHARED": "cluster"}}
+    cluster = load_inventory({"labels": {"cluster:c": ["c_0"]}, "clusters": {"c": record}}).clusters["c"]
+    request = _request(DECODE_ADDITIONAL_SETTINGS=settings, **HOST)
+
+    env = policy.runtime_env(cluster, request, {"LATER": "later", "SHARED": "later"})
+
+    assert {name: env[name] for name in HOST} == {"CLUSTER": "cluster", "LATER": "later", "SHARED": "later"}

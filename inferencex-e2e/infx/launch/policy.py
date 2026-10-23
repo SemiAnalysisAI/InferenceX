@@ -138,7 +138,8 @@ def point_settings(request: LaunchRequest) -> frozenset[str]:
     for name in ("PREFILL_ADDITIONAL_SETTINGS", "DECODE_ADDITIONAL_SETTINGS"):
         with contextlib.suppress(ValueError):
             values = json.loads(request.env.get(name) or "[]")
-            names.update(v.partition("=")[0] for v in values or [] if isinstance(v, str))
+            if isinstance(values, list):
+                names.update(v.partition("=")[0] for v in values if isinstance(v, str))
     return frozenset(names)
 
 
