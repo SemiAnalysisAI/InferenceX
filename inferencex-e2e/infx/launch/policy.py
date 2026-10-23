@@ -6,13 +6,14 @@ belong in the cluster record. :func:`table_problems` checks every table here aga
 
 from __future__ import annotations
 
-import contextlib
 import fnmatch
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
+
+from infx.launch.request import RequestError
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -136,10 +137,14 @@ def point_settings(request: LaunchRequest) -> frozenset[str]:
     """The names the point's NAME=value additional-settings set; the workflow exports them."""
     names: set[str] = set()
     for name in ("PREFILL_ADDITIONAL_SETTINGS", "DECODE_ADDITIONAL_SETTINGS"):
-        with contextlib.suppress(ValueError):
+        try:
             values = json.loads(request.env.get(name) or "[]")
-            if isinstance(values, list):
-                names.update(v.partition("=")[0] for v in values if isinstance(v, str))
+        except ValueError:
+            continue
+        if not isinstance(values, list):
+            kind = type(values).__name__
+            raise RequestError(f"{name} must be a JSON list of NAME=value strings, got {kind}")
+        names.update(v.partition("=")[0] for v in values if isinstance(v, str))
     return frozenset(names)
 
 
