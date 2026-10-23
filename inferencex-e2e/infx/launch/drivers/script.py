@@ -7,6 +7,7 @@ the container workspace, and ``speedbench_results/`` come back on every exit pat
 from __future__ import annotations
 
 import fnmatch
+import posixpath
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -58,7 +59,7 @@ def script_outputs(request: ScriptRequest, workdir: PurePosixPath) -> tuple[Pure
     out_yaml = request.env.get("OUT_YAML")
     if not out_yaml:
         return (RESULTS_DIR,)
-    path = workdir / out_yaml
+    path = PurePosixPath(posixpath.normpath(workdir / out_yaml))
     if not path.is_relative_to(workdir):
         raise LaunchError(f"OUT_YAML {out_yaml} lies outside the container workspace {workdir}")
     return (path.relative_to(workdir), RESULTS_DIR)

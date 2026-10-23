@@ -259,6 +259,7 @@ def test_collectors_serve_the_checkpoint_srt_jobs_would(fakes, workspace, tmp_pa
 
 @pytest.mark.parametrize(("overrides", "message"), [
     ({"OUT_YAML": "/tmp/speedbench-reference-al.yaml"}, "lies outside the container workspace"),
+    ({"OUT_YAML": "/workspace/../etc/reference.yaml"}, "lies outside the container workspace"),
     ({"GPU_COUNT": ""}, "GPU_COUNT"),
 ])  # fmt: skip
 def test_a_bad_input_fails_before_any_slurm_call(fakes, workspace, tmp_path, capsys, overrides, message):
