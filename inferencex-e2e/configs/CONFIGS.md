@@ -98,8 +98,9 @@ The below list describes what each field is:
   scheduling.
 - `scenarios`: A dictionary of benchmark scenario types. At least one must be specified. Currently supported:
   - `fixed-seq-len`: Fixed input/output sequence length benchmarks. Each entry must have:
-    - `isl`: An integer representing the input sequence length, e.g., `1024`
-    - `osl`: An integer representing the output sequence length, e.g., `8192`
+    - `isl`: An integer representing the input sequence length, e.g., `8192`
+    - `osl`: An integer representing the output sequence length, e.g., `1024`
+    - PR sweeps run only `isl`/`osl` pairs 1024/1024 and 8192/1024; the changelog planner rejects any other pair.
     - `search-space`: A list of configurations to run with respective `isl` and `osl`, each entry must be a dict with the following fields:
       - `tp`: A positive integer representing the tensor parallelism level that the configuration will be served at.
       - `conc-start`: An integer representing the starting level of concurrency e.g., `4`
