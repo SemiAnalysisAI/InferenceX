@@ -725,14 +725,21 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
 
 @pytest.mark.parametrize(("shape", "overrides", "missing"), [
     ("single", dict(IS_AGENTIC="1", SPEC_DECODING="mtp", THINKING_MODE=""), "THINKING_MODE"),
+    ("single", dict(IS_AGENTIC="1", DURATION="600", INFERENCEX_RESULTS_PYTHON=None),
+     "INFERENCEX_RESULTS_PYTHON"),
     ("multi", dict(SPEC_DECODING=None), "SPEC_DECODING"),
     ("multi", dict(SRT_RECIPE=None), "SRT_RECIPE"),
+    ("power", dict(INFERENCEX_RESULTS_PYTHON=None), "INFERENCEX_RESULTS_PYTHON"),
     ("batch", dict(SRT_RECIPE=None), "SRT_RECIPE"),
 ])  # fmt: skip
 def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, missing):
     if shape == "multi":
         env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
                        FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
+    elif shape == "power":
+        env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8",
+                       FRAMEWORK="dynamo-sglang", MODEL="zai-org/GLM-5.2-FP8", IS_AGENTIC="1",
+                       CONC="4", FAKE_RESULTS="agentic", POWER="1")  # fmt: skip
     else:
         env = single_node_env(harness, "b300-dsxe" if shape == "batch" else "h100-cw")
     if shape == "batch":

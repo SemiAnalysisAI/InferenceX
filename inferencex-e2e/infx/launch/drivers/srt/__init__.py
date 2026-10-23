@@ -54,6 +54,8 @@ def run_single_node(launch: Launch) -> int:
     event = launch.life.event
     with event.stage("prepare"):
         request = SingleNodeRequest.from_env(launch.request.env)
+        if request.is_agentic and not request.eval_only:
+            require(request, "INFERENCEX_RESULTS_PYTHON")
         model_path = models.single_node_model_path(launch.cluster, request)
         staged = {"MODEL_PATH": model_path} if model_path.startswith("/") else {}
         run = SrtRun.create(launch, request, staged)
@@ -168,6 +170,8 @@ def run_multinode(launch: Launch) -> int:
             raise LaunchError(f"{srt_recipe} is not in the recipe mirror")
         decision = power.decide_power(launch.cluster.id, launch.path, request)
         event.set(power=asdict(decision))
+        if not request.eval_only and (decision.agentx or decision.adapter):
+            require(request, "INFERENCEX_RESULTS_PYTHON")
         model = models.checkpoint(launch.cluster, request)
         served = models.served_path(launch.cluster, request, model)
         model_paths = models.model_paths(launch.cluster, request, served)
