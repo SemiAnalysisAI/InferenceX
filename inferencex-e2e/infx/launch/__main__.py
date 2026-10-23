@@ -42,7 +42,11 @@ def _run(runner_config: Path | None) -> int:
     rc = 1
     try:
         request = LaunchRequest.from_env()
-        cluster = resolve_cluster(request.runner_name, runner_config)
+        try:
+            cluster = resolve_cluster(request.runner_name, runner_config)
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            event.error(error)
+            return rc
         event.set(cluster=cluster.id)
         rc = launch(cluster, request, event)
     except RequestError as error:
