@@ -146,7 +146,10 @@ def parse_args() -> argparse.Namespace:
         help="Build payloads but don't push to HF.",
     )
 
-    return p.parse_args()
+    args = p.parse_args()
+    if args.dwbug_min_peak is not None and not args.exclude_dynamic_workflow_bug:
+        p.error("--dwbug-min-peak requires --exclude-dynamic-workflow-bug")
+    return args
 
 
 def _run(cmd: list, **kw: Any) -> None:

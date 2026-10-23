@@ -156,6 +156,19 @@ def test_random_sampling_forwards_seed_to_sampler_and_readme(build, tmp_path: Pa
     assert "--seed 7" in readme
 
 
+def test_dwbug_min_peak_without_the_filter_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = ["build", "--repo-base", "org/base", "--work-dir", str(tmp_path), "--dwbug-min-peak", "2"]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    with pytest.raises(SystemExit) as exit_info:
+        build_weka_hf_dataset.parse_args()
+
+    assert exit_info.value.code == 2
+    assert "--dwbug-min-peak requires --exclude-dynamic-workflow-bug" in capsys.readouterr().err
+
+
 def _request(t: float, api_time: float, tokens: int = 1) -> dict:
     return {
         "t": t,
