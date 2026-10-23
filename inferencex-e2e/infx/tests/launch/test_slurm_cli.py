@@ -146,6 +146,15 @@ def test_waiting_for_a_log_fails_when_the_job_dies_before_it(fake_bin, tmp_path)
     assert calls(log) == [["show", "job", "77"]]
 
 
+def test_waiting_for_a_log_accepts_one_created_just_before_the_job_left_the_queue(fake_bin, tmp_path, capsys):
+    batch_log, scontrol = tmp_path / "batch.log", tmp_path / "scontrol.log"
+    fake_bin("squeue", f"echo started > {batch_log}")
+    fake_bin("scontrol", recorder(scontrol))
+    wait_for_log(Job("77"), batch_log, wait_s=0)
+    assert calls(scontrol) == []
+    assert "ERROR" not in capsys.readouterr().err
+
+
 def slurm_backend() -> slurm.SlurmBackend:
     """A Slurm backend for runner ``c_0`` of a minimal cluster."""
     record = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",

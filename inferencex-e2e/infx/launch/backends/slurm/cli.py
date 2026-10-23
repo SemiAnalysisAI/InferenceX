@@ -299,7 +299,7 @@ def wait_for_log(job: Job, path: Path, *, wait_s: float = 5.0) -> None:
     Raises ``SlurmError``, after printing ``scontrol show job``, if the job ends first.
     """
     while not path.exists():
-        if queue_state(job, echo_command=False) is None:
+        if queue_state(job, echo_command=False) is None and not path.exists():
             print(f"ERROR: job {job.id} failed before creating {path}", file=sys.stderr)
             with contextlib.suppress(FileNotFoundError):
                 proc.run(["scontrol", "show", "job", job.id])
