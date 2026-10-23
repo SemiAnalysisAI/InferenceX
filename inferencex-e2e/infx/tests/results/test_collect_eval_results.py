@@ -406,6 +406,19 @@ def test_collector_cli_runs_outside_checkout(tmp_path: Path) -> None:
     assert rows[0]["source"] == str(result)
 
 
+def test_collect_eval_rows_reads_eval_sets_in_name_order(tmp_path: Path) -> None:
+    scores = {"tp8_dpa": 0.8, "tp4": 0.4, "tp8": 0.81, "tp2": 0.2, "tp4_dpa": 0.41, "tp1": 0.1}
+    for name, score in scores.items():
+        artifact = tmp_path / f"eval_dsr1_8k1k_{name}_conc64"
+        artifact.mkdir()
+        (artifact / "meta_env.json").write_text('{"conc": 64}')
+        _write_lm_eval_result(artifact / "results.json", score)
+
+    rows = collect_eval_rows(tmp_path)
+
+    assert [row["score"] for row in rows] == [0.1, 0.2, 0.4, 0.41, 0.81, 0.8]
+
+
 def test_collect_eval_rows_expands_batched_concurrencies(
     tmp_path: Path,
 ) -> None:

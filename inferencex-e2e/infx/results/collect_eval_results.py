@@ -62,7 +62,9 @@ def find_eval_sets(root: Path) -> list[Path]:
     try:
         if (root / "meta_env.json").exists():
             out.append(root)
-        out.extend(d for d in root.iterdir() if d.is_dir() and (d / "meta_env.json").exists())
+        out.extend(
+            d for d in sorted(root.iterdir()) if d.is_dir() and (d / "meta_env.json").exists()
+        )
     except Exception:  # noqa: BLE001, S110
         pass
     return out
