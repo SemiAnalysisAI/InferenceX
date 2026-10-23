@@ -1,0 +1,139 @@
+schema: 2
+
+# MiniMax-M3.1-Flash AgentX on two GB300 trays (8 GPUs), aggregated through
+# Dynamo vLLM. Serve flags follow the single-node GB300 recipe
+# (single_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4-mtp); the
+# Dynamo setup follows minimaxm3/vllm/gb200-fp4/agentx.
+base:
+  identity:
+    model: {}
+    container: {}
+    frameworks: {dynamo: "1.5.0.dev20260908"}
+  dynamo: {install: true, source: {pypi: "1.5.0.dev20260908"}}
+  environment: {ETCD_LEASE_TTL: "7200"}
+  slurm: {time_limit: "12:00:00"}
+  health_check: {max_attempts: 2160, interval_seconds: 10}
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env: {DYN_TCP_REQUEST_TIMEOUT: "60"}
+    args:
+      trust-remote-code: true
+      router-mode: "kv"
+      router-kv-events: true
+      router-temperature: "0"
+      router-session-affinity-ttl-secs: 14400
+      kv-cache-block-size: 128
+  engine:
+    type: vllm
+    connector:
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        TRANSFORMERS_CACHE: "/hf_hub_cache"
+        VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+        VLLM_FLOAT32_MATMUL_PRECISION: "high"
+        # Rendering the chat template for long AgentX conversations exceeds the
+        # 30 s default under concurrent load; vLLM then aborts the request.
+        VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT: "600"
+        VLLM_LOG_STATS_INTERVAL: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        UCX_MEMTYPE_CACHE: "n"
+        UCX_NET_DEVICES: "@fabric.rdma-device-ports"
+        UCX_TLS: "cuda_copy,cuda_ipc,rc"
+        NCCL_IB_HCA: "@fabric.rdma-devices"
+      args:
+        served-model-name: "MiniMaxAI/MiniMax-M3.1-Flash"
+        pipeline-parallel-size: 1
+        trust-remote-code: true
+        language-model-only: true
+        enable-prefix-caching: true
+        kv-cache-metrics: true
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        # The checkpoint is QAT-trained for an NVFP4 KV cache.
+        kv-cache-dtype: "nvfp4"
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        disable-hybrid-kv-cache-manager: true
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        max-model-len: 1048576
+        max-num-batched-tokens: 8192
+        reasoning-parser: "minimax_m3"
+        dyn-tool-call-parser: "minimax_m3"
+        dyn-reasoning-parser: "minimax_m3"
+      kv_events: true
+  sbatch_directives: {cpus-per-task: "144", mem: "0"}
+  srun_options: {container-remap-root: ""}
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+
+# TP8 across both trays; seven-token DSpark (golden AL 4.04).
+override_tp8:
+  name: "minimaxm31flash-vllm-agg-gb300-tp8-agentic"
+  roles:
+    agg:
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 64
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+# TEP8: TP8 attention with expert-parallel MoE; seven-token DSpark (golden AL 4.04).
+override_tep8:
+  name: "minimaxm31flash-vllm-agg-gb300-tep8-agentic"
+  roles:
+    agg:
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+      args:
+        tensor-parallel-size: 8
+        enable-expert-parallel: true
+        max-num-seqs: 128
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+# DEP8: TP1 x DP8 + EP8, one DP launch per tray, with vLLM Simple CPU KV
+# offload. Each DP rank gets a quarter of its tray's DRAM allowance (179 GiB of
+# the 771 GB that dram-utilization 0.80 leaves per tray); three-token DSpark
+# (golden AL 2.88).
+override_dep8_vllm_simple:
+  name: "minimaxm31flash-vllm-agg-gb300-dep8-vllm-simple-agentic"
+  engine:
+    dp_launch_mode: per_node
+  roles:
+    agg:
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        max-num-seqs: 32
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":192199557120,"cpu_bytes_to_use_per_rank":192199557120,"lazy_offload":true}}'

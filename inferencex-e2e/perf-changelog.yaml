@@ -10988,3 +10988,11 @@
     - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX on GB200, matching the B200 recipe (#4426) with the arm64 build of the same day-0 vLLM image (minimax-m31-flash-arm64-cu134)."
     - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c128 drafting 3 tokens (golden AL 2.88)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4433
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add MiniMax-M3.1-Flash AgentX on two GB300 trays (8 GPUs) aggregated through Dynamo vLLM, with the single-node GB300 serve flags (NVFP4 KV and indexer cache, 600 s chat-template render timeout) and the day-0 arm64 vLLM image."
+    - "TP8 c1-c32 and TEP8 (TP8 + EP8) c48-c64 with 7-token DSpark (golden AL 4.04); DEP8 (TP1 x DP8 + EP8, per-node DP launch) c72-c128 with 3-token DSpark (golden AL 2.88) and vLLM Simple CPU KV offload (179 GiB per DP rank, lazy). FlashInfer PrimiTS drafter throughout."
+  pr-link: TBD
