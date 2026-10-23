@@ -10920,3 +10920,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/yichaozhu/k3-umbp-distributed-scale
   scenario-type: [agentic-coding]
   no-evals: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale
+  description:
+    - "Use consistent-hash prefill and round-robin decode routing for the Kimi-K3 UMBP 2P3D c176 baseline."
+    - "Preserve the 1P1D c70 point and all engine, cache, transport, warmup and profiling settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/yichaozhu/k3-umbp-c176-p-hash-d-rr
+  scenario-type: [agentic-coding]
+  no-evals: true

@@ -1748,6 +1748,6 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale:
         conc-list: [176]
         kv-offloading: dram
         kv-offload-backend: { name: umbp }
-        srt-recipe: disagg-umbp-scale-variants.yaml:override_2p3d_c176
+        srt-recipe: disagg-umbp-scale-variants.yaml:override_2p3d_c176_p_hash_d_rr
         prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
