@@ -65,6 +65,19 @@ def test_delete_accepts_empty_response(monkeypatch):
     assert github.write("example/project", "git/refs/heads/claim", "DELETE") == {}
 
 
+def test_session_listings_see_the_state_after_a_write(monkeypatch):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+    )
+    refs = [{"ref": f"refs/heads/{session.branch}"}]
+    monkeypatch.setattr(github, "items", lambda *_args: list(refs))
+    monkeypatch.setattr(github.github, "api", lambda *_args, **_kwargs: refs.clear() or {})
+
+    assert session.branch_exists() is True
+    github.write("example/project", f"git/refs/heads/{session.branch}", "DELETE")
+    assert session.branch_exists() is False
+
+
 @pytest.mark.parametrize(("contents", "data"), [
     ({"type": "file", "encoding": "base64", "size": 3, "content": "YWJj\n"}, b"abc"),
     ([{"type": "file", "name": "recipe.yaml", "path": "recipes/recipe.yaml"}], None),
