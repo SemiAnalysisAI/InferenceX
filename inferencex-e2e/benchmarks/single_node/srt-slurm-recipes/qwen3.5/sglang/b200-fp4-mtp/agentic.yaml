@@ -17,7 +17,7 @@ base:
       nodes: 1
       workers: 1
       args:
-        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
         trust-remote-code: true
         data-parallel-size: 1
         expert-parallel-size: 1
@@ -54,7 +54,8 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # One variant per point. Admission is 2x CONC and the graph batch is CONC,
-# capped at 64. TP4 tokenizes in parallel to keep 256k warmups within the
+# capped at 64, except TP2 C1 uses 2x CONC with deeper NEXTN drafting.
+# TP4 tokenizes in parallel to keep 256k warmups within the
 # client timeout; TP2 keeps the single tokenizer, whose multi-worker startup
 # races with TP2 HiCache shared-memory initialization. HiCache sizes each of
 # the target KV and Mamba host pools per rank with a 1 GB/rank alignment
@@ -381,7 +382,9 @@ override_tp2_c1:
       args:
         tensor-parallel-size: 2
         max-running-requests: 2
-        cuda-graph-max-bs: 1
+        cuda-graph-max-bs: 2
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
   benchmark:
     env:
       CONC: '1'
