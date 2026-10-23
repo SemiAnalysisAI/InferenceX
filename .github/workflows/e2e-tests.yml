@@ -77,7 +77,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
+                description: "Expand eval selection to every eligible 8k1k fixed-sequence and agentic config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
@@ -165,7 +165,7 @@ on: # zizmor: ignore[concurrency-limits]
                 type: boolean
                 default: false
             all-evals:
-                description: "Expand eval selection to every fixed-sequence config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
+                description: "Expand eval selection to every eligible 8k1k fixed-sequence and agentic config; eval-only with generate-cli-command, changelog mode keeps throughput unless evals-only"
                 required: false
                 type: boolean
                 default: false
