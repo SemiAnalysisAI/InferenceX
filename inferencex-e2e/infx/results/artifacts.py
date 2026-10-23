@@ -172,6 +172,8 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("infmax_model_prefix"),
         row.get("framework"),
         row.get("precision"),
+        row.get("spec_decoding", "none"),
+        as_bool(row.get("disagg", False)),
         as_int(row.get("tp")),
         as_int(row.get("pp", 1), 1),
         as_int(row.get("dcp_size", 1), 1),
