@@ -202,6 +202,8 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
 def submission_fields(path: Path) -> tuple[str, str]:
     """Accept exactly one successful native JSON submission, never scrape prose."""
     record = json.loads(path.read_text())
+    if not isinstance(record, dict):
+        raise ValueError("SRT submission manifest is not a JSON object")
     if record.get("status") != "submitted":
         raise ValueError("SRT did not submit a job")
     job_id = str(record["slurm_job_id"])

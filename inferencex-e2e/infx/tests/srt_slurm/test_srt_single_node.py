@@ -292,6 +292,7 @@ def test_sglang_decode_context_parallel_size_must_match_the_point(point, flag):
     ({"status": "error"}, None),
     ({"status": "submitted", "slurm_job_id": "42;43", "output_dir": "/shared/42"}, None),
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "relative"}, None),
+    (["42"], None),
 ])
 def test_submission_manifest(tmp_path, record, expected):
     path = tmp_path / "submission.json"
