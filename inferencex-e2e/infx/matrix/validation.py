@@ -429,7 +429,7 @@ def _validate_conc_fields(self: Any) -> Any:
     has_range = self.conc_start is not None and self.conc_end is not None
     has_list = self.conc_list is not None and len(self.conc_list) > 0
 
-    if has_range and has_list:
+    if has_list and (self.conc_start is not None or self.conc_end is not None):
         raise ValueError(
             f"Cannot specify both '{Fields.CONC_LIST.value}' list and "
             f"'{Fields.CONC_START.value}'/'{Fields.CONC_END.value}'. "

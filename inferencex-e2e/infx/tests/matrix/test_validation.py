@@ -639,6 +639,15 @@ class TestSingleNodeSearchSpaceEntry:
                 "conc-list": [4, 8, 4],
             })
 
+    @pytest.mark.parametrize("bound", ["conc-start", "conc-end"])
+    def test_conc_list_rejects_a_lone_range_bound(self, bound):
+        with pytest.raises(ValidationError, match="Cannot specify both"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "conc-list": [4],
+                bound: 1,
+            })
+
 
 class TestMultiNodeSearchSpaceEntry:
 
