@@ -11060,3 +11060,12 @@
     - "Update the vLLM image from nightly-39983a5e to nightly-83c078d9, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4429
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-gb300-trt-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse-Spark-Open NVFP4 GB300 TensorRT-LLM AgentX with DFlash2: TEP8 on two nodes at concurrency 1 with GPU-only KV cache, and TEP4 on one node at concurrency 1, 4, 8, 20, 32, and 48 with FP8 KV cache and native DRAM offloading."
+    - "Configure per-point batch limits, CUDA graphs, scheduler intervals, and host-cache sizes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4446
