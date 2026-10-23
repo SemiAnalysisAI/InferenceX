@@ -11060,3 +11060,10 @@
     - "Update the vLLM image from nightly-39983a5e to nightly-83c078d9, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4429
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - "*"
+  description:
+    - "Update Qwen3.5 GB300 Dynamo-TRT AgentX recipes, TensorRT-LLM image, and NUMA placement"
+    - "Upgrade the shared srt-slurm pin from v2.59.1 to v2.60.1 for preferred NUMA memory binding and post-eval placement beside the resolved public frontend; all srt-slurm jobs use the updated runtime."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4452
