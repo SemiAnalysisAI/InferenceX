@@ -47,10 +47,11 @@ logger = logging.getLogger("sample_proxy_traces")
 
 
 def _redact_url(url: str) -> str:
-    """Show host + db, drop credentials."""
+    """Show host + db, drop credentials.
+
+    A libpq ``key=value`` conninfo has no URL netloc, so it is shown as a placeholder."""
     try:
         p = urlsplit(url)
-        # libpq key=value conninfo has no URL netloc and would land whole in .path.
         if not p.netloc:
             return "<connection string>"
         return f"{p.hostname}{p.path}"
@@ -113,6 +114,7 @@ SECURITY_MONITOR_FILTER_SQL = f"""
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse and validate the command line, exiting on bad flag combinations, and return the options."""
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -353,6 +355,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def get_db_url(args: argparse.Namespace) -> str:
+    """Return the connection string from ``--db-url`` or the environment, exiting when neither is set."""
     url = args.db_url or os.environ.get(DEFAULT_ENV)
     if not url:
         sys.exit(f"ERROR: connection string missing. Set ${DEFAULT_ENV} or pass --db-url.")
@@ -469,9 +472,9 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
 
     md5(session_id || seed) is the same expression Postgres uses for the
     'random' mode, so deterministic-random output is identical to the
-    one-pass version.
+    one-pass version. Rows are first sorted by session_id because phase 1
+    has no ORDER BY, which makes ties reproducible.
     """
-    # Phase 1 has no ORDER BY, so pre-sort by session_id to make ties reproducible.
     rows = sorted(rows, key=lambda r: r["session_id"])
     if args.sampling == "top":
         rows = sorted(rows, key=lambda r: r["req_count"], reverse=True)
@@ -494,7 +497,10 @@ def _sort_and_limit(rows: list[dict], args: argparse.Namespace) -> list[dict]:
 def find_sessions(
     conn: psycopg.Connection, args: argparse.Namespace, model_like: str
 ) -> list[dict]:
+    """Return the sampled summary rows of sessions passing every filter in ``args``."""
+
     def _encode_cli_int(s: str | None) -> int | None:
+        """Encode ``X.Y.Z`` as one comparable int, None when empty, exiting when malformed."""
         if not s:
             return None
         parts = s.split(".")
@@ -634,6 +640,7 @@ SELECT session_id,
 def find_one_session(
     conn: psycopg.Connection, session_id: str, privacy_mode: str, model_like: str
 ) -> list[dict]:
+    """Return the summary row of session ``session_id``, or an empty list when no rows match."""
     logger.info("looking up session %s (--session-id mode)", session_id)
     t = time.time()
     with conn.cursor(row_factory=dict_row) as cur:
@@ -703,6 +710,7 @@ _DWBUG_TAIL_TOLERANCE = 6
 
 
 def _parse_cli_tuple(s: str | None) -> tuple[int, int, int] | None:
+    """Parse a ``major.minor.patch`` CLI version, returning None when it is missing or malformed."""
     if not s:
         return None
     parts = s.split(".")
@@ -715,6 +723,7 @@ def _parse_cli_tuple(s: str | None) -> tuple[int, int, int] | None:
 
 
 def _hash_lcp(a: list, b: list) -> int:
+    """Return the length of the common prefix of hash lists ``a`` and ``b``."""
     n = 0
     for x, y in zip(a, b, strict=False):
         if x == y:
@@ -786,6 +795,7 @@ def fetch_session_rows(
 
 
 def write_session_rows(rows: list[dict], out_path: Path) -> int:
+    """Write ``rows`` to ``out_path`` as JSONL and return how many were written."""
     with out_path.open("w") as f:
         for row in rows:
             f.write(json.dumps(row, default=str) + "\n")
@@ -793,6 +803,7 @@ def write_session_rows(rows: list[dict], out_path: Path) -> int:
 
 
 def main() -> int:
+    """Find the requested sessions, dump each to a JSONL file plus manifest.json, and return 0."""
     args = parse_args()
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

@@ -12,6 +12,7 @@ def deepcopy(value: Any) -> Any:
 
 
 def _copy(value: Any, memo: dict[int, Any]) -> Any:
+    """Return a deep copy of ``value``, reusing copies already recorded in ``memo`` by object id."""
     cls = type(value)
     if cls is str or cls is int or cls is float or cls is bool or value is None:
         return value

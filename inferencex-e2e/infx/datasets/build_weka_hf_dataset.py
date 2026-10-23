@@ -49,6 +49,7 @@ PLOT_SUBAGENT = HERE / "plot_subagent_distributions.py"
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse the command line and return the options, rejecting ``--dwbug-min-peak`` alone."""
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -153,6 +154,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _run(cmd: list, **kw: Any) -> None:
+    """Echo ``cmd`` and run it, raising ``CalledProcessError`` on failure."""
     print(f"$ {' '.join(shlex.quote(str(c)) for c in cmd)}", flush=True)
     subprocess.run(cmd, check=True, **kw)
 
@@ -165,8 +167,11 @@ def _recreate(stage_dir: Path) -> None:
 
 
 def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
+    """Dump sampled proxy sessions into ``work_dir/proxy`` and return that directory.
+
+    With ``--skip-sample`` a complete earlier dump is reused. A missing manifest.json marks a crashed dump.
+    """
     proxy_dir = work_dir / "proxy"
-    # The sampler writes manifest.json after every session file, so its absence marks a crashed dump.
     complete = (proxy_dir / "manifest.json").is_file()
     if args.skip_sample and complete and any(proxy_dir.glob("*.jsonl")):
         n = sum(1 for _ in proxy_dir.glob("*.jsonl"))
@@ -203,6 +208,7 @@ def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
 
 
 def stage_convert(args: argparse.Namespace, proxy_dir: Path, work_dir: Path) -> Path:
+    """Convert the proxy JSONLs in ``proxy_dir`` to weka JSONs under ``work_dir`` and return that directory."""
     per_trace = work_dir / "per_trace"
     traces = {p.stem for p in per_trace.glob("*.json")}
     if args.skip_convert and traces and traces == {p.stem for p in proxy_dir.glob("*.jsonl")}:
@@ -278,6 +284,7 @@ def _compute_stats(per_trace_dir: Path) -> dict:
 
 
 def _format_stats(stats: dict) -> str:
+    """Return ``stats`` as one aligned ``key: value`` line per entry."""
     lines = []
     for k, v in stats.items():
         lines.append(f"{k}: {v:>15,}")
@@ -306,6 +313,7 @@ def _build_readme(
     pretty_date: str | None = None,
     isl_cap: int | None = None,
 ) -> str:
+    """Return the dataset card README for ``repo_id`` from its stats, filters, and sampler command."""
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     pretty_label = (
         f"CC Traces — Weka, With Subagents, "
@@ -410,6 +418,7 @@ def _build_readme(
 
 
 def _filters_block(args: argparse.Namespace, *, cap_256k: bool = False) -> str:
+    """Return the Markdown bullet list of the sampling filters in ``args``."""
     bits = []
     if (
         args.min_trace_version is not None
@@ -511,6 +520,7 @@ def _build_payload(
 
 
 def _is_oversize(req: dict, cap: int = CAP_TOKENS) -> bool:
+    """Whether the request's input plus output tokens exceed ``cap``."""
     return (req.get("in") or 0) + (req.get("out") or 0) > cap
 
 
@@ -646,6 +656,7 @@ def stage_isl_filter(per_trace_dir: Path, work_dir: Path, cap: int) -> Path:
 def stage_upload(
     args: argparse.Namespace, payload_dir: Path, repo_id: str, commit_msg: str
 ) -> None:
+    """Create the dataset repo ``repo_id`` and upload ``payload_dir`` to it, unless ``--skip-upload``."""
     if args.skip_upload:
         print(f"[upload] --skip-upload: payload ready at {payload_dir}")
         return
@@ -697,6 +708,7 @@ def _reconstruct_sampler_cmd(args: argparse.Namespace) -> list:
 
 
 def main() -> int:
+    """Sample, convert, build, and upload the base dataset and the optional 256k one, returning 0."""
     args = parse_args()
     work_dir = args.work_dir
     work_dir.mkdir(parents=True, exist_ok=True)

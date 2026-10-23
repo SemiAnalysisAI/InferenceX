@@ -35,13 +35,7 @@ _CLASS_ATTRIBUTES = {
     "__firstlineno__",
     "__static_attributes__",
 }
-# libyaml accepts documents PyYAML rejects when they hold directives, tabs, byte order marks, a
-# comment glued to a block scalar header, or characters PyYAML's reader refuses. Line breaks
-# other than "\n" go to PyYAML too, because the line-start patterns here only see "\n".
 _DIVERGENT = re.compile(r"(?m)^%|[\t\ufeff\r\x85\u2028\u2029]|[|>][-+0-9]*#")
-# Deeper documents are left to PyYAML: its recursive composer raises RecursionError near 500
-# levels, where libyaml's recursive C composer returns a value or overflows the C stack.
-# Indentless sequences add at most one level per counted collection token.
 _MAX_TOKEN_DEPTH = 50
 _OPENING_TOKENS = (
     yaml.BlockMappingStartToken,
@@ -56,18 +50,16 @@ _FLOW_TOKENS = {
     yaml.FlowMappingEndToken: -1,
     yaml.FlowSequenceEndToken: -1,
 }
-# The largest srt recipe is 110 KiB; master configs and the changelog are parsed once a run.
 _CACHED_TEXT_CHARACTERS = 128 * 1024
 _PYYAML = object()
 
 
-# Each entry is (twin, watched classes, their attributes, the loader's tables) as of the build.
 _TWINS: dict[type, tuple[type, tuple[type, ...], tuple[dict[str, Any], ...], tuple[Any, ...]]] = {}
-# libyaml skips the token after an empty explicit key in a flow collection; PyYAML rejects it.
 _AFTER_EMPTY_FLOW_KEY = (yaml.ValueToken, yaml.FlowEntryToken, yaml.FlowSequenceEndToken)
 
 
 def _class_state(classes: tuple[type, ...]) -> tuple[dict[str, Any], ...]:
+    """Return a snapshot of each class's own attributes in ``classes``, lookup tables excluded."""
     return tuple(
         {key: value for key, value in dict(vars(cls)).items() if key not in _TABLES}
         for cls in classes
@@ -87,6 +79,7 @@ _PYYAML_STATE = _class_state(_PYYAML_CLASSES)
 
 
 def _table_state(loader: type) -> tuple[dict[Any, Any], ...]:
+    """Return copies of the constructor and resolver tables of ``loader``."""
     return tuple(
         {key: list(value) if isinstance(value, list) else value for key, value in table.items()}
         for table in (dict(getattr(loader, name)) for name in _TABLES)
@@ -145,8 +138,10 @@ def _may_nest_deeply(text: str) -> bool:
 
 def _needs_pyyaml(text: str, fast: type) -> bool:
     """Whether the document has a tag, which libyaml and PyYAML scan differently, nesting too
-    deep for libyaml's composer, or a plain scalar inside a flow collection holding ``?``,
-    which ends it in PyYAML."""
+    deep for libyaml's composer, a plain scalar inside a flow collection holding ``?``, which
+    ends it in PyYAML, or a token after an empty explicit flow key, which libyaml skips.
+
+    Past 50 levels PyYAML nears its RecursionError while libyaml's C composer may overflow."""
     if "?" not in text and "!" not in text and not _may_nest_deeply(text):
         return False
     depth = flow = 0
@@ -171,7 +166,10 @@ def _needs_pyyaml(text: str, fast: type) -> bool:
 
 
 def _libyaml_load(text: str, fast: type) -> Any:
-    """libyaml's result for ``text``, or ``_PYYAML`` where PyYAML has to decide."""
+    """libyaml's result for ``text``, or ``_PYYAML`` where PyYAML has to decide.
+
+    Directives, tabs, byte order marks, a comment glued to a block scalar header, characters
+    PyYAML's reader refuses, and line breaks other than newline all go to PyYAML."""
     if _DIVERGENT.search(text) or yaml.reader.Reader.NON_PRINTABLE.search(text):
         return _PYYAML
     try:
@@ -184,11 +182,15 @@ def _libyaml_load(text: str, fast: type) -> Any:
 
 @functools.lru_cache(maxsize=512)
 def _cached_libyaml_load(text: str, fast: type, int_digits: int) -> Any:  # noqa: ARG001
-    """Planner runs bind the same recipes and shared blocks once per matrix row."""
+    """Return the libyaml result for ``text``, cached per loader and integer digit limit."""
     return _libyaml_load(text, fast)
 
 
 def _fast_value(text: str, fast: type) -> Any:
+    """Return a fresh copy of the libyaml result for ``text``, or ``_PYYAML`` for PyYAML to decide.
+
+    Only texts up to 128 KiB are cached, which covers the largest srt recipe at 110 KiB. Alias
+    chains too deep to copy go to PyYAML."""
     if len(text) > _CACHED_TEXT_CHARACTERS:
         return _libyaml_load(text, fast)
     value = _cached_libyaml_load(text, fast, sys.get_int_max_str_digits())
@@ -197,7 +199,6 @@ def _fast_value(text: str, fast: type) -> Any:
     try:
         return fastcopy.deepcopy(value)
     except RecursionError:
-        # Chains of aliases can nest values far deeper than the document's own syntax.
         return _PYYAML
 
 
@@ -212,7 +213,7 @@ def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
     once per process and returned as fresh deep copies. ``INFX_PURE_YAML=1`` turns libyaml off.
     PyYAML internals patched before this module is imported, or mutated in place (such as
     ``Scanner.ESCAPE_REPLACEMENTS``), are not detected. Each loader class is kept for the life
-    of the process.
+    of the process. A stream whose ``tell()`` fails, as after iteration or closing, goes to PyYAML.
     """
     fast = _fast_loader(loader)
     if fast is not None and type(stream) is str:
@@ -221,7 +222,6 @@ def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
             return value
     elif fast is not None and type(stream) in (io.TextIOWrapper, io.StringIO):
         try:
-            # Iterating a file disables tell(), and a closed one fails differently from read().
             start = stream.tell() if stream.seekable() else None
         except (OSError, ValueError):
             start = None
@@ -284,8 +284,8 @@ class UniqueKeySafeLoader(yaml.SafeLoader):
 
 def _reject_repeated_keys(loader: UniqueKeySafeLoader, node: yaml.MappingNode) -> None:
     """Check ``node``'s own keys, and those of the mappings it merges, before PyYAML's
-    ``flatten_mapping`` rewrites any of them in place."""
-    # Holding the nodes keeps their ids from being reused by a later document's nodes.
+    ``flatten_mapping`` rewrites any of them in place. Checked nodes stay referenced on the
+    loader so a later document cannot reuse their ids."""
     checked = loader.__dict__.setdefault("_infx_checked_mappings", {})
     if id(node) in checked:
         return
