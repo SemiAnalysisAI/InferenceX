@@ -1720,3 +1720,34 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           # Inherits the same P-only scratch-reclaim setting as 1P1D c48.
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+
+kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale:
+  image: yukiozzz/vllm-openai-rocm:k3-umbp-pr-stack-83d42f09-runtime@sha256:7b6ed1d61b1237c616acbd111ee5f76cb747f7cf27f5f53fa3a7010727e5a8fc
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: nightly-20260913-83944c4 }
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3/vllm/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.6
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [70]
+        kv-offloading: dram
+        kv-offload-backend: { name: umbp }
+        srt-recipe: disagg-umbp-scale-variants.yaml:override_1p1d_c70
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        conc-list: [176]
+        kv-offloading: dram
+        kv-offload-backend: { name: umbp }
+        srt-recipe: disagg-umbp-scale-variants.yaml:override_2p3d_c176
+        prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }

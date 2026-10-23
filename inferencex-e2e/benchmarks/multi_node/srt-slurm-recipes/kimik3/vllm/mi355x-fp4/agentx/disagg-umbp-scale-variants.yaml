@@ -1,0 +1,183 @@
+base:
+  schema: 2
+  name: kimik3-fp4-mi355x-vllm-umbp-agentic
+  slurm:
+    time_limit: 03:00:00
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    container-remap-root: ''
+    container-writable: ''
+    mem: '0'
+  container_mounts:
+    /dev/infiniband: /dev/infiniband
+  extra_mount:
+  - /it-share/data/Inferact-Kimi-K3-DSpark:/models/Inferact-Kimi-K3-DSpark:ro
+  - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm-router
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    container_image: registry-1.docker.io#vllm/vllm-router:sha256:1fbf06701abce8c8cd459414e472d63999c05b201baffc62e00727c10583f5ea
+    args:
+      policy: consistent_hash
+      prefill-policy: consistent_hash
+      decode-policy: consistent_hash
+      log-level: info
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  engine:
+    type: vllm
+    connector: moriio
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args: &common_args
+        served-model-name: moonshotai/Kimi-K3
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        cp-kv-cache-interleave-size: 1
+        dcp-comm-backend: a2a
+        moe-backend: auto
+        load-format: fastsafetensors
+        gpu-memory-utilization: 0.9
+        language-model-only: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        max-model-len: 1048576
+        stream-interval: 10
+        enable-prefix-caching: true
+        prefix-match-unit: 128
+        kv-cache-dtype: fp8
+        mamba-ssm-cache-dtype: bfloat16
+        block-size: 128
+        attention-backend: ROCM_AITER_MLA
+        attention-config: '{"mla_prefill_backend":"ROCM_AITER_FA","use_prefill_query_quantization":true}'
+        speculative-config: '{"model":"/models/Inferact-Kimi-K3-DSpark","method":"dspark","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}},{"kv_connector":"UMBPStoreConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.umbp.connector","kv_role":"kv_both","kv_connector_extra_config":{"mode":"standalone","endpoint":"/run/k3-umbp/pool.sock","load_async":true,"lookup_async":true,"lazy_offload":false,"enable_partial_hash_hits":true,"timeout_ms":60000}}]}}'
+        max-num-batched-tokens: 8192
+        compilation-config: '{"mode":3,"cudagraph_mode":"NONE","max_cudagraph_capture_size":0,"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
+        quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
+      env: &common_env
+        NCCL_IB_HCA: '@fabric.rdma-devices'
+        NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
+        GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
+        VLLM_ROCM_USE_AITER: '1'
+        AITER_BF16_FP8_MOE_BOUND: '0'
+        AITER_FLYDSL_STAGE2_FP8: '1'
+        VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
+        VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
+        VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB: '256'
+        SAFETENSORS_FAST_GPU: '1'
+        VLLM_SSM_CONV_STATE_LAYOUT: DS
+        VLLM_KV_CACHE_LAYOUT: HND
+        NCCL_DMABUF_ENABLE: '0'
+        HSA_ENABLE_IPC_MODE_LEGACY: '1'
+        HIP_FORCE_DEV_KERNARG: '1'
+        PYTHONHASHSEED: '42'
+        VLLM_USE_DIRECT_DCP_A2A: '0'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
+        PYTHONNOUSERSITE: '1'
+        VLLM_SERVER_DEV_MODE: '0'
+        MORI_IO_ENABLE_NOTIFICATION: '0'
+        MORI_IO_SQ_BACKOFF_TIMEOUT_US: '50000'
+        MORI_IO_QP_MAX_SEND_WR: '16384'
+        MORI_IO_QP_MAX_CQE: '32768'
+        MORI_IO_QP_MAX_SGE: '2'
+        MORI_IO_TC_DISABLE: '0'
+        HSA_NO_SCRATCH_RECLAIM: '0'
+        UMBP_ENDPOINT: /run/k3-umbp/pool.sock
+        UMBP_DRAM_CAPACITY: '1799000000000'
+        UMBP_DRAM_USE_HUGEPAGES: '1'
+        UMBP_DRAM_HUGEPAGE_SIZE: '2097152'
+        UMBP_DRAM_PREFAULT: '1'
+        UMBP_DRAM_HOST_REGISTER: '1'
+        UMBP_DISTRIBUTED_DRAM_PAGE_SIZE: '2097152'
+        UMBP_DISTRIBUTED_RANGED_SCRATCH_BYTES: '268435456'
+        UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES: '1'
+        UMBP_DISTRIBUTED_LOCAL_FIRST: '1'
+        UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH: '1'
+        UMBP_HEARTBEAT_INTERVAL_DIVISOR: '10'
+        UMBP_SSD_ENABLED: '0'
+        VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB: '16'
+        UMBP_DRAM_NUMA_NODE: 0,1
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        <<: *common_args
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}},{"kv_connector":"UMBPStoreConnector","kv_connector_module_path":"vllm.distributed.kv_transfer.kv_connector.v1.umbp.connector","kv_role":"kv_consumer","kv_connector_extra_config":{"mode":"standalone","endpoint":"/run/k3-umbp/pool.sock","enable_lookup":false,"save_decode_cache":false,"timeout_ms":60000}}]}}'
+        max-num-batched-tokens: 512
+      env: *common_env
+  benchmark:
+    placement:
+      node: head
+  setup_script: k3-umbp-pool.sh
+  host_setup:
+    nodes: workers
+    timeout_seconds: 1800
+    commands:
+    - IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/setup.sh"
+    - >-
+      page_kb=$(awk '/^Hugepagesize:/ {print $2}' /proc/meminfo);
+      pages=$(( (1799000000000 / (page_kb * 1024) + 1) * 102 / 100 ));
+      HUGEPAGES_TARGET=$pages HUGEPAGE_GROW_TOLERANCE_PCT=1 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
+    teardown:
+    - HUGEPAGES_TARGET=0 bash "${GITHUB_WORKSPACE}/runners/srt-slurm/hooks/mi355x-amds/hugepage_sanity.sh"
+  services:
+  - name: umbp-master
+    type: generic
+    container: null
+    placement:
+      node: head
+    start: before_workers
+    critical: true
+    inherit_discovery_env: false
+    command:
+    - /usr/local/lib/python3.12/dist-packages/mori/umbp_master
+    - 0.0.0.0:25190
+    readiness:
+      port: 25190
+      timeout_seconds: 120
+
+override_1p1d_c70:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 140
+    decode:
+      args:
+        max-num-seqs: 140
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":350,"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350],"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
+
+override_2p3d_c176:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      args:
+        max-num-seqs: 176
+    decode:
+      nodes: 3
+      workers: 3
+      args:
+        max-num-seqs: 64
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":320,"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"],"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320]}'

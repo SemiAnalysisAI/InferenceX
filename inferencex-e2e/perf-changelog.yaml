@@ -10911,3 +10911,12 @@
     - "Update the SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4408
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale
+  description:
+    - "Add Kimi-K3 UMBP distributed 1P1D c70 and 2P3D c176 with TP8/DCP8, DSpark K4 and 1799 GB DRAM per worker."
+    - "Use a digest-pinned ROCm100 image, MoRIIO READ and BF16 SSM state; cap each c176 decode worker at 64 sequences."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/yichaozhu/k3-umbp-distributed-scale
+  scenario-type: [agentic-coding]
+  no-evals: true
