@@ -257,6 +257,23 @@ def test_a_container_step_on_a_lost_allocation_is_recorded_as_retriable(fake_bin
     assert (error.type, error.retriable) == (kind, retriable)
 
 
+def test_a_running_allocation_records_no_end_from_the_controllers_projection(fake_bin):
+    fake_bin("sacct", "echo 'sacct: error: Problem talking to the database' >&2; exit 1")
+    # A running job's EndTime is its start plus the time limit, not when it ended.
+    fake_bin("scontrol", "echo 'JobId=42 JobState=RUNNING ExitCode=0:0 NodeList=gpu01 "
+             "SubmitTime=1791547200 StartTime=1791547260 EndTime=1791633660'")
+    step = subprocess.Popen(["bash", "-c", "exit 0"])
+    step.wait()
+    backend = slurm_backend()
+
+    backend.state(slurm.SlurmJob("42", step=step))
+
+    record = backend.life.event.finish(0)
+    assert (record.slurm_started_at, record.slurm_ended_at, record.queue_s) == (
+        datetime(2026, 10, 9, 12, 1, tzinfo=UTC), None, 60.0,
+    )
+
+
 def test_srun_rejects_env_value_that_would_split_export():
     with pytest.raises(ValueError, match="UCX_NET_DEVICES"):
         srun_argv(None, ["true"], container=ContainerSpec(image="i", env={"UCX_NET_DEVICES": "a,b"}))

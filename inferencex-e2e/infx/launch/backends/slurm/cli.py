@@ -252,9 +252,12 @@ def observe(job: Job) -> JobStatus:
             fields.get(name, "")
             for name in ("JobState", "ExitCode", "NodeList", "SubmitTime", "StartTime", "EndTime")
         )
-    nodes = nodes.strip()
+    nodes, state = nodes.strip(), state.strip()
+    # scontrol projects StartTime for pending jobs and EndTime from the time limit until the end.
+    started = "" if state == "PENDING" else started
+    ended = "" if state in {"PENDING", "CONFIGURING", "RUNNING"} else ended
     return replace(
-        job_status(state.strip(), exit_code.strip()),
+        job_status(state, exit_code.strip()),
         nodes=None if nodes in {"", "None assigned", "(null)"} else nodes,
         submitted_at=_time(submitted),
         started_at=_time(started),
