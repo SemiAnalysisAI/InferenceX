@@ -100,6 +100,8 @@ def select_recipe(
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
+        except (KeyError, TypeError) as exc:
+            errors.append(f"{name}: missing or malformed field {exc}")
         else:
             matches.append((f"{path}:{name}" if name else path, recipe))
     if len(matches) != 1:

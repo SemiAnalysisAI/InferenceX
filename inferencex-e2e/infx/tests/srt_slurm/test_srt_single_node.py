@@ -114,6 +114,15 @@ def test_ambiguous_native_variants_are_rejected(point):
         runtime_arguments(str(path), env)
 
 
+def test_a_variant_missing_a_required_field_is_reported_not_raised(point):
+    path, recipe, env = point
+    broken = {"roles": {"agg": {"args": {"tensor-parallel-size": None}}}}
+    path.write_text(yaml.safe_dump({"base": recipe, "override_good": {}, "override_broken": broken}))
+    assert select_recipe(str(path), env)[0] == f"{path}:override_good"
+    with pytest.raises(ValueError, match="override_broken: .*'tensor-parallel-size'"):
+        select_recipe(f"{path}:override_broken", env)
+
+
 @pytest.mark.parametrize("algorithm,spec_decoding", [("EAGLE", "mtp"), ("DFLASH", "draft_model")])
 def test_speculative_binding_uses_real_verification_and_the_chat_template(
     point, tmp_path, algorithm, spec_decoding
