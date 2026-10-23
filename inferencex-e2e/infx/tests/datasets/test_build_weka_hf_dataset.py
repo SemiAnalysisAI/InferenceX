@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,7 +19,9 @@ out = Path(argv[argv.index("--out") + 1])
 Path(os.environ["STUB_SAMPLER_RECORD"]).write_text(
     json.dumps({"argv": argv, "db_url": os.environ.get("AGENTIC_PROXY_DB_URL")})
 )
-for sid in os.environ["STUB_SESSIONS"].split(","):
+for n, sid in enumerate(os.environ["STUB_SESSIONS"].split(",")):
+    if n == int(os.environ.get("STUB_SAMPLER_CRASH_AT", "-1")):
+        sys.exit(1)
     row = {
         "timestamp": "2026-05-01T00:00:00+00:00",
         "t_sec": 0.0,
@@ -29,6 +32,7 @@ for sid in os.environ["STUB_SESSIONS"].split(","):
         "hash_ids": ["h1"],
     }
     (out / f"{sid}.jsonl").write_text(json.dumps(row) + "\\n")
+(out / "manifest.json").write_text("{}")
 """
 
 
@@ -53,6 +57,7 @@ def build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     plot = tmp_path / "stub_plot.py"
     plot.write_text(STUB_PLOT)
     monkeypatch.delenv("STUB_PLOT_FAIL", raising=False)
+    monkeypatch.delenv("STUB_SAMPLER_CRASH_AT", raising=False)
     monkeypatch.setattr(build_weka_hf_dataset, "SAMPLER", sampler)
     monkeypatch.setattr(build_weka_hf_dataset, "PLOT_WEKA", plot)
     monkeypatch.setattr(build_weka_hf_dataset, "PLOT_SUBAGENT", plot)
@@ -97,6 +102,19 @@ def test_failed_plots_do_not_republish_the_previous_builds_pngs(
 
     assert list(plots.iterdir()) == []
     assert _trace_ids(tmp_path / "work/base/traces.jsonl") == ["s2"]
+
+
+def test_skip_sample_does_not_reuse_a_crashed_samplers_partial_dump(
+    build, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STUB_SAMPLER_CRASH_AT", "1")
+    with pytest.raises(subprocess.CalledProcessError):
+        build("partial-a,partial-b")
+    monkeypatch.delenv("STUB_SAMPLER_CRASH_AT")
+
+    build("full-a,full-b", "--skip-sample")
+
+    assert _trace_ids(tmp_path / "work/base/traces.jsonl") == ["full-a", "full-b"]
 
 
 def test_db_url_reaches_sampler_without_being_echoed(

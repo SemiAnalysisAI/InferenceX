@@ -132,7 +132,9 @@ def parse_args() -> argparse.Namespace:
         help="HF write token (else $HF_TOKEN or cached login).",
     )
 
-    p.add_argument("--skip-sample", action="store_true", help="Reuse work-dir/proxy/ if present.")
+    p.add_argument(
+        "--skip-sample", action="store_true", help="Reuse a completed work-dir/proxy/ sample."
+    )
     p.add_argument(
         "--skip-convert",
         action="store_true",
@@ -161,7 +163,9 @@ def _recreate(stage_dir: Path) -> None:
 
 def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
     proxy_dir = work_dir / "proxy"
-    if args.skip_sample and proxy_dir.exists() and any(proxy_dir.glob("*.jsonl")):
+    # The sampler writes manifest.json after every session file, so its absence marks a crashed dump.
+    complete = (proxy_dir / "manifest.json").is_file()
+    if args.skip_sample and complete and any(proxy_dir.glob("*.jsonl")):
         n = sum(1 for _ in proxy_dir.glob("*.jsonl"))
         print(f"[sample] reusing {n} cached session JSONLs in {proxy_dir}")
         return proxy_dir
