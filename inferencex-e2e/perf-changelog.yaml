@@ -10871,3 +10871,13 @@
     - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4395
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-h100-vllm-agentic
+    - minimaxm31flash-fp4-h200-vllm-agentic
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + MXFP8 dense) AgentX on H100 and H200 with vLLM image minimax-m31-flash (https://vllm.ai/blog/2026-10-23-minimax-m31-flash)."
+    - "Serve flags follow the recipes.vllm.ai Hopper TP8 recipe: block size 128, FP8 KV and indexer cache, Marlin MoE backend for the NVFP4 experts, FULL_AND_PIECEWISE graphs, hybrid KV cache manager disabled, minimax_m3 reasoning and tool parsers. Context stays at 1M (upstream Hopper example uses 256K) because the AgentX corpus for this prefix is uncapped."
+    - "Search space: TP8 only, H100 conc 1-12 and H200 conc 1-24, no KV offloading. Upstream does not enable DSpark on Hopper."
+  pr-link: TBD
+  scenario-type: [agentic-coding]
