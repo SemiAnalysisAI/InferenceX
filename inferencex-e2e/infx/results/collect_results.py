@@ -8,7 +8,7 @@ def main() -> None:
     exp_name = sys.argv[2]
 
     agg_results = []
-    for result_path in results_dir.rglob("*.json"):
+    for result_path in sorted(results_dir.rglob("*.json")):
         with open(result_path) as f:
             result = json.load(f)
         agg_results.append(result)
