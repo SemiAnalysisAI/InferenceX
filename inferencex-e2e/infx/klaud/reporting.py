@@ -322,7 +322,7 @@ def values(row: dict) -> Values:
         output_tps_gpu=metrics.get("output_tput_per_gpu"),
         ttft_ms=metrics["mean_ttft"] * 1000 if metrics.get("mean_ttft") is not None else None,
         tpot_ms=metrics["mean_tpot"] * 1000 if metrics.get("mean_tpot") is not None else None,
-        request_errors=metrics.get("errors"),
+        request_errors=row.get("benchmark_outcome", {}).get("failed"),
     )
 
 

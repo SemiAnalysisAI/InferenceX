@@ -1731,7 +1731,6 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "output_tput_per_gpu": 8.0,
         "mean_ttft": 0.1,
         "mean_tpot": 0.02,
-        "errors": 0,
     }
     info = {
         "runs": [{"github_run_id": "42", "run_attempt": 1}],
@@ -1962,7 +1961,7 @@ def publish(monkeypatch, head):
             "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 0,
             "run_url": "https://github.com/example/project/actions/runs/42",
             "tput_per_gpu": 5.0 * conc, "output_tput_per_gpu": 4.0 * conc, "mean_ttft": 0.1,
-            "mean_tpot": 0.02, "errors": 0,
+            "mean_tpot": 0.02,
         }
         for conc in (2, 6)
     ]
@@ -2133,7 +2132,7 @@ def serve_dsr1_baseline(monkeypatch, current, markdown):
             "recipe_fingerprint": f"{isl:064x}",
             "run_url": "https://github.com/example/project/actions/runs/42",
             "tput_per_gpu": 10.0, "output_tput_per_gpu": 8.0, "mean_ttft": 0.1,
-            "mean_tpot": 0.02, "errors": 0,
+            "mean_tpot": 0.02,
         }
         for isl in (1024, 8192)
     ]
@@ -2930,6 +2929,39 @@ def test_agentx_deltas_compare_only_the_same_replay_corpus(old, new, cell, note)
     assert f"| 4 | {cell} |" in text
     notes = [line for line in text.splitlines() if "Δ N/A" in line]
     assert notes == ([f"**Note:** All rows: Δ N/A: {note}."] if note else [])
+
+
+@pytest.mark.parametrize(("completed", "errors", "note"), [
+    pytest.param(100, 0, None, id="no-failed-requests"),
+    pytest.param(97, 3, "**Note:** All rows: 3 request errors.", id="failed-requests"),
+])  # fmt: skip
+def test_a_fixed_sequence_result_reports_its_failed_requests(completed, errors, note):
+    from infx.results.fixed_sequence import build_result
+
+    raw = {
+        "max_concurrency": 4, "model_id": "m", "num_prompts": 100, "completed": completed,
+        "total_token_throughput": 800.0, "output_throughput": 400.0,
+        "mean_ttft_ms": 100.0, "mean_tpot_ms": 10.0,
+        "benchmark_outcome": {"status": "passed", "requested": 100, "completed": completed,
+                              "failed": 100 - completed, "max_failure_rate": 0.05},
+    }  # fmt: skip
+    env = {
+        "RUNNER_TYPE": "h100", "FRAMEWORK": "sglang", "PRECISION": "fp8", "SPEC_DECODING": "none",
+        "ISL": "1024", "OSL": "1024", "DISAGG": "false", "MODEL_PREFIX": "dsr1", "IMAGE": "i:1",
+        "TP": "8", "EP_SIZE": "1", "DP_ATTENTION": "false",
+    }  # fmt: skip
+    values = reporting.values(build_result(raw, env))
+    point = reporting.Point(
+        key="f" * 64, label="1024/1024 c4 TP8 EP1 ffffff", conc=4, scenario="fixed-seq-len",
+        values=values, result="passed",
+    )  # fmt: skip
+
+    text = reporting.point_table([point])
+
+    assert values.request_errors == errors
+    assert values.output_tps_gpu == 50.0
+    notes = [line.rstrip() for line in text.splitlines() if "request error" in line]
+    assert notes == ([note] if note else [])
 
 
 def test_baseline_notes_name_concurrency_rows_like_their_table():
