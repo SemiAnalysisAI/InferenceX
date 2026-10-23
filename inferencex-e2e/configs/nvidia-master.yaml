@@ -8623,7 +8623,7 @@ dsv41flash-fp4-gb200-sglang-agentic-dspark:
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 96, 128, 160, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
 
 musespark-fp4-gb200-sglang-agentic-dflash:
-  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:gb200-nv
