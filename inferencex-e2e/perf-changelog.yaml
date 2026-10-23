@@ -10908,7 +10908,8 @@
     - agentic-coding
   description:
     - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294 to vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392, which includes vllm-project/vllm#60683 (Kimi-K3 specialized decode on MI355X)."
-    - "dcp1 concurrency 1 runs additional-config {\"decode_backend\":\"latency_specialized\"} with VLLM_USE_V2_MODEL_RUNNER=1: pure spec-verify steps of at most 8 rows run each MoE decoder layer as persistent FlyDSL MonoKernels with in-kernel TP all-reduces."
+    - "Concurrency 1 runs additional-config {\"decode_backend\":\"latency_specialized\"} with VLLM_USE_V2_MODEL_RUNNER=1: pure spec-verify steps of at most 8 rows run each MoE decoder layer as persistent FlyDSL MonoKernels with in-kernel TP all-reduces."
     - "Every concurrency adds additional-config {\"kda_prefill_backend\":\"fused\"}: KDA layers prefill with the fused gfx950 chunk kernel."
-    - "dcp1 concurrency 1 drops its fp8_per_channel quantization-config: the specialized decode reads the in_proj, o_proj and shared-expert weights in place as BF16 and refuses FP8 ones."
+    - "Concurrency 1 drops its fp8_per_channel quantization-config: the specialized decode reads the in_proj, o_proj and shared-expert weights in place as BF16 and refuses FP8 ones."
+    - "The GPU-resident concurrency 1 and 4 points move from dcp-size 1 to 8 (decode-context-parallel-size 8, dcp-comm-backend a2a), sharding the KV read across all 8 GPUs like the offload points. At dcp8 the specialized decode attends with AITER's asm MLA (M1) instead of the dcp1-only fused M1c."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4393

@@ -1,11 +1,11 @@
 # Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
 # (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
-# is ~195 GB per GPU. The KV cache is GPU-resident at dcp1 c1 and c4 and backed by
-# vLLM's SimpleCPUOffloadConnector (dram) from dcp8 c4. Three bands, driven by
-# kimik3-fp4-mi355x-vllm-agentic-mtp: interactive dcp1 c1 and c4 (GPU-resident),
-# mid dcp8 c4-c32 and throughput dcp8 c48-c60 (KV read sharded across all
-# 8 GPUs, DRAM offload, DSpark draft with synthetic acceptance). The 1799 GB
-# DRAM budget splits evenly across the eight ranks.
+# is ~195 GB per GPU. Every point shards the KV read across all 8 GPUs (dcp8).
+# The KV cache is GPU-resident at c1 and c4 and backed by vLLM's
+# SimpleCPUOffloadConnector (dram) from the offload c4 point. Three bands, driven
+# by kimik3-fp4-mi355x-vllm-agentic-mtp: interactive c1 and c4 (GPU-resident),
+# mid c4-c32 and throughput c48-c60 (DRAM offload, DSpark draft with synthetic
+# acceptance). The 1799 GB DRAM budget splits evenly across the eight ranks.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
@@ -75,7 +75,7 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. The DSpark draft length descends with concurrency
-# (7 at dcp1 c1 and c4, 5 at dcp8 c4, 4 from c10) and stays at 4 for the throughput
+# (7 at GPU-resident c1 and c4, 5 at offload c4, 4 from c10) and stays at 4 for the throughput
 # band; agentic runs replace block rejection with the golden acceptance length
 # for that draft length. Admission is 2x CONC and graph capture covers every
 # even size up to 2x CONC x (1 + drafts); c1 admits one. Every point
@@ -86,7 +86,8 @@ base:
 # c1 runs vLLM's Kimi-K3 specialized decode (vllm-project/vllm#60683,
 # additional-config decode_backend=latency_specialized): pure spec-verify steps of
 # at most 8 rows run each MoE layer as FlyDSL MonoKernels; c1 (k=7) verifies 8 rows
-# per step. The kernels need Model Runner V2, no KV connector and BF16 in_proj /
+# per step. At dcp8 the decode attends with AITER's asm MLA (M1); the fused M1c
+# attention is dcp1-only. The kernels need Model Runner V2, no KV connector and BF16 in_proj /
 # o_proj / shared-expert weights, so c1 does not quantize online.
 # Every point prefills KDA layers with the fused gfx950 chunk kernel
 # (additional-config kda_prefill_backend=fused).
@@ -94,6 +95,8 @@ override_tp8_c1:
   roles:
     agg:
       args:
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
         max-num-seqs: 1
         max-num-batched-tokens: 16384
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16]}'
@@ -111,6 +114,8 @@ override_tp8_c4:
   roles:
     agg:
       args:
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
         max-num-seqs: 8
         max-num-batched-tokens: 8192
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":64,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64]}'
