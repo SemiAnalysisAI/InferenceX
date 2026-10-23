@@ -825,6 +825,8 @@ def save_to_pytorch_benchmark_format(
 
 def main(args: argparse.Namespace) -> None:
     print(args)
+    if args.request_rate <= 0:
+        raise ValueError(f"--request-rate must be positive, got {args.request_rate}")
     random.seed(args.seed)
     np.random.seed(args.seed)  # noqa: NPY002
 

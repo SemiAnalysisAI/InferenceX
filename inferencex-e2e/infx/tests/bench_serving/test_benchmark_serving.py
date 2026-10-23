@@ -93,6 +93,16 @@ def test_metadata_value_keeps_its_equals_signs(tmp_path, monkeypatch):
     assert saved['tp'] == '8'
 
 
+@pytest.mark.parametrize('rate', [0.0, -2.0])
+def test_non_positive_request_rate_is_rejected_before_the_run(tmp_path, monkeypatch, rate):
+    benchmark = stub_benchmark(monkeypatch, {'completed': 1})
+
+    with pytest.raises(ValueError, match=f'--request-rate must be positive, got {rate}'):
+        client.main(cli_args(tmp_path, request_rate=rate))
+
+    assert benchmark.await_count == 0
+
+
 class WordTokenizer:
     """One token per whitespace-separated word."""
 
