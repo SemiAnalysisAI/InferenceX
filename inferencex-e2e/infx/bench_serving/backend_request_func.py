@@ -391,6 +391,11 @@ async def async_request_openai_chat_completions(
                             most_recent_timestamp = timestamp
 
                     output.generated_text = generated_text
+                    if not output.error and ttft == 0.0:
+                        output.error = (
+                            "Never received a valid chunk to calculate TTFT."
+                            "This response will be marked as failed!"
+                        )
                     output.success = not output.error
                     output.latency = most_recent_timestamp - st
                 else:
