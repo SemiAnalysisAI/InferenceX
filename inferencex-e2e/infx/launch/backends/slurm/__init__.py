@@ -377,11 +377,27 @@ class SlurmBackend(Backend):
         )
 
     def _allocate(self, gpus: int, time_min: int) -> Job:
-        """``salloc`` one node and cancel it when the launch ends."""
+        """``salloc`` one node and cancel it when the launch ends.
+
+        A signal kills a queued ``salloc`` before it names its job, so that request is
+        cancelled by the runner's job name instead.
+        """
         settings = self.settings
         extra = ["--exclusive"] if settings.exclusive else []
         extra += [f"--{name}={value}" for name, value in settings.cpu_directives().items()]
-        job = cli.salloc(self._resources(gpus, time_min), extra=[*extra, *settings.salloc_args])
+        returned = False
+
+        def cancel_unreturned() -> None:
+            if not returned:
+                cli.cancel_named([self.request.runner_name])
+
+        self.life.callback(cancel_unreturned)
+        try:
+            job = cli.salloc(self._resources(gpus, time_min), extra=[*extra, *settings.salloc_args])
+        except Exception:
+            returned = True
+            raise
+        returned = True
         self.life.callback(cli.cancel, job)
         return job
 

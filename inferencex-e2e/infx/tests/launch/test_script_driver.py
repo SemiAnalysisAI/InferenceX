@@ -27,6 +27,10 @@ args = sys.argv[1:]
 with open(os.environ["FAKE_CALLS"], "a") as log:
     log.write(json.dumps([name, *args]) + "\n")
 if name == "salloc":
+    if os.environ.get("FAKE_QUEUED_MARKER"):
+        open(os.environ["FAKE_QUEUED_MARKER"], "w").close()
+        import time
+        time.sleep(60)
     print("salloc: Granted job allocation 42", file=sys.stderr)
 elif name == "unsquashfs":
     sys.exit(1)
@@ -324,3 +328,24 @@ def test_sigterm_during_the_collector_cancels_the_allocation_and_exits_143(
 
     assert launcher.wait(timeout=60) == 143
     assert fakes()[-1] == ["scancel", "42"]
+
+
+def test_sigterm_while_salloc_is_queued_cancels_the_pending_request(fakes, workspace, tmp_path):
+    config = tmp_path / "runners.yaml"
+    config.write_text(yaml.safe_dump(inventory_for(tmp_path)))
+    queued = tmp_path / "salloc-queued"
+    launcher = subprocess.Popen(
+        [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
+        env={**os.environ, **launch_env(workspace), "PYTHONPATH": str(ROOT),
+             "FAKE_QUEUED_MARKER": str(queued), "USER": "runner"},
+        cwd=workspace, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )  # fmt: skip
+    deadline = time.monotonic() + 60
+    while not queued.exists() and launcher.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert queued.exists(), "salloc never started"
+
+    launcher.send_signal(signal.SIGTERM)
+
+    assert launcher.wait(timeout=60) == 143
+    assert ["scancel", "--user=runner", "--name=fixture_00"] in fakes()
