@@ -305,3 +305,37 @@ def test_validate_scores_handles_empty_or_malformed_threshold_sections(
 
     assert validate_scores_main() == 1
     assert expected in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        ('{"results": {"gsm8k": ', "invalid JSON"),
+        ("[1]", "expected a JSON object with a 'results' mapping"),
+        ('{"results": null}', "expected a JSON object with a 'results' mapping"),
+    ],
+)
+def test_validate_scores_fails_a_malformed_result_file_and_checks_the_rest(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    content: str,
+    reason: str,
+) -> None:
+    bad = tmp_path / "results_a.json"
+    bad.write_text(content)
+    (tmp_path / "results_b.json").write_text(
+        json.dumps({"results": {"gsm8k": {"exact_match,strict-match": 0.95}}})
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(tmp_path / "results*.json"),
+    ])
+
+    assert validate_scores_main() == 1
+    captured = capsys.readouterr()
+    assert f"FAIL: unreadable result file {bad}: {reason}" in captured.err
+    assert "PASS: gsm8k exact_match,strict-match = 0.9500" in captured.out

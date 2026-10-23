@@ -330,9 +330,18 @@ def main() -> int:
     for f in result_files:
         match = CONC_SUFFIX_RE.search(Path(f).name)
         conc_label = f"[conc={match.group(1)}] " if match else ""
-        with open(f) as fh:
-            data = json.load(fh)
-        if "integration_error" in data:
+        try:
+            with open(f) as fh:
+                data = json.load(fh)
+        except json.JSONDecodeError as exc:
+            print(f"FAIL: unreadable result file {f}: invalid JSON: {exc}", file=sys.stderr)
+            failed = True
+            continue
+        except OSError as exc:
+            print(f"FAIL: unreadable result file {f}: {exc}", file=sys.stderr)
+            failed = True
+            continue
+        if isinstance(data, dict) and "integration_error" in data:
             print(
                 f"FAIL: {conc_label}integration failure: "
                 f"{integration_error_message(data['integration_error'])}",
@@ -340,7 +349,16 @@ def main() -> int:
             )
             failed = True
             continue
-        for task, metrics in data.get("results", {}).items():
+        results = data.get("results", {}) if isinstance(data, dict) else None
+        if not isinstance(results, dict):
+            print(
+                f"FAIL: unreadable result file {f}: "
+                "expected a JSON object with a 'results' mapping",
+                file=sys.stderr,
+            )
+            failed = True
+            continue
+        for task, metrics in results.items():
             invalid_effective, effective = invalid_effective_count(data, task)
             if invalid_effective:
                 print(
