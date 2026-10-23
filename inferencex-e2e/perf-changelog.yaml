@@ -10911,3 +10911,16 @@
     - "Update the SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4408
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image unchanged: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f (same as #4319)."
+    - "Search space unchanged: TP4 and TP2 at c1-c64."
+    - "Every TP4 and TP2 point admits at most 2x CONC running sequences: max-num-seqs c1: 2, c2: 4, c4: 8, c8: 16, c16: 32, c32: 64, c64: 128 (previously unset)."
+    - "max-cudagraph-capture-size drops from a flat 1024 to max-num-seqs x (1 + 5 DSpark drafts): c1: 12, c2: 24, c4: 48, c8: 96, c16: 192, c32: 384, c64: 768."
+    - "max-num-batched-tokens stays 16384 on every point. DSpark settings are unchanged."
+    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped, and inherits the target KV cache dtype; the PR touches no quantization or speculative-config setting."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4432
