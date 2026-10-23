@@ -10278,6 +10278,139 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg:
           dp-attn: false
         decode: { num-worker: 1, tp: 16, dcp-size: 16, ep: 1, dp-attn: false }
 
+minimaxm3-fp4-gb300-dynamo-trt-agentic-disagg-mtp:
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0a0.dev202610180820
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: { name: dynamo-router, version: "1.6.0.dev20261016" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm3/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.997287
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [54]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        srt-recipe: disagg-variants.yaml:override_1p3d_tp4_c54_b4
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 3
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [50]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        srt-recipe: disagg-variants.yaml:override_1p5d_tp4_c50_b2
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [12]
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        srt-recipe: disagg-variants.yaml:override_1p2d_tp8_c12_b1
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+minimaxm3-fp4-gb300-dynamo-trt-agentic-agg-mtp:
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0a0.dev202610180820
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: { name: dynamo-router, version: "1.6.0.dev20261016" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: minimaxm3/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.934957
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        conc-list: [20]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_mtp3_c20
+        worker:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        conc-list: [25]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_mtp5_c25
+        worker:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        conc-list: [30]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_mtp3_c30
+        worker:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        conc-list: [35]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_mtp3_c35
+        worker:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610180820" }
+        conc-list: [45]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp2_mtp3_c45
+        worker:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+
 glm5.3-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
   model: nvidia/GLM-5.3-NVFP4

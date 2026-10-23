@@ -11053,3 +11053,10 @@
     - "Pin the MiniMax-M3 B200 vLLM images by digest and retune the TP4 concurrency 15-38 entries, with DRAM KV offload sized to the 1,073 GB node allowance."
     - "Add minimaxm3-fp4-b200-vllm-agentic-mtp-c10 with TP4 and TP8 concurrency 10 and TP4 DRAM concurrency 20 and 32 entries that cap active sequences."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4382
+
+- config-keys:
+    - minimaxm3-fp4-gb300-dynamo-trt-agentic-disagg-mtp
+    - minimaxm3-fp4-gb300-dynamo-trt-agentic-agg-mtp
+  description:
+    - "Add GB300 MiniMax-M3 NVFP4 Dynamo TensorRT-LLM AgentX aggregated and disaggregated EAGLE3 recipes with native host KV caching"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4383

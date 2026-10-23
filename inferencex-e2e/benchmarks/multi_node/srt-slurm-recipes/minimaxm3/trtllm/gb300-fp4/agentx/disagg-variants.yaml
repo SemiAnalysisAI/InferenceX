@@ -1,0 +1,304 @@
+schema: 2
+
+base:
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20261016
+    request_plane: tcp
+    sidecar: true
+    sidecar_args:
+      - --grpc-connections
+      - "8"
+      - --grpc-startup-deadline-secs
+      - "3600"
+      - --dyn-tool-call-parser
+      - minimax_m3
+      - --dyn-reasoning-parser
+      - minimax_m3
+  health_check:
+    max_attempts: 270
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  engine:
+    type: trtllm
+    numa_memory_bind: true
+    served_model_name: nvidia/MiniMax-M3-NVFP4
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      env:
+        HF_HUB_OFFLINE: '0'
+        TRANSFORMERS_OFFLINE: '0'
+        HF_HUB_CACHE: /hf_hub_cache
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_PROFILE_LOG_RANKS: all
+        TLLM_ENABLE_CACHE_TRANSFER_PERF_INFO: '1'
+        TRTLLM_NIXL_ENABLE_TELEMETRY: '1'
+        PYTHONNOUSERSITE: '1'
+        MIMALLOC_PURGE_DELAY: '0'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        TRTLLM_M3_NVFP4_STANDARD_STAGE: '1'
+        TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        UCX_TLS: cuda_copy,rc
+        TRTLLM_NIXL_BOUNCE_ENABLE: '1'
+        TRTLLM_NIXL_BOUNCE_ARENA_SIZE_BYTES: 1GiB
+        TRTLLM_NIXL_BOUNCE_MAX_CHUNK_SIZE_BYTES: 32MiB
+        TRTLLM_NIXL_BOUNCE_MAX_INFLIGHT_CHUNKS_PER_REQUEST: '8'
+        TRTLLM_NIXL_BOUNCE_COPY_STREAM_COUNT: '8'
+        TRTLLM_NIXL_BOUNCE_SCATTER_WORKER_COUNT: '4'
+        TRTLLM_NIXL_BOUNCE_MIN_DESCRIPTOR_COUNT: '1024'
+        TRTLLM_NIXL_BOUNCE_MAX_AVERAGE_DESCRIPTOR_SIZE_BYTES: 16KiB
+        TRTLLM_NIXL_BOUNCE_ENABLE_EAGER_GATHER: '1'
+        TRTLLM_NIXL_BOUNCE_USE_NIXL_NOTIFICATIONS: '0'
+        TRTLLM_NIXL_BOUNCE_USE_ZERO_COPY_ARGUMENTS: '1'
+        TLLM_PREFIX_TOKEN_CACHE: '1'
+        TLLM_PREFIX_TOKEN_CACHE_MAX_CHARS: '268435456'
+        TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
+        PYTHONPYCACHEPREFIX: /tmp/pycache
+        TRITON_CACHE_DIR: /tmp/triton-cache
+        DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+        DYN_TRTLLM_KV_BLOCK_SIZE: '128'
+        DYN_ENGINE_CONV_AFFINITY: '1'
+        DYN_TOKENIZER: fastokens
+        DYN_PUBLISH_KV_EVENTS: '0'
+        DYN_REASONING_PARSER: minimax_m3
+        DYN_TOOL_CALL_PARSER: minimax_m3
+        PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: upb
+      args:
+        num_postprocess_workers: 4
+        cuda_graph_config:
+        disable_overlap_scheduler: true
+        torch_compile_config:
+          enable_fullgraph: true
+          enable_inductor: false
+          enable_piecewise_cuda_graph: true
+          enable_userbuffers: true
+          max_num_streams: 3
+          capture_num_tokens:
+            - 1
+            - 512
+            - 1024
+        kv_cache_config:
+          iteration_stats_interval: 20
+          enable_block_reuse: true
+          block_reuse_config:
+            policy: per_conversation
+          host_cache_size: 240518168576
+          disk_cache_size: 0
+          dtype: nvfp4
+          tokens_per_block: 128
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.9
+        enable_chunked_prefill: true
+        return_perf_metrics: false
+        moe_config:
+          backend: TRTLLM
+          use_low_precision_moe_combine: true
+        scheduler_config:
+          capacity_scheduler_policy: GUARANTEED_NO_EVICT
+        cache_transceiver_config:
+          backend: NIXL
+          transceiver_runtime: PYTHON
+          kv_transfer_timeout_ms: 600000
+          kv_cache_bounce_size_mb: 0
+        sparse_attention_config:
+          algorithm: minimax_m3
+          implementation: msa
+          indexer_kv_dtype: fp8
+          sparse_disable_index_value: true
+          fuse_qkv_index_projection: true
+        speculative_config:
+          decoding_type: Eagle3
+          max_draft_len: 3
+          speculative_model: Inferact/MiniMax-M3-EAGLE3-GQA
+        attention_dp_config:
+          enable_kv_cache_aware_routing: false
+          kv_cache_routing_conversation_affinity: true
+          kv_cache_routing_max_sessions: 65536
+        stream_interval: 20
+        reasoning_parser: minimax_m3
+        pipeline_parallel_size: 1
+        trust_remote_code: true
+        max_seq_len: 1048576
+        print_iter_log: true
+        iter_perf_stats_interval: 20
+        enable_iter_perf_stats: true
+        enable_autotuner: true
+        max_batch_size: 32
+        max_num_tokens: 8192
+        enable_attention_dp: true
+        tensor_parallel_size: 2
+        moe_expert_parallel_size: 2
+    decode:
+      gpus: 4
+      env:
+        HF_HUB_OFFLINE: '0'
+        TRANSFORMERS_OFFLINE: '0'
+        HF_HUB_CACHE: /hf_hub_cache
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_PROFILE_LOG_RANKS: all
+        TLLM_ENABLE_CACHE_TRANSFER_PERF_INFO: '1'
+        TRTLLM_NIXL_ENABLE_TELEMETRY: '1'
+        PYTHONNOUSERSITE: '1'
+        MIMALLOC_PURGE_DELAY: '0'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        TRTLLM_M3_NVFP4_STANDARD_STAGE: '1'
+        TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        UCX_TLS: cuda_copy,rc
+        TRTLLM_NIXL_BOUNCE_ENABLE: '1'
+        TRTLLM_NIXL_BOUNCE_ARENA_SIZE_BYTES: 1GiB
+        TRTLLM_NIXL_BOUNCE_MAX_CHUNK_SIZE_BYTES: 32MiB
+        TRTLLM_NIXL_BOUNCE_MAX_INFLIGHT_CHUNKS_PER_REQUEST: '8'
+        TRTLLM_NIXL_BOUNCE_COPY_STREAM_COUNT: '8'
+        TRTLLM_NIXL_BOUNCE_SCATTER_WORKER_COUNT: '4'
+        TRTLLM_NIXL_BOUNCE_MIN_DESCRIPTOR_COUNT: '1024'
+        TRTLLM_NIXL_BOUNCE_MAX_AVERAGE_DESCRIPTOR_SIZE_BYTES: 16KiB
+        TRTLLM_NIXL_BOUNCE_ENABLE_EAGER_GATHER: '1'
+        TRTLLM_NIXL_BOUNCE_USE_NIXL_NOTIFICATIONS: '0'
+        TRTLLM_NIXL_BOUNCE_USE_ZERO_COPY_ARGUMENTS: '1'
+        TLLM_PREFIX_TOKEN_CACHE: '1'
+        TLLM_PREFIX_TOKEN_CACHE_MAX_CHARS: '268435456'
+        TRTLLM_ENABLE_TRTLLMGEN_MOE_ROUTING_RENORM_PDL: '0'
+        TRTLLM_ENABLE_PDL: '1'
+        XDG_CACHE_HOME: /tmp/jit-cache/xdg
+        TRTLLM_CACHE_DIR: /tmp/jit-cache/xdg/tensorrt_llm
+        MINFER_FMHA_CACHE_DIR: /tmp/jit-cache/xdg/minfer/fmha_sm100
+        PYTHONPYCACHEPREFIX: /tmp/pycache
+        TRITON_CACHE_DIR: /tmp/triton-cache
+        DYN_TRTLLM_KV_BLOCK_SIZE: '128'
+        DYN_ENGINE_CONV_AFFINITY: '1'
+        DYN_TOKENIZER: fastokens
+        DYN_PUBLISH_KV_EVENTS: '0'
+        DYN_REASONING_PARSER: minimax_m3
+        DYN_TOOL_CALL_PARSER: minimax_m3
+        PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: upb
+      args:
+        enable_lm_head_tp_in_adp: false
+        num_postprocess_workers: 4
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+        kv_cache_config:
+          iteration_stats_interval: 20
+          free_gpu_memory_fraction: 0.9
+          enable_block_reuse: false
+          avg_seq_len: 220000
+          dtype: nvfp4
+          tokens_per_block: 128
+          use_kv_cache_manager_v2: true
+          host_cache_size: 0
+          disk_cache_size: 0
+        return_perf_metrics: false
+        moe_config:
+          backend: TRTLLM
+          use_low_precision_moe_combine: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        cache_transceiver_config:
+          backend: NIXL
+          transceiver_runtime: PYTHON
+          kv_transfer_timeout_ms: 600000
+          kv_cache_bounce_size_mb: 0
+        sparse_attention_config:
+          algorithm: minimax_m3
+          implementation: msa
+          indexer_kv_dtype: fp8
+          sparse_disable_index_value: true
+          fuse_qkv_index_projection: true
+        modeling_v2: require
+        speculative_config:
+          decoding_type: Eagle3
+          max_draft_len: 3
+          speculative_model: Inferact/MiniMax-M3-EAGLE3-GQA
+          advanced_sampling_mode: no_topk
+        stream_interval: 20
+        reasoning_parser: minimax_m3
+        pipeline_parallel_size: 1
+        trust_remote_code: true
+        max_seq_len: 1048576
+        print_iter_log: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        enable_autotuner: true
+        max_num_tokens: 120
+        enable_attention_dp: false
+        tensor_parallel_size: 4
+        moe_expert_parallel_size: 1
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      ETCD_LEASE_TTL: '120'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+      DYN_TOKENIZER: fastokens
+      DYN_TCP_REQUEST_TIMEOUT: '30'
+      DYN_LOG: warn
+      DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+    args:
+      router-mode: kv
+      no-kv-events: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+    placement:
+      node: first_decode
+  benchmark:
+    use_chat_template: true
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: ''
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
+      SERVED_MODEL_NAME: nvidia/MiniMax-M3-NVFP4
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    placement:
+      node: last_decode
+
+override_1p3d_tp4_c54_b4:
+  name: dynamo-disagg-gb300-1p3d-tp2-tp4-c54-b4-eagle3
+  roles:
+    decode:
+      nodes: 3
+      workers: 3
+      args:
+        max_batch_size: 4
+
+override_1p5d_tp4_c50_b2:
+  name: dynamo-disagg-gb300-1p5d-tp2-tp4-c50-b2-eagle3
+  roles:
+    decode:
+      nodes: 5
+      workers: 5
+      args:
+        max_batch_size: 2
+
+override_1p2d_tp8_c12_b1:
+  name: dynamo-disagg-gb300-1p2d-tp2-tp8-c12-b1-eagle3
+  roles:
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      args:
+        max_batch_size: 1
+        tensor_parallel_size: 8
