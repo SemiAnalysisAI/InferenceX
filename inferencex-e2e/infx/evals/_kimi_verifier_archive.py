@@ -35,6 +35,7 @@ def main() -> None:
             raise ValueError(
                 f"expected a 64-character archive SHA256, got {expected_archive_sha256!r}"
             )
+        expected_archive_sha256 = expected_archive_sha256.lower()
 
         parsed_repo_url = urlsplit(repo_url)
         if parsed_repo_url.scheme not in ("http", "https") or not parsed_repo_url.netloc:

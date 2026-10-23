@@ -155,6 +155,18 @@ def test_retries_a_download_cut_short_by_the_connection(
     assert extracted == REQUIRED_FILES
 
 
+def test_accepts_an_uppercase_pinned_archive_sha256(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    payload = _archive()
+
+    paths = _fetch(monkeypatch, checkout, payload, sha256=hashlib.sha256(payload).hexdigest().upper())
+
+    assert len(paths) == 1
+    assert (checkout / "pyproject.toml").read_text() == "pyproject.toml"
+
+
 def _escaping_member() -> tarfile.TarInfo:
     member = tarfile.TarInfo("verifier-pinned/../../escaped")
     member.size = 6
