@@ -571,14 +571,16 @@ def hit_timeout(repository: str, job: dict) -> bool:
 
 def preempted(repository: str, run: dict) -> bool:
     """Cancelled by someone else: no job of its current attempt failed or hit its timeout."""
-    return run["conclusion"] == "cancelled" and not any(
-        job["conclusion"] in ("failure", "timed_out")
-        or (job["conclusion"] == "cancelled" and hit_timeout(repository, job))
-        for job in github.items(
-            repository,
-            f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
-            "jobs",
-        )
+    if run["conclusion"] != "cancelled":
+        return False
+    jobs = github.items(
+        repository,
+        f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
+        "jobs",
+    )
+    # A fail-fast sweep cancels every other job, so rule out failures before reading annotations.
+    return not any(job["conclusion"] in ("failure", "timed_out") for job in jobs) and not any(
+        job["conclusion"] == "cancelled" and hit_timeout(repository, job) for job in jobs
     )
 
 
