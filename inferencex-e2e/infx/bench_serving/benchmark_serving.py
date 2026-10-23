@@ -472,6 +472,8 @@ def calculate_metrics(
             "on the benchmark arguments.",
             stacklevel=2,
         )
+    # Convert once; every numpy call below would otherwise rebuild an array from the list.
+    ttfts, tpots, itls, e2els = (np.asarray(v or 0) for v in (ttfts, tpots, itls, e2els))
     metrics = BenchmarkMetrics(
         completed=completed,
         total_input=total_input,
@@ -480,29 +482,23 @@ def calculate_metrics(
         request_goodput=good_completed / dur_s,
         output_throughput=sum(actual_output_lens) / dur_s,
         total_token_throughput=(total_input + sum(actual_output_lens)) / dur_s,
-        mean_ttft_ms=np.mean(ttfts or 0)
+        mean_ttft_ms=np.mean(ttfts)
         * 1000,  # ttfts is empty if streaming is not supported by backend
-        std_ttft_ms=np.std(ttfts or 0) * 1000,
-        median_ttft_ms=np.median(ttfts or 0) * 1000,
-        percentiles_ttft_ms=[
-            (p, np.percentile(ttfts or 0, p) * 1000) for p in selected_percentiles
-        ],
-        mean_tpot_ms=np.mean(tpots or 0) * 1000,
-        std_tpot_ms=np.std(tpots or 0) * 1000,
-        median_tpot_ms=np.median(tpots or 0) * 1000,
-        percentiles_tpot_ms=[
-            (p, np.percentile(tpots or 0, p) * 1000) for p in selected_percentiles
-        ],
-        mean_itl_ms=np.mean(itls or 0) * 1000,
-        std_itl_ms=np.std(itls or 0) * 1000,
-        median_itl_ms=np.median(itls or 0) * 1000,
-        percentiles_itl_ms=[(p, np.percentile(itls or 0, p) * 1000) for p in selected_percentiles],
-        mean_e2el_ms=np.mean(e2els or 0) * 1000,
-        std_e2el_ms=np.std(e2els or 0) * 1000,
-        median_e2el_ms=np.median(e2els or 0) * 1000,
-        percentiles_e2el_ms=[
-            (p, np.percentile(e2els or 0, p) * 1000) for p in selected_percentiles
-        ],
+        std_ttft_ms=np.std(ttfts) * 1000,
+        median_ttft_ms=np.median(ttfts) * 1000,
+        percentiles_ttft_ms=[(p, np.percentile(ttfts, p) * 1000) for p in selected_percentiles],
+        mean_tpot_ms=np.mean(tpots) * 1000,
+        std_tpot_ms=np.std(tpots) * 1000,
+        median_tpot_ms=np.median(tpots) * 1000,
+        percentiles_tpot_ms=[(p, np.percentile(tpots, p) * 1000) for p in selected_percentiles],
+        mean_itl_ms=np.mean(itls) * 1000,
+        std_itl_ms=np.std(itls) * 1000,
+        median_itl_ms=np.median(itls) * 1000,
+        percentiles_itl_ms=[(p, np.percentile(itls, p) * 1000) for p in selected_percentiles],
+        mean_e2el_ms=np.mean(e2els) * 1000,
+        std_e2el_ms=np.std(e2els) * 1000,
+        median_e2el_ms=np.median(e2els) * 1000,
+        percentiles_e2el_ms=[(p, np.percentile(e2els, p) * 1000) for p in selected_percentiles],
     )
 
     return metrics, actual_output_lens
