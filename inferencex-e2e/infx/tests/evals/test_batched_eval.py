@@ -298,6 +298,10 @@ def test_validate_scores_fails_when_thresholds_cannot_be_loaded(
             "default:\n  gsm8k: 0.8\nmodels:\n  dsr1:\n    gsm8k: '0.9'\n",
             "thresholds config models.dsr1.gsm8k must be a finite number, got '0.9'",
         ),
+        (
+            "default:\n  gsm8k: 0.8\nmodel:\n  dsr1:\n    gsm8k: 0.9\n",
+            "thresholds config has unknown section(s): model",
+        ),
     ],
 )
 def test_validate_scores_handles_empty_or_malformed_threshold_sections(

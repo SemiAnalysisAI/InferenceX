@@ -38,6 +38,10 @@ def load_config(path: str) -> dict:
         raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
         cfg = {"default": cfg}
+    if unknown := sorted(set(cfg) - {"default", "models"}, key=str):
+        raise ValueError(
+            f"thresholds config has unknown section(s): {', '.join(map(str, unknown))}"
+        )
     sections = {name: {} if cfg.get(name) is None else cfg[name] for name in ("default", "models")}
     for name, section in sections.items():
         if not isinstance(section, dict):
