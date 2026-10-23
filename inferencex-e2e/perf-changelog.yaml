@@ -10917,10 +10917,11 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Image unchanged: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f (same as #4319)."
-    - "Search space unchanged: TP4 and TP2 at c1-c64."
-    - "Every TP4 and TP2 point admits at most 2x CONC running sequences: max-num-seqs c1: 2, c2: 4, c4: 8, c8: 16, c16: 32, c32: 64, c64: 128 (previously unset)."
+    - "Image: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f -> nightly-rocm100-83c078d955cd6e0c63d3b12abe669c8de936a370."
+    - "Run TP4 at c1 and c2 only; remove the TP4 c4, c8, c16, c32 and c64 points. TP2 keeps c1-c64."
+    - "Every point admits at most 2x CONC running sequences: max-num-seqs c1: 2, c2: 4, c4: 8, c8: 16, c16: 32, c32: 64, c64: 128 (previously unset)."
     - "max-cudagraph-capture-size drops from a flat 1024 to max-num-seqs x (1 + 5 DSpark drafts): c1: 12, c2: 24, c4: 48, c8: 96, c16: 192, c32: 384, c64: 768."
     - "max-num-batched-tokens stays 16384 on every point. DSpark settings are unchanged."
-    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped, and inherits the target KV cache dtype; the PR touches no quantization or speculative-config setting."
+    - "New image picks up vllm-project/vllm#63009 (offloaded Engram tables allocated at their exact size, used at TP2), #54163 (DSpark keeps the last prefix-cache block) and #60731 (mono decode on gfx942, which also edits the shared mono kernels)."
+    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped, and inherits the target KV cache dtype; the draft load path is the same at both vLLM commits."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4432
