@@ -1552,6 +1552,8 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
     - dram-utilization: 0.80
       search-space:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
+    - dram-utilization: 1.0
+      search-space:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [64], srt-recipe: agentic.yaml:override_tp4_dspark3_c64_simple }
 
 # DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.
