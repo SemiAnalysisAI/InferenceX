@@ -10918,5 +10918,6 @@
   description:
     - "Add a TP4 c24 point (max-num-seqs 48, DSpark 7)."
     - "Replace DEP4 c64/c128 with DEP8 (TP1 x DP8 + EP8 behind vllm-router) at c64, c96 and c128, max-num-seqs 16/24/32 per rank, DSpark 3."
-    - "Image, serve flags and TP4 c1-c32 points are unchanged."
+    - "Add host-DRAM KV offload (vLLM SimpleCPUOffload, lazy) above c24: TP4 c32 at 1073 GB, DEP8 c64-c128 at 1932 GB (241.5 GB per rank)."
+    - "Image and serve flags are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4431
