@@ -10859,6 +10859,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3837
 
 - config-keys:
+    - glm5.2-fp4-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260901-07c8f729 to v0.5.22-cu130 and use cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4394
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4395
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
