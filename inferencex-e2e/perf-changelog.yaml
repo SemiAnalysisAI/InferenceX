@@ -11065,4 +11065,4 @@
     - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
   description:
     - "Update Qwen3.5 GB300 Dynamo-TRT AgentX recipes, TensorRT-LLM image, and NUMA placement"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4452
