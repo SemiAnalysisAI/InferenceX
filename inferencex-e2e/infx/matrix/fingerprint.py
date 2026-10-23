@@ -19,6 +19,7 @@ RECIPE_EXCLUDED = (
     ("benchmark", "concurrencies"),
     ("benchmark", "env", "CONC"),
     ("telemetry", "dcgm_exporter", "port"),
+    ("telemetry", "cpu_power_exporter"),
 )
 EXPORTER_PORT = 0
 

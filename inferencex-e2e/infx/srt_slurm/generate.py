@@ -65,6 +65,7 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             IS_MULTINODE="true",
             SRT_RECIPE=point["srt-recipe"],
             POWER="1" if point.get("power") else "0",
+            CPU_POWER="1" if point.get("cpu-power") else "0",
             CONC_LIST=" ".join(map(str, point["conc"])),
             DECODE_CPU_DRAM_GB=str(point.get("decode-cpu-dram-gb", 0)),
         )
@@ -97,15 +98,16 @@ def _binder_inputs(
     environment: Mapping[str, str],
     placement: tuple[str, Cluster] | None,
     root: Path,
-) -> tuple[int | None, dict[str, str]]:
-    """The DCGM exporter port and AgentX client env the launcher binds a multi-node point with.
+) -> tuple[int | None, str | None, dict[str, str]]:
+    """The DCGM exporter port, CPU exporter source and AgentX client env the launcher binds a
+    multi-node point with.
 
     Raises ``ValueError`` when they depend on a cluster the runner label does not single out,
     or the cluster's lanes refuse the point.
     """
     agentic = environment["IS_AGENTIC"] == "1"
     if "prefill" not in point or not (agentic or point.get("power")):
-        return None, {}
+        return None, None, {}
     if placement is None:
         raise ValueError(
             f"runner {point['runner']!r} must schedule on one cluster to bind the cluster's "
@@ -138,13 +140,15 @@ def bound_variant(
     *,
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
+    cpu_power_source: str | None = None,
     client_env: Mapping[str, str] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """The variant the launcher submits for ``point``, composed and bound.
 
-    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client paths
-    ``client_env``, the binder inputs the launcher computes. ``'@fabric.<name>'`` values stay
-    unresolved: recipe fingerprints hash them as written.
+    Multi-node variants get the DCGM telemetry block on ``power_port``, the Grace CPU exporter
+    on ``cpu_power_source``, and the client paths ``client_env``: the binder inputs the launcher
+    computes. ``'@fabric.<name>'`` values stay unresolved: recipe fingerprints hash them as
+    written.
     """
     if "prefill" not in point:
         selected, recipe = select_recipe(
@@ -157,6 +161,7 @@ def bound_variant(
         root=root,
         expand=expand,
         power_port=power_port,
+        cpu_power_source=cpu_power_source,
         client_env=client_env,
     )
 
@@ -232,11 +237,12 @@ def generate_recipes(
         for point in points:
             environment = point_environment(point)
             placement = _placement(inventory, point["runner"])
-            power_port, client_env = _binder_inputs(point, environment, placement, root)
+            power_port, cpu_source, client_env = _binder_inputs(point, environment, placement, root)
             fabric = _cluster_fabric(placement[1]) if placement else None
             variant, recipe = bound_variant(
-                point, environment, root, power_port=power_port, client_env=client_env
-            )
+                point, environment, root,
+                power_port=power_port, cpu_power_source=cpu_source, client_env=client_env,
+            )  # fmt: skip
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
             check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)

@@ -950,6 +950,8 @@ def _fixed_sequence_entries(
             entry.update(srt_recipe_fields(config, benchmark))
             if benchmark.get(Fields.POWER.value):
                 entry[Fields.POWER.value] = True
+            if benchmark.get(Fields.CPU_POWER.value):
+                entry[Fields.CPU_POWER.value] = True
             entry.update(
                 {
                     Fields.EXP_NAME.value: f"{model_code}_{seq_len_to_str(isl, osl)}",
@@ -1067,6 +1069,8 @@ def _agentic_entries(
         entry.update(srt_recipe_fields(config, benchmark))
         if benchmark.get(Fields.POWER.value):
             entry[Fields.POWER.value] = True
+        if benchmark.get(Fields.CPU_POWER.value):
+            entry[Fields.CPU_POWER.value] = True
         entry.update(
             {
                 Fields.KV_OFFLOADING.value: kv_offloading,

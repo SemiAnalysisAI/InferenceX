@@ -279,6 +279,7 @@ def aggregate_power_result(
             aggregate_gpus=aggregate_gpus,
             expected_producer_sha=env.get("POWER_PRODUCER_SHA") or None,
             logs_root=Path(env.get("POWER_RESULT_ROOT", "LOGS")),
+            expected_cpu=env.get("CPU_POWER") == "1",
             validation_result=validation_path,
             require_power=require_power,
         )
