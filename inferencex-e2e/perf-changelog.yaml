@@ -11053,3 +11053,11 @@
     - "Pin the MiniMax-M3 B200 vLLM images by digest and retune the TP4 concurrency 15-38 entries, with DRAM KV offload sized to the 1,073 GB node allowance."
     - "Add minimaxm3-fp4-b200-vllm-agentic-mtp-c10 with TP4 and TP8 concurrency 10 and TP4 DRAM concurrency 20 and 32 entries that cap active sequences."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4382
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Set TP4 concurrency 16, 24 and 32 to the FLASHINFER_TS DSpark attention backend and VLLM_HTTP_TIMEOUT_KEEP_ALIVE=300. Use prefill-schedule-interval 64 at concurrency 16 and 24, and 32 at concurrency 32."
+    - "Add TP4 concurrency 24 with max-num-seqs 48."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -54,12 +54,21 @@ zip_override_tp4:
       gpus: 4
       args:
         tensor-parallel-size: 4
-        max-num-seqs: [2, 8, 16, 32, 64]
+        max-num-seqs: [2, 8, 16, 32, 48, 64]
         # Golden AL 4.04.
-        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config:
+          - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+          - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+          - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+          - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+          - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+          - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        prefill-schedule-interval: [null, null, null, 64, 64, 32]
+      env:
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: [null, null, null, '300', '300', '300']
   benchmark:
     env:
-      CONC: ['1', '4', '8', '16', '32']
+      CONC: ['1', '4', '8', '16', '24', '32']
 
 zip_override_dep4:
   frontend:
