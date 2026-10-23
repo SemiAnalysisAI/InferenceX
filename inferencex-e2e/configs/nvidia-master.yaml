@@ -5619,7 +5619,7 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.5.0.dev20260908" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261016" }
   multinode: true
   disagg: false
   srt-recipe-dir: minimaxm31flash/vllm/gb300-fp4/agentx

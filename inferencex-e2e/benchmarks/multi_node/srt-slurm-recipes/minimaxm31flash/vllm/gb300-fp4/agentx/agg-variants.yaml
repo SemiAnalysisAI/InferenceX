@@ -8,8 +8,10 @@ base:
   identity:
     model: {}
     container: {}
-    frameworks: {dynamo: "1.5.0.dev20260908"}
-  dynamo: {install: true, source: {pypi: "1.5.0.dev20260908"}}
+    frameworks: {dynamo: "1.6.0.dev20261016"}
+  # 1.6.0.dev20261014+ imports the vLLM engine-launch helpers lazily
+  # (ai-dynamo/dynamo#16378); earlier builds fail at import on this vLLM.
+  dynamo: {install: true, source: {pypi: "1.6.0.dev20261016"}}
   environment: {ETCD_LEASE_TTL: "7200"}
   slurm: {time_limit: "12:00:00"}
   health_check: {max_attempts: 2160, interval_seconds: 10}
