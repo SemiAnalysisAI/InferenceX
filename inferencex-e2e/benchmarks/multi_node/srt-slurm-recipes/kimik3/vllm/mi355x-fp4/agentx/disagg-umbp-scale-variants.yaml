@@ -156,7 +156,8 @@ base:
     - 0.0.0.0:25190
     readiness:
       port: 25190
-      timeout_seconds: 120
+      # Readiness includes cold Pyxis image import and container startup.
+      timeout_seconds: 900
 
 override_1p1d_c70:
   roles:
