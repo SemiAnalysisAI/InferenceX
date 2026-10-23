@@ -1173,6 +1173,19 @@ def expand_full_sweep(
                 f"Invalid runner type(s): {invalid_runners}. "
                 f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
             )
+    precisions = {config[Fields.PRECISION.value] for config in master_config.values()}
+    frameworks = {config[Fields.FRAMEWORK.value] for config in master_config.values()}
+    for label, requested, exists in (
+        (
+            "model prefix",
+            options.model_prefix,
+            lambda p: any(k.startswith(f"{p}-") for k in master_config),
+        ),
+        ("precision", options.precision, precisions.__contains__),
+        ("framework", options.framework, frameworks.__contains__),
+    ):
+        if missing := [value for value in requested or () if not exists(value)]:
+            raise ValueError(f"No config has {label}: {', '.join(missing)}")
 
     seq_filter = {seq_len_stoi[sl] for sl in options.seq_lens} if options.seq_lens else None
     configs = (

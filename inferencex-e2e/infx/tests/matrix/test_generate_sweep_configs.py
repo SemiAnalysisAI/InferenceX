@@ -1264,7 +1264,7 @@ class TestGenerateFullSweepSingleNode:
         sample_single_node_config["dsr1flash-fp8-mi300x-sglang"] = {**entry, "model-prefix": "dsr1flash"}
 
         selected = {}
-        for prefixes in (["dsr1"], ["dsr1flash"], ["dsr1", "dsr1flash"], ["nonexistent"]):
+        for prefixes in (["dsr1"], ["dsr1flash"], ["dsr1", "dsr1flash"]):
             full_sweep_args_single_node.model_prefix = prefixes
             result = generate_full_sweep(
                 full_sweep_args_single_node,
@@ -1277,42 +1277,44 @@ class TestGenerateFullSweepSingleNode:
             ("dsr1",): ["dsr1"],
             ("dsr1flash",): ["dsr1flash"],
             ("dsr1", "dsr1flash"): ["dsr1", "dsr1flash"],
-            ("nonexistent",): [],
         }
 
-    def test_filter_by_precision(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.precision = ["fp8"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
+    @pytest.mark.parametrize("field", ["precision", "framework"])
+    def test_filter_by_config_field(
+        self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node, field,
+    ):
+        entry = sample_single_node_config["dsr1-fp8-mi300x-sglang"]
+        sample_single_node_config["dsr1-fp4-mi300x-vllm"] = {
+            **entry, "precision": "fp4", "framework": "vllm",
+        }
 
-        full_sweep_args_single_node.precision = ["fp4"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
+        selected = {}
+        for value in ("fp8", "fp4") if field == "precision" else ("sglang", "vllm"):
+            setattr(full_sweep_args_single_node, field, [value])
+            result = generate_full_sweep(
+                full_sweep_args_single_node, sample_single_node_config, sample_runner_config,
+            )
+            selected[value] = {row["precision"] for row in result}
 
-    def test_filter_by_framework(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.framework = ["sglang"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
+        if field == "precision":
+            assert selected == {"fp8": {"fp8"}, "fp4": {"fp4"}}
+        else:
+            assert selected == {"sglang": {"fp8"}, "vllm": {"fp4"}}
 
-        full_sweep_args_single_node.framework = ["vllm"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
+    @pytest.mark.parametrize(("filters", "message"), [
+        ({"model_prefix": ["dsr1", "deepseek"]}, "No config has model prefix: deepseek"),
+        ({"precision": ["FP8"]}, "No config has precision: FP8"),
+        ({"framework": ["trtllm"]}, "No config has framework: trtllm"),
+    ])
+    def test_filter_value_no_config_has_is_rejected(
+        self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node,
+        filters, message,
+    ):
+        vars(full_sweep_args_single_node).update(filters)
+        with pytest.raises(ValueError, match=f"^{message}$"):
+            generate_full_sweep(
+                full_sweep_args_single_node, sample_single_node_config, sample_runner_config,
+            )
 
     def test_filter_by_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.runner_type = ["mi300x"]
