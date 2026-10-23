@@ -1354,6 +1354,8 @@ def resolve_baseline(
     """
     from fnmatch import fnmatchcase
 
+    from infx.results.identity import public_config_key
+
     from .api import fetch
     from .validation import PRODUCER_UNAVAILABLE
 
@@ -1400,10 +1402,11 @@ def resolve_baseline(
             sources.append(feed.url)
         return datasets[run_id, run_attempt]
 
+    published_family = public_config_key(candidate.family.split(":", 1)[1])
     family_runs = {
         int(change["workflow_run_id"])
         for change in public.changelogs
-        if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
+        if any(fnmatchcase(published_family, key) for key in change["config_keys"])
     }
     for row, run_id, run_attempt, head in public.rows:
         if head is None:

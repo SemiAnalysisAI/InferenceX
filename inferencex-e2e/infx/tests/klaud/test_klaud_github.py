@@ -1667,8 +1667,12 @@ def test_prepare_baseline_keeps_the_baseline_the_candidate_pr_froze(tmp_path, mo
         published if frozen else preflight.model_copy(update={"goal": goal}))
 
 
+@pytest.mark.parametrize(("family_key", "published_key", "fingerprint"), [
+    ("test-family", "test-family", "fingerprint"),
+    ("model-fp8-h200-trtllm-mtp", "model-fp8-h200-trt-mtp", None),
+], ids=["fingerprinted", "legacy-row-under-aliased-key"])  # fmt: skip
 def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
-    monkeypatch,
+    monkeypatch, family_key, published_key, fingerprint
 ):
     base = "a" * 40
     historical_head = "b" * 40
@@ -1677,7 +1681,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
     entry = {
         "model-prefix": "Model",
         "runner": "h200",
-        "framework": "trtllm",
+        "framework": "trt",
         "precision": "fp8",
         "spec-decoding": "mtp",
         "disagg": False,
@@ -1706,7 +1710,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
     public_row = {
         "model": "Model",
         "hardware": "h200",
-        "framework": "trtllm",
+        "framework": "trt",
         "precision": "fp8",
         "spec_method": "mtp",
         "disagg": False,
@@ -1725,7 +1729,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "decode_ep": 1,
         "decode_dp_attention": False,
         "decode_num_workers": 0,
-        "recipe_fingerprint": "fingerprint",
+        "recipe_fingerprint": fingerprint,
         "run_url": "https://github.com/example/project/actions/runs/42",
         "tput_per_gpu": 10.0,
         "output_tput_per_gpu": 8.0,
@@ -1735,7 +1739,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
     info = {
         "runs": [{"github_run_id": "42", "run_attempt": 1}],
         "runConfigs": [{"github_run_id": "42", "head_sha": historical_head}],
-        "changelogs": [{"workflow_run_id": "42", "config_keys": ["test-family"]}],
+        "changelogs": [{"workflow_run_id": "42", "config_keys": [published_key]}],
     }
 
     feeds = {
@@ -1759,7 +1763,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
     producers = {historical_head: historical_matrix}
     candidate = OwnedCandidate(
         id="1" * 16 + "-" + "2" * 16,
-        family="configs/nvidia-master.yaml:test-family",
+        family=f"configs/nvidia-master.yaml:{family_key}",
         base=base,
     )
     context = {
@@ -1768,7 +1772,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             "image": public_image,
             "model": "Model",
             "hardware": "h200",
-            "framework": "trtllm",
+            "framework": "trt",
             "precision": "fp8",
             "spec_method": "mtp",
             "disagg": False,
