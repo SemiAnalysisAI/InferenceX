@@ -9,6 +9,33 @@ import pytest
 from infx.bench_serving import benchmark_serving as client
 
 
+def cli_args(tmp_path, **overrides):
+    """``main`` arguments for a one-prompt random run saved to ``tmp_path/result.json``."""
+    return Namespace(**{
+        'seed': 0, 'backend': 'vllm', 'model': 'fixture', 'served_model_name': None,
+        'tokenizer': None, 'tokenizer_mode': 'auto', 'base_url': 'http://unused',
+        'endpoint': '/completions', 'trust_remote_code': False, 'dataset_name': 'random',
+        'random_prefix_len': 0, 'random_input_len': 1, 'random_output_len': 1, 'num_prompts': 1,
+        'random_range_ratio': 1, 'use_chat_template': False, 'dsv4': False,
+        'random_num_workers': 1, 'goodput': None, 'logprobs': None, 'best_of': 1,
+        'request_rate': float('inf'), 'burstiness': 1, 'disable_tqdm': True, 'num_warmups': 0,
+        'profile': False, 'percentile_metrics': 'ttft', 'metric_percentiles': '99',
+        'ignore_eos': False, 'max_concurrency': 1, 'lora_modules': None, 'save_result': True,
+        'metadata': None, 'save_detailed': True, 'result_filename': 'result.json',
+        'result_dir': str(tmp_path), **overrides,
+    })
+
+
+def stub_benchmark(monkeypatch, raw):
+    """Skip tokenizer loading, prompt sampling and serving; ``benchmark`` returns ``raw``."""
+    benchmark = AsyncMock(return_value=raw)
+    monkeypatch.setattr(client, '_load_tokenizer', lambda *a, **kw: object())
+    monkeypatch.setattr(client, 'sample_random_requests', lambda **kw: [])
+    monkeypatch.setattr(client, 'benchmark', benchmark)
+    monkeypatch.setattr(client.gc, 'freeze', lambda: None)
+    return benchmark
+
+
 @pytest.mark.parametrize('requested,completed,status', [
     (100, 100, 'passed'), (100, 95, 'passed'), (100, 94, 'failed'),
     (100, 0, 'failed'), (0, 0, 'failed'), (100, 101, 'failed'),
@@ -18,28 +45,14 @@ from infx.bench_serving import benchmark_serving as client
 def test_client_preserves_outcome_before_failure(
     tmp_path, monkeypatch, requested, completed, status, save_result,
 ):
-    args = Namespace(
-        seed=0, backend='vllm', model='fixture', served_model_name=None,
-        tokenizer=None, tokenizer_mode='auto', base_url='http://unused', endpoint='/completions',
-        trust_remote_code=False, dataset_name='random', random_prefix_len=0,
-        random_input_len=1, random_output_len=1, num_prompts=requested, random_range_ratio=1,
-        use_chat_template=False, dsv4=False, random_num_workers=1, goodput=None,
-        logprobs=None, best_of=1, request_rate=float('inf'), burstiness=1,
-        disable_tqdm=True, num_warmups=0, profile=False, percentile_metrics='ttft',
-        metric_percentiles='99', ignore_eos=False, max_concurrency=1, lora_modules=None,
-        save_result=save_result, metadata=None, save_detailed=True,
-        result_filename='result.json', result_dir=str(tmp_path),
-    )
+    args = cli_args(tmp_path, num_prompts=requested, save_result=save_result)
     metrics = {name: 0 for name in (
         'median_ttft_ms', 'mean_ttft_ms', 'std_ttft_ms', 'p99_ttft_ms',
         'mean_tpot_ms', 'median_tpot_ms', 'std_tpot_ms', 'p99_tpot_ms',
         'median_itl_ms', 'mean_itl_ms', 'std_itl_ms', 'p99_itl_ms',
     )}
     raw = {**metrics, 'completed': completed, 'errors': ['retained diagnostic']}
-    monkeypatch.setattr(client, '_load_tokenizer', lambda *a, **kw: object())
-    monkeypatch.setattr(client, 'sample_random_requests', lambda **kw: [])
-    monkeypatch.setattr(client, 'benchmark', AsyncMock(return_value=raw))
-    monkeypatch.setattr(client.gc, 'freeze', lambda: None)
+    stub_benchmark(monkeypatch, raw)
     invalid = requested == 0 or completed is None or completed < 0 or completed > requested
 
     if status == 'failed':
@@ -68,6 +81,16 @@ def test_client_preserves_outcome_before_failure(
         assert 'error' not in outcome
         assert outcome['failed'] == {100: 0, 95: 5, 94: 6, 0: 100}[completed]
         assert outcome['max_failure_rate'] == 0.05
+
+
+def test_metadata_value_keeps_its_equals_signs(tmp_path, monkeypatch):
+    stub_benchmark(monkeypatch, {'completed': 1})
+
+    client.main(cli_args(tmp_path, metadata=['cmd=--a=b', ' tp = 8 ']))
+
+    saved = json.loads((tmp_path / 'result.json').read_text())
+    assert saved['cmd'] == '--a=b'
+    assert saved['tp'] == '8'
 
 
 class WordTokenizer:

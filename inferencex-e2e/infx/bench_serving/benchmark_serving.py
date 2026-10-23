@@ -925,7 +925,7 @@ def main(args: argparse.Namespace) -> None:
         if args.metadata:
             for item in args.metadata:
                 if "=" in item:
-                    kvstring = item.split("=")
+                    kvstring = item.split("=", 1)
                     result_json[kvstring[0].strip()] = kvstring[1].strip()
                 else:
                     raise ValueError("Invalid metadata format. Please use KEY=VALUE format.")
