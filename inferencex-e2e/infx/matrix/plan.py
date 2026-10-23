@@ -15,7 +15,7 @@ from .generate import (
     drop_app_colliding_evals,
     freeze_config_value,
     generate_config_matrix,
-    seq_len_to_str,
+    seq_len_itos,
     trim_conc,
 )
 from .revision import GENERATOR, snapshot
@@ -431,11 +431,17 @@ def build_plan(
         for result in all_benchmark_results:
             result["recipe-fingerprint"] = recipe_fingerprint(result, root)
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
-            scenario = (
-                "agentic"
-                if result.get("scenario-type") == "agentic-coding"
-                else seq_len_to_str(result["isl"], result["osl"])
-            )
+            if result.get("scenario-type") == "agentic-coding":
+                scenario = "agentic"
+            else:
+                scenario = seq_len_itos.get((result["isl"], result["osl"]))
+            # run-sweep.yml dispatches only these groups; any other would never run.
+            if scenario is None:
+                raise ValueError(
+                    f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
+                    f"osl={result['osl']} has no sweep job; supported: "
+                    f"{', '.join(seq_len_itos.values())}"
+                )
             final_results[node_type][scenario].append(result)
 
         all_eval_results = [

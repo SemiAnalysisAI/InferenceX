@@ -679,6 +679,16 @@ def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, cha
     assert '\"single_node\":' not in captured.out
 
 
+@pytest.mark.parametrize("key", ["single", "multi"])
+def test_plan_rejects_a_sequence_length_no_sweep_job_runs(planning_repo, changelog_run, key):
+    root, master, _ = planning_repo
+    master[key]["scenarios"]["fixed-seq-len"][0].update(isl=1024, osl=8192)
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
+
+    with pytest.raises(ValueError, match=r"isl=1024 osl=8192 .*1k1k, 8k1k"):
+        changelog_run([{"config-keys": [key], "scenario-type": ["fixed-seq-len"], "no-evals": True}])
+
+
 def test_a_master_config_key_defined_twice_is_rejected(planning_repo, changelog_run):
     root, master, _ = planning_repo
     shadow = {"single": {**master["single"], "image": "example/image:shadow"}}
