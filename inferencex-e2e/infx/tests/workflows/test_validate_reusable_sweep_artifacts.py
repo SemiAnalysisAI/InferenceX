@@ -409,6 +409,19 @@ def write_agentic_artifacts(
     (root / f"agentic_{result_name}").mkdir()
 
 
+def test_eval_validation_matches_mixed_case_raw_meta_to_lowercased_aggregate(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    meta_path = tmp_path / "eval_result_conc32_h100-dgxc-slurm_00" / "meta_env.json"
+    meta_path.write_text(
+        json.dumps({**single_eval_meta(32), "framework": "VLLM", "precision": "FP4"})
+    )
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
 def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
     tmp_path: Path,
 ) -> None:

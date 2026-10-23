@@ -31,6 +31,11 @@ def normalized_runner(value: Any) -> str:
     return str(value or "").lower()
 
 
+def _lowered(value: Any) -> Any:
+    """Match aggregate rows, which lowercase framework and precision."""
+    return value.lower() if isinstance(value, str) else value
+
+
 LEGACY_EVAL_SUITE = "<legacy-eval-suite>"
 
 
@@ -47,8 +52,8 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
             "multi",
             normalized_runner(row.get("hw")),
             row.get("model_prefix", row.get("infmax_model_prefix")),
-            row.get("framework"),
-            row.get("precision"),
+            _lowered(row.get("framework")),
+            _lowered(row.get("precision")),
             row.get("eval_suite", LEGACY_EVAL_SUITE),
             row.get("spec_decoding", "none"),
             as_int(row.get("isl", 8192), 8192),
@@ -78,8 +83,8 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         "single",
         normalized_runner(row.get("hw")),
         row.get("model_prefix", row.get("infmax_model_prefix")),
-        row.get("framework"),
-        row.get("precision"),
+        _lowered(row.get("framework")),
+        _lowered(row.get("precision")),
         row.get("eval_suite", LEGACY_EVAL_SUITE),
         row.get("spec_decoding", "none"),
         as_int(row.get("isl", 8192), 8192),
