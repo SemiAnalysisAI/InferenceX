@@ -4,7 +4,7 @@ Reads profile_export.jsonl and produces mean/median/p75/p90/p95 ISL and OSL
 summary stats.
 
 Usage:
-    python analyze_benchmark_distributions.py path/to/aiperf_artifacts/ -o output_dir/
+    python -m infx.results.agentic.analyze_benchmark_distributions <artifacts_dir> -o <out>
 """
 
 from __future__ import annotations
