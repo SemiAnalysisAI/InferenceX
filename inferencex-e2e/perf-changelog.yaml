@@ -10871,3 +10871,43 @@
     - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4395
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX recipe on B200 with the vLLM day-0 image vllm/vllm-openai:minimax-m31-flash."
+    - "Serve flags follow recipes.vllm.ai Blackwell TP4: block-size 128, nvfp4 KV and indexer cache, prefill query quantization, FULL_AND_PIECEWISE graphs, minimax_m3 parsers, text-only."
+    - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); synthetic acceptance from the golden curve minimaxm31flash_dspark.yaml (#4425)."
+    - "TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c128 drafting 3 tokens (golden AL 2.88)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4426
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM image from nightly-49cb2bbf to the digest-pinned nightly-8e2beaa3."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4388
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4396
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM ROCm image from v0.31.0 to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4402
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4408
+  scenario-type: [agentic-coding]
