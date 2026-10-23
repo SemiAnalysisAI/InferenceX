@@ -10918,4 +10918,4 @@
   description:
     - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX on GB200, matching the B200 recipe (#4426) with the arm64 build of the same day-0 vLLM image (minimax-m31-flash-arm64-cu134)."
     - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c128 drafting 3 tokens (golden AL 2.88)."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4433
