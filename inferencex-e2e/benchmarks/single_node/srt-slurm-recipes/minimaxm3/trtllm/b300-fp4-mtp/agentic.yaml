@@ -14,7 +14,6 @@ base:
   engine:
     type: trtllm
     served_model_name: nvidia/MiniMax-M3-NVFP4
-  setup_script: minimaxm3-trtllm-agentx.sh
   roles:
     agg:
       nodes: 1
@@ -97,6 +96,9 @@ base:
       AIPERF_SERVER_METRICS_URLS: http://localhost:8000/prometheus/metrics
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
       KV_OFFLOADING: dram
+      # Pin MiniMax-M3 thinking on for the replay, matching the thinking_on
+      # golden acceptance curve. The client splits this value on whitespace.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"thinking_mode":"enabled"}}'
 
 # One variant per measured point. Draft length and capture ladder follow the
 # matching local ser_tp*_mtp*_c*.yaml profile. The host pool is 288 GiB at TP8
