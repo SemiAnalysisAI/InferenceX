@@ -474,7 +474,7 @@ def main() -> None:
     if not added_yaml.strip():
         raise ValueError("No additions found in the changelog file.")
 
-    changelog_data = yamlio.safe_load(added_yaml)
+    changelog_data = yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader)
 
     try:
         result = build_plan(

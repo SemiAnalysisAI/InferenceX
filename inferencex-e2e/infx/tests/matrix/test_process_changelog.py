@@ -679,6 +679,30 @@ def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, cha
     assert '\"single_node\":' not in captured.out
 
 
+def test_a_master_config_key_defined_twice_is_rejected(planning_repo, changelog_run):
+    root, master, _ = planning_repo
+    shadow = {"single": {**master["single"], "image": "example/image:shadow"}}
+    with (root / "configs/nvidia-master.yaml").open("a") as master_file:
+        master_file.write(yaml.safe_dump(shadow, sort_keys=False))
+
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'single'"):
+        changelog_run([{"scenario-type": ["fixed-seq-len"], "no-evals": True}])
+
+
+def test_a_changelog_addition_with_a_repeated_field_is_rejected(planning_repo, monkeypatch):
+    added = (
+        "- config-keys: [single]\n  config-keys: [multi]\n  description: [Change]\n"
+        "  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1\n"
+    )
+    monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: added)
+    monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "base",
+                        "--head-ref", "head", "--changelog-file", "perf-changelog.yaml"])
+
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'config-keys'"):
+        process_changelog.main()
+
+
+
 @pytest.mark.parametrize("threshold,expected", [
     (None, ["single", "default", "low", "high", "null", "invalid"]),
     (1, ["single", "default", "low", "high"]),

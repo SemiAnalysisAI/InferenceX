@@ -1133,7 +1133,7 @@ def load_config_files(config_files: list[str], validate: bool = True) -> dict:
     for config_file in config_files:
         try:
             with open(config_file) as f:
-                config_data = yamlio.safe_load(f)
+                config_data = yamlio.load(f, yamlio.UniqueKeySafeLoader)
                 if not isinstance(config_data, dict):
                     raise ValueError(f"Config file '{config_file}' must contain a dictionary")
 

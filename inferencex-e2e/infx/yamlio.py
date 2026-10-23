@@ -6,13 +6,18 @@ import functools
 import io
 import os
 import re
+from collections.abc import Iterator
 from typing import IO, Any
 
 import yaml
+from yaml.constructor import ConstructorError
+from yaml.resolver import BaseResolver
 
 _C_SAFE_LOADER = (
     None if os.environ.get("INFX_PURE_YAML") == "1" else getattr(yaml, "CSafeLoader", None)
 )
+_MERGE_TAG = "tag:yaml.org,2002:merge"
+_VALUE_TAG = "tag:yaml.org,2002:value"
 _TABLES = (
     "yaml_constructors",
     "yaml_multi_constructors",
@@ -129,3 +134,101 @@ def load(stream: str | IO[str], loader: type = yaml.SafeLoader) -> Any:
 def safe_load(stream: str | IO[str]) -> Any:
     """Drop-in for ``yaml.safe_load`` on text."""
     return load(stream, yaml.SafeLoader)
+
+
+class UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate mapping keys."""
+
+
+def construct_unique_mapping(
+    loader: UniqueKeyLoader,
+    node: yaml.MappingNode,
+    deep: bool = False,
+) -> dict[Any, Any]:
+    """Construct a mapping while rejecting keys that would overwrite values."""
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in mapping
+        except TypeError as exc:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found unhashable key {key!r}",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+class UniqueKeySafeLoader(yaml.SafeLoader):
+    """SafeLoader, merge keys included, that rejects a key repeated within one mapping."""
+
+
+def _reject_repeated_keys(loader: UniqueKeySafeLoader, node: yaml.MappingNode) -> None:
+    """Check ``node``'s own keys, and those of the mappings it merges, before PyYAML's
+    ``flatten_mapping`` rewrites any of them in place."""
+    # Holding the nodes keeps their ids from being reused by a later document's nodes.
+    checked = loader.__dict__.setdefault("_infx_checked_mappings", {})
+    if id(node) in checked:
+        return
+    checked[id(node)] = node
+    seen = set()
+    for key_node, value_node in node.value:
+        if key_node.tag == _MERGE_TAG:
+            sources = (
+                value_node.value if isinstance(value_node, yaml.SequenceNode) else [value_node]
+            )
+            for source in sources:
+                if isinstance(source, yaml.MappingNode):
+                    _reject_repeated_keys(loader, source)
+            continue
+        if key_node.tag == _VALUE_TAG:
+            key = loader.construct_scalar(key_node)
+        else:
+            key = loader.construct_object(key_node)
+        try:
+            duplicate = key in seen
+        except TypeError:
+            continue
+        if duplicate:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        seen.add(key)
+
+
+def construct_unique_safe_mapping(
+    loader: UniqueKeySafeLoader, node: yaml.Node
+) -> Iterator[dict[Any, Any]]:
+    """``SafeConstructor.construct_yaml_map`` after checking the mapping's own keys."""
+    data: dict[Any, Any] = {}
+    yield data
+    if isinstance(node, yaml.MappingNode):
+        _reject_repeated_keys(loader, node)
+    data.update(loader.construct_mapping(node))
+
+
+def construct_unique_safe_set(loader: UniqueKeySafeLoader, node: yaml.Node) -> Iterator[set[Any]]:
+    """``SafeConstructor.construct_yaml_set`` after checking the mapping's own keys."""
+    data: set[Any] = set()
+    yield data
+    if isinstance(node, yaml.MappingNode):
+        _reject_repeated_keys(loader, node)
+    data.update(loader.construct_mapping(node))
+
+
+UniqueKeyLoader.add_constructor(BaseResolver.DEFAULT_MAPPING_TAG, construct_unique_mapping)
+UniqueKeySafeLoader.add_constructor(BaseResolver.DEFAULT_MAPPING_TAG, construct_unique_safe_mapping)
+UniqueKeySafeLoader.add_constructor("tag:yaml.org,2002:set", construct_unique_safe_set)

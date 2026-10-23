@@ -2,7 +2,6 @@ import pytest
 import yaml
 
 from infx import yamlio
-from infx.workflows.validate_perf_changelog import UniqueKeyLoader
 
 
 @pytest.mark.parametrize(
@@ -56,4 +55,33 @@ def test_stream_errors_name_the_file_with_pyyamls_wording(tmp_path):
 
 def test_custom_loader_constructors_apply():
     with pytest.raises(yaml.YAMLError, match="found duplicate key 'a'"):
-        yamlio.load("x: 1\ny: {a: 1, a: 2}\n", UniqueKeyLoader)
+        yamlio.load("x: 1\ny: {a: 1, a: 2}\n", yamlio.UniqueKeyLoader)
+
+
+def test_safe_unique_key_loader_merges_and_rejects_repeated_own_keys():
+    merged = "base: &b {x: 1, y: 1}\nk: {<<: *b, y: 2}\n"
+    repeated = "base: &b {x: 1}\nk: {<<: *b, y: 2, y: 3}\n"
+
+    assert yamlio.load(merged, yamlio.UniqueKeySafeLoader) == {
+        "base": {"x": 1, "y": 1},
+        "k": {"x": 1, "y": 2},
+    }
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'y'"):
+        yamlio.load(repeated, yamlio.UniqueKeySafeLoader)
+
+
+@pytest.mark.parametrize("load", [yamlio.load, lambda text, loader: yaml.load(text, Loader=loader)])
+@pytest.mark.parametrize(
+    ("merging", "expected"), [("{<<: *b}", {"k": 2}), ("!!set {<<: *b}", {"k"})]
+)
+def test_safe_unique_key_loader_allows_overriding_a_mapping_flattened_elsewhere_first(
+    load, merging, expected
+):
+    text = f"x:\n  b: &b {{<<: &a {{k: 1}}, k: 2}}\ny: {merging}\n"
+
+    assert load(text, yamlio.UniqueKeySafeLoader) == {"x": {"b": {"k": 2}}, "y": expected}
+
+
+def test_safe_unique_key_loader_reports_a_non_mapping_map_as_safeloader_does():
+    with pytest.raises(yaml.constructor.ConstructorError, match="expected a mapping node"):
+        yamlio.load("a: !!map x\n", yamlio.UniqueKeySafeLoader)

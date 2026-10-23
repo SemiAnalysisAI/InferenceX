@@ -21,7 +21,6 @@ from infx.matrix.revision import PLANNER, Revision
 from .validate_perf_changelog import (
     CANONICAL_PR_LINK,
     ChangelogValidationError,
-    UniqueKeyLoader,
     parse_changelog,
     read_git_file,
     validate_raw_change,
@@ -473,7 +472,7 @@ def build_config(
 def validate_recovery_workflow(path: Path, pr_number: int) -> None:
     """Reject recovery workflows that could schedule benchmark compute."""
     text = path.read_text()
-    data = yamlio.load(text, UniqueKeyLoader)
+    data = yamlio.load(text, yamlio.UniqueKeyLoader)
     if not isinstance(data, dict):
         raise RecoveryError("recovery workflow root must be a mapping")
 
