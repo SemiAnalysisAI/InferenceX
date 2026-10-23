@@ -64,17 +64,22 @@ def call(
 
 
 def tee(argv: Sequence[str], log: Path, env: Mapping[str, str] | None = None) -> int:
-    """``argv 2>&1 | tee log``; return argv's status."""
+    """``argv 2>&1 | tee log``; return argv's status, 127 if it cannot start."""
     echo(argv, env)
-    with (
-        log.open("wb") as sink,
-        subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env) as child,
-    ):
-        output = cast("io.BufferedReader", child.stdout)
-        while chunk := output.read1(1 << 16):
-            for stream in (sys.stdout.buffer, sink):
-                stream.write(chunk)
-                stream.flush()
+    with log.open("wb") as sink:
+        try:
+            child = subprocess.Popen(
+                argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env
+            )
+        except OSError as error:
+            print(f"ERROR: cannot run {argv[0]}: {error}", file=sys.stderr, flush=True)
+            return 127
+        with child:
+            output = cast("io.BufferedReader", child.stdout)
+            while chunk := output.read1(1 << 16):
+                for stream in (sys.stdout.buffer, sink):
+                    stream.write(chunk)
+                    stream.flush()
     return status(child.returncode)
 
 
