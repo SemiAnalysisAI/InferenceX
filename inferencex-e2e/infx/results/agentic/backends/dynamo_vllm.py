@@ -92,7 +92,9 @@ class DynamoVllmBackend(VllmBackend):
             )
         )
         if flat["server_overall_cache_hit_rate"] is None:
-            flat["server_overall_cache_hit_rate"] = frontend_hit_rate or router_shared_hit_rate
+            overall = frontend_hit_rate if frontend_hit_rate is not None else router_shared_hit_rate
+            flat["server_overall_cache_hit_rate"] = overall
+            nested["cache"]["overall_cache_hit_rate"] = overall
 
         nested["cache"].update(
             {
