@@ -52,8 +52,9 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point. Every point admits 128 sequences and captures every
-# decode size through 32 plus 48, 64 and 128. The _dpa points (concurrency 32
+# One variant per point. Every point admits 128 sequences (256 on plain-TP TP2
+# c256) and captures every decode size through 32 plus 48, 64 and 128 (and 256
+# there). The _dpa points (concurrency 32
 # and above) run DP attention without TBO (TBO does not support SWA bounded
 # replay), keep each AIPerf session on one DP rank and defer prefill so that at
 # least 10 decode passes run between prefills.
@@ -164,6 +165,11 @@ override_tp2_c256:
   roles:
     agg:
       gpus: 2
+      # Admit every session: at 128 sequences half of the 256 queue behind the
+      # running batch.
+      args:
+        max-num-seqs: 256
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128,256]'
   benchmark:
     env:
       CONC: '256'
