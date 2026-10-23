@@ -40,12 +40,14 @@ try:
 
     from github import Github, GithubException, RateLimitExceededException
 
-    # PyGithub surfaces network failures as requests exceptions, which are not builtin ones.
+    # PyGithub surfaces network failures as requests exceptions, which are not builtin ones,
+    # and raises RetryError once its own 5xx and rate-limit retries run out.
     _NETWORK_ERRORS: tuple[type[Exception], ...] = (
         ConnectionError,
         TimeoutError,
         requests.ConnectionError,
         requests.Timeout,
+        requests.exceptions.RetryError,
     )
 except ImportError:
     gitpython = None  # type: ignore[assignment]

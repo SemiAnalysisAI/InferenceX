@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -21,6 +25,7 @@ from infx.workflows.merge_with_reuse import (
     _latest_statuses,
     _MergeState,
     _poll_pr_head,
+    _make_github,
     _resolve_token,
     _retry_delay,
     find_eligible_run,
@@ -387,6 +392,60 @@ class TestWaitForCheck:
         gh_repo.get_commit.return_value.get_check_runs.return_value = [verdict, skipped]
 
         assert wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60) == 0
+
+    def test_server_errors_past_client_retries_are_retried(self, monkeypatch):
+        """PyGithub's own 5xx retries end in requests' RetryError, which must not abort."""
+        sha = "a" * 40
+        state = {"healthy": False, "check_polls": 0}
+
+        class GitHub(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_GET(self):
+                base = f"http://127.0.0.1:{self.server.server_port}/repos/owner/repo"
+                path = self.path.partition("?")[0]
+                if path == "/repos/owner/repo":
+                    status, body = 200, {"full_name": "owner/repo", "url": base}
+                elif path == f"/repos/owner/repo/commits/{sha}":
+                    status, body = 200, {"sha": sha, "url": f"{base}/commits/{sha}"}
+                elif path == f"/repos/owner/repo/commits/{sha}/check-runs":
+                    state["check_polls"] += 1
+                    status, body = (200, {"total_count": 1, "check_runs": [{
+                        "id": 1, "name": "check-changelog", "status": "completed",
+                        "conclusion": "success", "started_at": "2024-01-01T00:00:00Z",
+                        "details_url": None,
+                    }]}) if state["healthy"] else (502, {"message": "Server Error"})
+                else:
+                    status, body = 404, {"message": "Not Found"}
+                data = json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), GitHub)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
+        thread.start()
+        monkeypatch.setenv("GITHUB_API_URL", f"http://127.0.0.1:{server.server_port}")
+        # PyGithub throttles with time.sleep too, so only the helper's own sleep heals GitHub.
+        monkeypatch.setattr(
+            "infx.workflows.merge_with_reuse.time",
+            SimpleNamespace(
+                monotonic=time.monotonic, sleep=lambda _seconds: state.update(healthy=True)
+            ),
+        )
+        try:
+            gh_repo = _make_github("token").get_repo("owner/repo")
+            result = wait_for_check(sha, "check-changelog", gh_repo, timeout=60)
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        assert result == 0
+        assert state["check_polls"] > 1
 
 
 
