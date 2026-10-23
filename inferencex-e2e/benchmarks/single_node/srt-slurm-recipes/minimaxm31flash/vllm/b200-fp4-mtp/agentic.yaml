@@ -78,9 +78,9 @@ zip_override_dep8:
         tensor-parallel-size: 1
         data-parallel-size: 8
         enable-expert-parallel: true
-        max-num-seqs: [16, 32, 64]
+        max-num-seqs: [16, 24, 32]
         # Golden AL 2.88.
         speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
-      CONC: ['64', '128', '256']
+      CONC: ['64', '96', '128']
