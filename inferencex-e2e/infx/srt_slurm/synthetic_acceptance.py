@@ -115,7 +115,26 @@ def acceptance_length(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> float | None:
-    """The golden AL a speculative AgentX throughput run of ``recipe`` simulates, else None."""
+    """The golden AL the generation role of a speculative AgentX throughput run simulates,
+    else None."""
+    roles = recipe.get("roles", {})
+    generation = roles.get("decode", roles.get("agg", {}))
+    if (
+        ENGINES.get(framework) == "vllm"
+        and spec_parameters(generation, "vllm").get("enable_adaptive_verification") is True
+    ):
+        return None
+    return _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
+
+
+def _simulated_length(
+    recipe: Mapping[str, Any],
+    framework: str,
+    environment: Mapping[str, str],
+    *,
+    golden_dir: Path = GOLDEN_DIR,
+) -> float | None:
+    """The golden AL ``build_overrides`` sets on non-adaptive speculative roles, else None."""
     engine = ENGINES.get(framework)
     if engine is None:
         return None
@@ -165,7 +184,7 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
-    al = acceptance_length(recipe, framework, environment, golden_dir=golden_dir)
+    al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
         "sglang": SGLANG_VARIABLES,

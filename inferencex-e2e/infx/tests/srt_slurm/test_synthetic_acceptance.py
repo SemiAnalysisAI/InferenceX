@@ -218,6 +218,27 @@ def test_adaptive_verification_records_no_golden_acceptance(golden_dir: Path) ->
     assert build_overrides(recipe, "vllm-disagg", env, golden_dir=golden_dir) == []
 
 
+def test_adaptive_generation_records_no_golden_acceptance_while_prefill_simulates(
+    golden_dir: Path,
+) -> None:
+    decode = vllm_recipe("dspark", enable_adaptive_verification=True)["roles"]["agg"]
+    prefill = vllm_recipe("dspark")["roles"]["agg"]
+    recipe = {"roles": {"prefill": prefill, "decode": decode}}
+    env = {**ENV, "SPEC_DECODING": "dspark"}
+
+    assert acceptance_length(recipe, "vllm-disagg", env, golden_dir=golden_dir) is None
+    result = apply_native(
+        recipe, build_overrides(recipe, "vllm-disagg", env, golden_dir=golden_dir)
+    )
+    assert result["roles"]["decode"] == decode
+    assert json.loads(result["roles"]["prefill"]["args"]["speculative-config"]) == {
+        "method": "dspark",
+        "num_speculative_tokens": 3,
+        "rejection_sample_method": "synthetic",
+        "synthetic_acceptance_length": 2.7,
+    }
+
+
 @pytest.mark.parametrize("sampling", [None, "unknown"])
 def test_kimi_curve_requires_an_explicit_supported_sampler(
     golden_dir: Path, sampling: str | None
