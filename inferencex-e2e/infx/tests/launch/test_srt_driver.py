@@ -722,6 +722,19 @@ def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     assert (error["stage"], error["type"], error["evidence"]) == ("prepare", "SetupFailed", "srt-setup.log")
 
 
+def test_a_setup_step_killed_by_a_signal_exits_128_plus_the_signal(harness):
+    fakes = Path(harness.env["PATH"].split(os.pathsep)[0])
+    (fakes / "make").write_text("#!/bin/bash\nkill -KILL $$\n")
+    env = lane_env(
+        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="deepseek-ai/DeepSeek-R1-0528",
+    )  # fmt: skip
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 137, result.stderr[-4000:]
+    error = job_event(harness.workspace)["error"]
+    assert (error["type"], error["exit_code"]) == ("SetupFailed", 137)
+
+
 def test_a_failed_uv_download_fails_the_uv_install(harness):
     fakes = Path(harness.env["PATH"].split(os.pathsep)[0])
     (fakes / "uv").unlink()

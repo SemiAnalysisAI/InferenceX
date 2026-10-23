@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+from infx.bench.proc import status
 from infx.clusters import Cluster, resolve_cluster
 from infx.launch import drivers
 from infx.launch.backends import BACKENDS, backend_class
@@ -28,7 +29,7 @@ def launch(cluster: Cluster, request: LaunchRequest, event: JobEventBuilder | No
     """Run ``request`` on ``cluster``; a launch error is one ``ERROR:`` line, not a traceback."""
     with Lifecycle(event) as life:
         try:
-            rc = drivers.run(cluster, request, life)
+            rc = status(drivers.run(cluster, request, life))
         except (LaunchError, BackendError, RequestError) as error:
             life.event.error(error)
             rc = 1
