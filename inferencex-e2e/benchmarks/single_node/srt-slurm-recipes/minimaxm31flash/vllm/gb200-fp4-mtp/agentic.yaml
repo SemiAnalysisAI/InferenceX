@@ -1,6 +1,6 @@
 base:
   schema: 2
-  name: minimaxm31flash-fp4-gb200-vllm-agentic
+  name: minimaxm31flash-fp4-gb200-vllm-agentic-dspark
   resources:
     gpu_type: gb200
     gpus_per_node: 4
@@ -23,8 +23,7 @@ base:
       nodes: 1
       workers: 1
       # Serve flags follow the GB200 TP4 recipe at
-      # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash, without DSpark:
-      # MiniMax-M3.1-Flash has no golden AL curve yet.
+      # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash.
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -38,6 +37,10 @@ base:
         kv-cache-dtype: nvfp4
         attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
         disable-hybrid-kv-cache-manager: true
+        # Three-token DSpark from the checkpoint's dspark/ head, per the
+        # recipes.vllm.ai GB200 TP4 command. Throughput runs replace
+        # block rejection with the golden acceptance length.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         enable-prefix-caching: true
         max-model-len: 1048576
         max-num-batched-tokens: 8192
