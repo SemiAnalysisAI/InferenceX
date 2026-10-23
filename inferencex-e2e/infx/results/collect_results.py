@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 def main() -> None:
+    """Concatenate every JSON result under the results dir in argv into agg_<exp_name>.json."""
     results_dir = Path(sys.argv[1])
     exp_name = sys.argv[2]
 

@@ -195,10 +195,12 @@ class _RawEvalArtifact:
 
     @cached_property
     def results(self) -> dict[Path, dict[str, Any]]:
+        """Parsed results*.json files of this raw dir, keyed by path."""
         return read_eval_results(self.path.glob("results*.json"))
 
     @classmethod
     def read(cls, path: Path) -> _RawEvalArtifact:
+        """Load the raw eval dir at ``path``, recording meta_env.json problems in ``errors``."""
         artifact = cls(path, {}, [], False, [])
         prefix = f"raw eval artifact {path.name!r}"
         meta_path = path / "meta_env.json"
@@ -405,6 +407,7 @@ def _prune_raw_eval_dir(
     name = artifact_dir.name
 
     def superseded(key: tuple[Any, ...]) -> bool:
+        """Return whether a dir other than this one won identity ``key``."""
         winner = winners.get(key)
         return winner is not None and winner.parent.name != name
 

@@ -85,6 +85,7 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> list[Path]:
 
 
 def _read_results(directory: Path) -> dict[Path, dict[str, Any]]:
+    """Map each readable eval result JSON in ``directory``, except meta_env.json, to its parsed content."""
     return read_eval_results(
         (path for path in directory.glob("*.json") if path.name != "meta_env.json"),
         skip_errors=(Exception,),
@@ -134,6 +135,7 @@ def collect_eval_rows(root: Path) -> list[dict[str, Any]]:
 
 
 def main() -> None:
+    """Print single-node and multinode eval tables for the results dir in argv and write agg_eval_<exp_name>.json."""
     if len(sys.argv) < 3:
         print("Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]")
         sys.exit(1)

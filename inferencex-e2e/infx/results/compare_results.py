@@ -11,6 +11,7 @@ from infx.results.identity import public_framework
 
 
 def parse_bool(value: object) -> bool:
+    """Return ``value`` if it is a bool, else whether its string form is ``"true"`` in any case."""
     if isinstance(value, bool):
         return value
     return str(value).lower() == "true"
@@ -184,6 +185,7 @@ def compute_metric_delta(
 
 
 def main() -> None:
+    """Print markdown tables comparing fixed-sequence results in the argv dir to DATABASE_URL baselines."""
     if len(sys.argv) < 2:
         print("Usage: python compare_results.py <results_dir>")
         sys.exit(1)

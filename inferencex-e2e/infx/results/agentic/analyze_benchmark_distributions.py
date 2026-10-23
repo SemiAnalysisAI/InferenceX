@@ -21,6 +21,7 @@ def load_records(artifacts_dir: Path) -> list[dict]:
 
 
 def _stats(values: list[int]) -> dict[str, float]:
+    """Return count, mean, median, p75, p90 and p95 of the integer ``values``."""
     sv = sorted(values)
     n = len(sv)
     return {
@@ -34,6 +35,7 @@ def _stats(values: list[int]) -> dict[str, float]:
 
 
 def _fmt(s: dict[str, float]) -> str:
+    """Format a ``_stats`` dict as one indented summary line."""
     return (
         f"  n={s['n']:,}  mean={s['mean']:,.0f}  median={s['median']:,}  "
         f"p75={s['p75']:,}  p90={s['p90']:,}  p95={s['p95']:,}"
@@ -41,6 +43,7 @@ def _fmt(s: dict[str, float]) -> str:
 
 
 def analyze(records: list[dict], output_dir: Path) -> None:
+    """Print ISL/OSL stats for ``records`` and write them to workload_distribution_summary.txt in ``output_dir``."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     all_isl: list[int] = []
@@ -77,6 +80,7 @@ def analyze(records: list[dict], output_dir: Path) -> None:
 
 
 def main() -> None:
+    """Parse the artifacts dir and output dir from argv and write the distribution summary."""
     parser = argparse.ArgumentParser(description="Analyze benchmark workload distributions")
     parser.add_argument("artifacts_dir", help="Path to aiperf_artifacts/ directory")
     parser.add_argument(

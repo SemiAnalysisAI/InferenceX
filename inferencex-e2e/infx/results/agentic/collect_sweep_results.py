@@ -54,6 +54,7 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
             break
 
     def metric_stat(metric_name: str, stat: str) -> float:
+        """Return the ``stat`` column of ``metric_name`` as a float, or 0 when missing or unparsable."""
         if metric_name in per_metric:
             try:
                 return float(per_metric[metric_name].get(stat, 0))
@@ -62,6 +63,7 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
         return 0
 
     def scalar_val(metric_name: str) -> float:
+        """Return the scalar row ``metric_name`` as a float, or 0 when missing or unparsable."""
         if metric_name in scalars:
             try:
                 return float(scalars[metric_name])
@@ -219,6 +221,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
 
 
 def main() -> None:
+    """Write summary.csv to the output dir for every experiment under the artifacts dir from argv, then plot overviews."""
     if len(sys.argv) < 3:
         print(f"Usage: {sys.argv[0]} <artifacts_dir> <output_dir>")
         sys.exit(1)

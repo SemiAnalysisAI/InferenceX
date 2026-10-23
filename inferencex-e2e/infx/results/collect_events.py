@@ -23,8 +23,6 @@ from infx import github
 FILENAME = "job_event.json"
 SCHEMA_VERSION = 2
 NO_RECORD = "NoLauncherRecord"
-# The names benchmark-tmpl.yml and benchmark-multinode-tmpl.yml give their jobs: an optional
-# klaud marker, the priority, model prefix, precision and runner, then the concurrency last.
 _BENCHMARK_JOB = re.compile(
     r"(?:^|/ )(?:klaud \| )?p[0-9.]+ \| (?P<model_prefix>\S+) (?P<precision>\S+) (?P<runner>\S+)"
     r" .* c(?P<conc>[0-9]+(?:x[0-9]+)*)(?: \| (?P<eval>eval|eval-only))?$"
@@ -51,7 +49,10 @@ def read_events(directory: Path) -> list[dict[str, Any]]:
 def reconcile(
     events: list[dict[str, Any]], jobs: Iterable[dict[str, Any]], *, run_url: str
 ) -> list[dict[str, Any]]:
-    """``events`` with their jobs' outcomes, then a record for each benchmark job without one."""
+    """``events`` with their jobs' outcomes, then a record for each benchmark job without one.
+
+    Benchmark jobs are recognized by the names benchmark-tmpl.yml and benchmark-multinode-tmpl.yml give them.
+    """
     events = [dict(event) for event in events]
     starts = [_time(event.get("started_at")) for event in events]
     synthesized = []
@@ -164,6 +165,7 @@ def _time(value: object) -> datetime | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Write the job events under the artifacts dir in ``argv`` as JSON Lines, reconciled with ``--run`` jobs, and return 0."""
     parser = argparse.ArgumentParser(
         prog="python -m infx.results.collect_events", description=__doc__
     )

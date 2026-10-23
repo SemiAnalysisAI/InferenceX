@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# InferenceX-app FRAMEWORK_ALIASES: ingestion stores these config frameworks under other names.
 FRAMEWORK_ALIASES = {
     "atom-disagg": "mooncake-atom",
     "sglang-disagg": "mori-sglang",
@@ -13,7 +12,10 @@ _LONGEST_FIRST = sorted(FRAMEWORK_ALIASES.items(), key=lambda alias: -len(alias[
 
 
 def public_framework(framework: str) -> str:
-    """The framework name the database and public API hold for a config's ``framework``."""
+    """The framework name the database and public API hold for a config's ``framework``.
+
+    The aliases mirror InferenceX-app's FRAMEWORK_ALIASES used at ingestion.
+    """
     framework = framework.lower()
     return FRAMEWORK_ALIASES.get(framework, framework)
 
