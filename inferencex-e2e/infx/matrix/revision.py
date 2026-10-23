@@ -28,6 +28,7 @@ class Tool:
 
     @property
     def module_path(self) -> str:
+        """The module's file path relative to the revision root."""
         return self.module.replace(".", "/") + ".py"
 
 
@@ -45,12 +46,6 @@ SNAPSHOT_PATHS = (
     "benchmarks/multi_node/srt-slurm-recipes",
 )
 INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
-# Each request line is [argv, output path]; a fork runs the tool as ``python -m`` would, with
-# stdout in the output file, and the server answers with the fork's exit status on a line of its
-# own after a marker, so output from importing the tool cannot be mistaken for a reply.
-# The server preloads only the tool's top-level imports, so the tool's own top-level code runs
-# once per request, in the fork, as the real __main__; the fork then exits through normal
-# interpreter finalization (threads joined, atexit, flushes, exit-status rules of CPython).
 _FORK_REPLY = "infx-fork-exit "
 _FORK_SERVER = """
 import ast, importlib.util, json, os, runpy, sys, types
@@ -89,18 +84,22 @@ class Revision:
     root: Path
 
     def __post_init__(self) -> None:
+        """Resolve ``root`` to an absolute path."""
         object.__setattr__(self, "root", Path(self.root).resolve())
 
     @property
     def master_configs(self) -> list[str]:
+        """Paths of the revision's master config files."""
         return [str(self._configs / Path(path).name) for path in MASTER_CONFIGS]
 
     @property
     def runner_config(self) -> str:
+        """Path of the revision's runner config."""
         return str(self._configs / "runners.yaml")
 
     @property
     def _configs(self) -> Path:
+        """The revision's config directory, the first that holds runners.yaml."""
         return next(
             (
                 self.root / name
@@ -111,6 +110,10 @@ class Revision:
         )
 
     def invocation(self, tool: Tool, args: Sequence[str]) -> tuple[list[str], dict[str, str]]:
+        """Return the command and environment that run ``tool`` with ``args`` in this revision.
+
+        Prefer the module layout, else the legacy script. Raise ValueError when neither exists.
+        """
         script = self.root / tool.legacy_script
         if (self.root / tool.module_path).is_file():
             entrypoint, imports = ["-m", tool.module], [self.root]
@@ -121,6 +124,7 @@ class Revision:
         return [sys.executable, *entrypoint, *args], self._environment(imports)
 
     def _environment(self, imports: Sequence[Path]) -> dict[str, str]:
+        """Return a minimal environment with ``imports`` on PYTHONPATH and the revision as root."""
         env = {name: os.environ[name] for name in INHERITED_ENV if name in os.environ}
         env["PYTHONPATH"] = os.pathsep.join(map(str, imports))
         env["INFERENCEX_REPOSITORY_ROOT"] = str(self.root)
@@ -129,6 +133,7 @@ class Revision:
     def _generator_arguments(
         self, config_keys: Sequence[str], flags: Sequence[str], config_files: Sequence[str] | None
     ) -> list[str]:
+        """Return the generator's ``test-config`` arguments for these keys, flags, and configs."""
         return [
             "test-config",
             "--config-keys",
@@ -146,6 +151,10 @@ class Revision:
         flags: Sequence[str],
         config_files: Sequence[str] | None = None,
     ) -> list[dict]:
+        """Run the revision's generator for ``config_keys`` and return its rows.
+
+        Raise CalledProcessError when the generator fails.
+        """
         command, env = self.invocation(
             GENERATOR, self._generator_arguments(config_keys, flags, config_files)
         )
@@ -182,6 +191,7 @@ class Revision:
             stopping = threading.Event()
 
             def run(index: int, request: GenerateRequest) -> list[dict]:
+                """Return request ``index``'s rows from a fork, or its own process on failure."""
                 output = Path(outputs, f"{index}.json")
                 server = servers.get()
                 try:
@@ -206,6 +216,10 @@ class Revision:
                 pool.shutdown(wait=True, cancel_futures=True)
 
     def fingerprints(self, rows: list[dict]) -> list[str]:
+        """Return the revision's recipe fingerprint of each row, or row digests if it has none.
+
+        Raise ValueError when the fingerprinter does not print one fingerprint per row.
+        """
         if not (self.root / f"{FINGERPRINTER.replace('.', '/')}.py").is_file():
             from infx.matrix.fingerprint import row_fingerprint
 
@@ -226,11 +240,18 @@ class Revision:
 
 
 class _ForkServer:
-    """A process of ``revision``'s environment that imported ``tool`` and forks per request."""
+    """A process in ``revision``'s environment that preloads ``tool``'s imports and forks.
+
+    Each fork runs the tool as ``__main__`` with stdout in the request's output file.
+    """
 
     def __init__(self, revision: Revision, tool: Tool) -> None:
+        """Start the server in its own session, so a terminal Ctrl-C does not reach its forks.
+
+        Requests are JSON ``[argv, output path]`` lines. Each exit status follows a marker, so
+        output from importing the tool is never taken for a reply.
+        """
         _, env = revision.invocation(tool, [])
-        # Its own session keeps a terminal Ctrl-C away from forks that would then fall back.
         self._process = subprocess.Popen(
             [sys.executable, "-c", _FORK_SERVER, tool.module, _FORK_REPLY],
             cwd=revision.root,
@@ -247,13 +268,16 @@ class _ForkServer:
         self._noisy = False
 
     def __enter__(self) -> Self:
+        """Return the server itself."""
         return self
 
     def kill(self) -> None:
+        """Kill the server and its forks, ignoring a server that already exited."""
         with suppress(ProcessLookupError):
             os.killpg(self._process.pid, signal.SIGKILL)
 
     def __exit__(self, error_type: type[BaseException] | None, *_: object) -> None:
+        """Close the server's stdin and wait for it to exit, killing it first on an error."""
         if error_type is not None:
             self.kill()
         with suppress(OSError):
@@ -279,6 +303,10 @@ class _ForkServer:
 
 @contextmanager
 def snapshot(ref: str) -> Iterator[Revision]:
+    """Extract the matrix inputs at git ``ref`` into a temporary directory and yield its Revision.
+
+    Raise ValueError when a blob cannot be read or the configs needed to generate are missing.
+    """
     repository = git_repository_root()
     listing = subprocess.run(
         [
@@ -338,6 +366,7 @@ def snapshot(ref: str) -> Iterator[Revision]:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    """Run a checkout's generator or planner with its own configs and exit with its status."""
     parser = argparse.ArgumentParser(
         description="Run a checkout's own matrix generator or planner against its own configs."
     )

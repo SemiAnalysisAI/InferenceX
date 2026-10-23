@@ -31,6 +31,10 @@ SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
+    """Return the lines ``filepath`` gained between two git refs, joined by newlines.
+
+    Raise RuntimeError when git diff fails and ValueError when any non-blank line was deleted.
+    """
     result = subprocess.run(
         [
             "git",
@@ -67,6 +71,7 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
 
 
 def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
+    """Keep rows with no prefill block or a prefill EP of at least ``min_prefill_ep`` if set."""
     if min_prefill_ep is None:
         return eval_rows
     kept: list[dict] = []
@@ -84,6 +89,10 @@ def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | 
 
 
 def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> list[str]:
+    """Expand ``*`` wildcards against the master config and return the matching keys in order.
+
+    Raise ValueError for a key or pattern that matches nothing.
+    """
     resolved_keys = {}
     for key in config_keys:
         if "*" in key:
@@ -103,6 +112,7 @@ def get_config_keys_from_master(config_keys: list[str], master_config: dict) -> 
 
 
 def _matrix_curve_key(entry: dict) -> tuple:
+    """Return a hashable identity of a matrix row's curve, ignoring its conc and naming fields."""
     return tuple(
         sorted(
             (key, freeze_config_value(value))
@@ -113,6 +123,7 @@ def _matrix_curve_key(entry: dict) -> tuple:
 
 
 def _matrix_visual_series_key(entry: dict) -> tuple:
+    """Return the fields that place a matrix row on one visual curve of the dashboard."""
     is_agentic = entry.get("scenario-type") == "agentic-coding"
     kv_offloading = entry.get("kv-offloading", "none")
     offload_mode = "off" if kv_offloading in (None, "", "none") else "on"
@@ -136,6 +147,7 @@ def _matrix_visual_series_key(entry: dict) -> tuple:
 
 
 def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
+    """Return a row's concurrencies as a tuple, or raise ValueError if they are not ints."""
     conc = entry.get("conc")
     if isinstance(conc, int):
         return (conc,)
@@ -145,6 +157,11 @@ def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
 
 
 def append_only_delta(base_entries: list[dict], head_entries: list[dict]) -> list[dict]:
+    """Return the head rows trimmed to the concurrency points the base revision lacks.
+
+    Raise ValueError when head removes base curves or points, adds nothing, or adds points to a
+    curve without exactly one unchanged image.
+    """
     base_groups: dict[tuple, set[int]] = defaultdict(set)
     head_groups: dict[tuple, set[int]] = defaultdict(set)
     for entry in base_entries:
@@ -210,6 +227,7 @@ def validate_append_only_scope(
     head_master: dict,
     selected_config_scenarios: dict[str, set[str]],
 ) -> None:
+    """Raise ValueError if append-only edits touch unselected configs or scenarios."""
     selected_configs = selected_config_scenarios.keys()
     all_keys = base_master.keys() | head_master.keys()
     unrelated_changes = [
@@ -255,6 +273,7 @@ def group_unseen_scenarios(
     scenarios: tuple[str, ...],
     seen: dict[str, set[str]],
 ) -> dict[tuple[str, ...], list[str]]:
+    """Group configs by the requested scenarios not yet in ``seen``, marking them as seen."""
     groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for config in config_keys:
         unseen = tuple(
@@ -270,6 +289,7 @@ def group_unseen_scenarios(
 
 class MatrixGenerationError(ValueError):
     def __init__(self, command: list[str], cause: Exception) -> None:
+        """Wrap the generation error ``cause`` with the equivalent generator ``command``."""
         super().__init__(str(cause))
         self.command, self.cause = command, cause
 
@@ -285,6 +305,11 @@ def build_plan(
     all_evals: bool = False,
     evals_only: bool = False,
 ) -> ChangelogMatrixEntry:
+    """Build the sweep matrix for changelog entries added between ``base_ref`` and ``head_ref``.
+
+    Raise ValueError for invalid entry combinations, append-only violations, and fixed-sequence
+    points with no sweep job in run-sweep.yml, and MatrixGenerationError when generation fails.
+    """
     if not changelog_data:
         raise ValueError("No valid YAML entries found in the changelog additions.")
 
@@ -329,6 +354,7 @@ def build_plan(
             mode: EvalMode,
             scenarios: tuple[str, ...] | None,
         ) -> list[dict]:
+            """Generate the working tree's rows for ``keys``, or raise MatrixGenerationError."""
             nonlocal runner_data
             try:
                 if runner_data is None:
@@ -435,7 +461,6 @@ def build_plan(
                 scenario = "agentic"
             else:
                 scenario = seq_len_itos.get((result["isl"], result["osl"]))
-            # run-sweep.yml dispatches only these groups; any other would never run.
             if scenario is None:
                 raise ValueError(
                     f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
@@ -458,6 +483,7 @@ def build_plan(
 
 
 def main() -> None:
+    """Print the sweep matrix, as JSON, for the changelog lines added between two refs."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", type=str, required=True)
     parser.add_argument("--head-ref", type=str, required=True)
@@ -499,6 +525,7 @@ def main() -> None:
 
 
 def _generation_flags(mode: EvalMode, scenarios: tuple[str, ...] | None) -> list[str]:
+    """Return the generator flags that select ``mode`` evals and the given scenario types."""
     flags = ["--no-evals"] if mode == "none" else ["--evals-only"]
     if mode == "all":
         flags.append("--all-evals")

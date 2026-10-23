@@ -22,6 +22,10 @@ Matrix = dict[str, tuple[dict[tuple[str, int], dict[str, Any]], list[str]]]
 
 
 def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
+    """Expand generated rows into one point per concurrency, keyed by (fingerprint, conc).
+
+    Return the points and the messages of rows whose recipe could not be fingerprinted.
+    """
     points, errors = {}, []
     for row in rows:
         try:
@@ -37,6 +41,7 @@ def _points(rows: list[dict], root: Path) -> tuple[dict, list[str]]:
 
 
 def head_matrix(config_files: list[str], runner_config: str) -> Matrix:
+    """Generate the working tree's matrix for each config key, as points and fingerprint errors."""
     master = load_config_files(config_files)
     runners = load_runner_file(runner_config)
     root = config_root(config_files)
@@ -49,6 +54,7 @@ def head_matrix(config_files: list[str], runner_config: str) -> Matrix:
 
 
 def base_matrix(ref: str, config_files: list[str]) -> Matrix:
+    """Generate the matrix of each config key at git ``ref``, as points and fingerprint errors."""
     with snapshot(ref) as revision:
         configs = Path(revision.runner_config).parent
         files = [configs / Path(path).name for path in config_files]
@@ -70,14 +76,17 @@ def base_matrix(ref: str, config_files: list[str]) -> Matrix:
 
 
 def _sorted(points: Iterable[dict]) -> list[dict]:
+    """Return the points ordered by experiment name, then concurrency."""
     return sorted(points, key=lambda point: (point["exp-name"], point["conc"]))
 
 
 def _keys(base: Matrix, head: Matrix) -> list[str]:
+    """Return head's config keys followed by keys that exist only in base."""
     return [*head, *(key for key in base if key not in head)]
 
 
 def compare(base: Matrix, head: Matrix) -> list[dict]:
+    """List the config keys whose points differ, with counts and the added and removed points."""
     changed = []
     for key in _keys(base, head):
         before, after = base.get(key, ({}, []))[0], head.get(key, ({}, []))[0]
@@ -97,6 +106,7 @@ def compare(base: Matrix, head: Matrix) -> list[dict]:
 
 
 def _label(point: dict) -> str:
+    """Describe a point in one line by experiment, shape, conc, and short fingerprint."""
     if "prefill" in point:
         shape = str(point.get("srt-recipe", "")).rpartition("/")[2]
     else:
@@ -107,6 +117,7 @@ def _label(point: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Report config keys whose points or recipes changed since ``--base``, as text or JSON."""
     parser = argparse.ArgumentParser(
         description="List config keys whose benchmark points or recipes differ from a base."
     )
@@ -115,11 +126,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--runner-config", default=RUNNER_CONFIG)
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
     args = parser.parse_args(argv)
-    # The head matrix is built in a daemon thread while the base revision's generators run, so
-    # an interrupt during base generation exits at once and head errors keep their precedence.
     head_outcome: dict[str, Any] = {}
 
     def build_head() -> None:
+        """Build the head matrix into ``head_outcome``, storing any error instead of raising.
+
+        Runs in a daemon thread during base generation so an interrupt exits at once.
+        """
         try:
             head_outcome["matrix"] = head_matrix(args.config_files, args.runner_config)
         except BaseException as error:  # noqa: BLE001
