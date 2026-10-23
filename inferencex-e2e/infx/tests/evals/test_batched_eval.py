@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from infx.evals.validate_scores import main as validate_scores_main
 from infx.evals.validate_scores import validate_batch_manifest
 
@@ -212,3 +214,29 @@ def test_validate_scores_accepts_legacy_result_without_effective_count(
     assert validate_scores_main() == 0
     captured = capsys.readouterr()
     assert "PASS: gsm8k exact_match,strict-match" in captured.out
+
+
+@pytest.mark.parametrize(
+    ("score", "shown"), [(float("nan"), "nan"), (float("inf"), "inf"), (True, "True")]
+)
+def test_validate_scores_fails_a_non_finite_or_boolean_score(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    score: object,
+    shown: str,
+) -> None:
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(json.dumps({"results": {"gsm8k": {"exact_match,strict-match": score}}}))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(result_path),
+    ])
+
+    assert validate_scores_main() == 1
+    captured = capsys.readouterr()
+    assert f"FAIL: gsm8k exact_match,strict-match = {shown} is not a finite number" in captured.err
+    assert "PASS" not in captured.out

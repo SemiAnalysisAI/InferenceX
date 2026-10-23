@@ -352,7 +352,13 @@ def main() -> int:
                 if not isinstance(val, (int, float)):
                     continue
                 checked += 1
-                if val < min_score:
+                if isinstance(val, bool) or not math.isfinite(val):
+                    print(
+                        f"FAIL: {conc_label}{task} {name} = {val} is not a finite number",
+                        file=sys.stderr,
+                    )
+                    failed = True
+                elif val < min_score:
                     print(
                         f"FAIL: {conc_label}{task} {name} = {val:.4f} (< {min_score} from {source})",
                         file=sys.stderr,
