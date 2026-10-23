@@ -5436,7 +5436,7 @@ qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
           ep: 2
           dp-attn: false
 minimaxm3-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:e5c9e6bb82f645e8fca04e4d395743ee5ed473a62b98942d65f83c35d0c69301
+  image: vllm/vllm-openai:nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294@sha256:8c1434bfee7d7626eef78ef70600434ffba4a1b8813cb1d1c8707ad25f47035e
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:b300-dsxe
@@ -5449,11 +5449,8 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
     - dram-utilization: 1.0
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5, 10, 15, 20], srt-recipe: agentic.yaml }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30, 40, 48, 64], srt-recipe: agentic.yaml }
-    - dram-utilization: 1.0
-      search-space:
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24, 32, 40], srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [20, 24], srt-recipe: agentic.yaml }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24, 28], srt-recipe: agentic.yaml }
 
 minimaxm3-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
   image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
