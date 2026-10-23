@@ -22,10 +22,6 @@ base:
     agg:
       nodes: 1
       workers: 1
-      # Serve flags follow the Blackwell TP4 recipe at
-      # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash. DSpark uses the
-      # checkpoint's built-in drafter; throughput runs replace block rejection
-      # with the golden AL (infx/golden_al_distribution/minimaxm31flash_dspark.yaml).
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -52,9 +48,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# Native zip expansion creates one variant per concurrency.
-
-# TP4 is the upstream Blackwell layout and covers low to mid concurrency.
 zip_override_tp4:
   roles:
     agg:
@@ -62,14 +55,12 @@ zip_override_tp4:
       args:
         tensor-parallel-size: 4
         max-num-seqs: [2, 8, 16, 32, 64]
-        # Seven-token DSpark, as in the vLLM day-0 GB300 AgentX frontier.
+        # Golden AL 4.04.
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: ['1', '4', '8', '16', '32']
 
-# DEP4: TP1 x DP4 + EP4 behind a consistent-hash router for high concurrency.
-# B200's 180 GB HBM holds less KV per rank than B300, so DEP4 stops at conc 128.
 zip_override_dep4:
   frontend:
     type: vllm-router
@@ -88,7 +79,7 @@ zip_override_dep4:
         data-parallel-size: 4
         enable-expert-parallel: true
         max-num-seqs: [32, 64]
-        # Three-token DSpark, as in the recipes.vllm.ai Blackwell recipe.
+        # Golden AL 2.88.
         speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:

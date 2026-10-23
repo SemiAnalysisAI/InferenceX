@@ -5530,9 +5530,6 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [15, 20, 25, 30, 32, 34, 36, 38, 40], srt-recipe: agentic.yaml }
 minimaxm31flash-fp4-b200-vllm-agentic-dspark:
-  # Day-0 vLLM image for MiniMax-M3.1-Flash (vllm.ai/blog/2026-10-23-minimax-m31-flash).
-  # DSpark uses the checkpoint's built-in drafter; synthetic acceptance follows
-  # infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
   image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
@@ -5544,9 +5541,7 @@ minimaxm31flash-fp4-b200-vllm-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      # TP4 is the upstream Blackwell layout, drafting 7 DSpark tokens.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
-      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router, drafting 3 DSpark tokens.
       - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 minimaxm3-fp4-b200-trtllm-agentic-mtp:
