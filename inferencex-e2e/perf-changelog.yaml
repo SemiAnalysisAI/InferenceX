@@ -11060,3 +11060,13 @@
     - "Update the vLLM image from nightly-39983a5e to nightly-83c078d9, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4429
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-gb300-sglang-agentic-dflash-multinode
+    - musespark-fp4-gb300-sglang-agentic-dflash-nightly1019
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse-Spark-Open NVFP4 GB300 SGLang AgentX multi-node (TP8/EP8 over two trays) and single-node TP4 configs on lmsysorg/sglang:nightly-dev-20261019-3c560089."
+    - "Pin the image by digest; both configs use DFlash2 speculative decoding."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4454
