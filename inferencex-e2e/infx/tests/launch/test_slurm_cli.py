@@ -188,6 +188,20 @@ def test_backend_cancel_scancels_even_when_squeue_fails(fake_bin, tmp_path, monk
     assert calls(log) == [["4242"]]
 
 
+def test_backend_cancel_skips_a_job_squeue_reports_as_purged(fake_bin, tmp_path, monkeypatch):
+    queries, scancel = tmp_path / "squeue.log", tmp_path / "scancel.log"
+    fake_bin("squeue", f"{recorder(queries)}\n"
+             "echo 'slurm_load_jobs error: Invalid job id specified' >&2; exit 1")
+    fake_bin("scancel", recorder(scancel))
+    monkeypatch.setattr(cli, "SQUEUE_RETRY_S", 0)
+    backend = slurm_backend()
+
+    backend.cancel(backend.attach("4242"))
+
+    assert len(calls(queries)) == 1
+    assert calls(scancel) == []
+
+
 def test_workflow_cleanup_cancels_the_runners_jobs_and_those_srtctl_submitted(fake_bin, tmp_path, monkeypatch):
     scancel, squeue = tmp_path / "scancel.log", tmp_path / "squeue.log"
     fake_bin("scancel", recorder(scancel))

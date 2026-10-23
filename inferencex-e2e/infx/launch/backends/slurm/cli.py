@@ -130,7 +130,8 @@ def sbatch(
 def _listed_state(job: Job, *, echo_command: bool) -> str | None:
     """The job's squeue state, or None if squeue answers without it or is not installed.
 
-    A failing squeue (a busy controller times out) is retried, then raises ``SlurmError``.
+    A failing squeue (a busy controller times out) is retried, then raises ``SlurmError``;
+    an id the controller has already purged is a definite answer, not a failure.
     """
     argv = ["squeue", "-j", job.id, "--noheader", "--format=%i|%T"]
     for attempt in range(3):
@@ -142,6 +143,8 @@ def _listed_state(job: Job, *, echo_command: bool) -> str | None:
             return None
         if result.returncode == 0:
             break
+        if "Invalid job id specified" in result.stderr:
+            return None
     else:
         raise SlurmError(f"squeue failed for job {job.id} (exit {result.returncode})")
     for line in result.stdout.splitlines():
