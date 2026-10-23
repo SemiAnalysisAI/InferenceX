@@ -306,6 +306,7 @@ def main() -> int:
 
     failed = False
     checked = 0
+    selector = args.metric_prefix or "declared task metrics"
     result_files = sorted(glob.glob(args.results_glob))
 
     manifest_errors = validate_batch_manifest(
@@ -358,6 +359,7 @@ def main() -> int:
             )
             failed = True
             continue
+        file_checked = checked
         for task, metrics in results.items():
             invalid_effective, effective = invalid_effective_count(data, task)
             if invalid_effective:
@@ -391,9 +393,11 @@ def main() -> int:
                     print(
                         f"PASS: {conc_label}{task} {name} = {val:.4f} (>= {min_score} from {source})"
                     )
+        if checked == file_checked:
+            print(f"FAIL: {conc_label}no metrics matched {selector!r} in {f}", file=sys.stderr)
+            failed = True
 
     if checked == 0:
-        selector = args.metric_prefix or "declared task metrics"
         print(f"WARN: no metrics matched {selector!r}", file=sys.stderr)
 
     return 1 if (failed or checked == 0) else 0
