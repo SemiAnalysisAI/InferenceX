@@ -10919,4 +10919,4 @@
     - "Add a TP4 c24 point (max-num-seqs 48, DSpark 7)."
     - "Replace DEP4 c64/c128 with DEP8 (TP1 x DP8 + EP8 behind vllm-router) at c64, c128 and c256, max-num-seqs 16/32/64 per rank, DSpark 3."
     - "Image, serve flags and TP4 c1-c32 points are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4431
