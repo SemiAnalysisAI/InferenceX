@@ -31,6 +31,8 @@ for n, sid in enumerate(os.environ["STUB_SESSIONS"].split(",")):
         "duration_ms": 1000,
         "hash_ids": ["h1"],
     }
+    if sid == os.environ.get("STUB_BAD_SESSION"):
+        del row["model"]
     (out / f"{sid}.jsonl").write_text(json.dumps(row) + "\\n")
 (out / "manifest.json").write_text("{}")
 """
@@ -58,6 +60,7 @@ def build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     plot.write_text(STUB_PLOT)
     monkeypatch.delenv("STUB_PLOT_FAIL", raising=False)
     monkeypatch.delenv("STUB_SAMPLER_CRASH_AT", raising=False)
+    monkeypatch.delenv("STUB_BAD_SESSION", raising=False)
     monkeypatch.setattr(build_weka_hf_dataset, "SAMPLER", sampler)
     monkeypatch.setattr(build_weka_hf_dataset, "PLOT_WEKA", plot)
     monkeypatch.setattr(build_weka_hf_dataset, "PLOT_SUBAGENT", plot)
@@ -115,6 +118,20 @@ def test_skip_sample_does_not_reuse_a_crashed_samplers_partial_dump(
     build("full-a,full-b", "--skip-sample")
 
     assert _trace_ids(tmp_path / "work/base/traces.jsonl") == ["full-a", "full-b"]
+
+
+def test_skip_convert_does_not_publish_a_crashed_converters_partial_output(
+    build, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STUB_BAD_SESSION", "b-bad")
+    with pytest.raises(subprocess.CalledProcessError):
+        build("a-good,b-bad")
+    assert (tmp_path / "work/per_trace/a-good.json").is_file()
+
+    with pytest.raises(subprocess.CalledProcessError):
+        build("unused", "--skip-sample", "--skip-convert")
+
+    assert not (tmp_path / "work/base").exists()
 
 
 def test_db_url_reaches_sampler_without_being_echoed(

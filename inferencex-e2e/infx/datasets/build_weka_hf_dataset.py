@@ -138,7 +138,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--skip-convert",
         action="store_true",
-        help="Reuse work-dir/per_trace/ if present.",
+        help="Reuse work-dir/per_trace/ if it holds exactly the sampled sessions.",
     )
     p.add_argument(
         "--skip-upload",
@@ -201,8 +201,9 @@ def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
 
 def stage_convert(args: argparse.Namespace, proxy_dir: Path, work_dir: Path) -> Path:
     per_trace = work_dir / "per_trace"
-    if args.skip_convert and per_trace.exists() and any(per_trace.glob("*.json")):
-        n = sum(1 for _ in per_trace.glob("*.json"))
+    traces = {p.stem for p in per_trace.glob("*.json")}
+    if args.skip_convert and traces and traces == {p.stem for p in proxy_dir.glob("*.jsonl")}:
+        n = len(traces)
         print(f"[convert] reusing {n} cached per-trace JSONs in {per_trace}")
         return per_trace
     _recreate(per_trace)
