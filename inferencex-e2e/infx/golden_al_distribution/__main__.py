@@ -128,7 +128,9 @@ def main(argv: list[str] | None = None) -> int:
         "lookup", help="the AL synthetic acceptance applies for a model prefix and method"
     )
     lookup_parser.add_argument("model", help="InferenceX model prefix, e.g. qwen3.5, dsv4, kimik3")
-    lookup_parser.add_argument("method", help="spec method: mtp, eagle, nextn, eagle3, dspark")
+    lookup_parser.add_argument(
+        "method", help="spec method: mtp, eagle, nextn, eagle3, dspark, dflash"
+    )
     lookup_parser.add_argument("tokens", type=int, help="num_speculative_tokens")
     lookup_parser.add_argument("--thinking", choices=THINKING_MODES, default="thinking_on")
     lookup_parser.add_argument("--draft-model", help="draft checkpoint (selects MiniMax GQA)")
