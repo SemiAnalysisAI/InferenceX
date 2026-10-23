@@ -11003,5 +11003,6 @@
   scenario-type: [agentic-coding]
   description:
     - "Add MiniMax-M3.1-Flash AgentX on two GB300 trays (8 GPUs) aggregated through Dynamo vLLM, with the single-node GB300 serve flags (NVFP4 KV and indexer cache, 600 s chat-template render timeout) and the day-0 arm64 vLLM image."
-    - "TP8 c1-c32 and TEP8 (TP8 + EP8) c48-c64 with 7-token DSpark (golden AL 4.04); DEP8 (TP1 x DP8 + EP8, per-node DP launch) c72-c128 with 3-token DSpark (golden AL 2.88) and vLLM Simple CPU KV offload (179 GiB per DP rank, lazy). FlashInfer PrimiTS drafter throughout."
+    - "DEP8 (TP1 x DP8 + EP8, per-node DP launch) c72/c96/c128 with 3-token DSpark on the FlashInfer PrimiTS drafter (golden AL 2.88) and vLLM Simple CPU KV offload (179 GiB per DP rank, lazy), on Dynamo 1.6.0.dev20261016."
+    - "No TP8/TEP8 points: vLLM's NVFP4 KV-cache attention needs 16 query heads per KV head on each rank (64 query / 4 KV heads), which attention TP8 halves to 8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4436

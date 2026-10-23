@@ -1,7 +1,9 @@
 schema: 2
 
 # MiniMax-M3.1-Flash AgentX on two GB300 trays (8 GPUs), aggregated through
-# Dynamo vLLM. Serve flags follow the single-node GB300 recipe
+# Dynamo vLLM. DEP8 only: the NVFP4 KV-cache attention kernels need 16 query
+# heads per KV head on each rank (64 query / 4 KV heads), so attention TP8 does
+# not start; low and mid concurrency stay on the single-tray TP4 recipe. Serve flags follow the single-node GB300 recipe
 # (single_node/srt-slurm-recipes/minimaxm31flash/vllm/gb300-fp4-mtp); the
 # Dynamo setup follows minimaxm3/vllm/gb200-fp4/agentx.
 base:
@@ -94,31 +96,6 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
-
-# TP8 across both trays; seven-token DSpark (golden AL 4.04).
-override_tp8:
-  name: "minimaxm31flash-vllm-agg-gb300-tp8-agentic"
-  roles:
-    agg:
-      env:
-        VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-      args:
-        tensor-parallel-size: 8
-        max-num-seqs: 64
-        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-
-# TEP8: TP8 attention with expert-parallel MoE; seven-token DSpark (golden AL 4.04).
-override_tep8:
-  name: "minimaxm31flash-vllm-agg-gb300-tep8-agentic"
-  roles:
-    agg:
-      env:
-        VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-      args:
-        tensor-parallel-size: 8
-        enable-expert-parallel: true
-        max-num-seqs: 128
-        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
 # DEP8: TP1 x DP8 + EP8, one DP launch per tray, with vLLM Simple CPU KV
 # offload. Each DP rank gets a quarter of its tray's DRAM allowance (179 GiB of
