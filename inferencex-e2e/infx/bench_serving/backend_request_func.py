@@ -287,7 +287,12 @@ async def async_request_openai_completions(
                                 generated_text += text or ""
                             elif usage := data.get("usage"):
                                 output.output_tokens = usage.get("completion_tokens")
-                    if first_chunk_received:
+                            elif error := data.get("error"):
+                                output.error = json.dumps(error)
+                                break
+                    if output.error:
+                        output.success = False
+                    elif first_chunk_received:
                         output.success = True
                     else:
                         output.success = False
@@ -379,11 +384,14 @@ async def async_request_openai_chat_completions(
                                 generated_text += content or ""
                             elif usage := data.get("usage"):
                                 output.output_tokens = usage.get("completion_tokens")
+                            elif error := data.get("error"):
+                                output.error = json.dumps(error)
+                                break
 
                             most_recent_timestamp = timestamp
 
                     output.generated_text = generated_text
-                    output.success = True
+                    output.success = not output.error
                     output.latency = most_recent_timestamp - st
                 else:
                     output.error = response.reason or ""
