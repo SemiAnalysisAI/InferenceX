@@ -2926,6 +2926,40 @@ def test_attempt_translation_points_to_a_table_only_when_one_is_shown(points, ch
     assert change in chinese
 
 
+def test_chunked_attempt_tells_both_languages_where_results_continue(monkeypatch):
+    head = "c" * 40
+    session = SimpleNamespace(
+        repository="example/project", parent={"id": 42},
+        candidate=OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
+        pulls=lambda: [{"number": 7}], refresh=lambda _pull: {"body": ""},
+        runs=lambda: [{"id": 9, "head_sha": head, "run_attempt": 1, "status": "in_progress",
+                       "conclusion": None}],
+    )  # fmt: skip
+    points = [
+        agentx_point("cc", output_tps_gpu=10.0, request_errors=0).model_copy(update={
+            "key": f"{conc:064x}", "label": f"AgentX c{conc} TP8 EP1 {conc:06x}", "conc": conc})
+        for conc in range(1, 22)
+    ]  # fmt: skip
+    record = reporting.Attempt(
+        kind="initial", number=0, head=head, image="example/image:2", run_id=9, run_attempt=1,
+        status="running", change=reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        next=reporting.Prose(en="Wait.", zh="等待。"), benchmarks_expected=21,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=points,
+    )  # fmt: skip
+    posted = []
+    monkeypatch.setattr(github, "items", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        github, "write", lambda _repo, _path, _method, payload: posted.append(payload["body"])
+    )
+
+    reporting.publish(session, record)
+
+    [main] = [body for body in posted if ":run-9-1\n" in body.split("-->", 1)[0]]
+    english, chinese = main.split("<details>")
+    assert "Results continue in numbered report comments." in english
+    assert "结果见后续编号的报告评论。" in chinese
+
+
 def eval_entry(tp):
     return {
         "model-prefix": "dsr1", "runner": "cluster:fixture-a", "framework": "sglang",

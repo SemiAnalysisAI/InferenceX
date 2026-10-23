@@ -836,7 +836,9 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
         )
         note = "\n\nResults continue in numbered report comments."
         text = (
-            text.replace("\n\n<details>", note + "\n\n<details>", 1)
+            text.replace("\n\n<details>", note + "\n\n<details>", 1).replace(
+                "\n\n</details>", "  \n结果见后续编号的报告评论。\n\n</details>", 1
+            )
             if "<details>" in text
             else text + note
         )
