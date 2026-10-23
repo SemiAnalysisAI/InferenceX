@@ -2435,7 +2435,7 @@ def attempt_comment(number, en, zh, *, author="Klaud-Cold", parent=42, candidate
         f"<!-- klaud-report:{parent}:{candidate}:run-{run}-1\n{json.dumps(data)}\n-->\nRendered.")}
 
 
-def finish_report(monkeypatch, outcome, comments, recovering=False):
+def finish_report(monkeypatch, outcome, comments, recovering=False, repairs=0):
     session = lifecycle.Session(
         "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
         recovering=recovering,
@@ -2461,7 +2461,7 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
 
     session.finish(CandidateOutcome(
         outcome=outcome, phase="final-sweep" if validated else "targeted", pull_request=7,
-        run_ids=[9], repairs_used=0,
+        run_ids=[9], repairs_used=repairs,
     ))
 
     [report] = [body for body in posted if body.startswith(session.marker)]
@@ -2592,6 +2592,14 @@ def test_closing_report_states_why_from_the_latest_own_attempt(
         f"**{outcome}** · 修复次数：0 · 运行：{runs}  \n{why[1]}所有自有运行均已结束。{done[1]}"
         "\n\n</details>"
     )
+
+
+def test_closing_report_translates_an_unknown_repair_count(monkeypatch):
+    report = finish_report(monkeypatch, "uncertain", [], recovering=True, repairs=None)
+    english, chinese = report.split("<summary>中文</summary>")
+
+    assert "· Repairs: unknown ·" in english
+    assert "· 修复次数：未知 ·" in chinese
 
 
 def test_every_candidate_pr_body_says_how_to_stop_the_candidate(monkeypatch):

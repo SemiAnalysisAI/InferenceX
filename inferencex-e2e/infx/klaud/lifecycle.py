@@ -499,6 +499,7 @@ class Session:
                     or "—"
                 )
                 repairs = outcome.repairs_used if outcome.repairs_used is not None else "unknown"
+                repairs_zh = outcome.repairs_used if outcome.repairs_used is not None else "未知"
                 reason_en = f" · Reason: {outcome.reason_code}" if outcome.reason_code else ""
                 reason_zh = f" · 原因：{outcome.reason_code}" if outcome.reason_code else ""
                 why = (
@@ -521,7 +522,7 @@ class Session:
                             if proof
                             else "PR closed; branch deleted for retry."
                         ),
-                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs} · 运行：{links}  \n{why_zh}所有自有运行均已结束。"
+                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs_zh} · 运行：{links}  \n{why_zh}所有自有运行均已结束。"
                         + (
                             "完整 sweep 已验证；已就绪，等待审查。"
                             if proof
