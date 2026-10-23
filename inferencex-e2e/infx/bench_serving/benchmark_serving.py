@@ -812,7 +812,7 @@ def save_to_pytorch_benchmark_format(
     ignored_metrics = ["ttfts", "itls", "generated_texts", "errors"]
     pt_records = convert_to_pytorch_benchmark_format(
         args=args,
-        metrics={k: [results[k]] for k in metrics},
+        metrics={k: [results[k]] for k in metrics if k in results},
         extra_info={
             k: results[k] for k in results if k not in metrics and k not in ignored_metrics
         },

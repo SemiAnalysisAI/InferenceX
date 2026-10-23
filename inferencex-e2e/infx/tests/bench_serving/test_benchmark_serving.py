@@ -96,3 +96,24 @@ def test_metrics_retokenize_a_success_without_reported_usage():
     assert metrics.total_output == 11
     assert metrics.output_throughput == 5.5
     assert metrics.mean_tpot_ms == pytest.approx((0.9 / 3 + 0.9 / 6) / 2 * 1000)
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_pytorch_records_skip_metrics_the_run_did_not_select(tmp_path, monkeypatch, enabled):
+    if enabled:
+        monkeypatch.setenv('SAVE_TO_PYTORCH_BENCHMARK_FORMAT', '1')
+    else:
+        monkeypatch.delenv('SAVE_TO_PYTORCH_BENCHMARK_FORMAT', raising=False)
+    results = {'mean_ttft_ms': 12.5, 'p90_ttft_ms': 20.0, 'completed': 3}
+    result_file = tmp_path / 'result.json'
+
+    client.save_to_pytorch_benchmark_format(Namespace(model='m'), results, str(result_file))
+
+    records_file = tmp_path / 'result.pytorch.json'
+    if not enabled:
+        assert not records_file.exists()
+        return
+    [record] = json.loads(records_file.read_text())
+    assert record['metric']['name'] == 'mean_ttft_ms'
+    assert record['metric']['benchmark_values'] == [12.5]
+    assert record['metric']['extra_info'] == {'p90_ttft_ms': 20.0, 'completed': 3}
