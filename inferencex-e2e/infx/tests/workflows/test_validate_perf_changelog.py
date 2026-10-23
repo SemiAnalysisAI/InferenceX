@@ -82,6 +82,11 @@ def test_parse_changelog_rejects_duplicate_mapping_keys() -> None:
         parse_changelog(raw, "test changelog")
 
 
+def test_parse_changelog_reports_a_tagged_non_mapping_entry_as_invalid_yaml() -> None:
+    with pytest.raises(ChangelogValidationError, match="expected a mapping node, but found scalar"):
+        parse_changelog(b"- !!map config-a\n", "test changelog")
+
+
 def test_compare_entries_allows_appended_pr_entry() -> None:
     base = [entry("config-a")]
     added = entry("config-b", "XXX")

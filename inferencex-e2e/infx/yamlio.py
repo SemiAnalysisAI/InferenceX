@@ -171,10 +171,14 @@ class UniqueKeyLoader(yaml.SafeLoader):
 
 def construct_unique_mapping(
     loader: UniqueKeyLoader,
-    node: yaml.MappingNode,
+    node: yaml.Node,
     deep: bool = False,
 ) -> dict[Any, Any]:
     """Construct a mapping while rejecting keys that would overwrite values."""
+    if not isinstance(node, yaml.MappingNode):
+        raise ConstructorError(
+            None, None, f"expected a mapping node, but found {node.id}", node.start_mark
+        )
     mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
