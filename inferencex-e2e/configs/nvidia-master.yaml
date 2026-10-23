@@ -8754,6 +8754,52 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       # Router; FlashInfer attention up to conc 64, MegaAttention above.
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 32, 64, 128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
+# MiniMax-M3.1-Flash AgentX on GB200: day-zero vLLM image from
+# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, arm64 CUDA 13.4 build,
+# verified 2026-10-23 (manifest sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c).
+# NVFP4 routed experts with MXFP8 dense layers and an NVFP4 KV cache. DSpark is
+# off until a MiniMax-M3.1-Flash golden AL curve is committed.
+minimaxm31flash-fp4-gb200-vllm-agentic:
+  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/vllm/gb200-fp4
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # TP4 is the upstream Blackwell layout.
+      - { tp: 4, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
+      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router.
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [64, 128, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
+# MiniMax-M3.1-Flash AgentX on GB300: day-zero vLLM image from
+# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, arm64 CUDA 13.4 build,
+# verified 2026-10-23 (manifest sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c).
+# NVFP4 routed experts with MXFP8 dense layers and an NVFP4 KV cache. DSpark is
+# off until a MiniMax-M3.1-Flash golden AL curve is committed.
+minimaxm31flash-fp4-gb300-vllm-agentic:
+  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/vllm/gb300-fp4
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # TP4 is the upstream Blackwell layout.
+      - { tp: 4, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
+      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router.
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [64, 128, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
 # `precision: fp4` labels the checkpoint's MXFP4 routed experts, as on the
