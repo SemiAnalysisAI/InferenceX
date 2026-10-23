@@ -22,7 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 
-def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | None:  # noqa: ARG001
+def _load_custom_client_csv(client_csv: Path) -> pd.DataFrame | None:
     """Load per-request metrics from custom benchmark client CSV."""
     df = pd.read_csv(client_csv)
     if len(df) == 0:
@@ -144,7 +144,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 return result
             result.update(aiperf_metrics)
         elif client_csv.exists():
-            df = _load_custom_client_csv(client_csv, exp_dir)
+            df = _load_custom_client_csv(client_csv)
             if df is None or len(df) == 0:
                 return result
 

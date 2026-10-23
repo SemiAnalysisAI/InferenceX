@@ -30,7 +30,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from infx.config import git_repository_root, project_root
 
@@ -70,7 +70,7 @@ except ImportError:
 
         status = 0
         data: object = None
-        headers: dict = {}  # type: ignore[type-arg]  # noqa: RUF012
+        headers: ClassVar[dict] = {}  # type: ignore[type-arg]
 
     class RateLimitExceededException(GithubException):  # type: ignore[no-redef]
         """Stub when PyGithub is not installed."""

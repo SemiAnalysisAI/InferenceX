@@ -135,7 +135,7 @@ def remap_hash(h: str, m: dict[str, int]) -> int:
     return m[h]
 
 
-def infer_block_size(rows: list[dict]) -> int:  # noqa: ARG001
+def infer_block_size() -> int:
     """Return the proxy's 64-token block size.
 
     Partial trailing blocks make hash_token_count / len(hash_ids) unreliable.
@@ -331,7 +331,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
 
     think_times = compute_think_times(rows)
     hash_map: dict[str, int] = {}
-    block_size = infer_block_size(rows)
+    block_size = infer_block_size()
 
     out_requests: list[dict] = []
     instance_count: dict[str, int] = {}

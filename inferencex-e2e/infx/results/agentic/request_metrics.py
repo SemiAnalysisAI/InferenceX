@@ -282,7 +282,6 @@ def _aiperf_percent_metric_as_rate(
 
 
 def compute_cache_stats(
-    records: list[dict[str, Any]],  # noqa: ARG001
     aggregate: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return flat and nested theoretical prefix cache hit rate from the aiperf ``aggregate``."""
@@ -311,7 +310,7 @@ def compute_request_metrics(
     qps_flat, qps_nested = compute_qps_stats(records)
     latency_flat, latency_nested = compute_latency_stats(records)
     workload_flat, workload_nested = compute_workload_stats(records, traces)
-    cache_flat, cache_nested = compute_cache_stats(records, aggregate)
+    cache_flat, cache_nested = compute_cache_stats(aggregate)
     throughput_flat, throughput_nested = compute_throughput_stats(records)
 
     for part in (qps_flat, latency_flat, workload_flat, cache_flat, throughput_flat):

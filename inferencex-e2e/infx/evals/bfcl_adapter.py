@@ -243,7 +243,6 @@ def _positive_int(value: str) -> int:
 
 
 def _source_details(
-    suite: SuiteSpec,  # noqa: ARG001
     case_ids_by_category: Mapping[str, tuple[str, ...]],
 ) -> dict[str, Any]:
     """Return the pinned upstream source metadata plus the case IDs selected per category."""
@@ -287,13 +286,12 @@ def _expected_category_details(
 
 
 def _diagnostics(
-    suite: SuiteSpec,
     case_ids_by_category: Mapping[str, tuple[str, ...]],
     scores: Sequence[CategoryScore] | None = None,
 ) -> dict[str, Any]:
     """Return source metadata and per-category diagnostics, with placeholders if scores is None."""
     return {
-        "source": _source_details(suite, case_ids_by_category),
+        "source": _source_details(case_ids_by_category),
         "categories": (
             [score.as_dict() for score in scores]
             if scores is not None
@@ -334,7 +332,7 @@ def _native_report(
             "total_count": total_count,
             "expected_count": suite.expected_sample_count,
         },
-        "bfcl": _diagnostics(suite, case_ids_by_category, scores),
+        "bfcl": _diagnostics(case_ids_by_category, scores),
     }
     if integration_error is not None:
         report["integration_error"] = _error_dict(integration_error)
@@ -411,7 +409,7 @@ def _compatibility_result(
         "results": results,
         "configs": configs,
         "n-samples": task_samples,
-        "bfcl": _diagnostics(suite, case_ids_by_category, scores),
+        "bfcl": _diagnostics(case_ids_by_category, scores),
     }
     if integration_error is not None:
         result["integration_error"] = _error_dict(integration_error)

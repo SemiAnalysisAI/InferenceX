@@ -142,7 +142,7 @@ def test_metrics_retokenize_a_success_without_reported_usage():
     requests = [('p', 5, 4, None), ('p', 5, 7, None)]
 
     metrics, output_lens = client.calculate_metrics(
-        requests, outputs, 2.0, WordTokenizer(), ['tpot'], [50], {},
+        requests, outputs, 2.0, WordTokenizer(), [50], {},
     )
 
     assert output_lens == [4, 7]
