@@ -10798,7 +10798,7 @@
   description:
     - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-20261021-c1c287a4 and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 and --stream-interval 20 at every concurrency."
     - "Lower max-running-requests to 3 at concurrency 10, raise prefill-decode-interval to 96 at concurrency 24, switch HiCache to write_back, and replace concurrency 16, 20 and 40 with 28, 30, 44 and 48."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4398
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
 
 - config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
