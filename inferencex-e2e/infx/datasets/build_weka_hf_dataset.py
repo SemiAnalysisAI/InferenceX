@@ -32,6 +32,7 @@ import copy
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -145,13 +146,20 @@ def _run(cmd: list, **kw: Any) -> None:
     subprocess.run(cmd, check=True, **kw)
 
 
+def _recreate(stage_dir: Path) -> None:
+    """Empty a work-dir stage directory so earlier runs' traces are not republished."""
+    if stage_dir.exists():
+        shutil.rmtree(stage_dir)
+    stage_dir.mkdir(parents=True)
+
+
 def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
     proxy_dir = work_dir / "proxy"
     if args.skip_sample and proxy_dir.exists() and any(proxy_dir.glob("*.jsonl")):
         n = sum(1 for _ in proxy_dir.glob("*.jsonl"))
         print(f"[sample] reusing {n} cached session JSONLs in {proxy_dir}")
         return proxy_dir
-    proxy_dir.mkdir(parents=True, exist_ok=True)
+    _recreate(proxy_dir)
     cmd: list = [
         sys.executable,
         str(SAMPLER),
@@ -188,7 +196,7 @@ def stage_convert(args: argparse.Namespace, proxy_dir: Path, work_dir: Path) -> 
         n = sum(1 for _ in per_trace.glob("*.json"))
         print(f"[convert] reusing {n} cached per-trace JSONs in {per_trace}")
         return per_trace
-    per_trace.mkdir(parents=True, exist_ok=True)
+    _recreate(per_trace)
     _run(
         [
             sys.executable,
@@ -577,7 +585,7 @@ def _stage_filter(
     tag: str,
 ) -> Path:
     """Apply ``filter_fn`` to every per-trace JSON; write survivors to out_dir."""
-    out_dir.mkdir(parents=True, exist_ok=True)
+    _recreate(out_dir)
     kept = 0
     dropped = 0
     for p in sorted(per_trace_dir.glob("*.json")):

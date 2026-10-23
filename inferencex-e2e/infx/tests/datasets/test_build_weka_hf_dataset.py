@@ -1,6 +1,73 @@
 from __future__ import annotations
 
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+from infx.datasets import build_weka_hf_dataset
 from infx.datasets.build_weka_hf_dataset import _filter_trace_256k
+
+STUB_SAMPLER = """
+import json, os, sys
+from pathlib import Path
+
+argv = sys.argv[1:]
+out = Path(argv[argv.index("--out") + 1])
+Path(os.environ["STUB_SAMPLER_RECORD"]).write_text(
+    json.dumps({"argv": argv, "db_url": os.environ.get("AGENTIC_PROXY_DB_URL")})
+)
+for sid in os.environ["STUB_SESSIONS"].split(","):
+    row = {
+        "timestamp": "2026-05-01T00:00:00+00:00",
+        "t_sec": 0.0,
+        "model": "claude-test",
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "duration_ms": 1000,
+        "hash_ids": ["h1"],
+    }
+    (out / f"{sid}.jsonl").write_text(json.dumps(row) + "\\n")
+"""
+
+
+@pytest.fixture
+def build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Run the build CLI with the DB sampler stubbed to write STUB_SESSIONS, plots skipped."""
+    sampler = tmp_path / "stub_sampler.py"
+    sampler.write_text(STUB_SAMPLER)
+    record = tmp_path / "sampler-record.json"
+    no_plot = tmp_path / "no_plot.py"
+    no_plot.write_text("")
+    monkeypatch.setattr(build_weka_hf_dataset, "SAMPLER", sampler)
+    monkeypatch.setattr(build_weka_hf_dataset, "PLOT_WEKA", no_plot)
+    monkeypatch.setattr(build_weka_hf_dataset, "PLOT_SUBAGENT", no_plot)
+    monkeypatch.setenv("STUB_SAMPLER_RECORD", str(record))
+    monkeypatch.delenv("AGENTIC_PROXY_DB_URL", raising=False)
+
+    def run(sessions: str, *flags: str) -> dict:
+        monkeypatch.setenv("STUB_SESSIONS", sessions)
+        argv = ["build", "--repo-base", "org/base", "--work-dir", str(tmp_path / "work")]
+        monkeypatch.setattr(sys, "argv", [*argv, "--skip-upload", *flags])
+        assert build_weka_hf_dataset.main() == 0
+        return json.loads(record.read_text())
+
+    return run
+
+
+def _trace_ids(traces_jsonl: Path) -> list[str]:
+    return [json.loads(line)["id"] for line in traces_jsonl.read_text().splitlines()]
+
+
+def test_rebuild_in_same_work_dir_publishes_only_this_runs_sessions(build, tmp_path: Path) -> None:
+    filters = ("--repo-256k", "org/256k", "--base-max-isl", "990016")
+    build("old-a,old-b", *filters)
+    build("new-c", *filters)
+
+    work = tmp_path / "work"
+    assert _trace_ids(work / "base/traces.jsonl") == ["new-c"]
+    assert _trace_ids(work / "256k/traces.jsonl") == ["new-c"]
 
 
 def _request(t: float, api_time: float, tokens: int = 1) -> dict:
