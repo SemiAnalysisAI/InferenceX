@@ -7594,13 +7594,13 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
 glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20261016-a93f16f0@sha256:0b3e39704480c423d8a00ca15ebee63154defc62944df2d4b11c594563bab457
+  image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0.dev20261015" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261019" }
   multinode: true
   disagg: false
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
