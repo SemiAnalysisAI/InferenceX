@@ -139,9 +139,6 @@ override_tp4_dspark3_c64_simple:
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1199000000000,"lazy_offload":false}}'
       env:
         PYTHONHASHSEED: '42'
-        # HACK: stack dumps every ~12 min from utils/debug_site/sitecustomize.py (image PYTHONPATH kept).
-        PYTHONPATH: '/infmax-workspace/utils/debug_site:/usr/local/lib/python3.12/dist-packages/_rocm_sdk_core/share/amd_smi'
-        DEBUG_STACK_DUMP_S: '720'
   benchmark:
     env:
       CONC: '64'
