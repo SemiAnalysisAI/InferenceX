@@ -374,6 +374,20 @@ class TestWaitForCheck:
 
         assert result == 0
 
+    def test_later_skipped_run_does_not_replace_verdict(self):
+        """An unrelated label event re-runs the workflow with check-changelog skipped."""
+        verdict = make_check_run(
+            name="check-changelog", started_at="2024-01-01T00:00:05Z", cr_id=10
+        )
+        skipped = make_check_run(
+            name="check-changelog", conclusion="skipped", started_at="2024-01-01T00:00:31Z",
+            cr_id=20,
+        )
+        gh_repo = MagicMock()
+        gh_repo.get_commit.return_value.get_check_runs.return_value = [verdict, skipped]
+
+        assert wait_for_check("a" * 40, "check-changelog", gh_repo, timeout=60) == 0
+
 
 
 

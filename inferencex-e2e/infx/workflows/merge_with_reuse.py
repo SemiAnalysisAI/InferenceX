@@ -452,6 +452,8 @@ def wait_for_check(
         try:
             check_runs = list(commit.get_check_runs())
             matching = [cr for cr in check_runs if cr.name == check_name]
+            # Unrelated label events re-run the workflow with this job skipped on the same SHA.
+            matching = [cr for cr in matching if cr.conclusion != "skipped"] or matching
             if matching:
                 matching.sort(key=_check_run_recency)
                 latest = matching[-1]
