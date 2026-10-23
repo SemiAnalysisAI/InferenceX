@@ -184,8 +184,6 @@ def stage_sample(args: argparse.Namespace, work_dir: Path) -> Path:
         cmd.append("--exclude-dynamic-workflow-bug")
         if args.dwbug_min_peak is not None:
             cmd += ["--dwbug-min-peak", str(args.dwbug_min_peak)]
-    if args.db_url:
-        cmd += ["--db-url", args.db_url]
     _run(cmd)
     return proxy_dir
 

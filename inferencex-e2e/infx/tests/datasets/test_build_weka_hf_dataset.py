@@ -44,7 +44,9 @@ def build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(build_weka_hf_dataset, "PLOT_WEKA", no_plot)
     monkeypatch.setattr(build_weka_hf_dataset, "PLOT_SUBAGENT", no_plot)
     monkeypatch.setenv("STUB_SAMPLER_RECORD", str(record))
-    monkeypatch.delenv("AGENTIC_PROXY_DB_URL", raising=False)
+    # setenv first so teardown also removes the value main() exports.
+    monkeypatch.setenv("AGENTIC_PROXY_DB_URL", "")
+    monkeypatch.delenv("AGENTIC_PROXY_DB_URL")
 
     def run(sessions: str, *flags: str) -> dict:
         monkeypatch.setenv("STUB_SESSIONS", sessions)
@@ -68,6 +70,18 @@ def test_rebuild_in_same_work_dir_publishes_only_this_runs_sessions(build, tmp_p
     work = tmp_path / "work"
     assert _trace_ids(work / "base/traces.jsonl") == ["new-c"]
     assert _trace_ids(work / "256k/traces.jsonl") == ["new-c"]
+
+
+def test_db_url_reaches_sampler_without_being_echoed(
+    build, capfd: pytest.CaptureFixture[str]
+) -> None:
+    url = "postgresql://reader:hunter2-secret@db.example/proxy"
+    record = build("s1", "--db-url", url)
+
+    assert record["db_url"] == url
+    assert all("hunter2-secret" not in arg for arg in record["argv"])
+    out, err = capfd.readouterr()
+    assert "hunter2-secret" not in out + err
 
 
 def _request(t: float, api_time: float, tokens: int = 1) -> dict:
