@@ -15,7 +15,11 @@ if "psycopg" not in sys.modules:
     sys.modules["psycopg"] = _psycopg
     sys.modules["psycopg.rows"] = _psycopg.rows
 
-from infx.datasets.sample_proxy_traces import _sort_and_limit, parse_args  # noqa: E402
+from infx.datasets.sample_proxy_traces import (  # noqa: E402
+    _redact_url,
+    _sort_and_limit,
+    parse_args,
+)
 
 TIED_TS = datetime(2026, 5, 1, tzinfo=UTC)
 OLDER_TS = datetime(2026, 4, 1, tzinfo=UTC)
@@ -46,3 +50,9 @@ def test_zero_limit_is_rejected(
 
     assert exit_info.value.code == 2
     assert "--limit must be >= 1" in capsys.readouterr().err
+
+
+def test_keyword_conninfo_password_is_not_logged() -> None:
+    redacted = _redact_url("host=db.example dbname=proxy user=reader password=hunter2-secret")
+
+    assert "hunter2-secret" not in redacted

@@ -50,6 +50,9 @@ def _redact_url(url: str) -> str:
     """Show host + db, drop credentials."""
     try:
         p = urlsplit(url)
+        # libpq key=value conninfo has no URL netloc and would land whole in .path.
+        if not p.netloc:
+            return "<connection string>"
         return f"{p.hostname}{p.path}"
     except Exception:  # noqa: BLE001
         return "<connection string>"
