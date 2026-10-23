@@ -114,11 +114,8 @@ env:
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
-  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
-  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
   SALLOC_TIME_LIMIT: '480'
-  KEEP_LOGS: '0'
   IS_MULTINODE: 'true'
   RANDOM_RANGE_RATIO: 0.8
   # Day-zero models resolved via hf: ids download from the Hub inside the
@@ -155,7 +152,6 @@ env:
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
-  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}

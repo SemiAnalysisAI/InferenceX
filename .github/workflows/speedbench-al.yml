@@ -86,15 +86,11 @@ env:
   DRAFT_SAMPLE_METHOD: greedy
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
-  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
-  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
-  KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
   EVAL_ONLY: 'false'
   RUN_EVAL: 'false'
   IS_AGENTIC: '0'
-  SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   MODEL: ${{ inputs.model }}
