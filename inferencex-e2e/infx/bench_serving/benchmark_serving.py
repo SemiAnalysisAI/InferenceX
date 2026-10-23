@@ -49,9 +49,6 @@ from .backend_request_func import (
 try:
     from .backend_request_func import get_tokenizer
 except ImportError:
-    # vLLM moved get_tokenizer from vllm.transformers_utils.tokenizer to
-    # vllm.tokenizers; the old path was a deprecation alias in v0.20 and
-    # was removed by v0.23. Try the new location first, fall back to old.
     try:
         from vllm.tokenizers import get_tokenizer
     except ImportError:
@@ -71,6 +68,8 @@ MILLISECONDS_TO_SECONDS_CONVERSION = 1000
 
 @dataclass
 class BenchmarkMetrics:
+    """Aggregate results of one run. ``e2el`` is client latency from request send to full response."""
+
     completed: int
     total_input: int
     total_output: int
@@ -90,14 +89,12 @@ class BenchmarkMetrics:
     median_itl_ms: float
     std_itl_ms: float
     percentiles_itl_ms: list[tuple[float, float]]
-    # Client latency from request send to complete response.
     mean_e2el_ms: float
     median_e2el_ms: float
     std_e2el_ms: float
     percentiles_e2el_ms: list[tuple[float, float]]
 
 
-# --- Multiprocessing helpers for sample_random_requests ---
 _worker_tokenizer = None
 
 
@@ -110,9 +107,9 @@ def _load_tokenizer(
     LlamaTokenizer.all_special_tokens_extended (e.g. Qwen3.5 with newer
     transformers). Prefer backend_request_func.get_tokenizer on fallback so
     client tokenization stays aligned with the sglang server (#1381, #1428).
+    ``deepseek_v4`` always uses vLLM's loader, since HF AutoTokenizer may not know it.
     """
     if tokenizer_mode == "deepseek_v4":
-        # HF AutoTokenizer may not recognize deepseek_v4; use vLLM's loader.
         try:
             from vllm.tokenizers import get_tokenizer as _vllm_get_tokenizer
         except ImportError:
@@ -183,7 +180,7 @@ def _apply_chat_template(prompt: str, tokenizer: PreTrainedTokenizerBase, dsv4: 
 
 
 def _process_prompt_chunk(chunk_args: tuple) -> list[tuple[str, int, int, None, int]]:
-    """Generate a chunk of random prompts in a worker process."""
+    """Generate one chunk of random prompts in a worker, as ``(prompt, len, output_len, None, mismatch)`` tuples."""
     (
         indices,
         prefix_token_ids,
@@ -244,6 +241,11 @@ def sample_random_requests(
     trust_remote_code: bool = False,
     num_workers: int = 0,
 ) -> list[tuple[str, int, int]]:
+    """Build ``num_prompts`` random-token prompts, each length between ``range_ratio`` times its target and the target.
+
+    Returns ``(prompt, prompt_len, output_len, None)`` tuples. Raises ``ValueError`` for no prompts or
+    ``dsv4`` without a chat template. Padding uses a local RNG so arrival times ignore ``num_workers``.
+    """
     if num_prompts <= 0:
         raise ValueError(f"--num-prompts must be positive, got {num_prompts}")
     vocab_size = tokenizer.vocab_size
@@ -261,6 +263,7 @@ def sample_random_requests(
         input_len = input_len - chat_template_len
 
     def sample_uniform(seq_len: int) -> list[int]:
+        """Draw ``num_prompts`` lengths uniformly from ``range_ratio * seq_len`` to ``seq_len``."""
         lower = int(seq_len * range_ratio)
         upper = seq_len
         return np.random.randint(lower, upper + 1, size=num_prompts).tolist()  # noqa: NPY002
@@ -269,11 +272,10 @@ def sample_random_requests(
     output_lens = sample_uniform(output_len)
     offsets = np.random.randint(0, vocab_size, size=num_prompts).tolist()  # noqa: NPY002
 
-    # Local padding draws keep downstream arrival times independent of num_workers.
     local_rng = np.random.RandomState(
         np.random.get_state()[1][  # noqa: NPY002
             :4
-        ].tolist()  # derive seed from current state without advancing it
+        ].tolist()
     )
 
     if num_workers <= 0:
@@ -410,6 +412,11 @@ def calculate_metrics(
     selected_percentiles: list[float],
     goodput_config_dict: dict[str, float],
 ) -> tuple[BenchmarkMetrics, list[int]]:
+    """Summarize ``outputs`` over ``dur_s`` seconds into metrics, plus each request's output length.
+
+    Retokenizes text when the server sent no usage count, which may overcount slightly. Goodput counts
+    a request whose TTFT, TPOT (0 for one token), and E2EL all meet ``goodput_config_dict``.
+    """
     actual_output_lens: list[int] = []
     total_input = 0
     completed = 0
@@ -424,7 +431,6 @@ def calculate_metrics(
             output_len = outputs[i].output_tokens
 
             if not output_len:
-                # Chunks can bundle tokens; retokenization may slightly overcount.
                 output_len = len(
                     tokenizer(outputs[i].generated_text, add_special_tokens=False).input_ids
                 )
@@ -435,7 +441,6 @@ def calculate_metrics(
                 latency_minus_ttft = outputs[i].latency - outputs[i].ttft
                 tpot = latency_minus_ttft / (output_len - 1)
                 tpots.append(tpot)
-            # Note: if output_len <= 1, we regard tpot as 0 for goodput
             all_tpots.append(tpot)
             itls += outputs[i].itl
             ttfts.append(outputs[i].ttft)
@@ -469,7 +474,6 @@ def calculate_metrics(
             "on the benchmark arguments.",
             stacklevel=2,
         )
-    # Convert once; every numpy call below would otherwise rebuild an array from the list.
     ttfts, tpots, itls, e2els = (np.asarray(v or 0) for v in (ttfts, tpots, itls, e2els))
     metrics = BenchmarkMetrics(
         completed=completed,
@@ -479,8 +483,7 @@ def calculate_metrics(
         request_goodput=good_completed / dur_s,
         output_throughput=sum(actual_output_lens) / dur_s,
         total_token_throughput=(total_input + sum(actual_output_lens)) / dur_s,
-        mean_ttft_ms=np.mean(ttfts)
-        * 1000,  # ttfts is empty if streaming is not supported by backend
+        mean_ttft_ms=np.mean(ttfts) * 1000,
         std_ttft_ms=np.std(ttfts) * 1000,
         median_ttft_ms=np.median(ttfts) * 1000,
         percentiles_ttft_ms=[(p, np.percentile(ttfts, p) * 1000) for p in selected_percentiles],
@@ -523,6 +526,10 @@ async def benchmark(
     max_concurrency: int | None,
     lora_modules: list[str] | None,
 ) -> dict[str, Any]:
+    """Warm up, then send ``input_requests`` to ``api_url`` at ``request_rate`` and return the result dict.
+
+    Raises ``ValueError`` for an unknown backend or multi-modal input outside ``openai-chat``.
+    """
     if backend in ASYNC_REQUEST_FUNCS:
         request_func = ASYNC_REQUEST_FUNCS[backend]
     else:
@@ -531,7 +538,6 @@ async def benchmark(
     print("Starting initial single prompt test run...")
     test_prompt, test_prompt_len, test_output_len, test_mm_content = input_requests[0]
     if backend != "openai-chat" and test_mm_content is not None:
-        # multi-modal benchmark is only available on OpenAI Chat backend.
         raise ValueError("Multi-modal content is only supported on 'openai-chat' backend.")
     test_input = RequestFuncInput(
         model=model_id,
@@ -552,6 +558,7 @@ async def benchmark(
         warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
         async def warmup_limited_req_fn() -> RequestFuncOutput:
+            """Send the test request, under the warmup concurrency limit if one is set."""
             if warmup_semaphore is None:
                 return await request_func(request_func_input=test_input, pbar=warmup_pbar)
             async with warmup_semaphore:
@@ -608,6 +615,7 @@ async def benchmark(
     async def limited_request_func(
         request_func_input: RequestFuncInput, pbar: tqdm | None
     ) -> RequestFuncOutput:
+        """Send ``request_func_input``, under the concurrency limit if one is set."""
         if semaphore is None:
             return await request_func(request_func_input=request_func_input, pbar=pbar)
         async with semaphore:
@@ -712,6 +720,7 @@ async def benchmark(
         metric_name: str,
         metric_header: str,
     ) -> None:
+        """Print the selected metric's mean, median, and percentiles and copy them into ``result``."""
         if metric_attribute_name not in selected_percentile_metrics:
             return
         print("{s:{c}^{n}}".format(s=metric_header, n=50, c="-"))
@@ -752,6 +761,7 @@ async def benchmark(
 
 
 def check_goodput_args(args: argparse.Namespace) -> dict[str, float]:
+    """Parse ``args.goodput`` into SLOs in ms, raising ``ValueError`` for unknown names or negative values."""
     goodput_config_dict = {}
     valid_names = ["ttft", "tpot", "e2el"]
     if args.goodput:
@@ -773,6 +783,7 @@ def check_goodput_args(args: argparse.Namespace) -> dict[str, float]:
 
 
 def parse_goodput(slo_pairs: list[str]) -> dict[str, float]:
+    """Parse ``KEY:VALUE`` strings into a dict, raising ``ArgumentTypeError`` on bad format."""
     goodput_config_dict = {}
     try:
         for slo_pair in slo_pairs:
@@ -791,6 +802,7 @@ def parse_goodput(slo_pairs: list[str]) -> dict[str, float]:
 def save_to_pytorch_benchmark_format(
     args: argparse.Namespace, results: dict[str, Any], file_name: str
 ) -> None:
+    """Write the latency metrics of ``results`` as PyTorch benchmark records beside ``file_name``."""
     metrics = [
         "median_ttft_ms",
         "mean_ttft_ms",
@@ -820,6 +832,10 @@ def save_to_pytorch_benchmark_format(
 
 
 def main(args: argparse.Namespace) -> None:
+    """Run the benchmark from parsed ``args``, save results if asked, and exit nonzero when the run fails.
+
+    Records the request outcome before saving so cleanup cannot turn a failed run into a pass.
+    """
     print(args)
     if args.request_rate <= 0:
         raise ValueError(f"--request-rate must be positive, got {args.request_rate}")
@@ -868,7 +884,6 @@ def main(args: argparse.Namespace) -> None:
 
     goodput_config_dict = check_goodput_args(args)
 
-    # Avoid GC processing "static" data - reduce pause times.
     gc.collect()
     gc.freeze()
 
@@ -897,12 +912,9 @@ def main(args: argparse.Namespace) -> None:
         )
     )
 
-    # Preserve the request gate before writing results: cleanup or a surrounding
-    # launcher must not turn an error-containing benchmark into a passed point.
     try:
         outcome = benchmark_outcome(args.num_prompts, benchmark_result["completed"])
     except ValueError as exc:
-        # Preserve invalid counts for diagnostics; the processor rejects them.
         outcome = {
             "status": "failed",
             "requested": args.num_prompts,
@@ -939,7 +951,6 @@ def main(args: argparse.Namespace) -> None:
         result_json = {**result_json, **benchmark_result}
 
         if not args.save_detailed:
-            # Remove fields with too many data points
             for field in [
                 "ttfts",
                 "itls",
@@ -988,7 +999,6 @@ if __name__ == "__main__":
         default=None,
         help="Server or API base url if not using http host and port.",
     )
-    # Use 127.0.0.1 here instead of localhost to force the use of ipv4
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument(

@@ -45,7 +45,7 @@ def http_json(url: str) -> object | None:
 
 
 def process_alive(pid: int) -> bool:
-    """A zombie waiting to be reaped is not a live server."""
+    """Whether ``pid`` is running, counting a zombie waiting to be reaped as dead."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -68,6 +68,7 @@ def wait_ready(
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
     def stream() -> None:
+        """Copy new bytes of ``log`` to stdout, restarting when the file is replaced or truncated."""
         nonlocal offset, inode
         if log is None or not log.exists():
             return
@@ -88,7 +89,6 @@ def wait_ready(
         if status is not None and status < 400:
             return
         if pid is not None and not process_alive(pid):
-            # Its last words may have landed during the probe.
             stream()
             raise NotReadyError(f"process {pid} died before {url} became ready")
         time.sleep(poll_s)

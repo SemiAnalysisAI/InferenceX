@@ -32,7 +32,7 @@ class Point:
 
 
 def client_argv(point: Point) -> list[str]:
-    """An unthrottled burst that ignores EOS, after 2x-concurrency warmups."""
+    """The client argv for ``point``, an unthrottled burst that ignores EOS after 2x-concurrency warmups."""
     argv = [
         PYTHON, "-m", "infx.bench_serving.benchmark_serving",
         "--model", point.model,
@@ -62,6 +62,7 @@ def client_argv(point: Point) -> list[str]:
 
 
 def _run_client(point: Point) -> int:
+    """Run the benchmark client for ``point``, relaying signals, and return its status."""
     with proc.RelaySignals() as relay:
         return relay.run(client_argv(point))
 
@@ -78,7 +79,7 @@ def served_model(base_url: str) -> str:
 
 
 def srt_single(args: argparse.Namespace) -> int:
-    """One single-node point; srt-slurm owns the server and power sampling."""
+    """Benchmark one single-node point from the environment and return its status. srt-slurm owns the server and power."""
     values = env.require(
         "MODEL", "CONC", "ISL", "OSL", "RANDOM_RANGE_RATIO", "RESULT_FILENAME", "RESULT_DIR",
         "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT", "RUN_EVAL", "EVAL_ONLY", "USE_CHAT_TEMPLATE",
@@ -118,7 +119,7 @@ def srt_single(args: argparse.Namespace) -> int:
 
 
 def srt_sweep(args: argparse.Namespace) -> int:
-    """Every ``CONC_LIST`` point of an srt-slurm multi-node job; srt-slurm owns the servers."""
+    """Benchmark every ``CONC_LIST`` point of an srt-slurm multi-node job and return the first failure, else 0."""
     values = env.require(
         "ISL", "OSL", "RANDOM_RANGE_RATIO", "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT",
         "CONC_LIST", "PREFILL_NUM_WORKERS", "PREFILL_TP", "PREFILL_PP_SIZE", "PREFILL_PCP_SIZE",
@@ -166,7 +167,7 @@ def srt_sweep(args: argparse.Namespace) -> int:
 
 
 def explicit_point(args: argparse.Namespace) -> int:
-    """One point described entirely by flags."""
+    """Benchmark one point described entirely by ``args`` and return the client's status."""
     return _run_client(
         Point(
             base_url=args.base_url,

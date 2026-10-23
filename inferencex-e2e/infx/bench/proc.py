@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# TOKENS and TOKENIZER name token counts and tokenizer paths, never credentials.
 _SECRET_NAME = re.compile(r"TOKEN(?!S|IZER)|SECRET|API_?KEY|PASSWORD", re.IGNORECASE)
 
 
@@ -28,7 +27,10 @@ def status(returncode: int) -> int:
 
 
 def echo(argv: Sequence[str | os.PathLike[str]], env: Mapping[str, str] | None = None) -> None:
-    """Print ``+ <argv>`` to stderr, masking the values of credential variables."""
+    """Print ``+ <argv>`` to stderr, masking the values of credential variables.
+
+    Names like ``TOKENS`` and ``TOKENIZER`` hold counts and paths, so they are not masked.
+    """
     text = shlex.join(map(os.fspath, argv))
     secrets = {
         value
@@ -99,19 +101,23 @@ class _Signals:
     """Handle ``SIGNALS`` for the ``with`` block and remember the first one received."""
 
     def __init__(self) -> None:
+        """Start with no signal received and no saved handlers."""
         self.received: int | None = None
         self._previous: dict[int, Any] = {}
 
     def __enter__(self) -> Self:
+        """Install ``_handle`` for every signal in ``SIGNALS`` and return self."""
         for signum in SIGNALS:
             self._previous[signum] = signal.signal(signum, self._handle)
         return self
 
     def __exit__(self, *_: object) -> None:
+        """Restore the handlers that were in place before the block."""
         for signum, handler in self._previous.items():
             signal.signal(signum, handler)
 
     def _handle(self, signum: int, _frame: FrameType | None) -> None:
+        """Record ``signum`` unless an earlier signal was already recorded."""
         self.received = self.received or signum
 
 
@@ -123,10 +129,12 @@ class RelaySignals(_Signals):
     """Run commands one at a time, relaying signals; after one, nothing new starts."""
 
     def __init__(self) -> None:
+        """Start with no running child."""
         super().__init__()
         self._child: subprocess.Popen[bytes] | None = None
 
     def _handle(self, signum: int, frame: FrameType | None) -> None:
+        """Record ``signum`` and forward it to the running child, if any."""
         super()._handle(signum, frame)
         if self._child is not None:
             self._child.send_signal(signum)
