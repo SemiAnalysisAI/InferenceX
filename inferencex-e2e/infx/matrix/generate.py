@@ -104,8 +104,13 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     for indices in groups.values():
         keep = min(indices, key=lambda index: minimum_concurrency(out[index]))
         kept_entry = out[keep]
-        if any(out[index].get("run-eval") is True for index in indices):
+        eval_rows = [out[index] for index in indices if out[index].get("run-eval") is True]
+        if eval_rows:
             kept_entry = {**kept_entry, "run-eval": True}
+            if not kept_entry.get(Fields.EVAL_FRAMEWORK.value):
+                for field in (Fields.EVAL_FRAMEWORK.value, Fields.EVAL_SUITE.value):
+                    if field in eval_rows[0]:
+                        kept_entry[field] = eval_rows[0][field]
             if kept_entry.get("prefill") is not None:
                 kept_entry["eval-conc"] = minimum_concurrency(kept_entry)
             if any(out[index].get("eval-all-concs") is True for index in indices):
@@ -1476,7 +1481,11 @@ def select_matrix_evals(
     if mode == "smoke":
         return smoke_entries(rows)
     if trim:
-        rows = trim_conc(rows)
+        rows = [
+            row
+            for row in drop_app_colliding_evals(trim_conc(rows))
+            if row.get(Fields.RUN_EVAL.value) or not row.get(Fields.EVAL_ONLY.value)
+        ]
     if mode in ("subset", "all"):
         rows = [row for row in rows if row.get(Fields.RUN_EVAL.value, False)]
         for row in rows:

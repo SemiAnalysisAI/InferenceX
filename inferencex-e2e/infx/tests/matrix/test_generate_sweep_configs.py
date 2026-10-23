@@ -2329,6 +2329,47 @@ class TestCommandLine:
             ('lm-eval', expected_conc), ('minimax-vendor', expected_conc),
         ]
 
+    def test_trimming_does_not_give_two_recipes_the_same_app_eval(self):
+        # Each recipe's eval starts at its own highest concurrency; trimming moves both to 2.
+        shape = {
+            'model': 'm', 'model-prefix': 'm', 'runner': 'r', 'framework': 'f',
+            'precision': 'fp4', 'spec-decoding': 'none', 'disagg': True, 'isl': 8192,
+            'osl': 1024, 'prefill': {'tp': 8, 'num-worker': 1},
+            'decode': {'tp': 8, 'num-worker': 2},
+        }
+        rows = [
+            {**shape, 'srt-recipe': 'narrow.yaml', 'conc': [2, 64]},
+            {**shape, 'srt-recipe': 'wide.yaml', 'conc': [2, 128]},
+        ]
+
+        result = generate_sweep_configs.select_matrix_evals(rows, mode='default', trim=True)
+
+        assert [
+            (row['srt-recipe'], row['conc'], row['run-eval'], row.get('eval-conc'))
+            for row in result
+        ] == [('narrow.yaml', [2], True, 2), ('wide.yaml', [2], False, None)]
+
+    def test_trimmed_agentic_eval_without_a_framework_still_claims_its_app_eval(self):
+        # dense.yaml's eval moves from conc 64 to its conc-16 row; sparse.yaml evaluates conc 16.
+        shape = {
+            'scenario-type': 'agentic-coding', 'model': 'm', 'model-prefix': 'm',
+            'runner': 'r', 'framework': 'f', 'precision': 'fp4', 'spec-decoding': 'none',
+            'disagg': True, 'kv-offloading': 'none', 'prefill': {'tp': 8, 'num-worker': 1},
+            'decode': {'tp': 8, 'num-worker': 1},
+        }
+        rows = [
+            {**shape, 'srt-recipe': 'dense.yaml', 'conc': [16]},
+            {**shape, 'srt-recipe': 'dense.yaml', 'conc': [64]},
+            {**shape, 'srt-recipe': 'sparse.yaml', 'conc': [16]},
+        ]
+
+        result = generate_sweep_configs.select_matrix_evals(rows, mode='default', trim=True)
+
+        assert [
+            (row['srt-recipe'], row['conc'], row['run-eval'], row.get('eval-framework'))
+            for row in result
+        ] == [('dense.yaml', [16], True, 'lm-eval'), ('sparse.yaml', [16], False, None)]
+
     @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
     def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(
         self, monkeypatch, sample_single_node_config, sample_runner_config, entrypoint,
