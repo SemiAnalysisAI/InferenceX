@@ -1,0 +1,74 @@
+# MiniMax-M3.1-Flash AgentX on MI355X with vLLM, following the MI355X TP4
+# recipe at https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash and
+# https://vllm.ai/blog/2026-10-23-minimax-m31-flash. DSpark is off until a
+# MiniMax-M3.1-Flash golden AL curve is committed.
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-mi355x-vllm-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Cold loads of the 250 GB checkpoint plus the MXFP8 expert conversion can
+  # take the full VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        tensor-parallel-size: 4
+        gpu-memory-utilization: 0.9
+        language-model-only: true
+        trust-remote-code: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        # The checkpoint is QAT-trained for an NVFP4 KV cache; decode indexer
+        # scoring splits across TP ranks by context.
+        kv-cache-dtype: nvfp4
+        attention-config: '{"indexer_kv_dtype":"nvfp4","indexer_decode_cp":true}'
+        # NVFP4 routed experts are converted to MXFP8 at load for the AITER MoE.
+        # (upstream spells this --quantization-config.moe mxfp8).
+        quantization-config: '{"moe":"mxfp8"}'
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        max-model-len: 1048576
+        max-num-batched-tokens: 8192
+        disable-uvicorn-access-log: true
+      env:
+        # Upstream AMD recipe environment.
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '1'
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# Native zip expansion creates one variant per concurrency. TP4 is the
+# upstream MI355X layout; admission is 2x CONC.
+zip_override_tp4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: [2, 4, 8, 16, 32, 64, 128, 256]
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8', '16', '32', '64', '128']
