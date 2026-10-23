@@ -251,6 +251,16 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         runtime_arguments(f"{path}:base", env)
 
 
+@pytest.mark.parametrize("flag", ["dcp-size", "decode-context-parallel-size"])
+def test_sglang_decode_context_parallel_size_must_match_the_point(point, flag):
+    path, recipe, env = point
+    recipe["roles"]["agg"]["args"][flag] = 4
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    runtime_arguments(f"{path}:base", {**env, "DCP_SIZE": "4"})
+    with pytest.raises(ValueError, match=r"DCP_SIZE: recipe/matrix '1' != '4'"):
+        runtime_arguments(f"{path}:base", env)
+
+
 @pytest.mark.parametrize("record,expected", [
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "/shared/42"}, ("42", "/shared/42")),
     ({"status": "error"}, None),

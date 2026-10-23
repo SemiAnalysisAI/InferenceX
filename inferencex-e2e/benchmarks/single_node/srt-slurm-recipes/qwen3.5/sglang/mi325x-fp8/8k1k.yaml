@@ -24,7 +24,7 @@ base:
         trust-remote-code: true
         tokenizer-worker-num: 6
         enable-aiter-allreduce-fusion: true
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         disable-radix-cache: true
         max-prefill-tokens: 32768
         scheduler-recv-interval: 30
@@ -37,7 +37,7 @@ zip_override_concurrency:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [4, 8, 16, 32, 64]
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64]
   benchmark:
     env:
       CONC: ['4', '8', '16', '32', '64']
