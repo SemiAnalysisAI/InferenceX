@@ -247,6 +247,8 @@ def sample_random_requests(
     trust_remote_code: bool = False,
     num_workers: int = 0,
 ) -> list[tuple[str, int, int]]:
+    if num_prompts <= 0:
+        raise ValueError(f"--num-prompts must be positive, got {num_prompts}")
     vocab_size = tokenizer.vocab_size
     prefix_token_ids = np.random.randint(0, vocab_size, size=prefix_len).tolist()  # noqa: NPY002
 

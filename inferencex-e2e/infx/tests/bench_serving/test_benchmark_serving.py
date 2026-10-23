@@ -114,6 +114,15 @@ def test_missing_result_dir_is_rejected_before_the_run(tmp_path, monkeypatch):
     assert not missing.exists()
 
 
+@pytest.mark.parametrize('num_workers', [1, 2], ids=['serial', 'parallel'])
+def test_random_sampling_rejects_zero_prompts(num_workers):
+    with pytest.raises(ValueError, match='--num-prompts must be positive, got 0'):
+        client.sample_random_requests(
+            prefix_len=0, input_len=4, output_len=4, num_prompts=0, range_ratio=1.0,
+            tokenizer=Namespace(vocab_size=10), tokenizer_id='unused', num_workers=num_workers,
+        )
+
+
 class WordTokenizer:
     """One token per whitespace-separated word."""
 
