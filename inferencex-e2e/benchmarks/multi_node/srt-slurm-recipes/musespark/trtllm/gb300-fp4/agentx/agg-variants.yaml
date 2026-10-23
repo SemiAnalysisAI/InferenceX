@@ -1,0 +1,202 @@
+schema: 2
+
+base:
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  engine:
+    type: trtllm
+    served_model_name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  frontend:
+    type: trtllm_serve
+    enable_multiple_frontends: false
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        HF_HUB_CACHE: /hf_hub_cache
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        OMPI_MCA_coll: ^ucc,hcoll
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        UCX_CUDA_IPC_ENABLE_MNNVL: y
+        UCX_RNDV_SCHEME: put_zcopy
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TLLM_PROFILE_LOG_RANKS: all
+        TRTLLM_GPU_KEEPALIVE: '1'
+        MUSESPARK_OPEN_ALLREDUCE: MNNVL
+        MUSESPARK_OPEN_FUSED_FINALIZE_AR_MNNVL: '1'
+        MUSESPARK_OPEN_SHARDED_PROJECTIONS: '1'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+      extra_args:
+        - --chat_template
+        - /model/chat_template.jinja
+      args:
+        backend: pytorch
+        modeling_v2: require
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        enable_iter_req_stats: false
+        iter_stats_max_iterations: 10000
+        request_stats_max_iterations: 10000
+        max_stats_len: 10000
+        print_iter_log: false
+        return_perf_metrics: true
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/agg
+        kv_cache_config:
+          iteration_stats_interval: 20
+          use_kv_cache_manager_v2: true
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.8
+          host_cache_size: 103079215104
+          tokens_per_block: 32
+          pool_ratio: [0.15, 0.85]
+        max_num_tokens: 8192
+        max_seq_len: 1048576
+        moe_config:
+          backend: TRTLLM
+        tensor_parallel_size: 4
+        moe_expert_parallel_size: 4
+        pipeline_parallel_size: 1
+        prefill_cuda_graph_backend: breakable
+        trust_remote_code: true
+        num_postprocess_workers: 8
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        stream_interval: 20
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: RadixArk/Muse-Spark-Open-DFlash2
+  benchmark:
+    env:
+      SERVED_MODEL_NAME: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+      # The HF repo is gated; tokenize from the mounted checkpoint.
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '1000000'
+
+override_tep8_c1:
+  name: musespark-trt-agg-gb300-tep8-c1-dflash7
+  roles:
+    agg:
+      nodes: 2
+      gpus: 8
+      env:
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: null
+        MUSESPARK_OPEN_LL_QKV_WEIGHT_LAYOUT: '0'
+      args:
+        tensor_parallel_size: 8
+        moe_expert_parallel_size: 8
+        enable_tokenization_cache: false
+        max_batch_size: 1
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 1
+          batch_sizes: [1]
+
+override_tep4_c1:
+  name: musespark-trt-agg-gb300-tep4-c1-dflash7
+  roles:
+    agg:
+      args:
+        max_batch_size: 1
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 1
+          batch_sizes: [1]
+
+override_tep4_c2:
+  name: musespark-trt-agg-gb300-tep4-c2-dflash7
+  roles:
+    agg:
+      args:
+        max_batch_size: 2
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 2
+          batch_sizes: [1, 2]
+
+override_tep4_c4:
+  name: musespark-trt-agg-gb300-tep4-c4-dflash7
+  roles:
+    agg:
+      args:
+        max_batch_size: 4
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 4
+          batch_sizes: [1, 2, 4]
+
+override_tep4_c8:
+  name: musespark-trt-agg-gb300-tep4-c8-dflash7
+  roles:
+    agg:
+      args:
+        max_batch_size: 8
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 8
+          batch_sizes: [1, 2, 4, 8]
+
+override_tep4_c16:
+  name: musespark-trt-agg-gb300-tep4-c16-dflash7
+  roles:
+    agg:
+      args:
+        max_batch_size: 16
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 16
+          batch_sizes: [1, 2, 4, 8, 16]
+
+override_tep4_c32:
+  name: musespark-trt-agg-gb300-tep4-c32-dflash7
+  roles:
+    agg:
+      args:
+        max_batch_size: 32
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 32
+          batch_sizes: [1, 2, 4, 8, 16, 32]
+
+override_tep4_c64:
+  name: musespark-trt-agg-gb300-tep4-c64-dflash7
+  roles:
+    agg:
+      args:
+        max_batch_size: 64
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+          batch_sizes: [1, 2, 4, 8, 16, 32, 64]

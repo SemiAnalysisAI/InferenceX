@@ -9741,6 +9741,109 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
           ep: 4
           dp-attn: false
 
+musespark-fp4-gb300-trt-agentic-dflash:
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0a0.dev202610221558
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: trt
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.10686
+      search-space:
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [1]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tep8_c1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [1]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [2]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c2
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c4
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [8]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c8
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [16]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c16
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [32]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c32
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [64]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c64
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
   image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
   model: Qwen/Qwen3.5-397B-A17B-FP8

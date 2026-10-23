@@ -111,7 +111,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
 | MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimaxm31flash_dspark.yaml`) | |
-| Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `musespark_dflash.yaml`) | |
+| Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `musespark_dflash.yaml`) | |
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |
 | GLM-5.3 | `glm5.3` | 2026-09-22 ([#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)) | Agentic coding (MTP only, per the deprecation policy) | Single-turn 1k1k (deprecated for all models before this model was added; never run) |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |
