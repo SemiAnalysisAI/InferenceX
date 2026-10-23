@@ -239,3 +239,18 @@ def test_partial_subagent_filter_recomputes_group_metadata() -> None:
     assert child["t"] == 4.0
     assert child["duration_ms"] == 5_000
     assert child["total_tokens"] == 300
+
+
+def test_filter_drops_models_left_without_requests() -> None:
+    opus_main = {**_request(0.0, 1.0, tokens=300_000), "model": "opus"}
+    sonnet_main = {**_request(1.0, 1.0), "model": "sonnet"}
+    haiku_inner = {**_request(2.0, 1.0), "model": "haiku"}
+    opus_inner = {**_request(3.0, 1.0, tokens=300_000), "model": "opus"}
+    child = {**_subagent("child", [haiku_inner, opus_inner]), "models": ["haiku", "opus"]}
+    trace = {"id": "models", "models": ["haiku", "opus", "sonnet"]}
+    trace["requests"] = [opus_main, sonnet_main, child]
+
+    filtered = _filter_trace_256k(trace, cap=256_000)
+
+    assert filtered["requests"][1]["models"] == ["haiku"]
+    assert filtered["models"] == ["haiku", "sonnet"]

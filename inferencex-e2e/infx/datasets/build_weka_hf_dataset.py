@@ -572,8 +572,16 @@ def _filter_trace(trace: dict, is_oversize: Callable[[dict], bool]) -> dict | No
         entry["t"] = first_t
         entry["duration_ms"] = round((last_end - first_t) * 1000.0)
         entry["total_tokens"] = sum((r.get("in") or 0) + (r.get("out") or 0) for r in inners)
+        entry["models"] = sorted({r["model"] for r in inners})
 
     out["requests"] = surviving
+    out["models"] = sorted(
+        {
+            m
+            for e in surviving
+            for m in (e["models"] if e.get("type") == "subagent" else [e["model"]])
+        }
+    )
     return out
 
 
