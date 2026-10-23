@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -120,13 +121,18 @@ def srt_sweep(args: argparse.Namespace) -> int:
     """Every ``CONC_LIST`` point of an srt-slurm multi-node job; srt-slurm owns the servers."""
     values = env.require(
         "ISL", "OSL", "RANDOM_RANGE_RATIO", "SRT_FRONTEND_HOST", "SRT_FRONTEND_PORT",
-        "CONC_LIST", "PREFILL_NUM_WORKERS", "PREFILL_TP", "DECODE_NUM_WORKERS", "DECODE_TP",
+        "CONC_LIST", "PREFILL_NUM_WORKERS", "PREFILL_TP", "PREFILL_PP_SIZE", "PREFILL_PCP_SIZE",
+        "PREFILL_DWDP_SIZE", "DECODE_NUM_WORKERS", "DECODE_TP", "DECODE_PP_SIZE", "DECODE_PCP_SIZE",
     )  # fmt: skip
     isl = env.positive_int("ISL")
     osl = env.positive_int("OSL")
     base_url = f"http://{values['SRT_FRONTEND_HOST']}:{env.positive_int('SRT_FRONTEND_PORT')}"
-    ctx = env.non_negative_int("PREFILL_NUM_WORKERS") * env.positive_int("PREFILL_TP")
-    gen = env.non_negative_int("DECODE_NUM_WORKERS") * env.positive_int("DECODE_TP")
+    ctx = env.non_negative_int("PREFILL_NUM_WORKERS") * math.prod(
+        env.positive_int(f"PREFILL_{size}") for size in ("TP", "PP_SIZE", "PCP_SIZE", "DWDP_SIZE")
+    )
+    gen = env.non_negative_int("DECODE_NUM_WORKERS") * math.prod(
+        env.positive_int(f"DECODE_{size}") for size in ("TP", "PP_SIZE", "PCP_SIZE")
+    )
     concs = [env.parse_positive_int("CONC_LIST", word) for word in values["CONC_LIST"].split()]
     windows = env.optional("SRT_MEASUREMENT_WINDOW_DIR")
     model = served_model(base_url)
