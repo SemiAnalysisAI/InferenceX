@@ -5,7 +5,6 @@ import json
 import os
 import subprocess
 from collections.abc import Iterable
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -59,11 +58,10 @@ def base_matrix(ref: str, config_files: list[str]) -> Matrix:
             single.write_text(yaml.safe_dump({key: entry}, sort_keys=False))
             singles.append(str(single))
 
-        def generate(key: str, single: str) -> list[dict]:
-            return revision.generate([key], ["--no-evals"], [single])
-
-        with ThreadPoolExecutor(os.cpu_count()) as pool:
-            rows = list(pool.map(generate, master, singles))
+        requests = [
+            ([key], ["--no-evals"], [single]) for key, single in zip(master, singles, strict=True)
+        ]
+        rows = revision.generate_each(requests, os.cpu_count() or 1)
         return {
             key: _points(generated, revision.root)
             for key, generated in zip(master, rows, strict=True)

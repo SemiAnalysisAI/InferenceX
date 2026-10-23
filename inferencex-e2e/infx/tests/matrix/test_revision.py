@@ -102,6 +102,43 @@ def test_historical_generation_uses_committed_source_and_inputs(generation_repo,
     assert not snapshot.exists()
 
 
+@pytest.mark.parametrize("ref,expected", [("older", ("older", 2)), ("newer", ("newer", 6))])
+def test_batch_generation_runs_each_revisions_own_generator(
+    generation_repo, ref, expected, monkeypatch
+):
+    def no_process_per_request(*_):
+        raise AssertionError("a request fell back to its own process")
+
+    monkeypatch.setattr(revision.Revision, "generate", no_process_per_request)
+    with revision.snapshot(ref) as inputs:
+        batches = inputs.generate_each([(["fixture"], ["--no-evals"], None)] * 3, 2)
+
+    assert [[(row["model"], row["conc"]) for row in rows] for rows in batches] == [[expected]] * 3
+
+
+def test_batch_generation_raises_the_generators_own_failure(generation_repo):
+    requests = [(["fixture"], ["--no-evals"], None), (["absent"], ["--no-evals"], None)]
+    with revision.snapshot("newer") as inputs, pytest.raises(subprocess.CalledProcessError) as error:
+        inputs.generate_each(requests, 2)
+
+    assert "absent" in error.value.stderr
+
+
+@pytest.mark.parametrize("flush", [False, True])
+def test_batch_generation_fails_like_each_run_when_an_import_writes_to_stdout(
+    generation_repo, flush
+):
+    _, git = generation_repo
+    source = git("show", "newer:infx/matrix/validation.py")
+    Path("infx/matrix/validation.py").write_text(f"print('imported', flush={flush})\n{source}\n")
+    git("add", "infx/matrix/validation.py")
+    git("commit", "-qm", "noisy import")
+
+    with revision.snapshot("HEAD") as inputs, pytest.raises(json.JSONDecodeError):
+        inputs.generate_each([(["fixture"], ["--no-evals"], None)] * 3, 1)
+
+
+
 def test_historical_generation_rejects_missing_inputs(generation_repo):
     _, git = generation_repo
     git("rm", "-f", "configs/runners.yaml")
