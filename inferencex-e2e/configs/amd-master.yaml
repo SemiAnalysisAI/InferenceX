@@ -1535,11 +1535,11 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
 # MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
 # AMD's Quark MXFP4 export (routed experts in MXFP4, W4A4 on the AITER MoE)
-# with an NVFP4 KV cache. TP4 is the upstream MI355X layout with native DSpark
-# (7 drafts at c1-c4, 3 from c8); throughput runs use the minimaxm31flash_dspark
-# golden AL.
+# at TP4 with native DSpark: 7 drafts, mono decode and an FP8 KV cache at
+# c1-c8; 3 drafts, an NVFP4 KV cache and DBO from c16. Throughput runs use the
+# minimaxm31flash_dspark golden AL.
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:minimax-m31-flash@sha256:dbe558ed02054340c98623854f51a3a9a7252aa08b6ea97ec37246fca6318647
+  image: vllm/vllm-openai-rocm:minimax-m31-flash@sha256:ae8681212aa5291d8c27f06e90016435e3fca144a68fd5c439231f6475f74569
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
   model-prefix: minimaxm31flash
   runner: cluster:mi355x-amds

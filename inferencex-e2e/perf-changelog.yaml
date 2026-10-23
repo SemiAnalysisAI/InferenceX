@@ -10877,6 +10877,8 @@
   description:
     - "Add day-zero MiniMax-M3.1-Flash AgentX on MI355X with vLLM image vllm/vllm-openai-rocm:minimax-m31-flash (https://vllm.ai/blog/2026-10-23-minimax-m31-flash), on AMD's Quark export amd/MiniMax-M3.1-Flash-Quark-MXFP4 (MXFP4 routed experts + NVFP4 KV)."
     - "Serve flags follow the recipes.vllm.ai MI355X TP4 recipe: block size 128, nvfp4 KV and indexer cache with indexer decode CP, hybrid KV cache manager disabled, minimax_m3 reasoning and tool parsers, 1M context, native DSpark (TRITON_ATTN drafter, fp8 draft KV, probabilistic draft sampling). MoE as the export recommends: MXFP4 experts loaded as stored on the AITER W4A4 MoE (moe-backend aiter), no shared-expert fusion."
-    - "Search space: TP4 at conc 1-64, no KV offloading. DSpark draft length 7 at conc 1-4 and 3 from conc 8, per the blog's MI355X runs; throughput runs use the minimaxm31flash_dspark golden AL curve."
+    - "Search space: TP4 at conc 1-64, no KV offloading; throughput runs use the minimaxm31flash_dspark golden AL curve."
+    - "Conc 1-8: DSpark 7 with the recipe's mono decode (VLLM_ROCM_MINIMAX_M3_MONO=1): a pure decode step of up to 16 tokens runs each layer as one fused kernel, on FP8 KV and indexer caches with FULL_DECODE_ONLY graphs; AgentX tool-call gaps keep c4 and c8 steps small enough to reach it."
+    - "Conc 16-64: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV cache, with 32K-token prefill steps under DBO."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4420
   scenario-type: [agentic-coding]
