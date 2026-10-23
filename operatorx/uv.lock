@@ -2,6 +2,10 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 
+[options]
+exclude-newer = "2026-09-26T15:44:46.373722019Z"
+exclude-newer-span = "PT12H"
+
 [[package]]
 name = "operatorx"
 version = "0.1.0"
