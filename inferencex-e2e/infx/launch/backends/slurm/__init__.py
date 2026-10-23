@@ -399,7 +399,7 @@ class SlurmBackend(Backend):
 
         def cancel_unreturned() -> None:
             if not returned:
-                cli.cancel_named([self.request.runner_name])
+                cli.cancel_named([self.request.runner_name], wait=False)
 
         self.life.callback(cancel_unreturned)
         try:

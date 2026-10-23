@@ -32,6 +32,9 @@ if name == "salloc":
         import time
         time.sleep(60)
     print("salloc: Granted job allocation 42", file=sys.stderr)
+elif name == "squeue":
+    if os.environ.get("FAKE_STUCK_JOB"):
+        print(os.environ["FAKE_STUCK_JOB"])
 elif name == "unsquashfs":
     sys.exit(1)
 elif name == "srun":
@@ -349,15 +352,20 @@ def test_sigterm_while_salloc_is_queued_cancels_the_pending_request(fakes, works
     launcher = subprocess.Popen(
         [sys.executable, "-m", "infx.launch", "--runner-config", str(config), "run"],
         env={**os.environ, **launch_env(workspace), "PYTHONPATH": str(ROOT),
-             "FAKE_QUEUED_MARKER": str(queued), "USER": "runner"},
+             "FAKE_QUEUED_MARKER": str(queued), "FAKE_STUCK_JOB": "99", "USER": "runner"},
         cwd=workspace, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )  # fmt: skip
-    deadline = time.monotonic() + 60
-    while not queued.exists() and launcher.poll() is None and time.monotonic() < deadline:
-        time.sleep(0.1)
-    assert queued.exists(), "salloc never started"
+    try:
+        deadline = time.monotonic() + 60
+        while not queued.exists() and launcher.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert queued.exists(), "salloc never started"
 
-    launcher.send_signal(signal.SIGTERM)
+        launcher.send_signal(signal.SIGTERM)
 
-    assert launcher.wait(timeout=60) == 143
+        assert launcher.wait(timeout=30) == 143
+    finally:
+        launcher.kill()
+        launcher.wait()
     assert ["scancel", "--user=runner", "--name=fixture_00"] in fakes()
+    assert [call for call in fakes() if call[0] == "squeue"] == []

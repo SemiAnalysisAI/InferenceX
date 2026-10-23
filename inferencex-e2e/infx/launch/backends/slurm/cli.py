@@ -176,8 +176,8 @@ def cancel(job: Job) -> None:
         proc.run(["scancel", job.id])
 
 
-def cancel_named(names: Sequence[str]) -> None:
-    """``scancel`` this user's jobs named any of ``names`` and wait until squeue drops them.
+def cancel_named(names: Sequence[str], *, wait: bool = True) -> None:
+    """``scancel`` this user's jobs named any of ``names``; with ``wait``, until squeue drops them.
 
     A job stuck in the queue (e.g. ``COMPLETING`` on a hung node) is given up on after
     ``CANCEL_NAMED_WAIT_S`` with a warning.
@@ -185,6 +185,8 @@ def cancel_named(names: Sequence[str]) -> None:
     user = os.environ.get("USER") or getpass.getuser()
     for name in names:
         proc.run(["scancel", f"--user={user}", f"--name={name}"])
+    if not wait:
+        return
     query = ["squeue", f"--user={user}", "--name=" + ",".join(names), "--noheader", "--format=%i"]
     deadline = time.monotonic() + CANCEL_NAMED_WAIT_S
     while True:
