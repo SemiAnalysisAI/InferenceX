@@ -99,3 +99,11 @@ def test_cli_show_rejects_a_curve_outside_the_golden_dir(tmp_path, capsys) -> No
 
     assert main(["--golden-dir", str(golden), "show", "../outside"]) == 1
     assert "Invalid golden curve identity" in capsys.readouterr().err
+
+
+def test_a_thinking_mode_written_as_a_list_is_rejected(tmp_path) -> None:
+    (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on: [1.5, 2.3, 2.9]\n")
+    spec = {"method": "mtp", "num_speculative_tokens": 2}
+
+    with pytest.raises(ValueError, match="thinking_on of golden curve m_mtp.yaml"):
+        golden_length("m", spec, "thinking_on", tmp_path)

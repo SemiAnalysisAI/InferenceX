@@ -75,6 +75,9 @@ def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
     [(model, modes)] = data.items()
     if not isinstance(modes, dict):
         raise ValueError(f"Expected thinking modes in golden curve {path.name}")
+    for mode, cells in modes.items():
+        if cells is not None and not isinstance(cells, dict):
+            raise ValueError(f"Expected draft lengths in {mode} of golden curve {path.name}")
     return Curve(name=name, model=str(model), modes=modes)
 
 
