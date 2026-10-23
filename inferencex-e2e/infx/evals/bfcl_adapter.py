@@ -610,7 +610,7 @@ def _run_upstream(
         else _bounded_openai_handler(OpenAICompletionsHandler)
     )
 
-    bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
+    model_config = ModelConfig(
         model_name=model,
         display_name=f"{model} (FC) (InferenceX)",
         url="",
@@ -622,6 +622,9 @@ def _run_upstream(
         is_fc_model=True,
         underscore_to_dot=True,
     )
+    bfcl_model_config.MODEL_CONFIG_MAPPING[model] = model_config
+    # BFCL evaluation looks configs up by result dir name with every "_" turned into "/".
+    bfcl_model_config.MODEL_CONFIG_MAPPING[model.replace("/", "_").replace("_", "/")] = model_config
 
     categories = list(suite.generation_categories)
     generation_kwargs = _function_defaults(generate)
