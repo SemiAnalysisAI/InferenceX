@@ -5617,6 +5617,30 @@ minimaxm31flash-fp4-b200-vllm-agentic-dspark:
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [64, 96, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
+# MiniMax-M3.1-Flash AgentX on B200 with SGLang: day-zero image from the SGLang
+# cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
+# manifest digest verified 2026-10-24. Serve flags follow the cookbook's
+# B200 Balanced (TP4) and High-Throughput (TP8, attention DP2, EP8; mem 0.75, prefill graphs to 16384).
+# Seven-token DSpark (bundled draft); synthetic acceptance follows
+# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+minimaxm31flash-fp4-b200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Balanced: TP4.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      # High-Throughput: TP8 + EP8 with attention DP2 inside the server (--attn-dp-size 2,
+      # not full DP attention, so dp-attn stays false).
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128], srt-recipe: agentic.yaml }
+
 # MiniMax-M3.1-Flash AgentX on GB200: the B200 recipe and search space on the
 # GB200 NVL4 tray, with the day-zero arm64 CUDA 13.4 build of the same image
 # (manifest sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c).
