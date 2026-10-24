@@ -1,0 +1,132 @@
+# MiniMax-M3.1-Flash AgentX PD on MI355X with vLLM: one TP4 prefill worker and
+# one TP4 decode worker on separate nodes, KV over NIXL (UCX RDMA), vLLM Router.
+# Checkpoint MiniMaxAI/MiniMax-M3.1-Flash with its NVFP4 routed experts
+# quantized to MXFP4 at load (W4A4 on the AITER MoE). Both roles use the
+# block-outer KV layout (BLHNC): a block is one row, so NIXL reads one segment
+# per block instead of one per layer page. The prefill worker keeps a
+# SimpleCPUOffload tier, sequence-parallel prefill and DBO; the decode worker
+# splits indexer scoring across ranks by context.
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-mi355x-vllm-disagg-agentic
+  slurm:
+    time_limit: '08:00:00'
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    container-remap-root: ''
+    container-writable: ''
+    mem: '0'
+  container_mounts:
+    /dev/infiniband: /dev/infiniband
+  extra_mount:
+    # Match the host's Ionic provider without replacing the image's verbs core.
+    - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm-router
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    # Native Pyxis/Enroot digest reference; imported in the frontend's job step.
+    container_image: registry-1.docker.io#vllm/vllm-router:sha256:1fbf06701abce8c8cd459414e472d63999c05b201baffc62e00727c10583f5ea
+    args:
+      policy: consistent_hash
+      prefill-policy: consistent_hash
+      decode-policy: consistent_hash
+      log-level: info
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  # Cold loads of the 250 GB checkpoint can take the full
+  # VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  engine:
+    type: vllm
+    connector: nixl
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args: &common_args
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        tensor-parallel-size: 4
+        gpu-memory-utilization: 0.9
+        language-model-only: true
+        trust-remote-code: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        kv-cache-dtype: nvfp4
+        attention-config: '{"indexer_kv_dtype":"nvfp4"}'
+        quantization-config: '{"moe":"mxfp4"}'
+        moe-backend: aiter
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        max-model-len: 1048576
+        max-num-seqs: 128
+        disable-uvicorn-access-log: true
+        # The native srt driver supplies the golden AL in throughput runs and
+        # keeps real block rejection for eval.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # 32K-token prefill steps, so DBO (from 16384 tokens) can split them.
+        max-num-batched-tokens: 32768
+        enable-dbo: true
+        dbo-prefill-token-threshold: 16384
+        dbo-decode-token-threshold: 32768
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backends":["UCX"],"num_threads":4}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1199000000000,"lazy_offload":false}}]}}'
+      env: &common_env
+        NCCL_IB_HCA: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+        NCCL_SOCKET_IFNAME: eno0
+        GLOO_SOCKET_IFNAME: eno0
+        # The export's recommended MoE setup: AITER MoE, and the MXFP8 shared
+        # expert stays a separate MLP (no shared-expert fusion).
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        # DBO needs the V2 model runner (the V1 runner refuses DSpark).
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        # Bind each HIP stream to one hardware queue (see the single-node recipe).
+        DEBUG_HIP_DYNAMIC_QUEUES: '0'
+        VLLM_KV_CACHE_LAYOUT: BLHNC
+        PYTHONHASHSEED: '42'
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+        # Rendering 100K+ token conversations in one API server outlasts the
+        # 30 s default when the multi-turn burst arrives.
+        VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT: '600'
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        <<: *common_args
+        attention-config: '{"indexer_kv_dtype":"nvfp4","indexer_decode_cp":true}'
+        max-num-batched-tokens: null
+        enable-dbo: null
+        dbo-prefill-token-threshold: null
+        dbo-decode-token-threshold: null
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backends":["UCX"],"num_threads":4}}'
+      env: *common_env
+  benchmark:
+    placement:
+      node: head
+
+# c64: sequence-parallel prefill on the prefill worker.
+override_1p1d_c64:
+  roles:
+    prefill:
+      env:
+        VLLM_ROCM_MINIMAX_M3_SP_PREFILL: '1'
