@@ -2649,7 +2649,8 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
         "spec_method": "none", "disagg": False, "benchmark_type": "agentic_traces", "isl": None,
         "osl": None, "image": "example/image:stable", "date": "2026-09-19",
     }  # fmt: skip
-    items = [{"source-status": "baseline", "source-id": "1", "source": source}]
+    items = [{"source-status": "baseline", "source-id": "1", "source": source,
+              "benchmark-age-days": 0}]
 
     def chosen(headroom):
         return sorted(

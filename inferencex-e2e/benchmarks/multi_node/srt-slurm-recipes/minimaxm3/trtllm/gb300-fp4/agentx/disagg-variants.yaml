@@ -1,6 +1,13 @@
 schema: 2
 
 base:
+  services:
+    - name: otel-collector
+      type: otel-collector
+      readiness:
+        tcp:
+          port: 4317
+        timeout_seconds: 600
   dynamo:
     install: true
     source:

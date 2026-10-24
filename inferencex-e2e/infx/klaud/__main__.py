@@ -141,12 +141,15 @@ def choose(
     occupied: set[str],
     families: dict[tuple, dict[str, tuple[frozenset[str], int]]],
 ) -> list[dict]:
-    """Shuffle one candidate per unclaimed family that fits the headroom of every target cluster.
+    """Order one candidate per unclaimed family that fits the headroom of every target cluster.
 
-    Headroom is checked but not consumed here, so the overlap review keeps alternatives.
+    The order is a weighted shuffle: a family's weight is its benchmark age in days plus one, so
+    older images tend to lead without starving recent ones. Headroom is checked but not consumed
+    here, so the overlap review keeps alternatives.
     """
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
+    keys: list[float] = []
     seen = set()
     valid = [item for item in items if item["source-status"] == "baseline"]
     for item in sorted(
@@ -194,9 +197,10 @@ def choose(
                     "branch": branch,
                 }
             )
+            keys.append(random.expovariate(item["benchmark-age-days"] + 1))
             seen.add(family)
-    random.shuffle(selected)
-    return selected
+    ordered = sorted(zip(keys, selected, strict=True), key=lambda pair: pair[0])
+    return [candidate for _, candidate in ordered]
 
 
 def weights_key(source: dict) -> tuple:
