@@ -283,14 +283,23 @@ def follow_log(job: Job, path: Path) -> None:
     tail_argv = ["tail", "-F", "-s", "2", "-n+1", str(path), f"--pid={sentinel.pid}"]
     echo(tail_argv)
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
-    # HACK (manual e2e only): also stream srtctl's engine log once it appears, and aiperf's.
-    logs, pid = f"{path.parent}/*_agg_w*.out", sentinel.pid
+    # HACK (manual e2e only): also stream srtctl's engine logs as they appear, and aiperf's.
+    # PD worker lines carry the role and worker index, e.g. [P0] / [D0].
+    pid = sentinel.pid
     # Not streamed (the uploaded log keeps them): aiter's line per new GEMM shape, torch's
     # hipBLASLt fallback warning + its source line, the 10 s KV Transfer metrics.
     noise = (r"\[aiter\] shape is M:|bgemm_internal_cublaslt error|"
              r"^  out = F\.linear\(inp, weights, bias\)$|KV Transfer metrics:")
-    subprocess.Popen(["bash", "-c", f"while kill -0 {pid} && ! ls {logs}; do sleep 1; done &>/dev/null;"
-                      f" tail -qF -s 2 -n+1 --pid={pid} {logs} | grep --line-buffered -vE '{noise}'"],
+    engines = r'''while kill -0 "$2"; do
+  for f in "$1"/*_agg_w*.out "$1"/*_prefill_w*.out "$1"/*_decode_w*.out; do
+    [[ -e $f && $seen != *" $f "* ]] || continue
+    seen+=" $f "; mode=${f%_w*}; mode=${mode##*_}; tag=${mode:0:1}${f##*_w}; tag=${tag%.out}
+    [[ $mode == agg ]] && tag= || tag="[${tag^^}] "
+    tail -qF -s 2 -n+1 --pid="$2" "$f" | grep --line-buffered -vE "$3" | sed -u "s/^/$tag/" &
+  done
+  sleep 2
+done'''
+    subprocess.Popen(["bash", "-c", engines, "engines", str(path.parent), str(pid), noise],
                      stderr=subprocess.DEVNULL)
     subprocess.Popen(["tail", "-F", "-s", "2", "-n+1", f"--pid={pid}", f"{path.parent}/benchmark.out"],
                      stderr=subprocess.DEVNULL)
