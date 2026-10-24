@@ -285,8 +285,13 @@ def follow_log(job: Job, path: Path) -> None:
     tail = subprocess.Popen(tail_argv, stderr=subprocess.DEVNULL)
     # HACK (manual e2e only): also stream srtctl's engine log once it appears, and aiperf's.
     logs, pid = f"{path.parent}/*_agg_w*.out", sentinel.pid
+    # Not streamed (the uploaded log keeps them): aiter's line per new GEMM shape, torch's
+    # hipBLASLt fallback warning + its source line, the 10 s KV Transfer metrics.
+    noise = (r"\[aiter\] shape is M:|bgemm_internal_cublaslt error|"
+             r"^  out = F\.linear\(inp, weights, bias\)$|KV Transfer metrics:")
     subprocess.Popen(["bash", "-c", f"while kill -0 {pid} && ! ls {logs}; do sleep 1; done &>/dev/null;"
-                      f" exec tail -qF -s 2 -n+1 --pid={pid} {logs}"], stderr=subprocess.DEVNULL)
+                      f" tail -qF -s 2 -n+1 --pid={pid} {logs} | grep --line-buffered -vE '{noise}'"],
+                     stderr=subprocess.DEVNULL)
     subprocess.Popen(["tail", "-F", "-s", "2", "-n+1", f"--pid={pid}", f"{path.parent}/benchmark.out"],
                      stderr=subprocess.DEVNULL)
     try:
