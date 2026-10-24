@@ -733,13 +733,26 @@ def resume_check() -> dict[str, bool]:
     return {"run": resume, "resume": resume}
 
 
+def ended_parked(action_outcome: str) -> bool:
+    """Return True if the agent step succeeded and the session's last end record is a park."""
+    evidence = os.environ.get("KLAUD_EVIDENCE")
+    if action_outcome != "success" or not evidence:
+        return False
+    try:
+        end = SessionEnd.model_validate_json((Path(evidence) / "session-end.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return end.status == "parked"
+
+
 def save_diagnostics(
     execution_file: Path, outcome_file: Path, action_outcome: str, output: Path
 ) -> bool:
     """Write sanitized session diagnostics to ``output`` and return False if unverified.
 
     The outcome comes from the posted receipt, the evidence outcome, then ``outcome_file``. A
-    session that parked on its unfinished draft PR has no outcome and counts as verified.
+    session whose agent ended cleanly right after parking on its unfinished draft PR has no
+    outcome and counts as verified.
     """
     diagnostics = {
         "action-outcome": action_outcome,
@@ -766,7 +779,7 @@ def save_diagnostics(
             ],
         }
         receipt = session.report(pulls[0]) if pulls else None
-        if not receipt and pulls and resumable(session, pulls[0]):
+        if not receipt and pulls and ended_parked(action_outcome) and resumable(session, pulls[0]):
             parked_runs = parked(session, pulls[0], int(os.environ.get("KLAUD_SESSION") or "1"))
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         failure = "session-state-unavailable"
@@ -926,12 +939,16 @@ def regenerate_producers(directory: Path) -> None:
 
 
 def select(
-    directory: Path, max_candidates: int, execution_file: Path | None = None, resumed: int = 0
+    directory: Path,
+    max_candidates: int,
+    execution_file: Path | None = None,
+    active_sessions: int = 0,
 ) -> None:
     """Claim reviewed candidates that fit capacity and have a verified baseline.
 
-    Takes up to ``max_candidates`` less the ``resumed`` sessions sharing the cap, and writes
-    their context, ownership.json and selection.json under ``directory``.
+    Takes up to ``max_candidates`` less the ``active_sessions`` already running or resumed,
+    which share the cap, and writes their context, ownership.json and selection.json under
+    ``directory``.
     """
     from . import claims, validation
     from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
@@ -941,7 +958,7 @@ def select(
     review, deferred = reviewed(contexts)
     decisions = {decision.candidate_id: decision for decision in review.decisions}
     selected = []
-    slots = max(0, max_candidates - resumed)
+    slots = max(0, max_candidates - active_sessions)
     headroom: dict[str, int] = {}
     if slots and any(decision.decision == "proceed" for decision in review.decisions):
         try:
@@ -1071,8 +1088,8 @@ def select(
             json.dumps(execution_diagnostics(execution_file), indent=2) + "\n"
         )
     summary = f"Klaud Cold: selected {len(candidates)} of {len(contexts)} eligible candidates."
-    if resumed:
-        summary += f" {resumed} resumed sessions leave " + (
+    if active_sessions:
+        summary += f" {active_sessions} running or resumed sessions leave " + (
             f"{slots} of {max_candidates} slots." if slots else "no slot for new candidates."
         )
     if deferred:
@@ -1165,10 +1182,10 @@ def main() -> int:
         help="Claude execution log; retain numeric metrics and fixed denial categories",
     )
     selection.add_argument(
-        "--resumed",
+        "--active-sessions",
         type=int,
         default=0,
-        help="Sessions recovery resumed in this wave; each takes one of its candidate slots",
+        help="Klaud sessions running or resumed by recovery; each takes one candidate slot",
     )
     commands.add_parser(
         "check-stop",
@@ -1186,10 +1203,10 @@ def main() -> int:
         "recover", help="Reconcile interrupted sessions from completed autosweeps"
     )
     recovery.add_argument(
-        "--max-resumes",
+        "--max-sessions",
         type=int,
         required=True,
-        help="Most unfinished sessions to resume in this wave (0-256)",
+        help="Most Klaud sessions running at once, counting the resumes it grants (0-256)",
     )
     commands.add_parser(
         "recover-current",
@@ -1335,9 +1352,9 @@ def main() -> int:
         if args.command == "recover":
             from .lifecycle import recover
 
-            if not 0 <= args.max_resumes <= 256:
-                parser.error("--max-resumes must be between 0 and 256")
-            recover(args.max_resumes)
+            if not 0 <= args.max_sessions <= 256:
+                parser.error("--max-sessions must be between 0 and 256")
+            recover(args.max_sessions)
             return 0
         if args.command == "finish":
             from .lifecycle import current_session
@@ -1415,9 +1432,11 @@ def main() -> int:
             return 0
         if not 1 <= args.max_candidates_per_run <= 256:
             parser.error("--max-candidates-per-run must be between 1 and 256")
-        if args.resumed < 0:
-            parser.error("--resumed must not be negative")
-        select(args.directory, args.max_candidates_per_run, args.execution_file, args.resumed)
+        if args.active_sessions < 0:
+            parser.error("--active-sessions must not be negative")
+        select(
+            args.directory, args.max_candidates_per_run, args.execution_file, args.active_sessions
+        )
         return 0
     except ReadError as error:
         if args.command == "plan":

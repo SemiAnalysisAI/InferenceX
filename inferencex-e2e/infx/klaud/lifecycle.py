@@ -41,7 +41,7 @@ RERUN_GIVE_UP_SECONDS = 24 * 60 * 60
 MAX_RUN_ATTEMPTS = 10
 MAX_SESSIONS = 12
 MAX_EXPIRED_SESSIONS = 4
-WAVE_HOURS = 6
+WAVE_HOURS = 3
 RESUME_GIVE_UP_SECONDS = 24 * 60 * 60
 SESSION_SECONDS = 330 * 60
 PARK_AFTER_SECONDS = 300 * 60
@@ -753,12 +753,16 @@ def parked(session: Session, pull: dict, number: int) -> list[int] | None:
 def within_budget(session: Session, pull: dict) -> bool:
     """Return True while the candidate may start another session.
 
-    A session that parked on owned runs is free up to MAX_SESSIONS; one that ran out, crashed
-    or parked only at its deadline counts toward MAX_EXPIRED_SESSIONS.
+    A session that parked on owned runs and then ended cleanly (or is still running) is free up
+    to MAX_SESSIONS. One that ran out, crashed, kept working after parking, or parked only at its
+    deadline counts toward MAX_EXPIRED_SESSIONS.
     """
-    started = sessions_started(session)
-    expired = sum(not parked(session, pull, number) for number in range(1, started + 1))
-    return started < MAX_SESSIONS and expired < MAX_EXPIRED_SESSIONS
+    started = [job for job in candidate_jobs(session) if started_session(job)]
+    expired = sum(
+        not (parked(session, pull, number) and job.get("conclusion") in (None, "success"))
+        for number, job in enumerate(started, 1)
+    )
+    return len(started) < MAX_SESSIONS and expired < MAX_EXPIRED_SESSIONS
 
 
 def park(session: Session, number: int, *, overdue: bool) -> list[int]:
@@ -965,8 +969,9 @@ def summarize(repository: str, candidate: OwnedCandidate, parent: int, status: s
 def reconcile(session: Session, now: datetime) -> bool:
     """Settle interrupted ``session`` at ``now`` and return True if anything changed.
 
-    Raises PendingCleanup subclasses while owned work runs, while the newest preempted run may
-    rerun, or when the session may resume. Returns False for a merged PR or no owned work.
+    Raises PendingCleanup subclasses while owned work runs, while the latest exact-head final
+    sweep or a newer targeted run was preempted and may rerun, or when the session may resume.
+    Returns False for a merged PR or no owned work.
     """
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
@@ -1007,26 +1012,24 @@ def reconcile(session: Session, now: datetime) -> bool:
     ]
     if not pending and any(not terminal(run) for run in runs):
         raise PendingCleanup("Owned work is still running; retained for the next recovery pass")
-    newest = max(
-        (
-            run
-            for run in runs
-            if run["conclusion"] != "skipped"
-            and (run["event"] != "pull_request" or run["head_sha"] == pull["head"]["sha"])
-        ),
+    latest = max(final, key=lambda r: r["created_at"]) if final else None
+    targeted = max(
+        (run for run in runs if run["event"] != "pull_request" and run["conclusion"] != "skipped"),
         key=lambda r: r["created_at"],
         default=None,
     )
-    if (
-        not pending
-        and newest
-        and pull
-        and pull["state"] == "open"
-        and newest["conclusion"] == "cancelled"
-        and now - utc(newest["updated_at"]) < timedelta(seconds=RERUN_GIVE_UP_SECONDS)
-    ):
-        await_rerun(session, pull, newest, now)
-    latest = max(final, key=lambda r: r["created_at"]) if final else None
+    if targeted and latest and targeted["created_at"] < latest["created_at"]:
+        targeted = None
+    for run in (latest, targeted):
+        if (
+            not pending
+            and run
+            and pull
+            and pull["state"] == "open"
+            and run["conclusion"] == "cancelled"
+            and now - utc(run["updated_at"]) < timedelta(seconds=RERUN_GIVE_UP_SECONDS)
+        ):
+            await_rerun(session, pull, run, now)
     validated = bool(latest and terminal(latest) and latest["conclusion"] == "success")
     if validated and not pending:
         try:
@@ -1052,11 +1055,13 @@ def reconcile(session: Session, now: datetime) -> bool:
     return True
 
 
-def recover(max_resumes: int) -> None:
-    """Reconcile every owned candidate, then resume up to ``max_resumes`` approved sessions.
+def recover(max_sessions: int) -> None:
+    """Reconcile every owned candidate, then resume approved sessions, oldest planners first.
 
-    Writes still-blocked families to ``$RUNNER_TEMP/klaud-recovery.json`` and the resume count
-    to ``$GITHUB_OUTPUT``. Unreadable state counts as live work, and oldest planners go first.
+    Resumes only while sessions already running plus those resumed here stay below
+    ``max_sessions``. Writes still-blocked families to ``$RUNNER_TEMP/klaud-recovery.json`` and
+    the running plus resumed session count to ``$GITHUB_OUTPUT``. Unreadable state counts as
+    live work.
     """
     repository = os.environ["GITHUB_REPOSITORY"]
     now = datetime.now(UTC)
@@ -1161,12 +1166,17 @@ def recover(max_resumes: int) -> None:
                 status = "reconciled / 已收尾" if changed else None
             if status:
                 summarize(repository, candidate, parent["id"], status)
+    try:
+        running = len(running_sessions(repository))
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        print("::warning::Klaud: running sessions unavailable; resuming none this pass.")
+        running = max_sessions
     resumed = 0
     approved.sort(key=lambda pair: (pair[0].parent["id"], pair[0].candidate.id))
-    for index, (session, pull) in enumerate(approved):
+    for session, pull in approved:
         run_id = session.parent["id"]
-        if index >= max_resumes:
-            status = "pending / 等待后续收尾 (resume deferred: no slot left in this wave)"
+        if running + resumed >= max_sessions:
+            status = "pending / 等待后续收尾 (resume deferred: every session slot is in use)"
         else:
             try:
                 number = grant(session, pull)
@@ -1204,7 +1214,24 @@ def recover(max_resumes: int) -> None:
     )
     if filename := os.environ.get("GITHUB_OUTPUT"):
         with open(filename, "a") as output:
-            output.write(f"resumed={resumed}\n")
+            output.write(f"active-sessions={running + resumed}\n")
+
+
+def running_sessions(repository: str) -> set[str]:
+    """Return the candidates whose session job in an active klaud-plan run has not finished."""
+    running = set()
+    for status in ACTIVE_STATUSES:
+        query = urlencode({"status": status, "per_page": 100})
+        for run in github.items(
+            repository, f"actions/workflows/klaud-plan.yml/runs?{query}", "workflow_runs"
+        ):
+            for job in github.items(
+                repository, f"actions/runs/{run['id']}/jobs?per_page=100", "jobs"
+            ):
+                match = re.search(rf"Run candidate ({CANDIDATE_ID})", job["name"])
+                if match and not job.get("completed_at"):
+                    running.add(match[1])
+    return running
 
 
 def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]], set[int]]:
