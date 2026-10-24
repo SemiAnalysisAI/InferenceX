@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 from collections.abc import Collection
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode
 
 
@@ -121,14 +121,18 @@ def set_comment_reaction(
     token: str,
     content: str | None,
     *,
+    collection: Literal["issues", "pulls"],
     replace: Collection[str] = (),
 ) -> None:
     """Replace selected github-actions reactions while preserving human reactions.
 
-    With no replacement set, simply add the requested reaction. GitHub makes
-    repeated additions of the same reaction idempotent.
+    ``collection`` is ``issues`` for PR conversation comments and ``pulls`` for inline
+    review comments. With no replacement set, simply add the requested reaction. GitHub
+    makes repeated additions of the same reaction idempotent.
     """
-    path = f"/issues/comments/{comment_id}/reactions"
+    if collection not in ("issues", "pulls"):
+        raise ValueError(f"Unsupported comment collection: {collection!r}")
+    path = f"/{collection}/comments/{comment_id}/reactions"
     if replace:
         reactions = paginate(repo, path, token, "")
         for reaction in reactions:
