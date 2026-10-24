@@ -24,3 +24,27 @@ wait_for_amd_gpu_clean() {
         return 1
     fi
 }
+
+# The RAPL energy counters are root-only by default (CVE-2020-8694). The CPU power
+# exporter runs on the bare host as the job user, so the counters become that user's
+# at mode 0400: no other account can read them. The owner persists until reboot.
+open_rapl_counters() {
+    local zones zone user
+    zones=(/sys/class/powercap/intel-rapl/intel-rapl:[0-9]*/energy_uj)
+    user=$(id -un)
+    if [[ ! -e "${zones[0]}" ]]; then
+        echo "[$(hostname -s)] no RAPL package zones under /sys/class/powercap" >&2
+        return 1
+    fi
+    if ! sudo -n chown "$user" "${zones[@]}" || ! sudo -n chmod 0400 "${zones[@]}"; then
+        echo "[$(hostname -s)] could not give $user the RAPL energy counters" >&2
+        return 1
+    fi
+    for zone in "${zones[@]}"; do
+        if ! cat "$zone" >/dev/null; then
+            echo "[$(hostname -s)] $zone is not readable as $user" >&2
+            return 1
+        fi
+        echo "[$(hostname -s)] $(cat "$(dirname "$zone")/name") energy_uj $(stat -c '%U %a' "$zone")"
+    done
+}
