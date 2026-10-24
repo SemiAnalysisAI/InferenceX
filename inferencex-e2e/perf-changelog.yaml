@@ -11100,3 +11100,10 @@
     - "Search space: Balanced TP4 at conc 1-32; TP8 + EP8 with attention DP2 at conc 64-128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4466
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260913-fa663e72 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4460
+  scenario-type: [agentic-coding]
