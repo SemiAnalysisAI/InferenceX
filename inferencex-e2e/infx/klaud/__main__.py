@@ -149,7 +149,6 @@ def choose(
     """
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
-    # Exponential keys with rate = weight, sorted ascending, sample without replacement by weight.
     keys: list[float] = []
     seen = set()
     valid = [item for item in items if item["source-status"] == "baseline"]
