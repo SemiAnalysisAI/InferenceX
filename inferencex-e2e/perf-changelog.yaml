@@ -11104,6 +11104,6 @@
 - config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
   description:
-    - "Use the ROCm nightly image and BF16 SSM states for the throughput points."
+    - "Use ROCm nightly-c50aca14416ef29f6ed0ed256302f30646726dcd pinned by digest and BF16 SSM states for the throughput points."
     - "Replace 1P1D c56 and 1P3D c12 with 1P1D c1, K7 specialized decode, and FP32 SSM states."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4391
