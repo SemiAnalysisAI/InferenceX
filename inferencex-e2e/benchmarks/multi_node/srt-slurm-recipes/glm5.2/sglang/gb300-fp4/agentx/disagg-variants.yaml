@@ -7,7 +7,7 @@ base:
     container: {}
     frameworks:
       dynamo: 1.6.0.dev20261016
-      sglang: 0.0.0.dev1+gc15edf314
+      sglang: 0.0.0.dev1+g5994c5597
   resources:
     gpu_type: gb300
     gpus_per_node: 4
