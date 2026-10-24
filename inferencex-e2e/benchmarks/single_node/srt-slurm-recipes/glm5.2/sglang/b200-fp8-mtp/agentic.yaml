@@ -44,6 +44,8 @@ base:
         SGLANG_CACHE_DIR: /tmp/sglang-cache
         # Outlast AIPerf's pooled keep-alive connections.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # SGLang otherwise forces 0 for multi-rank graph capture, under which DCP8 GSM8K emitted only '!'.
+        NCCL_GRAPH_REGISTER: '1'
   benchmark:
     env:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
