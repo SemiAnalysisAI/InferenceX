@@ -257,29 +257,6 @@ override_tp4_c32:
       CONC: '32'
       KV_OFFLOADING: dram
 
-override_tp4_c36:
-  roles:
-    agg:
-      args:
-        mem-fraction-static: 0.95
-        max-running-requests: 72
-        cuda-graph-max-bs-decode: 72
-        chunked-prefill-size: 16384
-        max-prefill-tokens: 16384
-        schedule-policy: fcfs
-        prefill-decode-interval: 24
-        swa-full-tokens-ratio: 0.1
-        enable-layernorm-sp: true
-        enable-megamoe-for-layernorm-sp: true
-        enable-hierarchical-cache: true
-        hicache-size: 175
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
-  benchmark:
-    env:
-      CONC: '36'
-      KV_OFFLOADING: dram
-
 override_tp4_c40:
   roles:
     agg:
@@ -290,7 +267,7 @@ override_tp4_c40:
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
         schedule-policy: shortest-prefill-first
-        prefill-decode-interval: 80
+        prefill-decode-interval: 96
         swa-full-tokens-ratio: 0.2
         enable-layernorm-sp: true
         enable-megamoe-for-layernorm-sp: true
@@ -299,7 +276,56 @@ override_tp4_c40:
         stream-interval: 20
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
   benchmark:
     env:
       CONC: '40'
+      KV_OFFLOADING: dram
+
+override_tp4_c44:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 170
+        hicache-write-policy: write_back
+        stream-interval: 20
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+  benchmark:
+    env:
+      CONC: '44'
+      KV_OFFLOADING: dram
+
+override_tp4_c48:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 26
+        cuda-graph-max-bs-decode: 26
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 170
+        hicache-write-policy: write_back
+        stream-interval: 20
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
+  benchmark:
+    env:
+      CONC: '48'
       KV_OFFLOADING: dram
