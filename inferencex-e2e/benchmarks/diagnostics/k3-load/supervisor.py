@@ -27,10 +27,14 @@ def terminate(p):
         p.wait(timeout=15)
 
 start=time.monotonic(); overall='no_reproduction'
-baseline=vram();write('allocation_start',job=os.environ.get('SLURM_JOB_ID'),host=os.uname().nodename,baseline=baseline,command=SETTINGS['command'],configuration=SETTINGS)
+before=vram();time.sleep(10);baseline=vram();write('allocation_start',job=os.environ.get('SLURM_JOB_ID'),host=os.uname().nodename,baseline=baseline,command=SETTINGS['command'],configuration=SETTINGS)
 assert len(baseline)==8,baseline
-if max(baseline.values())>2*1024**3:
-    write('preexisting_vram_abort',vram=baseline);raise SystemExit(2)
+limits={k:int((Path(k)/'mem_info_vram_total').read_text())*.10 for k in baseline}
+write('preflight',before=before,after=baseline,limits=limits,policy='Original formal host gate: max VRAM10%, after10s')
+if any(baseline[k]>limits[k] for k in baseline):
+    write('preexisting_vram_abort',vram=baseline)
+    (ROOT/'result.json').write_text(json.dumps(dict(result='preflight_declined',native_loads=0)))
+    raise SystemExit(2)
 for number in range(1,5):
     if time.monotonic()-start>1260:
         write('budget_stop');break
