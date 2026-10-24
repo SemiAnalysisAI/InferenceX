@@ -11100,3 +11100,10 @@
     - "Search space: Balanced TP4 at conc 1-32; TP8 + EP8 with attention DP2 at conc 64-128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4466
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  description:
+    - "Update vLLM image from nightly-1b2a6663 to nightly-c50aca14."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4470
+  scenario-type: [agentic-coding]
