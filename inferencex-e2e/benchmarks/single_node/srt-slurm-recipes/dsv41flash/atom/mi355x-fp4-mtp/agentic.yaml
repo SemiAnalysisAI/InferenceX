@@ -51,8 +51,8 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
 # One variant per point. max-num-seqs (per DP rank under DP attention) follows
-# the B300 vLLM AgentX recipe: one sequence at concurrency 1, twice the
-# concurrency from 2 to 16, and the concurrency from 32 up. Each point captures
+# the B300 vLLM AgentX recipe: twice the concurrency from 1 to 16 and the
+# concurrency from 32 up. Each point captures
 # every decode size through min(32, max-num-seqs) plus 48, 64, 128 and 256 up to
 # its max-num-seqs. The _dpa points (concurrency 32 and above) run DP attention
 # without TBO (TBO does not support SWA bounded replay), keep each AIPerf
@@ -64,8 +64,8 @@ override_tp2_c1:
     agg:
       gpus: 2
       args:
-        max-num-seqs: 1
-        cudagraph-capture-sizes: '[1]'
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
   benchmark:
     env:
       CONC: '1'
@@ -210,8 +210,8 @@ override_tp4_c1:
     agg:
       gpus: 4
       args:
-        max-num-seqs: 1
-        cudagraph-capture-sizes: '[1]'
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
   benchmark:
     env:
       CONC: '1'
