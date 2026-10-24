@@ -166,3 +166,24 @@ override_tp4_dspark3_c64_simple_sp:
       CONC: '64'
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1199'
+
+# Test only: the SP point above with block-outer KV pages (one 1.8 MB row per
+# block instead of 125 per-layer pages), for the CPU offload copies.
+override_tp4_dspark3_c64_simple_sp_blhnc:
+  roles:
+    agg:
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        quantization-config: '{"moe":"mxfp4"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: 128
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1199000000000,"lazy_offload":false}}'
+      env:
+        PYTHONHASHSEED: '42'
+        VLLM_ROCM_MINIMAX_M3_SP_PREFILL: '1'
+        VLLM_KV_CACHE_LAYOUT: BLHNC
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1199'
