@@ -41,6 +41,7 @@ CHECKS = range(18)
 
 
 def normalize_verdict(verdict: str) -> str:
+    """Return verdict with pass emojis in N/A rows replaced by the neutral marker."""
     return NA_ROW_WITH_PASS_EMOJI.sub(r"\1➖\2", verdict)  # noqa: RUF001
 
 
@@ -97,18 +98,25 @@ def verdict_errors(verdict: str) -> list[str]:
 
 
 def marker(signoff_key: str) -> str:
+    """Return the hidden HTML marker for signoff_key, raising ValueError if the key is invalid."""
     if SIGNOFF_KEY.fullmatch(signoff_key) is None:
         raise ValueError("Invalid sign-off key")
     return f"<!-- codeowner-signoff-verify signoff={signoff_key} -->"
 
 
 def _is_verdict_for(comment: dict[str, Any], signoff_key: str) -> bool:
+    """Return True if comment is a verifier bot's verdict for signoff_key."""
     author = comment.get("user") or {}
     body = comment.get("body") or ""
     return author.get("login") in VERIFIER_AUTHORS and body.startswith(f"{marker(signoff_key)}\n")
 
 
 def verdict_body(verdict: str, head_sha: str, signoff_key: str) -> tuple[str, str]:
+    """Build the PR comment body and status for a verdict on head_sha.
+
+    Returns (body, status) where status is success, warning or failure. Invalid verdicts become a
+    failure notice.
+    """
     verdict = normalize_verdict(verdict)
     checks, errors = parse_verdict(verdict)
     if errors:
@@ -143,6 +151,11 @@ def publish(
     *,
     verification_succeeded: bool,
 ) -> None:
+    """Post or update the PR verdict comment for signoff_key on head_sha.
+
+    Uses the verdict file only when verification succeeded, and reposts if the old comment was
+    deleted.
+    """
     verdict = ""
     if verification_succeeded and verdict_path.exists():
         verdict = verdict_path.read_text(encoding="utf-8").strip()
@@ -171,6 +184,7 @@ def publish(
 
 
 def main() -> None:
+    """Publish the sign-off verdict using settings from the environment."""
     publish(
         os.environ["GITHUB_REPOSITORY"],
         os.environ["GH_TOKEN"],

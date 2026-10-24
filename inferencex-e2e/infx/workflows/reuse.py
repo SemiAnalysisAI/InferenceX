@@ -119,6 +119,7 @@ def find_reuse_authorization(
     command: str,
     allowed_author_associations: set[str],
 ) -> tuple[bool, int | None]:
+    """Return whether an allowed reuse command exists on the PR, and the run ID it pins if any."""
     comment, pinned_run_id = find_reuse_request(
         repo,
         pr_number,
@@ -250,6 +251,10 @@ def resolve_reusable_run(
 
 
 def main() -> int:
+    """Decide from CLI arguments whether the sweep can reuse a prior run.
+
+    Writes the outputs and returns the exit code. Raises RuntimeError if no GitHub token is set.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
     parser.add_argument("--commit-sha", required=True)
