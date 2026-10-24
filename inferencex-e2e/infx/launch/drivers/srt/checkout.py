@@ -128,6 +128,8 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
         run.env["UV_CACHE_DIR"] = str(cache)
         run.env["UV_PYTHON_INSTALL_DIR"] = str(root / "python")
     venv = checkout.venv
+    # Copy instead of hardlinking: parallel jobs hardlinking the same files in a uv
+    # cache on shared NFS fail at sweep fan-out. Costs ~8 s per install.
     env = {**run.env, "UV_LINK_MODE": "copy"}
     argv = [uv, "venv", "--quiet", "--seed", *(["--python", python] if python else []), str(venv)]
     _checked(proc.run(argv, env=env, cwd=checkout.root), "uv venv")
