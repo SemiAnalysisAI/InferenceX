@@ -11100,3 +11100,10 @@
     - "Search space: Balanced TP4 at conc 1-32; TP8 + EP8 with attention DP2 at conc 64-128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4466
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-dev-x86_64-cu13.0.1-20ebb28 to nightly-83c078d9, using upstream MegaMoE."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4457
+  scenario-type: [agentic-coding]
