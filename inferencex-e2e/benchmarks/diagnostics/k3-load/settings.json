@@ -137,5 +137,5 @@
     "native startup3 if no failure",
     "timing stress only: hold each file-buffer close250ms; same data/queue/capacity; only if prior3 passed"
   ],
-  "setup50715": "No model attempts; shared image layer-cache permission failure, now CPU-prepared exact-digest SquashFS"
+  "setup50715": "No model attempts; ordinary-user shared-cache permission failure. CPU import unavailable on login host. Active diagnostic uses approved CI account and original image URI."
 }
