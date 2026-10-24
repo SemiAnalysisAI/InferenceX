@@ -109,7 +109,7 @@
     "UMBP_SSD_ENABLED": "0",
     "VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB": "16",
     "UMBP_DRAM_NUMA_NODE": "0,1",
-    "PYTORCH_CUDA_ALLOC_CONF": "per_process_memory_fraction:0.92,garbage_collection_threshold:0.9"
+    "PYTORCH_CUDA_ALLOC_CONF": "per_process_memory_fraction:0.92"
   },
   "base_run": 40089164291,
   "base_slurm": 50712,
@@ -118,7 +118,7 @@
   "role": "decode",
   "nodes": 1,
   "gpus": 8,
-  "attempts_max": 4,
+  "attempts_max": 3,
   "stop_on_first_native_failure": true,
   "changes": [
     "One D replica, no other P/D nodes or router",
@@ -133,20 +133,22 @@
     "TP8/DCP8/EP1/GMU0.9/fastsafetensors default queue/BF16SSM/FP8KV/in_proj quantization"
   ],
   "attempt_plan": [
-    "native startup1",
-    "native startup2 if no failure",
-    "native startup3 if no failure",
-    "timing stress only: hold each file-buffer close250ms; same data/queue/capacity; only if prior3 passed"
+    "native cap-only load1",
+    "native cap-only load2 if no failure",
+    "explicit250ms file-buffer-close stress if both native passed"
   ],
   "setup50715": "No model attempts; ordinary-user shared-cache permission failure. CPU import unavailable on login host. Active diagnostic uses approved CI account and original image URI.",
   "allocator_trial": {
-    "name": "native allocator cache reclamation",
+    "name": "cap only; no eager GC",
     "torch_memory_fraction": 0.92,
-    "garbage_collection_threshold": 0.9,
+    "garbage_collection_threshold": 0,
     "baseline_run": 40100658527,
     "baseline_slurm": 50717,
     "baseline_model_outcome": "nativeHSA/free0 in firstload",
     "vllm_gpu_memory_utilization": 0.9,
-    "formal_performance_baseline": false
-  }
+    "formal_performance_baseline": false,
+    "baseline_eager_gc_run": 40101741888,
+    "eager_gc_result": "All8 load passed;rank4min14.765625GiB;11352device frees;stopped redundant repetitions to minimize change"
+  },
+  "timing_stress_attempt": 3
 }

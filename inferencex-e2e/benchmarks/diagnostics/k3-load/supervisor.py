@@ -35,17 +35,18 @@ if any(baseline[k]>limits[k] for k in baseline):
     write('preexisting_vram_abort',vram=baseline)
     (ROOT/'result.json').write_text(json.dumps(dict(result='preflight_declined',native_loads=0)))
     raise SystemExit(2)
-for number in range(1,5):
+for number in range(1,int(SETTINGS.get('attempts_max',4))+1):
+    is_stress=(number==SETTINGS.get('timing_stress_attempt',4))
     if time.monotonic()-start>1260:
         write('budget_stop');break
     out=ROOT/f'attempt{number}';out.mkdir(exist_ok=False)
     env=dict(os.environ,**SETTINGS['env']);env.update(SA_LOAD_PROBE_DIR=str(out),PYTHONPATH='/probe'+(':'+env['PYTHONPATH'] if env.get('PYTHONPATH') else ''))
-    if number==4:env['SA_LOAD_PROBE_CLOSE_DELAY_S']='0.25'
+    if is_stress:env['SA_LOAD_PROBE_CLOSE_DELAY_S']='0.25'
     env['HEAD_NODE_IP']=subprocess.check_output(['hostname','-I'],text=True).split()[0]
     assert 'VLLM_FASTSAFETENSORS_QUEUE_SIZE' not in env
     with (out/'server.out').open('w') as f:
         p=subprocess.Popen(SETTINGS['command'],env=env,stdout=f,stderr=subprocess.STDOUT,start_new_session=True)
-        write('attempt_started',attempt=number,pid=p.pid,timing_perturbation=(number==4))
+        write('attempt_started',attempt=number,pid=p.pid,timing_perturbation=is_stress)
         deadline=time.monotonic()+360;status='timeout'
         try:
             while time.monotonic()<deadline:
@@ -68,7 +69,7 @@ for number in range(1,5):
         time.sleep(1)
     write('release_checked',attempt=number,released=released,vram=current)
     if hsa or copy_error:
-        overall='reproduced_native_loading_failure' if number<4 else 'reproduced_timing_stress_loading_failure'
+        overall='reproduced_native_loading_failure' if not is_stress else 'reproduced_timing_stress_loading_failure'
         break
     if not released:
         overall='own_server_vram_not_released';break
