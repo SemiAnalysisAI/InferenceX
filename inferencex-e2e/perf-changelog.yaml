@@ -11060,3 +11060,10 @@
     - "Update the vLLM image from nightly-39983a5e to nightly-83c078d9, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4429
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-20261016-a93f16f0 to nightly-dev-20261021-c1c287a4, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4449
+  scenario-type: [agentic-coding]
