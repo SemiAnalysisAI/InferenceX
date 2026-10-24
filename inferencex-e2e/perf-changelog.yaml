@@ -11077,6 +11077,7 @@
   description:
     - "Checkpoint: MiniMaxAI/MiniMax-M3.1-Flash instead of amd/MiniMax-M3.1-Flash-Quark-MXFP4; quantization-config {\"moe\":\"mxfp4\"} quantizes its NVFP4 routed experts to MXFP4 at load, so the MoE still runs W4A4 on AITER (AITER_MXFP4_MXFP4)."
     - "Conc 16-64: sequence-parallel prefill (VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1) on top of DBO. The image turns it on for this checkpoint (it finds the MXFP8 dense kernels the Quark export keeps elsewhere)."
+    - "Conc 16 runs both DSpark arms: 7 drafts with mono decode and an FP8 KV cache, and 3 drafts with an NVFP4 KV cache, DBO and sequence-parallel prefill."
     - "Conc 64: vLLM SimpleCPUOffloadConnector (eager) with 1349 GB of host memory (dram-utilization 0.9 of the TP4 lane), about 24M tokens next to the 14.2M-token GPU KV cache, which the c64 working set outgrows."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4463
   scenario-type: [agentic-coding]
