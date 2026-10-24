@@ -65,7 +65,8 @@ Then decide:
   specific changed file), treat Check 0 as PASS. Do not write "if they're a member
   then OK, otherwise…" hedging.
 - FAIL only when the signer is not a CODEOWNER for a SPECIFIC
-  (non-catch-all) changed path, such as an AMD owner signing an NVIDIA-only change.
+  (non-catch-all) changed path, such as a CODEOWNER for one vendor's configs signing
+  a change that only touches another vendor's configs.
   Name the path and its real owners in one line.
 
 ## Check 1 — A passing sweep + evals ran on a commit IN this PR
@@ -257,8 +258,8 @@ against the sign-off body.
 ## Check 6 — Upstream vLLM/SGLang images, and engine-first ordering
 The checklist makes upstream engine images a HARD guideline: on established hardware,
 vLLM/SGLang submissions must run images published by the upstream projects, not
-vendor forks. Established (NOT "new hardware") SKUs: NVIDIA H100, H200, B200, B300,
-GB200, GB300, AMD MI300X, AMD MI325X, and AMD MI355X.
+vendor forks. Established (NOT "new hardware") SKUs: H100, H200, B200, B300,
+GB200, GB300, MI300X, MI325X, and MI355X.
 Identify each master-config entry this PR adds/changes (in `inferencex-e2e/configs/*-master.yaml`)
 and read its `framework:`, `runner:`, and `image:` fields.
 - (a) UPSTREAM IMAGE: for entries with `framework: vllm`, the image must come from the
@@ -467,7 +468,7 @@ confirms it is disabled; comments, documentation, and removed diff lines are not
 runtime enablement. If the effective value cannot be verified, do not PASS.
 Report the config/script, enabling value and where it comes from, and require
 removing the enablement and verifying that the draft runs as shipped. Passing
-evals, matching an upstream recipe, AL measurements, or historical NVIDIA runs
+evals, matching an upstream recipe, AL measurements, or historical runs on any hardware
 do not exempt it. Apply this to submissions under review, including image-only
 bumps and re-enabled recipes; do not retroactively fail historical runs solely
 because they predate the rule.
@@ -479,7 +480,7 @@ because they predate the rule.
   FP8 head as a violation.
 - If the pinned upstream framework converts draft tensors at load time by default (for
   example SGLang loading DeepSeek V4.1 DSpark `wo_a` FP8 weights as BF16, matching
-  DeepSeek's reference), that default conversion IS the baseline. A patch or setting
+  the model authors' reference implementation), that default conversion IS the baseline. A patch or setting
   that removes it changes the draft computation and FAILs; its absence is not a
   violation.
 - The framework's default draft KV-cache dtype for that checkpoint, or an
@@ -690,8 +691,8 @@ This is a listing check, separate from Check 3's recipe-completeness requirement
   configs and effective recipes, not the PR title or the submitter's affiliation.
   Include NVIDIA SKUs such as H100, H200, B200, B300, GB200, GB300, and Rubin;
   these are examples, not a closed allowlist. Exclude ALL non-NVIDIA hardware,
-  including AMD MI300/MI300X, MI325/MI325X, MI355/MI355X and MI455X, Google
-  TPUv7/TPUv6e, AWS Trainium3, and SambaNova SN50. In mixed-vendor PRs, assess
+  including MI300/MI300X, MI325/MI325X, MI355/MI355X and MI455X,
+  TPUv7/TPUv6e, Trainium3, and SN50. In mixed-vendor PRs, assess
   only the affected NVIDIA configurations. Unknown vendor identity is unverified,
   not permission to classify the hardware as NVIDIA.
 - Include direct vLLM/SGLang, `sglang-disagg`, `dynamo-vllm`, and
@@ -843,14 +844,12 @@ single terse line. Rules:
   later lines or in sub-bullets; the publisher rejects such rows.
   Never hide Check 4, 13, 14, 15, or 16 WARN inside the collapsed group.
   Check 4, 13, 15, and 16 warnings must not trigger the Pareto-coverage escalation.
-  For Check 14 WARN, the publisher adds the
-  warning and mentions @functionstackx, @cquil11, @Oseltamivir, and @adibarra
-  above the findings. Use only @usernames, without personal names; do not
-  duplicate that escalation text yourself. Do not add these escalation mentions
-  for PASS/N/A coverage or to the copyable review checklist; the checklist should
-  only say to tag a core maintainer. The publisher alone inserts the explicit
-  escalation mentions when Check 14 is WARN, including an overall REJECTED
-  verdict with a Pareto warning.
+  For Check 14 WARN, the publisher adds the warning and the configured Pareto-reviewer
+  mentions above the findings. Do not write that escalation text, those mentions, or
+  any names yourself. Do not add escalation mentions for PASS/N/A coverage or to the
+  copyable review checklist; the checklist should only say to tag a core maintainer.
+  The publisher alone inserts them when Check 14 is WARN, including an overall
+  REJECTED verdict with a Pareto warning.
   Spend words only on the checks that fail or warn.
 - State conclusions, don't narrate your process. No multi-paragraph explanations, no
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
