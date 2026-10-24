@@ -1,0 +1,101 @@
+schema: 2
+base:
+  name: minimaxm31flash-fp4-gb300-vllm-agentic-dspark
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  health_check:
+    interval_seconds: 5
+    max_attempts: 1440
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        block-size: 128
+        kv-cache-dtype: nvfp4
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        gpu-memory-utilization: 0.92
+        max-model-len: 1048576
+        max-num-batched-tokens: 16384
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        disable-uvicorn-access-log: true
+        stream-interval: 20
+      env:
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        PYTHONUNBUFFERED: '1'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT: '600'
+        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+override_tp2_c48:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 72
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
+  benchmark:
+    env:
+      CONC: '48'
+
+override_tp4_c64:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 96
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":868000000000,"lazy_offload":true}}'
+  benchmark:
+    env:
+      CONC: '64'
+
+override_tp2_c64:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-num-seqs: 96
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
+  benchmark:
+    env:
+      CONC: '64'
+
+
+override_tp4_c96:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: 144
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":868000000000,"lazy_offload":true}}'
+  benchmark:
+    env:
+      CONC: '96'

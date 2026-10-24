@@ -43,6 +43,7 @@ base:
       env:
         VLLM_FLOAT32_MATMUL_PRECISION: high
         PYTHONUNBUFFERED: '1'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
         # Rendering the chat template for long AgentX conversations exceeds the
         # 30 s default under concurrent load; vLLM then aborts the request.
