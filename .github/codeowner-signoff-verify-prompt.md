@@ -51,6 +51,25 @@ eval runs, reuse source runs, and Klaud Cold reports. Evidence from an earlier c
 describes the pinned SHA only under the freshness rule in Check 1. A missing API
 permission, an incomplete response, or a stale bot comment is never a pass.
 
+## Facts report
+Before you start, read `/tmp/signoff-facts.json`. Trusted default-branch code built it
+for the pinned SHA. It ran no PR code. Each section is named for the check it serves:
+
+| Section | Contents |
+| --- | --- |
+| `check_1_commits` | Per in-PR commit: newest benchmark and eval check-run conclusions, `satisfied`, run ids |
+| `check_1_latest_validated` | Newest satisfied commit that is an ancestor of the pinned SHA |
+| `check_1_later_commits` | First-parent commits after it, with `merge` flag and changed files |
+| `check_2_eval_gaps` | Per run and eval row: gap and 2-sigma threshold against the best sibling and the closest ingested cohort |
+| `check_18g_points` | Generated points added and removed per config key, with measurements, dominance, and re-tuned deltas |
+| `check_18c_images` | Newly referenced images and whether `docker manifest inspect` resolves them (`tag@digest` pins by digest) |
+
+Facts are inputs, not verdicts. Apply each check's rules to them, and spot-check a fact
+that looks wrong. When the file is missing or a section holds `"error"`, do that work
+yourself as the check describes. The same module has helpers you can run:
+`uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts <command>`
+with `evals`, `points`, `dominance`, or `golden-al` (`--help` lists the arguments).
+
 ## Check 0 — The sign-off author is a CODEOWNER for the changed files
 The sign-off must come from a CODEOWNER for what the PR changes. Read
 `.github/CODEOWNERS` (in the checked-out default branch) and, for each changed file,
@@ -84,8 +103,10 @@ PR. This check is therefore the enforcement point. It has two requirements:
 (b) nothing material changed between that commit and the pinned SHA.
 
 ### (a) Green sweep and evals on an in-PR commit
-The cleanest way to answer is the check-runs attached to each in-PR commit. You do
-NOT need to list `run-sweep.yml` runs or parse reuse logs.
+The cleanest way to answer is the check-runs attached to each in-PR commit.
+`check_1_commits` and `check_1_latest_validated` already summarize them; the steps below
+verify or replace that section. You do NOT need to list `run-sweep.yml` runs or parse
+reuse logs.
 - Get the PR's current commit SHAs:
   ```bash
   gh api repos/${REPO}/pulls/${PR_NUMBER}/commits \
@@ -120,7 +141,9 @@ NOT need to list `run-sweep.yml` runs or parse reuse logs.
 ### (b) Evidence is still current
 Judge by runtime behavior, not by which file or field changed. Check every commit after
 the passing commit, up to the pinned SHA, and the source SHA of any authorized
-`/use <run_id>` or `/reuse-sweep-run` run.
+`/use <run_id>` or `/reuse-sweep-run` run. `check_1_later_commits` lists the commits and
+their changed files; for a merge, the files are what the base branch brought in. Read
+the diffs to judge materiality.
 - (b1) MATERIAL changes can alter generated benchmark points, runtime-path selection,
   image, model or checkpoint, precision, framework, topology or resources, concurrency,
   launch arguments or environment, benchmark or eval execution, speculative-acceptance
@@ -158,20 +181,17 @@ PR's config. Say exactly which condition applies.
 
 ### (b) Accuracy matches the peer cohort
 The bar is the closest current cohort, not a fixed threshold. A green job, a coarse
-threshold, or one aggregate score is not enough. For each evaluated task and topology,
-compare `em_strict` with sibling topologies in the same run and with ingested
-evaluations of the same model, precision, framework, hardware, and spec method. Copy
-those values from the eval JSON (its hardware/framework/spec keys map to the flags):
-```bash
-uv run --project inferencex-e2e --locked python -m infx.workflows.public_evidence evals \
-  --model <model> --precision <precision> --framework <framework> --hardware <hardware> \
-  --spec-method <spec_method> --task <task>
-```
-If `exact` is empty, use the closest `same_model_precision_task` rows and name the
-difference. Never compare against a historical minimum or old failed lanes.
-FAIL when `cohort_em_strict - candidate_em_strict > 2 * sqrt(se_candidate^2 + se_cohort^2)`
-and the additional detail section gives no explanation backed by a rerun. Name the
-task, topology, both scores, and run links.
+threshold, or one aggregate score is not enough. Each eval row is compared with its best
+sibling topology in the same run and with the closest ingested evaluation of the same
+model, precision, framework, hardware, spec method, and task (same topology when one
+exists). `check_2_eval_gaps` holds the result. Never compare against a historical
+minimum or old failed lanes. A row is materially weaker when
+`reference_em_strict - candidate_em_strict > 2 * sqrt(se_candidate^2 + se_reference^2)`
+(`verdict: materially-weaker`). A missing or zero SE is replaced by the binomial SE
+`sqrt(p * (1 - p) / n_eff)`. FAIL when that holds against the sibling or the cohort
+and the additional detail section gives no explanation backed by a rerun. Name the task,
+topology, both scores, and run links. When `cohort_scope` is `none` or the section
+failed, find peers with `signoff_facts evals` and name how they differ.
 
 ### (c) The eval exercised the changed path
 For a conditional backend or kernel change, configuration selection is not runtime
@@ -485,7 +505,8 @@ Verify BOTH:
   model in `inferencex-e2e/infx/golden_al_distribution/` on the default-branch checkout. Examples include
   `qwen3.5_mtp.yaml` and `minimaxm3_eagle3.yaml`. Confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
-  qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare
+  qwen3.5 thinking_on with 3 speculative tokens -> 3.39; `signoff_facts golden-al` returns
+  the expected value and setting). For TRT-LLM configs, compare
   the pinned `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` value PLUS 1 against the
   golden AL (the env var excludes the bonus token). A submission may choose any
   supported draft length, but it may NOT substitute a different acceptance target.
@@ -872,6 +893,8 @@ be verified"). (h) is report-only. Name the config, file and line, and the misma
 
 ### (a) `CONFIG_FILE` resolves
 Each added `CONFIG_FILE` resolves to the intended recipe and launcher branch.
+`check_18g_points.generation_errors.head` lists config keys that fail to generate at
+the pinned SHA but not at the merge base.
 
 ### (b) Master and recipe agree
 Master `num-worker`, `tp`, `ep`, `dp-attn`, concurrency list, server args, and GPU or
@@ -880,9 +903,10 @@ node math agree with the recipe's resources and benchmark fields. A recipe
 shape to SGLang. Compare SGLang disaggregation with an accepted same-model peer.
 
 ### (c) Images resolve now
-Run `docker manifest inspect <image>` for every newly referenced image (treat `#` as
-`/`). A past green sweep does not prove a rolling or nightly tag still exists. A
-replaced tag needs its own validation, not an assumption of equivalence.
+Every newly referenced image must resolve now (`check_18c_images`; otherwise run
+`docker manifest inspect <image>` with `#` treated as `/`). A past green sweep does not
+prove a rolling or nightly tag still exists. A replaced tag needs its own validation,
+not an assumption of equivalence.
 
 ### (d) Pinned orchestration
 External orchestration dependencies use an immutable commit or a published release
@@ -903,20 +927,17 @@ Entries are permanent, so this fails here; PR-body claims stay under Check 15.
 
 ### (g) Removed points were off the frontier
 A removed sweep point is allowed only when it was not on the combined Pareto frontier,
-or a new point dominates it in both `tput_per_gpu` and `mean_intvty`. Get the removed
-points' measurements from the ingested series below; if they are not ingested, use the
-most recent sweep run that measured them (`gh run download`). The public model name is
-the Hugging Face name without its organization, e.g. `DeepSeek-V4.1-Flash`.
-```bash
-uv run --project inferencex-e2e --locked python -m infx.workflows.public_evidence points \
-  --model-name <public name> --model <model-prefix> --precision <precision> \
-  --framework <framework> --hardware <hardware> --spec-method <spec_method>
-```
+or a measured head point dominates it in both `tput_per_gpu` and `mean_intvty`. Per
+config key, `check_18g_points` lists `undominated_removed` (FAIL, unless head-point
+measurements the facts missed dominate them) and `unmeasured_removed`. For unmeasured
+points, take measurements from the most recent sweep run that measured them
+(`gh run download`) and run `signoff_facts dominance`. Points with the same shape and concurrency but a new
+recipe fingerprint are re-tuned, not removed; they appear under `retuned_deltas`.
 
-### (h) Image-only bump deltas (report only)
-Compare each benchmark and eval lane with the closest prior run on the old image and
-state Pareto, throughput, and interactivity deltas in the row. A small diff is not
-evidence of low risk.
+### (h) Image-only and re-tune deltas (report only)
+Report `retuned_deltas` (throughput and interactivity change per point) in the row,
+plus any eval lane change from Check 2. For an image-only bump, also compare with the
+closest prior run on the old image. A small diff is not evidence of low risk.
 
 ## Verdict and output
 Decide PASS only if Checks 0-18 ALL pass. A check reported as `N/A` counts as a pass,
