@@ -41,15 +41,19 @@ class VllmBackend(ServerMetricsBackend):
         flat["total_prompt_tokens"] = counter_int(prompt_total)
         flat["total_generation_tokens"] = counter_int(generation_total)
 
+        disaggregated = nested["validity"]["deployment"]["disaggregated"]
+        role_scope, role_filter = _cache_role_filter(metrics, disaggregated)
         prefix_hits = sum_stat(
             metrics,
             "vllm:prefix_cache_hits",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         prefix_queries = sum_stat(
             metrics,
             "vllm:prefix_cache_queries",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         gpu_rate = rate(prefix_hits, prefix_queries)
         flat["server_gpu_cache_hit_rate"] = gpu_rate
@@ -58,11 +62,13 @@ class VllmBackend(ServerMetricsBackend):
             metrics,
             "vllm:external_prefix_cache_hits",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         external_queries = sum_stat(
             metrics,
             "vllm:external_prefix_cache_queries",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         external_rate = rate(external_hits, external_queries)
         flat["server_external_cache_hit_rate"] = external_rate
@@ -73,6 +79,7 @@ class VllmBackend(ServerMetricsBackend):
             "vllm:prompt_tokens_by_source",
             "source",
             preferred_keys=("total", "sum", "max", "avg"),
+            series_filter=role_filter,
         )
         if prompt_by_source:
             local_cache_hit = prompt_by_source.get("local_cache_hit")
@@ -143,6 +150,10 @@ class VllmBackend(ServerMetricsBackend):
                 "prefix_cache_queries": prefix_queries,
                 "external_prefix_cache_hits": external_hits,
                 "external_prefix_cache_queries": external_queries,
+                "overall_source": "worker_counters"
+                if flat["server_overall_cache_hit_rate"] is not None
+                else None,
+                "role_scope": role_scope,
             }
         )
         nested["kv_cache"].update(
@@ -171,7 +182,7 @@ class VllmBackend(ServerMetricsBackend):
                 "generation_total": flat["total_generation_tokens"],
             }
         )
-        nested["sources"] = _vllm_sources(metrics)
+        nested["sources"] = _vllm_sources(metrics, disaggregated)
 
     def prompt_generation_totals(
         self,
@@ -250,7 +261,9 @@ def first_counter_total(
     return None
 
 
-def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _vllm_sources(
+    metrics: dict[str, dict[str, Any]], disaggregated: bool | None
+) -> list[dict[str, Any]]:
     source_ids = set()
     for metric_name in (
         "vllm:prompt_tokens",
@@ -261,7 +274,7 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "vllm:prompt_tokens_by_source",
     ):
         for series in metric_series(metrics, metric_name):
-            source_ids.add(_source_id(series))
+            source_ids.add(_source_id(series, disaggregated))
 
     sources: list[dict[str, Any]] = []
     for source_id in sorted(source_ids):
@@ -269,7 +282,7 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             continue
 
         def series_filter(series: dict, source_id: str = source_id) -> bool:
-            return _source_id(series) == source_id
+            return _source_id(series, disaggregated) == source_id
 
         prompt_tokens = sum_stat(metrics, "vllm:prompt_tokens", series_filter=series_filter)
         generation_tokens = sum_stat(metrics, "vllm:generation_tokens", series_filter=series_filter)
@@ -296,17 +309,58 @@ def _vllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     return sources
 
 
-def _source_id(series: dict[str, Any]) -> str:
+_CACHE_METRICS = (
+    "vllm:prompt_tokens_by_source",
+    "vllm:prefix_cache_hits",
+    "vllm:prefix_cache_queries",
+    "vllm:external_prefix_cache_hits",
+    "vllm:external_prefix_cache_queries",
+)
+
+
+def _series_role(series: dict[str, Any], disaggregated: bool | None = None) -> str:
     labels = series.get("labels") if isinstance(series.get("labels"), dict) else {}
+    mode = str(labels.get("disaggregation_mode") or "").lower()
+    if mode in ("prefill", "context"):
+        return "prefill"
+    if mode == "decode":
+        return "decode"
+    if mode in ("combined", "unified", "prefill_and_decode"):
+        return "combined"
+    if "disaggregation_mode" in labels:
+        return "unknown"
     component = str(labels.get("dynamo_component") or labels.get("component") or "")
     if component == "prefill":
-        role = "prefill"
-    elif component in ("backend", "decode"):
-        role = "decode"
-    elif component in ("frontend", "router"):
-        role = "router"
+        return "prefill"
+    if component == "backend" and disaggregated is False:
+        return "combined"
+    if component in ("backend", "decode"):
+        return "decode"
+    if component in ("frontend", "router"):
+        return "router"
+    return "combined"
+
+
+def _cache_role_filter(
+    metrics: dict[str, dict[str, Any]], disaggregated: bool | None
+) -> tuple[str, Any]:
+    roles = {
+        _series_role(s, disaggregated)
+        for name in _CACHE_METRICS
+        for s in metric_series(metrics, name)
+    }
+    if "prefill" in roles:
+        scope = "mixed" if "combined" in roles else "prefill"
     else:
-        role = "combined"
+        scope = "unresolved" if "decode" in roles or disaggregated is True else "combined"
+    if "unknown" in roles or (disaggregated is True and "combined" in roles):
+        scope = "unresolved"
+    # Known decode counters measure KV transfer, including alongside unlabelled workers.
+    return scope, lambda series: _series_role(series, disaggregated) in ("prefill", "combined")
+
+
+def _source_id(series: dict[str, Any], disaggregated: bool | None) -> str:
+    role = _series_role(series, disaggregated)
 
     parts = [role]
     endpoint = series.get("endpoint_url")

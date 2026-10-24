@@ -68,6 +68,8 @@ def empty_server_metrics(present: bool, metric_count: int) -> dict[str, Any]:
             "router_shared_cache_hit_rate": None,
             "frontend_cached_tokens": None,
             "frontend_input_tokens": None,
+            "overall_source": None,
+            "role_scope": None,
         },
         "kv_cache": {
             "gpu_usage_pct": None,
