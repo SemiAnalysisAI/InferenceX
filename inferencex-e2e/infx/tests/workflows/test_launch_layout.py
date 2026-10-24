@@ -27,6 +27,7 @@ Path(os.environ["LAUNCH_CAPTURE"]).write_text(json.dumps({
 result = os.environ["RESULT_FILENAME"]
 Path(result + ".json").write_text("{}\\n")
 Path(result + "_conc1.json").write_text('{"num_requests_successful": 1}\\n')
+Path("profile_" + result + ".trace.json.gz").write_bytes(b"fixture trace")
 Path("speedbench-reference-al.yaml").write_text("fixture: 1\\n")
 """
 
@@ -71,7 +72,7 @@ def workflow_step(workflow: str, step_name: str) -> dict:
     [
         ("benchmark-tmpl.yml", "Launch job script"),
         ("benchmark-multinode-tmpl.yml", "Launch multi-node job script"),
-        ("profile.yml", "Launch job script"),
+        ("profile.yml", "Launch + Profile (single-node sglang/vllm)"),
         ("speedbench-al.yml", "Collect AL matrix"),
     ],
 )
@@ -132,4 +133,6 @@ def test_launch_runs_the_python_entrypoint_from_the_project_root(tmp_path, workf
         assert "fixture: 1" in summary.read_text()
     else:
         assert (project / (exported["RESULT_FILENAME"] + ".json")).read_text() == "{}\n"
-
+    if workflow == "profile.yml":
+        output = dict(line.split("=", 1) for line in github_output.read_text().splitlines())
+        assert Path(output["trace"]).read_bytes() == b"fixture trace"
