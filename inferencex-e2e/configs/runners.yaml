@@ -798,8 +798,9 @@ clusters:
     slurm:
       partition: compute
       exclusive: true
-      # HACK (manual e2e only): g11 kept 91-92% VRAM of a prior job, host_setup gave up after 15 min (run 40015891349).
-      exclude: [mia1-p01-g11]
+      # HACK (manual e2e only): g11 kept 91-92% VRAM of a prior job, host_setup gave up after 15 min (run 40015891349);
+      # g16 GPU 3 had 29 GiB in use at vLLM startup (host_setup passed at 7%), short of 0.9 (run 40063576514).
+      exclude: [mia1-p01-g11, mia1-p01-g16]
       gres: "gpu:{gpus}"
       cpus-per-task: 128
       srun-args: [--container-remap-root, --container-writable]
