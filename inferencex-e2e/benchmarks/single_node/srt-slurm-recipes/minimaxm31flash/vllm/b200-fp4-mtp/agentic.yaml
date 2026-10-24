@@ -44,6 +44,7 @@ base:
         VLLM_FLOAT32_MATMUL_PRECISION: high
         PYTHONUNBUFFERED: '1'
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
@@ -55,6 +56,7 @@ zip_override_tp4:
       args:
         tensor-parallel-size: 4
         max-num-seqs: [2, 8, 16, 32, 48]
+        max-num-batched-tokens: [32768, 32768, 32768, 32768, 8192]
         # Golden AL 4.04.
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
