@@ -5704,6 +5704,29 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           ep: 1
           dp-attn: false
 
+# MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
+# cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
+# manifest digest verified 2026-10-24. Serve flags follow the cookbook's
+# GB300 Balanced (TP4) and High-Throughput (TP4, EP4) cells; GB200 has no cookbook cell, so the High-Throughput arm takes B200's sm_100 memory settings (mem 0.75, prefill graphs to 16384).
+# Seven-token DSpark (bundled draft); synthetic acceptance follows
+# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+minimaxm31flash-fp4-gb200-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/gb200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Balanced: TP4.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      # High-Throughput: TP4 + EP4 (MegaMoE).
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128], srt-recipe: agentic.yaml }
+
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-disagg-mtp:
   image: vllm/vllm-openai@sha256:b9104b7ef3048e42f79fba9ab5da06e5aff8164aca9968692ec2f569aaaf34c6
   model: nvidia/MiniMax-M3-NVFP4
