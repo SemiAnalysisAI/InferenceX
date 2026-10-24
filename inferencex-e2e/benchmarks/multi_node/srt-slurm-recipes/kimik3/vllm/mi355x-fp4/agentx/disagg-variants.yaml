@@ -1,9 +1,6 @@
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-disagg-agentic
-  setup_script: kimik3-nightly-kernels.sh
-  environment:
-    KIMIK3_KERNEL_BUILD_JOBS: '12'
   slurm:
     time_limit: '08:00:00'
   sbatch_directives:
