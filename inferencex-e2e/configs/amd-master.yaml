@@ -1022,15 +1022,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
       osl: 1024
       search-space:
       - spec-decoding: "mtp"
-        conc-list: [1, 2, 4, 8]
-        srt-recipe: disagg-variants.yaml:override_mtp3_1p1d_tp8
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-        decode: {num-worker: 1, tp: 8, ep: 1, dp-attn: false}
-      - spec-decoding: "mtp"
         conc-list: [2, 4, 8, 16, 32]
         srt-recipe: disagg-variants.yaml:override_mtp3_1p2d_tp8_narrow
         prefill:
@@ -1053,15 +1044,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         srt-recipe: disagg-variants.yaml:override_mtp1_1p1d_dep8
         prefill:
           num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-        decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
-      - spec-decoding: "mtp"
-        conc-list: [1024, 2048, 4096]
-        srt-recipe: disagg-variants.yaml:override_mtp1_2p1d_dep8
-        prefill:
-          num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
