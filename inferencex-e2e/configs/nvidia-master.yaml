@@ -5655,9 +5655,12 @@ minimaxm31flash-fp4-gb200-vllm-agentic-dspark:
   srt-recipe-dir: minimaxm31flash/vllm/gb200-fp4-mtp
   scenarios:
     agentic-coding:
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agg-variants.yaml:override_tp2_c32_dram }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: agg-variants.yaml:override_tp2_c40_dram }
     - search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 minimaxm3-fp4-b200-trtllm-agentic-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23.post1
   model: nvidia/MiniMax-M3-NVFP4
