@@ -23,6 +23,10 @@ COMMAND_SPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u20
 
 
 def timestamp(value: str | None) -> float:
+    """Return the POSIX time of an ISO-8601 value, or infinity if it is invalid.
+
+    Naive times are treated as UTC.
+    """
     try:
         parsed = datetime.fromisoformat(value or "")
         return (parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)).timestamp()
@@ -31,6 +35,7 @@ def timestamp(value: str | None) -> float:
 
 
 def full_sweep_at(events: list[dict[str, Any]], created_at: str) -> bool:
+    """Return True if a full-sweep label was on the PR at created_at, replaying label events."""
     created = timestamp(created_at)
     if created == float("inf"):
         return False
@@ -50,10 +55,15 @@ def full_sweep_at(events: list[dict[str, Any]], created_at: str) -> bool:
 def resolve_run(
     repo: str, pr_number: int, pull: dict[str, Any], token: str, requested_id: str | None
 ) -> dict[str, Any]:
+    """Return the requested_id run, or else the first eligible completed sweep run on the PR.
+
+    Raises RuntimeError naming why no run qualifies.
+    """
     timeline = github.paginate(repo, f"/issues/{pr_number}/timeline", token)
     commits = sweep_runs.pr_commit_shas(repo, pr_number, token)
 
     def rejection(run: dict[str, Any]) -> str:
+        """Return why run cannot be staged, or an empty string if it can."""
         if (
             run.get("path") != ".github/workflows/run-sweep.yml"
             or run.get("event") != "pull_request"
@@ -98,10 +108,16 @@ def use_command(body: str) -> re.Match[str] | None:
 
 
 def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | None:
+    """Validate a /stage-results comment event and return the staging outputs.
+
+    Returns None if the comment is not a staging request. Raises RuntimeError after posting a reply
+    when the request is rejected.
+    """
     pr_number = event["issue"]["number"]
     actor = event["comment"]["user"]["login"]
 
     def reject(reason: str, comment: str) -> NoReturn:
+        """Post comment on the PR and raise RuntimeError with reason."""
         github.api(
             repo, f"/issues/{pr_number}/comments", token, method="POST", data={"body": comment}
         )
@@ -159,6 +175,7 @@ def request(repo: str, event: dict[str, Any], token: str) -> dict[str, str] | No
 
 
 def main() -> None:
+    """Handle the comment event from the environment and append staging outputs to GITHUB_OUTPUT."""
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     outputs = request(os.environ["GITHUB_REPOSITORY"], event, os.environ["GH_TOKEN"])
     if outputs is None:
