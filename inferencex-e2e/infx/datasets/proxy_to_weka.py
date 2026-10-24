@@ -1,7 +1,7 @@
 """Convert flat per-session JSONL dumps into weka-format trace JSON.
 
 Reads <in-dir>/<session_id>.jsonl produced by `sample_proxy_traces.py`
-and writes <in-dir>/../<out-dir>/<session_id>.json in the v1 weka trace
+and writes <out-dir>/<session_id>.json in the v1 weka trace
 format consumed by the kv-cache-tester replayer (see
 agentx-harness: src/aiperf/dataset/loader/weka_trace_models.py).
 
@@ -38,6 +38,7 @@ def _dump_trace_inline_hash_ids(trace: dict, path: Path) -> None:
     placeholders: list[list[Any]] = []
 
     def _substitute(obj: Any) -> Any:
+        """Return a copy of ``obj`` with every ``hash_ids`` list swapped for a numbered placeholder."""
         if isinstance(obj, dict):
             out: dict[str, Any] = {}
             for k, v in obj.items():
@@ -63,6 +64,7 @@ def _dump_trace_inline_hash_ids(trace: dict, path: Path) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse the command line and return the input and output directories."""
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -88,10 +90,12 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
 def slugify(label: str) -> str:
+    """Return ``label`` lowercased with non-alphanumeric runs as underscores, or ``subagent`` if empty."""
     return _SLUG_RE.sub("_", label.lower()).strip("_") or "subagent"
 
 
 def load_session_rows(path: Path) -> list[dict]:
+    """Read the JSONL rows at ``path`` and return them sorted by timestamp with exact duplicates dropped."""
     rows: list[dict] = []
     with path.open() as f:
         for line in f:
@@ -125,12 +129,13 @@ def load_session_rows(path: Path) -> list[dict]:
 
 
 def remap_hash(h: str, m: dict[str, int]) -> int:
+    """Return the dense integer id of hash ``h``, assigning the next one in ``m`` when it is new."""
     if h not in m:
         m[h] = len(m)
     return m[h]
 
 
-def infer_block_size(rows: list[dict]) -> int:  # noqa: ARG001
+def infer_block_size() -> int:
     """Return the proxy's 64-token block size.
 
     Partial trailing blocks make hash_token_count / len(hash_ids) unreliable.
@@ -218,6 +223,7 @@ MIN_CLI_FOR_HEADER_AS_TRUTH = (2, 1, 139)
 
 
 def _parse_cli_version(s: str | None) -> tuple[int, int, int] | None:
+    """Parse a ``major.minor.patch`` CLI version string, returning None when it is missing or malformed."""
     if not s:
         return None
     parts = s.split(".")
@@ -268,6 +274,7 @@ def build_subagent_entry(
     items: list[tuple[dict, float | None]],
     hash_map: dict[str, int],
 ) -> dict:
+    """Return the weka sub-agent entry for one ``label`` instance built from its rows and think times."""
     inner = [build_normal_request(row, hash_map, tt) for row, tt in items]
     first_row = items[0][0]
     last_row = items[-1][0]
@@ -296,6 +303,7 @@ def build_subagent_entry(
 
 
 def session_to_weka(session_id: str, rows: list[dict]) -> dict:
+    """Convert one session's proxy ``rows`` into a weka trace dict for ``session_id``."""
     if not rows:
         return {
             "id": session_id,
@@ -323,7 +331,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
 
     think_times = compute_think_times(rows)
     hash_map: dict[str, int] = {}
-    block_size = infer_block_size(rows)
+    block_size = infer_block_size()
 
     out_requests: list[dict] = []
     instance_count: dict[str, int] = {}
@@ -386,6 +394,7 @@ def session_to_weka(session_id: str, rows: list[dict]) -> dict:
 
 
 def main() -> int:
+    """Convert every session JSONL in ``--in-dir`` into a weka trace in ``--out-dir``, returning 0."""
     args = parse_args()
 
     in_files = sorted(p for p in args.in_dir.glob("*.jsonl"))

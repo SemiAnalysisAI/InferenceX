@@ -141,15 +141,31 @@ def test_import_producing_invalid_squash_fails_without_replacing(tools, tmp_path
     assert sorted(p.name for p in (tmp_path / "squash").iterdir()) == [f"{SQUASH_NAME}.lock"]
 
 
+def test_submit_host_import_without_unsquashfs_keeps_the_existing_squash(tools, tmp_path, monkeypatch):
+    _, logs = tools
+    (tmp_path / "bin" / "unsquashfs").unlink()
+    monkeypatch.setenv("PATH", str(tmp_path / "bin"))
+    squash = tmp_path / "squash" / SQUASH_NAME
+    squash.parent.mkdir()
+    squash.write_text(VALID)
+    with pytest.raises(ImageError, match="unsquashfs") as error:
+        ensure_image(IMAGE, policy(tmp_path, "submit-host"), job=None)
+    assert error.value.retriable is False
+    assert squash.read_text() == VALID
+    assert calls(logs["enroot"]) == []
+
+
 @pytest.mark.parametrize(("mode", "visibility", "job", "message", "steps"), [
     ("pre-staged", "shared", None, rf"pre-staged image .* missing or invalid at .*{SQUASH_NAME}", 0),
     ("pre-staged", "node-local", Job("7"), "stage it there", 1),
     ("compute", "node-local", None, "requires a job allocation", 0),
+    ("all-nodes", "shared", None, "needs a job allocation", 0),
 ])  # fmt: skip
 def test_an_image_that_cannot_be_staged_fails_at_once(tools, tmp_path, mode, visibility, job, message, steps):
     _, logs = tools
-    with pytest.raises(ImageError, match=message):
+    with pytest.raises(ImageError, match=message) as error:
         ensure_image(IMAGE, policy(tmp_path, mode, visibility), job=job)
+    assert error.value.retriable is False
     assert len(calls(logs["srun"])) == steps
     assert calls(logs["enroot"]) == []
 
