@@ -38,6 +38,14 @@ COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
 # whitespace-separated pip specs: the install site word-splits this deliberately, and the whole
 # string keys the shared cache dir.
 COLLX_NCCL_EP_SPEC="nccl-extensions[cu13]==0.2.0.dev20261005 nccl4py[cu13]==0.5.0"
+# vLLM main's FlashInfer pin and the companions its one-sided all-to-all imports, installed over the
+# image's older FlashInfer. The cubin and jit-cache wheels must match flashinfer-python's version or
+# it refuses to import. jit-cache goes in without deps: its per-arch providers hold no all-to-all
+# kernel, which JIT-builds once into the cache. Whitespace-separated pip specs, hashed into the cache key.
+COLLX_FLASHINFER_SPEC="flashinfer-python==0.7.1 flashinfer-cubin==0.7.1 apache-tvm-ffi==0.1.11 \
+nvidia-cutlass-dsl[cu13]==4.8.0 cuda-tile==1.6.0 cuda-core==1.2.1 nvidia-cudnn-frontend==1.31.0 \
+nccl4py==0.6.0 nccl-extensions==0.1.0"
+COLLX_FLASHINFER_JIT_CACHE_SPEC="flashinfer-jit-cache==0.7.1+cu130"
 # aws-ofi-nccl that prepare_backend.sh builds for multi-node EFA shards whose host plugin predates
 # 1.21 (h100's 1.20). That proxy thread applies every GIN signal with an inline gdrcopy
 # read-modify-write of device memory; 1.21 hands signals to a worker and drops the read (1.3-4.5x on
