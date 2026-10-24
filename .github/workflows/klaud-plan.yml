@@ -2,6 +2,7 @@ name: Klaud Cold auto-sweep
 run-name: >-
   ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
   inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
+  || github.event.schedule == '15,45 * * * *' && 'Klaud Cold wake'
   || 'Klaud Cold auto-sweep' }}
 
 on: # zizmor: ignore[concurrency-limits]
@@ -20,7 +21,8 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: ''
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */3 * * *'
+    - cron: '15,45 * * * *'
 
 permissions:
   contents: read
@@ -42,7 +44,7 @@ jobs:
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       blocked-families: ${{ steps.recover.outputs.blocked-families }}
-      resumed: ${{ steps.recover.outputs.resumed }}
+      active-sessions: ${{ steps.recover.outputs.active-sessions }}
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -80,12 +82,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
-          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-resumes "$MAX_CANDIDATES_PER_RUN"
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-sessions "$MAX_CANDIDATES_PER_RUN"
           echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
 
   review:
     name: Review candidate overlap
     needs: recover
+    if: github.event.schedule != '15,45 * * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -283,8 +286,8 @@ jobs:
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
           KLAUD_PR_REVIEW: ${{ needs.review.outputs.review }}
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
-          KLAUD_RESUMED: ${{ needs.recover.outputs.resumed }}
-        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --resumed "${KLAUD_RESUMED:-0}" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
+          KLAUD_ACTIVE_SESSIONS: ${{ needs.recover.outputs.active-sessions }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-ownership
@@ -302,7 +305,7 @@ jobs:
             ${{ runner.temp }}/klaud/review-diagnostics.json
             ${{ runner.temp }}/klaud/*/candidate.json
             ${{ runner.temp }}/klaud/*/baseline-preflight.json
-          retention-days: 14
+          retention-days: 90
 
   candidates:
     name: Run candidate ${{ matrix.candidate }}

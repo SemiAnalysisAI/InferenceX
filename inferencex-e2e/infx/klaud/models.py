@@ -153,6 +153,20 @@ class CandidateOutcome(Contract):
         return self
 
 
+class SessionEnd(Contract):
+    """How a candidate session ended: finished with a verified outcome, or parked on its runs."""
+
+    status: Literal["finished", "parked"]
+    outcome: CandidateOutcome | None = None
+
+    @model_validator(mode="after")
+    def outcome_only_when_finished(self) -> SessionEnd:
+        """Return the record, raising ValueError unless only a finished session has an outcome."""
+        if (self.status == "finished") != (self.outcome is not None):
+            raise ValueError("A finished session reports its outcome; a parked one reports none")
+        return self
+
+
 class Feed(Contract):
     url: str
     retrieved_at: str

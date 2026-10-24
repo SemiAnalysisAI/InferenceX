@@ -24,14 +24,15 @@ unless KLAUD_RESUME=true.
 Create one draft PR after a real change, titled `[Klaud Cold] English / 简体中文`.
 Start its body with only `<!-- klaud-baseline -->`; the report helper fills it.
 
-When KLAUD_RESUME=true, an earlier session ended (ran out or was cancelled) before finishing
+When KLAUD_RESUME=true, an earlier session parked, ran out or was cancelled before finishing
 this candidate, and recovery started this session in a new run to continue it. The branch,
 draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
 never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
 counter, repairs used and run IDs from your attempt comments; a commit pushed after the head
 of your last attempt comment, other than the perf-changelog entry, counts as a used repair.
-Inspect those runs (queued, running, preempted or finished) and continue. Repair budget,
-infrastructure-retry limits and failure rules carry over.
+Recovery starts a session only after every owned run ended, and it already reran the newest
+run if someone preempted it. Inspect those runs (finished or preempted) and continue. Repair
+budget, infrastructure-retry limits and failure rules carry over.
 
 Compare the actual old/new bundled engine source at its tags/commits in vLLM, SGLang,
 ATOM or TensorRT-LLM, including coupled dependencies and used flags/config parsers.
@@ -107,18 +108,25 @@ test-name=$KLAUD_TEST_NAME, and
 Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
 it is startup evidence, not a full curve. Persist each run ID/head/attempt and typed progress
-comment immediately, before waiting. Use `gh run watch --interval 60`, resume after tool
-timeouts, and inspect jobs because queued workflows can contain active jobs and failed
-benchmarks can leave evals running. Diagnose the FIRST server error, not teardown symptoms.
-Empty aggregates or green collectors do not prove success.
+comment immediately, before waiting. Inspect jobs because queued workflows can contain active
+jobs and failed benchmarks can leave evals running. Diagnose the FIRST server error, not
+teardown symptoms. Empty aggregates or green collectors do not prove success.
+
+Never idle on queued work. Once every owned run you need is queued or running and nothing
+else is left to do, publish an attempt report for each of them, then run `park` and end the
+session as below. Recovery reruns the newest run if it is preempted and starts your next
+session after every owned run ended, so parking costs no repair. You may watch a run that is
+already running with `gh run watch --interval 60` for at most 30 minutes; park instead of
+watching anything longer or still queued. When a hook says the session is near its time
+limit, report progress and park, or finish if the outcome is already terminal.
 
 One initial update plus $MAX_REPAIRS repairs TOTAL, including final-sweep repairs.
 A confirmed transient client-download/runner/network retry does not consume a recipe
 repair: keep the same head and classify it as infrastructure-retry, numbered 1 then 2 per attempt.
 Do not repeat deterministic failures as infrastructure retries. Stop after validation,
 exhausted repairs, or the same failure twice without progress.
-Benchmarks may take three hours. Do not cancel healthy or queued work to fit the agent job
-limit; leave it queued when the session ends, and a later session resumes it.
+Benchmarks may take three hours. Never cancel healthy or queued work to fit the session limit;
+park instead.
 
 After smoke benchmarks AND selected evals pass, append one exact-family inferencex-e2e/perf-changelog.yaml
 entry at the physical tail with this PR URL, preserving every prior byte. Set exactly
@@ -182,7 +190,9 @@ the family claim so a later wave may retry it. Pending cleanup means wait and re
 Uncertainty is not incompatibility. Open PRs block the family until cleanup completes.
 Without an owned PR, report without a placeholder or deleting someone else's claim.
 
-After finish succeeds, read verified $KLAUD_EVIDENCE/outcome.json and invoke StructuredOutput
-exactly once with that exact JSON object. Return no prose, Markdown, code fence, file path or
-JSON-encoded string. Never forge completion markers or disable the Stop hook. Recovery can
-preserve healthy children after SDK/job interruption; never abandon an unfinished session.
+After finish succeeds, read verified $KLAUD_EVIDENCE/session-end.json and invoke
+StructuredOutput exactly once with that exact JSON object. After park succeeds, do the same
+with the `{"status": "parked"}` it writes there. Return no prose, Markdown, code fence, file
+path or JSON-encoded string. Never forge completion or park markers or disable the hooks.
+Recovery can preserve healthy children after SDK/job interruption; never abandon an
+unfinished session.
