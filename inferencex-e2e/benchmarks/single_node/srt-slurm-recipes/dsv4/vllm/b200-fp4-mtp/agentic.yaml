@@ -179,7 +179,7 @@ override_dep8_c32:
         moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
+        kv-cache-memory-bytes: 33285996544
         max-num-batched-tokens: 8248
         max-num-seqs: 8
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56],"mode":0}'
@@ -215,7 +215,7 @@ override_dep8_c64:
         moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
+        kv-cache-memory-bytes: 33285996544
         max-num-batched-tokens: 8304
         max-num-seqs: 16
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112],"mode":0}'
@@ -251,7 +251,7 @@ override_dep8_c96:
         moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
+        kv-cache-memory-bytes: 33285996544
         max-num-batched-tokens: 8360
         max-num-seqs: 24
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168],"mode":0}'
@@ -287,7 +287,7 @@ override_dep8_c128:
         moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
+        kv-cache-memory-bytes: 33285996544
         max-num-batched-tokens: 8416
         max-num-seqs: 32
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224],"mode":0}'
@@ -323,7 +323,7 @@ override_dep8_c160:
         moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 36507222016
+        kv-cache-memory-bytes: 32212254720
         max-num-batched-tokens: 8472
         max-num-seqs: 40
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280],"mode":0}'
@@ -359,7 +359,7 @@ override_dep8_c192:
         moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 36507222016
+        kv-cache-memory-bytes: 32212254720
         max-num-batched-tokens: 8528
         max-num-seqs: 48
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336],"mode":0}'
