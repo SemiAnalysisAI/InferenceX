@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from typing import Any
 
@@ -95,6 +96,15 @@ def empty_server_metrics(present: bool, metric_count: int) -> dict[str, Any]:
             },
         },
         "sources": [],
+        "validity": {
+            "deployment": {"disaggregated": None},
+            "cache_rate": {
+                "status": "NOT_EVALUATED",
+                "published": False,
+                "eligible_exact_actual": False,
+                "reasons": ["adapter_does_not_assess_cache_rate"],
+            },
+        },
     }
 
 
@@ -109,7 +119,7 @@ def apply_profile_totals(flat: dict[str, Any], records: list[dict[str, Any]]) ->
 
 
 def counter_int(value: float | None) -> int | None:
-    if value is None:
+    if value is None or not math.isfinite(value):
         return None
     return round(value)
 
@@ -125,6 +135,6 @@ def _record_token_sum(records: list[dict[str, Any]], metric_name: str) -> int | 
         try:
             total += int(value)
             found = True
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
     return total if found else None

@@ -79,6 +79,64 @@ def endpoint_roles_from_env(env: Mapping[str, str]) -> dict[str, str] | None:
     return roles or None
 
 
+def _integer_total(values: list[Any]) -> int | None:
+    if not values or any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or (isinstance(value, float) and not math.isfinite(value))
+        or value < 0
+        or int(value) != value
+        for value in values
+    ):
+        return None
+    return sum(int(value) for value in values)
+
+
+def _disaggregated_prompt_total(
+    metrics: dict[str, dict[str, Any]], records: list[dict[str, Any]], nested: dict[str, Any]
+) -> int | None:
+    values = []
+    for record in records:
+        metric = record.get("metrics", {}).get("input_sequence_length")
+        values.append(metric.get("value") if isinstance(metric, dict) else metric)
+    prompt = _integer_total(values)
+    if prompt is not None:
+        return prompt
+    frontend = metrics.get("dynamo_frontend_input_sequence_tokens")
+    if frontend is not None:
+        if not isinstance(frontend, dict):
+            return None
+        series = frontend.get("series")
+        key = {"counter": "total", "histogram": "sum"}.get(frontend.get("type"))
+        if not isinstance(series, list) or key is None:
+            return None
+        return _integer_total(
+            [
+                item.get("stats", {}).get(key)
+                if isinstance(item, dict) and isinstance(item.get("stats"), dict)
+                else None
+                for item in series
+            ]
+        )
+    reuse = nested["validity"]["cache_rate"]
+    if reuse.get("published") and reuse.get("role_scope") == "prefill":
+        return _integer_total([reuse.get("prompt_tokens")])
+    return None
+
+
+def _apply_disaggregated_prompt_total(
+    metrics: dict[str, dict[str, Any]],
+    records: list[dict[str, Any]],
+    flat: dict[str, Any],
+    nested: dict[str, Any],
+) -> None:
+    prompt = _disaggregated_prompt_total(metrics, records, nested)
+    if prompt != nested["tokens"]["prompt_total"]:
+        for field in ("gpu_cache_hit", "cpu_or_external_cache_hit", "computed"):
+            nested["tokens"]["prompt_by_source"][field] = None
+    flat["total_prompt_tokens"] = nested["tokens"]["prompt_total"] = prompt
+
+
 def compute_server_metrics(
     server_metrics: dict[str, Any],
     *,
@@ -89,11 +147,17 @@ def compute_server_metrics(
     endpoint_roles: Mapping[str, str] | None = None,
     request_scope: Mapping[str, Any] | None = None,
     deployment: Mapping[str, Any] | None = None,
+    disaggregated: bool | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     metrics = index_server_metrics(server_metrics)
     flat = SERVER_CACHE_FLAT_FIELDS.copy()
     warnings: list[str] = []
     nested = empty_server_metrics(bool(metrics), len(metrics))
+    source_env = env or {}
+    deployment = {**deployment_from_env(source_env), **dict(deployment or {})}
+    if disaggregated is None:
+        disaggregated = deployment.get("disagg")
+    nested["validity"]["deployment"] = {"disaggregated": disaggregated}
     adapter = detect_backend(metrics, framework)
 
     if not metrics:
@@ -106,6 +170,8 @@ def compute_server_metrics(
         nested["tokens"]["prompt_total"] = flat["total_prompt_tokens"]
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
         nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
+        if disaggregated is True and (adapter is None or adapter.name != "atom"):
+            _apply_disaggregated_prompt_total(metrics, records, flat, nested)
         nested["cache_validity"] = summarize_cache_validity(nested)
         return flat, nested, warnings
 
@@ -117,7 +183,6 @@ def compute_server_metrics(
         )
     nested["adapter"] = adapter.name
     if getattr(adapter, "accepts_context", False):
-        source_env = env or {}
         adapter.populate(
             metrics,
             flat,
@@ -128,8 +193,8 @@ def compute_server_metrics(
                 if endpoint_roles is not None
                 else endpoint_roles_from_env(source_env),
                 "request_scope": request_scope,
-                **deployment_from_env(source_env),
-                **dict(deployment or {}),
+                **deployment,
+                "disagg": disaggregated,
                 "collector_export": server_metrics,
                 "warnings": warnings,
             },
@@ -153,6 +218,9 @@ def compute_server_metrics(
     if nested["tokens"]["generation_total"] is None:
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
     nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
+
+    if disaggregated is True and adapter.name != "atom":
+        _apply_disaggregated_prompt_total(metrics, records, flat, nested)
 
     nested["cache_validity"] = summarize_cache_validity(nested)
     return flat, nested, warnings

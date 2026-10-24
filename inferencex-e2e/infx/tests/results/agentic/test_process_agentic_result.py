@@ -76,6 +76,7 @@ SERVER_METRICS_KEYS = {
     "adapter",
     "metric_count",
     "cache_validity",
+    "validity",
     "cache",
     "kv_cache",
     "kv_offload",
@@ -1562,8 +1563,15 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
     assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
     assert agg["server_metrics"]["tokens"]["generation_total"] == 200
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
+    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] is None
+    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] is None
+    validity = agg["server_metrics"]["validity"]
+    assert validity["cache_rate"]["status"] == "UNKNOWN"
+    assert agg["server_metrics"]["cache_validity"]["pricing_eligible"] is False
+    assert {source["prefix_cache_hit_rate"] for source in agg["server_metrics"]["sources"]} == {
+        0.4,
+        0.6,
+    }
     assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.8)
     assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.25)
     assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 19_200
