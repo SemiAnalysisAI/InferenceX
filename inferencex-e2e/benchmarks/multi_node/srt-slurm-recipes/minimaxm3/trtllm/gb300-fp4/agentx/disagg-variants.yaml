@@ -32,7 +32,7 @@ base:
   engine:
     type: trtllm
     numa_memory_bind: true
-    served_model_name: nvidia/MiniMax-M3-NVFP4
+    served_model_name: /model
   roles:
     prefill:
       nodes: 1
@@ -275,7 +275,7 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: ''
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
-      SERVED_MODEL_NAME: nvidia/MiniMax-M3-NVFP4
+      SERVED_MODEL_NAME: /model
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     placement:
