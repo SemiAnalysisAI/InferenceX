@@ -144,3 +144,25 @@ override_tp4_dspark3_c64_simple:
       CONC: '64'
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1199'
+
+# Test only: the same c64 offload point on MiniMaxAI/MiniMax-M3.1-Flash with
+# its NVFP4 experts quantized to MXFP4 at load (W4A4 on the AITER MoE), where
+# the image's sequence-parallel prefill finds the MXFP8 linear kernels and
+# turns on (from 4096 tokens; DBO microbatches from 16384).
+override_tp4_dspark3_c64_simple_sp:
+  roles:
+    agg:
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        quantization-config: '{"moe":"mxfp4"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: 128
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1199000000000,"lazy_offload":false}}'
+      env:
+        PYTHONHASHSEED: '42'
+        VLLM_ROCM_MINIMAX_M3_SP_PREFILL: '1'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '1199'
