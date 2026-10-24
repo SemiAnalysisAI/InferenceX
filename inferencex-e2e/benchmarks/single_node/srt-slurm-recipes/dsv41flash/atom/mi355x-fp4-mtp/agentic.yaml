@@ -30,6 +30,7 @@ base:
         state-checkpoint-interval-tokens: 8192
         level: 3
         cudagraph-mode: FULL
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
         # The checkpoint's bundled DSpark head. Throughput runs get the golden
         # AL (dsv41flash_dspark thinking_on, K5) from infx/srt_slurm/synthetic_acceptance.py;
         # evals keep real acceptance.
@@ -50,22 +51,17 @@ base:
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
 
-# One variant per point. max-num-seqs (per DP rank under DP attention) follows
-# the B300 vLLM AgentX recipe: twice the concurrency from 1 to 16 and the
-# concurrency from 32 up. Each point captures
-# every decode size through min(32, max-num-seqs) plus 48, 64, 128 and 256 up to
-# its max-num-seqs. The _dpa points (concurrency 32 and above) run DP attention
-# without TBO (TBO does not support SWA bounded replay), keep each AIPerf
-# session on one DP rank and defer prefill so that at least 10 decode passes run
-# between prefills.
+# One variant per point. max-num-seqs is ATOM's default on every point; decode
+# graphs cover every size through 32 plus 48, 64 and 128 (and 256 on the c256
+# points). The _dpa points (concurrency 32 and above) run DP attention without
+# TBO (TBO does not support SWA bounded replay), keep each AIPerf session on
+# one DP rank and defer prefill so that at least 10 decode passes run between
+# prefills.
 
 override_tp2_c1:
   roles:
     agg:
       gpus: 2
-      args:
-        max-num-seqs: 2
-        cudagraph-capture-sizes: '[1,2]'
   benchmark:
     env:
       CONC: '1'
@@ -74,9 +70,6 @@ override_tp2_c2:
   roles:
     agg:
       gpus: 2
-      args:
-        max-num-seqs: 4
-        cudagraph-capture-sizes: '[1,2,3,4]'
   benchmark:
     env:
       CONC: '2'
@@ -85,9 +78,6 @@ override_tp2_c4:
   roles:
     agg:
       gpus: 2
-      args:
-        max-num-seqs: 8
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8]'
   benchmark:
     env:
       CONC: '4'
@@ -96,9 +86,6 @@ override_tp2_c8:
   roles:
     agg:
       gpus: 2
-      args:
-        max-num-seqs: 16
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
   benchmark:
     env:
       CONC: '8'
@@ -107,9 +94,6 @@ override_tp2_c16:
   roles:
     agg:
       gpus: 2
-      args:
-        max-num-seqs: 32
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
   benchmark:
     env:
       CONC: '16'
@@ -122,8 +106,6 @@ override_tp2_c32_dpa:
         enable-dp-attention: true
         # ATOM_DP_LB_REQ_EQUIV weights in-flight requests under least_tokens.
         dp-load-balance: least_tokens
-        max-num-seqs: 32
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
       env: &dpa_env
         GPU_MAX_HW_QUEUES: '5'
         ATOM_DP_SESSION_AFFINITY: '1'
@@ -143,8 +125,6 @@ override_tp2_c64_dpa:
       args:
         enable-dp-attention: true
         dp-load-balance: least_tokens
-        max-num-seqs: 64
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64]'
       env: *dpa_env
   benchmark:
     env:
@@ -158,8 +138,6 @@ override_tp2_c128_dpa:
       args:
         enable-dp-attention: true
         dp-load-balance: least_tokens
-        max-num-seqs: 128
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
       env: *dpa_env
   benchmark:
     env:
@@ -173,7 +151,6 @@ override_tp2_c256_dpa:
       args:
         enable-dp-attention: true
         dp-load-balance: least_tokens
-        max-num-seqs: 256
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128,256]'
       env: *dpa_env
   benchmark:
@@ -187,9 +164,6 @@ override_tp2_c128:
   roles:
     agg:
       gpus: 2
-      args:
-        max-num-seqs: 128
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128]'
   benchmark:
     env:
       CONC: '128'
@@ -199,7 +173,6 @@ override_tp2_c256:
     agg:
       gpus: 2
       args:
-        max-num-seqs: 256
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,48,64,128,256]'
   benchmark:
     env:
@@ -209,9 +182,6 @@ override_tp4_c1:
   roles:
     agg:
       gpus: 4
-      args:
-        max-num-seqs: 2
-        cudagraph-capture-sizes: '[1,2]'
   benchmark:
     env:
       CONC: '1'
@@ -220,9 +190,6 @@ override_tp4_c8:
   roles:
     agg:
       gpus: 4
-      args:
-        max-num-seqs: 16
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
   benchmark:
     env:
       CONC: '8'
@@ -234,8 +201,6 @@ override_tp4_c32_dpa:
       args:
         enable-dp-attention: true
         dp-load-balance: least_tokens
-        max-num-seqs: 32
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
       env: *dpa_env
   benchmark:
     env:
