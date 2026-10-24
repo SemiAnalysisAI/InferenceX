@@ -10924,8 +10924,8 @@
 - config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale
   description:
-    - "Use consistent-hash prefill and round-robin decode routing for the Kimi-K3 UMBP 2P3D c176 baseline."
-    - "Preserve the 1P1D c70 point and all engine, cache, transport, warmup and profiling settings."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/yichaozhu/k3-umbp-c176-p-hash-d-rr
+    - "Use consistent-hash prefill, round-robin decode, and strictly serial fastsafetensors loading for Kimi-K3 UMBP 2P3D c176."
+    - "Set VLLM_FASTSAFETENSORS_QUEUE_SIZE=-1 on prefill and decode workers to avoid overlapping shard buffers; preserve the c70 point, image, loader, GMU, precision, cache, transport, standard warmup and full profiling duration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/yichaozhu/k3-umbp-c176-serial-load
   scenario-type: [agentic-coding]
   no-evals: true
