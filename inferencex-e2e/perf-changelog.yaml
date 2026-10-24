@@ -11009,6 +11009,70 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4433
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Image unchanged: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f (same as #4319)."
+    - "Run TP4 at c1 and c2 only; remove the TP4 c4, c8, c16, c32 and c64 points. TP2 keeps c1-c64."
+    - "TP2 c16: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 4."
+    - "TP2 c32: max-num-batched-tokens 16384 -> 8192 and max-num-seqs 8."
+    - "The TP4 c16 and c32 recipe variants get the same settings but are no longer in the search space. DSpark settings and all other points are unchanged."
+    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), and inherits the target KV cache dtype."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4409
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 AgentX on MI355X via ATOM on rocm/atom-dev:nightly_202610181506 (ATOM 0.1.8.dev77+gdf86c4829), following the standalone recipe in ROCm/ATOM PR 2592."
+    - "Eleven TP4 points with MTP at 3 draft tokens: CONC 1, 4, 8, 16, 24, 32 and 40 on the GPU prefix cache, and CONC 48, 56, 64 and 80 with the LMCache (0.5.6.dev139+gf22dec28) DRAM tier at 253 GB of KV plus 110 GB of GDN state per rank, 1452 GB in total within the 1499 GB TP4 share at dram-utilization 1.0. Only CONC 80 runs the eval."
+    - "Every point serves FP8 KV cache with prefix caching, max-num-seqs 1024, timeout-keep-alive 1800, GDN state checkpoints every 16384 prompt tokens, ATOM_GDN_STATE_MIDSTEP=1, ATOM_STATE_CHECKPOINT_END_MARGIN=5, ATOM_PA_FLYDSL=1, ATOM_PREFILL_DECODE_INTERVAL=4, AITER_QUICK_REDUCE_QUANTIZATION=INT4 and CUDA graphs at every batch size up to max(8, 2x CONC)."
+    - "From CONC 32, ATOM_PREFILL_DELAYER_STALL_TICKS and ATOM_PREFILL_DELAYER_TTFT_MAX_TICKS are 15. From CONC 48, LMCache offloads with 256-token chunks and OFFLOAD_MIN_LOAD_TOKENS=8192."
+    - "Throughput runs take the golden AL 3.39 (3 draft tokens) from golden_al_distribution/qwen3.5_mtp.yaml; the eval uses real acceptance."
+    - "The image's ATOM revision is the merge of ROCm/ATOM#2591 (midstep GDN state checkpoints, MTP draft KV slot and lookahead allocation) and includes #2549 (GDN state image pack), #2588 and #2599 (prompt hashing and prefix walk off the scheduler thread), #2589 (prompt-end checkpoint margin), #2590 (one-copy accepted-token publish) and #2609 (FlyDSL head-256 plan cap)."
+    - "The MTP draft runs as shipped: the checkpoint's FP8 E4M3 128x128-block weights on attention projections, shared and routed experts, BF16 on fc, router gate, shared_expert_gate and norms, with the target's FP8 KV cache. The recipe sets no online quantization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4309
+
+- config-keys:
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg
+  scenario-type:
+  - agentic-coding
+  description:
+  - 'Refine GB300 Kimi-K3 AgentX points to be good on all four p90 charts: replace the decode-capped 1P2D-2P5D points with uncapped 1P2D c48-64 and 3P4D c240, add specialized-decode 1P3D c16 and 1P2D c24/32, keep 2P3D c240 and aggregated TP16 c1, and drop aggregated TP8 c2/c4. Pin cp-kv-cache-interleave-size to 1 for the specialized-decode disaggregated points.'
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4373
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+    - minimaxm3-fp4-b200-vllm-agentic-mtp-c10
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin the MiniMax-M3 B200 vLLM images by digest and retune the TP4 concurrency 15-38 entries, with DRAM KV offload sized to the 1,073 GB node allowance."
+    - "Add minimaxm3-fp4-b200-vllm-agentic-mtp-c10 with TP4 and TP8 concurrency 10 and TP4 DRAM concurrency 20 and 32 entries that cap active sequences."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4382
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-39983a5e to nightly-83c078d9, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4429
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB200 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Serve flags follow the cookbook's GB300 Balanced (TP4) and High-Throughput (TP4, EP4) cells: DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
+    - "GB200 has no cookbook cell; it runs the GB300 (4-GPU) layouts, with B200's sm_100 High-Throughput memory settings (mem-fraction-static 0.75, prefill graphs to 16384)."
+    - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
+    - "Search space: Balanced TP4 at conc 1-32; TP4 + EP4 at conc 64-128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4444
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB300 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
