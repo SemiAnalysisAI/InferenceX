@@ -108,7 +108,8 @@
     "UMBP_HEARTBEAT_INTERVAL_DIVISOR": "10",
     "UMBP_SSD_ENABLED": "0",
     "VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB": "16",
-    "UMBP_DRAM_NUMA_NODE": "0,1"
+    "UMBP_DRAM_NUMA_NODE": "0,1",
+    "PYTORCH_CUDA_ALLOC_CONF": "per_process_memory_fraction:0.92,garbage_collection_threshold:0.9"
   },
   "base_run": 40089164291,
   "base_slurm": 50712,
@@ -137,5 +138,15 @@
     "native startup3 if no failure",
     "timing stress only: hold each file-buffer close250ms; same data/queue/capacity; only if prior3 passed"
   ],
-  "setup50715": "No model attempts; ordinary-user shared-cache permission failure. CPU import unavailable on login host. Active diagnostic uses approved CI account and original image URI."
+  "setup50715": "No model attempts; ordinary-user shared-cache permission failure. CPU import unavailable on login host. Active diagnostic uses approved CI account and original image URI.",
+  "allocator_trial": {
+    "name": "native allocator cache reclamation",
+    "torch_memory_fraction": 0.92,
+    "garbage_collection_threshold": 0.9,
+    "baseline_run": 40100658527,
+    "baseline_slurm": 50717,
+    "baseline_model_outcome": "nativeHSA/free0 in firstload",
+    "vllm_gpu_memory_utilization": 0.9,
+    "formal_performance_baseline": false
+  }
 }

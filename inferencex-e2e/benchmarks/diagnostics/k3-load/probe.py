@@ -11,7 +11,7 @@ def emit(event,memory=True,**fields):
             if torch.cuda.is_initialized():
                 dev=torch.cuda.current_device();free,total=torch.cuda.mem_get_info(dev);stats=torch.cuda.memory_stats(dev)
                 row.update(device=dev,free=free,total=total)
-                for k in ('allocated_bytes.all.current','reserved_bytes.all.current','allocated_bytes.all.peak','reserved_bytes.all.peak','inactive_split_bytes.all.current','num_alloc_retries','num_ooms'):row[k]=stats.get(k)
+                for k in ('allocated_bytes.all.current','reserved_bytes.all.current','allocated_bytes.all.peak','reserved_bytes.all.peak','inactive_split_bytes.all.current','num_alloc_retries','num_ooms','num_device_free','num_oom_rejections','num_sync_all_streams'):row[k]=stats.get(k)
                 row['driver_used_minus_torch_reserved']=total-free-stats.get('reserved_bytes.all.current',0)
         except Exception as exc:row['memory_error']=repr(exc)
     data=(json.dumps(row,default=str)+'\n').encode()
@@ -73,6 +73,11 @@ def worker_hook(module):
         RANK=self.rank
         emit('worker_load_enter',local_rank=self.local_rank,runner=type(self.model_runner).__module__+'.'+type(self.model_runner).__name__)
         import torch
+        fraction=torch.cuda.memory.get_per_process_memory_fraction()
+        getter=getattr(torch._C,'_accelerator_getAllocatorSettings',None)
+        settings=getter() if getter else torch.cuda.memory._snapshot()['allocator_settings']
+        emit('allocator_configuration',fraction=fraction,settings=settings,torch_version=torch.__version__)
+        assert abs(fraction-.92)<1e-5, 'Allocator fraction did not activate; stop before loading'
         if RANK==4:
             try:
                 torch.cuda.memory._record_memory_history(max_entries=50000,stacks='python');emit('history_enabled')
@@ -98,7 +103,10 @@ def iterator_hook(module):
     original=module.fastsafetensors_weights_iterator
     @functools.wraps(original)
     def iterator(files,*args,**kwargs):
-        emit('iterator_start',files=describe(files));count=0;last=0
+        import torch
+        getter=getattr(torch._C,'_accelerator_getAllocatorSettings',None)
+        emit('iterator_start',files=describe(files),allocator_settings=getter() if getter else None)
+        count=0;last=0
         try:
             for name,tensor in original(files,*args,**kwargs):
                 count+=1;now=time.monotonic()
@@ -117,6 +125,11 @@ def patch(module):
     # Per-PID source evidence avoids concurrent writers; no package edits.
     (ROOT/(module.__name__.replace('.','_')+f'.pid{os.getpid()}.source.py')).write_bytes(data)
     n=module.__name__
+    if n=='fastsafetensors.loader':
+        for relative in ['frameworks/_torch.py','tensor_factory.py','copier/nogds.py']:
+            source=Path(module.__file__).parent/relative
+            if source.exists():
+                (ROOT/(relative.replace('/','_')+f'.pid{os.getpid()}.source.py')).write_bytes(source.read_bytes())
     if n.endswith('gpu_worker'):worker_hook(module)
     elif n.endswith('weight_utils'):iterator_hook(module)
     elif n=='fastsafetensors.loader':
