@@ -11071,3 +11071,14 @@
     - "Search space: Balanced TP4 at conc 1-32; TP4 + EP4 at conc 64-128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4444
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202610121516 to nightly_202610240802 (ATOM 11a2d56, digest sha256:4271692397830e1198b6aee1fe81c29c39f3704b0816f2746162f778cfa93048) and update model.container and the AToMesh frontend image to match. Upstream recipes/DeepSeek-V4.1-Flash-Agentic.md is unchanged. The image adds ROCm/ATOM#2376 (DeepSeek-V4.1 DP attention), ROCm/ATOM#2543 and ROCm/ATOM#2556 (FP4 fixes for DP-padded batches), ROCm/ATOM#2551 (DP-attention prefill steps balanced by estimated chunk cost), ROCm/ATOM#2569 (decoder SWA bounded replay under DP attention), ROCm/ATOM#2588 and ROCm/ATOM#2599 (prompt hashing and the prefix walk off the GPU critical path), ROCm/ATOM#2429 (DP-attention comm-fused MoE reduce-scatter) and ROCm/ATOM#2670 (reused speculative output buffers)."
+    - "Run DP attention (--enable-dp-attention) without TBO from concurrency 32: TP2 at concurrency 32, 64, 128 and 256 (128 and 256 are new) and TP4 at concurrency 32. TBO is not enabled because it does not support SWA bounded replay. These points set GPU_MAX_HW_QUEUES=5, ATOM_DP_SESSION_AFFINITY=1 with AIPerf sending the session id, dp-load-balance least_tokens with ATOM_DP_LB_REQ_EQUIV=512, and ATOM_ENABLE_PREFILL_DELAYER=1 with ATOM_PREFILL_DECODE_INTERVAL=10 (replacing the interval of 4 at TP2 c64 and 16 at TP4 c32)."
+    - "Drop TP2 concurrency 6. TP2 runs [1, 2, 4, 8, 16] and TP4 runs [1, 8] on plain TP; TP2 also runs concurrency 128 and 256 on plain TP, without any of the DP settings, next to the DP-attention points. Other server settings are unchanged."
+    - "Drop the max-num-seqs 128 cap: every point runs ATOM's default max-num-seqs (at 128 the plain-TP TP2 c256 point queued half the sessions, TTFT 490 s). Decode graphs stay at every size through 32 plus 48, 64 and 128; the TP2 c256 points (plain TP and DP attention) also capture 256."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
