@@ -11062,6 +11062,67 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB200 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Serve flags follow the cookbook's GB300 Balanced (TP4) and High-Throughput (TP4, EP4) cells: DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
+    - "GB200 has no cookbook cell; it runs the GB300 (4-GPU) layouts, with B200's sm_100 High-Throughput memory settings (mem-fraction-static 0.75, prefill graphs to 16384)."
+    - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
+    - "Search space: Balanced TP4 at conc 1-32; TP4 + EP4 at conc 64-128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4444
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on MI355X with SGLang image lmsysorg/sglang:dev-minimax-m31-flash-mi35x (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Serve flags follow the cookbook's MI355X Low-Latency (TP4) cell: DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
+    - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
+    - "Search space: Low-Latency TP4 at conc 1-64, GPU-resident. The cookbook's High-Throughput cell (HiCache) is dropped: on MI355X its first prefill's HiCache write backup hits a HIP illegal memory access with either a fixed hicache-size or hicache-ratio 1.5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4445
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on B200 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Serve flags follow the cookbook's B200 Balanced (TP4) and High-Throughput (TP8, attention DP2, EP8: DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
+    - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
+    - "Search space: Balanced TP4 at conc 1-32; TP8 + EP8 with attention DP2 at conc 64-128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4442
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on B200 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Serve flags follow the cookbook's B200 Balanced (TP4) and High-Throughput (TP8, attention DP2, EP8: DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
+    - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
+    - "Search space: Balanced TP4 at conc 1-32; TP8 + EP8 with attention DP2 at conc 64-128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4466
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4427
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-cd10ed6f to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4428
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from dev-muse-spark-open to nightly-dev-20261021-c1c287a4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4430
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
   scenario-type: [agentic-coding]
   description:

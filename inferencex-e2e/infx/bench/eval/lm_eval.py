@@ -24,7 +24,10 @@ CONTEXT_FIELDS = ("max_position_embeddings", "max_sequence_length", "seq_length"
 
 
 def install(environ: Mapping[str, str]) -> None:
-    """Install lm-eval at ``REF`` into this interpreter; failures only warn, as images may ship it."""
+    """Install lm-eval at ``REF`` into this interpreter. Failures only warn, as images may ship it.
+
+    The ``huggingface-hub`` range keeps lm-eval from upgrading it past what transformers 5.x accepts.
+    """
     try:
         uv.find()
     except env.BenchError as error:
@@ -32,8 +35,6 @@ def install(environ: Mapping[str, str]) -> None:
         return
     if "atom" in environ.get("IMAGE", ""):
         _pip(environ, "uninstall", "torchvision")
-    # lm-eval does not depend on transformers, so without this range its resolution
-    # upgrades huggingface-hub past what transformers 5.x accepts.
     _pip(environ, "install", "lm-eval[api]", "huggingface-hub>=1.5,<2")
     pinned = ("install", "--no-deps", "--reinstall")
     git = shutil.which("git", path=environ.get("PATH"))
@@ -43,6 +44,7 @@ def install(environ: Mapping[str, str]) -> None:
 
 
 def _pip(environ: Mapping[str, str], command: str, *args: str) -> bool:
+    """Run ``uv pip <command> <args>``, warning on failure, and return whether it succeeded."""
     argv = uv.pip(command, "-q", "--no-cache", "--break-system-packages", *args)
     rc = proc.call(argv, environ)
     if rc:
@@ -98,6 +100,7 @@ def max_output_tokens(context: int) -> int:
 
 
 def tasks(environ: Mapping[str, str]) -> str:
+    """``EVAL_TASKS_DIR``, else the default task set."""
     return env.optional("EVAL_TASKS_DIR", env=environ) or DEFAULT_TASKS
 
 
