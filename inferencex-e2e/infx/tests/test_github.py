@@ -14,6 +14,8 @@ from infx import github
     ("gh: Not Found (HTTP 404)\n", 404),
     ("gh: Forbidden (HTTP 403)", 403),
     ("gh: Bad Gateway (HTTP 502)", 502),
+    ('gh: Not Found (HTTP 404)\ngh: This API operation needs the "admin:org" scope. To request '
+     "it, run:  gh auth refresh -h github.com -s admin:org\n", 404),
     ("network timeout mentioning 404 without HTTP status", None),
 ])
 def test_authenticated_api_errors_expose_status_without_guessing(monkeypatch, stderr, status):
