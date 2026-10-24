@@ -7621,7 +7621,7 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0.dev20261019" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261015" }
   multinode: true
   disagg: false
   srt-recipe-dir: glm5.2/sglang/gb300-fp4/agentx
