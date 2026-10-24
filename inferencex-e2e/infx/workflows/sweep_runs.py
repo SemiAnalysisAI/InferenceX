@@ -16,6 +16,7 @@ REUSABLE_AGGREGATE_ARTIFACTS = {
 def completed_pr_runs(
     repo: str, workflow_id: str, head_branch: str, token: str
 ) -> list[dict[str, Any]]:
+    """Return every completed pull_request run of workflow_id on head_branch."""
     workflow = urllib.parse.quote(workflow_id, safe="")
     return github.paginate(
         repo,

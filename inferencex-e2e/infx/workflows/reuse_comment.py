@@ -49,6 +49,10 @@ def warn_outside_pr(
 
 
 def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
+    """React to a reuse command comment on a PR and report whether it was accepted.
+
+    Returns 0 when accepted or not applicable, 1 when the request is rejected.
+    """
     if event.get("action") not in {"created", "edited"} or not event.get("issue", {}).get(
         "pull_request"
     ):
@@ -122,6 +126,10 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
 
 
 def main() -> int:
+    """Acknowledge the comment from the GitHub Actions event and return the exit code.
+
+    Raises RuntimeError if no GitHub token is set.
+    """
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")

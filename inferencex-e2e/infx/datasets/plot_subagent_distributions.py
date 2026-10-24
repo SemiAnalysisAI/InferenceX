@@ -90,6 +90,7 @@ PLOT_SPECS: list[dict] = [
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse the command line and return the input, output, and binning options."""
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -119,6 +120,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def collect_metrics(in_dir: Path) -> dict[str, list[float]]:
+    """Read every weka trace in ``in_dir`` and return the sub-agent fan-out samples by metric name."""
     groups_per_trace: list[int] = []
     inners_per_group: list[int] = []
     duration_sec: list[float] = []
@@ -178,6 +180,10 @@ def _draw_histogram(
     value_fmt: str,
     linear_clip_pct: float,
 ) -> None:
+    """Draw a histogram of ``values`` with percentile markers on ``ax``, or an empty panel if none.
+
+    A log axis centres a single repeated value, since ``geomspace(v, v)`` can round to non-monotonic edges.
+    """
     if not values:
         ax.set_title(f"{title}\n(no values)")
         ax.axis("off")
@@ -191,9 +197,11 @@ def _draw_histogram(
             ax.set_title(f"{title}\n(no positive values)")
             ax.axis("off")
             return
-        lo = max(positive.min(), 1e-3)
         hi = float(positive.max())
-        edges = np.geomspace(lo, hi, bins + 1)
+        lo = max(float(positive.min()), 1e-3) if hi > 1e-3 else float(positive.min())
+        edges = (
+            np.geomspace(lo, hi, bins + 1) if hi > lo else np.geomspace(lo / 2, hi * 2, bins + 1)
+        )
         ax.hist(positive, bins=edges, color="#888", edgecolor="#222", linewidth=0.4)
         ax.set_xscale("log")
     else:
@@ -239,6 +247,7 @@ def plot_combined(
     use_log: bool,
     linear_clip_pct: float,
 ) -> None:
+    """Draw every metric of ``metrics`` into one 3x2 figure and save it to ``out_path``."""
     fig, axes = plt.subplots(3, 2, figsize=(20, 16))
     for spec, ax in zip(PLOT_SPECS, axes.flat, strict=False):
         log_x = use_log and spec["log_in_log_fig"]
@@ -264,6 +273,7 @@ def plot_combined(
 
 
 def main() -> int:
+    """Collect the metrics from ``--in-dir`` and write the log and linear figures, returning 0."""
     args = parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     metrics = collect_metrics(args.in_dir)

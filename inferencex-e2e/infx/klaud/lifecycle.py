@@ -1,4 +1,8 @@
-"""Finish owned sessions; resume or reconcile interrupted ones in the next autosweep."""
+"""Finish owned sessions; resume or reconcile interrupted ones in the next autosweep.
+
+A candidate gets at most ``MAX_SESSIONS`` sessions, its planner run's own plus three resume
+runs, and planner waves start every ``WAVE_HOURS`` as scheduled in klaud-plan.yml.
+"""
 
 from __future__ import annotations
 
@@ -30,22 +34,14 @@ SWEEP_LABELS = {
     "evals-only",
     "agentx-fast",
 }
-# Leaves the scheduler time to rerun what it preempted before recovery reruns it.
 RERUN_GRACE_SECONDS = 30 * 60
-# Recovery stops waiting for a preempted final sweep that stayed cancelled this long.
 RERUN_GIVE_UP_SECONDS = 24 * 60 * 60
 MAX_SWEEP_ATTEMPTS = 10
-# Sessions per candidate: its planner run's session plus three resume runs.
 MAX_SESSIONS = 4
-# Planner waves start this often (klaud-plan.yml's schedule).
 WAVE_HOURS = 6
-# Recovery stops resuming, or keeping unreconciled sessions, this long after the last ended.
 RESUME_GIVE_UP_SECONDS = 24 * 60 * 60
-# The klaud-candidate.yml step that lets a resume run start only a session recovery granted.
 GATE_STEP = "Check whether this session should run"
-# The klaud-candidate.yml step that runs the session's agent.
 AGENT_STEP = "Let Klaud Cold own the candidate PR"
-# GitHub concludes a job stopped at its timeout-minutes as cancelled, with this annotation.
 TIMEOUT_ANNOTATION = "exceeded the maximum execution time"
 
 
@@ -72,11 +68,13 @@ class ResumeSession(PendingCleanup):
     """Recovery may resume this unfinished session; keep its PR, branch, claim and lease."""
 
     def __init__(self, pull: dict) -> None:
+        """Carry the resumable ``pull`` with a fixed public message."""
         super().__init__("Unfinished session approved to resume in a new run")
         self.pull = pull
 
 
 def terminal(run: dict) -> bool:
+    """Return True if workflow ``run`` has completed with a conclusion."""
     return run["status"] == "completed" and bool(run.get("conclusion"))
 
 
@@ -89,14 +87,27 @@ class Session:
         *,
         recovering: bool = False,
     ) -> None:
+        """Track ``candidate`` of planner run ``parent`` in ``repository``, as recovery if set."""
         self.repository, self.parent, self.candidate = repository, parent, candidate
         self.recovering = recovering
         self.branch = f"klaud/auto-{candidate.id}"
         self.marker = f"<!-- klaud-outcome:{parent['id']}:{candidate.id}\n"
         self.validations = {}
         self.first_attempt_end: datetime | None = None
+        self.listings: dict[str, tuple[int, list[dict]]] = {}
+
+    def listing(self, path: str, key: str | None = None) -> list[dict]:
+        """``path``'s listing, reused until the next GitHub write or ownership check."""
+        cached = self.listings.get(path)
+        if cached is None or cached[0] != github.writes:
+            cached = self.listings[path] = (github.writes, github.items(self.repository, path, key))
+        return cached[1]
 
     def validation(self, run: dict) -> tuple[dict, list[dict], list[dict]]:
+        """Return the sweep evidence of final sweep ``run``, cached per run attempt.
+
+        Raises VerificationError if the sweep or its baseline coverage fails verification.
+        """
         key = (run["id"], run["head_sha"], run["run_attempt"])
         if key not in self.validations:
             from .reporting import baseline_for, check_baseline_coverage
@@ -121,6 +132,11 @@ class Session:
         return self.first_attempt_end
 
     def pulls(self) -> list[dict]:
+        """Return this candidate's PR as a list of at most one, raising VerificationError.
+
+        A PR opened outside the planner's first attempt is ignored. More than one, or one not
+        owned by the bot from this repository, is an error.
+        """
         query = urlencode(
             {
                 "state": "all",
@@ -131,7 +147,7 @@ class Session:
         end = self.pull_window_end()
         pulls = [
             pull
-            for pull in github.items(self.repository, "pulls?" + query)
+            for pull in self.listing("pulls?" + query)
             if utc(pull["created_at"]) >= utc(self.parent["created_at"])
             and (end is None or utc(pull["created_at"]) <= end)
         ]
@@ -144,15 +160,16 @@ class Session:
         return pulls
 
     def resume_runs(self) -> list[dict]:
-        """Recovery's resume runs of this candidate's session, oldest first."""
+        """Recovery's resume runs of this candidate's session, oldest first.
+
+        A session resumes within RESUME_GIVE_UP_SECONDS of the last ending and lasts at most a
+        GitHub job's 6 hours, which bounds when every resume run starts.
+        """
         prefix = resume_title(self.parent["id"], self.candidate.id, 0).removesuffix("0")
-        # A session resumes within RESUME_GIVE_UP_SECONDS of the last one ending, and each
-        # session lasts at most a GitHub job's 6 hours, so every resume run starts by then.
         until = utc(self.parent["created_at"]) + MAX_SESSIONS * timedelta(
             seconds=RESUME_GIVE_UP_SECONDS, hours=6
         )
-        runs = github.items(
-            self.repository,
+        runs = self.listing(
             "actions/workflows/klaud-plan.yml/runs?"
             + urlencode(
                 {
@@ -184,11 +201,14 @@ class Session:
         return max((run["updated_at"] for run in runs), key=utc)
 
     def runs(self) -> list[dict]:
+        """Return the candidate's targeted e2e runs followed by its PR sweep runs.
+
+        In recovery, raises VerificationError if a maintainer started a sweep after the session.
+        """
         ended = self.last_session_end()
         end = ended or "*"
         query = {"per_page": 100, "created": f"{self.parent['created_at']}..{end}"}
-        targeted = github.items(
-            self.repository,
+        targeted = self.listing(
             "actions/workflows/e2e-tests.yml/runs?"
             + urlencode({**query, "event": "workflow_dispatch"}),
             "workflow_runs",
@@ -201,8 +221,7 @@ class Session:
             and run["actor"]["login"] == BOT
             and run["head_repository"]["full_name"] == self.repository
         ]
-        sweeps = github.items(
-            self.repository,
+        sweeps = self.listing(
             "actions/workflows/run-sweep.yml/runs?"
             + urlencode(
                 {
@@ -234,9 +253,11 @@ class Session:
         return targeted + sweeps
 
     def aborted(self, pull: dict) -> bool:
+        """Return True if ``pull`` carries the abort label."""
         return any(label["name"] == ABORT_LABEL for label in pull["labels"])
 
     def refresh(self, pull: dict) -> dict:
+        """Return fresh ``pull``, raising VerificationError if it moved, merged or changed hands."""
         self.check_parent()
         current = github.read(self.repository, f"pulls/{pull['number']}")
         if (
@@ -248,6 +269,8 @@ class Session:
         return current
 
     def check_parent(self) -> None:
+        """Drop cached listings and, in recovery, raise VerificationError if the session resumed."""
+        self.listings.clear()
         if self.recovering and (
             not terminal(github.read(self.repository, f"actions/runs/{self.parent['id']}"))
             or not all(terminal(run) for run in self.resume_runs())
@@ -255,7 +278,8 @@ class Session:
             raise VerificationError("Session resumed; leave the active session intact")
 
     def report(self, pull: dict) -> dict | None:
-        comments = github.items(self.repository, f"issues/{pull['number']}/comments?per_page=100")
+        """Return the outcome record of this session's latest bot report on ``pull``, or None."""
+        comments = self.listing(f"issues/{pull['number']}/comments?per_page=100")
         matches = [
             comment
             for comment in comments
@@ -267,8 +291,12 @@ class Session:
         return json.loads(body[len(self.marker) :].split("\n-->", 1)[0])
 
     def pending(self, pull: dict) -> CandidateOutcome | None:
+        """Return the outcome of this session's pending cleanup request on ``pull``, or None.
+
+        Raises VerificationError if the PR head moved since or the outcome claims validated.
+        """
         marker = self.marker.replace("klaud-outcome:", "klaud-cleanup:")
-        comments = github.items(self.repository, f"issues/{pull['number']}/comments?per_page=100")
+        comments = self.listing(f"issues/{pull['number']}/comments?per_page=100")
         matches = [
             c for c in comments if c["user"]["login"] == BOT and c["body"].startswith(marker)
         ]
@@ -284,7 +312,8 @@ class Session:
         return outcome
 
     def branch_exists(self) -> bool:
-        refs = github.items(self.repository, "git/matching-refs/heads/" + self.branch)
+        """Return True if the candidate branch exists."""
+        refs = self.listing("git/matching-refs/heads/" + self.branch)
         return any(ref["ref"] == "refs/heads/" + self.branch for ref in refs)
 
     def delete_branch(self, pull: dict) -> None:
@@ -305,6 +334,11 @@ class Session:
         require_ready: bool = True,
         require_branch_deleted: bool = True,
     ) -> None:
+        """Raise unless GitHub state matches ``outcome`` for this session, else return None.
+
+        Raises PendingCleanup while owned jobs run and VerificationError on any mismatch. The
+        flags relax the report, ready-for-review and deleted-branch checks.
+        """
         pulls = self.pulls()
         pull = pulls[0] if pulls else None
         if pull and pull["merged_at"]:
@@ -319,7 +353,6 @@ class Session:
         if outcome.outcome == "validated":
             if not pull or pull["state"] != "open" or (require_ready and pull["draft"]):
                 raise VerificationError("Validated PR must remain ready for review")
-            # Klaud runs every final sweep fail-fast; any other sweep label is invalid.
             sweep_labels = {label["name"] for label in pull["labels"]} & SWEEP_LABELS
             if sweep_labels != {"full-sweep-fail-fast"}:
                 raise VerificationError("Validated PR has incompatible sweep labels")
@@ -368,6 +401,11 @@ class Session:
                 raise VerificationError("Missing verified completion report")
 
     def finish(self, outcome: CandidateOutcome) -> CandidateOutcome:
+        """Apply ``outcome`` to this session and return it with the real PR and run IDs.
+
+        Validated PRs are published and marked ready. Others have runs cancelled, the PR closed
+        and the branch deleted. Then the report is posted and the family claim released.
+        """
         pulls = self.pulls()
         pull = pulls[0] if pulls else None
         runs = self.runs()
@@ -426,7 +464,11 @@ class Session:
                     self.check_parent()
                     if pull:
                         self.refresh(pull)
-                    github.write(self.repository, f"actions/runs/{run['id']}/cancel", "POST")
+                    try:
+                        github.write(self.repository, f"actions/runs/{run['id']}/cancel", "POST")
+                    except (OSError, subprocess.SubprocessError):
+                        if not terminal(github.read(self.repository, f"actions/runs/{run['id']}")):
+                            raise
             if any(not terminal(run) for run in self.runs()):
                 raise PendingCleanup(
                     "Cancellation requested; wait for terminal jobs then finish again"
@@ -488,6 +530,7 @@ class Session:
                     or "—"
                 )
                 repairs = outcome.repairs_used if outcome.repairs_used is not None else "unknown"
+                repairs_zh = outcome.repairs_used if outcome.repairs_used is not None else "未知"
                 reason_en = f" · Reason: {outcome.reason_code}" if outcome.reason_code else ""
                 reason_zh = f" · 原因：{outcome.reason_code}" if outcome.reason_code else ""
                 why = (
@@ -510,7 +553,7 @@ class Session:
                             if proof
                             else "PR closed; branch deleted for retry."
                         ),
-                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs} · 运行：{links}  \n{why_zh}所有自有运行均已结束。"
+                        f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs_zh} · 运行：{links}  \n{why_zh}所有自有运行均已结束。"
                         + (
                             "完整 sweep 已验证；已就绪，等待审查。"
                             if proof
@@ -529,6 +572,8 @@ class Session:
 
 
 def subprocess_ready(repository: str, number: int, *, undo: bool = True) -> None:
+    """Mark PR ``number`` ready for review, or back to draft if ``undo``, counting a write."""
+    github.writes += 1
     subprocess.run(
         ["gh", "pr", "ready", str(number), "--repo", repository] + (["--undo"] if undo else []),
         check=True,
@@ -538,17 +583,21 @@ def subprocess_ready(repository: str, number: int, *, undo: bool = True) -> None
 
 
 def current_session() -> Session:
+    """Return the Session for the candidate in ``$KLAUD_EVIDENCE/candidate.json``.
+
+    A resume run passes ``KLAUD_PARENT_RUN``, the planner run that owns the candidate.
+    """
     context = json.loads((Path(os.environ["KLAUD_EVIDENCE"]) / "candidate.json").read_text())
     candidate = OwnedCandidate.model_validate(
         {key: context[key] for key in ("id", "family", "base")}
     )
     repository = os.environ["GITHUB_REPOSITORY"]
-    # A resume run continues the session of the planner run that owns the candidate.
     parent = os.environ.get("KLAUD_PARENT_RUN") or os.environ["GITHUB_RUN_ID"]
     return Session(repository, github.read(repository, f"actions/runs/{int(parent)}"), candidate)
 
 
 def hit_timeout(repository: str, job: dict) -> bool:
+    """Return True if ``job`` ran and GitHub annotated it as stopped at its timeout-minutes."""
     return bool(job.get("runner_name")) and any(
         TIMEOUT_ANNOTATION in (annotation.get("message") or "")
         for annotation in github.items(
@@ -558,20 +607,28 @@ def hit_timeout(repository: str, job: dict) -> bool:
 
 
 def preempted(repository: str, run: dict) -> bool:
-    """Cancelled by someone else: no job of its current attempt failed or hit its timeout."""
-    return run["conclusion"] == "cancelled" and not any(
-        job["conclusion"] in ("failure", "timed_out")
-        or (job["conclusion"] == "cancelled" and hit_timeout(repository, job))
-        for job in github.items(
-            repository,
-            f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
-            "jobs",
-        )
+    """Cancelled by someone else: no job of its current attempt failed or hit its timeout.
+
+    Failures are ruled out first because a fail-fast sweep cancels every other job.
+    """
+    if run["conclusion"] != "cancelled":
+        return False
+    jobs = github.items(
+        repository,
+        f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100",
+        "jobs",
+    )
+    return not any(job["conclusion"] in ("failure", "timed_out") for job in jobs) and not any(
+        job["conclusion"] == "cancelled" and hit_timeout(repository, job) for job in jobs
     )
 
 
 def await_rerun(session: Session, pull: dict, run: dict, now: datetime) -> None:
-    """Keep a preempted final sweep's candidate alive until the sweep runs again."""
+    """Raise AwaitingRerun to keep ``session`` while preempted final sweep ``run`` can rerun.
+
+    Waits RERUN_GRACE_SECONDS for the scheduler's own rerun, then requests one. Returns if
+    ``run`` was not preempted or is out of attempts.
+    """
     try:
         if not preempted(session.repository, run):
             return
@@ -624,9 +681,7 @@ def candidate_jobs(session: Session) -> list[dict]:
         (
             job
             for run in runs
-            for job in github.items(
-                session.repository, f"actions/runs/{run}/jobs?filter=all&per_page=100", "jobs"
-            )
+            for job in session.listing(f"actions/runs/{run}/jobs?filter=all&per_page=100", "jobs")
             if job["name"].startswith(prefix)
             and job["started_at"]
             and utc(job["started_at"]) >= utc(job["created_at"])
@@ -651,30 +706,34 @@ def sessions_started(session: Session) -> int:
 
 
 def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
-    """Whether a new resume run would continue this unfinished session."""
+    """Return True if a new resume run would continue this unfinished session at ``now``.
+
+    The last started job must have ended, run the gate step, and failed, timed out or been
+    cancelled within RESUME_GIVE_UP_SECONDS. Only klaud-abort stops a candidate.
+    """
     if session.last_session_end() is None or not resumable(session, pull):
         return False
     started = [job for job in candidate_jobs(session) if started_session(job)]
     return (
         0 < len(started) < MAX_SESSIONS
-        # Runs that failed before their agent started never extend this.
         and bool(started[-1].get("completed_at"))
         and now - utc(started[-1]["completed_at"]) < timedelta(seconds=RESUME_GIVE_UP_SECONDS)
-        # A planner run from before resumption has no gate.
         and any(step["name"] == GATE_STEP for step in started[-1]["steps"])
-        # A session that runs out fails its job, and a cancelled session was preempted like any
-        # other Klaud work; only klaud-abort stops a candidate.
         and started[-1]["conclusion"] in ("failure", "timed_out", "cancelled")
     )
 
 
 def resume(session: Session, pull: dict | None, now: datetime) -> None:
-    """Approve resuming an unfinished session; recovery grants approved ones after its pass."""
+    """Raise ResumeSession with ``pull`` when recovery may resume this session, else return.
+
+    Recovery grants the approved sessions after its pass.
+    """
     if session.recovering and resumes(session, pull, now):
         raise ResumeSession(pull)
 
 
 def resume_marker(parent: int, candidate: str, number: int) -> str:
+    """Return the comment marker that records the grant of session ``number``."""
     return f"<!-- klaud-resume:{parent}:{candidate}:session-{number} -->"
 
 
@@ -690,7 +749,10 @@ def granted(session: Session, pull: dict, number: int) -> bool:
 
 
 def grant(session: Session, pull: dict) -> int:
-    """Grant an unfinished session its next session, then dispatch the resume run that runs it."""
+    """Grant an unfinished session its next session, dispatch its resume run, return its number.
+
+    If the dispatch fails the grant comment is deleted, so no uncounted session can start.
+    """
     repository, parent = session.repository, session.parent["id"]
     session.refresh(pull)
     number = sessions_started(session) + 1
@@ -727,7 +789,6 @@ def grant(session: Session, pull: dict) -> int:
             },
         )
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        # A grant without its resume run would let a later run start an uncounted session.
         if posted is not None:
             with contextlib.suppress(
                 OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError
@@ -754,6 +815,7 @@ def retained(session: Session, now: datetime) -> bool:
 
 
 def summarize(repository: str, candidate: OwnedCandidate, parent: int, status: str) -> None:
+    """Append ``status`` for ``candidate`` of run ``parent`` to the job summary, if one exists."""
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a") as output:
             output.write(
@@ -763,6 +825,11 @@ def summarize(repository: str, candidate: OwnedCandidate, parent: int, status: s
 
 
 def reconcile(session: Session, now: datetime) -> bool:
+    """Settle interrupted ``session`` at ``now`` and return True if anything changed.
+
+    Raises PendingCleanup subclasses while work runs, a recent preempted sweep may rerun,
+    or the session may resume. Returns False for a merged PR or no owned work.
+    """
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
     if pull and pull["merged_at"]:
@@ -842,6 +909,11 @@ def reconcile(session: Session, now: datetime) -> bool:
 
 
 def recover(max_resumes: int) -> None:
+    """Reconcile every owned candidate, then resume up to ``max_resumes`` approved sessions.
+
+    Writes still-blocked families to ``$RUNNER_TEMP/klaud-recovery.json`` and the resume count
+    to ``$GITHUB_OUTPUT``. Unreadable state counts as live work, and oldest planners go first.
+    """
     repository = os.environ["GITHUB_REPOSITORY"]
     now = datetime.now(UTC)
     inventory = github.items(
@@ -851,22 +923,44 @@ def recover(max_resumes: int) -> None:
     for artifact in inventory:
         if artifact["expired"]:
             continue
-        parent = github.read(repository, f"actions/runs/{artifact['workflow_run']['id']}")
-        if (
-            parent["head_branch"] != "main"
-            or parent["path"] != ".github/workflows/klaud-plan.yml"
-            or parent["event"] not in ("schedule", "workflow_dispatch")
-        ):
+        try:
+            parent = github.read(repository, f"actions/runs/{artifact['workflow_run']['id']}")
+            if (
+                parent["head_branch"] != "main"
+                or parent["path"] != ".github/workflows/klaud-plan.yml"
+                or parent["event"] not in ("schedule", "workflow_dispatch")
+            ):
+                continue
+            with tempfile.TemporaryDirectory(prefix="klaud-ownership-") as temp:
+                github.download_json(repository, artifact, Path(temp))
+                owner = Ownership.model_validate_json((Path(temp) / "ownership.json").read_text())
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            print(f"::warning::Klaud: ownership artifact {artifact['id']} is unreadable; skipped.")
             continue
-        with tempfile.TemporaryDirectory(prefix="klaud-ownership-") as temp:
-            github.download_json(repository, artifact, Path(temp))
-            owner = Ownership.model_validate_json((Path(temp) / "ownership.json").read_text())
         if owner.run_id != parent["id"]:
             raise VerificationError("Ownership parent mismatch")
         owners.append((owner, artifact))
-    parents = {
-        owner.run_id: github.read(repository, f"actions/runs/{owner.run_id}") for owner, _ in owners
-    }
+    results = {}
+    blocked = set()
+    live = set()
+    parents = {}
+    for owner, _ in owners:
+        if owner.run_id in parents:
+            continue
+        try:
+            parents[owner.run_id] = github.read(repository, f"actions/runs/{owner.run_id}")
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            for candidate in owner.candidates:
+                results[(owner.run_id, candidate.id)] = False
+                blocked.add(candidate.family)
+                live.add(candidate.id)
+                summarize(
+                    repository,
+                    candidate,
+                    owner.run_id,
+                    "needs inspection / 需要检查 (state unavailable or invalid)",
+                )
+    owners = [pair for pair in owners if pair[0].run_id in parents]
     if any(
         parent["head_branch"] != "main"
         or parent["path"] != ".github/workflows/klaud-plan.yml"
@@ -874,9 +968,6 @@ def recover(max_resumes: int) -> None:
         for parent in parents.values()
     ):
         raise VerificationError("Untrusted ownership parent")
-    results = {}
-    blocked = set()
-    live = set()
     approved: list[tuple[Session, dict]] = []
     for owner, _ in sorted(owners, key=lambda pair: pair[0].run_id, reverse=True):
         parent = parents[owner.run_id]
@@ -931,7 +1022,6 @@ def recover(max_resumes: int) -> None:
             if status:
                 summarize(repository, candidate, parent["id"], status)
     resumed = 0
-    # Oldest planner runs first; resumed sessions share this wave's candidate cap.
     approved.sort(key=lambda pair: (pair[0].parent["id"], pair[0].candidate.id))
     for index, (session, pull) in enumerate(approved):
         run_id = session.parent["id"]
@@ -978,6 +1068,11 @@ def recover(max_resumes: int) -> None:
 
 
 def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]], set[int]]:
+    """Return active Klaud work in ``repository``.
+
+    That is live candidate IDs, active targeted run IDs per candidate, and planner runs whose
+    reconcile job is unfinished.
+    """
     live: set[str] = set()
     targeted: dict[str, list[int]] = {}
     planners: set[int] = set()
@@ -1008,14 +1103,31 @@ def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]], set
 
 
 def bot_committed(commits: list[dict]) -> bool:
+    """Return True if ``commits`` is non-empty and the Actions bot committed all of them."""
     return bool(commits) and all(
         (commit.get("committer") or {}).get("login") == COMMITTER for commit in commits
     )
 
 
 def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
+    """Clean up Klaud work no live session owns and return the widened ``live`` candidate IDs.
+
+    Closes abandoned draft PRs and cancels orphan targeted runs. Deletes stale claims, leases
+    and branches. A claim whose planner run cannot be read counts as live.
+    """
     sessions, targeted, planners = owned_activity(repository)
     live = live | sessions
+    claimed = []
+    for owner in claims.family_owners(repository):
+        candidate = owner.candidates[0]
+        if candidate.id in live:
+            continue
+        try:
+            parent = github.read(repository, f"actions/runs/{owner.run_id}")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            live.add(candidate.id)
+            continue
+        claimed.append((owner, candidate, parent))
     pulls = github.items(repository, "pulls?state=open&per_page=100")
     abandoned = []
     for pull in pulls:
@@ -1037,11 +1149,8 @@ def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
         if candidate not in live:
             for run in runs:
                 github.write(repository, f"actions/runs/{run}/cancel", "POST")
-    for owner in claims.family_owners(repository):
-        candidate = owner.candidates[0]
-        if candidate.id not in live and terminal(
-            github.read(repository, f"actions/runs/{owner.run_id}")
-        ):
+    for owner, candidate, parent in claimed:
+        if candidate.id not in live and terminal(parent):
             claims.release_family(repository, candidate, owner.run_id)
     if planners <= {int(os.environ.get("GITHUB_RUN_ID", "0"))}:
         finished: dict[int, bool] = {}

@@ -36,10 +36,12 @@ class Checkout:
 
     @property
     def venv(self) -> Path:
+        """Return the checkout's virtualenv directory."""
         return self.root / ".venv"
 
 
 def _git(*args: str | Path, capture: bool = False) -> str:
+    """Run ``git`` and return stripped stdout if ``capture``, or raise LaunchError on failure."""
     try:
         result = proc.run(["git", *args], check=True, capture=capture)
     except (OSError, subprocess.CalledProcessError) as error:
@@ -48,6 +50,7 @@ def _git(*args: str | Path, capture: bool = False) -> str:
 
 
 def _checked(result: subprocess.CompletedProcess[str], action: str) -> None:
+    """Raise LaunchError naming ``action`` if ``result`` exited non-zero."""
     if result.returncode:
         raise LaunchError(f"{action} failed (exit {result.returncode})")
 
@@ -113,7 +116,8 @@ def _uv(run: SrtRun) -> str:
     install_dir = root / "bin" if root is not None else Path.home() / ".local/bin"
     install_dir.mkdir(parents=True, exist_ok=True)
     env = {**run.env, "UV_INSTALL_DIR": str(install_dir), "UV_NO_MODIFY_PATH": "1"}
-    _checked(proc.run(["sh", "-c", f"curl -LsSf {UV_INSTALLER} | sh"], env=env), "installing uv")
+    installer = f"curl -LsSf {UV_INSTALLER} | sh"
+    _checked(proc.run(["bash", "-o", "pipefail", "-c", installer], env=env), "installing uv")
     run.prepend_path(install_dir)
     return str(install_dir / "uv")
 
@@ -128,8 +132,11 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
         run.env["UV_CACHE_DIR"] = str(cache)
         run.env["UV_PYTHON_INSTALL_DIR"] = str(root / "python")
     venv = checkout.venv
+    # Copy instead of hardlinking: parallel jobs hardlinking the same files in a uv
+    # cache on shared NFS fail at sweep fan-out. Costs ~8 s per install.
+    env = {**run.env, "UV_LINK_MODE": "copy"}
     argv = [uv, "venv", "--quiet", "--seed", *(["--python", python] if python else []), str(venv)]
-    _checked(proc.run(argv, env=run.env, cwd=checkout.root), "uv venv")
+    _checked(proc.run(argv, env=env, cwd=checkout.root), "uv venv")
     install = [
         uv,
         "pip",
@@ -141,7 +148,7 @@ def install_srtctl(run: SrtRun, checkout: Checkout, *, python: str | None = None
         str(checkout.root),
     ]
     _checked(
-        proc.run(install, env={**run.env, "VIRTUAL_ENV": str(venv)}, cwd=checkout.root),
+        proc.run(install, env={**env, "VIRTUAL_ENV": str(venv)}, cwd=checkout.root),
         "installing srtctl",
     )
     run.prepend_path(venv / "bin")
@@ -160,6 +167,7 @@ def _installed_version(venv: Path, name: str) -> str | None:
 
 
 def _run_logged(argv: list[str], log: Path, *, env: dict[str, str], cwd: Path) -> int:
+    """Echo and run ``argv`` in ``cwd``, append its output to ``log`` and return its exit code."""
     echo(argv, env)
     with log.open("a") as handle:
         return subprocess.run(

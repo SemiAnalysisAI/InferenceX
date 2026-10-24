@@ -50,9 +50,9 @@ usage: python -m infx.matrix.generate full-sweep
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
 
-By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset and the AgentX GSM8K subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand, but it cannot be combined with `--no-evals`.
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset and the AgentX GSM8K subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every eligible 8k1k fixed-sequence and agentic config. `--all-evals` always emits only those eval-only jobs, with or without `--evals-only`, but it cannot be combined with `--no-evals`.
 
-`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
+`--step-size` must be greater than 1 and applies to concurrency ranges. `--min-conc` / `--max-conc` drop concurrencies outside the bounds, including explicit `conc-list` values. A single-node fixed-sequence `conc-start`/`conc-end` range that crosses a bound is clamped to it, and a fixed-sequence config with no concurrency left under `--max-conc` runs at the cap. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
 
 `--trim-conc` (the `trim-conc` input of `e2e-tests.yml`) keeps only the minimum concurrency of every generated single- and multi-node deployment shape, after eval selection, for a lowest-concurrency smoke run; in changelog-ref mode only throughput rows are trimmed, and evals keep their selected concurrency. No PR label enables trimming.
 
@@ -65,7 +65,7 @@ full-sweep --config-files configs/nvidia-master.yaml
 
 **Test all single-node dsr1 configurations on B200 with 8k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --seq-lens 8k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type cluster:b200-nscale --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 8k1k workloads:**
@@ -75,12 +75,12 @@ full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files configs/
 
 **Test all single-node TRT configs on H200 runners:**
 ```
-full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files configs/nvidia-master.yaml
+full-sweep --single-node --framework trt --runner-type h200 cluster:h200-dgxc --config-files configs/nvidia-master.yaml
 ```
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 8k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type cluster:b200-nscale --precision fp4 --framework sglang --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**

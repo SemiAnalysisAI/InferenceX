@@ -9,6 +9,7 @@ RUNNER_CONFIG = "configs/runners.yaml"
 
 
 def repository_root() -> Path:
+    """Return the project root from ``INFERENCEX_REPOSITORY_ROOT``, the source tree, or the working directory."""
     if root := os.environ.get("INFERENCEX_REPOSITORY_ROOT"):
         return project_root(Path(root))
     source_root = Path(__file__).resolve().parent.parent

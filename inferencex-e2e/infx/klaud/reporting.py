@@ -44,6 +44,10 @@ SCENARIO_NAME = r"[A-Za-z0-9][A-Za-z0-9 ._/-]{0,59}"
 
 
 def public_prose(value: str) -> str:
+    """Return ``value`` unchanged, raising ValueError on mentions, HTML, newlines or pipes.
+
+    Backquoted image digests are exempt from the check.
+    """
     prose = re.sub(r"`[A-Za-z0-9_./:+-]+@sha256:[0-9a-f]{64}`", "", value)
     if any(char in prose for char in ("@", "<", ">", "\n", "|")):
         raise ValueError("Use one sentence of public prose without mentions, HTML or tables")
@@ -107,6 +111,7 @@ class Point(Contract):
     @field_validator("dataset", mode="before")
     @classmethod
     def canonical_dataset(cls, value: Any) -> Any:
+        """Return a string ``value`` as its dashboard dataset slug, anything else unchanged."""
         return dataset_slug(value) if isinstance(value, str) else value
 
 
@@ -159,6 +164,7 @@ class Baseline(Contract):
     @field_validator("sources")
     @classmethod
     def public_sources(cls, urls: list[str]) -> list[str]:
+        """Return ``urls``, raising ValueError unless each is a public dashboard API URL."""
         from urllib.parse import urlsplit
 
         for url in urls:
@@ -174,6 +180,7 @@ class Baseline(Contract):
 
     @model_validator(mode="after")
     def distinct(self) -> Self:
+        """Return the baseline, raising ValueError on duplicates or invalid retirements."""
         unique_points(self.points)
         unique_evals(self.evals)
         retired = [key for retirement in self.retirements for key in retirement.points]
@@ -189,6 +196,7 @@ class Baseline(Contract):
 
     @model_serializer(mode="wrap")
     def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Return the serialized baseline, omitting ``retirements`` when it is empty."""
         data = handler(self)
         if not self.retirements:
             data.pop("retirements", None)
@@ -227,6 +235,7 @@ class Attempt(Contract):
 
     @model_validator(mode="after")
     def consistent(self) -> Self:
+        """Return the attempt, raising ValueError if coverage, numbering or provenance disagree."""
         unique_points(self.points)
         unique_evals(self.evals)
         if (
@@ -251,11 +260,13 @@ class Attempt(Contract):
 
 
 def unique_points(points: list[Point]) -> None:
+    """Raise ValueError if two ``points`` share a key."""
     if len({point.key for point in points}) != len(points):
         raise ValueError("Duplicate comparison point")
 
 
 def unique_evals(rows: list[Evaluation]) -> None:
+    """Raise ValueError if two eval ``rows`` share key, suite and metric."""
     if len({(row.key, row.suite, row.metric) for row in rows}) != len(rows):
         raise ValueError("Duplicate comparison eval")
 
@@ -268,6 +279,7 @@ def day(value: str) -> date:
 
 
 def point_key(entry: dict) -> str:
+    """Return the identity of matrix ``entry`` without image, name, fingerprint or queue fields."""
     return identity(
         {
             key: value
@@ -285,6 +297,7 @@ def point_key(entry: dict) -> str:
 
 
 def point_label(entry: dict) -> str:
+    """Return a label for matrix ``entry`` with its workload, concurrency, shape and key prefix."""
     if entry.get("prefill") is not None:
         shape = "/".join(
             f"{role[0].upper()}TP{entry[role]['tp']}x{entry[role]['num-worker']}"
@@ -303,7 +316,10 @@ def label_workload(label: str) -> tuple[int, int] | None:
 
 
 def values(row: dict) -> Values:
-    """Collector/API metrics are seconds; only this presentation layer converts ms."""
+    """Return the throughput, latency in ms and error count of result ``row``.
+
+    Collector and API metrics are seconds, and only this presentation layer converts to ms.
+    """
     metrics = row.get("metrics", row)
     if "request_metrics" in metrics:
         request = metrics["request_metrics"]
@@ -322,26 +338,32 @@ def values(row: dict) -> Values:
         output_tps_gpu=metrics.get("output_tput_per_gpu"),
         ttft_ms=metrics["mean_ttft"] * 1000 if metrics.get("mean_ttft") is not None else None,
         tpot_ms=metrics["mean_tpot"] * 1000 if metrics.get("mean_tpot") is not None else None,
-        request_errors=metrics.get("errors"),
+        request_errors=row.get("benchmark_outcome", {}).get("failed"),
     )
 
 
 def number(value: float | None) -> str:
+    """Return ``value`` with two decimals and separators, trailing zeros trimmed, or N/A."""
     return "N/A" if value is None else f"{value:,.2f}".rstrip("0").rstrip(".")
 
 
 def delta(old: float | None, new: float | None, comparable: bool = True) -> str:
+    """Return the signed percent change from ``old`` to ``new``, or N/A if not comparable."""
     if not comparable or old is None or new is None or old == 0:
         return "N/A"
     return f"{(new / old - 1) * 100:+.1f}%".replace(".0%", "%")
 
 
 def translated(english: str, chinese: str) -> str:
+    """Return ``english`` followed by ``chinese`` in a collapsed details block."""
     return english + "\n\n<details>\n<summary>中文</summary>\n\n" + chinese + "\n\n</details>"
 
 
 def short_label(label: str) -> str:
+    """Return ``label`` with its first ISL/OSL pair written in k where it divides by 1024."""
+
     def shape(match: re.Match) -> str:
+        """Return the matched ISL/OSL pair with each multiple of 1024 written in k."""
         return "/".join(
             f"{int(n) // 1024}k" if int(n) > 0 and int(n) % 1024 == 0 else n for n in match.groups()
         )
@@ -350,7 +372,10 @@ def short_label(label: str) -> str:
 
 
 def point_layout(points: list[Point]) -> tuple[str, list[str], str]:
-    """Factor out only shared settings; retain full labels for ambiguous concurrencies."""
+    """Return the first column title, row labels and shared caption for ``points``.
+
+    Only settings shared by every point are factored out, so ambiguous concurrencies keep labels.
+    """
     labels = [short_label(p.label) for p in points]
     shapes = [
         re.fullmatch(r"(.+) c\d+ (.+)", re.sub(r" [0-9a-f]{6}$", "", label)) for label in labels
@@ -380,6 +405,7 @@ def point_layout(points: list[Point]) -> tuple[str, list[str], str]:
 
 
 def table(header: list[str], rows: list[list[str]]) -> str:
+    """Return a Markdown table of ``header`` and ``rows``, or an empty string without rows."""
     if not rows:
         return ""
     alignment = [
@@ -396,6 +422,7 @@ def table(header: list[str], rows: list[list[str]]) -> str:
 
 
 def note_lines(issues: dict[str, list[str]], total: int) -> str:
+    """Return one Markdown note per reason in ``issues``, naming its labels or all rows."""
     return "  \n".join(
         f"**Note:** {'All rows' if len(labels) == total else ', '.join(labels)}: {reason}."
         for reason, labels in issues.items()
@@ -403,6 +430,7 @@ def note_lines(issues: dict[str, list[str]], total: int) -> str:
 
 
 def measured(new: float | None, old: float | None, comparable: bool) -> str:
+    """Return ``new`` with its change from ``old``, or N/A if ``new`` is missing."""
     return "N/A" if new is None else f"{number(new)} ({delta(old, new, comparable)})"
 
 
@@ -429,6 +457,10 @@ def mismatch(previous: Point | None, point: Point) -> str | None:
 def point_table(
     points: list[Point], baseline: Baseline | None = None, *, context: bool = True
 ) -> str:
+    """Return the Markdown comparison of ``points`` against ``baseline`` with its notes.
+
+    ``context`` adds the shared settings caption.
+    """
     old = {point.key: point for point in baseline.points} if baseline else {}
     heading, labels, settings = point_layout(points)
     rows, issues = [], {}
@@ -479,6 +511,7 @@ def point_table(
 
 
 def eval_table(rows: list[Evaluation], baseline: Baseline | None, *, compare: bool = True) -> str:
+    """Return the Markdown table of eval ``rows`` with notes, versus ``baseline`` if ``compare``."""
     previous = {(row.key, row.suite, row.metric): row for row in baseline.evals} if baseline else {}
     values, issues = [], {}
     for row in rows:
@@ -539,6 +572,10 @@ def retirement_reasons(baseline: Baseline) -> dict[str, str]:
 
 
 def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
+    """Return the Markdown table of the frozen ``baseline`` points with notes.
+
+    ``context`` adds the shared settings caption.
+    """
     points = baseline.points
     retired = retirement_reasons(baseline)
     heading, labels, settings = point_layout(points)
@@ -563,7 +600,7 @@ def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
             reason = f"{number(point.values.request_errors)} request error" + (
                 "s" if point.values.request_errors != 1 else ""
             )
-            issues.setdefault(reason, []).append(label)
+            issues.setdefault(reason, []).append(shown)
     return "\n\n".join(
         part
         for part in (
@@ -585,6 +622,7 @@ def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
 
 
 def render_body(baseline: Baseline) -> str:
+    """Return the bilingual PR body section that presents ``baseline`` and the abort label."""
     _, _, settings = point_layout(baseline.points)
     sources = ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources)) or "N/A"
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
@@ -610,6 +648,7 @@ def render_body(baseline: Baseline) -> str:
 
 
 def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) -> str:
+    """Return the bilingual comment for attempt ``record`` in ``repository`` versus ``baseline``."""
     titles = {
         "initial": ("Initial attempt", "初次尝试"),
         "repair": (f"Repair {record.number}/5", f"修复 {record.number}/5"),
@@ -656,16 +695,23 @@ def render_attempt(record: Attempt, baseline: Baseline | None, repository: str) 
     chinese = (
         f"**{title_zh} · {status_zh}** · {link} · {timestamp}  \n"
         + meta.replace("Mean latency", "平均延迟").replace("Median latency", "中位延迟")
-        + f"  \n**变更：**{record.change.zh}实测数值及异常说明见上表。  \n**下一步：**{record.next.zh}"
+        + f"  \n**变更：**{record.change.zh}"
+        + ("实测数值及异常说明见上表。" if results else "")
+        + f"  \n**下一步：**{record.next.zh}"
     )
     return translated(english, chinese)
 
 
 def marker(session: Session, name: str) -> str:
+    """Return the comment marker of report ``name`` in ``session``."""
     return f"<!-- klaud-report:{session.parent['id']}:{session.candidate.id}:{name}\n"
 
 
 def stored(session: Session, pull: dict, name: str) -> dict | None:
+    """Return the bot's report comment ``name`` on ``pull``, or None.
+
+    Raises VerificationError if more than one comment matches.
+    """
     matches = [
         c
         for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
@@ -682,6 +728,10 @@ def decode[Record: Contract](
     session: Session | None = None,
     pull: dict | None = None,
 ) -> Record:
+    """Return the report in ``comment`` as ``model``, joining any chunked points and evals.
+
+    Chunks are read from ``pull``, and a missing one raises VerificationError.
+    """
     value = json.loads(comment["body"].split("\n", 1)[1].split("\n-->", 1)[0])
     if "record" in value:
         record = value["record"]
@@ -697,6 +747,7 @@ def decode[Record: Contract](
 
 
 def latest_next(session: Session, pull: dict) -> Prose | None:
+    """Return the next step of the session's latest attempt report on ``pull``, or None."""
     attempts = [
         c
         for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
@@ -715,6 +766,7 @@ def latest_next(session: Session, pull: dict) -> Prose | None:
 
 
 def baseline_for(session: Session, pull: dict) -> Baseline | None:
+    """Return the baseline frozen in ``pull``'s body or baseline comment, or None."""
     current = session.refresh(pull)
     embedded = baseline_from_body(current.get("body") or "")
     if embedded:
@@ -724,12 +776,17 @@ def baseline_for(session: Session, pull: dict) -> Baseline | None:
 
 
 def baseline_marker(record: Baseline) -> str:
+    """Return a hidden HTML comment embedding ``record`` as compressed base64 JSON."""
     packed = zlib.compress(record.model_dump_json(by_alias=True).encode(), level=9)
     encoded = base64.urlsafe_b64encode(packed).decode()
     return f"<!-- klaud-baseline-record:v1:{encoded} -->"
 
 
 def baseline_from_body(body: str) -> Baseline | None:
+    """Return the baseline embedded in PR ``body``, or None.
+
+    Raises VerificationError if the record is ambiguous or invalid.
+    """
     prefix = "<!-- klaud-baseline-record:v1:"
     matches = [line for line in body.splitlines() if line.startswith(prefix)]
     if not matches:
@@ -745,6 +802,11 @@ def baseline_from_body(body: str) -> Baseline | None:
 
 
 def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
+    """Write ``record`` and its rendered tables into ``pull``'s baseline placeholder.
+
+    Returns early if already written. Raises VerificationError on a different frozen baseline,
+    a missing or repeated placeholder, or an oversized body.
+    """
     current = session.refresh(pull)
     body = current.get("body") or ""
     completed = "<!-- klaud-baseline-body -->"
@@ -770,7 +832,10 @@ def initialize_body(session: Session, pull: dict, record: Baseline) -> None:
 
 
 def check_reported_datasets(record: Attempt) -> None:
-    """A hand-written attempt must name each passed AgentX point's corpus, or deltas stay N/A."""
+    """Raise VerificationError if a passed AgentX point of ``record`` lacks its dataset.
+
+    Without the corpus name its deltas would stay N/A.
+    """
     if any(
         point.scenario == "agentic-coding" and point.result == "passed" and not point.dataset
         for point in record.points
@@ -781,7 +846,15 @@ def check_reported_datasets(record: Attempt) -> None:
 
 
 def publish(session: Session, record: Baseline | Attempt) -> None:
-    pull = session.pulls()[0]
+    """Publish ``record`` to the candidate PR, raising VerificationError if it mismatches.
+
+    A baseline is frozen in the PR body. An attempt is upserted as a comment, split into
+    numbered chunk comments past 20 points or evals.
+    """
+    pulls = session.pulls()
+    if not pulls:
+        raise VerificationError("Candidate PR not found")
+    pull = pulls[0]
     session.refresh(pull)
     if isinstance(record, Baseline):
         if record.family != session.candidate.family:
@@ -806,7 +879,8 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
         )
     name = f"run-{record.run_id}-{record.run_attempt}"
     previous = stored(session, pull, name)
-    text = render_attempt(record, baseline_for(session, pull), session.repository)
+    baseline = baseline_for(session, pull)
+    text = render_attempt(record, baseline, session.repository)
     packed = record.model_dump(by_alias=True)
     chunks = []
     if len(record.points) > 20 or len(record.evals) > 20:
@@ -816,26 +890,23 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
                 "evals": packed["evals"][offset : offset + 20],
             }
             part_name = f"{name}-part-{offset // 20 + 1}-{identity(part)[:16]}"
-            part_text = point_table(
-                record.points[offset : offset + 20], baseline_for(session, pull)
-            )
+            part_text = point_table(record.points[offset : offset + 20], baseline)
             if part["evals"]:
-                part_text += "\n\n" + eval_table(
-                    record.evals[offset : offset + 20],
-                    baseline_for(session, pull),
-                )
+                part_text += "\n\n" + eval_table(record.evals[offset : offset + 20], baseline)
             upsert(session, pull, part_name, json.dumps(part), part_text)
             chunks.append(part_name)
         packed.update(points=[], evals=[])
         packed = {"record": packed, "chunks": chunks}
         text = render_attempt(
             record.model_copy(update={"points": [], "evals": []}),
-            baseline_for(session, pull),
+            baseline,
             session.repository,
         )
         note = "\n\nResults continue in numbered report comments."
         text = (
-            text.replace("\n\n<details>", note + "\n\n<details>", 1)
+            text.replace("\n\n<details>", note + "\n\n<details>", 1).replace(
+                "\n\n</details>", "  \n结果见后续编号的报告评论。\n\n</details>", 1
+            )
             if "<details>" in text
             else text + note
         )
@@ -843,6 +914,10 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
 
 
 def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> None:
+    """Create or update report comment ``name`` on ``pull`` with hidden ``data`` and ``text``.
+
+    Raises VerificationError if the body exceeds GitHub's comment size.
+    """
     previous = stored(session, pull, name)
     body = marker(session, name) + data + "\n-->\n" + text
     if len(body) > 60000:
@@ -857,7 +932,11 @@ def upsert(session: Session, pull: dict, name: str, data: str, text: str) -> Non
 def publish_final(
     session: Session, run: dict, evidence: tuple[dict, list[dict], list[dict]]
 ) -> None:
-    """Normal finish and recovery publish the same artifact-derived final report."""
+    """Publish the final report of passed sweep ``run`` built from its verified ``evidence``.
+
+    Normal finish and recovery publish the same artifact-derived report. Mixed images raise
+    VerificationError.
+    """
     from infx.results.eval_artifacts import eval_key
 
     from .validation import benchmark_entries, expected_evals
@@ -932,6 +1011,7 @@ def publish_final(
 def public_point(entry: dict) -> dict:
     """Project generated settings onto the public BenchmarkRow identity (not metrics)."""
     from infx.matrix.generate import _hardware_family
+    from infx.results.identity import public_framework
 
     from .models import normalized_image
 
@@ -940,7 +1020,7 @@ def public_point(entry: dict) -> dict:
     point = {
         "model": entry["model-prefix"],
         "hardware": _hardware_family(entry["runner"]),
-        "framework": entry["framework"],
+        "framework": public_framework(entry["framework"]),
         "precision": entry["precision"],
         "spec_method": entry["spec-decoding"],
         "disagg": entry.get("disagg", False),
@@ -987,6 +1067,7 @@ def _matches_public_point(row: dict, point: dict) -> bool:
 
 
 def matrix_points(matrix: dict) -> list[dict]:
+    """Return one copy of each benchmark entry in ``matrix`` per concurrency, as ``conc``."""
     from .validation import benchmark_entries
 
     return [
@@ -1006,7 +1087,9 @@ def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
 def check_baseline_coverage(
     repository: str, candidate: OwnedCandidate, matrix: dict, baseline: Baseline | None
 ) -> None:
-    """Current-family completeness cannot replace the frozen original point roster.
+    """Raise VerificationError unless ``matrix`` keeps the frozen ``baseline`` point roster.
+
+    Current-family completeness cannot replace that roster.
 
     The agent can rewrite the recorded baseline, so its retirements exempt points only when
     the planner's rule, re-run on the family and MODELS.md at the candidate base (never the PR
@@ -1122,6 +1205,7 @@ def markdown_table(markdown: str, header: tuple[str, ...]) -> list[dict[str, str
     """
 
     def cells(line: str) -> list[str] | None:
+        """Return the trimmed cells of table row ``line``, or None if it is not one."""
         line = line.strip()
         if len(line) < 2 or line[0] != "|" or line[-1] != "|":
             return None
@@ -1142,6 +1226,7 @@ def markdown_table(markdown: str, header: tuple[str, ...]) -> list[dict[str, str
 
 
 def calendar_date(value: str) -> bool:
+    """Return True if ``value`` parses as an ISO date."""
     try:
         datetime.fromisoformat(value)
     except ValueError:
@@ -1169,6 +1254,7 @@ def deprecated_workloads(
         return {}
 
     def lists(cell: str, scenario: str) -> bool:
+        """Return True if ``cell`` names ``scenario`` as a whole word."""
         return re.search(rf"(?<![\w-]){re.escape(scenario)}(?![\w-])", cell) is not None
 
     rows: dict[tuple[int, int], list[dict[str, str]]] = {}
@@ -1248,8 +1334,6 @@ def retirements(
     ]
 
 
-# Eval rows carry no workload, offload or image. Eval ingest also encodes an aggregate
-# multi-node deployment as disaggregated without decode workers, unlike benchmark rows.
 EVAL_IDENTITY_OMITS = (
     "benchmark_type",
     "isl",
@@ -1262,7 +1346,11 @@ EVAL_IDENTITY_OMITS = (
 
 
 def eval_identity(entry: dict, conc: int) -> dict:
-    """The public eval-row fields that identify a default eval of ``entry`` at ``conc``."""
+    """The public eval-row fields that identify a default eval of ``entry`` at ``conc``.
+
+    Eval rows carry no workload, offload or image, and eval ingest encodes an aggregate
+    multi-node deployment as disaggregated without decode workers.
+    """
     point = public_point({**entry, "conc": conc})
     omitted = (
         EVAL_IDENTITY_OMITS
@@ -1339,20 +1427,22 @@ def resolve_baseline(
     model: str,
     goal: Prose,
     producers: Mapping[str, dict],
+    matrix: dict,
 ) -> Baseline:
     """Freeze source-date rows against their own producer's complete family.
 
-    ``producers`` holds the families producer revisions regenerated themselves, so nothing
-    here runs a revision's code. Legacy fingerprints may be absent, but exact producer
-    provenance and a unique workload/topology/concurrency match are required. Raw API data
-    stays private.
+    ``matrix`` is the candidate family's canonical matrix at the candidate base. ``producers``
+    holds the families producer revisions regenerated themselves, so nothing here runs a
+    revision's code. Legacy fingerprints may be absent, but exact producer provenance and a
+    unique workload/topology/concurrency match are required. Raw API data stays private.
     """
     from fnmatch import fnmatchcase
 
-    from .api import fetch
-    from .validation import PRODUCER_UNAVAILABLE, canonical_matrix
+    from infx.results.identity import public_config_key
 
-    matrix = canonical_matrix(repository, candidate.base, candidate.family)
+    from .api import fetch
+    from .validation import PRODUCER_UNAVAILABLE
+
     public = publication(repository, context, model)
     old_image = context["source"]["image"]
     entries = {point_key(entry): entry for entry in matrix_points(matrix)}
@@ -1364,6 +1454,10 @@ def resolve_baseline(
     current = {key: public_point(entry) for key, entry in entries.items()}
 
     def current_key(entry: dict) -> str | None:
+        """Return the current-family key of producer ``entry``, or None if it has none.
+
+        Raises VerificationError if several current points match.
+        """
         key = point_key(entry)
         if key in current:
             return key
@@ -1373,7 +1467,8 @@ def resolve_baseline(
             raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
         return keys[0] if keys else None
 
-    historical: dict[str, list[dict]] = {}
+    historical: dict[str, list[tuple[dict, dict]]] = {}
+    additions: dict[str, list[tuple[str, dict]]] = {}
     published: dict[str, Point] = {}
     unverified: list[dict] = []
     sources = list(public.sources)
@@ -1395,10 +1490,11 @@ def resolve_baseline(
             sources.append(feed.url)
         return datasets[run_id, run_attempt]
 
+    published_family = public_config_key(candidate.family.split(":", 1)[1])
     family_runs = {
         int(change["workflow_run_id"])
         for change in public.changelogs
-        if any(fnmatchcase(candidate.family.split(":", 1)[1], key) for key in change["config_keys"])
+        if any(fnmatchcase(published_family, key) for key in change["config_keys"])
     }
     for row, run_id, run_attempt, head in public.rows:
         if head is None:
@@ -1407,10 +1503,10 @@ def resolve_baseline(
         if head not in historical:
             if head not in producers:
                 raise VerificationError(PRODUCER_UNAVAILABLE)
-            historical[head] = matrix_points(producers[head])
-        matches = [
-            entry for entry in historical[head] if _matches_public_point(row, public_point(entry))
-        ]
+            historical[head] = [
+                (entry, public_point(entry)) for entry in matrix_points(producers[head])
+            ]
+        matches = [entry for entry, point in historical[head] if _matches_public_point(row, point)]
         if not matches:
             continue
         if row.get("recipe_fingerprint"):
@@ -1426,12 +1522,14 @@ def resolve_baseline(
         key = current_key(matches[0]) or point_key(matches[0])
         if key in published:
             raise VerificationError("Duplicate public baseline point")
-        entries.update(
-            (point_key(point), point)
-            for point in historical[head]
-            if normalized_image(point["image"]) == normalized_image(old_image)
-            and current_key(point) is None
-        )
+        if head not in additions:
+            additions[head] = [
+                (point_key(point), point)
+                for point, _ in historical[head]
+                if normalized_image(point["image"]) == normalized_image(old_image)
+                and current_key(point) is None
+            ]
+        entries.update(additions[head])
         entry = entries[key]
         published[key] = Point(
             key=key,
