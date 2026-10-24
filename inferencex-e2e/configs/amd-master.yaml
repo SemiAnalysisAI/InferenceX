@@ -1554,11 +1554,6 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
 
 # MiniMax-M3.1-Flash AgentX on MI355X: day-zero vLLM ROCm image from
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, verified 2026-10-23.
-# MiniMaxAI/MiniMax-M3.1-Flash with its NVFP4 routed experts quantized to
-# MXFP4 at load (W4A4 on the AITER MoE) at TP4 with native DSpark: 7 drafts,
-# mono decode and an FP8 KV cache at c1-c16; 3 drafts, an NVFP4 KV cache, DBO
-# and sequence-parallel prefill at c16-c64; c64 adds a SimpleCPUOffload KV
-# tier. c16 runs both arms, each selected by its zip index.
 # Throughput runs use the minimaxm31flash_dspark golden AL.
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:minimax-m31-flash@sha256:ae8681212aa5291d8c27f06e90016435e3fca144a68fd5c439231f6475f74569
@@ -1574,6 +1569,7 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
     - dram-utilization: 0.90
       search-space:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 32], srt-recipe: agentic.yaml }
+      # c16 runs on both DSpark arms.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16], srt-recipe: 'agentic.yaml:zip_override_tp4_dspark7_mono[4]' }
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [16], srt-recipe: 'agentic.yaml:zip_override_tp4_dspark3[0]' }
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [64], srt-recipe: agentic.yaml:override_tp4_dspark3_c64_offload }

@@ -1,11 +1,6 @@
 # MiniMax-M3.1-Flash AgentX on MI355X with vLLM, following the MI355X TP4
 # recipe at https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash and
 # https://vllm.ai/blog/2026-10-23-minimax-m31-flash, with native DSpark.
-# Checkpoint: MiniMaxAI/MiniMax-M3.1-Flash, its NVFP4 routed experts
-# quantized to OCP MXFP4 at load and run as W4A4 on the AITER MoE. Long
-# prefill steps run with dual-batch overlap (DBO); from c16 they also run
-# sequence-parallel across the TP ranks (VLLM_ROCM_MINIMAX_M3_SP_PREFILL),
-# which finds the MXFP8 dense kernels on this checkpoint.
 base:
   schema: 2
   name: minimaxm31flash-fp4-mi355x-vllm-agentic
@@ -85,8 +80,7 @@ base:
 
 # Native zip expansion creates one variant per concurrency. TP4 is the
 # upstream MI355X layout; admission is 2x CONC. Throughput runs replace block
-# rejection with the golden acceptance length. c16 runs on both DSpark arms
-# below; the matrix selects each c16 variant by its zip index.
+# rejection with the golden acceptance length.
 
 # c1-c16: DSpark 7 with the recipe's mono decode. A pure decode step of up to
 # 16 tokens (2 requests x 8) runs each layer as one fused kernel; larger steps
@@ -115,6 +109,7 @@ zip_override_tp4_dspark7_mono:
         DEBUG_HIP_DYNAMIC_QUEUES: null
   benchmark:
     env:
+      # c16 also runs on the DSpark 3 arm; the matrix selects each by zip index.
       CONC: ['1', '2', '4', '8', '16']
 
 # c16-c32: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV
@@ -131,15 +126,13 @@ zip_override_tp4_dspark3:
     env:
       CONC: ['16', '32']
 
-# c64: the same, plus vLLM's SimpleCPUOffloadConnector (eager) on this lane's
-# DRAM share at 0.9, 1349 GB = ~337 GB / ~24M tokens per rank. The c64 working
-# set outgrows the 14.2M-token GPU KV cache; the CPU tier serves its misses.
 override_tp4_dspark3_c64_offload:
   roles:
     agg:
       args:
         speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         max-num-seqs: 128
+        # ~24M tokens; the c64 working set outgrows the 14.2M-token GPU KV cache.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false}}'
       env:
         VLLM_ROCM_MINIMAX_M3_SP_PREFILL: '1'
