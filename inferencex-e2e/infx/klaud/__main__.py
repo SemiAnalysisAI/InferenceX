@@ -43,11 +43,11 @@ if TYPE_CHECKING:
     from infx.clusters import RunnerInventory
 
 PRODUCERS = "producers.json"
-# An abort is lifted by removing its label, so it never delays the next attempt by itself.
 RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started", "aborted"})
 
 
 def observation_key(row: dict) -> tuple:
+    """Return the public identity tuple of feed ``row``, with its image normalized."""
     image = row.get("image")
     if isinstance(image, str):
         image = normalized_image(image)
@@ -69,6 +69,7 @@ def observation_key(row: dict) -> tuple:
 
 
 def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozenset[str]:
+    """Return the cluster IDs serving the runners of ``entries``, or none if one is unknown."""
     try:
         return frozenset(
             inventory.cluster_for(node).id
@@ -89,6 +90,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
     from infx.matrix.validation import load_config_files, load_runner_file
+    from infx.results.identity import public_framework
 
     from .validation import in_scope
 
@@ -122,7 +124,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
                 row = {
                     "model": entry["model-prefix"],
                     "hardware": _hardware_family(entry["runner"]),
-                    "framework": entry["framework"],
+                    "framework": public_framework(entry["framework"]),
                     "precision": entry["precision"],
                     "spec_method": entry["spec-decoding"],
                     "disagg": entry.get("disagg", False),
@@ -204,16 +206,21 @@ def choose(
 
 
 def weights_key(source: dict) -> tuple:
+    """Return the (model, precision, hardware) key that identifies the weights ``source`` needs."""
     return (source.get("model"), source.get("precision"), source.get("hardware"))
 
 
 def recent_candidate_outcomes(
     repository: str, cooldown_hours: int
 ) -> tuple[dict[str, str | None], set[tuple]]:
+    """Return each candidate's latest outcome within ``cooldown_hours`` and missing-weights keys.
+
+    Resumed sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
+    The newest session artifact counts. Unreadable history means no cooldown.
+    """
     from .lifecycle import MAX_SESSIONS, WAVE_HOURS, resume_parent
 
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
-    # Resumed sessions of an older planner run record their outcomes in later waves.
     since = cutoff - timedelta(hours=MAX_SESSIONS * WAVE_HOURS)
     try:
         runs = github_items(
@@ -231,7 +238,6 @@ def recent_candidate_outcomes(
             created = utc(run["created_at"])
             if created >= since:
                 dated.append((created, int(run["id"])))
-                # A resume run's candidates come from its planner run's plan.
                 plans[int(run["id"])] = resume_parent(run.get("display_title") or "") or int(
                     run["id"]
                 )
@@ -257,7 +263,6 @@ def recent_candidate_outcomes(
                     or utc(artifact["created_at"]) < cutoff
                 ):
                     continue
-                # Each session of a candidate uploads its own artifact; the newest one counts.
                 if match[1] not in latest or artifact["id"] > latest[match[1]][0]["id"]:
                     latest[match[1]] = (artifact, run_id)
             except (AttributeError, KeyError, TypeError, ValueError):
@@ -286,6 +291,7 @@ def recent_candidate_outcomes(
 
 
 def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
+    """Return the candidates in the klaud-plan artifact among ``artifacts``, or [] if unreadable."""
     plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
     if not plan:
         return []
@@ -301,6 +307,10 @@ def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
 
 
 def recorded_outcome(repository: str, artifact: dict) -> str | None:
+    """Return the outcome a diagnostics ``artifact`` recorded, or None if it is unreadable.
+
+    A skipped agent yields ``agent-not-started`` and a missing-weights failure ``weights-missing``.
+    """
     with tempfile.TemporaryDirectory() as scratch:
         try:
             download_json(repository, artifact, Path(scratch))
@@ -322,6 +332,10 @@ def recorded_outcome(repository: str, artifact: dict) -> str | None:
 
 
 def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
+    """Return ``candidates`` never tried recently, then those whose recent outcome retries now.
+
+    An abort is lifted by removing its label, so it never delays the next attempt by itself.
+    """
     fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
     deferred = [
         candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
@@ -383,6 +397,7 @@ def abort_released(repository: str, candidate_id: str) -> bool:
 
 
 def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
+    """Return ``pulls`` on Klaud branches or updated within ``stale_days`` before ``now``."""
     cutoff = now - timedelta(days=stale_days)
     return [
         pr
@@ -395,6 +410,11 @@ def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict
 def plan(
     root: Path, directory: Path, review_batch_size: int, cooldown_hours: int, stale_pr_days: int
 ) -> None:
+    """Write ``candidates.json`` and ``open-prs.json`` under ``directory`` for overlap review.
+
+    Unclaimed, unaborted feed candidates at ``root``'s HEAD are cooled down by
+    ``cooldown_hours`` and capped at ``review_batch_size``. PRs idle ``stale_pr_days`` drop out.
+    """
     from . import claims
 
     policy = Policy()
@@ -425,12 +445,10 @@ def plan(
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    # klaud-abort keeps a candidate out of the pool until someone removes the label.
     aborted = aborted_candidates(repository)
     candidates = [candidate for candidate in candidates if candidate["id"] not in aborted]
     recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
     for candidate in candidates:
-        # Only candidates the cooldown would hold back need their abort history.
         held = candidate["id"] in recent and recent[candidate["id"]] not in RETRY_NEXT_WAVE
         if held and abort_released(repository, candidate["id"]):
             recent[candidate["id"]] = "aborted"
@@ -504,7 +522,10 @@ def plan(
 
 
 def denied_bash_category(denial: dict) -> str:
-    """Retain only fixed categories, never command text, arguments or paths."""
+    """Return a fixed category for the Bash command in permission ``denial``.
+
+    Command text, arguments and paths are never retained.
+    """
     command = denial.get("tool_input", {})
     command = command.get("command") if isinstance(command, dict) else None
     if not isinstance(command, str):
@@ -542,6 +563,7 @@ def denied_bash_category(denial: dict) -> str:
 
 
 def execution_diagnostics(path: Path) -> dict:
+    """Return numeric metrics, termination and denial categories from the log at ``path``."""
     try:
         messages = json.loads(path.read_text())
         if not isinstance(messages, list):
@@ -614,13 +636,15 @@ def execution_diagnostics(path: Path) -> dict:
 
 
 def check_stop() -> dict:
-    """Require a verified terminal outcome, not merely an agent's final response."""
+    """Return the Stop hook decision, blocking unless a verified terminal outcome exists.
+
+    An aborted candidate never blocks, since the recover-current step cleans it up.
+    """
     from .lifecycle import current_session
 
     try:
         session = current_session()
         pulls = session.pulls()
-        # The job's recover-current step cancels an aborted candidate's runs and closes its PR.
         if pulls and session.aborted(pulls[0]):
             return {}
         outcome = CandidateOutcome.model_validate_json(
@@ -666,7 +690,6 @@ def resume_check() -> dict[str, bool]:
     if run is None or int(run) not in same:
         return no
     jobs = [job for job in candidate_jobs(session) if started_session(job)]
-    # This job's own session is already one of the started ones.
     if len(jobs) > MAX_SESSIONS or any(
         job["run_id"] in same and job["run_id"] != int(run) for job in jobs
     ):
@@ -682,6 +705,10 @@ def resume_check() -> dict[str, bool]:
 def save_diagnostics(
     execution_file: Path, outcome_file: Path, action_outcome: str, output: Path
 ) -> bool:
+    """Write sanitized session diagnostics to ``output`` and return False if unverified.
+
+    The outcome comes from the posted receipt, the evidence outcome, then ``outcome_file``.
+    """
     diagnostics = {
         "action-outcome": action_outcome,
         **execution_diagnostics(execution_file),
@@ -850,6 +877,11 @@ def regenerate_producers(directory: Path) -> None:
 def select(
     directory: Path, max_candidates: int, execution_file: Path | None = None, resumed: int = 0
 ) -> None:
+    """Claim reviewed candidates that fit capacity and have a verified baseline.
+
+    Takes up to ``max_candidates`` less the ``resumed`` sessions sharing the cap, and writes
+    their context, ownership.json and selection.json under ``directory``.
+    """
     from . import claims, validation
     from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
 
@@ -858,7 +890,6 @@ def select(
     review, deferred = reviewed(contexts)
     decisions = {decision.candidate_id: decision for decision in review.decisions}
     selected = []
-    # Sessions that recovery resumed in this wave run beside its new candidates and share the cap.
     slots = max(0, max_candidates - resumed)
     headroom: dict[str, int] = {}
     if slots and any(decision.decision == "proceed" for decision in review.decisions):
@@ -886,6 +917,9 @@ def select(
             {key: candidate[key] for key in ("id", "family", "base")}
         )
         try:
+            matrix = validation.canonical_matrix(
+                os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
+            )
             baseline = resolve_baseline(
                 os.environ["GITHUB_REPOSITORY"],
                 owned,
@@ -896,6 +930,7 @@ def select(
                     zh="在调度候选任务前验证完整的已发布基线。",
                 ),
                 producers.get(candidate["family"], {}),
+                matrix,
             )
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
@@ -904,12 +939,7 @@ def select(
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-            missing = missing_baseline_points(
-                validation.canonical_matrix(
-                    os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
-                ),
-                baseline,
-            )
+            missing = missing_baseline_points(matrix, baseline)
         except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = str(error)
@@ -1029,6 +1059,7 @@ def select(
 
 
 def main() -> int:
+    """Run the Klaud subcommand named on the command line and return its exit status."""
     parser = argparse.ArgumentParser(prog="python -m infx.klaud", description=__doc__)
     parser.add_argument(
         "--root",
@@ -1173,7 +1204,6 @@ def main() -> int:
                     return 0
                 session = current_session()
                 pulls = session.pulls()
-                # A resumed session continues with the baseline its PR already froze.
                 record = baseline_for(session, pulls[0]) if pulls else None
                 if record is None:
                     context = json.loads(
@@ -1199,7 +1229,10 @@ def main() -> int:
             from .validation import canonical_matrix, check_matrix
 
             session = current_session()
-            pull = session.pulls()[0]
+            pulls = session.pulls()
+            if not pulls:
+                raise VerificationError("Candidate PR not found")
+            pull = pulls[0]
             head = pull["head"]["sha"]
             matrix = json.loads(args.matrix_file.read_text())
             canonical = canonical_matrix(session.repository, head, session.candidate.family)
@@ -1319,7 +1352,6 @@ def main() -> int:
         if isinstance(error, VerificationError):
             reason = str(error)
         elif isinstance(error, ValidationError) and args.command == "report":
-            # Name the failing fields of the agent's own record without echoing its values.
             reason = "Invalid record: " + "; ".join(
                 ".".join(str(part) for part in item["loc"]) + ": " + item["msg"]
                 if item["loc"]

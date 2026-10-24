@@ -11102,6 +11102,27 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4427
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-cd10ed6f to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4428
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from dev-muse-spark-open to nightly-dev-20261021-c1c287a4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4430
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm3-fp4-gb300-dynamo-trt-agentic-disagg-mtp
     - minimaxm3-fp4-gb300-dynamo-trt-agentic-agg-mtp
   scenario-type: [agentic-coding]
