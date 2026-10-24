@@ -11079,5 +11079,5 @@
     - "Conc 16-64: sequence-parallel prefill (VLLM_ROCM_MINIMAX_M3_SP_PREFILL=1) on top of DBO. The image turns it on for this checkpoint (it finds the MXFP8 dense kernels the Quark export keeps elsewhere)."
     - "Conc 64: vLLM SimpleCPUOffloadConnector (eager) with 1199 GB of host memory (dram-utilization 0.8 of the TP4 lane), about 21M tokens next to the 14.2M-token GPU KV cache, which the c64 working set outgrows."
     - "Measured at c64 (runs 39929767608 / 40025622103 / 40064210369 + 40063576514): interactivity P90 33.1 (no offload) -> 43.6 (offload) -> 48.5 / 49.5 (offload + SP on the MiniMaxAI checkpoint), E2EL/OSL P90 23.5 -> 30.2 -> 33.5 / 33.1, 63.3K -> 69.6K -> 75.7K total tok/s/GPU; gsm8k 0.968 with SP + DBO."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4463
   scenario-type: [agentic-coding]
