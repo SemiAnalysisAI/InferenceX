@@ -7,6 +7,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+from infx.results.agentic.atom_validity import account_cache
 from infx.results.agentic.common import (
     gauge_stat,
     metric_series,
@@ -107,6 +108,7 @@ def _cache_counts(
 
 class AtomBackend(ServerMetricsBackend):
     name = "atom"
+    accepts_context = True
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
@@ -120,10 +122,12 @@ class AtomBackend(ServerMetricsBackend):
         flat: dict[str, Any],
         nested: dict[str, Any],
         *,
-        endpoint_roles: Mapping[str, str] | None = None,
-        disaggregated: bool | None = None,
-        cpu_offload_disabled: bool = False,
+        context: Mapping[str, Any] | None = None,
     ) -> None:
+        context = context or {}
+        endpoint_roles = context.get("endpoint_roles")
+        disaggregated = context.get("disagg")
+        cpu_offload_disabled = context.get("kv_offloading") == "none"
         prompt_names = _atom_counter_names("prompt_tokens")
         prompt_endpoints = {s.get("endpoint_url") for s in metric_series(metrics, prompt_names)}
         if endpoint_roles is None:
@@ -156,6 +160,21 @@ class AtomBackend(ServerMetricsBackend):
         full_tokens, cached_tokens, external_tokens = _cache_counts(
             metrics, endpoint_roles, disaggregated, cpu_offload_disabled
         )
+        counts, detail = account_cache(
+            metrics,
+            endpoint_roles=endpoint_roles,
+            request_scope=context.get("request_scope"),
+            disagg=disaggregated,
+            kv_offloading=context.get("kv_offloading"),
+            collector_export=context.get("collector_export") or {},
+        )
+        if counts is not None:
+            full_tokens, cached_tokens, external_tokens = counts
+            flat["total_prompt_tokens"] = counter_int(full_tokens)
+        nested["cache_validity"] = detail
+        sink = context.get("warnings")
+        if isinstance(sink, list):
+            sink.extend(f"atom cache accounting: {reason}" for reason in detail["reasons"])
         cache_hit_rate = rate(cached_tokens, full_tokens)
         # Offload is CPU reuse beyond the GPU prefix; loaded tokens measure transfer volume.
         external_hit_rate = rate(external_tokens, full_tokens)
@@ -193,6 +212,12 @@ class AtomBackend(ServerMetricsBackend):
             }
         )
         nested["kv_cache"]["gpu_usage_pct"] = flat["gpu_kv_cache_usage_pct"]
+        if counts is not None and full_tokens is not None and external_tokens is not None:
+            nested["tokens"]["prompt_by_source"].update(
+                gpu_cache_hit=cached_tokens,
+                cpu_or_external_cache_hit=external_tokens,
+                computed=full_tokens - cached_tokens - external_tokens,
+            )
         nested["tokens"].update(
             {
                 "prompt_total": flat["total_prompt_tokens"],

@@ -45,6 +45,7 @@ def load_records_with_accounting(
         "records_dropped_total": 0,
         "records_warmup_dropped": 0,
         "records_error_dropped": 0,
+        "records_profiling_error_dropped": 0,
         "error_categories": {},
     }
     with open(path) as f:
@@ -61,6 +62,8 @@ def load_records_with_accounting(
                 accounting["records_warmup_dropped"] += 1
             if error:
                 accounting["records_error_dropped"] += 1
+                if not is_warmup:
+                    accounting["records_profiling_error_dropped"] += 1
                 category = _error_category(error)
                 categories = accounting["error_categories"]
                 categories[category] = categories.get(category, 0) + 1

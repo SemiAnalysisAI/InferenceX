@@ -2,17 +2,58 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .backends import detect_backend
-from .backends.atom import AtomBackend
 from .backends.base import (
     SERVER_CACHE_FLAT_FIELDS,
     apply_profile_totals,
     empty_server_metrics,
 )
+from .cache_validity import summarize_cache_validity
 from .common import index_server_metrics
+
+
+def request_scope_from_records(
+    records: list[dict[str, Any]], request_accounting: Mapping[str, Any]
+) -> dict[str, Any]:
+    prompt = []
+    for record in records:
+        metric = record.get("metrics", {}).get("usage_prompt_tokens")
+        value = metric.get("value") if isinstance(metric, dict) else metric
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+            or int(value) != value
+        ):
+            break
+        prompt.append(int(value))
+    return {
+        "profiling_requests": len(records),
+        "profiling_prompt_tokens": sum(prompt) if len(prompt) == len(records) else None,
+        "error_records": request_accounting.get(
+            "records_profiling_error_dropped", request_accounting.get("records_error_dropped")
+        ),
+        "cancelled_records": sum(
+            1 for record in records if (record.get("metadata") or {}).get("was_cancelled")
+        ),
+    }
+
+
+def deployment_from_env(env: Mapping[str, str]) -> dict[str, Any]:
+    offload = (env.get("KV_OFFLOADING") or "").strip().lower() or None
+    if offload == "none" and (
+        env.get("KV_OFFLOAD_BACKEND") or env.get("KV_OFFLOAD_BACKEND_METADATA")
+    ):
+        offload = None
+    return {
+        "disagg": {"true": True, "false": False}.get((env.get("DISAGG") or "").lower()),
+        "kv_offloading": offload,
+    }
 
 
 def endpoint_roles_from_env(env: Mapping[str, str]) -> dict[str, str] | None:
@@ -45,6 +86,9 @@ def compute_server_metrics(
     records: list[dict[str, Any]],
     server_logs: Iterable[str | None] = (),
     env: Mapping[str, str] | None = None,
+    endpoint_roles: Mapping[str, str] | None = None,
+    request_scope: Mapping[str, Any] | None = None,
+    deployment: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     metrics = index_server_metrics(server_metrics)
     flat = SERVER_CACHE_FLAT_FIELDS.copy()
@@ -62,6 +106,7 @@ def compute_server_metrics(
         nested["tokens"]["prompt_total"] = flat["total_prompt_tokens"]
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
         nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
+        nested["cache_validity"] = summarize_cache_validity(nested)
         return flat, nested, warnings
 
     if adapter is None:
@@ -71,19 +116,23 @@ def compute_server_metrics(
             f"framework={framework.lower()!r}, metric_names=[{preview}]"
         )
     nested["adapter"] = adapter.name
-    if isinstance(adapter, AtomBackend):
+    if getattr(adapter, "accepts_context", False):
         source_env = env or {}
         adapter.populate(
             metrics,
             flat,
             nested,
-            endpoint_roles=endpoint_roles_from_env(source_env),
-            disaggregated={"true": True, "false": False}.get(source_env.get("DISAGG", "").lower()),
-            cpu_offload_disabled=(source_env.get("KV_OFFLOADING", "").strip().lower() == "none")
-            and not (
-                source_env.get("KV_OFFLOAD_BACKEND")
-                or source_env.get("KV_OFFLOAD_BACKEND_METADATA")
-            ),
+            context={
+                "framework": framework,
+                "endpoint_roles": endpoint_roles
+                if endpoint_roles is not None
+                else endpoint_roles_from_env(source_env),
+                "request_scope": request_scope,
+                **deployment_from_env(source_env),
+                **dict(deployment or {}),
+                "collector_export": server_metrics,
+                "warnings": warnings,
+            },
         )
     else:
         adapter.populate(metrics, flat, nested)
@@ -105,4 +154,5 @@ def compute_server_metrics(
         nested["tokens"]["generation_total"] = flat["total_generation_tokens"]
     nested["tokens"]["requests_completed"] = flat["total_requests_completed"]
 
+    nested["cache_validity"] = summarize_cache_validity(nested)
     return flat, nested, warnings
