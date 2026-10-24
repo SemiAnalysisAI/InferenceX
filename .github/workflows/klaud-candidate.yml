@@ -90,8 +90,8 @@ jobs:
           cp -R "$RUNNER_TEMP/plan/$CANDIDATE" "$RUNNER_TEMP/klaud"
           echo "KLAUD_EVIDENCE=$RUNNER_TEMP/klaud" >> "$GITHUB_ENV"
           rm -r "$RUNNER_TEMP/plan"
-          outcome_schema=$(uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud outcome-schema)
-          echo "outcome-schema=$outcome_schema" >> "$GITHUB_OUTPUT"
+          session_end_schema=$(uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud session-end-schema)
+          echo "session-end-schema=$session_end_schema" >> "$GITHUB_OUTPUT"
       - name: Check whether this session should run
         id: gate
         env:
@@ -110,6 +110,9 @@ jobs:
             sleep 15
           done
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
+      - name: Record when this session starts
+        if: steps.gate.outputs.run == 'true'
+        run: echo "KLAUD_SESSION_STARTED=$(date +%s)" >> "$GITHUB_ENV"
       - name: Let Klaud Cold own the candidate PR
         id: claude
         if: steps.gate.outputs.run == 'true'
@@ -130,18 +133,22 @@ jobs:
                 "Stop": [{"hooks": [{
                   "type": "command",
                   "command": "cd \"$GITHUB_WORKSPACE\" && uv run --project \"$INFERENCEX_TOOLING_PROJECT\" --locked python -P -m infx.klaud check-stop"
+                }]}],
+                "PostToolUse": [{"hooks": [{
+                  "type": "command",
+                  "command": "cd \"$GITHUB_WORKSPACE\" && uv run --project \"$INFERENCEX_TOOLING_PROJECT\" --locked python -P -m infx.klaud check-deadline"
                 }]}]
               }
             }
           claude_args: >-
             --model 'claude-opus-5-5'
             --max-turns 500
-            --json-schema '${{ steps.context.outputs.outcome-schema }}'
+            --json-schema '${{ steps.context.outputs.session-end-schema }}'
             --add-dir '${{ runner.temp }}/klaud'
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch"
           prompt: |
             Read .github/klaud-candidate-prompt.md and follow it for the candidate in
-            ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH,
+            ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH, KLAUD_SESSION,
             KLAUD_TEST_NAME, KLAUD_EVIDENCE and KLAUD_RESUME are provided in your environment.
       - name: Reconcile agent-owned state
         if: always() && steps.claude.outcome != 'skipped'

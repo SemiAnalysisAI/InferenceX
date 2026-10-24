@@ -2,6 +2,7 @@ name: Klaud Cold auto-sweep
 run-name: >-
   ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
   inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
+  || github.event.schedule == '15,45 * * * *' && 'Klaud Cold wake'
   || 'Klaud Cold auto-sweep' }}
 
 on: # zizmor: ignore[concurrency-limits]
@@ -21,6 +22,7 @@ on: # zizmor: ignore[concurrency-limits]
         default: ''
   schedule:
     - cron: '0 */6 * * *'
+    - cron: '15,45 * * * *'
 
 permissions:
   contents: read
@@ -86,6 +88,7 @@ jobs:
   review:
     name: Review candidate overlap
     needs: recover
+    if: github.event.schedule != '15,45 * * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -746,6 +746,19 @@ def decode[Record: Contract](
     return model.model_validate(value)
 
 
+def reported_runs(session: Session, pull: dict) -> set[int]:
+    """Return the IDs of the owned runs that the session's attempt reports on ``pull`` describe."""
+    return {
+        int(match[1])
+        for c in github.items(session.repository, f"issues/{pull['number']}/comments?per_page=100")
+        if c["user"]["login"] == "Klaud-Cold"
+        and (
+            match := re.fullmatch(r"run-(\d+)-\d+", c["body"].split("\n", 1)[0].rpartition(":")[2])
+        )
+        and c["body"].startswith(marker(session, match[0]))
+    }
+
+
 def latest_next(session: Session, pull: dict) -> Prose | None:
     """Return the next step of the session's latest attempt report on ``pull``, or None."""
     attempts = [

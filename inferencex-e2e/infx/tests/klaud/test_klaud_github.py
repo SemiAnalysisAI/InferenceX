@@ -359,7 +359,7 @@ def test_cooldown_ages_each_candidates_newest_artifact_including_resumed_session
             queries.append(path)
             return [{"id": 39, "created_at": "2026-10-14T06:00:00Z"},
                     {"id": 41, "created_at": "2026-10-15T00:00:00Z"},
-                    {"id": 40, "created_at": "2026-10-13T11:59:59Z"}]
+                    {"id": 40, "created_at": "2026-10-11T11:59:59Z"}]
         run_id = int(path.split("/")[2])
         if run_id not in artifacts:
             pytest.fail(f"listed artifacts of run {run_id}")
@@ -385,7 +385,7 @@ def test_cooldown_ages_each_candidates_newest_artifact_including_resumed_session
     assert klaud.recent_candidate_outcomes("example/project", 24) == (
         {late: "readiness-blocked", resumed: "capacity-deferred"}, set())
     # The cooldown plus the waves in which an older planner run may still resume sessions.
-    assert queries == ["actions/workflows/klaud-plan.yml/runs?created=>=2026-10-13"]
+    assert queries == ["actions/workflows/klaud-plan.yml/runs?created=>=2026-10-11"]
 
 
 def test_a_resumed_sessions_missing_weights_pause_its_model_from_the_planners_plan(monkeypatch):
@@ -608,8 +608,8 @@ UNEXPECTED_ERROR = CandidateOutcome(
 
 
 def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelled", state="open",
-                        artifacts=(), sessions=("failure",) * lifecycle.MAX_SESSIONS, reruns=(),
-                        planner="failure", gated=True):
+                        artifacts=(), sessions=("failure",) * lifecycle.MAX_EXPIRED_SESSIONS,
+                        reruns=(), planner="failure", gated=True):
     """Serve planner run 42 whose draft PR 7 has one final sweep, run 9, that ended
     ``conclusion`` (``None`` while it runs) at attempt ``attempt`` on 2026-10-15 00:00 UTC with
     ``jobs`` (a ``-timeout`` suffix marks a job GitHub stopped at its timeout).
@@ -756,7 +756,7 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     world = SimpleNamespace(
         session=lifecycle.Session("example/project", parent, candidate, recovering=True),
         pull=pull, reads=reads, comments=comments, writes=[], dispatches=[], finished=[],
-        released=[], start_resume=start_resume,
+        released=[], start_resume=start_resume, sweep=sweep,
     )
 
     def write(_repository, path, method, payload=None):
@@ -789,11 +789,11 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
 
 @pytest.mark.parametrize(("now", "attempt", "jobs", "state", "waiting", "rerun"), [
     pytest.param("2026-10-15T00:29:59Z", 1, ["success", "cancelled"], "open",
-                 "Preempted final sweep is waiting for its rerun", False, id="within-grace"),
+                 "Preempted run is waiting for its rerun", False, id="within-grace"),
     pytest.param("2026-10-15T00:30:00Z", 9, ["success", "cancelled"], "open",
-                 "Reran preempted final sweep", True, id="after-grace"),
+                 "Reran preempted run", True, id="after-grace"),
     pytest.param("2026-10-15T23:59:59Z", 1, ["success", "cancelled"], "open",
-                 "Reran preempted final sweep", True, id="before-give-up"),
+                 "Reran preempted run", True, id="before-give-up"),
     pytest.param("2026-10-16T00:00:00Z", 1, ["success", "cancelled"], "open", None, False,
                  id="give-up"),
     pytest.param("2026-10-15T00:30:00Z", 10, ["success", "cancelled"], "open", None, False,
@@ -872,8 +872,8 @@ def test_recovery_keeps_the_pr_claim_and_lease_of_a_rerun_final_sweep(monkeypatc
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
     assert output.read_text() == "resumed=0\n"
     assert summary.read_text() == (
-        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted final "
-        "sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
+        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted run). "
+        "[Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
 
 
 @pytest.mark.parametrize("stale", ["deleted-claim-parent", "corrupt-artifact"])
@@ -910,7 +910,7 @@ def test_recovery_skips_an_unreadable_owner_and_reconciles_the_others(
 
     assert world.writes == [("POST", "actions/runs/9/rerun-failed-jobs")]
     rerun = (f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted "
-             "final sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
+             "run). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
              "\n\n")
     if stale == "deleted-claim-parent":
         assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [
@@ -1029,11 +1029,21 @@ def resume_check(tmp_path, monkeypatch, world, number, attempt=1, run=None, sess
     return code, output.read_text()
 
 
+def park_comment(world, number, runs=(9,)):
+    """A Klaud comment recording that the world's session ``number`` parked on ``runs``."""
+    return {"id": 70 + number, "user": {"login": "Klaud-Cold"}, "body": (
+        lifecycle.park_marker(42, world.session.candidate.id, number)
+        + json.dumps({"runs": list(runs)}) + "\n-->\nParked.")}
+
+
+EXPIRED = lifecycle.MAX_EXPIRED_SESSIONS
+
+
 @pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
 @pytest.mark.parametrize(("sessions", "options", "started", "approved"), [
     pytest.param(("failure",), {}, 1, True, id="first-session"),
-    pytest.param(("failure",) * 3, {}, 3, True, id="below-the-cap"),
-    pytest.param(("failure",) * 4, {}, 4, False, id="at-the-cap"),
+    pytest.param(("failure",) * (EXPIRED - 1), {}, EXPIRED - 1, True, id="below-the-cap"),
+    pytest.param(("failure",) * EXPIRED, {}, EXPIRED, False, id="at-the-cap"),
     pytest.param(("failure", "gated-off", "failure"), {}, 2, True,
                  id="resume-run-without-its-grant-does-not-count"),
     pytest.param(("failure", "gated-off"), {}, 1, True, id="latest-started-session-decides"),
@@ -1053,42 +1063,60 @@ def resume_check(tmp_path, monkeypatch, world, number, attempt=1, run=None, sess
     pytest.param(("failure",), {"gated": False}, 1, False, id="planner-run-predates-resumption"),
     pytest.param(("failure",), {"gated": False, "reruns": ("skipped",)}, 1, False,
                  id="rerun-of-a-planner-run-from-before-resumption"),
+    pytest.param(("success",), {"parked": {1: (9,)}}, 1, True, id="parked-session"),
+    pytest.param(("success",) * (EXPIRED + 1), {"parked": dict.fromkeys(range(1, EXPIRED + 2),
+                 (9,))}, EXPIRED + 1, True, id="parked-sessions-never-expire"),
+    pytest.param(("success",) * lifecycle.MAX_SESSIONS,
+                 {"parked": dict.fromkeys(range(1, lifecycle.MAX_SESSIONS + 1), (9,))},
+                 lifecycle.MAX_SESSIONS, False, id="at-the-session-cap"),
+    pytest.param(("failure",) * (EXPIRED - 1) + ("success",), {"parked": {EXPIRED: ()}},
+                 EXPIRED, False, id="parking-at-the-deadline-expires"),
 ])  # fmt: skip
 def test_recovery_approves_resuming_only_sessions_a_resume_run_can_continue(
     monkeypatch, conclusion, sessions, options, started, approved
 ):
-    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=sessions, **options)
+    harness = {key: value for key, value in options.items() if key != "parked"}
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=sessions, **harness)
+    for number, runs in options.get("parked", {}).items():
+        world.comments.append(park_comment(world, number, runs))
 
     assert lifecycle.sessions_started(world.session) == started
-    if approved:
+    if conclusion is None:
+        with pytest.raises(lifecycle.PendingCleanup, match="Owned work is still running"):
+            lifecycle.reconcile(world.session, NOW)
+    elif approved:
         with pytest.raises(lifecycle.ResumeSession, match="approved to resume") as raised:
             lifecycle.reconcile(world.session, NOW)
         assert raised.value.pull is world.pull
-    elif conclusion is None:
-        with pytest.raises(lifecycle.PendingCleanup, match="Owned work is still running"):
-            lifecycle.reconcile(world.session, NOW)
     else:
         assert lifecycle.reconcile(world.session, NOW) is True
     assert world.writes == world.released == []
     assert world.finished == ([UNEXPECTED_ERROR] if conclusion and not approved else [])
 
 
-@pytest.mark.parametrize(("sessions", "now", "approved"), [
-    pytest.param(("failure",), "2026-10-15T05:59:59Z", True, id="within-a-day"),
-    pytest.param(("failure",), "2026-10-15T06:00:00Z", False, id="a-day-later"),
-    pytest.param(("failure", "failure"), "2026-10-15T11:59:59Z", True,
+@pytest.mark.parametrize(("sessions", "updated", "now", "approved"), [
+    pytest.param(("failure",), "2026-10-14T03:00:00Z", "2026-10-15T05:59:59Z", True,
+                 id="within-a-day"),
+    pytest.param(("failure",), "2026-10-14T03:00:00Z", "2026-10-15T06:00:00Z", False,
+                 id="a-day-later"),
+    pytest.param(("failure", "failure"), "2026-10-14T03:00:00Z", "2026-10-15T11:59:59Z", True,
                  id="within-a-day-of-the-resume-run"),
-    pytest.param(("failure", "failure"), "2026-10-15T12:00:00Z", False,
+    pytest.param(("failure", "failure"), "2026-10-14T03:00:00Z", "2026-10-15T12:00:00Z", False,
                  id="a-day-after-the-resume-run"),
-    pytest.param(("failure", "ungranted"), "2026-10-15T05:59:59Z", True,
+    pytest.param(("failure", "ungranted"), "2026-10-14T03:00:00Z", "2026-10-15T05:59:59Z", True,
                  id="within-a-day-of-the-last-started-session"),
-    pytest.param(("failure", "ungranted"), "2026-10-15T06:00:00Z", False,
+    pytest.param(("failure", "ungranted"), "2026-10-14T03:00:00Z", "2026-10-15T06:00:00Z", False,
                  id="a-run-that-never-started-its-agent-does-not-extend-it"),
+    pytest.param(("failure",), "2026-10-15T00:00:00Z", "2026-10-15T23:59:59Z", True,
+                 id="within-a-day-of-the-last-run-ending"),
+    pytest.param(("failure",), "2026-10-15T00:00:00Z", "2026-10-16T00:00:00Z", False,
+                 id="a-day-after-the-last-run-ended"),
 ])  # fmt: skip
-def test_recovery_stops_resuming_a_day_after_the_last_session_ended(
-    monkeypatch, sessions, now, approved
+def test_recovery_stops_resuming_a_day_after_the_last_session_or_run_ended(
+    monkeypatch, sessions, updated, now, approved
 ):
     world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=sessions)
+    world.sweep["updated_at"] = updated
 
     if approved:
         with pytest.raises(lifecycle.ResumeSession):
@@ -1096,6 +1124,155 @@ def test_recovery_stops_resuming_a_day_after_the_last_session_ended(
     else:
         assert lifecycle.reconcile(world.session, lifecycle.utc(now)) is True
     assert world.finished == ([] if approved else [UNEXPECTED_ERROR])
+
+
+@pytest.mark.parametrize(("conclusion", "kept"), [(None, True), ("failure", False)],
+                         ids=["run-live", "runs-ended"])
+def test_recovery_keeps_a_draft_while_its_runs_are_live_however_long_they_queue(
+    monkeypatch, conclusion, kept
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
+
+    assert lifecycle.retained(world.session, lifecycle.utc("2026-10-20T00:00:00Z")) is kept
+
+
+def test_recovery_reruns_a_preempted_targeted_run_newer_than_the_final_sweep(monkeypatch):
+    world = ended_session_sweep(monkeypatch, conclusion="failure")
+    targeted = {
+        "id": 11, "event": "workflow_dispatch", "head_sha": "a" * 40, "run_attempt": 1,
+        "display_title": f"e2e Test - klaud-42-{world.session.candidate.id}",
+        "actor": {"login": "Klaud-Cold"}, "head_repository": {"full_name": "example/project"},
+        "status": "completed", "conclusion": "cancelled",
+        "created_at": "2026-10-14T04:00:00Z", "updated_at": "2026-10-15T00:00:00Z",
+    }
+    serve = github.items
+
+    def items(repository, path, key=None):
+        if path.startswith("actions/workflows/e2e-tests.yml/runs?"):
+            return [targeted]
+        if path == "actions/runs/11/attempts/1/jobs?per_page=100":
+            return [{"id": 300, "conclusion": "cancelled", "runner_name": "gpu-0"}]
+        if path == "check-runs/300/annotations?per_page=100":
+            return [{"message": "The operation was canceled."}]
+        return serve(repository, path, key)
+
+    monkeypatch.setattr(github, "items", items)
+
+    with pytest.raises(lifecycle.AwaitingRerun, match="Reran preempted run"):
+        lifecycle.reconcile(world.session, NOW)
+    assert world.writes == [("POST", "actions/runs/11/rerun-failed-jobs")]
+
+
+@pytest.mark.parametrize(("session", "resumed"), [("failure", True), (None, False)],
+                         ids=["own-job-ended", "own-job-running"])
+def test_recovery_resumes_a_candidate_whose_job_ended_while_its_planner_run_continues(
+    monkeypatch, tmp_path, session, resumed
+):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=(session,))
+    world.reads["actions/runs/42"] = {
+        **world.session.parent, "status": "in_progress", "conclusion": None}
+
+    _, output = recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == ([GRANT, DISPATCH] if resumed else [])
+    assert output.read_text() == f"resumed={int(resumed)}\n"
+
+
+def report_comment(world, run):
+    """A Klaud attempt report on the world's PR for attempt 1 of owned run ``run``."""
+    return {"id": 90 + run, "user": {"login": "Klaud-Cold"},
+            "body": reporting.marker(world.session, f"run-{run}-1") + "{}\n-->\nQueued."}
+
+
+@pytest.mark.parametrize(("conclusion", "reported", "overdue", "error"), [
+    pytest.param(None, True, False, None, id="reported-live-run"),
+    pytest.param(None, False, False, "Publish an attempt report", id="unreported-live-run"),
+    pytest.param("failure", True, False, "No owned run is queued or running",
+                 id="nothing-to-wait-on"),
+    pytest.param("failure", False, True, None, id="at-the-deadline"),
+])  # fmt: skip
+def test_a_session_parks_only_on_reported_live_runs_or_at_its_deadline(
+    monkeypatch, conclusion, reported, overdue, error
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=(None,))
+    session = lifecycle.Session("example/project", world.session.parent, world.session.candidate)
+    if reported:
+        world.comments.append(report_comment(world, 9))
+
+    if error:
+        with pytest.raises(github.VerificationError, match=error):
+            lifecycle.park(session, 1, overdue=overdue)
+        assert world.writes == []
+    else:
+        waiting = [] if conclusion else [9]
+        assert lifecycle.park(session, 1, overdue=overdue) == waiting
+        assert lifecycle.parked(session, world.pull, 1) == waiting
+        lifecycle.park(session, 1, overdue=overdue)
+        assert [method for method, _ in world.writes] == ["POST", "PATCH"]
+
+
+@pytest.mark.parametrize(("parked", "conclusion", "blocked"), [
+    pytest.param((9,), None, False, id="parked-on-a-live-run"),
+    pytest.param((9,), "success", True, id="parked-runs-ended"),
+    pytest.param((), "success", False, id="parked-at-the-deadline"),
+    pytest.param(None, None, True, id="never-parked"),
+])  # fmt: skip
+def test_a_parked_session_may_stop_only_while_a_run_it_waits_on_is_live(
+    tmp_path, monkeypatch, parked, conclusion, blocked
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=(None,))
+    if parked is not None:
+        world.comments.append(park_comment(world, 1, parked))
+    (tmp_path / "session-end.json").write_text('{"status": "parked"}\n')
+    monkeypatch.setattr(lifecycle, "current_session", lambda: world.session)
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path))
+    monkeypatch.setenv("KLAUD_SESSION", "1")
+
+    assert ("decision" in klaud.check_stop()) is blocked
+
+
+@pytest.mark.parametrize("parked", [True, False], ids=["parked", "ran-out"])
+def test_diagnostics_verify_a_parked_session_without_an_outcome(tmp_path, monkeypatch, parked):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=(None,))
+    if parked:
+        world.comments.append(park_comment(world, 1))
+    monkeypatch.setattr(lifecycle, "current_session", lambda: world.session)
+    monkeypatch.setenv("KLAUD_SESSION", "1")
+    monkeypatch.delenv("KLAUD_EVIDENCE", raising=False)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    output = tmp_path / "diagnostics.json"
+
+    assert klaud.save_diagnostics(
+        tmp_path / "execution.json", tmp_path / "structured.json", "success", output
+    ) is parked
+    diagnostics = json.loads(output.read_text())
+    if parked:
+        assert diagnostics["session-state"] == "parked"
+        assert diagnostics["candidate-outcome"] is None
+    else:
+        assert diagnostics["candidate-outcome"]["outcome"] == "unexpected-error"
+
+
+@pytest.mark.parametrize(("elapsed", "warned"), [
+    (lifecycle.PARK_AFTER_SECONDS - 1, False), (lifecycle.PARK_AFTER_SECONDS, True),
+])  # fmt: skip
+def test_the_deadline_hook_tells_a_session_to_park_near_its_time_limit(
+    monkeypatch, elapsed, warned
+):
+    now = lifecycle.utc("2026-10-15T05:00:00Z")
+
+    class Clock(klaud.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr(klaud, "datetime", Clock)
+    monkeypatch.setenv("KLAUD_SESSION_STARTED", str(int(now.timestamp()) - elapsed))
+
+    hook = klaud.check_deadline()
+    assert bool(hook) is warned
+    if warned:
+        assert "About 30 minutes remain" in hook["hookSpecificOutput"]["additionalContext"]
 
 
 @pytest.mark.parametrize("change", [
@@ -1148,11 +1325,10 @@ def test_a_resumed_session_never_adopts_a_newer_runs_pr_on_its_branch(tmp_path, 
     assert resume_check(tmp_path, monkeypatch, world, 3) == (0, "run=false\nresume=false\n")
 
 
-@pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
 def test_recovery_dispatches_a_resume_run_that_continues_an_unfinished_session(
-    monkeypatch, tmp_path, conclusion
+    monkeypatch, tmp_path
 ):
-    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
     candidate = world.session.candidate.id
     link = "https://github.com/example/project/actions/runs/42"
 
@@ -1335,10 +1511,11 @@ def test_a_planner_job_runs_only_its_first_attempts_session_without_reading_gith
 
 @pytest.mark.parametrize(("sessions", "change", "resumes"), [
     pytest.param(("failure", None), None, True, id="granted"),
-    pytest.param(("failure",) * 3 + (None,), None, True, id="last-session"),
+    pytest.param(("failure",) * (lifecycle.MAX_SESSIONS - 1) + (None,), None, True,
+                 id="last-session"),
     pytest.param(("failure", "gated-off", None), None, True,
                  id="ungranted-resume-run-not-counted"),
-    pytest.param(("failure",) * 4 + (None,), None, False, id="over-the-cap"),
+    pytest.param(("failure",) * lifecycle.MAX_SESSIONS + (None,), None, False, id="over-the-cap"),
     pytest.param(("failure", None), "outcome-recorded", False, id="outcome-recorded"),
     pytest.param(("failure", None), "aborted", False, id="aborted-despite-a-grant"),
     pytest.param(("failure", None), "ungranted", False, id="no-grant"),

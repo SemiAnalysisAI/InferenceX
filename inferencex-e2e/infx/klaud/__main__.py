@@ -34,6 +34,7 @@ from .models import (
     Ownership,
     Policy,
     PRReview,
+    SessionEnd,
     identity,
     normalized_image,
     utc,
@@ -218,7 +219,7 @@ def recent_candidate_outcomes(
     Resumed sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
     The newest session artifact counts. Unreadable history means no cooldown.
     """
-    from .lifecycle import MAX_SESSIONS, WAVE_HOURS, resume_parent
+    from .lifecycle import MAX_SESSIONS, WAKE_TITLE, WAVE_HOURS, resume_parent
 
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
     since = cutoff - timedelta(hours=MAX_SESSIONS * WAVE_HOURS)
@@ -236,7 +237,7 @@ def recent_candidate_outcomes(
     for run in runs:
         try:
             created = utc(run["created_at"])
-            if created >= since:
+            if created >= since and run.get("display_title") != WAKE_TITLE:
                 dated.append((created, int(run["id"])))
                 plans[int(run["id"])] = resume_parent(run.get("display_title") or "") or int(
                     run["id"]
@@ -638,25 +639,55 @@ def execution_diagnostics(path: Path) -> dict:
 def check_stop() -> dict:
     """Return the Stop hook decision, blocking unless a verified terminal outcome exists.
 
-    An aborted candidate never blocks, since the recover-current step cleans it up.
+    An aborted candidate never blocks, since the recover-current step cleans it up. A session
+    that parked may stop while a run it parked on is still live, or if it parked at its deadline.
     """
-    from .lifecycle import current_session
+    from .lifecycle import current_session, parked, terminal
 
     try:
         session = current_session()
         pulls = session.pulls()
         if pulls and session.aborted(pulls[0]):
             return {}
-        outcome = CandidateOutcome.model_validate_json(
-            (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").read_text()
-        )
+        evidence = Path(os.environ["KLAUD_EVIDENCE"])
+        end = evidence / "session-end.json"
+        if end.exists() and SessionEnd.model_validate_json(end.read_text()).status == "parked":
+            waiting = parked(session, pulls[0], int(os.environ["KLAUD_SESSION"])) if pulls else None
+            if waiting is None:
+                raise VerificationError("Session has not parked")
+            if waiting and all(terminal(run) for run in session.runs() if run["id"] in waiting):
+                return {
+                    "decision": "block",
+                    "reason": "Every run this session parked on has ended. Continue: inspect them, report the attempt, then repair, park again or finish.",
+                }
+            return {}
+        outcome = CandidateOutcome.model_validate_json((evidence / "outcome.json").read_text())
         session.verify(outcome)
     except (KeyError, TypeError, ValueError, subprocess.SubprocessError, OSError):
         return {
             "decision": "block",
-            "reason": "No verified terminal outcome. Continue monitoring and repairs, then run the documented finish command to validate or complete failure/deferral cleanup and reporting. Inspect read failures; never dispatch replacements or cancel healthy work just to stop.",
+            "reason": "No verified terminal outcome. Continue monitoring and repairs, then run the documented finish command to validate or complete failure/deferral cleanup and reporting, or park while owned runs are queued or running. Inspect read failures; never dispatch replacements or cancel healthy work just to stop.",
         }
     return {}
+
+
+def check_deadline() -> dict:
+    """Return the PostToolUse hook output telling a session near its time limit to park."""
+    from .lifecycle import PARK_AFTER_SECONDS, SESSION_SECONDS
+
+    started = os.environ.get("KLAUD_SESSION_STARTED")
+    if not started:
+        return {}
+    elapsed = datetime.now(UTC).timestamp() - int(started)
+    if elapsed < PARK_AFTER_SECONDS:
+        return {}
+    minutes = max(0, int((SESSION_SECONDS - elapsed) // 60))
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": f"About {minutes} minutes remain in this session. Publish attempt reports for owned runs now, then run park, or finish if the outcome is terminal, and end with StructuredOutput.",
+        }
+    }
 
 
 def resume_check() -> dict[str, bool]:
@@ -707,7 +738,8 @@ def save_diagnostics(
 ) -> bool:
     """Write sanitized session diagnostics to ``output`` and return False if unverified.
 
-    The outcome comes from the posted receipt, the evidence outcome, then ``outcome_file``.
+    The outcome comes from the posted receipt, the evidence outcome, then ``outcome_file``. A
+    session that parked on its unfinished draft PR has no outcome and counts as verified.
     """
     diagnostics = {
         "action-outcome": action_outcome,
@@ -715,8 +747,9 @@ def save_diagnostics(
     }
     failure = None
     outcome = None
+    parked_runs = None
     try:
-        from .lifecycle import current_session
+        from .lifecycle import current_session, parked, resumable
 
         session = current_session()
         pulls, runs = session.pulls(), session.runs()
@@ -733,6 +766,8 @@ def save_diagnostics(
             ],
         }
         receipt = session.report(pulls[0]) if pulls else None
+        if not receipt and pulls and resumable(session, pulls[0]):
+            parked_runs = parked(session, pulls[0], int(os.environ.get("KLAUD_SESSION") or "1"))
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         failure = "session-state-unavailable"
     else:
@@ -743,7 +778,7 @@ def save_diagnostics(
                 failure = "receipt-invalid"
             else:
                 diagnostics["outcome-source"] = "verified-receipt"
-        else:
+        elif parked_runs is None:
             evidence = os.environ.get("KLAUD_EVIDENCE")
             if evidence:
                 try:
@@ -756,8 +791,10 @@ def save_diagnostics(
                     diagnostics["outcome-source"] = "verified-outcome"
             if outcome is None:
                 try:
-                    outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
+                    outcome = SessionEnd.model_validate_json(outcome_file.read_text()).outcome
                 except (OSError, ValueError, TypeError):
+                    outcome = None
+                if outcome is None:
                     failure = "candidate-outcome-unavailable"
                 else:
                     diagnostics["outcome-source"] = "structured-response"
@@ -766,6 +803,19 @@ def save_diagnostics(
                 session.verify(outcome)
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 failure = "lifecycle-unverified"
+    if parked_runs is not None and failure is None:
+        diagnostics["session-state"] = "parked"
+        diagnostics["parked-runs"] = len(parked_runs)
+        diagnostics["candidate-outcome"] = None
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(diagnostics, indent=2) + "\n")
+        if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(filename, "a") as summary:
+                summary.write(
+                    f"Parked on {len(parked_runs)} owned runs; recovery resumes the candidate. / "
+                    f"已等待 {len(parked_runs)} 个自有运行；恢复流程将继续该候选。\n"
+                )
+        return True
     if failure is not None:
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
@@ -779,6 +829,7 @@ def save_diagnostics(
         diagnostics["outcome-report"] = "unavailable-or-invalid"
     else:
         diagnostics["outcome-report"] = "available"
+        diagnostics["session-state"] = "finished"
     diagnostics["candidate-outcome"] = outcome.model_dump(by_alias=True, exclude_unset=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(diagnostics, indent=2) + "\n")
@@ -1121,7 +1172,15 @@ def main() -> int:
     )
     commands.add_parser(
         "check-stop",
-        help="Claude Stop hook: require finished runs and validated or closed PRs",
+        help="Claude Stop hook: require finished runs and validated or closed PRs, or a park",
+    )
+    commands.add_parser(
+        "check-deadline",
+        help="Claude PostToolUse hook: tell a session near its time limit to park",
+    )
+    commands.add_parser(
+        "park",
+        help="Record that this session waits on its reported live owned runs, then stop",
     )
     recovery = commands.add_parser(
         "recover", help="Reconcile interrupted sessions from completed autosweeps"
@@ -1171,7 +1230,9 @@ def main() -> int:
         "finish", help="Verify validation or finish owned cleanup and reporting"
     )
     finish.add_argument("--outcome-file", type=Path, required=True)
-    commands.add_parser("outcome-schema", help="Print the public-safe candidate outcome schema")
+    commands.add_parser(
+        "session-end-schema", help="Print the public-safe schema of how a session ended"
+    )
     diagnostics = commands.add_parser(
         "diagnostics",
         help="Save sanitized candidate outcomes, termination metrics and permission categories",
@@ -1289,12 +1350,36 @@ def main() -> int:
             ):
                 raise VerificationError("Baseline failure requires a fixed reason-code")
             outcome = current_session().finish(outcome)
-            (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").write_text(
+            evidence = Path(os.environ["KLAUD_EVIDENCE"])
+            (evidence / "outcome.json").write_text(
                 outcome.model_dump_json(by_alias=True, exclude_unset=True) + "\n"
             )
+            (evidence / "session-end.json").write_text(
+                SessionEnd(status="finished", outcome=outcome).model_dump_json(
+                    by_alias=True, exclude_unset=True
+                )
+                + "\n"
+            )
             return 0
-        if args.command == "outcome-schema":
-            print(json.dumps(CandidateOutcome.model_json_schema(by_alias=True)))
+        if args.command == "park":
+            from .lifecycle import PARK_AFTER_SECONDS, current_session, park
+
+            started = int(os.environ["KLAUD_SESSION_STARTED"])
+            park(
+                current_session(),
+                int(os.environ["KLAUD_SESSION"]),
+                overdue=datetime.now(UTC).timestamp() - started >= PARK_AFTER_SECONDS,
+            )
+            (Path(os.environ["KLAUD_EVIDENCE"]) / "session-end.json").write_text(
+                SessionEnd(status="parked").model_dump_json(by_alias=True, exclude_unset=True)
+                + "\n"
+            )
+            return 0
+        if args.command == "session-end-schema":
+            print(json.dumps(SessionEnd.model_json_schema(by_alias=True)))
+            return 0
+        if args.command == "check-deadline":
+            print(json.dumps(check_deadline()))
             return 0
         if args.command == "check-stop":
             print(json.dumps(check_stop()))
