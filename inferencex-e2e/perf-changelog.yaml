@@ -10937,3 +10937,11 @@
     - "Use engine-generated sparse decode capture sizes under a 512-token graph cap matching the NVIDIA variant; preserve all other engine, cache, router and benchmark settings."
   scenario-type: [agentic-coding]
   no-evals: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale
+  description:
+    - "Bound the PyTorch allocator to 92 percent during Kimi-K3 UMBP 2P3D c176 loading so inactive cache is reclaimed before native copy resources are exhausted."
+    - "Preserve P64/D128, sparse decode graph cap512, vLLM GPU memory utilization0.9, the image, loader, queue defaults, precision, routing, standard warmup and full3600-second profiling; leave c70 unchanged."
+  scenario-type: [agentic-coding]
+  no-evals: true
