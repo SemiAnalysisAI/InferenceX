@@ -1,5 +1,5 @@
 """Bounded native D-worker loading repetitions in one exclusive allocation."""
-import json,os,signal,subprocess,time,hashlib
+import json,os,signal,subprocess,time,hashlib,threading
 from pathlib import Path
 
 ROOT=Path('/logs');ROOT.mkdir(exist_ok=True)
@@ -26,6 +26,15 @@ def terminate(p):
         except ProcessLookupError:pass
         p.wait(timeout=15)
 
+SAMPLER_STOP=threading.Event()
+def sysfs_sampler():
+    totals={k:int((Path(k)/'mem_info_vram_total').read_text()) for k in vram()}
+    with (ROOT/'sysfs-vram.jsonl').open('a',buffering=1) as stream:
+        while not SAMPLER_STOP.is_set():
+            used=vram()
+            stream.write(json.dumps(dict(time=time.time(),used=used,free={k:totals[k]-v for k,v in used.items()}))+'\n')
+            SAMPLER_STOP.wait(.1)
+sampler_thread=threading.Thread(target=sysfs_sampler,daemon=True);sampler_thread.start()
 start=time.monotonic(); overall='no_reproduction'
 before=vram();time.sleep(10);baseline=vram();write('allocation_start',job=os.environ.get('SLURM_JOB_ID'),host=os.uname().nodename,baseline=baseline,command=SETTINGS['command'],configuration=SETTINGS)
 assert len(baseline)==8,baseline
@@ -42,6 +51,7 @@ for number in range(1,int(SETTINGS.get('attempts_max',4))+1):
     out=ROOT/f'attempt{number}';out.mkdir(exist_ok=False)
     env=dict(os.environ,**SETTINGS['env']);env.update(SA_LOAD_PROBE_DIR=str(out),PYTHONPATH='/probe'+(':'+env['PYTHONPATH'] if env.get('PYTHONPATH') else ''))
     if is_stress:env['SA_LOAD_PROBE_CLOSE_DELAY_S']='0.25'
+    env['SA_LOAD_PROBE_MODE']=SETTINGS.get('observation_mode','full')
     env['HEAD_NODE_IP']=subprocess.check_output(['hostname','-I'],text=True).split()[0]
     assert 'VLLM_FASTSAFETENSORS_QUEUE_SIZE' not in env
     with (out/'server.out').open('w') as f:
@@ -53,7 +63,13 @@ for number in range(1,int(SETTINGS.get('attempts_max',4))+1):
                 if p.poll() is not None:
                     status='server_exited';break
                 if len(list(out.glob('rank*.loaded')))==8:
-                    status='all_eight_loaded';break
+                    status='all_eight_loaded'
+                    # Allow native watchdogs to report an asynchronous load fault.
+                    for _ in range(20):
+                        time.sleep(.5)
+                        if p.poll() is not None:
+                            status='server_exited';break
+                    break
                 time.sleep(.5)
         finally:
             terminate(p)
@@ -78,3 +94,5 @@ for number in range(1,int(SETTINGS.get('attempts_max',4))+1):
 write('finished',result=overall,elapsed=time.monotonic()-start,final_vram=vram())
 (ROOT/'result.json').write_text(json.dumps(dict(result=overall,elapsed=time.monotonic()-start),indent=2))
 # Neither unreproduced nor reproduced is a serving/performance PASS.
+
+SAMPLER_STOP.set();sampler_thread.join(timeout=2)

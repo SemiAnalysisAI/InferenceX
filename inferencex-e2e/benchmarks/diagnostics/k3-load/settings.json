@@ -118,7 +118,7 @@
   "role": "decode",
   "nodes": 1,
   "gpus": 8,
-  "attempts_max": 3,
+  "attempts_max": 1,
   "stop_on_first_native_failure": true,
   "changes": [
     "One D replica, no other P/D nodes or router",
@@ -133,13 +133,11 @@
     "TP8/DCP8/EP1/GMU0.9/fastsafetensors default queue/BF16SSM/FP8KV/in_proj quantization"
   ],
   "attempt_plan": [
-    "native cap-only load1",
-    "native cap-only load2 if no failure",
-    "explicit250ms file-buffer-close stress if both native passed"
+    "One clean native cap-only load;no FF wrappers,memory sampling/history or timing delay in workers"
   ],
   "setup50715": "No model attempts; ordinary-user shared-cache permission failure. CPU import unavailable on login host. Active diagnostic uses approved CI account and original image URI.",
   "allocator_trial": {
-    "name": "cap only; no eager GC",
+    "name": "clean native cap-only confirmation",
     "torch_memory_fraction": 0.92,
     "garbage_collection_threshold": 0,
     "baseline_run": 40100658527,
@@ -150,5 +148,6 @@
     "baseline_eager_gc_run": 40101741888,
     "eager_gc_result": "All8 load passed;rank4min14.765625GiB;11352device frees;stopped redundant repetitions to minimize change"
   },
-  "timing_stress_attempt": 3
+  "timing_stress_attempt": 0,
+  "observation_mode": "boundary_only"
 }
