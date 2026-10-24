@@ -7,7 +7,7 @@ strategy runs NCCL EP's low-latency algorithm with the rank-major layout, and no
 auto-selected after TensorRT-LLM's NVLink one- and two-sided strategies, or forced with
 `TRTLLM_FORCE_COMM_METHOD=NCCL_EP`. Claims below were checked against TensorRT-LLM main
 `a6142c920` (`tensorrt_llm/_torch/moe/fused_moe/`) and nccl-extensions `1ee7136`, the last commit
-before the pinned nightly.
+before the 2026-10-05 nightly. They have not been rechecked against the pinned 2026-10-13 nightly.
 
 | Row | Configuration | `maturity` |
 |---|---|---|
@@ -75,11 +75,11 @@ activations in BF16 (`nccl_ep.py:78-79`). The default matrix therefore omits ncc
 `-fp8-ds-e3m4` on FP8 rows, `-cap<N>-<wheel version>`, and the harness's regime suffix. HT's `-zc`
 is part of its family: HT always takes the window. Examples:
 
-- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261005-cudagraph-spin-ar`: graphed low-latency, staged.
-- `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261005-eager-spin-ar`: eager low-latency, zero-copy.
-- `nccl-ep-v02-ht-routed-zc-static-gum1-cap512-0.2.0.dev20261005-cudagraph-spin-ar`: graphed
+- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed low-latency, staged.
+- `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261013-eager-spin-ar`: eager low-latency, zero-copy.
+- `nccl-ep-v02-ht-routed-zc-static-gum1-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed
   HT decode.
-- `nccl-ep-v02-ht-routed-zc-static-cap8192-0.2.0.dev20261005-eager-spin-ar`: HT prefill.
+- `nccl-ep-v02-ht-routed-zc-static-cap8192-0.2.0.dev20261013-eager-spin-ar`: HT prefill.
 
 `-gum1` appears only on graphed HT rows, the only capture that holds a host collective on this
 communicator (the routing `ncclAllGather`). The communicator runs graph usage mode 1 in every mode,
@@ -95,8 +95,8 @@ resolution: 16 for HT and every SM for low-latency, then `NCCL_EP_COMM_SMS`, the
 
 ## Nightly version
 
-`runtime/common.sh` pins `nccl-extensions[cu13]==0.2.0.dev20261005` alongside
-`nccl4py[cu13]==0.5.0`. Installation uses `--pre --extra-index-url https://pypi.nvidia.com`;
+`runtime/common.sh` pins `nccl-extensions[cu13]==0.2.0.dev20261013` alongside
+`nccl4py[cu13]==0.5.0` and `cuda-core==1.2.1`. Installation uses `--pre --extra-index-url https://pypi.nvidia.com`;
 the package specification keys the backend cache. Each result records the installed
 wheel version verbatim in `implementation.library_version`, including the nightly date, and in
 `kernel_generation`. The value comes from distribution metadata, not the requested pin or native
