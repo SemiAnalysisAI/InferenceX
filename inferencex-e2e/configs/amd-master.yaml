@@ -1573,6 +1573,28 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
       search-space:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
+# MiniMax-M3.1-Flash AgentX on MI355X with SGLang: day-zero image from the SGLang
+# cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
+# manifest digest verified 2026-10-24. Serve flags follow the cookbook's
+# MI355X Low-Latency (TP4) cell. Its High-Throughput cell (HiCache) crashes on MI355X
+# with this image, so concurrency 48-64 stays GPU-resident on the Low-Latency cell.
+# Seven-token DSpark (bundled draft); synthetic acceptance follows
+# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-minimax-m31-flash-mi35x@sha256:2d74f6ea339964befdfc97f8d74d9ce5bbecd4a29b343f2868a29d13d51ec3f8
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Low-Latency: TP4, GPU-resident.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64], srt-recipe: agentic.yaml }
+
 # DeepSeek-V4.1-Flash on ATOM, following the upstream TP2 / TP4 AgentX recipe.
 # Five-token DSpark uses golden AL 3.51 for throughput and real acceptance for eval.
 dsv41flash-fp4-mi355x-atom-agentic-dspark:

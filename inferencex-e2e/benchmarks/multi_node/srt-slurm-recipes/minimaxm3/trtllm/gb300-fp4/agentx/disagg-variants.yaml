@@ -274,6 +274,15 @@ base:
     placement:
       node: last_decode
 
+override_1p2d_tp4_c72_b8:
+  name: dynamo-disagg-gb300-1p2d-tp2-tp4-c72-b8-eagle3
+  roles:
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max_batch_size: 8
+
 override_1p3d_tp4_c54_b4:
   name: dynamo-disagg-gb300-1p3d-tp2-tp4-c54-b4-eagle3
   roles:
