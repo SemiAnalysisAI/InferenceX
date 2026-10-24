@@ -136,44 +136,35 @@ override_tp4_c32:
       CONC: '32'
       KV_OFFLOADING: none
 
-# High-Throughput cell: Low-Latency plus HiCache and an fp8 DSpark draft KV cache.
-# HiCache stays on the cookbook's ratio sizing: a fixed hicache-size of 180 GB per rank
-# (host/device ~1.09) hit a HIP illegal memory access in the first prefill's write
-# backup. Ratio 1.5 instead of the default 2 sizes the host pools at ~249 GB per rank
-# (~1.0 TB for the four ranks), inside the MI355X CPU DRAM budget that ratio 2 exceeds.
+# The cookbook's High-Throughput cell (HiCache) crashes on MI355X with this image: the
+# first prefill's HiCache write backup hits a HIP illegal memory access with either a
+# fixed hicache-size or hicache-ratio 1.5. Concurrency 48 and 64 run the Low-Latency
+# cell GPU-resident instead, like the vLLM MI355X recipe's TP4 c64.
 
-override_tp4_c48_hicache:
+override_tp4_c48:
   roles:
     agg:
       args:
         tensor-parallel-size: 4
-        speculative-draft-kv-cache-dtype: fp8_e4m3
         chunked-prefill-size: 32768
-        max-running-requests: 128
-        cuda-graph-max-bs-decode: 128
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
         mem-fraction-static: 0.8
-        prefill-decode-interval: 16
-        enable-hierarchical-cache: true
-        hicache-ratio: 1.5
   benchmark:
     env:
       CONC: '48'
-      KV_OFFLOADING: dram
+      KV_OFFLOADING: none
 
-override_tp4_c64_hicache:
+override_tp4_c64:
   roles:
     agg:
       args:
         tensor-parallel-size: 4
-        speculative-draft-kv-cache-dtype: fp8_e4m3
         chunked-prefill-size: 32768
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
         mem-fraction-static: 0.8
-        prefill-decode-interval: 16
-        enable-hierarchical-cache: true
-        hicache-ratio: 1.5
   benchmark:
     env:
       CONC: '64'
-      KV_OFFLOADING: dram
+      KV_OFFLOADING: none
