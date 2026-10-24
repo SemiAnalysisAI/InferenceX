@@ -11071,3 +11071,10 @@
     - "Search space: Balanced TP4 at conc 1-32; TP4 + EP4 at conc 64-128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4444
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from v0.32.0 to nightly-rocm72-c50aca14, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4461
+  scenario-type: [agentic-coding]
