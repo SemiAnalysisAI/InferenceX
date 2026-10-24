@@ -34,6 +34,7 @@ from .models import (
     Ownership,
     Policy,
     PRReview,
+    SessionEnd,
     identity,
     normalized_image,
     utc,
@@ -43,11 +44,11 @@ if TYPE_CHECKING:
     from infx.clusters import RunnerInventory
 
 PRODUCERS = "producers.json"
-# An abort is lifted by removing its label, so it never delays the next attempt by itself.
 RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started", "aborted"})
 
 
 def observation_key(row: dict) -> tuple:
+    """Return the public identity tuple of feed ``row``, with its image normalized."""
     image = row.get("image")
     if isinstance(image, str):
         image = normalized_image(image)
@@ -69,6 +70,7 @@ def observation_key(row: dict) -> tuple:
 
 
 def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozenset[str]:
+    """Return the cluster IDs serving the runners of ``entries``, or none if one is unknown."""
     try:
         return frozenset(
             inventory.cluster_for(node).id
@@ -89,6 +91,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
     from infx.config import project_root
     from infx.matrix.generate import _hardware_family, generate_test_config_sweep
     from infx.matrix.validation import load_config_files, load_runner_file
+    from infx.results.identity import public_framework
 
     from .validation import in_scope
 
@@ -122,7 +125,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
                 row = {
                     "model": entry["model-prefix"],
                     "hardware": _hardware_family(entry["runner"]),
-                    "framework": entry["framework"],
+                    "framework": public_framework(entry["framework"]),
                     "precision": entry["precision"],
                     "spec_method": entry["spec-decoding"],
                     "disagg": entry.get("disagg", False),
@@ -141,12 +144,15 @@ def choose(
     occupied: set[str],
     families: dict[tuple, dict[str, tuple[frozenset[str], int]]],
 ) -> list[dict]:
-    """Shuffle one candidate per unclaimed family that fits the headroom of every target cluster.
+    """Order one candidate per unclaimed family that fits the headroom of every target cluster.
 
-    Headroom is checked but not consumed here, so the overlap review keeps alternatives.
+    The order is a weighted shuffle: a family's weight is its benchmark age in days plus one, so
+    older images tend to lead without starving recent ones. Headroom is checked but not consumed
+    here, so the overlap review keeps alternatives.
     """
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
+    keys: list[float] = []
     seen = set()
     valid = [item for item in items if item["source-status"] == "baseline"]
     for item in sorted(
@@ -194,22 +200,28 @@ def choose(
                     "branch": branch,
                 }
             )
+            keys.append(random.expovariate(item["benchmark-age-days"] + 1))
             seen.add(family)
-    random.shuffle(selected)
-    return selected
+    ordered = sorted(zip(keys, selected, strict=True), key=lambda pair: pair[0])
+    return [candidate for _, candidate in ordered]
 
 
 def weights_key(source: dict) -> tuple:
+    """Return the (model, precision, hardware) key that identifies the weights ``source`` needs."""
     return (source.get("model"), source.get("precision"), source.get("hardware"))
 
 
 def recent_candidate_outcomes(
     repository: str, cooldown_hours: int
 ) -> tuple[dict[str, str | None], set[tuple]]:
-    from .lifecycle import MAX_SESSIONS, WAVE_HOURS, resume_parent
+    """Return each candidate's latest outcome within ``cooldown_hours`` and missing-weights keys.
+
+    Resumed sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
+    The newest session artifact counts. Unreadable history means no cooldown.
+    """
+    from .lifecycle import MAX_SESSIONS, WAKE_TITLE, WAVE_HOURS, resume_parent
 
     cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
-    # Resumed sessions of an older planner run record their outcomes in later waves.
     since = cutoff - timedelta(hours=MAX_SESSIONS * WAVE_HOURS)
     try:
         runs = github_items(
@@ -225,9 +237,8 @@ def recent_candidate_outcomes(
     for run in runs:
         try:
             created = utc(run["created_at"])
-            if created >= since:
+            if created >= since and run.get("display_title") != WAKE_TITLE:
                 dated.append((created, int(run["id"])))
-                # A resume run's candidates come from its planner run's plan.
                 plans[int(run["id"])] = resume_parent(run.get("display_title") or "") or int(
                     run["id"]
                 )
@@ -253,7 +264,6 @@ def recent_candidate_outcomes(
                     or utc(artifact["created_at"]) < cutoff
                 ):
                     continue
-                # Each session of a candidate uploads its own artifact; the newest one counts.
                 if match[1] not in latest or artifact["id"] > latest[match[1]][0]["id"]:
                     latest[match[1]] = (artifact, run_id)
             except (AttributeError, KeyError, TypeError, ValueError):
@@ -282,6 +292,7 @@ def recent_candidate_outcomes(
 
 
 def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
+    """Return the candidates in the klaud-plan artifact among ``artifacts``, or [] if unreadable."""
     plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
     if not plan:
         return []
@@ -297,6 +308,10 @@ def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
 
 
 def recorded_outcome(repository: str, artifact: dict) -> str | None:
+    """Return the outcome a diagnostics ``artifact`` recorded, or None if it is unreadable.
+
+    A skipped agent yields ``agent-not-started`` and a missing-weights failure ``weights-missing``.
+    """
     with tempfile.TemporaryDirectory() as scratch:
         try:
             download_json(repository, artifact, Path(scratch))
@@ -318,6 +333,10 @@ def recorded_outcome(repository: str, artifact: dict) -> str | None:
 
 
 def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
+    """Return ``candidates`` never tried recently, then those whose recent outcome retries now.
+
+    An abort is lifted by removing its label, so it never delays the next attempt by itself.
+    """
     fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
     deferred = [
         candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
@@ -379,6 +398,7 @@ def abort_released(repository: str, candidate_id: str) -> bool:
 
 
 def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
+    """Return ``pulls`` on Klaud branches or updated within ``stale_days`` before ``now``."""
     cutoff = now - timedelta(days=stale_days)
     return [
         pr
@@ -391,6 +411,11 @@ def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict
 def plan(
     root: Path, directory: Path, review_batch_size: int, cooldown_hours: int, stale_pr_days: int
 ) -> None:
+    """Write ``candidates.json`` and ``open-prs.json`` under ``directory`` for overlap review.
+
+    Unclaimed, unaborted feed candidates at ``root``'s HEAD are cooled down by
+    ``cooldown_hours`` and capped at ``review_batch_size``. PRs idle ``stale_pr_days`` drop out.
+    """
     from . import claims
 
     policy = Policy()
@@ -421,12 +446,10 @@ def plan(
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    # klaud-abort keeps a candidate out of the pool until someone removes the label.
     aborted = aborted_candidates(repository)
     candidates = [candidate for candidate in candidates if candidate["id"] not in aborted]
     recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
     for candidate in candidates:
-        # Only candidates the cooldown would hold back need their abort history.
         held = candidate["id"] in recent and recent[candidate["id"]] not in RETRY_NEXT_WAVE
         if held and abort_released(repository, candidate["id"]):
             recent[candidate["id"]] = "aborted"
@@ -500,7 +523,10 @@ def plan(
 
 
 def denied_bash_category(denial: dict) -> str:
-    """Retain only fixed categories, never command text, arguments or paths."""
+    """Return a fixed category for the Bash command in permission ``denial``.
+
+    Command text, arguments and paths are never retained.
+    """
     command = denial.get("tool_input", {})
     command = command.get("command") if isinstance(command, dict) else None
     if not isinstance(command, str):
@@ -538,6 +564,7 @@ def denied_bash_category(denial: dict) -> str:
 
 
 def execution_diagnostics(path: Path) -> dict:
+    """Return numeric metrics, termination and denial categories from the log at ``path``."""
     try:
         messages = json.loads(path.read_text())
         if not isinstance(messages, list):
@@ -610,25 +637,57 @@ def execution_diagnostics(path: Path) -> dict:
 
 
 def check_stop() -> dict:
-    """Require a verified terminal outcome, not merely an agent's final response."""
-    from .lifecycle import current_session
+    """Return the Stop hook decision, blocking unless a verified terminal outcome exists.
+
+    An aborted candidate never blocks, since the recover-current step cleans it up. A session
+    that parked may stop while a run it parked on is still live, or if it parked at its deadline.
+    """
+    from .lifecycle import current_session, parked, terminal
 
     try:
         session = current_session()
         pulls = session.pulls()
-        # The job's recover-current step cancels an aborted candidate's runs and closes its PR.
         if pulls and session.aborted(pulls[0]):
             return {}
-        outcome = CandidateOutcome.model_validate_json(
-            (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").read_text()
-        )
+        evidence = Path(os.environ["KLAUD_EVIDENCE"])
+        end = evidence / "session-end.json"
+        if end.exists() and SessionEnd.model_validate_json(end.read_text()).status == "parked":
+            waiting = parked(session, pulls[0], int(os.environ["KLAUD_SESSION"])) if pulls else None
+            if waiting is None:
+                raise VerificationError("Session has not parked")
+            if waiting and all(terminal(run) for run in session.runs() if run["id"] in waiting):
+                return {
+                    "decision": "block",
+                    "reason": "Every run this session parked on has ended. Continue: inspect them, report the attempt, then repair, park again or finish.",
+                }
+            return {}
+        outcome = CandidateOutcome.model_validate_json((evidence / "outcome.json").read_text())
         session.verify(outcome)
     except (KeyError, TypeError, ValueError, subprocess.SubprocessError, OSError):
         return {
             "decision": "block",
-            "reason": "No verified terminal outcome. Continue monitoring and repairs, then run the documented finish command to validate or complete failure/deferral cleanup and reporting. Inspect read failures; never dispatch replacements or cancel healthy work just to stop.",
+            "reason": "No verified terminal outcome. Continue monitoring and repairs, then run the documented finish command to validate or complete failure/deferral cleanup and reporting, or park while owned runs are queued or running. Inspect read failures; never dispatch replacements or cancel healthy work just to stop.",
         }
     return {}
+
+
+def check_deadline() -> dict:
+    """Return the PostToolUse hook output telling a session near its time limit to park."""
+    from .lifecycle import PARK_AFTER_SECONDS, SESSION_SECONDS
+
+    started = os.environ.get("KLAUD_SESSION_STARTED")
+    if not started:
+        return {}
+    elapsed = datetime.now(UTC).timestamp() - int(started)
+    if elapsed < PARK_AFTER_SECONDS:
+        return {}
+    minutes = max(0, int((SESSION_SECONDS - elapsed) // 60))
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": f"About {minutes} minutes remain in this session. Publish attempt reports for owned runs now, then run park, or finish if the outcome is terminal, and end with StructuredOutput.",
+        }
+    }
 
 
 def resume_check() -> dict[str, bool]:
@@ -662,7 +721,6 @@ def resume_check() -> dict[str, bool]:
     if run is None or int(run) not in same:
         return no
     jobs = [job for job in candidate_jobs(session) if started_session(job)]
-    # This job's own session is already one of the started ones.
     if len(jobs) > MAX_SESSIONS or any(
         job["run_id"] in same and job["run_id"] != int(run) for job in jobs
     ):
@@ -675,17 +733,36 @@ def resume_check() -> dict[str, bool]:
     return {"run": resume, "resume": resume}
 
 
+def ended_parked(action_outcome: str) -> bool:
+    """Return True if the agent step succeeded and the session's last end record is a park."""
+    evidence = os.environ.get("KLAUD_EVIDENCE")
+    if action_outcome != "success" or not evidence:
+        return False
+    try:
+        end = SessionEnd.model_validate_json((Path(evidence) / "session-end.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return end.status == "parked"
+
+
 def save_diagnostics(
     execution_file: Path, outcome_file: Path, action_outcome: str, output: Path
 ) -> bool:
+    """Write sanitized session diagnostics to ``output`` and return False if unverified.
+
+    The outcome comes from the posted receipt, the evidence outcome, then ``outcome_file``. A
+    session whose agent ended cleanly right after parking on its unfinished draft PR has no
+    outcome and counts as verified.
+    """
     diagnostics = {
         "action-outcome": action_outcome,
         **execution_diagnostics(execution_file),
     }
     failure = None
     outcome = None
+    parked_runs = None
     try:
-        from .lifecycle import current_session
+        from .lifecycle import current_session, parked, resumable
 
         session = current_session()
         pulls, runs = session.pulls(), session.runs()
@@ -702,6 +779,8 @@ def save_diagnostics(
             ],
         }
         receipt = session.report(pulls[0]) if pulls else None
+        if not receipt and pulls and ended_parked(action_outcome) and resumable(session, pulls[0]):
+            parked_runs = parked(session, pulls[0], int(os.environ.get("KLAUD_SESSION") or "1"))
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         failure = "session-state-unavailable"
     else:
@@ -712,7 +791,7 @@ def save_diagnostics(
                 failure = "receipt-invalid"
             else:
                 diagnostics["outcome-source"] = "verified-receipt"
-        else:
+        elif parked_runs is None:
             evidence = os.environ.get("KLAUD_EVIDENCE")
             if evidence:
                 try:
@@ -725,8 +804,10 @@ def save_diagnostics(
                     diagnostics["outcome-source"] = "verified-outcome"
             if outcome is None:
                 try:
-                    outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
+                    outcome = SessionEnd.model_validate_json(outcome_file.read_text()).outcome
                 except (OSError, ValueError, TypeError):
+                    outcome = None
+                if outcome is None:
                     failure = "candidate-outcome-unavailable"
                 else:
                     diagnostics["outcome-source"] = "structured-response"
@@ -735,6 +816,19 @@ def save_diagnostics(
                 session.verify(outcome)
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 failure = "lifecycle-unverified"
+    if parked_runs is not None and failure is None:
+        diagnostics["session-state"] = "parked"
+        diagnostics["parked-runs"] = len(parked_runs)
+        diagnostics["candidate-outcome"] = None
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(diagnostics, indent=2) + "\n")
+        if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(filename, "a") as summary:
+                summary.write(
+                    f"Parked on {len(parked_runs)} owned runs; recovery resumes the candidate. / "
+                    f"已等待 {len(parked_runs)} 个自有运行；恢复流程将继续该候选。\n"
+                )
+        return True
     if failure is not None:
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
@@ -748,6 +842,7 @@ def save_diagnostics(
         diagnostics["outcome-report"] = "unavailable-or-invalid"
     else:
         diagnostics["outcome-report"] = "available"
+        diagnostics["session-state"] = "finished"
     diagnostics["candidate-outcome"] = outcome.model_dump(by_alias=True, exclude_unset=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(diagnostics, indent=2) + "\n")
@@ -844,8 +939,17 @@ def regenerate_producers(directory: Path) -> None:
 
 
 def select(
-    directory: Path, max_candidates: int, execution_file: Path | None = None, resumed: int = 0
+    directory: Path,
+    max_candidates: int,
+    execution_file: Path | None = None,
+    active_sessions: int = 0,
 ) -> None:
+    """Claim reviewed candidates that fit capacity and have a verified baseline.
+
+    Takes up to ``max_candidates`` less the ``active_sessions`` already running or resumed,
+    which share the cap, and writes their context, ownership.json and selection.json under
+    ``directory``.
+    """
     from . import claims, validation
     from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
 
@@ -854,8 +958,7 @@ def select(
     review, deferred = reviewed(contexts)
     decisions = {decision.candidate_id: decision for decision in review.decisions}
     selected = []
-    # Sessions that recovery resumed in this wave run beside its new candidates and share the cap.
-    slots = max(0, max_candidates - resumed)
+    slots = max(0, max_candidates - active_sessions)
     headroom: dict[str, int] = {}
     if slots and any(decision.decision == "proceed" for decision in review.decisions):
         try:
@@ -882,6 +985,9 @@ def select(
             {key: candidate[key] for key in ("id", "family", "base")}
         )
         try:
+            matrix = validation.canonical_matrix(
+                os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
+            )
             baseline = resolve_baseline(
                 os.environ["GITHUB_REPOSITORY"],
                 owned,
@@ -892,6 +998,7 @@ def select(
                     zh="在调度候选任务前验证完整的已发布基线。",
                 ),
                 producers.get(candidate["family"], {}),
+                matrix,
             )
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
@@ -900,12 +1007,7 @@ def select(
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-            missing = missing_baseline_points(
-                validation.canonical_matrix(
-                    os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
-                ),
-                baseline,
-            )
+            missing = missing_baseline_points(matrix, baseline)
         except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = str(error)
@@ -986,8 +1088,8 @@ def select(
             json.dumps(execution_diagnostics(execution_file), indent=2) + "\n"
         )
     summary = f"Klaud Cold: selected {len(candidates)} of {len(contexts)} eligible candidates."
-    if resumed:
-        summary += f" {resumed} resumed sessions leave " + (
+    if active_sessions:
+        summary += f" {active_sessions} running or resumed sessions leave " + (
             f"{slots} of {max_candidates} slots." if slots else "no slot for new candidates."
         )
     if deferred:
@@ -1025,6 +1127,7 @@ def select(
 
 
 def main() -> int:
+    """Run the Klaud subcommand named on the command line and return its exit status."""
     parser = argparse.ArgumentParser(prog="python -m infx.klaud", description=__doc__)
     parser.add_argument(
         "--root",
@@ -1079,23 +1182,31 @@ def main() -> int:
         help="Claude execution log; retain numeric metrics and fixed denial categories",
     )
     selection.add_argument(
-        "--resumed",
+        "--active-sessions",
         type=int,
         default=0,
-        help="Sessions recovery resumed in this wave; each takes one of its candidate slots",
+        help="Klaud sessions running or resumed by recovery; each takes one candidate slot",
     )
     commands.add_parser(
         "check-stop",
-        help="Claude Stop hook: require finished runs and validated or closed PRs",
+        help="Claude Stop hook: require finished runs and validated or closed PRs, or a park",
+    )
+    commands.add_parser(
+        "check-deadline",
+        help="Claude PostToolUse hook: tell a session near its time limit to park",
+    )
+    commands.add_parser(
+        "park",
+        help="Record that this session waits on its reported live owned runs, then stop",
     )
     recovery = commands.add_parser(
         "recover", help="Reconcile interrupted sessions from completed autosweeps"
     )
     recovery.add_argument(
-        "--max-resumes",
+        "--max-sessions",
         type=int,
         required=True,
-        help="Most unfinished sessions to resume in this wave (0-256)",
+        help="Most Klaud sessions running at once, counting the resumes it grants (0-256)",
     )
     commands.add_parser(
         "recover-current",
@@ -1136,7 +1247,9 @@ def main() -> int:
         "finish", help="Verify validation or finish owned cleanup and reporting"
     )
     finish.add_argument("--outcome-file", type=Path, required=True)
-    commands.add_parser("outcome-schema", help="Print the public-safe candidate outcome schema")
+    commands.add_parser(
+        "session-end-schema", help="Print the public-safe schema of how a session ended"
+    )
     diagnostics = commands.add_parser(
         "diagnostics",
         help="Save sanitized candidate outcomes, termination metrics and permission categories",
@@ -1169,7 +1282,6 @@ def main() -> int:
                     return 0
                 session = current_session()
                 pulls = session.pulls()
-                # A resumed session continues with the baseline its PR already froze.
                 record = baseline_for(session, pulls[0]) if pulls else None
                 if record is None:
                     context = json.loads(
@@ -1195,7 +1307,10 @@ def main() -> int:
             from .validation import canonical_matrix, check_matrix
 
             session = current_session()
-            pull = session.pulls()[0]
+            pulls = session.pulls()
+            if not pulls:
+                raise VerificationError("Candidate PR not found")
+            pull = pulls[0]
             head = pull["head"]["sha"]
             matrix = json.loads(args.matrix_file.read_text())
             canonical = canonical_matrix(session.repository, head, session.candidate.family)
@@ -1237,9 +1352,9 @@ def main() -> int:
         if args.command == "recover":
             from .lifecycle import recover
 
-            if not 0 <= args.max_resumes <= 256:
-                parser.error("--max-resumes must be between 0 and 256")
-            recover(args.max_resumes)
+            if not 0 <= args.max_sessions <= 256:
+                parser.error("--max-sessions must be between 0 and 256")
+            recover(args.max_sessions)
             return 0
         if args.command == "finish":
             from .lifecycle import current_session
@@ -1252,12 +1367,36 @@ def main() -> int:
             ):
                 raise VerificationError("Baseline failure requires a fixed reason-code")
             outcome = current_session().finish(outcome)
-            (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").write_text(
+            evidence = Path(os.environ["KLAUD_EVIDENCE"])
+            (evidence / "outcome.json").write_text(
                 outcome.model_dump_json(by_alias=True, exclude_unset=True) + "\n"
             )
+            (evidence / "session-end.json").write_text(
+                SessionEnd(status="finished", outcome=outcome).model_dump_json(
+                    by_alias=True, exclude_unset=True
+                )
+                + "\n"
+            )
             return 0
-        if args.command == "outcome-schema":
-            print(json.dumps(CandidateOutcome.model_json_schema(by_alias=True)))
+        if args.command == "park":
+            from .lifecycle import PARK_AFTER_SECONDS, current_session, park
+
+            started = int(os.environ["KLAUD_SESSION_STARTED"])
+            park(
+                current_session(),
+                int(os.environ["KLAUD_SESSION"]),
+                overdue=datetime.now(UTC).timestamp() - started >= PARK_AFTER_SECONDS,
+            )
+            (Path(os.environ["KLAUD_EVIDENCE"]) / "session-end.json").write_text(
+                SessionEnd(status="parked").model_dump_json(by_alias=True, exclude_unset=True)
+                + "\n"
+            )
+            return 0
+        if args.command == "session-end-schema":
+            print(json.dumps(SessionEnd.model_json_schema(by_alias=True)))
+            return 0
+        if args.command == "check-deadline":
+            print(json.dumps(check_deadline()))
             return 0
         if args.command == "check-stop":
             print(json.dumps(check_stop()))
@@ -1293,9 +1432,11 @@ def main() -> int:
             return 0
         if not 1 <= args.max_candidates_per_run <= 256:
             parser.error("--max-candidates-per-run must be between 1 and 256")
-        if args.resumed < 0:
-            parser.error("--resumed must not be negative")
-        select(args.directory, args.max_candidates_per_run, args.execution_file, args.resumed)
+        if args.active_sessions < 0:
+            parser.error("--active-sessions must not be negative")
+        select(
+            args.directory, args.max_candidates_per_run, args.execution_file, args.active_sessions
+        )
         return 0
     except ReadError as error:
         if args.command == "plan":
@@ -1315,7 +1456,6 @@ def main() -> int:
         if isinstance(error, VerificationError):
             reason = str(error)
         elif isinstance(error, ValidationError) and args.command == "report":
-            # Name the failing fields of the agent's own record without echoing its values.
             reason = "Invalid record: " + "; ".join(
                 ".".join(str(part) for part in item["loc"]) + ": " + item["msg"]
                 if item["loc"]

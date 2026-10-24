@@ -117,6 +117,7 @@ def checkpoint(cluster: Cluster, request: LaunchRequest) -> Checkpoint | None:
     entries = cluster.models.entries
 
     def node_local(key: str) -> bool:
+        """Return whether model entry ``key`` lives on a node-local volume."""
         return volumes[entries[key].root].visibility == "node-local"
 
     key = _override(cluster, request, "entry")

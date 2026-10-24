@@ -1,21 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 r"""Benchmark online serving throughput.
 
-On the server side, run one of the following commands:
-    vLLM OpenAI API server
+On the server side, start an OpenAI-compatible server, for example:
     vllm serve <your_model> \
         --swap-space 16 \
         --disable-log-requests
-
-    (TGI backend)
-    ./launch_tgi_server.sh <your_model> <max_batch_total_tokens>
 
 On the client side, run:
     python -m infx.bench_serving.benchmark_serving \
         --backend <backend> \
         --model <your_model> \
-        --dataset-name sharegpt \
-        --dataset-path <path to dataset> \
+        --dataset-name random \
+        --random-input-len <input_len> \
+        --random-output-len <output_len> \
         --request-rate <request_rate> \ # By default <request_rate> is inf
         --num-prompts <num_prompts> # By default <num_prompts> is 1000
 
@@ -36,6 +33,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -51,9 +49,6 @@ from .backend_request_func import (
 try:
     from .backend_request_func import get_tokenizer
 except ImportError:
-    # vLLM moved get_tokenizer from vllm.transformers_utils.tokenizer to
-    # vllm.tokenizers; the old path was a deprecation alias in v0.20 and
-    # was removed by v0.23. Try the new location first, fall back to old.
     try:
         from vllm.tokenizers import get_tokenizer
     except ImportError:
@@ -73,6 +68,8 @@ MILLISECONDS_TO_SECONDS_CONVERSION = 1000
 
 @dataclass
 class BenchmarkMetrics:
+    """Aggregate results of one run. ``e2el`` is client latency from request send to full response."""
+
     completed: int
     total_input: int
     total_output: int
@@ -92,14 +89,12 @@ class BenchmarkMetrics:
     median_itl_ms: float
     std_itl_ms: float
     percentiles_itl_ms: list[tuple[float, float]]
-    # Client latency from request send to complete response.
     mean_e2el_ms: float
     median_e2el_ms: float
     std_e2el_ms: float
     percentiles_e2el_ms: list[tuple[float, float]]
 
 
-# --- Multiprocessing helpers for sample_random_requests ---
 _worker_tokenizer = None
 
 
@@ -112,9 +107,9 @@ def _load_tokenizer(
     LlamaTokenizer.all_special_tokens_extended (e.g. Qwen3.5 with newer
     transformers). Prefer backend_request_func.get_tokenizer on fallback so
     client tokenization stays aligned with the sglang server (#1381, #1428).
+    ``deepseek_v4`` always uses vLLM's loader, since HF AutoTokenizer may not know it.
     """
     if tokenizer_mode == "deepseek_v4":
-        # HF AutoTokenizer may not recognize deepseek_v4; use vLLM's loader.
         try:
             from vllm.tokenizers import get_tokenizer as _vllm_get_tokenizer
         except ImportError:
@@ -185,7 +180,7 @@ def _apply_chat_template(prompt: str, tokenizer: PreTrainedTokenizerBase, dsv4: 
 
 
 def _process_prompt_chunk(chunk_args: tuple) -> list[tuple[str, int, int, None, int]]:
-    """Generate a chunk of random prompts in a worker process."""
+    """Generate one chunk of random prompts in a worker, as ``(prompt, len, output_len, None, mismatch)`` tuples."""
     (
         indices,
         prefix_token_ids,
@@ -246,6 +241,13 @@ def sample_random_requests(
     trust_remote_code: bool = False,
     num_workers: int = 0,
 ) -> list[tuple[str, int, int]]:
+    """Build ``num_prompts`` random-token prompts, each length between ``range_ratio`` times its target and the target.
+
+    Returns ``(prompt, prompt_len, output_len, None)`` tuples. Raises ``ValueError`` for no prompts or
+    ``dsv4`` without a chat template. Padding uses a local RNG so arrival times ignore ``num_workers``.
+    """
+    if num_prompts <= 0:
+        raise ValueError(f"--num-prompts must be positive, got {num_prompts}")
     vocab_size = tokenizer.vocab_size
     prefix_token_ids = np.random.randint(0, vocab_size, size=prefix_len).tolist()  # noqa: NPY002
 
@@ -261,19 +263,19 @@ def sample_random_requests(
         input_len = input_len - chat_template_len
 
     def sample_uniform(seq_len: int) -> list[int]:
+        """Draw ``num_prompts`` lengths uniformly from ``range_ratio * seq_len`` to ``seq_len``."""
         lower = int(seq_len * range_ratio)
         upper = seq_len
         return np.random.randint(lower, upper + 1, size=num_prompts).tolist()  # noqa: NPY002
 
     input_lens = sample_uniform(input_len)
     output_lens = sample_uniform(output_len)
-    offsets = np.random.randint(0, vocab_size, size=num_prompts)  # noqa: NPY002
+    offsets = np.random.randint(0, vocab_size, size=num_prompts).tolist()  # noqa: NPY002
 
-    # Local padding draws keep downstream arrival times independent of num_workers.
     local_rng = np.random.RandomState(
         np.random.get_state()[1][  # noqa: NPY002
             :4
-        ].tolist()  # derive seed from current state without advancing it
+        ].tolist()
     )
 
     if num_workers <= 0:
@@ -294,7 +296,7 @@ def sample_random_requests(
                     prefix_token_ids,
                     input_lens[start:end],
                     output_lens[start:end],
-                    offsets[start:end].tolist(),
+                    offsets[start:end],
                     prefix_len,
                     vocab_size,
                     use_chat_template,
@@ -406,10 +408,14 @@ def calculate_metrics(
     outputs: list[RequestFuncOutput],
     dur_s: float,
     tokenizer: PreTrainedTokenizerBase,
-    selected_percentile_metrics: list[str],  # noqa: ARG001
     selected_percentiles: list[float],
     goodput_config_dict: dict[str, float],
 ) -> tuple[BenchmarkMetrics, list[int]]:
+    """Summarize ``outputs`` over ``dur_s`` seconds into metrics, plus each request's output length.
+
+    Retokenizes text when the server sent no usage count, which may overcount slightly. Goodput counts
+    a request whose TTFT, TPOT (0 for one token), and E2EL all meet ``goodput_config_dict``.
+    """
     actual_output_lens: list[int] = []
     total_input = 0
     completed = 0
@@ -423,8 +429,7 @@ def calculate_metrics(
         if outputs[i].success:
             output_len = outputs[i].output_tokens
 
-            if output_len is None:
-                # Chunks can bundle tokens; retokenization may slightly overcount.
+            if not output_len:
                 output_len = len(
                     tokenizer(outputs[i].generated_text, add_special_tokens=False).input_ids
                 )
@@ -435,7 +440,6 @@ def calculate_metrics(
                 latency_minus_ttft = outputs[i].latency - outputs[i].ttft
                 tpot = latency_minus_ttft / (output_len - 1)
                 tpots.append(tpot)
-            # Note: if output_len <= 1, we regard tpot as 0 for goodput
             all_tpots.append(tpot)
             itls += outputs[i].itl
             ttfts.append(outputs[i].ttft)
@@ -469,6 +473,7 @@ def calculate_metrics(
             "on the benchmark arguments.",
             stacklevel=2,
         )
+    ttfts, tpots, itls, e2els = (np.asarray(v or 0) for v in (ttfts, tpots, itls, e2els))
     metrics = BenchmarkMetrics(
         completed=completed,
         total_input=total_input,
@@ -477,29 +482,22 @@ def calculate_metrics(
         request_goodput=good_completed / dur_s,
         output_throughput=sum(actual_output_lens) / dur_s,
         total_token_throughput=(total_input + sum(actual_output_lens)) / dur_s,
-        mean_ttft_ms=np.mean(ttfts or 0)
-        * 1000,  # ttfts is empty if streaming is not supported by backend
-        std_ttft_ms=np.std(ttfts or 0) * 1000,
-        median_ttft_ms=np.median(ttfts or 0) * 1000,
-        percentiles_ttft_ms=[
-            (p, np.percentile(ttfts or 0, p) * 1000) for p in selected_percentiles
-        ],
-        mean_tpot_ms=np.mean(tpots or 0) * 1000,
-        std_tpot_ms=np.std(tpots or 0) * 1000,
-        median_tpot_ms=np.median(tpots or 0) * 1000,
-        percentiles_tpot_ms=[
-            (p, np.percentile(tpots or 0, p) * 1000) for p in selected_percentiles
-        ],
-        mean_itl_ms=np.mean(itls or 0) * 1000,
-        std_itl_ms=np.std(itls or 0) * 1000,
-        median_itl_ms=np.median(itls or 0) * 1000,
-        percentiles_itl_ms=[(p, np.percentile(itls or 0, p) * 1000) for p in selected_percentiles],
-        mean_e2el_ms=np.mean(e2els or 0) * 1000,
-        std_e2el_ms=np.std(e2els or 0) * 1000,
-        median_e2el_ms=np.median(e2els or 0) * 1000,
-        percentiles_e2el_ms=[
-            (p, np.percentile(e2els or 0, p) * 1000) for p in selected_percentiles
-        ],
+        mean_ttft_ms=np.mean(ttfts) * 1000,
+        std_ttft_ms=np.std(ttfts) * 1000,
+        median_ttft_ms=np.median(ttfts) * 1000,
+        percentiles_ttft_ms=[(p, np.percentile(ttfts, p) * 1000) for p in selected_percentiles],
+        mean_tpot_ms=np.mean(tpots) * 1000,
+        std_tpot_ms=np.std(tpots) * 1000,
+        median_tpot_ms=np.median(tpots) * 1000,
+        percentiles_tpot_ms=[(p, np.percentile(tpots, p) * 1000) for p in selected_percentiles],
+        mean_itl_ms=np.mean(itls) * 1000,
+        std_itl_ms=np.std(itls) * 1000,
+        median_itl_ms=np.median(itls) * 1000,
+        percentiles_itl_ms=[(p, np.percentile(itls, p) * 1000) for p in selected_percentiles],
+        mean_e2el_ms=np.mean(e2els) * 1000,
+        std_e2el_ms=np.std(e2els) * 1000,
+        median_e2el_ms=np.median(e2els) * 1000,
+        percentiles_e2el_ms=[(p, np.percentile(e2els, p) * 1000) for p in selected_percentiles],
     )
 
     return metrics, actual_output_lens
@@ -527,6 +525,10 @@ async def benchmark(
     max_concurrency: int | None,
     lora_modules: list[str] | None,
 ) -> dict[str, Any]:
+    """Warm up, then send ``input_requests`` to ``api_url`` at ``request_rate`` and return the result dict.
+
+    Raises ``ValueError`` for an unknown backend or multi-modal input outside ``openai-chat``.
+    """
     if backend in ASYNC_REQUEST_FUNCS:
         request_func = ASYNC_REQUEST_FUNCS[backend]
     else:
@@ -535,7 +537,6 @@ async def benchmark(
     print("Starting initial single prompt test run...")
     test_prompt, test_prompt_len, test_output_len, test_mm_content = input_requests[0]
     if backend != "openai-chat" and test_mm_content is not None:
-        # multi-modal benchmark is only available on OpenAI Chat backend.
         raise ValueError("Multi-modal content is only supported on 'openai-chat' backend.")
     test_input = RequestFuncInput(
         model=model_id,
@@ -556,6 +557,7 @@ async def benchmark(
         warmup_semaphore = asyncio.Semaphore(max_concurrency) if max_concurrency else None
 
         async def warmup_limited_req_fn() -> RequestFuncOutput:
+            """Send the test request, under the warmup concurrency limit if one is set."""
             if warmup_semaphore is None:
                 return await request_func(request_func_input=test_input, pbar=warmup_pbar)
             async with warmup_semaphore:
@@ -612,6 +614,7 @@ async def benchmark(
     async def limited_request_func(
         request_func_input: RequestFuncInput, pbar: tqdm | None
     ) -> RequestFuncOutput:
+        """Send ``request_func_input``, under the concurrency limit if one is set."""
         if semaphore is None:
             return await request_func(request_func_input=request_func_input, pbar=pbar)
         async with semaphore:
@@ -648,6 +651,12 @@ async def benchmark(
         )
     outputs: list[RequestFuncOutput] = await asyncio.gather(*tasks)
 
+    if pbar is not None:
+        pbar.close()
+
+    benchmark_duration = time.perf_counter() - benchmark_start_time
+    benchmark_end_time_unix = time.time()
+
     if profile:
         print("Stopping profiler...")
         profile_input = RequestFuncInput(
@@ -663,18 +672,11 @@ async def benchmark(
         if profile_output.success:
             print("Profiler stopped")
 
-    if pbar is not None:
-        pbar.close()
-
-    benchmark_duration = time.perf_counter() - benchmark_start_time
-    benchmark_end_time_unix = time.time()
-
     metrics, actual_output_lens = calculate_metrics(
         input_requests=input_requests,
         outputs=outputs,
         dur_s=benchmark_duration,
         tokenizer=tokenizer,
-        selected_percentile_metrics=selected_percentile_metrics,
         selected_percentiles=selected_percentiles,
         goodput_config_dict=goodput_config_dict,
     )
@@ -700,7 +702,7 @@ async def benchmark(
         "total_input_tokens": metrics.total_input,
         "total_output_tokens": metrics.total_output,
         "request_throughput": metrics.request_throughput,
-        "request_goodput:": metrics.request_goodput if goodput_config_dict else None,
+        "request_goodput": metrics.request_goodput if goodput_config_dict else None,
         "output_throughput": metrics.output_throughput,
         "total_token_throughput": metrics.total_token_throughput,
         "input_lens": [output.prompt_len for output in outputs],
@@ -716,6 +718,7 @@ async def benchmark(
         metric_name: str,
         metric_header: str,
     ) -> None:
+        """Print the selected metric's mean, median, and percentiles and copy them into ``result``."""
         if metric_attribute_name not in selected_percentile_metrics:
             return
         print("{s:{c}^{n}}".format(s=metric_header, n=50, c="-"))
@@ -756,6 +759,7 @@ async def benchmark(
 
 
 def check_goodput_args(args: argparse.Namespace) -> dict[str, float]:
+    """Parse ``args.goodput`` into SLOs in ms, raising ``ValueError`` for unknown names or negative values."""
     goodput_config_dict = {}
     valid_names = ["ttft", "tpot", "e2el"]
     if args.goodput:
@@ -777,6 +781,7 @@ def check_goodput_args(args: argparse.Namespace) -> dict[str, float]:
 
 
 def parse_goodput(slo_pairs: list[str]) -> dict[str, float]:
+    """Parse ``KEY:VALUE`` strings into a dict, raising ``ArgumentTypeError`` on bad format."""
     goodput_config_dict = {}
     try:
         for slo_pair in slo_pairs:
@@ -795,6 +800,7 @@ def parse_goodput(slo_pairs: list[str]) -> dict[str, float]:
 def save_to_pytorch_benchmark_format(
     args: argparse.Namespace, results: dict[str, Any], file_name: str
 ) -> None:
+    """Write the latency metrics of ``results`` as PyTorch benchmark records beside ``file_name``."""
     metrics = [
         "median_ttft_ms",
         "mean_ttft_ms",
@@ -812,7 +818,7 @@ def save_to_pytorch_benchmark_format(
     ignored_metrics = ["ttfts", "itls", "generated_texts", "errors"]
     pt_records = convert_to_pytorch_benchmark_format(
         args=args,
-        metrics={k: [results[k]] for k in metrics},
+        metrics={k: [results[k]] for k in metrics if k in results},
         extra_info={
             k: results[k] for k in results if k not in metrics and k not in ignored_metrics
         },
@@ -824,7 +830,15 @@ def save_to_pytorch_benchmark_format(
 
 
 def main(args: argparse.Namespace) -> None:
+    """Run the benchmark from parsed ``args``, save results if asked, and exit nonzero when the run fails.
+
+    Records the request outcome before saving so cleanup cannot turn a failed run into a pass.
+    """
     print(args)
+    if args.request_rate <= 0:
+        raise ValueError(f"--request-rate must be positive, got {args.request_rate}")
+    if args.save_result and args.result_dir and not Path(args.result_dir).is_dir():
+        raise ValueError(f"--result-dir {args.result_dir} is not an existing directory")
     random.seed(args.seed)
     np.random.seed(args.seed)  # noqa: NPY002
 
@@ -868,7 +882,6 @@ def main(args: argparse.Namespace) -> None:
 
     goodput_config_dict = check_goodput_args(args)
 
-    # Avoid GC processing "static" data - reduce pause times.
     gc.collect()
     gc.freeze()
 
@@ -897,12 +910,9 @@ def main(args: argparse.Namespace) -> None:
         )
     )
 
-    # Preserve the request gate before writing results: cleanup or a surrounding
-    # launcher must not turn an error-containing benchmark into a passed point.
     try:
         outcome = benchmark_outcome(args.num_prompts, benchmark_result["completed"])
     except ValueError as exc:
-        # Preserve invalid counts for diagnostics; the processor rejects them.
         outcome = {
             "status": "failed",
             "requested": args.num_prompts,
@@ -925,7 +935,7 @@ def main(args: argparse.Namespace) -> None:
         if args.metadata:
             for item in args.metadata:
                 if "=" in item:
-                    kvstring = item.split("=")
+                    kvstring = item.split("=", 1)
                     result_json[kvstring[0].strip()] = kvstring[1].strip()
                 else:
                     raise ValueError("Invalid metadata format. Please use KEY=VALUE format.")
@@ -939,7 +949,6 @@ def main(args: argparse.Namespace) -> None:
         result_json = {**result_json, **benchmark_result}
 
         if not args.save_detailed:
-            # Remove fields with too many data points
             for field in [
                 "ttfts",
                 "itls",
@@ -988,7 +997,6 @@ if __name__ == "__main__":
         default=None,
         help="Server or API base url if not using http host and port.",
     )
-    # Use 127.0.0.1 here instead of localhost to force the use of ipv4
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument(

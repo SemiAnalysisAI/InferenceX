@@ -17,33 +17,49 @@ class VerificationError(ValueError):
 
 
 def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
+    """Return the decoded JSON from a GET of ``path`` in ``repository``, optionally paginated."""
     return github.api(repository, path, paginate=paginate)
 
 
 def items(repository: str, path: str, key: str | None = None) -> list[dict]:
+    """Return every listed item at ``path``, unwrapped from ``key``, or raise VerificationError."""
     try:
         return github.paginate(repository, path, item_key=key or "")
     except github.ListingError as error:
         raise VerificationError(str(error)) from error
 
 
+writes = 0
+
+
 def write(repository: str, path: str, method: str, payload: dict | None = None) -> dict:
+    """Send ``payload`` to ``path`` with ``method`` and return the JSON reply.
+
+    Each call bumps the module ``writes`` counter so listings cached before it are read again.
+    """
+    global writes  # noqa: PLW0603
+    writes += 1
     return github.api(repository, path, method=method, data=payload)
 
 
 def artifacts(repository: str, run_id: int) -> list[dict]:
+    """Return the artifact records of workflow run ``run_id``."""
     return items(repository, f"actions/runs/{run_id}/artifacts?per_page=100", "artifacts")
 
 
 def file_at(repository: str, head: str, path: str) -> bytes:
-    """Read data at an immutable revision; callers never execute downloaded code."""
+    """Return the bytes of ``path`` at commit ``head``, raising VerificationError if unsafe.
+
+    ``head`` must be a full SHA and the file at most 4 MiB. Callers never execute the result.
+    """
     import re
 
     if not re.fullmatch(r"[0-9a-f]{40}", head):
         raise VerificationError("Expected an immutable source revision")
     result = read(repository, f"contents/{quote(path, safe='/')}?ref={head}")
     if (
-        result.get("type") != "file"
+        not isinstance(result, dict)
+        or result.get("type") != "file"
         or result.get("encoding") != "base64"
         or result["size"] > 4 * 1024 * 1024
     ):
@@ -52,7 +68,10 @@ def file_at(repository: str, head: str, path: str) -> bytes:
 
 
 def download_json(repository: str, artifact: dict, destination: Path) -> None:
-    """Read bounded JSON only; never extract archive paths or execute artifact code."""
+    """Write the JSON members of ``artifact`` under ``destination``, raising VerificationError.
+
+    Archives over 256 MiB, unsafe paths and duplicates are rejected. Artifact code never runs.
+    """
     limit = 256 * 1024 * 1024
     if artifact["expired"] or not 0 < artifact["size_in_bytes"] <= limit:
         raise VerificationError("Artifact unavailable or too large")
