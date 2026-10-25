@@ -5701,6 +5701,9 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
     - dram-utilization: 1.0
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agentic.yaml:override_tp4_c24' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[0]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[1]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [56], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[2]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agentic.yaml:zip_override_tp2[0]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: 'agentic.yaml:zip_override_tp2[1]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
