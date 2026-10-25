@@ -2,6 +2,7 @@
 
 # Workflow-owned common settings, loaded before recipe-specific overrides.
 # Benchmark receivers validate these inputs; they do not choose missing values.
+# Jobs inherit these exports. Post-eval gets only WORKLOAD_ENV names (infx/launch/drivers/srt/submit.py).
 export OPENAI_API_KEY='EMPTY'
 export EVAL_ENDPOINT_READY_TIMEOUT_SECONDS='1800'
 export EVAL_MODEL_STABILIZATION_SECONDS='30'
@@ -12,6 +13,3 @@ export ENABLE_AGENTX_POWER='1'
 export VLLM_ENGINE_READY_TIMEOUT_S='3600'
 export SGLANG_TORCH_PROFILER_DIR='/workspace'
 export VLLM_TORCH_PROFILER_DIR='/workspace'
-
-# Explicitly forward these settings across container boundaries.
-export INFERENCEX_RUNTIME_ENV_VARS="OPENAI_API_KEY EVAL_ENDPOINT_READY_TIMEOUT_SECONDS EVAL_MODEL_STABILIZATION_SECONDS AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS AIPERF_EXPERIMENTAL_FAST ENABLE_AGENTX_POWER REQUIRE_POWER VLLM_ENGINE_READY_TIMEOUT_S SGLANG_TORCH_PROFILER_DIR VLLM_TORCH_PROFILER_DIR"
