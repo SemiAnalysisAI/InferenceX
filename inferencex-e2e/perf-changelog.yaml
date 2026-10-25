@@ -11169,6 +11169,12 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Use latest configs for MiniMax M3.1 AgentX submission"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4465
+
+- config-keys:
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB300 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash, following the cookbook's GB300 cells (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
