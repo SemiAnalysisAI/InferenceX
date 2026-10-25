@@ -404,14 +404,37 @@ present, determine whether the override changes computed FLOPs vs the model's na
 config and whether the model natively supports that mode. FAIL with the exact
 flag/value if architecture FLOPs are reduced without native model support.
 
+Also FAIL, with or without native support and with or without evals, for these named
+prohibitions in the effective recipe, including values inherited from launcher,
+container, or pinned-image defaults:
+- Indexer skipping or sharing: any setting under which a sparse-attention layer reuses
+  another layer's index or top-k selection instead of computing its own, such as
+  `index_topk_freq` or `*_INDEX_TOPK_FREQ` above 1, `use_index_cache`, or `skip_index`.
+  When the pinned engine shares by default (for example SGLang on ROCm defaults
+  `SGLANG_MINIMAX_M3_INDEX_TOPK_FREQ` to 2), the recipe must disable it explicitly
+  (`=1`); an unset value is compliant only when the pinned implementation confirms
+  per-layer selection.
+- INT4 quantized all-reduce: `*QUICK_REDUCE_QUANTIZATION=INT4` (for example
+  `ROCM_`, `VLLM_ROCM_`, or `AITER_` prefixes). INT6 and INT8 remain levers under (b).
+These apply to configs added or changed after the rule; they do not retroactively
+invalidate earlier runs, and earlier runs are not precedent for a config under review.
+
 ### (b) Accuracy-trading levers are covered by evals
-These levers need eval coverage even when the model supports them natively: indexer
-skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`), INT4 all-reduce
-(`QUICK_REDUCE_QUANTIZATION=INT4`), accuracy-affecting `--hf-overrides`,
+These levers need eval coverage even when the model supports them natively: INT6 or INT8
+quantized all-reduce (`QUICK_REDUCE_QUANTIZATION=INT6`/`INT8`), accuracy-affecting `--hf-overrides`,
 `online_quant_config`, and an FP8 KV cache used only to recover throughput lost to
 another quality trade (judge from the recipe history, sign-off, and changelog). FAIL
 when no Check 2 eval covers a config that uses one. Accuracy loss on covered configs
 fails under Check 2(b). Upstream merge status does not make an accuracy loss acceptable.
+
+### (c) Nothing on the forbidden-optimizations list
+Read the "Forbidden optimizations" section of `CONTRIBUTING.md` on the default-branch
+checkout; it is the canonical list. Checks 8(a), 8(b), 10, 11, and 13 enforce its
+known categories in detail. FAIL here, with the exact flag, file, and list item, for
+any technique on that list that those checks do not already cover, including items
+added after this prompt was written. A PR cannot narrow the list by editing it: judge
+against the default-branch copy. Report N/A when the PR changes no recipe, benchmark
+script, launcher, master config, or image.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
