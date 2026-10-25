@@ -11197,3 +11197,10 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp
+  description:
+    - "Update vLLM from nightly-9ea8f3ff to v0.32.0 and Dynamo to 1.6.0.dev20261023 for its renamed vLLM helper."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4517
+  scenario-type: [agentic-coding]
