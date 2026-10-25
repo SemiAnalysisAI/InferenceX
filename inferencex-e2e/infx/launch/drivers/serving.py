@@ -26,6 +26,11 @@ HF_VOLUME = "hf-hub-cache"
 PENDING_NOTE_S = 60.0
 
 
+def is_local_squash(image: str) -> bool:
+    """A squash file already on the node; pyxis starts it as is, so there is nothing to stage."""
+    return image.startswith("/") and image.endswith(".sqsh")
+
+
 def wait_started(job_id: str, log: Path, *, poll_s: float = 10.0, note_s: float = PENDING_NOTE_S) -> None:
     """Say why Slurm holds the job until it writes its log; stream_logs is silent meanwhile.
 
@@ -130,7 +135,8 @@ def run(launch: Launch) -> int:
     if serving.storage_image:
         wanted["storage"] = serving.storage_image
     with event.stage("prepare"):
-        images = {role: backend.stage_image(image, single_node=True).reference for role, image in wanted.items()}
+        images = {role: image if is_local_squash(image) else backend.stage_image(image, single_node=True).reference
+                  for role, image in wanted.items()}
     os.environ.update(job_env(serving, images, volume.path))  # sbatch --export=ALL hands them to job.sh
     log = Path(request.env.get("RUNNER_TEMP") or request.workspace) / f"serving-{os.getpid()}.log"
     with event.stage("submit"):

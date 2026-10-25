@@ -23,7 +23,7 @@ NAME_PATTERN = r"^[a-z0-9][a-z0-9.-]*$"
 LOCAL_PATH_MARKERS = ("/models/", "/mnt/", "/data/")
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # image is spliced into srun arguments on the GPU node; model is passed to the client argv.
-IMAGE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
+IMAGE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*|/[A-Za-z0-9._/-]+\.sqsh")  # a registry ref, or a squash file on the node
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+")
 VNG_CLUSTER_PREFIXES = ("hcm-", "han-")  # VNG sites; cluster ids are <site>-<node>
 # Variables job.sh / bench.sh / sidecar.sh / client.py set themselves.

@@ -28,3 +28,11 @@ def test_job_gone_from_queue_returns_without_log(tmp_path, monkeypatch, capsys):
     fake_squeue(tmp_path, monkeypatch, "exit 0")
     wait_started("7", tmp_path / "never.log", poll_s=0, note_s=0)
     assert capsys.readouterr().out == ""
+
+
+def test_local_squash_is_used_as_is_and_registry_refs_are_staged():
+    from infx.launch.drivers.serving import is_local_squash
+
+    assert is_local_squash("/data/images/sglang-v0.5.22.sqsh")
+    assert not is_local_squash("lmsysorg/sglang:v0.5.22")
+    assert not is_local_squash("/data/images/notes.txt")

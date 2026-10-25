@@ -100,3 +100,10 @@ def test_router_metrics_port_placeholder_in_env_is_ambiguous_with_a_fixed_port()
     router = ROUTER.replace("--prometheus-port {{router_metrics_port}}", "")
     router = router.replace("router:\n", "router:\n  metrics_port: 29000\n  env: {METRICS: '{{router_metrics_port}}'}\n")
     assert "router.metrics_port: drop it" in errors(yaml_of(router))
+
+
+def test_image_may_be_a_squash_file_on_the_node():
+    local = BASE.replace("image: vllm/vllm-openai:v0.29.0", "image: /data/images/vllm-v0.29.0.sqsh")
+    assert load_serving(local + "scenario: tau2\nconc: 8\n").image == "/data/images/vllm-v0.29.0.sqsh"
+    shell = BASE.replace("image: vllm/vllm-openai:v0.29.0", "image: /data/images/$(id).sqsh")
+    assert "image: only letters" in errors(shell + "scenario: tau2\nconc: 8\n")
