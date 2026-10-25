@@ -16,21 +16,21 @@ The Python project is `inferencex-e2e/` (`pyproject.toml`, `uv.lock`, `.python-v
 
 - **PR and issue titles MUST be bilingual:** `<English title> / <中文标题>`, e.g. `[Klaud Cold] Remove SWE-bench Lite eval / [Klaud Cold] 移除 SWE-bench Lite 评测`. Keep prefixes on both halves. Fix English-only titles before review or merge.
 - PR and issue bodies and human-authored PR comments keep English visible and put natural Simplified Chinese in one collapsed `<details><summary>中文</summary>` section. Leave code, commands, logs, model names, SKUs, flags, and identifiers untranslated. The CODEOWNER sign-off template is English-only. See [translation terminology](.github/AGENT_OPERATIONS.md#translation-terminology).
-- **Descriptions are high signal.** Lead with the problem, the change, and why it matters; keep risks, breaking changes, and unresolved failures visible. Put boilerplate (AI disclosure, change-type lists, checklists) in closed `<details>` blocks after the summary. Report validation only from real integration or end-to-end runs, with a run link; omit local-check inventories and empty sections. See [PR descriptions](CONTRIBUTING.md#pr-descriptions).
-- Every PR body includes a collapsed `<details><summary>AI model disclosure</summary>` block naming each contributing model (including delegated agents) by the identifier the runtime exposes, and its role. Tool names are not models. If the exact model is unavailable, say so; human-only PRs state `No AI used`. Keep it current when another model edits the PR.
-- Only one eligible CODEOWNER posts the PR Review Checklist; check for an existing one first, and edit it in place rather than posting another. See [sign-off](CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
-- Commit subjects are conventional English; commit bodies include the Chinese translation. Contributor docs are English-only except READMEs; keep existing `README_zh.md` files in sync with their language switchers, and add no other translations.
+- **Descriptions are high signal.** Lead with the problem, the change, and why it matters; keep risks, breaking changes, and unresolved failures visible. Put boilerplate (AI disclosure, change-type lists, checklists) in closed `<details>` blocks after the summary. Report validation only from real integration or end-to-end runs, with a run link; collapse supporting evidence; omit local-check inventories and empty or pending sections. Keep running appropriate checks. See [PR descriptions](CONTRIBUTING.md#pr-descriptions).
+- Every PR body includes a collapsed `<details><summary>AI model disclosure</summary>` block naming each contributing model (including delegated agents) and its role, copying the identifier the runtime exposes; never guess one. Tool names are not models. If the exact model is unavailable, state that it could not be verified; human-only PRs state `No AI used`. Keep it current when another model edits the PR.
+- Only one eligible CODEOWNER posts the PR Review Checklist; check for an existing one first, and edit it in place rather than posting another; post a replacement only if the original was deleted. See [sign-off](CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
+- Commit subjects are conventional English; commit bodies include the Chinese translation. Contributor docs are English-only except READMEs; keep existing `README_zh.md` files in sync and preserve their language switchers; add no other translations.
 - Klaud Cold reports use `infx.klaud`'s typed reporting commands and renderer per the [candidate instructions](.github/klaud-candidate-prompt.md); never hand-build baselines, deltas, receipts, or cleanup reports.
 
 ## Cross-repo changes
 
 - Pareto logic changes update both InferenceX and InferenceX-app with matching regression tests and cross-linked PRs.
-- `power_model/` changes update the app's file-for-file TypeScript port (`packages/app/src/lib/power/power_model/`), which pins one upstream merge commit: land the InferenceX PR first, then the app PR pins it and regenerates its manifest and parity fixture. Procedure: [InferenceX-app `AGENTS.md`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/master/AGENTS.md#power-model--ts-port-and-upstream-python-must-stay-in-sync).
+- `power_model/` changes update the InferenceX-app TypeScript port with matching tests and cross-linked PRs. The app mirrors `power_model/src/power_model` file for file under `packages/app/src/lib/power/power_model/` and pins one upstream merge commit: land the InferenceX PR first, then the app PR pins that commit and regenerates its manifest and parity fixture. A port fix that upstream also needs starts with the InferenceX PR. Procedure: [InferenceX-app `AGENTS.md`](https://github.com/SemiAnalysisAI/InferenceX-app/blob/master/AGENTS.md#power-model--ts-port-and-upstream-python-must-stay-in-sync).
 
 ## Code style
 
 - Follow the nearest existing pattern. Python uses typed signatures and strict Pydantic schemas; YAML uses kebab-case fields.
-- Python under `inferencex-e2e/infx/` uses all stable Ruff rules (exclusions in `infx/ruff.toml`), line length 100, and the Ruff formatter; CI's Lint job fails on any finding. Justified exceptions use inline `# noqa: CODE`, never file-wide ignores.
+- Python under `inferencex-e2e/infx/` uses all stable Ruff rules (exclusions in `infx/ruff.toml`), line length 100, and the Ruff formatter; CI's Lint job fails on any finding. Run the [local checks](#local-checks) before pushing Python changes and fix findings where practical; justified exceptions use inline `# noqa: CODE`, never file-wide ignores.
 - Shared benchmark behavior that runs inside serving containers belongs in `inferencex-e2e/infx/bench/` as stdlib-only, Python 3.10 compatible commands (`python3 -m infx.bench <command>`) configured by env vars or flags. Bash entrypoints stay thin shims.
 
 ### Bash (mandatory)
@@ -38,11 +38,11 @@ The Python project is `inferencex-e2e/` (`pyproject.toml`, `uv.lock`, `.python-v
 Applies to active Bash scripts and shell embedded in workflows and recipes; leave deprecated code alone unless asked.
 
 - **Configuration flows from the caller.** Workflows, master configs, runtime profiles, and launchers supply configuration explicitly; receiving scripts validate it and never silently choose defaults.
-- **No fallback defaults** for caller-supplied configuration: no `${VAR:-default}`, `${VAR:=default}`, colon-free forms, or equivalent "if unset, assign" logic. Pass `false` and `0` explicitly too.
-- **Validate inputs with `check_env_vars`** from `inferencex-e2e/benchmarks/check_env.sh` (sourcing only defines it). Group required inputs near the top; validate path-specific inputs on entering that path. Do not duplicate the helper.
+- **No fallback defaults** for caller-supplied configuration: no `${VAR:-default}`, `${VAR:=default}`, colon-free forms, or equivalent "if unset, assign" logic. A missing input is a caller error and must fail clearly. Pass `false` and `0` explicitly too.
+- **Validate inputs with `check_env_vars`** from `inferencex-e2e/benchmarks/check_env.sh` (sourcing only defines it). Group required inputs near the top, after sourcing it; validate path-specific inputs on entering that path. It rejects missing and empty values and lists every missing name. Do not duplicate it or remove its safe handling of unset variables.
 - **No nounset:** no `set -u`, `set -o nounset`, `set -euo pipefail`, or `bash -u`. Keep other options such as `set -eo pipefail`.
 - **Preserve precedence and forwarding.** Apply caller settings before recipe overrides and forward required inputs across container or job boundaries; never replace a supported override with an unconditional assignment.
-- Deliberate optional inputs, runtime-derived values, and unset-safe internal probes are fine; they are not licence to invent fallback configuration.
+- Deliberate optional inputs, runtime-derived values, and unset-safe internal probes are fine; they are not licence to invent fallback configuration or replace a documented automatic selection with an arbitrary constant.
 
 Example: replace `export IS_MULTINODE="${IS_MULTINODE:-true}"` in the receiver with `export IS_MULTINODE=true` in the caller, and `check_env_vars IS_MULTINODE MODEL_NAME PRECISION` in the receiver.
 
@@ -50,7 +50,7 @@ Example: replace `export IS_MULTINODE="${IS_MULTINODE:-true}"` in the receiver w
 
 - No header comments describing a file, topology, config, recipe, override, or section.
 - No history: how code evolved, what it replaced, where it came from, or past results. Git and `perf-changelog.yaml` are the record.
-- Only technical explanation of a specific line or block: why a value was chosen, or context the code cannot show (hardware quirk, upstream bug, measured failure). One short line is the norm.
+- Only technical explanation of a specific line or block: why a value was chosen, or context the code cannot show (hardware quirk, upstream bug, measured failure). One short line is the norm; never restate the code.
 
 ## Tests
 
@@ -78,12 +78,12 @@ Run the focused test path first. Use `--extra workflows` for GitHub integrations
 
 ## Benchmark invariants (non-negotiable)
 
-- Every priority-scheduled self-hosted job requests exactly one `nodes:N` label (physical Slurm nodes; single-node is `nodes:1`, multi-node forwards `node-count`). Labels cannot be added to a queued job; fix the branch and dispatch again.
-- A change that alters what any benchmark runs needs a `perf-changelog.yaml` entry for the affected config keys; refactors, recipe moves, and docs need none. `python -m infx.matrix.changed --base origin/main` (from `inferencex-e2e/`) lists affected config and recipe keys; judge script and launcher changes by what they run.
-- `perf-changelog.yaml` is append-only and byte-sensitive: preserve every existing byte and separator, append only at the tail, and resolve conflicts only with the [changelog conflict helper](.github/workflows/README.md#changelog-conflict-recovery). One PR has at most one block (listing one or more `config-keys`); revise it rather than adding another. New entries are English-only.
+- Every priority-scheduled self-hosted job requests exactly one `nodes:N` label (physical Slurm nodes; single-node is `nodes:1`, multi-node forwards `node-count`). A queued job without the label is ineligible for priority scheduling, and labels cannot be added later; fix the branch and dispatch again.
+- A change that alters what any benchmark runs needs a `perf-changelog.yaml` entry for the affected config keys; the entry triggers result collection. Refactors, recipe moves, and docs need none. `python -m infx.matrix.changed --base origin/main` (from `inferencex-e2e/`) lists affected config and recipe keys; if it lists none, add no entry. It does not see script or launcher code, so judge script and launcher changes by what they run.
+- `perf-changelog.yaml` is append-only and byte-sensitive: preserve every existing byte and separator, append only at the tail, and resolve conflicts only with the [changelog conflict helper](.github/workflows/README.md#changelog-conflict-recovery). One PR has at most one block (listing one or more `config-keys`); revise it rather than adding another. New entries are English-only (the bilingual rules do not apply); leave historical entries unchanged.
 - **`main` never runs sweeps.** A PR with a changelog entry needs an accepted `/use <run_id>` before merge, or its results are never ingested. Merge with `infx.workflows.merge_with_reuse`, except external PRs (pin their `e2e-tests.yml` run explicitly) and ingest-recovery PRs (merge directly, per the [recovery command](.claude/commands/recover-failed-ingest.md)). See [`/use`](CONTRIBUTING.md#reusing-your-prs-green-sweep-at-merge-with-use).
-- Multi-node srt-slurm changes update the recipe and matching master config together. srt-slurm recipes are fragments: the binder supplies image, model, precision, and sequence lengths, and `inferencex-e2e/configs/srt-recipes/` supplies `benchmark.type` and `benchmark.command`; never set those in a recipe. Rows of one design share a `*-variants.yaml` ([recipe guide](inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)).
-- Speculative fixed-sequence benchmarks use the chat template: `bind_workload` in `infx/srt_slurm/workload.py` sets `USE_CHAT_TEMPLATE: "true"`, which `infx.bench fixed-seq` turns into `--use-chat-template`.
+- Multi-node srt-slurm changes update the recipe and matching master config together. srt-slurm recipes, fixed-sequence and AgentX, are fragments: the binder supplies image, model, precision, and sequence lengths, and `inferencex-e2e/configs/srt-recipes/` supplies `benchmark.type` and `benchmark.command`; never set those in a recipe. Rows of one design share a `*-variants.yaml` ([recipe guide](inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/RECIPES.md)).
+- Speculative fixed-sequence benchmarks use the chat template: `bind_workload` in `infx/srt_slurm/workload.py` sets `benchmark.env.USE_CHAT_TEMPLATE: "true"` for single-node recipes that speculate, which `python3 -m infx.bench fixed-seq` (run by `srt_fixed_sequence.sh`) turns into `--use-chat-template`.
 - Benchmarks create no new directories under `/workspace`, and root containers leave no root-owned files in shared AMD runner workspaces.
 
 ## Launchers and hooks
