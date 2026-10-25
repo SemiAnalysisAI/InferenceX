@@ -6,7 +6,8 @@ commit maps unambiguously to one pull request and a maintainer has left a
 ``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
 The legacy command may omit the source run ID; without one, the latest successful
 ``pull_request`` ``run-sweep.yml`` run for the PR head is used. A pinned run ID may
-come from any PR; its commit need not be part of the PR being merged.
+come from any PR, or be a trusted external-PR ``e2e-tests.yml`` dispatch; its commit
+need not be part of the PR being merged.
 """
 
 from __future__ import annotations
@@ -27,6 +28,9 @@ from .sweep_runs import (
     has_reusable_result_artifacts as has_reusable_result_artifacts,
     pr_commit_shas as pr_commit_shas,
     run_pr_number as run_pr_number,
+    source_head_sha as source_head_sha,
+    source_identity,
+    trusted_external_pr,
 )
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
@@ -173,7 +177,8 @@ def validate_reusable_run(
 ) -> None:
     """Fail closed unless an Actions run is a valid reusable source run."""
     run_id = int(run["id"])
-    if run.get("event") != "pull_request":
+    external_pr = trusted_external_pr(run) if allow_failed else None
+    if run.get("event") != "pull_request" and external_pr is None:
         raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
     if run.get("status") != "completed":
         raise RuntimeError(f"Reusable source run {run_id} is not completed.")
@@ -186,7 +191,7 @@ def validate_reusable_run(
         )
     expected_path = workflow_path(workflow_id)
     run_path = str(run.get("path") or "")
-    if run_path and run_path != expected_path:
+    if external_pr is None and run_path and run_path != expected_path:
         raise RuntimeError(
             f"Reusable source run {run_id} is from {run_path}, expected {expected_path}."
         )
@@ -247,6 +252,22 @@ def resolve_reusable_run(
         token,
         allow_failed=pinned_run_id is not None,
     )
+    if pinned_run_id is not None and (external_pr := trusted_external_pr(run)) is not None:
+        if (identity := source_identity(repo, run, token)) is not None:
+            modifiers = {
+                label
+                for label in incompatible_labels
+                if identity.get(label.replace("-", "_")) is True
+            }
+        else:
+            # Runs without a source-identity artifact fall back to the tested PR's current labels.
+            source = github.api(repo, f"/pulls/{external_pr}", token)
+            modifiers = incompatible_labels.intersection(label_names(source))
+        if modifiers:
+            raise RuntimeError(
+                f"External source PR #{external_pr} uses reuse-incompatible label(s): "
+                f"{', '.join(sorted(modifiers))}."
+            )
     return run
 
 
@@ -403,7 +424,7 @@ def main() -> int:
     )
     run_id = int(run["id"])
     reason = f"PR #{pr_number} approved sweep reuse from run {run_id}"
-    head_sha = str(run.get("head_sha") or "")
+    head_sha = source_head_sha(args.repo, run, token)
     if head_sha in pr_commit_shas(args.repo, pr_number, token):
         source_pr: int | None = pr_number
     else:
