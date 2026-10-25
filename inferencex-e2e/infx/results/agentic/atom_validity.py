@@ -124,15 +124,21 @@ def account_cache(
     ):
         return finish("INVALID_COUNTER", "full/cached tokens outside their valid range")
     cpu_complete = set(series["offload_tokens"]) == keys
-    cpu_invalid = invalid["offload_tokens"] or (bool(series["offload_tokens"]) and offload is None)
-    if cpu_complete and offload is not None:
+    cpu_invalid = (
+        invalid["offload_tokens"]
+        or bool(set(series["offload_tokens"]) - keys)
+        or (bool(series["offload_tokens"]) and offload is None)
+    )
+    if kv_offloading == "none" and not cpu_invalid:
+        cpu_invalid = any(value != 0 for value in values["offload_tokens"].values())
+        cpu_complete = True
+        offload = 0.0
+    elif cpu_complete and offload is not None:
         cpu_invalid |= not math.isfinite(offload) or any(
             values["cached_tokens"][k] + values["offload_tokens"][k] > values["full_tokens"][k]
             for k in keys
         )
-    if not series["offload_tokens"] and not cpu_invalid and kv_offloading == "none":
-        offload = 0.0
-    elif not cpu_complete or cpu_invalid:
+    if not cpu_complete or cpu_invalid:
         offload = None
     counts = (full, cached, offload)
     scope = dict(request_scope or {})

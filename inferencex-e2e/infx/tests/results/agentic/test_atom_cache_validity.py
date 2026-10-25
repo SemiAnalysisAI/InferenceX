@@ -158,19 +158,50 @@ def test_distinct_label_domains_are_summed_but_duplicate_aliases_are_rejected():
 
 
 @pytest.mark.parametrize(
-    ("offload", "present", "cpu", "status"),
+    ("offload", "total", "cpu", "status"),
     [
-        ("none", False, 0, "VALID_COMPLETE"),
-        ("dram", False, None, "PARTIAL_COMPONENT"),
-        ("none", True, None, "INVALID_COUNTER"),
+        ("none", None, 0, "VALID_COMPLETE"),
+        ("dram", None, None, "PARTIAL_COMPONENT"),
+        ("none", -1, None, "INVALID_COUNTER"),
+        ("none", 100, None, "INVALID_COUNTER"),
     ],
 )
-def test_only_confirmed_absence_of_cpu_can_supply_a_missing_zero(offload, present, cpu, status):
+def test_only_confirmed_absence_of_cpu_can_supply_a_missing_zero(offload, total, cpu, status):
     export = _export()
-    if present:
-        export["metrics"]["atom:prefix_cache_offload_tokens"]["series"][0]["stats"]["total"] = -1
+    if total is not None:
+        export["metrics"]["atom:prefix_cache_offload_tokens"]["series"][0]["stats"]["total"] = total
     else:
         del export["metrics"]["atom:prefix_cache_offload_tokens"]
+    result = _run(export, offload=offload)
+    _rates(result, 0.6, cpu, 0.6 if cpu == 0 else None)
+    assert result["cache_validity"]["status"] == status
+    assert result["cache_validity"]["pricing_eligible"] is (cpu == 0)
+
+
+@pytest.mark.parametrize(
+    ("offload", "engine", "cpu", "status"),
+    [
+        ("none", "0", 0, "VALID_COMPLETE"),
+        ("dram", "0", None, "PARTIAL_COMPONENT"),
+        ("none", "extra", None, "INVALID_COUNTER"),
+    ],
+)
+def test_missing_cpu_domains_require_a_disabled_tier_and_matching_present_domains(
+    offload, engine, cpu, status
+):
+    export = _export()
+    for stem, values in (
+        ("full_tokens", (400, 600)),
+        ("cached_tokens", (240, 360)),
+        ("requests", (2, 3)),
+    ):
+        export["metrics"][f"atom:prefix_cache_{stem}"]["series"] = [
+            {"endpoint_url": P, "labels": {"engine": str(i)}, "stats": {"total": value}}
+            for i, value in enumerate(values)
+        ]
+    export["metrics"]["atom:prefix_cache_offload_tokens"]["series"] = [
+        {"endpoint_url": P, "labels": {"engine": engine}, "stats": {"total": 0}}
+    ]
     result = _run(export, offload=offload)
     _rates(result, 0.6, cpu, 0.6 if cpu == 0 else None)
     assert result["cache_validity"]["status"] == status
