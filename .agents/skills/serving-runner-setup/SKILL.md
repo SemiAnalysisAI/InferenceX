@@ -13,9 +13,10 @@ Every step that registers, removes or restarts a runner, or changes a node, need
 
 1. User `stackops`. Its home holds `~/.config/enroot/.credentials` (VCR pull) and the runner `.env` (`GREENLAB_HF_TOKEN=…`).
 2. Name `<cluster-id>_<NN>` (`hcm-hgx02_00`), exactly one `cluster:<cluster-id>` label.
-3. Directory `<large-local-disk>/gharunners/<name>/` (`/mnt/gharunners` on hgx, `/data/gharunners` on rtx).
-4. systemd: `sudo ./svc.sh install stackops && sudo ./svc.sh start` in each runner directory. No tmux, no hand-run `run.sh`.
-5. Slots per node = maximum concurrent jobs (hgx 4, rtx 2).
+3. Directory `<large-local-disk>/gharunners/<cluster-id>/gharunnerNN/` (`/mnt/gharunners/hcm-hgx02/...` on hgx, `/data/gharunners/hcm-rtx01/...` on rtx). The per-cluster folder keeps new slots away from any old `gharunnerNN` directory on the same disk.
+4. GitHub labels `slurm,<sku>,<pool>,cluster:<cluster-id>` (pool = `h200-hcm` or `rtx6000pro-hcm`). `benchmark-tmpl.yml` puts the serving YAML's `runner:` straight into `runs-on`, so every value a YAML may use (pool, cluster label, slot name) must be a real label on the runner.
+5. systemd: `sudo ./svc.sh install stackops && sudo ./svc.sh start` in each runner directory. No tmux, no hand-run `run.sh`.
+6. Slots per node = maximum concurrent jobs (hgx 4, rtx 2).
 
 ## 1. Preflight the node
 
@@ -48,11 +49,15 @@ Fix anything else on the infra side before registering. Known state (2026-10-25)
 As `stackops` on the node, with a registration token from https://github.com/vngcloud/InferenceX/settings/actions/runners/new:
 
 ```bash
-mkdir -p /mnt/gharunners && cd /mnt/gharunners
+ID=hcm-hgx02; BASE=/mnt/gharunners/$ID          # rtx: ID=hcm-rtx01; BASE=/data/gharunners/$ID
+mkdir -p $BASE && cd $BASE
 curl -fsSLO https://raw.githubusercontent.com/vngcloud/InferenceX/refactor/vng-benchmark/inferencex-e2e/utils/runner_setup/setup.sh
-bash setup.sh <TOKEN> <RUNNER_TARBALL_URL> 0 3 /mnt/gharunners hcm-hgx02 slurm,h200,cluster:hcm-hgx02 https://github.com/vngcloud/InferenceX
-for d in /mnt/gharunners/gharunner0*/actions-runner; do (cd "$d" && sudo ./svc.sh install stackops && sudo ./svc.sh start); done
+bash setup.sh <TOKEN> https://github.com/actions/runner/releases/download/v2.338.1/actions-runner-linux-x64-2.338.1.tar.gz \
+  0 3 $BASE $ID slurm,h200,h200-hcm,cluster:$ID https://github.com/vngcloud/InferenceX   # rtx: 0 1 ... slurm,rtx6000pro,rtx6000pro-hcm,cluster:$ID
+for d in $BASE/gharunner0*/actions-runner; do (cd "$d" && sudo ./svc.sh install stackops && sudo ./svc.sh start); done
 ```
+
+The registration token comes from the settings page or `gh api -X POST repos/vngcloud/InferenceX/actions/runners/registration-token --jq .token` (valid 1 hour; do not paste it into chat or files).
 
 Put the runner `.env` (`GREENLAB_HF_TOKEN=…`) in each `actions-runner/` directory before starting.
 
