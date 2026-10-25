@@ -8216,7 +8216,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   framework: dynamo-vllm
   router:
     name: dynamo-router
-    version: cf620cdfebfe120d81341bfe6e23621d04fbd35d
+    version: a0de541ea8c861d5ac01d15953ca529bea68637b
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -8348,7 +8348,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg:
   framework: dynamo-vllm
   router:
     name: dynamo-router
-    version: cf620cdfebfe120d81341bfe6e23621d04fbd35d
+    version: a0de541ea8c861d5ac01d15953ca529bea68637b
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true

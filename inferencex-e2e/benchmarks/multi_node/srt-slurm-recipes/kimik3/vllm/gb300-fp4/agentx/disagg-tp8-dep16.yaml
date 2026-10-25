@@ -6,12 +6,12 @@ base:
     container: {}
     frameworks:
       vllm: "e4a5b5537344b103ed10de7764378ef09604ef3d"
-      dynamo: "cf620cdfebfe120d81341bfe6e23621d04fbd35d"
+      dynamo: "a0de541ea8c861d5ac01d15953ca529bea68637b"
 
   dynamo:
     install: true
     source:
-      rev: "cf620cdfebfe120d81341bfe6e23621d04fbd35d"
+      rev: "a0de541ea8c861d5ac01d15953ca529bea68637b"
 
   slurm:
     time_limit: "04:00:00"
@@ -61,6 +61,7 @@ base:
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
       DYN_TOKENIZER_CACHE_BYTES: "8589934592"
       DYN_TCP_REQUEST_TIMEOUT: "120"
+      DYN_DISABLE_OPENAI_STRICT_SCHEMA_VALIDATION: "1"
 
   engine:
     type: vllm

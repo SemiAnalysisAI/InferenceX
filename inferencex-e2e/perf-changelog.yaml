@@ -11205,5 +11205,5 @@
   scenario-type:
   - agentic-coding
   description:
-  - 'Update GB300 Kimi-K3 AgentX to image vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d and Dynamo cf620cdfebfe120d81341bfe6e23621d04fbd35d, refresh the recipe settings, drop 1P2D c56, and add 3P1D TP8 prefill + DEP16 decode c336.'
+  - 'Update GB300 Kimi-K3 AgentX to image vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d and Dynamo a0de541ea8c861d5ac01d15953ca529bea68637b, refresh the recipe settings, drop 1P2D c56, and add 3P1D TP8 prefill + DEP16 decode c336.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4516
