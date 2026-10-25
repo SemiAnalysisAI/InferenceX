@@ -11148,3 +11148,10 @@
     - "Update the vLLM image from v0.32.0 to nightly-rocm72-c50aca14, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4461
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Use latest configs for MiniMax M3.1 AgentX submission"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4465
+  scenario-type: [agentic-coding]
