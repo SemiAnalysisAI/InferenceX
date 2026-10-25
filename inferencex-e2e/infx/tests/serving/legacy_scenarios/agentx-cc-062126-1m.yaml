@@ -1,0 +1,39 @@
+# AgentX replay of the SemiAnalysis CC traces (062126 corpus) at full context, for engines whose
+# enforced context window is >= 1048576. Identical to agentx-cc-062126.yaml minus maxContextLength
+# (optional, unset = keep every trace). That file caps at 262144, which drops every trace whose
+# recorded peak exceeds 256k (run 39209786113 kept 220/393 traces). Here all 393 traces stay; the
+# corpus caps per-request input at 990,016 tokens.
+schemaVersion: "2.0"
+benchmark:
+  scenario: inferencex-agentx-mvp
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: main
+    type: public
+    dataset: semianalysis_cc_traces_weka_062126
+    entries: 393
+    randomSeed: 42
+    traceIdleGapCapSeconds: 300.0
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 3600.0
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+    trajectoryStartMinRatio: 0.25
+    trajectoryStartMaxRatio: 0.75
+    warmupRequestsPerLane: 10
+    agenticWarmupGracePeriod: 1800.0
+  artifacts:
+    sliceDuration: 1.0
+  tokenizer:
+    trustRemoteCode: true
+  runtime:
+    statsInterval: 30.0
+randomSeed: 42

@@ -1,0 +1,26 @@
+# Synthetic ISL/OSL/prefix-cache workload. infx/serving/scenarios.py fills isl, osl and prefix_prompts from workload: and adds the adaptive_search sweep: block when workload.search is true.
+schemaVersion: "2.0"
+benchmark:
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+    extra:
+      ignore_eos: true   # guarantee OSL: server generates exactly max_tokens
+  datasets:
+  - name: main
+    type: synthetic
+    entries: 1000
+    randomSeed: 42
+    isl: 8192
+    osl: 1024
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 300.0
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+randomSeed: 42

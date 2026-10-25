@@ -1,0 +1,50 @@
+# E2: synthetic shared-prefix trace for the HiCache L2-cache vs Mooncake-L3 A/B (KV reuse across
+# DP groups). Trace from utils/serving/gen_shared_prefix_trace.py (defaults: 300 groups x 8 sibling
+# sessions, turn 1 = 16384 shared + 45056 private tokens, 2 follow-up turns of 2048 tokens, 256
+# output tokens, 5-15 s between turns), pinned in scenarios/datasets/lock.yaml (key shared-prefix-e2).
+# Differences from the AgentX scenarios, all deliberate:
+# - cacheBust first_turn_suffix (scenario requires first_turn_prefix): a prefix marker would make
+#   every session's token 0 unique and erase the shared group prefix this trace exists to measure.
+#   The suffix still makes every session's remainder unique. unsafeOverride lets it through and
+#   marks the run as not submission-valid, which is fine for an internal A/B.
+# - trajectoryStart 0/0: synthesized prompts replay as DELTAS_WITHOUT_RESPONSES, whose warmup does
+#   not rebuild a mid-session prefix, so every session starts at turn 1.
+# - 1800 s: about 1000 sessions at c32 against 2400 in the file, so sequential sampling never wraps
+#   (a wrap would replay identical private prefixes).
+schemaVersion: "2.0"
+benchmark:
+  scenario: inferencex-agentx-mvp
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: shared-prefix-e2
+    type: file
+    format: mooncake_trace
+    path: ${IX_CUSTOM_DATASET_FILE}
+    entries: 2400
+    randomSeed: 42
+    traceIdleGapCapSeconds: 300.0
+    cacheBust:
+      target: first_turn_suffix
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 1800.0
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+    trajectoryStartMinRatio: 0.0
+    trajectoryStartMaxRatio: 0.0
+    warmupRequestsPerLane: 10
+    agenticWarmupGracePeriod: 1800.0
+  artifacts:
+    sliceDuration: 1.0
+  tokenizer:
+    trustRemoteCode: true
+  runtime:
+    statsInterval: 30.0
+randomSeed: 42

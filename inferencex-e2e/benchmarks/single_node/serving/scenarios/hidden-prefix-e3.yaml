@@ -1,0 +1,45 @@
+# E3: hidden-prefix trace for the HiCache L2-cache vs Mooncake-L3 A/B. Trace from
+# the generator on vng-benchmark (utils/serving/gen_hidden_prefix_trace.py) (defaults: 320 tool catalogs of ~25k tokens, 2400 sessions x 4
+# independent requests = catalog + ~1k-token unique user message, 256 output tokens), pinned in
+# benchmarks/single_node/serving/datasets/lock.yaml (key hidden-prefix-e3). The router (smg cache_aware) routes on the
+# `messages` text only, while the GLM-5.3 template renders `tools` first: the shared catalog is a
+# prefix the router cannot see, so requests land on DP ranks regardless of which rank holds it.
+# `messages` mode replays each turn verbatim (MESSAGE_ARRAY_WITH_RESPONSES): no history between turns.
+# Cache bust stays the scenario's required first_turn_prefix: the marker goes into the first user
+# message, which renders after `tools`, so the shared catalog prefix is intact.
+# 1800 s: ~7k requests at c32 against 9600 in the file, so sequential sampling does not wrap.
+schemaVersion: "2.0"
+benchmark:
+  scenario: inferencex-agentx-mvp
+  unsafeOverride: true
+  endpoint:
+    type: chat
+    path: /v1/chat/completions
+    streaming: true
+    useServerTokenCount: true
+  datasets:
+  - name: hidden-prefix-e3
+    type: file
+    format: mooncake_trace
+    path: ${IX_CUSTOM_DATASET_FILE}
+    entries: 2400
+    randomSeed: 42
+    traceIdleGapCapSeconds: 300.0
+  phases:
+  - name: profiling
+    kind: profiling
+    type: concurrency
+    duration: 1800.0
+    gracePeriod: 30.0
+    failedRequestThreshold: 0.1
+    trajectoryStartMinRatio: 0.25
+    trajectoryStartMaxRatio: 0.75
+    warmupRequestsPerLane: 10
+    agenticWarmupGracePeriod: 1800.0
+  artifacts:
+    sliceDuration: 1.0
+  tokenizer:
+    trustRemoteCode: true
+  runtime:
+    statsInterval: 30.0
+randomSeed: 42
