@@ -164,6 +164,7 @@ benchmark:
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
     INFX_DIAGNOSTIC_WARMUP_REQUESTS_PER_LANE: '1'
+    AIPERF_MAX_CONTEXT_LENGTH: '16384'
 setup_script: k3-umbp-diagnostic.sh
 host_setup:
   nodes: workers
@@ -191,3 +192,4 @@ services:
     timeout_seconds: 900
 environment:
   SRT_MORIIO_EXPLICIT_REGISTRATION: '1'
+  UMBP_VERIFY_GPU_COUNT: '8'
