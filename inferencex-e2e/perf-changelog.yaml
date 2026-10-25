@@ -11170,3 +11170,15 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4456
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB300 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash, following the cookbook's GB300 cells (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Common flags: DSpark with block verification at block size 7 (the bundled draft's dspark_block_size; synthetic acceptance from the minimaxm31flash_dspark golden curve), minimax-m3 reasoning and tool parsers."
+    - "Balanced TP4 (TRT-LLM routed MoE, breakable prefill graphs, 8 tokenizer workers) at conc 1-32, with the scheduler batch at 2x CONC."
+    - "Low-Latency at conc 1 in agentic-low-latency.yaml: MSA-V1 MonoKernel, page size 128, one-step DSpark with 8 draft tokens, max-running-requests 8."
+    - "High-Throughput TP4 + EP4 at conc 32-128; above conc 32 it enables L2 HiCache with write_back at hicache-size 175 GB per rank, inside the gb300-nv 920,000 MiB step memory cap."
+    - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
+  scenario-type: [agentic-coding]
