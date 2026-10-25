@@ -109,22 +109,21 @@ zip_override_tp4_dspark7_mono:
         DEBUG_HIP_DYNAMIC_QUEUES: null
   benchmark:
     env:
-      # c16 also runs on the DSpark 3 arm; the matrix selects each by zip index.
       CONC: ['1', '2', '4', '8', '16']
 
-# c16-c32: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV
-# cache with DBO and sequence-parallel prefill (from 4096 tokens).
+# c32: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV cache
+# with DBO and sequence-parallel prefill (from 4096 tokens).
 zip_override_tp4_dspark3:
   roles:
     agg:
       args:
         speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [32, 64]
+        max-num-seqs: [64]
       env:
         VLLM_ROCM_MINIMAX_M3_SP_PREFILL: '1'
   benchmark:
     env:
-      CONC: ['16', '32']
+      CONC: ['32']
 
 override_tp4_dspark3_c64_offload:
   roles:
