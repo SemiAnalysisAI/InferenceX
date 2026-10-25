@@ -296,7 +296,7 @@ def write_lane_config(
     if request.framework == "tilert":
         prefill_image = request.env["PREFILL_IMAGE"]
         containers[prefill_image] = backend.stage_image(prefill_image).reference
-    if power.dcgm:
+    if power.dcgm or power.native:
         image, reference = stage_gpu_exporter(run)
         containers["dcgm-exporter"] = reference
         containers[image] = reference

@@ -11170,3 +11170,13 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4456
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-mi355x-atom-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  description:
+    - "Require valid measured GPU power for all current Kimi-K3 MI355X AgentX points."
+    - "Collect disaggregated vLLM power with the cluster AMD exporter across prefill and decode workers."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4493
+  scenario-type: [agentic-coding]

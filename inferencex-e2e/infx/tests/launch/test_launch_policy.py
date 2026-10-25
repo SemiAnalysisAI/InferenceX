@@ -15,7 +15,7 @@ from infx.launch.lifecycle import Lifecycle
 from infx.launch.policy import LaunchPath, Match, salloc_time_limit
 from infx.launch.request import LaunchRequest, MultiNodeRequest, RequestError
 
-DCGM, AGENTX, ADAPTER, ERR = "dcgm", "agentx", "adapter", "error"
+DCGM, AGENTX, ADAPTER, NATIVE_AGENTX, ERR = "dcgm", "agentx", "adapter", "native-agentx", "error"
 MULTI, NATIVE = LaunchPath.SRT_MULTI, LaunchPath.SRT_NATIVE
 
 
@@ -32,6 +32,9 @@ def _multinode(**env):
 
 
 CASES = [
+    ("mi355x-amds", MULTI, "1", "kimik3", "fp4", "vllm-disagg", NATIVE_AGENTX),
+    ("mi355x-amds", MULTI, "1", "glm5.2", "fp4", "vllm-disagg", ERR),
+    ("mi355x-amds", MULTI, "0", "kimik3", "fp4", "vllm-disagg", ERR),
     ("gb200-nv", MULTI, "1", "glm5.2", "fp4", "dynamo-sglang", AGENTX),
     ("gb200-nv", MULTI, "1", "kimik3", "fp4", "dynamo-vllm", AGENTX),
     ("gb200-nv", MULTI, "0", "dsr1", "fp8", "dynamo-sglang", DCGM),
@@ -71,10 +74,18 @@ def test_power_eligibility_of_each_cluster_lane(
         return
     decision = decide_power(cluster, path, _multinode(**env, POWER="1"))
     assert (decision.dcgm, decision.agentx, decision.adapter) == (
-        True, expected == AGENTX, expected == ADAPTER,
+        expected != NATIVE_AGENTX, expected in (AGENTX, NATIVE_AGENTX), expected == ADAPTER,
     )  # fmt: skip
-    assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv"))
+    assert decision.native is (expected == NATIVE_AGENTX)
+    assert decision.require is (prefix == "kimik3" and cluster in ("gb200-nv", "gb300-nv", "mi355x-amds"))
     assert not decide_power(cluster, path, _multinode(**env, POWER="0")).dcgm
+
+
+def test_mi355x_eval_does_not_enable_power_collection():
+    request = _multinode(IS_AGENTIC="1", MODEL_PREFIX="kimik3", PRECISION="fp4",
+                         FRAMEWORK="vllm-disagg", CONC="4", CONC_LIST="4", POWER="1",
+                         EVAL_ONLY="true")
+    assert decide_power("mi355x-amds", MULTI, request) == power.NO_POWER
 
 
 def test_gb200_reports_agentic_misses_distinctly():

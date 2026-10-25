@@ -97,15 +97,15 @@ def _binder_inputs(
     environment: Mapping[str, str],
     placement: tuple[str, Cluster] | None,
     root: Path,
-) -> tuple[int | None, dict[str, str]]:
-    """The DCGM exporter port and AgentX client env the launcher binds a multi-node point with.
+) -> tuple[int | None, dict[str, str], bool]:
+    """The exporter selection and AgentX client env the launcher binds a multi-node point with.
 
     Raises ``ValueError`` when they depend on a cluster the runner label does not single out,
     or the cluster's lanes refuse the point.
     """
     agentic = environment["IS_AGENTIC"] == "1"
     if "prefill" not in point or not (agentic or point.get("power")):
-        return None, {}
+        return None, {}, False
     if placement is None:
         raise ValueError(
             f"runner {point['runner']!r} must schedule on one cluster to bind the cluster's "
@@ -126,7 +126,8 @@ def _binder_inputs(
         path = launch_path(cluster.id, request)
         lane = lanes.srt_lane(cluster.id, path)
         decision = power.decide_power(cluster.id, path, request)
-        return config.binder_inputs(cluster, srt, lane, request, decision)
+        port, client_env = config.binder_inputs(cluster, srt, lane, request, decision)
+        return port, client_env, decision.native
     except LaunchError as error:
         raise ValueError(f"cluster {cluster.id!r}: {error}") from error
 
@@ -139,12 +140,13 @@ def bound_variant(
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
     client_env: Mapping[str, str] | None = None,
+    native_power: bool = False,
 ) -> tuple[str | None, dict[str, Any]]:
     """The variant the launcher submits for ``point``, composed and bound.
 
-    Multi-node variants get the DCGM telemetry block on ``power_port`` and the client paths
-    ``client_env``, the binder inputs the launcher computes. ``'@fabric.<name>'`` values stay
-    unresolved: recipe fingerprints hash them as written.
+    Multi-node variants get DCGM telemetry on ``power_port`` or native telemetry when
+    ``native_power`` is set, plus the launcher-computed client paths in ``client_env``.
+    ``'@fabric.<name>'`` values stay unresolved: recipe fingerprints hash them as written.
     """
     if "prefill" not in point:
         selected, recipe = select_recipe(
@@ -158,6 +160,7 @@ def bound_variant(
         expand=expand,
         power_port=power_port,
         client_env=client_env,
+        native_power=native_power,
     )
 
 
@@ -205,7 +208,7 @@ def generate_recipes(
 ) -> dict[str, Any]:
     """Bind every srt-slurm point of ``config_keys``; write recipes and a manifest.
 
-    A multi-node point is bound with its cluster's DCGM exporter port and AgentX client
+    A multi-node point is bound with its cluster's exporter selection and AgentX client
     paths; the manifest names that cluster, the one its runner label schedules on. A runner
     label on several clusters leaves ``'@fabric.<name>'`` values as written and the
     manifest's ``cluster`` null.
@@ -232,10 +235,17 @@ def generate_recipes(
         for point in points:
             environment = point_environment(point)
             placement = _placement(inventory, point["runner"])
-            power_port, client_env = _binder_inputs(point, environment, placement, root)
+            power_port, client_env, native_power = _binder_inputs(
+                point, environment, placement, root
+            )
             fabric = _cluster_fabric(placement[1]) if placement else None
             variant, recipe = bound_variant(
-                point, environment, root, power_port=power_port, client_env=client_env
+                point,
+                environment,
+                root,
+                power_port=power_port,
+                client_env=client_env,
+                native_power=native_power,
             )
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
@@ -251,7 +261,10 @@ def generate_recipes(
                         recipe, environment, point["srt-recipe"], srt.extra if srt else None
                     )
             else:
-                _apply_acceptance_and_validate(recipe, environment, point["srt-recipe"])
+                srt = slurm_settings(placement[1]).srt_slurm if native_power and placement else None
+                _apply_acceptance_and_validate(
+                    recipe, environment, point["srt-recipe"], srt.extra if srt else None
+                )
             identity = json.dumps({"point": point, "variant": variant}, sort_keys=True)
             digest = hashlib.sha256(identity.encode()).hexdigest()[:12]
             name = f"{re.sub(r'[^A-Za-z0-9_.-]', '_', key)}-{digest}.yaml"

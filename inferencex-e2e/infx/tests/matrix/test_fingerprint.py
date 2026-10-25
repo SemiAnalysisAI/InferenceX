@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from infx.launch.drivers.srt import lanes, power
+from infx.launch.policy import LaunchPath, Match
 from infx.matrix.fingerprint import recipe_fingerprint
 from infx.matrix.generate import generate_config_matrix
 from infx.matrix.validation import load_config_files, load_runner_file
@@ -234,3 +236,22 @@ def test_the_planner_binds_a_script_installed_version_from_the_row(project):
 
     _, recipe = bound_variant(row, point_environment(row), project, expand=expand_variants)
     assert recipe["environment"] == {"ROUTER_VERSION": "0.1.14"}
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_agentx_power_fingerprints_use_the_selected_telemetry_block(project, monkeypatch, native):
+    edit(project, "configs/master.yaml", lambda master:
+         master["agentx"]["scenarios"]["agentic-coding"][0]["search-space"][0].update(power=True))
+    if native:
+        monkeypatch.setitem(lanes.SRT_LANES, ("fixture", LaunchPath.SRT_MULTI), lanes.SrtLane())
+        rule = power.PowerRule(Match(agentic=True), agentx=True, require=True, native=True)
+        monkeypatch.setitem(power.POWER_LANES, ("fixture", LaunchPath.SRT_MULTI),
+                            power.PowerLane((rule,), error="unsupported"))
+    before = fingerprints(project)
+    selected, other = ("native", "dcgm") if native else ("dcgm", "native")
+    edit(project, f"configs/srt-recipes/telemetry-{other}.yaml",
+         lambda block: block["telemetry"].update(collect_interval_ms=400))
+    assert fingerprints(project)[next(iter(AGENTX_POINTS))] == before[next(iter(AGENTX_POINTS))]
+    edit(project, f"configs/srt-recipes/telemetry-{selected}.yaml",
+         lambda block: block["telemetry"].update(collect_interval_ms=500))
+    assert fingerprints(project)[next(iter(AGENTX_POINTS))] != before[next(iter(AGENTX_POINTS))]

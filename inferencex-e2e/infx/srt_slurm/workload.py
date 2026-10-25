@@ -194,7 +194,7 @@ def compose_recipe(
 ) -> dict[str, Any]:
     """The fragment at ``path`` over its lane's shared block, under ``base`` for bundles.
 
-    ``power_port`` adds the DCGM telemetry block with its exporter on that port.
+    ``power_port`` adds DCGM telemetry on that port; ``native_power`` uses the cluster exporter.
     """
     raw = yamlio.safe_load(path.read_text())
     if not isinstance(raw, dict):
@@ -357,20 +357,29 @@ def bind_multinode(
     expand: Callable[..., list[tuple[str | None, dict[str, Any]]]] = selected_recipes,
     power_port: int | None = None,
     client_env: Mapping[str, str] | None = None,
+    native_power: bool = False,
 ) -> tuple[str | None, dict[str, Any]]:
     """Bind the one variant ``recipe`` (``fragment[:selector]``) selects; return its name too."""
     agentic = environment["IS_AGENTIC"] == "1"
     path, _, selector = recipe.partition(":")
     composed = compose_recipe(
-        Path(path), agentic=agentic, multinode=True, root=root, power_port=power_port
+        Path(path),
+        agentic=agentic,
+        multinode=True,
+        root=root,
+        power_port=power_port,
+        native_power=native_power,
     )
     variants = expand(composed, selector or None)
     if len(variants) != 1:
         raise ValueError(f"{recipe} selects {len(variants)} variants, not one")
     name, selected = variants[0]
-    return name, bind_workload(
+    bound = bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
+    if native_power:
+        bound["telemetry"]["required"] = bound["benchmark"]["env"]["REQUIRE_POWER"] == "1"
+    return name, bound
 
 
 def resolve_fabric(node: Any, fabric: Mapping[str, str | None], where: str = "") -> Any:
@@ -435,6 +444,7 @@ def main(argv: list[str] | None = None) -> None:
         metavar="NAME=VALUE",
         help="a launcher-owned benchmark client setting",
     )
+    parser.add_argument("--native-power", action="store_true", help="use the cluster GPU exporter")
     add_fabric_argument(parser)
     args = parser.parse_args(argv)
     try:
@@ -445,6 +455,7 @@ def main(argv: list[str] | None = None) -> None:
             root=root,
             power_port=args.power_port,
             client_env=dict(args.client_env),
+            native_power=args.native_power,
         )
         bound = resolve_fabric(bound, args.fabric)
         check_setup_script(bound, Path(args.recipe.partition(":")[0]), root)

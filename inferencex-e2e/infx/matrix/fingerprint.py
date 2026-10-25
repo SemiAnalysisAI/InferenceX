@@ -9,8 +9,11 @@ from typing import Any
 
 import yaml
 
+from infx.clusters import load_inventory
 from infx.config import repository_root
-from infx.srt_slurm.generate import bound_variant, point_environment
+from infx.launch.drivers.srt.power import POWER_LANES
+from infx.launch.policy import LaunchPath
+from infx.srt_slurm.generate import _binder_inputs, _placement, bound_variant, point_environment
 from infx.srt_slurm.variants import expand_variants
 
 ROW_EXCLUDED = frozenset({"conc", "exp-name", "recipe-fingerprint"})
@@ -54,8 +57,25 @@ def _without(block: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
 def _concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
     """Render the row's bound srt recipe, minus the fields that vary per point or run."""
     power_port = EXPORTER_PORT if entry.get("power") else None
+    environment = point_environment(entry)
+    native_power = False
+    client_env = None
+    if entry.get("power") and entry.get("scenario-type") == "agentic-coding":
+        inventory = load_inventory(root / "configs/runners.yaml")
+        placement = _placement(inventory, entry["runner"])
+        lane = POWER_LANES.get((placement[1].id, LaunchPath.SRT_MULTI)) if placement else None
+        if lane and any(rule.native for rule in lane.rules):
+            _, native_client, native_power = _binder_inputs(entry, environment, placement, root)
+            if native_power:
+                power_port, client_env = None, {"REQUIRE_POWER": native_client["REQUIRE_POWER"]}
     _, recipe = bound_variant(
-        entry, point_environment(entry), root, expand=expand_variants, power_port=power_port
+        entry,
+        environment,
+        root,
+        expand=expand_variants,
+        power_port=power_port,
+        native_power=native_power,
+        client_env=client_env,
     )
     for path in RECIPE_EXCLUDED:
         recipe = _without(recipe, path)
