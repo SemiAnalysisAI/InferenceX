@@ -308,6 +308,13 @@ normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
 matrix/eval policy changes do not invalidate reuse.
 
+When the app's ingest finishes, on success or failure, it sends
+`ingest-results-completed` back with per-run counts (benchmark, eval, trace and
+power rows: new, duplicate, skipped, unmapped, failed). `ingest-results-callback.yml`
+checks that `merge-run-id` is a Merge Ingest push to `main`, resolves the PR merged
+by that commit, and posts one comment per merge run, updated in place on reruns
+(marker `<!-- ingest-results-report merge-run=<id> -->`).
+
 Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
