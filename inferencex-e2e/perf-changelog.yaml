@@ -11191,3 +11191,10 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image from v0.5.20-rocm720-mi35x-20260930 to v0.5.22-rocm720-mi35x, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4506
+  scenario-type: [agentic-coding]
