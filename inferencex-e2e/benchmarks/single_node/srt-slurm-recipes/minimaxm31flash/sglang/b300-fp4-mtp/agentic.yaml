@@ -137,12 +137,13 @@ override_tp4_dram_c32:
         cuda-graph-max-bs-decode: 64
         mem-fraction-static: 0.87
         enable-hierarchical-cache: true
-        hicache-size: 360
+        hicache-size: 290
         hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_dram_c64:
   roles:
@@ -155,12 +156,13 @@ override_tp4_dram_c64:
         cuda-graph-max-bs-decode: 128
         mem-fraction-static: 0.87
         enable-hierarchical-cache: true
-        hicache-size: 360
+        hicache-size: 290
         hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_dram_c80:
   roles:
@@ -173,12 +175,13 @@ override_tp4_dram_c80:
         cuda-graph-max-bs-decode: 128
         mem-fraction-static: 0.87
         enable-hierarchical-cache: true
-        hicache-size: 360
+        hicache-size: 290
         hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '80'
       KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
 
 override_tp4_dram_c96:
   roles:
@@ -191,9 +194,10 @@ override_tp4_dram_c96:
         cuda-graph-max-bs-decode: 128
         mem-fraction-static: 0.87
         enable-hierarchical-cache: true
-        hicache-size: 360
+        hicache-size: 290
         hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '96'
       KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
