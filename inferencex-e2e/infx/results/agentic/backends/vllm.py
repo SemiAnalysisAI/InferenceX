@@ -385,9 +385,15 @@ def _cache_role_filter(
     if "unknown" in roles or (disaggregated is True and "combined" in roles):
         scope = "unresolved"
     # Known decode counters measure KV transfer, including alongside unlabelled workers.
-    return scope, lambda series: _series_role(series, disaggregated, endpoint_roles) in (
-        "prefill",
-        "combined",
+    return (
+        scope,
+        lambda series: (
+            _series_role(series, disaggregated, endpoint_roles)
+            in (
+                "prefill",
+                "combined",
+            )
+        ),
     )
 
 

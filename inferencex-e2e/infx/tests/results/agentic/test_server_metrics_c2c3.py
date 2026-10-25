@@ -265,9 +265,7 @@ class TestSglangNonDeviceTiers:
 
     def test_storage_tier_is_counted_with_the_other_non_device_tiers(self) -> None:
         metrics = self._metrics({"device": 600, "host": 200, "storage": 100})
-        metrics["sglang:realtime_tokens"] = _counter(
-            [(PRE, {"mode": "prefill_compute"}, 100)]
-        )
+        metrics["sglang:realtime_tokens"] = _counter([(PRE, {"mode": "prefill_compute"}, 100)])
         _, nested = _run(metrics, "sglang")
         cache = nested["cache"]
         assert cache["gpu_cache_hit_rate"] == pytest.approx(0.6)
