@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -477,7 +479,22 @@ EXTERNAL_RUN = {
 }
 
 
-def run_external_reuse(monkeypatch, tmp_path, run, source_labels=()):
+EXTERNAL_HEAD = "75745991a66c" + "1" * 28
+
+
+def identity_zip(**changes) -> bytes:
+    identity = {
+        "pr_number": 900, "head_sha": EXTERNAL_HEAD, "merge_sha": "2" * 40,
+        "evals_only": False, "agentx_fast": False, "all_evals": True, "fail_fast": True,
+        **changes,
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        bundle.writestr("source_identity.json", json.dumps(identity))
+    return buffer.getvalue()
+
+
+def run_external_reuse(monkeypatch, tmp_path, run, source_labels=(), identity=None):
     def fake_github_api(repo, path, token, params=None):
         return {
             "/commits/merge-sha/pulls": [{"number": 1321}],
@@ -493,13 +510,20 @@ def run_external_reuse(monkeypatch, tmp_path, run, source_labels=()):
                 "body": "/use 88",
             }],
             "/pulls/1321/commits": [{"sha": "abc123"}],
-            "/actions/runs/88/artifacts": [{"name": "results_bmk"}],
+            "/actions/runs/88/artifacts": [{"name": "results_bmk"}] + (
+                [{"name": "source-identity", "id": 5}] if identity is not None else []
+            ),
         }[path]
+
+    def fake_download(repo, path, token):
+        assert path == "/actions/artifacts/5/zip"
+        return identity
 
     output_path = tmp_path / "outputs"
     monkeypatch.setenv("GITHUB_TOKEN", "token")
     monkeypatch.setattr(reuse.github, "api", fake_github_api)
     monkeypatch.setattr(reuse.github, "paginate", fake_paginated_github_api)
+    monkeypatch.setattr(reuse.github, "download", fake_download)
     monkeypatch.setattr(reuse.sys, "argv", [
         "find_reusable_sweep_run.py", "--repo", "SemiAnalysisAI/InferenceX",
         "--commit-sha", "merge-sha", "--event-name", "push", "--ref", "refs/heads/main",
@@ -514,6 +538,30 @@ def test_main_reuses_pinned_trusted_external_sweep(monkeypatch, tmp_path) -> Non
     assert outputs["reuse-enabled"] == "true"
     assert outputs["reuse-source-run-id"] == "88"
     assert outputs["reuse-source-pr-number"] == "900"
+    assert outputs["reuse-source-head-sha"] == "main-sha"
+
+
+def test_main_reports_recorded_external_head_and_ignores_current_labels(
+    monkeypatch, tmp_path,
+) -> None:
+    outputs = run_external_reuse(
+        monkeypatch, tmp_path, EXTERNAL_RUN, ["agentx-fast"], identity_zip(),
+    )
+    assert outputs["reuse-enabled"] == "true"
+    assert outputs["reuse-source-pr-number"] == "900"
+    assert outputs["reuse-source-head-sha"] == EXTERNAL_HEAD
+
+
+@pytest.mark.parametrize("archive,reason", [
+    (identity_zip(evals_only=True), "External source PR #900 .*evals-only"),
+    (identity_zip(pr_number=901), "disagrees with its title"),
+    (identity_zip(head_sha="f" * 40), "disagrees with its title"),
+    (identity_zip(agentx_fast="false"), "malformed source-identity"),
+    (b"not a zip", "unreadable source-identity"),
+])
+def test_main_rejects_by_recorded_external_identity(monkeypatch, tmp_path, archive, reason) -> None:
+    with pytest.raises(RuntimeError, match=reason):
+        run_external_reuse(monkeypatch, tmp_path, EXTERNAL_RUN, identity=archive)
 
 
 @pytest.mark.parametrize("change", [
