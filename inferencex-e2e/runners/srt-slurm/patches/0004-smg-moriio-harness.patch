@@ -1,0 +1,103 @@
+diff --git a/src/srtctl/frontends/smg.py b/src/srtctl/frontends/smg.py
+index 6abdfc5d..678775d2 100644
+--- a/src/srtctl/frontends/smg.py
++++ b/src/srtctl/frontends/smg.py
+@@ -11,10 +11,12 @@ itself, so the static-router base covers launch, readiness, and worker shape for
+ every backend.
+ """
+ 
++import json
++from dataclasses import replace
+ from typing import TYPE_CHECKING, Any, ClassVar
+ 
+ from srtctl.frontends.base import register_frontend
+-from srtctl.frontends.static_router import StaticRouterFrontend, setup_script_preamble
++from srtctl.frontends.static_router import StaticRouterFrontend
+ from srtctl.ports import SMG_METRICS_PORT
+ 
+ if TYPE_CHECKING:
+@@ -26,7 +28,7 @@ class SMGFrontend(StaticRouterFrontend):
+     """Shepherd Model Gateway in front of any engine's direct HTTP workers."""
+ 
+     type: ClassVar[str] = "smg"
+-    executable: ClassVar[tuple[str, ...]] = ("smg", "launch")
++    executable: ClassVar[tuple[str, ...]] = ("python3", "/configs/smg_moriio_gateway.py")
+     pd_flag: ClassVar[str] = "--pd-disaggregation"
+     process_name: ClassVar[str] = "smg"
+     # SMG waits at most --worker-startup-timeout-secs (1800 s by default) for a startup
+@@ -42,17 +44,17 @@ class SMGFrontend(StaticRouterFrontend):
+             raise ValueError("frontend.type: smg prefill/decode needs the same engine in both roles")
+         if prefill.type == "trtllm":
+             raise ValueError("frontend.type: smg does not support TRT-LLM prefill/decode")
+-        if prefill.type == "vllm" and not (prefill.is_grpc_mode("prefill") and decode.is_grpc_mode("decode")):
++        if (
++            prefill.type == "vllm"
++            and not prefill.discovers_workers()
++            and not (prefill.is_grpc_mode("prefill") and decode.is_grpc_mode("decode"))
++        ):
+             raise ValueError("frontend.type: smg runs vLLM prefill/decode only over gRPC; set grpc: true in both roles")
+ 
+     def frontend_metrics_port(self, frontend_args: dict[str, Any] | None) -> int | None:
+         """SMG serves Prometheus on its own listener, not on the routing port."""
+         return SMG_METRICS_PORT
+ 
+-    def build_bash_preamble(self, config: Any) -> str | None:
+-        """Run the recipe setup script in SMG's container, e.g. to ``pip install smg``."""
+-        return setup_script_preamble(config)
+-
+     def get_managed_frontend_args(
+         self,
+         config: Any,
+@@ -64,3 +66,52 @@ class SMGFrontend(StaticRouterFrontend):
+         if "prometheus-port" in normalized:
+             raise ValueError("frontend.args.prometheus-port is managed by srtctl for smg")
+         return ["--prometheus-port", str(SMG_METRICS_PORT)]
++
++    def discovers_workers(self, backend: Any) -> bool:
++        return backend.discovers_workers()
++
++    def build_bash_preamble(self, config: Any) -> str:
++        return "python3 -m venv /tmp/smg-router-venv && /tmp/smg-router-venv/bin/pip install --disable-pip-version-check smg==1.13.0"
++
++    def start_frontends(self, topology, runtime, config, backend, backend_processes, stop_event=None):
++        if not backend.discovers_workers():
++            return super().start_frontends(topology, runtime, config, backend, backend_processes, stop_event)
++        from srtctl.core.slurm import get_hostname_ip
++
++        specs = []
++        for process in backend_processes:
++            if process.http_port <= 0:
++                continue
++            host = get_hostname_ip(process.node, runtime.network_interface)
++            role = process.endpoint_mode
++            specs.append(
++                {
++                    "url": f"http://{host}:{process.http_port}",
++                    "worker_type": role,
++                    "runtime_type": "vllm",
++                    "connection_mode": "http",
++                    "kv_connector": "MoRIIOConnector",
++                    "kv_role": "kv_producer" if role == "prefill" else "kv_consumer",
++                    "labels": {
++                        "moriio_mode": "read",
++                        "moriio_host": host,
++                        "moriio_handshake_port": str(process.moriio_handshake_port),
++                        "moriio_notify_port": str(process.moriio_notify_port),
++                        "tp_size": str(len(process.gpu_indices)),
++                    },
++                }
++            )
++        (runtime.log_dir / "smg-workers.json").write_text(json.dumps(specs))
++        args = {
++            **config.frontend.args,
++            "moriio-workers": str(runtime.container_log_dir / "smg-workers.json"),
++            "enable-igw": True,
++        }
++        updated = replace(config, frontend=replace(config.frontend, args=args))
++        return super().start_frontends(topology, runtime, updated, backend, backend_processes, stop_event)
++
++    def build_router_command(self, workers, host, port, backend):
++        command = super().build_router_command(workers, host, port, backend)
++        if not backend.discovers_workers():
++            command[:2] = ["/tmp/smg-router-venv/bin/smg", "launch"]
++        return command

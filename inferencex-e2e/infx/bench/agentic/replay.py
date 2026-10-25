@@ -61,6 +61,15 @@ class ReplayConfig:
         warmup = None
         if values["AIPERF_EXPERIMENTAL_FAST"] == "1":
             duration, warmup = FAST_DURATION_S, FAST_WARMUP_REQUESTS_PER_LANE
+        diagnostic_warmup = inputs.optional("INFX_DIAGNOSTIC_WARMUP_REQUESTS_PER_LANE", env)
+        if diagnostic_warmup is not None:
+            if warmup is not None:
+                raise inputs.InputError("diagnostic warmup cannot be combined with FAST")
+            warmup = str(
+                inputs.parse_positive_int(
+                    "INFX_DIAGNOSTIC_WARMUP_REQUESTS_PER_LANE", diagnostic_warmup
+                )
+            )
         conv_aware = (
             values["FRAMEWORK"].startswith("dynamo-")
             and values["AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING"] != "0"

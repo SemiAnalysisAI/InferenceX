@@ -202,3 +202,21 @@ def test_corpus_is_uncapped_unless_explicitly_capped_or_pinned(prefix, override,
 
     assert (config.loader, config.dataset) == (loader, dataset)
     assert _value(replay_argv(config, "/venv/bin/agentx"), "--public-dataset") == loader
+
+
+def test_diagnostic_warmup_preserves_short_profile():
+    argv = _argv(DURATION="300", INFX_DIAGNOSTIC_WARMUP_REQUESTS_PER_LANE="1")
+    assert _value(argv, "--warmup-requests-per-lane") == "1"
+    assert _value(argv, "--benchmark-duration") == "300"
+    assert "--unsafe-override" in argv
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "bad"])
+def test_invalid_diagnostic_warmup_is_rejected(value):
+    with pytest.raises(InputError):
+        _argv(INFX_DIAGNOSTIC_WARMUP_REQUESTS_PER_LANE=value)
+
+
+def test_diagnostic_warmup_cannot_silently_override_fast():
+    with pytest.raises(InputError, match="cannot be combined"):
+        _argv(AIPERF_EXPERIMENTAL_FAST="1", INFX_DIAGNOSTIC_WARMUP_REQUESTS_PER_LANE="1")

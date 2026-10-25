@@ -10953,3 +10953,11 @@
     - "Preserve the AMD image, P64/D128, graph512, allocator0.92, GMU0.9, MoRIIO/UMBP, standard warmup and full3600 profiling; reuse the validated AMD Dynamo READ handoff adapter."
   scenario-type: [agentic-coding]
   no-evals: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-smg-disagg-agentic-umbp-c70-diag
+  description:
+    - "Diagnostic only: two-node Kimi-K3 UMBP c70 with SMG manual/min_load and 900-second session affinity; validate cross-node pool bytes before model loading."
+    - "Keep the pinned engine and 1799GB pool capacity, P64/D128, graph512 and allocator0.92; use one warmup request per lane and a 300-second profile within 30 minutes."
+  scenario-type: [agentic-coding]
+  no-evals: true
