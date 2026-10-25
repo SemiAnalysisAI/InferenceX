@@ -11,7 +11,7 @@ Every step that registers, removes or restarts a runner, or changes a node, need
 
 ## Convention (all pools)
 
-1. User `stackops`, uid/gid 1001 on every node (same as the existing hgx/han nodes; Slurm shows it as `1001`). Its home holds `~/.config/enroot/.credentials` (VCR pull) and the runner `.env` (`GREENLAB_HF_TOKEN=…`).
+1. User `stackops`, uid/gid 1001 on every node (same as the existing hgx/han nodes; Slurm shows it as `1001`). Its home holds `~/.config/enroot/.credentials` (VCR pull).
 2. Cluster id `<site>-<node>`: site `hcm` or `han` (`hcm-hgx02`, `hcm-rtx01`, `han-h200-01`). Runner name `<cluster-id>_<NN>` (`hcm-hgx02_00`), exactly one `cluster:<cluster-id>` label. A new site needs its prefix in `VNG_CLUSTER_PREFIXES` (`infx/serving/schema.py`).
 3. Directory `<large-local-disk>/gharunners/<cluster-id>/gharunnerNN/` (`/mnt/gharunners/hcm-hgx02/...` on hgx, `/data/gharunners/hcm-rtx01/...` on rtx, `/mnt/gharunners/han-h200-01/...` on HAN). The per-cluster folder keeps new slots away from any old `gharunnerNN` directory on the same disk.
 4. GitHub labels `slurm,<sku>,<pool>,cluster:<cluster-id>` (pool = `h200-hcm`, `rtx6000pro-hcm` or `h200-han`). `benchmark-tmpl.yml` puts the serving YAML's `runner:` straight into `runs-on`, so every value a YAML may use (pool, cluster label, slot name) must be a real label on the runner.
@@ -71,9 +71,9 @@ bash setup.sh <TOKEN> https://github.com/actions/runner/releases/download/v2.338
 for d in $BASE/gharunner0*/actions-runner; do (cd "$d" && sudo ./svc.sh install stackops && sudo ./svc.sh start); done
 ```
 
-The registration token comes from the settings page or `gh api -X POST repos/vngcloud/InferenceX/actions/runners/registration-token --jq .token` (valid 1 hour; do not paste it into chat or files).
+The registration token comes from the settings page or `gh api -X POST repos/vngcloud/InferenceX/actions/runners/registration-token --jq .token` (valid exactly 1 hour, not configurable; mint it right before running `setup.sh`). `setup.sh` prints `All runners configured!` even when registration failed: check that every slot printed its own `[<name>] Done.` line.
 
-Put the runner `.env` (`GREENLAB_HF_TOKEN=…`) in each `actions-runner/` directory before starting.
+No runner `.env` is needed for the datasets: every repo in `datasets/lock.yaml` is public on HF (checked 2026-10-25), and `infx/serving/datasets.py` downloads anonymously when `GREENLAB_HF_TOKEN` is unset. Add `GREENLAB_HF_TOKEN=…` to `actions-runner/.env` only if a private dataset is added to the lock.
 
 ## 3. Add the cluster record
 
