@@ -11205,5 +11205,5 @@
   scenario-type:
   - agentic-coding
   description:
-  - 'Update GB300 Kimi-K3 AgentX to image vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d (KDA RecoverSSM and online quantization of the Kimi-K3 projections) and Dynamo cf620cdfebfe120d81341bfe6e23621d04fbd35d. Disaggregated DCP8: prefill CUDA graphs up to 8192 tokens, prefill max-num-seqs 32, GPU memory utilization 0.95, replay-SSM on the uncapped decode points, router session affinity TTL 1 s; drop 1P2D c56. Add 3P1D TP8 prefill + DEP16 decode c336 with MXFP8 online quantization.'
+  - 'Update GB300 Kimi-K3 AgentX to image vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d and Dynamo cf620cdfebfe120d81341bfe6e23621d04fbd35d, refresh the recipe settings, drop 1P2D c56, and add 3P1D TP8 prefill + DEP16 decode c336.'
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4516
