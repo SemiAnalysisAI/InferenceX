@@ -1,0 +1,60 @@
+run-name: serving - ${{ inputs.test-name }}
+# VNG serving-YAML benchmarks (inferencex-e2e/docs/serving/ARCHITECTURE.md).
+# Dispatch with inferencex-e2e/utils/serving/dispatch.sh, which validates first.
+on:
+    workflow_dispatch:
+        inputs:
+            serving:
+                description: "Serving YAML text (inferencex-e2e/configs/serving/*.yaml)"
+                required: true
+                type: string
+            test-name:
+                description: "Run title, printed by dispatch.sh"
+                required: true
+                type: string
+
+permissions:
+    contents: read
+
+jobs:
+    plan:
+        runs-on: ubuntu-latest
+        outputs:
+            points: ${{ steps.plan.outputs.points }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - id: plan
+              working-directory: inferencex-e2e
+              env:
+                  SERVING_YAML: ${{ inputs.serving }}
+                  PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
+              run: |
+                  printf '%s\n' "$SERVING_YAML" > "$RUNNER_TEMP/serving.yaml"
+                  points=$(uv run --no-project --python 3.12 --with pydantic --with pyyaml \
+                    python -P -m infx.serving.to_matrix "$RUNNER_TEMP/serving.yaml")
+                  echo "points=$points" >> "$GITHUB_OUTPUT"
+
+    bench:
+        needs: plan
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: serving /
+        strategy:
+            fail-fast: false
+            matrix:
+                include: ${{ fromJSON(needs.plan.outputs.points) }}
+        secrets:
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with:
+            config: ${{ toJSON(matrix.config) }}
+            serving: ${{ matrix.serving }}
+            runner: ${{ matrix.config.runner }}
+            priority: "0"
+            queue-token: serving
+            dp-attn: false
+            run-eval: false
+            scenario-type: agentic-coding
+            duration: ${{ matrix.config.duration }}
+            test-name: ${{ inputs.test-name }}

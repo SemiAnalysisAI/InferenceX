@@ -1,0 +1,57 @@
+import json
+
+import yaml
+
+from infx.serving import scenarios
+from infx.serving.to_matrix import build, main
+
+ENGINE = """\
+name: qwen-tp1
+runner: cluster:hcm-hgx02
+image: vllm/vllm-openai:v0.29.0
+model: Qwen/Qwen3.8-27B
+gpus: 1
+serve: vllm serve Qwen/Qwen3.8-27B --max-model-len 262144 --port 9000
+"""
+ROW_KEYS = {
+    "image", "model", "model-prefix", "precision", "framework", "runner", "tp", "pp", "dcp-size",
+    "pcp-size", "ep", "dp-attn", "spec-decoding", "conc", "kv-offloading", "total-cpu-dram-gb",
+    "duration", "exp-name", "scenario-type",
+}
+
+
+def test_one_point_per_conc_with_the_rendered_scenario():
+    result = build(ENGINE + "scenario: agentx\noverrides: {duration: 180}\nconc: [8, 16]\n")
+    points = result["points"]
+    assert [p["config"]["exp-name"] for p in points] == ["qwen-tp1_c8", "qwen-tp1_c16"]
+    assert set(points[0]["config"]) == ROW_KEYS
+    assert points[0]["config"]["duration"] == 180 and points[0]["config"]["tp"] == 1
+    serving = json.loads(points[0]["serving"])
+    assert serving["scenario_label"] == "agentx-cc-062126-smoke"
+    assert serving["search"] is False and serving["dataset_kind"] == "public"
+    assert yaml.safe_load(serving["scenario_yaml"]) == scenarios.render("agentx", {"duration": 180}).doc
+    assert "--port" not in serving["serve_cmd"]
+    assert result["title"] == "serving qwen-tp1 agentx-cc-062126-smoke (180s) c8,16 cluster:hcm-hgx02"
+
+
+def test_grid_is_one_job_per_point():
+    points = build(ENGINE + "scenario: synthetic\nworkload: {isl: [8k, 32k], osl: 1k, cache: 50, search: true}\nconc: 1\n")["points"]
+    assert [p["config"]["exp-name"] for p in points] == [
+        "qwen-tp1-sweep-isl8k-osl1k-cache50", "qwen-tp1-sweep-isl32k-osl1k-cache50"]
+    assert all(json.loads(p["serving"])["search"] for p in points)
+
+
+def test_single_search_point_keeps_the_search_name():
+    [point] = build(ENGINE + "scenario: synthetic\nworkload: {isl: 8k, osl: 1k, cache: 0, search: true}\nconc: 1\n")["points"]
+    assert point["config"]["exp-name"] == "qwen-tp1_search"
+
+
+def test_cli_check_and_errors(tmp_path, capsys):
+    good = tmp_path / "good.yaml"
+    good.write_text(ENGINE + "scenario: tau2\nconc: 4\n")
+    assert main(["--check", str(good)]) == 0
+    assert capsys.readouterr().out.startswith("serving qwen-tp1 custom-agentic-tau2")
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(ENGINE + "scenario: tau2\nconc: 4\noverrides: {nope: 1}\n")
+    assert main([str(bad)]) == 2
+    assert "ERROR overrides: unknown key(s) nope" in capsys.readouterr().err

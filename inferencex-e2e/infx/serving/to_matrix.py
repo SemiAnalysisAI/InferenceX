@@ -1,0 +1,97 @@
+"""Serving YAML -> the points .github/workflows/serving.yml runs.
+
+    python -P -m infx.serving.to_matrix serving.yaml          # [{"config": row, "serving": json}, ...]
+    python -P -m infx.serving.to_matrix --check serving.yaml  # the run title only
+
+``config`` is the benchmark-tmpl.yml row; ``serving`` is SERVING_JSON for
+infx/launch/drivers/serving.py, with the rendered scenario inside.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from infx.serving.render import render
+from infx.serving.scenarios import Rendered
+from infx.serving.schema import ServingError, ServingSpec, load_serving, variants
+
+
+def _row(spec: ServingSpec, framework: str, conc: int, duration: int, exp_name: str) -> dict:
+    return {
+        "image": spec.image, "model": spec.model, "model-prefix": spec.name,
+        "precision": spec.precision, "framework": framework, "runner": spec.runner,
+        "tp": spec.gpus, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
+        "spec-decoding": "none", "conc": conc, "kv-offloading": "none", "total-cpu-dram-gb": 0,
+        "duration": duration, "exp-name": exp_name, "scenario-type": "agentic-coding",
+    }  # fmt: skip
+
+
+def _serving(spec: ServingSpec, rendered: dict[str, str], variant: Rendered, text: str) -> str:
+    return json.dumps({
+        "framework": rendered["framework"],
+        "serve_cmd": rendered["serve-cmd"],
+        "serve_env": rendered["serve-env"],
+        "served_model_name": rendered["served-model-name"],
+        "router_image": rendered["router-image"],
+        "router_cmd": rendered["router-cmd"],
+        "router_env": rendered["router-env"],
+        "router_profile": rendered["router-profile"],
+        "router_metrics_port": rendered["router-metrics-port"],
+        "replicas": spec.replicas,
+        "storage_image": rendered["storage-image"],
+        "storage_cmd": rendered["storage-cmd"],
+        "storage_env": rendered["storage-env"],
+        "scenario_yaml": variant.yaml(),
+        "scenario_label": variant.label,
+        "dataset_kind": variant.kind,
+        "dataset": variant.dataset,
+        "search": variant.search,
+        "yaml": text,
+    })
+
+
+def build(text: str, inventory=None) -> dict:
+    spec = load_serving(text, inventory)
+    rendered = render(spec)
+    chosen = variants(spec)
+    multi = len(chosen) > 1
+    points = []
+    for variant in chosen:
+        for conc in spec.conc:
+            if multi:
+                exp_name = f"{spec.name}-{variant.label}"
+            else:
+                exp_name = f"{spec.name}_search" if variant.search else f"{spec.name}_c{conc}"
+            row = _row(spec, rendered["framework"], conc, int(variant.duration), exp_name)
+            points.append({"config": row, "serving": _serving(spec, rendered, variant, text)})
+    what = f"{len(chosen)} points" if multi else chosen[0].label
+    durations = {int(variant.duration) for variant in chosen}
+    seconds = f"{durations.pop()}s" if len(durations) == 1 else "mixed"
+    concs = ",".join(str(conc) for conc in spec.conc)
+    return {"points": points, "title": f"serving {spec.name} {what} ({seconds}) c{concs} {spec.runner}"}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("path", type=Path)
+    parser.add_argument("--check", action="store_true", help="validate and print the run title only")
+    args = parser.parse_args(argv)
+    try:
+        try:
+            text = args.path.read_text()
+        except OSError as error:
+            raise ServingError(f"serving: cannot read {args.path} ({error.strerror})") from error
+        result = build(text)
+    except ServingError as error:
+        for line in str(error).splitlines():
+            print(f"ERROR {line}", file=sys.stderr)
+        return 2
+    print(result["title"] if args.check else json.dumps(result["points"]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
