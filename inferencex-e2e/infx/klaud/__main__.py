@@ -28,7 +28,6 @@ from .github import (
     read as github_read,
 )
 from .models import (
-    ABORT_LABEL,
     CandidateOutcome,
     OwnedCandidate,
     Ownership,
@@ -44,7 +43,10 @@ if TYPE_CHECKING:
     from infx.clusters import RunnerInventory
 
 PRODUCERS = "producers.json"
-RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started", "aborted"})
+RETRY_NEXT_WAVE = frozenset({"no-capacity", "agent-not-started"})
+MAINTAINER_CLOSE_HOLD_DAYS = 7
+INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing"})
+INFRA_COOLDOWN_DAYS = 7
 
 
 def observation_key(row: dict) -> tuple:
@@ -214,15 +216,19 @@ def weights_key(source: dict) -> tuple:
 def recent_candidate_outcomes(
     repository: str, cooldown_hours: int
 ) -> tuple[dict[str, str | None], set[tuple]]:
-    """Return each candidate's latest outcome within ``cooldown_hours`` and missing-weights keys.
+    """Return each candidate's latest outcome still cooling down and missing-weights keys.
 
-    Resumed sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
-    The newest session artifact counts. Unreadable history means no cooldown.
+    Infrastructure outcomes (INFRA_OUTCOMES) cool down for INFRA_COOLDOWN_DAYS, others for
+    ``cooldown_hours``. Resumed sessions record outcomes in later waves, so history reaches
+    MAX_SESSIONS waves back. The newest session artifact counts. Unreadable history means no
+    cooldown.
     """
     from .lifecycle import MAX_SESSIONS, WAKE_TITLE, WAVE_HOURS, resume_parent
 
-    cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
-    since = cutoff - timedelta(hours=MAX_SESSIONS * WAVE_HOURS)
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(hours=cooldown_hours)
+    window = min(cutoff, now - timedelta(days=INFRA_COOLDOWN_DAYS))
+    since = window - timedelta(hours=MAX_SESSIONS * WAVE_HOURS)
     try:
         runs = github_items(
             repository,
@@ -261,7 +267,7 @@ def recent_candidate_outcomes(
                 if (
                     not match
                     or artifact.get("expired", True)
-                    or utc(artifact["created_at"]) < cutoff
+                    or utc(artifact["created_at"]) < window
                 ):
                     continue
                 if match[1] not in latest or artifact["id"] > latest[match[1]][0]["id"]:
@@ -271,8 +277,11 @@ def recent_candidate_outcomes(
     result: dict[str, str | None] = {}
     blocked: dict[int, set[str]] = {}
     for candidate, (artifact, run_id) in latest.items():
-        result[candidate] = recorded_outcome(repository, artifact)
-        if result[candidate] == "weights-missing":
+        outcome = recorded_outcome(repository, artifact)
+        if outcome not in INFRA_OUTCOMES and utc(artifact["created_at"]) < cutoff:
+            continue
+        result[candidate] = outcome
+        if outcome == "weights-missing":
             blocked.setdefault(plans[run_id], set()).add(candidate)
     missing_weights = set()
     for plan_run, candidates in blocked.items():
@@ -333,10 +342,7 @@ def recorded_outcome(repository: str, artifact: dict) -> str | None:
 
 
 def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
-    """Return ``candidates`` never tried recently, then those whose recent outcome retries now.
-
-    An abort is lifted by removing its label, so it never delays the next attempt by itself.
-    """
+    """Return ``candidates`` never tried recently, then those whose recent outcome retries now."""
     fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
     deferred = [
         candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
@@ -344,77 +350,50 @@ def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> 
     return fresh + deferred
 
 
-def aborted_candidates(repository: str) -> set[str]:
-    """Candidates whose Klaud PR carries klaud-abort; the planner never retries them.
+def maintainer_closed_families(repository: str, now: datetime) -> set[str]:
+    """Family prefixes of Klaud PRs someone else closed unmerged in the last hold window.
 
-    Removing the label returns the candidate to the pool at the planner's next scan.
+    Closing a Klaud PR stops that candidate, and the planner leaves its family alone for
+    MAINTAINER_CLOSE_HOLD_DAYS. Closed PRs are read newest-updated first until the window ends.
     """
     from .lifecycle import BOT
 
-    aborted = set()
-    for issue in github_items(repository, f"issues?labels={ABORT_LABEL}&state=all&per_page=100"):
-        if "pull_request" not in issue or issue["user"]["login"] != BOT:
-            continue
-        pull = github_read(repository, f"pulls/{issue['number']}")
-        if match := re.fullmatch(r"klaud/auto-([0-9a-f]{16}-[0-9a-f]{16})", pull["head"]["ref"]):
-            aborted.add(match[1])
-    return aborted
-
-
-def abort_released(repository: str, candidate_id: str) -> bool:
-    """Whether the candidate's latest Klaud PR ended in an abort whose label was since removed."""
-    from urllib.parse import urlencode
-
-    from .lifecycle import BOT
-
-    query = urlencode(
-        {
-            "state": "closed",
-            "head": f"{repository.split('/', maxsplit=1)[0]}:klaud/auto-{candidate_id}",
-            "per_page": 100,
-        }
-    )
-    try:
-        pulls = [
-            pull
-            for pull in github_items(repository, "pulls?" + query)
-            if pull["user"]["login"] == BOT
-        ]
-        if not pulls:
-            return False
-        latest = max(pulls, key=lambda pull: pull["created_at"])
-        if any(label["name"] == ABORT_LABEL for label in latest["labels"]):
-            return False
-        comments = github_items(repository, f"issues/{latest['number']}/comments?per_page=100")
-        for comment in reversed(comments):
-            if comment["user"]["login"] == BOT and comment["body"].startswith(
-                "<!-- klaud-outcome:"
+    cutoff = now - timedelta(days=MAINTAINER_CLOSE_HOLD_DAYS)
+    held = set()
+    page = 1
+    while True:
+        pulls = github_read(
+            repository,
+            f"pulls?state=closed&sort=updated&direction=desc&per_page=100&page={page}",
+        )
+        for pull in pulls:
+            match = re.fullmatch(r"klaud/auto-([0-9a-f]{16})-[0-9a-f]{16}", pull["head"]["ref"])
+            if (
+                match
+                and pull["user"]["login"] == BOT
+                and not pull["merged_at"]
+                and utc(pull["closed_at"]) >= cutoff
+                and match[1] not in held
             ):
-                record = json.loads(comment["body"].split("\n", 1)[1].split("\n-->", 1)[0])
-                return record["outcome"]["outcome"] == "aborted"
-    except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.SubprocessError):
-        print(f"::warning::Klaud abort history unavailable for {candidate_id}; keeping cooldown")
-    return False
+                closer = github_read(repository, f"issues/{pull['number']}").get("closed_by") or {}
+                if closer.get("login") != BOT:
+                    held.add(match[1])
+        if len(pulls) < 100 or utc(pulls[-1]["updated_at"]) < cutoff:
+            return held
+        page += 1
 
 
-def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
-    """Return ``pulls`` on Klaud branches or updated within ``stale_days`` before ``now``."""
-    cutoff = now - timedelta(days=stale_days)
-    return [
-        pr
-        for pr in pulls
-        if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
-        or datetime.fromisoformat(pr["updated_at"].replace("Z", "+00:00")) >= cutoff
-    ]
+def klaud_pulls(pulls: list[dict]) -> list[dict]:
+    """Return ``pulls`` on Klaud candidate branches. Other PRs never own a family."""
+    return [pr for pr in pulls if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])]
 
 
-def plan(
-    root: Path, directory: Path, review_batch_size: int, cooldown_hours: int, stale_pr_days: int
-) -> None:
+def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: int) -> None:
     """Write ``candidates.json`` and ``open-prs.json`` under ``directory`` for overlap review.
 
-    Unclaimed, unaborted feed candidates at ``root``'s HEAD are cooled down by
-    ``cooldown_hours`` and capped at ``review_batch_size``. PRs idle ``stale_pr_days`` drop out.
+    Unclaimed feed candidates at ``root``'s HEAD are cooled down by ``cooldown_hours``, held
+    while a maintainer recently closed their family's PR, and capped at ``review_batch_size``.
+    Only open Klaud PRs are indexed.
     """
     from . import claims
 
@@ -446,13 +425,11 @@ def plan(
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
     candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    aborted = aborted_candidates(repository)
-    candidates = [candidate for candidate in candidates if candidate["id"] not in aborted]
+    held = maintainer_closed_families(repository, datetime.now(UTC))
+    candidates = [
+        candidate for candidate in candidates if candidate["id"].split("-", 1)[0] not in held
+    ]
     recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
-    for candidate in candidates:
-        held = candidate["id"] in recent and recent[candidate["id"]] not in RETRY_NEXT_WAVE
-        if held and abort_released(repository, candidate["id"]):
-            recent[candidate["id"]] = "aborted"
     candidates = [
         candidate
         for candidate in candidates
@@ -484,9 +461,7 @@ def plan(
             "branch": pr["head"]["ref"],
             "head": pr["head"]["sha"],
         }
-        for pr in active_pulls(
-            [pr for page in pulls for pr in page], datetime.now(UTC), stale_pr_days
-        )
+        for pr in klaud_pulls([pr for page in pulls for pr in page])
     ]
     if candidates:
         for pr in open_prs:
@@ -639,7 +614,7 @@ def execution_diagnostics(path: Path) -> dict:
 def check_stop() -> dict:
     """Return the Stop hook decision, blocking unless a verified terminal outcome exists.
 
-    An aborted candidate never blocks, since the recover-current step cleans it up. A session
+    A PR a maintainer closed never blocks, since the recover-current step cleans it up. A session
     that parked may stop while a run it parked on is still live, or if it parked at its deadline.
     """
     from .lifecycle import current_session, parked, terminal
@@ -647,7 +622,7 @@ def check_stop() -> dict:
     try:
         session = current_session()
         pulls = session.pulls()
-        if pulls and session.aborted(pulls[0]):
+        if pulls and session.closed_by_maintainer(pulls[0]):
             return {}
         evidence = Path(os.environ["KLAUD_EVIDENCE"])
         end = evidence / "session-end.json"
@@ -832,7 +807,7 @@ def save_diagnostics(
     if failure is not None:
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
-            outcome="unexpected-error",
+            outcome="no-outcome",
             phase="unknown",
             pull_request=observed.get("pull-request"),
             run_ids=[run["id"] for run in observed.get("runs", [])],
@@ -865,7 +840,7 @@ def save_diagnostics(
                 "| --- | --- | --- | --- | --- | --- |\n"
                 f"| {outcome.outcome} | {outcome.phase} | {reason} | {pr} | {repairs} | {runs} |\n"
             )
-    return outcome.outcome != "unexpected-error"
+    return outcome.outcome != "no-outcome"
 
 
 def reviewed(contexts: list[dict]) -> tuple[PRReview, str | None]:
@@ -1155,12 +1130,6 @@ def main() -> int:
         required=True,
         help="Hours a recently attempted candidate waits before another agent (1-168)",
     )
-    prepare.add_argument(
-        "--stale-pr-days",
-        type=int,
-        required=True,
-        help="Days without activity after which another open PR stops owning a family (1-90)",
-    )
     regeneration = commands.add_parser(
         "regenerate-producers",
         help="Regenerate reviewed candidates' baseline producer families; run without credentials",
@@ -1326,7 +1295,7 @@ def main() -> int:
             return 0
         if args.command == "recover-current":
             from . import claims
-            from .lifecycle import PendingCleanup, current_session, reconcile
+            from .lifecycle import PendingCleanup, current_session, reconcile, show_status
 
             session = current_session()
             try:
@@ -1339,6 +1308,8 @@ def main() -> int:
                     session.candidate,
                     session.parent["id"],
                 )
+            finally:
+                show_status(session)
             return 0
         if args.command == "resume-check":
             outputs = "".join(
@@ -1417,15 +1388,7 @@ def main() -> int:
                 parser.error("--review-batch-size must be between 1 and 256")
             if not 1 <= args.cooldown_hours <= 168:
                 parser.error("--cooldown-hours must be between 1 and 168")
-            if not 1 <= args.stale_pr_days <= 90:
-                parser.error("--stale-pr-days must be between 1 and 90")
-            plan(
-                args.root,
-                args.directory,
-                args.review_batch_size,
-                args.cooldown_hours,
-                args.stale_pr_days,
-            )
+            plan(args.root, args.directory, args.review_batch_size, args.cooldown_hours)
             return 0
         if args.command == "regenerate-producers":
             regenerate_producers(args.directory)
