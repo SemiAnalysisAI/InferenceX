@@ -892,7 +892,7 @@ clusters:
     scheduler: slurm
     slurm:
       partition: hardware-hcm
-      account: dev
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
       exclusive: false
       gres: "gpu:nvidia_h200:{gpus}"
       salloc-args: [--nodelist=hgx-h200-01, --cpus-per-gpu=16, --mem-per-gpu=240000M]
@@ -910,7 +910,7 @@ clusters:
     scheduler: slurm
     slurm:
       partition: hardware-hcm
-      account: dev
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
       exclusive: false
       gres: "gpu:nvidia_h200:{gpus}"
       salloc-args: [--nodelist=hgx-h200-02, --cpus-per-gpu=16, --mem-per-gpu=240000M]
@@ -928,7 +928,7 @@ clusters:
     scheduler: slurm
     slurm:
       partition: rtx6000pro-hcm
-      account: dev
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
       exclusive: false
       gres: "gpu:nvidia_rtx6000pro:{gpus}"
       salloc-args: [--nodelist=hoanq3-rtx6000x2-slurm-1, --cpus-per-gpu=16, --mem-per-gpu=110000M]
@@ -946,7 +946,7 @@ clusters:
     scheduler: slurm
     slurm:
       partition: rtx6000pro-hcm
-      account: dev
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
       exclusive: false
       gres: "gpu:nvidia_rtx6000pro:{gpus}"
       salloc-args: [--nodelist=hoanq3-rtx6000x2-slurm-2, --cpus-per-gpu=16, --mem-per-gpu=110000M]
@@ -964,7 +964,7 @@ clusters:
     scheduler: slurm
     slurm:
       partition: test
-      account: dev
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
       exclusive: false
       gres: "gpu:{gpus}"
       salloc-args: [--nodelist=hoanq3-h200-1x-han-1, --cpus-per-gpu=16, --mem-per-gpu=110000M]
@@ -982,7 +982,7 @@ clusters:
     scheduler: slurm
     slurm:
       partition: test
-      account: dev
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
       exclusive: false
       gres: "gpu:{gpus}"
       salloc-args: [--nodelist=hoanq3-h200-1x-han-2, --cpus-per-gpu=16, --mem-per-gpu=110000M]
@@ -1000,7 +1000,7 @@ clusters:
     scheduler: slurm
     slurm:
       partition: test
-      account: dev
+      account: greennode  # stackops' only association (Slurm enforces associations since 2026-10-25)
       exclusive: false
       gres: "gpu:{gpus}"
       salloc-args: [--nodelist=hoanq3-h200-1x-han-4, --cpus-per-gpu=16, --mem-per-gpu=110000M]
