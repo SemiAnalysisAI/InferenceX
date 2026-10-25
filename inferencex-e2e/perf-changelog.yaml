@@ -11191,3 +11191,12 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark-low-latency
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark-low-latency
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark-low-latency
+  description:
+    - "Add a Low-Latency TP4 point at conc 1 with the MSA-V1 MonoKernel, following the GB300 recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]

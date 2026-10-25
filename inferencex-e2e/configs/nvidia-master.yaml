@@ -5617,6 +5617,21 @@ minimaxm31flash-fp4-b200-vllm-agentic-dspark:
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [64, 96, 128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
+minimaxm31flash-fp4-b200-sglang-agentic-dspark-low-latency:
+  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Low-Latency: MSA-V1 MonoKernel at batch size 1.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
+
 # MiniMax-M3.1-Flash AgentX on B200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24. Serve flags follow the cookbook's
@@ -5748,6 +5763,21 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           tp: 8
           ep: 1
           dp-attn: false
+
+minimaxm31flash-fp4-gb200-sglang-agentic-dspark-low-latency:
+  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/gb200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Low-Latency: MSA-V1 MonoKernel at batch size 1.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
@@ -9443,6 +9473,21 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+
+minimaxm31flash-fp4-b300-sglang-agentic-dspark-low-latency:
+  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Low-Latency: MSA-V1 MonoKernel at batch size 1.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic-low-latency.yaml }
 
 # MiniMax-M3.1-Flash AgentX on B300 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
