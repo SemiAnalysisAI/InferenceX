@@ -93,8 +93,10 @@ Old scenario names (`agentx-cc-062126-smoke`, `custom-agentic-tau2`, `sweep-isl8
   | either hgx | `h200-hcm` | up to 4 |
   | RTX PRO 6000 node 1 / 2 | `cluster:hcm-rtx01` / `cluster:hcm-rtx02` | 2 |
   | either RTX node | `rtx6000pro-hcm` | up to 2 |
+  | HAN H200 node 1 / 2 | `cluster:han-h200-01` / `cluster:han-h200-02` | 1 (16 CPU, ~110 GB RAM) |
+  | either HAN node | `h200-han` | 1 |
 
-  Check load first: `ssh slurm-client squeue -p hardware-hcm` (or `-p rtx6000pro-hcm`). If the node is busy, tell the user the job waits in the Slurm queue. Never cancel another user's job.
+  Check load first: `ssh slurm-client squeue -p hardware-hcm` (or `-p rtx6000pro-hcm`, `-p test` for HAN). If the node is busy, tell the user the job waits in the Slurm queue. Never cancel another user's job.
 - **docker-compose / k8s:** `image` from `image:`; `serve` from `command:` + `args:`; `env` from `environment:` / `env:`.
 - **Drop `--numa-node …`.**
 - **DeepEP on hgx** (`--moe-a2a-backend deepep`): add `NVSHMEM_REMOTE_TRANSPORT: none` to `env:`.

@@ -109,9 +109,11 @@ with `--nodelist` in `salloc-args`:
 | `hcm-hgx02` | hgx-h200-02 | `hardware-hcm` | 8 | `/mnt/hf_hub_cache`, `/mnt/containers` |
 | `hcm-rtx01` | hoanq3-rtx6000x2-slurm-1 | `rtx6000pro-hcm` | 2 | `/data/hf_hub_cache`, `/data/containers` |
 | `hcm-rtx02` | hoanq3-rtx6000x2-slurm-2 | `rtx6000pro-hcm` | 2 | `/data/hf_hub_cache`, `/data/containers` |
+| `han-h200-01` | hoanq3-h200-1x-han-1 | `test` | 1 | `/mnt/hf_hub_cache`, `/mnt/containers` |
+| `han-h200-02` | hoanq3-h200-1x-han-2 | `test` | 1 | `/mnt/hf_hub_cache`, `/mnt/containers` |
 
 The serving YAML `runner:` takes a cluster label (`cluster:hcm-hgx02`), a pool label (`h200-hcm`,
-`rtx6000pro-hcm`) or one slot.
+`rtx6000pro-hcm`, `h200-han`) or one slot.
 
 ### Runner convention
 

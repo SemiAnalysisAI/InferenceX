@@ -25,7 +25,7 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # image is spliced into srun arguments on the GPU node; model is passed to the client argv.
 IMAGE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+")
-VNG_CLUSTER_PREFIX = "hcm-"
+VNG_CLUSTER_PREFIXES = ("hcm-", "han-")  # VNG sites; cluster ids are <site>-<node>
 # Variables job.sh / bench.sh / sidecar.sh / client.py set themselves.
 RESERVED_ENV = (
     "PORT", "MODEL", "CONC", "RESULT_DIR", "HF_HUB_CACHE", "FRAMEWORK",
@@ -168,8 +168,8 @@ def _format_validation_error(error: ValidationError) -> str:
 
 def runner_gpus(runner: str, inventory: RunnerInventory) -> int:
     """GPUs per node behind ``runner`` (a cluster label, a pool label or a slot name)."""
-    vng = sorted(cid for cid in inventory.clusters if cid.startswith(VNG_CLUSTER_PREFIX))
-    hint = f"runner: {runner} is not a VNG serving runner; use cluster:<id> with <id> in {', '.join(vng)}, or h200-hcm / rtx6000pro-hcm"
+    vng = sorted(cid for cid in inventory.clusters if cid.startswith(VNG_CLUSTER_PREFIXES))
+    hint = f"runner: {runner} is not a VNG serving runner; use cluster:<id> with <id> in {', '.join(vng)}, or a pool: h200-hcm, rtx6000pro-hcm, h200-han"
     names = inventory.labels.get(runner, [runner])
     gpus = set()
     for name in names:
@@ -177,7 +177,7 @@ def runner_gpus(runner: str, inventory: RunnerInventory) -> int:
             cluster = inventory.cluster_for(name)
         except ValueError:
             raise ServingError(hint) from None
-        if not cluster.id.startswith(VNG_CLUSTER_PREFIX):
+        if not cluster.id.startswith(VNG_CLUSTER_PREFIXES):
             raise ServingError(hint)
         gpus.add(cluster.gpus_per_node)
     return min(gpus)

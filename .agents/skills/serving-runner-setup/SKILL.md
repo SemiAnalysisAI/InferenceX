@@ -11,12 +11,12 @@ Every step that registers, removes or restarts a runner, or changes a node, need
 
 ## Convention (all pools)
 
-1. User `stackops`. Its home holds `~/.config/enroot/.credentials` (VCR pull) and the runner `.env` (`GREENLAB_HF_TOKEN=…`).
-2. Name `<cluster-id>_<NN>` (`hcm-hgx02_00`), exactly one `cluster:<cluster-id>` label.
-3. Directory `<large-local-disk>/gharunners/<cluster-id>/gharunnerNN/` (`/mnt/gharunners/hcm-hgx02/...` on hgx, `/data/gharunners/hcm-rtx01/...` on rtx). The per-cluster folder keeps new slots away from any old `gharunnerNN` directory on the same disk.
-4. GitHub labels `slurm,<sku>,<pool>,cluster:<cluster-id>` (pool = `h200-hcm` or `rtx6000pro-hcm`). `benchmark-tmpl.yml` puts the serving YAML's `runner:` straight into `runs-on`, so every value a YAML may use (pool, cluster label, slot name) must be a real label on the runner.
+1. User `stackops`, uid/gid 1001 on every node (same as the existing hgx/han nodes; Slurm shows it as `1001`). Its home holds `~/.config/enroot/.credentials` (VCR pull) and the runner `.env` (`GREENLAB_HF_TOKEN=…`).
+2. Cluster id `<site>-<node>`: site `hcm` or `han` (`hcm-hgx02`, `hcm-rtx01`, `han-h200-01`). Runner name `<cluster-id>_<NN>` (`hcm-hgx02_00`), exactly one `cluster:<cluster-id>` label. A new site needs its prefix in `VNG_CLUSTER_PREFIXES` (`infx/serving/schema.py`).
+3. Directory `<large-local-disk>/gharunners/<cluster-id>/gharunnerNN/` (`/mnt/gharunners/hcm-hgx02/...` on hgx, `/data/gharunners/hcm-rtx01/...` on rtx, `/mnt/gharunners/han-h200-01/...` on HAN). The per-cluster folder keeps new slots away from any old `gharunnerNN` directory on the same disk.
+4. GitHub labels `slurm,<sku>,<pool>,cluster:<cluster-id>` (pool = `h200-hcm`, `rtx6000pro-hcm` or `h200-han`). `benchmark-tmpl.yml` puts the serving YAML's `runner:` straight into `runs-on`, so every value a YAML may use (pool, cluster label, slot name) must be a real label on the runner.
 5. systemd: `sudo ./svc.sh install stackops && sudo ./svc.sh start` in each runner directory. No tmux, no hand-run `run.sh`.
-6. Slots per node = maximum concurrent jobs (hgx 4, rtx 2).
+6. Slots per node = maximum concurrent jobs (hgx 4, rtx 2, HAN 1).
 
 ## 1. Preflight the node
 
@@ -39,21 +39,35 @@ Pass criteria:
 - The GPU count in `Gres` equals `nvidia-smi -L`.
 - `NodeHostName` matches the node name.
 
-Fix anything else on the infra side before registering. Known state (2026-10-25):
-- HAN `test` partition: `/` at 99%, enroot paths on `/`, slurmd name mismatch on `hoanq3-h200-1x-han-3`. The pool stays out until fixed.
+If `stackops` is missing, create it as root on the node (step 1b). Fix anything else on the infra side before registering. Known state (2026-10-25):
+- HAN `test` partition, 1xH200 / 16 CPU / ~120 GB RAM per node, no `/data` disk on han-1/2 (caches on `/mnt`, which is on `/`):
+  - `han-1`, `han-2`: healthy (pyxis OK, ~300 GB free), no `stackops` yet. Clusters `han-h200-01`, `han-h200-02`.
+  - `han-4`: `/data` at 95%, `/` at 74%. Out until cleaned.
+  - `han-3-1`: `/` at 99% with the enroot paths on it. Out.
+  - `han-3`: slurmd name mismatch (`srun`: Invalid node name). Out.
 - `hgx-h200-01`: gres declares 4 of 8 GPUs.
 - `/shared` NFS at 96%.
+
+## 1b. Create `stackops` (root, only if preflight says MISSING)
+
+```bash
+groupadd -g 1001 stackops && useradd -u 1001 -g 1001 -m -s /bin/bash stackops
+install -d -o stackops -g stackops -m 700 ~stackops/.config/enroot
+# copy ~stackops/.config/enroot/.credentials from a working node (VCR pull), then:
+chown stackops:stackops ~stackops/.config/enroot/.credentials && chmod 600 ~stackops/.config/enroot/.credentials
+install -d -o stackops -g stackops /mnt/gharunners /mnt/hf_hub_cache /mnt/containers   # HAN/hgx; rtx uses /data
+```
 
 ## 2. Register the listeners
 
 As `stackops` on the node, with a registration token from https://github.com/vngcloud/InferenceX/settings/actions/runners/new:
 
 ```bash
-ID=hcm-hgx02; BASE=/mnt/gharunners/$ID          # rtx: ID=hcm-rtx01; BASE=/data/gharunners/$ID
+ID=hcm-hgx02; BASE=/mnt/gharunners/$ID          # rtx: ID=hcm-rtx01; BASE=/data/gharunners/$ID   HAN: ID=han-h200-01
 mkdir -p $BASE && cd $BASE
 curl -fsSLO https://raw.githubusercontent.com/vngcloud/InferenceX/refactor/vng-benchmark/inferencex-e2e/utils/runner_setup/setup.sh
 bash setup.sh <TOKEN> https://github.com/actions/runner/releases/download/v2.338.1/actions-runner-linux-x64-2.338.1.tar.gz \
-  0 3 $BASE $ID slurm,h200,h200-hcm,cluster:$ID https://github.com/vngcloud/InferenceX   # rtx: 0 1 ... slurm,rtx6000pro,rtx6000pro-hcm,cluster:$ID
+  0 3 $BASE $ID slurm,h200,h200-hcm,cluster:$ID https://github.com/vngcloud/InferenceX   # rtx: 0 1 ... slurm,rtx6000pro,rtx6000pro-hcm,cluster:$ID   HAN: 0 0 ... slurm,h200,h200-han,cluster:$ID
 for d in $BASE/gharunner0*/actions-runner; do (cd "$d" && sudo ./svc.sh install stackops && sudo ./svc.sh start); done
 ```
 
@@ -63,12 +77,13 @@ Put the runner `.env` (`GREENLAB_HF_TOKEN=…`) in each `actions-runner/` direct
 
 ## 3. Add the cluster record
 
-In `inferencex-e2e/configs/runners.yaml`, add the `cluster:<id>` label with the slot names, add the slots to the pool label (`h200-hcm` / `rtx6000pro-hcm`), and copy the nearest `hcm-*` record under `clusters:`. Change:
+In `inferencex-e2e/configs/runners.yaml`, add the `cluster:<id>` label with the slot names, add the slots to the pool label (`h200-hcm` / `rtx6000pro-hcm` / `h200-han`), and copy the nearest VNG record under `clusters:`. Change:
 - the `--nodelist` in `salloc-args`;
 - `gpus-per-node`, from `Gres`;
 - `available-cpu-dram-mib`, from `RealMemory`;
 - `--mem-per-gpu`: about 95% of `RealMemory` / GPUs, in M;
-- the volume and squash paths.
+- the volume and squash paths;
+- `gres`: copy the form `scontrol show node` prints (`gpu:nvidia_h200:{gpus}` on hgx, plain `gpu:{gpus}` on HAN).
 
 Keep `exclusive: false` and `--cpus-per-gpu=16`. Run `PYTEST infx/tests/serving/test_clusters.py` (extend its `NODES` table) and commit.
 

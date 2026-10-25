@@ -68,6 +68,7 @@ def test_runner_must_be_a_vng_cluster_slot_or_pool():
     assert runner_gpus("cluster:hcm-hgx02", inventory) == 8
     assert runner_gpus("hcm-hgx02_01", inventory) == 8
     assert runner_gpus("h200-hcm", inventory) == 4  # the smallest node of the pool
+    assert runner_gpus("h200-han", inventory) == 1
     with pytest.raises(ServingError, match="runner: h100-cw_00 is not a VNG serving runner"):
         runner_gpus("h100-cw_00", inventory)
 

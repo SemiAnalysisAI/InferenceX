@@ -360,6 +360,14 @@ labels:
     - hcm-rtx01_01
     - hcm-rtx02_00
     - hcm-rtx02_01
+  # HAN 1xH200 nodes (partition test): one slot per node, no /data disk, so caches live on /mnt (on /).
+  cluster:han-h200-01:
+    - han-h200-01_00
+  cluster:han-h200-02:
+    - han-h200-02_00
+  h200-han:
+    - han-h200-01_00
+    - han-h200-02_00
 clusters:
   h100-cw:
     gpus-per-node: 8
@@ -943,6 +951,42 @@ clusters:
         hf-hub-cache: {path: /data/hf_hub_cache}
       squash:
         dir: /data/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  han-h200-01:
+    gpus-per-node: 1
+    available-cpu-dram-mib: 120_741
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: test
+      account: dev
+      exclusive: false
+      gres: "gpu:{gpus}"
+      salloc-args: [--nodelist=hoanq3-h200-1x-han-1, --cpus-per-gpu=16, --mem-per-gpu=110000M]
+      volumes:
+        hf-hub-cache: {path: /mnt/hf_hub_cache}
+      squash:
+        dir: /mnt/containers
+        visibility: shared
+        import: submit-host
+        single-node-import: true
+  han-h200-02:
+    gpus-per-node: 1
+    available-cpu-dram-mib: 120_741
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: test
+      account: dev
+      exclusive: false
+      gres: "gpu:{gpus}"
+      salloc-args: [--nodelist=hoanq3-h200-1x-han-2, --cpus-per-gpu=16, --mem-per-gpu=110000M]
+      volumes:
+        hf-hub-cache: {path: /mnt/hf_hub_cache}
+      squash:
+        dir: /mnt/containers
         visibility: shared
         import: submit-host
         single-node-import: true
