@@ -5702,6 +5702,27 @@ minimaxm3-fp4-b200-trtllm-agentic-mtp:
     - dram-utilization: 0.8
       search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 5], srt-recipe: agentic.yaml }
+
+minimaxm31flash-fp4-b300-vllm-agentic-dspark:
+  # Day-0 vLLM image for MiniMax-M3.1-Flash (vllm.ai/blog/2026-10-23-minimax-m31-flash).
+  # DSpark uses the checkpoint's built-in drafter; synthetic acceptance follows
+  # infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/vllm/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # TP4 is the upstream Blackwell layout, drafting 7 DSpark tokens.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router, drafting 3 DSpark tokens.
+      - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+
 # Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
 # two NVL4 nodes, and TP4 lazy SimpleCPU KV offload variants. The pinned
 # runtime uses Dynamo-native MiniMax parsing on the worker without the vLLM
@@ -9447,6 +9468,30 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
       - { tp: 2, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [64, 256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [256], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
+
+# MiniMax-M3.1-Flash AgentX on B300 with SGLang: day-zero image from the SGLang
+# cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
+# manifest digest verified 2026-10-24. Serve flags follow the cookbook's
+# B300 Balanced (TP4) and High-Throughput (TP8, attention DP2, EP8).
+# Seven-token DSpark (bundled draft); synthetic acceptance follows
+# infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
+minimaxm31flash-fp4-b300-sglang-agentic-dspark:
+  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Balanced: TP4.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      # High-Throughput: TP8 + EP8 with attention DP2 inside the server (--attn-dp-size 2,
+      # not full DP attention, so dp-attn stays false).
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], srt-recipe: agentic.yaml }
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
