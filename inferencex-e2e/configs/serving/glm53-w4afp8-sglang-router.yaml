@@ -35,10 +35,9 @@ serve: |
   --served-model-name zai-org/GLM-5.3
 router:
   image: vcr.vngcloud.vn/60108-backend-worker/portal-external/dev/sglang-router-patched:v0.5.18-slim-noargcanon
-  metrics_port: 18888
   serve: |
     /work/target/release/smg launch
-    --host=0.0.0.0 --port={{router_port}} --prometheus-port=18888
+    --host=0.0.0.0 --port={{router_port}} --prometheus-port={{router_metrics_port}}
     --policy=cache_aware --dp-aware --worker-urls={{engine_url}}
     --cache-threshold=0.3 --balance-abs-threshold=100000 --balance-rel-threshold=2.0
     --max-tree-size=67108864 --eviction-interval=300

@@ -32,6 +32,6 @@ router:
     && exec vllm-router --host 0.0.0.0 --port {{router_port}}
     --worker-urls {{engine_urls}} --policy cache_aware
     --prometheus-host 127.0.0.1 --prometheus-port {{router_metrics_port}}
-    --request-timeout-secs 14400 --disable-retries"
+    --request-timeout-secs 14400 --disable-retries --worker-startup-timeout-secs 3600"
 scenario: livekit
 conc: [8, 16, 32, 64, 96, 128]
