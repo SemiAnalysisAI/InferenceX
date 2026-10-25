@@ -470,6 +470,73 @@ def test_main_reports_outside_run_source_pr(monkeypatch, tmp_path) -> None:
     assert outputs["reuse-source-pr-number"] == "900"
 
 
+EXTERNAL_RUN = {
+    "id": 88, "event": "workflow_dispatch", "status": "completed", "conclusion": "success",
+    "path": ".github/workflows/e2e-tests.yml", "pull_requests": [], "head_branch": "main",
+    "head_sha": "main-sha", "display_title": "e2e Test - External PR #900 @ 75745991a66c",
+}
+
+
+def run_external_reuse(monkeypatch, tmp_path, run, source_labels=()):
+    def fake_github_api(repo, path, token, params=None):
+        return {
+            "/commits/merge-sha/pulls": [{"number": 1321}],
+            "/pulls/1321": {"merged_at": "2026-05-13T00:01:00Z", "labels": []},
+            "/pulls/900": {"labels": [{"name": name} for name in source_labels]},
+            "/actions/runs/88": run,
+        }[path]
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        return {
+            "/issues/1321/comments": [{
+                "created_at": "2026-05-13T00:00:00Z", "author_association": "OWNER",
+                "body": "/use 88",
+            }],
+            "/pulls/1321/commits": [{"sha": "abc123"}],
+            "/actions/runs/88/artifacts": [{"name": "results_bmk"}],
+        }[path]
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse.github, "api", fake_github_api)
+    monkeypatch.setattr(reuse.github, "paginate", fake_paginated_github_api)
+    monkeypatch.setattr(reuse.sys, "argv", [
+        "find_reusable_sweep_run.py", "--repo", "SemiAnalysisAI/InferenceX",
+        "--commit-sha", "merge-sha", "--event-name", "push", "--ref", "refs/heads/main",
+        "--github-output", str(output_path),
+    ])
+    assert reuse.main() == 0
+    return dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+
+
+def test_main_reuses_pinned_trusted_external_sweep(monkeypatch, tmp_path) -> None:
+    outputs = run_external_reuse(monkeypatch, tmp_path, EXTERNAL_RUN)
+    assert outputs["reuse-enabled"] == "true"
+    assert outputs["reuse-source-run-id"] == "88"
+    assert outputs["reuse-source-pr-number"] == "900"
+
+
+@pytest.mark.parametrize("change", [
+    {"display_title": "e2e Test - nightly"},
+    {"head_branch": "feature"},
+    {"path": ".github/workflows/other.yml"},
+    {"event": "push"},
+])
+def test_main_rejects_untrusted_dispatch_source(monkeypatch, tmp_path, change) -> None:
+    with pytest.raises(RuntimeError, match="not a pull_request run|is from"):
+        run_external_reuse(monkeypatch, tmp_path, {**EXTERNAL_RUN, **change})
+
+
+def test_main_rejects_external_sweep_with_incompatible_modifier(monkeypatch, tmp_path) -> None:
+    with pytest.raises(RuntimeError, match="External source PR #900 .*agentx-fast"):
+        run_external_reuse(monkeypatch, tmp_path, EXTERNAL_RUN, ["agentx-fast"])
+
+
+def test_unpinned_validation_rejects_external_sweep() -> None:
+    with pytest.raises(RuntimeError, match="not a pull_request run"):
+        reuse.validate_reusable_run("example/project", "run-sweep.yml", EXTERNAL_RUN, "token")
+
+
 def test_main_enables_explicitly_pinned_failed_run(monkeypatch, tmp_path) -> None:
     comments = [
         {

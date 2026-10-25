@@ -172,6 +172,8 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("infmax_model_prefix"),
         row.get("framework"),
         row.get("precision"),
+        row.get("spec_decoding", "none"),
+        as_bool(row.get("disagg", False)),
         as_int(row.get("tp")),
         as_int(row.get("pp", 1), 1),
         as_int(row.get("dcp_size", 1), 1),
@@ -255,7 +257,7 @@ def duplicate_identity_errors(
     label: str,
     identities: Iterable[tuple[Any, ...]],
 ) -> list[str]:
-    """Reject duplicate rows that set equality would otherwise hide."""
+    """Return errors naming each ``identities`` entry seen more than once, which set equality would hide."""
     counts = Counter(identities)
     duplicates = {identity: count for identity, count in counts.items() if count > 1}
     if not duplicates:
@@ -276,7 +278,7 @@ def duplicate_identity_errors(
 def validate_fixed_artifacts(
     artifacts_dir: Path,
 ) -> list[str]:
-    """Validate fixed-sequence aggregate rows for duplicate identities."""
+    """Return duplicate-identity errors for the fixed-sequence rows in ``artifacts_dir``."""
     actual_rows = actual_benchmark_key_rows(artifacts_dir)
     return duplicate_identity_errors("fixed-sequence", actual_rows)
 
@@ -284,8 +286,12 @@ def validate_fixed_artifacts(
 def validate_agentic_artifacts(
     artifacts_dir: Path,
 ) -> list[str]:
-    """Validate agentic point, raw, and aggregate artifacts agree."""
-    point_rows = agentic_keys_from_paths(agentic_point_files(artifacts_dir))
+    """Return errors where the agentic point, raw and aggregate artifacts in ``artifacts_dir`` disagree.
+
+    Raw dirs of attempts replaced by a later rerun still download and are ignored.
+    """
+    point_files = agentic_point_files(artifacts_dir)
+    point_rows = agentic_keys_from_paths(point_files)
     errors = duplicate_identity_errors("agentic point", point_rows)
 
     results_bmk = artifacts_dir / "results_bmk"
@@ -301,14 +307,17 @@ def validate_agentic_artifacts(
         )
 
     point_names = {
-        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_")
-        for path in agentic_point_files(artifacts_dir)
+        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_") for path in point_files
     }
+    superseded_names = {
+        path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_")
+        for path in artifacts_dir.glob("bmk_agentic_*/**/*.json")
+    } - point_names
     raw_names = {
         path.name
         for path in artifacts_dir.iterdir()
         if path.is_dir() and path.name.startswith("agentic_")
-    }
+    } - superseded_names
     if point_names != raw_names:
         missing_raw = point_names - raw_names
         extra_raw = raw_names - point_names
@@ -321,7 +330,7 @@ def validate_agentic_artifacts(
 
 
 def validate_run_stats(artifacts_dir: Path, required: bool) -> list[str]:
-    """Require run-stats when fixed-sequence collection should have run."""
+    """Return an error when ``required`` and ``artifacts_dir`` holds no run-stats JSON, else []."""
     if not required:
         return []
     if list((artifacts_dir / "run-stats").glob("*.json")):

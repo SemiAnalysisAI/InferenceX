@@ -205,6 +205,7 @@ class Submitted:
             backend.cancel(job)
 
     def adopted(self) -> SlurmJob:
+        """Return the submitted job, or raise LaunchError if srtctl reported none."""
         if self.job is None:
             raise LaunchError("srtctl reported no submitted job")
         return self.job

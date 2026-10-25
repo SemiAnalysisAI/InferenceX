@@ -14,6 +14,7 @@ Usage:
     python collect_sweep_results.py <artifacts_dir> <output_dir>
 """
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -21,7 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 
-def _load_custom_client_csv(client_csv: Path, exp_dir: Path) -> pd.DataFrame | None:  # noqa: ARG001
+def _load_custom_client_csv(client_csv: Path) -> pd.DataFrame | None:
     """Load per-request metrics from custom benchmark client CSV."""
     df = pd.read_csv(client_csv)
     if len(df) == 0:
@@ -54,6 +55,7 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
             break
 
     def metric_stat(metric_name: str, stat: str) -> float:
+        """Return the ``stat`` column of ``metric_name`` as a float, or 0 when missing or unparsable."""
         if metric_name in per_metric:
             try:
                 return float(per_metric[metric_name].get(stat, 0))
@@ -62,6 +64,7 @@ def _load_aiperf_summary_csv(csv_path: Path) -> dict | None:
         return 0
 
     def scalar_val(metric_name: str) -> float:
+        """Return the scalar row ``metric_name`` as a float, or 0 when missing or unparsable."""
         if metric_name in scalars:
             try:
                 return float(scalars[metric_name])
@@ -141,19 +144,15 @@ def load_experiment(exp_dir: Path) -> dict | None:
                 return result
             result.update(aiperf_metrics)
         elif client_csv.exists():
-            df = _load_custom_client_csv(client_csv, exp_dir)
+            df = _load_custom_client_csv(client_csv)
             if df is None or len(df) == 0:
                 return result
 
             metadata_file = exp_dir / "benchmark_metadata.json"
             total_time_sec = None
             if metadata_file.exists():
-                try:
-                    with open(metadata_file) as f:
-                        metadata = json.load(f)
-                    total_time_sec = metadata.get("benchmark_runtime_sec")
-                except Exception:  # noqa: BLE001, S110
-                    pass
+                with contextlib.suppress(Exception), open(metadata_file) as f:
+                    total_time_sec = json.load(f).get("benchmark_runtime_sec")
 
             if not total_time_sec or total_time_sec <= 0:
                 first_start_ms = df["start_time_ms"].min()
@@ -219,6 +218,7 @@ def load_experiment(exp_dir: Path) -> dict | None:
 
 
 def main() -> None:
+    """Write summary.csv to the output dir for every experiment under the artifacts dir from argv, then plot overviews."""
     if len(sys.argv) < 3:
         print(f"Usage: {sys.argv[0]} <artifacts_dir> <output_dir>")
         sys.exit(1)
