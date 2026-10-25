@@ -19,8 +19,7 @@ adjustments:
     fp4: 0.1
   spec-decoding:
     mtp: 0.1
-    eagle: 0.1
-    eagle3: 0.1
+    draft_model: 0.1
   framework-prefix:
     sglang: 1.5
     vllm: 1.5

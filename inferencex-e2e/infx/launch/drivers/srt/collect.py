@@ -164,6 +164,7 @@ def collect(
     logs_staged = False
 
     def stage_logs_on_exit() -> None:
+        """Fetch and stage the job's logs when the launch ends before collect staged them."""
         if not logs_staged:
             _stage_logs(run, backend.fetch_outputs(job, fetched) / "logs", power)
 
@@ -258,6 +259,9 @@ def cleanup_outputs(root: Path, *, sleep: Callable[[float], None] = time.sleep) 
         except FileNotFoundError:
             break
         except OSError:
+            if attempt == attempts:
+                print(f"outputs still busy after {attempts} attempts; leaving it", flush=True)
+                break
             print(f"Retry {attempt}/{attempts}: Waiting for NFS locks to release...", flush=True)
             sleep(10)
     for directory, dirnames, filenames in os.walk(root, topdown=False):
