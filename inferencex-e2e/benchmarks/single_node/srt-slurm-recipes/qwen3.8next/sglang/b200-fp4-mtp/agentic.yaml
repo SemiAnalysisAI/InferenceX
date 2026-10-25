@@ -51,8 +51,8 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # One variant per point. NEXTN resets an unset admission cap to 48, so it is
-# explicit: 2x CONC, with the graph batch equal to it. C16 needs a larger
-# static fraction and a bounded Mamba cache.
+# explicit: 2x CONC, with the graph batch equal to it. C16 needs a bounded
+# Mamba cache.
 override_c1:
   roles:
     agg:
@@ -92,7 +92,7 @@ override_c16:
       args:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
-        mem-fraction-static: 0.85  # 0.9 OOMs in v0.5.22 draft prefill CUDA graph capture
+        mem-fraction-static: 0.8  # v0.5.22 OOMs at 0.9 in draft prefill graph capture, at 0.85 in prefill
         max-mamba-cache-size: 160
   benchmark:
     env:
