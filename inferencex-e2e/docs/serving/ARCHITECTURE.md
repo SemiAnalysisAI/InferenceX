@@ -3,11 +3,18 @@
 ## 1. What this is
 
 gn-benchmark is how GreenNode benchmarks an LLM serving setup on its own Slurm GPU nodes with
-the upstream InferenceX harness. You write one serving YAML: the engine command (vLLM, SGLang,
-Dynamo), an optional router and an optional KV storage service, the scenario (AgentX, tau2,
-LiveKit, E2/E3 prefix traces, or a synthetic ISL/OSL/cache grid) and the concurrencies or an
-SLO search. One command dispatches it to GitHub Actions, and each point comes back as an
-upstream-format result artifact that `result-report` reads.
+the upstream InferenceX harness. One serving YAML describes the setup: the engine command (any
+vLLM, SGLang or Dynamo launch), optionally a router in front of several engine replicas and a KV
+storage service behind them, and the workload. Workloads cover:
+
+- agentic replays: multi-turn coding agents, customer-service tool calling, voice-agent sessions;
+- synthetic ISL/OSL/prefix-cache grids, at fixed concurrencies or with an SLO search that finds
+  the highest concurrency that still meets the latency targets;
+- custom datasets in the Mooncake trace format (shared-prefix and hidden-prefix traces, or any
+  file you pin with a checksum).
+
+One command dispatches the YAML to GitHub Actions. Each benchmark point comes back as an
+upstream-format result artifact, which the `result-report` skill turns into a report.
 
 The branch is upstream InferenceX plus one launch path, `serving`. Everything that measures is
 upstream code, unchanged:
@@ -19,8 +26,8 @@ upstream code, unchanged:
   image staging and Slurm submit/follow/cancel in `SlurmBackend`.
 
 The VNG part only turns a serving YAML into matrix points and, inside one Slurm job, starts the
-containers the YAML names and points the harness at them. `git diff upstream/main --stat` shows
-four upstream files touched (section 4); `infx/bench` and `infx/results` have no VNG change.
+containers the YAML names and points the harness at them. `git diff --stat --diff-filter=M upstream/main`
+shows the four upstream files touched (section 4); `infx/bench` and `infx/results` have no VNG change.
 
 Design and decisions: `docs/superpowers/specs/2026-10-25-vng-serving-refactor-design.md` (repo root).
 
@@ -49,9 +56,10 @@ sequenceDiagram
     participant St as storage step (optional)
     participant Ro as router step (optional)
     participant E as engine step: bench.sh
-    J->>J: pick free ports 20000-32767 (engine, router, router metrics, DCGM)
+    Note over J: each step's ports are picked free (20000-32767) just before it starts
     J->>G: srun --overlap dcgm-exporter
     J->>St: srun --overlap sidecar.sh storage (e.g. Mooncake master)
+    J->>St: wait until its master port accepts TCP
     J->>Ro: srun --overlap sidecar.sh router (vllm-router, sglang-router, Dynamo frontend)
     J->>E: srun bench.sh in the engine image
     E->>E: client prepare: AgentX venv, dataset fetch + sha256, hf download
@@ -63,7 +71,7 @@ sequenceDiagram
 ```
 
 While the job waits for GPUs the driver prints one line a minute
-(`Slurm job 6215 PENDING Resources (null) (3m queued)`); once the job starts, its log streams
+(`Slurm job 6215 PENDING Resources (3m queued)`); once the job starts, its log streams
 live into the Actions step. Cancelling the run cancels the Slurm job.
 
 | Step | Where |
@@ -79,8 +87,9 @@ live into the Actions step. Cancelling the run cancels the Slurm job.
 | Replicas, one GPU slice each | `bench.sh:57` |
 | Client prepare / run | `bench.sh:25`, `bench.sh:106`; `infx/serving/client.py:58`, `:72` |
 
-If the engine or router dies before it is ready, the wait fails and prints the tail of
-`server.log` or `router.log`.
+If the engine dies before it is ready, the wait fails and prints the last 50 lines of
+`server.log`. If the router or storage step exits first, the job fails with a pointer to
+`results/router.log` or `results/storage.log`, which come back in the `server_logs_*` artifact.
 
 ## 3. How this differs from the upstream Slurm path
 
@@ -117,8 +126,9 @@ no usable shared filesystem, while srtctl assumes exclusive nodes with fixed por
 
 ## 4. Where VNG code lives
 
-Every VNG file has `serving` in its path, so `git grep -l serving` or
-`git diff upstream/main --stat` lists all of it.
+Most VNG files have `serving` in their path. The exceptions are the workflow, the `result-report`
+skill, the VNG block of `configs/runners.yaml` and the design docs. `git diff --stat upstream/main`
+lists every one of them.
 
 | File | Job |
 |---|---|
@@ -127,7 +137,7 @@ Every VNG file has `serving` in its path, so `git grep -l serving` or
 | `infx/serving/slo.py` | parse `metric:stat:op:threshold;...` |
 | `benchmarks/single_node/serving/scenarios/*.yaml` | the six base AIPerf configs |
 | `infx/serving/scenarios.py` | base + overrides / grid point / search / slo → final config and legacy label |
-| `configs/runners.yaml` (VNG block) | `hcm-*` runner labels and cluster records |
+| `configs/runners.yaml` (VNG block) | VNG runner labels and cluster records |
 | `infx/serving/schema.py`, `render.py` | serving YAML model and validation; command rendering |
 | `infx/serving/to_matrix.py`, `utils/serving/dispatch.sh`, `.github/workflows/gn-benchmark.yml` | points; local validation and dispatch; the `gn-benchmark` workflow |
 | `infx/serving/client.py`, `sweep_result.py` | in-container client; search result writer |
@@ -140,7 +150,7 @@ Paths are relative to `inferencex-e2e/` except the workflow and the skills.
 
 Upstream files touched (the only places a merge can conflict; four files, five spots):
 
-1. `configs/runners.yaml`: the VNG labels after the last upstream label, the four `hcm-*` records at the end of `clusters:`.
+1. `configs/runners.yaml`: the VNG labels after the last upstream label, the VNG cluster records at the end of `clusters:`.
 2. `infx/launch/policy.py:63`: `SERVING = "serving"` in `LaunchPath`; `:87-88`: return it when `SERVING_JSON` is set.
 3. `infx/launch/drivers/__init__.py`: `serving` in the driver import, and `LaunchPath.SERVING: Route("slurm", serving.run)` in `ROUTES`.
 4. `.github/workflows/benchmark-tmpl.yml:8`: the optional `serving` input; `:99`: `SERVING_JSON: ${{ inputs.serving }}`.
@@ -148,50 +158,43 @@ Upstream files touched (the only places a merge can conflict; four files, five s
 
 ## 5. VNG Slurm
 
-Facts measured on 2026-10-25: one cluster `test-cluster`, Slurm 26.11.0rc1, `select/cons_tres` with
-`CR_CORE_MEMORY`, backfill, no preemption, pyxis on every node.
+The GPU nodes sit in one Slurm cluster with pyxis/enroot containers. They have no usable shared
+filesystem and they are shared with the rest of the team. Both facts shape the design below.
 
 ### One cluster record per node
 
-There is no usable shared filesystem: `/shared` is a 492G NFS at
-96%, and home directories are not shared. So each runner lives on its GPU node, and the HF cache
-and squash files sit on that node's local disk. Each node is its own `clusters.hcm-<node>`, pinned
-with `--nodelist` in `salloc-args`:
+Without a shared filesystem, each GitHub runner lives on its GPU node, and the HF cache and squash
+files sit on that node's local disk. So each node is its own cluster record in
+`configs/runners.yaml`, pinned to its node with `--nodelist` in `salloc-args`. The record also
+holds the partition, the account, the GPU count and the two local paths.
 
-| Cluster | Node | Partition | GPUs | HF cache / squash |
-|---|---|---|---|---|
-| `hcm-hgx01` | hgx-h200-01 | `hardware-hcm` | 4 (gres declares 4 of 8; raise when infra fixes it) | `/mnt/hf_hub_cache`, `/mnt/containers` |
-| `hcm-hgx02` | hgx-h200-02 | `hardware-hcm` | 8 | `/mnt/hf_hub_cache`, `/mnt/containers` |
-| `hcm-rtx01` | hoanq3-rtx6000x2-slurm-1 | `rtx6000pro-hcm` | 2 | `/data/hf_hub_cache`, `/data/containers` |
-| `hcm-rtx02` | hoanq3-rtx6000x2-slurm-2 | `rtx6000pro-hcm` | 2 | `/data/hf_hub_cache`, `/data/containers` |
-| `han-h200-01` | hoanq3-h200-1x-han-1 | `test` | 1 | `/mnt/hf_hub_cache`, `/mnt/containers` |
-| `han-h200-02` | hoanq3-h200-1x-han-2 | `test` | 1 | `/mnt/hf_hub_cache`, `/mnt/containers` |
-| `han-h200-04` | hoanq3-h200-1x-han-4 | `test` | 1 | `/data/hf-cache`, `/data/containers` |
-
-The serving YAML `runner:` takes a cluster label (`cluster:hcm-hgx02`), a pool label (`h200-hcm`,
-`rtx6000pro-hcm`, `h200-han`) or one slot.
+Records are grouped into pools by GPU type and site. A serving YAML's `runner:` takes a pool label
+(any free node of that type), a `cluster:<id>` label (one node) or a single runner slot. The label
+goes straight into `runs-on`.
 
 ### Runner convention
 
-Every pool uses the same convention: user `stackops` (enroot credentials and HF token in its
-home), name `<cluster-id>_<NN>` with exactly one `cluster:<cluster-id>` label, directory
-`<local disk>/gharunners/<cluster-id>/gharunnerNN/`, GitHub labels `slurm,<sku>,<pool>,cluster:<cluster-id>` (the YAML's `runner:` goes straight into `runs-on`), run by systemd. Slots per node = the most jobs you want at once
-(hgx 4, rtx 2); Slurm queues a job that finds too few free GPUs. Setup and preflight:
-`.agents/skills/serving-runner-setup`.
+Every node follows the same convention: one service user that owns the enroot credentials and the
+HF token, runner slots named `<cluster-id>_<NN>` with exactly one `cluster:<cluster-id>` label,
+a directory per slot under the node's local disk, and systemd to keep them running. Slots per
+node = the most jobs you want at once; Slurm queues a job that finds too few free GPUs. The
+`serving-runner-setup` skill has the setup and preflight steps.
 
 ### Right-sized jobs, never exclusive
 
 The nodes are shared with the team. A job asks for its GPUs
-(`gres`), 16 CPUs per GPU and a per-GPU memory share (240000M on hgx, 110000M on rtx), and the
-rest of the node stays free. These live in `salloc-args` because upstream `submit_batch` adds no
+(`gres`), 16 CPUs per GPU and a per-GPU memory share sized to the node, and the rest of the node
+stays free. These live in `salloc-args` because upstream `submit_batch` adds no
 CPU or memory flags of its own; it passes `salloc-args` to `sbatch`.
 
 ### Ports picked at run time
 
 Pyxis containers share the host network, and other jobs can run on the
 same node, so fixed port bases would collide. `job.sh:16` picks each port free on the node from
-20000-32767, below the Linux ephemeral range: engine, router, DCGM, and the router metrics port
-when the router command uses `{{router_metrics_port}}`. A serving YAML never writes a literal port.
+20000-32767, below the Linux ephemeral range, right before the step that needs it: DCGM, the
+storage master and metadata ports, the engine (one port per replica behind a router), the
+router, the router metrics port when the router command uses `{{router_metrics_port}}`, and
+Dynamo's system port. A serving YAML never writes a literal port.
 
 ### Squash import
 
@@ -202,14 +205,17 @@ job runs, so the image is imported where it is used.
 
 Six base files in `benchmarks/single_node/serving/scenarios/`:
 
-| Family | Dataset |
-|---|---|
-| `agentx` | public weka `062126` |
-| `tau2` | lock `tau2-cs` |
-| `livekit` | lock `livekit-111868-v1.1-warm` |
-| `shared-prefix-e2` | lock `shared-prefix-e2` |
-| `hidden-prefix-e3` | lock `hidden-prefix-e3` |
-| `synthetic` | synthetic, with shared prefix |
+| Family | Workload | Dataset |
+|---|---|---|
+| `agentx` | multi-turn coding agent | public AgentX trace |
+| `tau2` | customer-service agent with tool calls | pinned file |
+| `livekit` | voice-agent sessions | pinned file, Mooncake trace format |
+| `shared-prefix-e2` | requests sharing long prefixes | pinned file, Mooncake trace format |
+| `hidden-prefix-e3` | prefixes reused without being visible to the router | pinned file, Mooncake trace format |
+| `synthetic` | generated ISL/OSL with a shared-prefix share | synthetic |
+
+Pinned files are listed in `benchmarks/single_node/serving/datasets/lock.yaml` with their URL and
+sha256; the client downloads and checks them before the run.
 
 A serving YAML picks a family and may set `overrides`. The keys allowed are `duration`, `dataset`
 (same kind only: public to public, lock to lock), `max_context_length` (`null` removes the cap),
@@ -225,8 +231,9 @@ slo: "inter_token_latency:p90:lt:10"   # optional; replaces the default SLO
 conc: 1                                # search finds the concurrency itself
 ```
 
-Every ISL x OSL x cache point becomes one job in the same workflow run. `search: false` runs each
-point at the `conc` values instead.
+Every ISL x OSL x cache point becomes one job in the same workflow run. `search: false` runs the
+points at a fixed concurrency instead: a grid of several points takes exactly one `conc`, a single
+point may list several.
 
 Old scenario names map to the new syntax like this:
 
@@ -238,12 +245,13 @@ Old scenario names map to the new syntax like this:
 | `agentx-cc-062126-1m` | `scenario: agentx` + `overrides: {max_context_length: null}` |
 | `agentx-cc-062126-topp95` | `scenario: agentx` + `overrides: {generation: {top_p: 0.95, temperature: 1.0}}` |
 | `custom-agentic-tau2[-smoke]` | `scenario: tau2` (smoke: + `overrides: {duration: 180}`) |
+| `custom-agentic-livekit111868-v1.1-warm` | `scenario: livekit` |
 | `custom-agentic-livekit111868-v1` / `-v2` | `scenario: livekit` + `overrides: {dataset: livekit-111868-v1}` / `v2` |
-| `custom-agentic-livekit111868-smoke` | `scenario: livekit` + `overrides: {dataset: livekit-111868-v2, duration: 180}` |
+| `custom-agentic-livekit111868-smoke` | `scenario: livekit` + `overrides: {dataset: livekit-111868-v2, duration: 180}`; the label becomes `custom-agentic-livekit111868-v2-smoke` |
 | `agentx-shared-prefix-e2` | `scenario: shared-prefix-e2` |
 | `agentx-hidden-prefix-e3[-smoke]` | `scenario: hidden-prefix-e3` (smoke: + `overrides: {duration: 180}`) |
 | `sweep-isl<I>-osl<O>-cache<C>` | `scenario: synthetic` + `workload: {..., search: true}` + `conc: 1` |
-| `fixed-isl<I>-osl<O>-cache<C>` | `scenario: synthetic` + `workload: {..., search: false}`, same `conc` list |
+| `fixed-isl<I>-osl<O>-cache<C>` | `scenario: synthetic` + `workload: {..., search: false}`, one `conc` per grid (a single point may list several) |
 | `IX_SLO` in `env:` | `slo: "<same tuples>"` |
 
 `infx/tests/serving/test_scenarios.py` checks parity: for each of the 20 legacy files kept as
@@ -257,14 +265,16 @@ reports.
 ## 7. Results
 
 Artifact names are upstream's (`bmk_agentic_<RF>`, `agentic_<RF>`). Exp-names keep the old rule:
-`<name>_c<conc>`, `<name>_search`, and `<name>-<label>` for grid points.
+`<name>-<label>` when the workload grid has more than one point, otherwise `<name>_search` for a
+search and `<name>_c<conc>` for each concurrency.
 
 `results/` in each artifact holds `serving.yaml`, `scenario.yaml`, `server[.N].log`,
 `server_command[.N].txt`, `router.log`, `router_command.txt`, `storage.log`,
 `storage_command.txt`, `dcgm.log`, `benchmark.log`, `benchmark_command.txt`, `dataset.txt` for
 file datasets, and `aiperf_artifacts/`.
 
-The aggregate JSON's `scenario` field holds the legacy label (`agentx-cc-062126-smoke`,
+The aggregate JSON's `scenario` field holds the legacy label, with the one exception in the table
+of section 6 (`agentx-cc-062126-smoke`,
 `sweep-isl8k-osl1k-cache50`, ...). Search points carry a `state`: `ok`, `cliff`,
 `no_pass_in_range`, `no_failure_in_range`, `max_iterations` or `no_data`.
 
@@ -296,10 +306,9 @@ them moves.
 
 - Multi-node PD disaggregation (upstream `srt-multi` and srt recipes).
 - Single-node PD through `roles:` in the serving driver.
-- Features still on unmerged branches: adaptive search on trace scenarios
-  (`bench/gemma4-livekit-dyn-swa-arms`), LiveKit open-loop (`bench/gemma4-livekit-voice-openloop`),
-  late-joining replicas / `scale_up` (`feat/serving-late-replica-mooncake`), `host_cpus` /
-  `host_mem_gb` (`feat/serving-dynamo-vllm-replicas`), warm-up-filtered TTFT (`livekit_ttft.py`).
+- Features still on unmerged branches of the old flow: adaptive search on trace scenarios,
+  LiveKit open-loop, late-joining replicas (`scale_up`), `host_cpus` / `host_mem_gb`, and
+  warm-up-filtered TTFT.
 - The VNG fix that counts Mooncake `storage_*` hits as external cache hits in
   `infx/results/agentic/backends/sglang.py` is not ported. Aggregates of L3 runs under-report
   `server_external_cache_hit_rate`; `result-report` computes the tiers from raw metrics and is not
