@@ -5597,31 +5597,6 @@ minimaxm3-fp4-b200-vllm-agentic-mtp-c10:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [20], srt-recipe: agentic.yaml:override_cap3_tp4_c20_dram }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml:override_cap6_tp4_c32_dram }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: agentic.yaml:override_cap16_tp4_c32_dram }
-minimaxm31flash-fp4-b300-vllm-agentic-dspark:
-  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
-  model: MiniMaxAI/MiniMax-M3.1-Flash
-  model-prefix: minimaxm31flash
-  runner: cluster:b300-dsxe
-  precision: fp4
-  framework: vllm
-  multinode: false
-  srt-recipe-dir: minimaxm31flash/vllm/b300-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: 'agg-variants.yaml:zip_override_tp4[0]' }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [4], srt-recipe: 'agg-variants.yaml:zip_override_tp4[1]' }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: 'agg-variants.yaml:zip_override_tp4[2]' }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agg-variants.yaml:zip_override_tp4[3]' }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [32], srt-recipe: 'agg-variants.yaml:override_tp4_c32' }
-    - dram-utilization: 1.0
-      search-space:
-      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agg-variants.yaml:override_tp4_c24' }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agg-variants.yaml:zip_override_tp2[0]' }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: 'agg-variants.yaml:zip_override_tp2[1]' }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agg-variants.yaml:zip_override_tp2[2]' }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agg-variants.yaml:zip_override_tp2[3]' }
-
 minimaxm31flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
   model: MiniMaxAI/MiniMax-M3.1-Flash
@@ -5718,10 +5693,18 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      # TP4 is the upstream Blackwell layout, drafting 7 DSpark tokens.
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
-      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router, drafting 3 DSpark tokens.
-      - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: 'agentic.yaml:zip_override_tp4[0]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [4], srt-recipe: 'agentic.yaml:zip_override_tp4[1]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: 'agentic.yaml:zip_override_tp4[2]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agentic.yaml:zip_override_tp4[3]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [32], srt-recipe: 'agentic.yaml:override_tp4_c32' }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agentic.yaml:override_tp4_c24' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agentic.yaml:zip_override_tp2[0]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: 'agentic.yaml:zip_override_tp2[1]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
 # Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
 # two NVL4 nodes, and TP4 lazy SimpleCPU KV offload variants. The pinned
