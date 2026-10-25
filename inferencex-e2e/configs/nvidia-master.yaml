@@ -5620,7 +5620,7 @@ minimaxm31flash-fp4-b200-vllm-agentic-dspark:
 # MiniMax-M3.1-Flash AgentX on B200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24. Serve flags follow the cookbook's
-# B200 Balanced (TP4) and High-Throughput (TP8, attention DP2, EP8; mem 0.75, prefill graphs to 16384).
+# B200 Balanced (TP4), then TP4 and TP4 + EP4 (MegaMoE) with DRAM KV offload from conc 32.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
 # infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
 minimaxm31flash-fp4-b200-sglang-agentic-dspark:
@@ -5637,9 +5637,12 @@ minimaxm31flash-fp4-b200-sglang-agentic-dspark:
     - search-space:
       # Balanced: TP4.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
-      # High-Throughput: TP8 + EP8 with attention DP2 inside the server (--attn-dp-size 2,
-      # not full DP attention, so dp-attn stays false).
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128], srt-recipe: agentic.yaml }
+    - dram-utilization: 0.80
+      search-space:
+      # Balanced TP4 with DRAM KV offload.
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 64], srt-recipe: agentic.yaml }
+      # High-Throughput TP4 + EP4 (MegaMoE) with DRAM KV offload.
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 72], srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB200: the B200 recipe and search space on the
 # GB200 NVL4 tray, with the day-zero arm64 CUDA 13.4 build of the same image
