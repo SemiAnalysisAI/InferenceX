@@ -11197,3 +11197,10 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-ac9126e58aa7 to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4505
+  scenario-type: [agentic-coding]
