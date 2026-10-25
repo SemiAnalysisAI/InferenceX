@@ -206,3 +206,55 @@ def test_conflicts_on_excluded_decode_do_not_block_prefill_measurement():
         entry["series"].append(_series(DECODE, 1000, "decode"))
     export["metrics"]["trtllm_other_metric"] = {"series": [_series(DECODE, 1, "aggregated")]}
     assert _run(export)["cache"]["overall_cache_hit_rate"] == pytest.approx(0.6)
+
+
+@pytest.mark.parametrize("fault", ["shape", "missing", "partial", "type"])
+def test_incomplete_frontend_does_not_hide_the_validated_prefill_total(fault):
+    export = _pair()
+    frontend = {"type": "counter", "series": [{"stats": {"total": None}}]}
+    if fault == "shape":
+        frontend = []
+    elif fault == "partial":
+        frontend["series"].append({"stats": {"total": 1234}})
+    elif fault == "type":
+        frontend["type"] = "gauge"
+    export["metrics"]["dynamo_frontend_input_sequence_tokens"] = frontend
+    flat, nested, _ = compute_server_metrics(
+        export, framework="dynamo-trt", records=[], disaggregated=True
+    )
+    assert flat["total_prompt_tokens"] == nested["tokens"]["prompt_total"] == 1000
+    assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.6)
+    assert nested["cache_validity"]["pricing_eligible"] is False
+
+
+@pytest.mark.parametrize("overlap", ["none", "identical", "conflicting"])
+def test_alias_totals_combine_disjoint_domains_without_counting_aliases_twice(overlap):
+    export = _pair()
+    other = "http://prefill-2/metrics"
+    for key in ("endpoints_configured", "endpoints_successful"):
+        export["summary"][key].append(other)
+    for name, first, second in (
+        (PROMPT, 1000, 3000),
+        (CACHED, 600, 900),
+        ("trtllm_generation_tokens", 200, 600),
+        ("trtllm_kv_cache_offload_bytes", 100, 300),
+    ):
+        export["metrics"][name] = {"type": "counter", "series": [_series(PREFILL, first)]}
+        export["metrics"][name + "_total"] = {
+            "type": "counter",
+            "series": [_series(other, second)],
+        }
+        if overlap != "none":
+            export["metrics"][name + "_total"]["series"].append(_series(PREFILL, first))
+    if overlap == "conflicting":
+        export["metrics"]["trtllm_generation_tokens_total"]["series"][-1]["stats"]["total"] = 201
+    flat, nested, _ = compute_server_metrics(
+        export, framework="dynamo-trt", records=[], disaggregated=True
+    )
+    assert nested["tokens"]["prompt_total"] == 4000
+    assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.375)
+    assert flat["total_generation_tokens"] == (None if overlap == "conflicting" else 800)
+    assert flat["kv_offload_bytes_gpu_to_cpu"] == 400
+    source = next(row for row in nested["sources"] if row["id"].endswith(other))
+    assert source["prompt_tokens"] == 3000
+    assert source["generation_tokens"] == 600

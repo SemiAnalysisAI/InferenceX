@@ -103,21 +103,20 @@ def _disaggregated_prompt_total(
     if prompt is not None:
         return prompt
     frontend = metrics.get("dynamo_frontend_input_sequence_tokens")
-    if frontend is not None:
-        if not isinstance(frontend, dict):
-            return None
+    if isinstance(frontend, dict):
         series = frontend.get("series")
         key = {"counter": "total", "histogram": "sum"}.get(frontend.get("type"))
-        if not isinstance(series, list) or key is None:
-            return None
-        return _integer_total(
-            [
-                item.get("stats", {}).get(key)
-                if isinstance(item, dict) and isinstance(item.get("stats"), dict)
-                else None
-                for item in series
-            ]
-        )
+        if isinstance(series, list) and key is not None:
+            prompt = _integer_total(
+                [
+                    item.get("stats", {}).get(key)
+                    if isinstance(item, dict) and isinstance(item.get("stats"), dict)
+                    else None
+                    for item in series
+                ]
+            )
+            if prompt is not None:
+                return prompt
     reuse = nested["validity"]["cache_rate"]
     if reuse.get("published") and reuse.get("role_scope") == "prefill":
         return _integer_total([reuse.get("prompt_tokens")])
