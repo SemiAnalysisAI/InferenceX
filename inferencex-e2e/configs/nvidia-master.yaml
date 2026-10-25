@@ -9409,13 +9409,13 @@ dsv41flash-fp4-gb300-sglang-agentic-dspark:
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 160], router: { name: sglang-router, version: "0.3.2" }, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 16], srt-recipe: agentic.yaml }
 dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
+  image: lmsysorg/sglang:nightly-dev-cu13-20261025-65633129@sha256:069efa1d6a2d58309529f53eeee34c39d69b1cdb455eaf7fb8de83e3fd0be727
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.6.0.dev20261019" }
+  router: { name: dynamo-router, version: "1.6.0" }
   multinode: true
   disagg: false
   srt-recipe-dir: dsv41flash/sglang/gb300-fp4/agentx
