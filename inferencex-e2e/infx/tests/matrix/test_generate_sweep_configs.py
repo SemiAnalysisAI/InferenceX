@@ -481,36 +481,56 @@ class TestSeqLenToStr:
 
 class TestMarkEvalEntries:
 
-    def test_agentic_gsm8k_groups_by_fixed_seq_keys_and_image(self):
+    def test_agentic_gsm8k_groups_by_deployment_shape(self):
+        """Every single-node agentic shape (any field but conc, naming, eval, and
+        fingerprint) gets its own GSM8K pick at its highest concurrency. Shapes the
+        app tells apart only by conc (image, kv-offloading) sit at distinct top
+        concs, since drop_app_colliding_evals keeps one eval per app identity."""
         base = {
             "scenario-type": "agentic-coding",
             "model": "m", "runner": "b300", "framework": "vllm",
             "precision": "fp4", "tp": 8, "spec-decoding": "none",
             "dp-attn": False, "image": "img:a",
         }
-        variants = [
-            {},
-            {"spec-decoding": "mtp"},
-            {"dp-attn": True},
-            {"image": "img:b"},
+        shapes = [
+            ({}, (16, 64)),
+            ({"spec-decoding": "mtp"}, (16, 64)),
+            ({"dp-attn": True}, (16, 64)),
+            ({"tp": 4}, (16, 64)),
+            ({"tp": 4, "ep": 4}, (16, 64)),
+            ({"image": "img:b"}, (16, 48)),
+            ({"kv-offloading": "dram"}, (16, 96)),
         ]
         matrix_values = [
-            dict(base, **variant, conc=conc, variant=n)
-            for n, variant in enumerate(variants)
-            for conc in (16, 64)
+            dict(base, **shape, conc=conc, shape=n, **{"recipe-fingerprint": f"{n}-{conc}"})
+            for n, (shape, concs) in enumerate(shapes)
+            for conc in concs
         ]
-        matrix_values.append(dict(base, tp=4, conc=128, variant=0))
-        matrix_values.append(dict(base, conc=256, variant=0, **{"kv-offloading": "dram"}))
 
         result = mark_eval_entries(matrix_values)
 
-        marked = sorted(
-            (e["variant"], e["tp"], e.get("kv-offloading"), e["conc"])
-            for e in result if e.get("run-eval")
-        )
-        assert marked == [
-            (0, 8, "dram", 256), (1, 8, None, 64), (2, 8, None, 64), (3, 8, None, 64),
+        marked = sorted((e["shape"], e["conc"]) for e in result if e.get("run-eval"))
+        assert marked == [(0, 64), (1, 64), (2, 64), (3, 64), (4, 64), (5, 48), (6, 96)]
+
+    def test_agentic_gsm8k_groups_by_srt_recipe(self):
+        """Two recipes of one deployment are different compute paths, so the
+        low-latency conc-1 recipe gets its own GSM8K pick next to the conc-32 one."""
+        base = {
+            "scenario-type": "agentic-coding",
+            "model": "m", "runner": "gb300", "framework": "sglang",
+            "precision": "fp4", "tp": 4, "spec-decoding": "mtp",
+            "dp-attn": False, "image": "img:a",
+        }
+        matrix_values = [
+            dict(base, conc=1, **{"srt-recipe": "agentic.yaml"}),
+            dict(base, conc=32, **{"srt-recipe": "agentic.yaml"}),
+            dict(base, conc=1, **{"srt-recipe": "agentic-low-latency.yaml"}),
         ]
+
+        result = mark_eval_entries(matrix_values)
+
+        marked = sorted((e["srt-recipe"], e["conc"]) for e in result if e.get("run-eval"))
+        assert marked == [("agentic-low-latency.yaml", 1), ("agentic.yaml", 32)]
 
     def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
         """Multi-node agentic GSM8K runs once per parallelism topology, at its
@@ -697,9 +717,7 @@ class TestMarkEvalEntries:
             for row in result if row["run-eval"]
         )
         vendor = [("minimax-vendor", 15, "none"), ("minimax-vendor", 20, "dram")]
-        gsm8k = [("lm-eval", 15, "none"), ("lm-eval", 20, "dram")] if all_evals else [
-            ("lm-eval", 20, "dram"),
-        ]
+        gsm8k = [("lm-eval", 15, "none"), ("lm-eval", 20, "dram")]
         assert evals == sorted(gsm8k + vendor)
         assert all(row["eval-suite"] == "minimax_m3_full"
                    for row in result if row.get("eval-framework") == "minimax-vendor")

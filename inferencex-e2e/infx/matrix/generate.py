@@ -581,9 +581,8 @@ def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
     }
 
 
-def _multinode_parallelism_key(entry: dict) -> tuple:
-    """Return a hashable identity of a multinode row, ignoring conc, eval, and naming fields."""
-    ignored_fields = {
+EVAL_GROUP_IGNORED_FIELDS = frozenset(
+    {
         Fields.CONC.value,
         Fields.RUN_EVAL.value,
         Fields.EVAL_ONLY.value,
@@ -592,12 +591,21 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
         Fields.EXP_NAME.value,
         Fields.EVAL_FRAMEWORK.value,
         Fields.EVAL_SUITE.value,
+        Fields.RECIPE_FINGERPRINT.value,
     }
+)
+
+
+def _eval_group_key(entry: dict) -> tuple:
+    """Return a hashable identity of a row, ignoring conc, eval, naming, and fingerprint fields.
+
+    Single-node recipes bind one variant per conc, so the fingerprint varies within one shape.
+    """
     return tuple(
         sorted(
             (key, freeze_config_value(value))
             for key, value in entry.items()
-            if key not in ignored_fields
+            if key not in EVAL_GROUP_IGNORED_FIELDS
         )
     )
 
@@ -686,7 +694,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Choose which rows run evals and return the rows, plus extra gsm8k eval-only rows.
 
     Pick the top and median 8k1k concs per single-node group, the top eligible conc per multinode
-    shape, one gsm8k point per agentic deployment, and every automatic vendor eval.
+    shape, one gsm8k point per agentic deployment shape, and every automatic vendor eval.
     """
     from collections import defaultdict
 
@@ -751,7 +759,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_concs = _eligible_eval_concs(entry)
         if not eval_concs:
             continue
-        mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
+        mn_groups[_eval_group_key(entry)].append((i, eval_concs[-1]))
 
     for entries in mn_groups.values():
         best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
@@ -777,20 +785,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
                 ag_mn_fallback[deployment] = (i, top_conc)
             eval_concs = _eligible_eval_concs(entry)
             if eval_concs:
-                ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
+                ag_mn_groups[_eval_group_key(entry)].append((i, eval_concs[-1]))
             continue
         conc = entry[Fields.CONC.value]
         conc_val = max(conc) if isinstance(conc, list) else conc
-        key = (
-            entry[Fields.MODEL.value],
-            entry[Fields.RUNNER.value],
-            entry[Fields.FRAMEWORK.value],
-            entry[Fields.PRECISION.value],
-            entry[Fields.SPEC_DECODING.value],
-            entry[Fields.DP_ATTN.value],
-            entry[Fields.IMAGE.value],
-        )
-        ag_sn_groups[key].append((i, conc_val))
+        ag_sn_groups[_eval_group_key(entry)].append((i, conc_val))
     gsm8k_picks: dict[int, int | None] = {}
     for entries in ag_sn_groups.values():
         gsm8k_picks[max(entries, key=lambda item: item[1])[0]] = None
@@ -903,7 +902,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
             conc = entry[Fields.CONC.value]
             conc_values = conc if isinstance(conc, list) else [conc]
-            parallelism_key = _multinode_parallelism_key(entry)
+            parallelism_key = _eval_group_key(entry)
             if parallelism_key in multinode_agentic_indices:
                 existing = expanded_entries[multinode_agentic_indices[parallelism_key]]
                 merged_conc = sorted(set(existing[Fields.CONC.value] + conc_values))
@@ -928,7 +927,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
         if Fields.PREFILL.value in entry:
             conc = entry[Fields.CONC.value]
             conc_values = conc if isinstance(conc, list) else [conc]
-            parallelism_key = _multinode_parallelism_key(entry)
+            parallelism_key = _eval_group_key(entry)
             if parallelism_key in multinode_indices:
                 existing = expanded_entries[multinode_indices[parallelism_key]]
                 existing[Fields.CONC.value] = sorted(set(existing[Fields.CONC.value] + conc_values))
