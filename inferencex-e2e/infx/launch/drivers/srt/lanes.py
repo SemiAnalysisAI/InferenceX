@@ -59,7 +59,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
     ),
     ("b300-dsxe", LaunchPath.SRT_MULTI): SrtLane(frameworks=_DYNAMO),
     ("gb200-nv", LaunchPath.SRT_MULTI): SrtLane(
-        frameworks=_DYNAMO,
+        frameworks=any_of("dynamo-sglang", "dynamo-trt", "dynamo-vllm", "llmd-vllm"),
         setup_scripts={"dynamo-sglang": "install-torchao.sh"},
         mounts=(
             LaneMount(
@@ -71,7 +71,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         ),
         shared_run_root=(
             Match(any_of("minimaxm3", "kimik3", "qwen3.5", "glm5.2")),
-            Match(any_of("dsv4"), frameworks=any_of("dynamo-vllm")),
+            Match(any_of("dsv4"), frameworks=any_of("dynamo-vllm", "llmd-vllm")),
             Match(any_of("dsv4"), frameworks=any_of("dynamo-sglang"), agentic=True),
         ),
     ),
@@ -107,6 +107,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
 
 
 def srt_lane(cluster_id: str, path: LaunchPath) -> SrtLane:
+    """Return the srt-slurm lane for a cluster and launch path, or raise LaunchError if none."""
     try:
         return SRT_LANES[(cluster_id, path)]
     except KeyError:

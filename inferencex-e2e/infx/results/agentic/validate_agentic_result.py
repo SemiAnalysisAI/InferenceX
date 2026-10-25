@@ -89,6 +89,7 @@ def validate_result(artifact_dir: Path, failed_request_threshold: float) -> list
 
 
 def main() -> int:
+    """Validate the artifact dir from argv against the error threshold and return 1 on any error, else 0."""
     parser = argparse.ArgumentParser()
     parser.add_argument("artifact_dir", type=Path)
     parser.add_argument(

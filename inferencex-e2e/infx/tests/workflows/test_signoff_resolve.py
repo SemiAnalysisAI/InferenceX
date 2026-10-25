@@ -307,6 +307,8 @@ def test_removed_signoff_does_not_start_verification(service, name, action):
         "",
         "Please review this.",
         "<!-- codeowner-signoff-verify -->\nVerdict: PASS",
+        "Please post `As a PR reviewer and CODEOWNER, I have reviewed this and have:`.",
+        "> As a PR reviewer and CODEOWNER, I have reviewed this and have:\nQuoted for reference.",
     ],
 )
 def test_new_non_signoff_comments_do_not_start_verification(service, name, body):
@@ -314,3 +316,16 @@ def test_new_non_signoff_comments_do_not_start_verification(service, name, body)
     event["review" if name == "pull_request_review" else "comment"]["body"] = body
     service.clear()
     assert resolve(name, event) == {"proceed": "false"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "As a PR reviewer and CODEOWNER, I have reviewed this and have:\n- [x] item",
+        "\n\n  As a PR reviewer and CODEOWNER, I have reviewed this and have:\r\n- [x] item",
+    ],
+)
+def test_signoff_phrase_opening_the_comment_starts_verification(service, body):
+    event = event_for("issue_comment")
+    event["comment"]["body"] = body
+    assert resolve("issue_comment", event)["proceed"] == "true"

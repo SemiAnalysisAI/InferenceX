@@ -109,6 +109,7 @@ class AtomBackend(ServerMetricsBackend):
     name = "atom"
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
+        """Return True for atom metric names, or for an empty scrape when ``framework`` is atom."""
         metric_names = set(metrics)
         return any(name.startswith(("atom:", "atom_")) for name in metric_names) or (
             not metrics and framework.lower() == "atom"
@@ -124,6 +125,7 @@ class AtomBackend(ServerMetricsBackend):
         disaggregated: bool | None = None,
         cpu_offload_disabled: bool = False,
     ) -> None:
+        """Fill token totals, prefix and LMCache hit rates and KV usage from ATOM ``metrics``."""
         prompt_names = _atom_counter_names("prompt_tokens")
         prompt_endpoints = {s.get("endpoint_url") for s in metric_series(metrics, prompt_names)}
         if endpoint_roles is None:

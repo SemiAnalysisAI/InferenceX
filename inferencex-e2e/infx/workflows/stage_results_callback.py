@@ -16,6 +16,10 @@ STAGING_SITE = "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
 
 
 def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str]:
+    """Return markdown chart links from payload, or a default link for run_id on run_date.
+
+    Raises RuntimeError if any link is malformed or not on the staging site.
+    """
     links = payload.get("chart-links")
     if links is None:
         return [f"{STAGING_SITE}/inference?i_dates={quote(f'{run_date}~r{run_id}')}"]
@@ -47,6 +51,10 @@ def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str
 
 
 def report(repo: str, event: dict[str, Any], token: str, server_url: str) -> None:
+    """Post or update the PR comment for a staging callback event.
+
+    Raises RuntimeError if the payload is malformed or from an unexpected source.
+    """
     payload = event["client_payload"]
     if payload.get("source-repository") != "SemiAnalysisAI/InferenceX-app":
         raise RuntimeError("Unsupported staging callback source")
@@ -103,6 +111,7 @@ def report(repo: str, event: dict[str, Any], token: str, server_url: str) -> Non
 
 
 def main() -> None:
+    """Report the staging callback from the GitHub Actions environment."""
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     report(
         os.environ["GITHUB_REPOSITORY"],
