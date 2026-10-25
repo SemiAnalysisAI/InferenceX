@@ -71,10 +71,14 @@ base:
 
 # One variant per point, concurrency 1 through 64 on both TP arms (c128 and
 # c192 excluded). Engram tables move to pinned host memory at TP2, where
-# resident tables leave too little KV. Graph capture covers 2x CONC x
-# (1 + 5 drafts). The prefill chunk is the upstream 16384, except at c16 and
-# c32, which run 8192-token chunks and admit at most 4 (c16) or 8 (c32)
-# running sequences.
+# resident tables leave too little KV. The searched points (TP4 c1-c2, TP2
+# c1-c64) cap running sequences for p90 interactivity: 1 at c1-c4, 2 at c8,
+# 4 at c16, 8 at c32 and 40 at c64. Graph capture is max-num-seqs x
+# (1 + 5 drafts), rounded up to vLLM's capture grid (8, 16, 24, 48, 240);
+# a size off the grid is truncated and larger steps run eagerly. Prefill
+# chunks are 32768 tokens at c1-c4 and 8192 from c8. The unsearched TP4
+# c4-c64 variants keep capture 1024 and 16384-token chunks, with 8192 / 4
+# (c16) and 8192 / 8 (c32).
 override_tp4_c1:
   roles:
     agg:
@@ -82,8 +86,9 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
-        max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-cudagraph-capture-size: 8
+        max-num-batched-tokens: 32768
+        max-num-seqs: 1
   benchmark:
     env:
       CONC: '1'
@@ -95,8 +100,9 @@ override_tp4_c2:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
-        max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-cudagraph-capture-size: 8
+        max-num-batched-tokens: 32768
+        max-num-seqs: 1
   benchmark:
     env:
       CONC: '2'
@@ -175,8 +181,9 @@ override_tp2_c1:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-cudagraph-capture-size: 8
+        max-num-batched-tokens: 32768
+        max-num-seqs: 1
   benchmark:
     env:
       CONC: '1'
@@ -188,8 +195,9 @@ override_tp2_c2:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-cudagraph-capture-size: 8
+        max-num-batched-tokens: 32768
+        max-num-seqs: 1
   benchmark:
     env:
       CONC: '2'
@@ -201,8 +209,9 @@ override_tp2_c4:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-cudagraph-capture-size: 8
+        max-num-batched-tokens: 32768
+        max-num-seqs: 1
   benchmark:
     env:
       CONC: '4'
@@ -214,8 +223,9 @@ override_tp2_c8:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-cudagraph-capture-size: 16
+        max-num-batched-tokens: 8192
+        max-num-seqs: 2
   benchmark:
     env:
       CONC: '8'
@@ -227,7 +237,7 @@ override_tp2_c16:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 1024
+        max-cudagraph-capture-size: 24
         max-num-batched-tokens: 8192
         max-num-seqs: 4
   benchmark:
@@ -241,7 +251,7 @@ override_tp2_c32:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 1024
+        max-cudagraph-capture-size: 48
         max-num-batched-tokens: 8192
         max-num-seqs: 8
   benchmark:
@@ -255,8 +265,9 @@ override_tp2_c64:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-cudagraph-capture-size: 1024
-        max-num-batched-tokens: 16384
+        max-cudagraph-capture-size: 240
+        max-num-batched-tokens: 8192
+        max-num-seqs: 40
   benchmark:
     env:
       CONC: '64'
