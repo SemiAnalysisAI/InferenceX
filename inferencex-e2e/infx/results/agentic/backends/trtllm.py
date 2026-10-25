@@ -290,11 +290,43 @@ def _alias_total(
     base: str,
     series_filter: Callable[[dict[str, Any]], bool] | None = None,
 ) -> float | None:
-    # Native and exporter-stripped names represent the same counter.
+    totals: dict[tuple, float] = {}
     for name in (base, f"{base}_total"):
-        if name in metrics:
-            return sum_stat(metrics, name, series_filter=series_filter)
-    return None
+        entry = metrics.get(name)
+        if entry is None:
+            continue
+        if (
+            not isinstance(entry, dict)
+            or entry.get("type") != "counter"
+            or not isinstance(entry.get("series"), list)
+        ):
+            return None
+        seen = set()
+        for series in metric_series(metrics, name):
+            if series_filter is not None and not series_filter(series):
+                continue
+            labels = series.get("labels")
+            labels = {} if labels is None else labels
+            if not isinstance(labels, dict) or any(
+                not isinstance(key, str) or not isinstance(value, str)
+                for key, value in labels.items()
+            ):
+                return None
+            key = str(series.get("endpoint_url", "")), tuple(sorted(labels.items()))
+            stats = series.get("stats")
+            value = stats.get("total") if isinstance(stats, dict) else None
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+                or key in seen
+                or (key in totals and totals[key] != value)
+            ):
+                return None
+            seen.add(key)
+            totals[key] = value
+    return sum(totals.values()) if totals else None
 
 
 def _endpoint_role_sets(
