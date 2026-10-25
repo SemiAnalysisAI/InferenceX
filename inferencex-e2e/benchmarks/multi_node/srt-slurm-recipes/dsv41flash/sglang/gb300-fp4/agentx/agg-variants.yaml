@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.6.0.dev20261014"
-      sglang: "0.0.0.dev1+ga6a8c5601"
+      dynamo: "1.6.0"
+      sglang: "0.0.0.dev1+g656331295"
   dynamo:
     install: false
     request_plane: tcp
