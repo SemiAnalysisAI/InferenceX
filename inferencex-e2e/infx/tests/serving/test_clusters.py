@@ -9,6 +9,7 @@ NODES = {
     "hcm-rtx02": ("hoanq3-rtx6000x2-slurm-2", 2, "gpu:nvidia_rtx6000pro:{gpus}", 2),
     "han-h200-01": ("hoanq3-h200-1x-han-1", 1, "gpu:{gpus}", 1),
     "han-h200-02": ("hoanq3-h200-1x-han-2", 1, "gpu:{gpus}", 1),
+    "han-h200-04": ("hoanq3-h200-1x-han-4", 1, "gpu:{gpus}", 1),
 }
 
 
@@ -34,4 +35,4 @@ def test_pool_labels_list_every_slot():
     labels = load_inventory().labels
     assert labels["h200-hcm"] == labels["cluster:hcm-hgx01"] + labels["cluster:hcm-hgx02"]
     assert labels["rtx6000pro-hcm"] == labels["cluster:hcm-rtx01"] + labels["cluster:hcm-rtx02"]
-    assert labels["h200-han"] == labels["cluster:han-h200-01"] + labels["cluster:han-h200-02"]
+    assert labels["h200-han"] == labels["cluster:han-h200-01"] + labels["cluster:han-h200-02"] + labels["cluster:han-h200-04"]

@@ -42,7 +42,7 @@ Pass criteria:
 If `stackops` is missing, create it as root on the node (step 1b). Fix anything else on the infra side before registering. Known state (2026-10-25):
 - HAN `test` partition, 1xH200 / 16 CPU / ~120 GB RAM per node, no `/data` disk on han-1/2 (caches on `/mnt`, which is on `/`):
   - `han-1`, `han-2`: healthy (pyxis OK, ~300 GB free), no `stackops` yet. Clusters `han-h200-01`, `han-h200-02`.
-  - `han-4`: `/data` at 95%, `/` at 74%. Out until cleaned.
+  - `han-4`: `/data` cleaned to 73% (267G free, 2026-10-25), `stackops` exists. Cluster `han-h200-04`, runner in `/data/gharunners/han-h200-04`, squash `/data/containers`, HF cache the existing `/data/hf-cache`. `/` (enroot runtime) has only 48G free.
   - `han-3-1`: `/` at 99% with the enroot paths on it. Out.
   - `han-3`: slurmd name mismatch (`srun`: Invalid node name). Out.
 - `hgx-h200-01`: gres declares 4 of 8 GPUs.
