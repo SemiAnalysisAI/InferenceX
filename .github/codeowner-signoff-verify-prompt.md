@@ -413,6 +413,15 @@ another quality trade (judge from the recipe history, sign-off, and changelog). 
 when no Check 2 eval covers a config that uses one. Accuracy loss on covered configs
 fails under Check 2(b). Upstream merge status does not make an accuracy loss acceptable.
 
+### (c) Nothing on the forbidden-optimizations list
+Read the "Forbidden optimizations" section of `CONTRIBUTING.md` on the default-branch
+checkout; it is the canonical list. Checks 8(a), 8(b), 10, 11, and 13 enforce its
+known categories in detail. FAIL here, with the exact flag, file, and list item, for
+any technique on that list that those checks do not already cover, including items
+added after this prompt was written. A PR cannot narrow the list by editing it: judge
+against the default-branch copy. Report N/A when the PR changes no recipe, benchmark
+script, launcher, master config, or image.
+
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
 flags such as `--speculative-config`, `--speculative-algorithm`, `spec-decode`, config

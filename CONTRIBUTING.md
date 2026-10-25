@@ -29,6 +29,16 @@ Every PR description must include an **AI model disclosure** section inside a co
 
 **Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
 
+## Forbidden optimizations
+
+This is the canonical list of optimizations a submission may not use. Read it before tuning a recipe. The principle: making the **same** computation run faster is fair game; removing computation, cheapening the draft, or changing the engine is not. Use only optimizations that accuracy-sensitive customers run in production. The sign-off checklist and the CI sign-off verifier enforce this list, and the verifier fails anything added here.
+
+1. **Reducing model-architecture FLOPs.** Skipping or trimming layers, experts, heads, or indexer passes in a way the model does not natively support, for example `--hf-overrides` that skip the indexer every N layers, `--json-model-override-args`, or `sed`/`jq` edits of model config files. Lower target or verifier precision is allowed when evals pass.
+2. **Lowering draft-model or draft-head precision below what ships.** Any submission-side quantization, dtype or KV-cache dtype override, checkpoint substitution, or patch that makes the draft cheaper than the shipped default, including the named `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE` prohibition. Details and examples: [Draft-model precision](#draft-model-precision).
+3. **Patching the inference engine or serving stack.** `.patch` files, `git apply`, inline `sed`/Python rewrites of engine sources, site-packages edits, monkey-patching, overwriting container files, runtime-applied engine PRs, or forked or rebuilt engine wheels. The pinned upstream image runs as shipped, unless a waiver at `inferencex-e2e/docs/waiver/<PR>.md` states what is patched, why the upstream image cannot run the benchmark, the upstream issue, and the removal plan. A waiver never covers draft precision.
+4. **Gaming speculative acceptance.** Agentic spec-decode configs must use the golden acceptance length for their model, thinking mode, and draft length from `inferencex-e2e/infx/golden_al_distribution/`; never hard-code or substitute another target. Synthetic or forced-acceptance knobs (for example `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`) on non-agentic spec-decode configs are forbidden without a sanctioned exception.
+5. **Accuracy-trading levers without eval coverage.** These are allowed only when an eval covers the config, even if the model supports them natively: indexer skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`), INT4 all-reduce (`QUICK_REDUCE_QUANTIZATION=INT4`), accuracy-affecting `--hf-overrides`, `online_quant_config`, and an FP8 KV cache used to recover throughput lost to another quality trade.
+
 ## Draft-model precision
 
 The rule is simple: **serve the draft as it ships.** A speculative-decoding
