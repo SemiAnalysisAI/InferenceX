@@ -117,7 +117,7 @@ The serving YAML `runner:` takes a cluster label (`cluster:hcm-hgx02`), a pool l
 
 Every pool uses the same convention: user `stackops` (enroot credentials and HF token in its
 home), name `<cluster-id>_<NN>` with exactly one `cluster:<cluster-id>` label, directory
-`<local disk>/gharunners/<name>/`, run by systemd. Slots per node = the most jobs you want at once
+`<local disk>/gharunners/<cluster-id>/gharunnerNN/`, GitHub labels `slurm,<sku>,<pool>,cluster:<cluster-id>` (the YAML's `runner:` goes straight into `runs-on`), run by systemd. Slots per node = the most jobs you want at once
 (hgx 4, rtx 2); Slurm queues a job that finds too few free GPUs. Setup and preflight:
 `.agents/skills/serving-runner-setup`.
 
