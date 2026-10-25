@@ -54,6 +54,8 @@ def run_single_node(launch: Launch) -> int:
     event = launch.life.event
     with event.stage("prepare"):
         request = SingleNodeRequest.from_env(launch.request.env)
+        if request.is_agentic and not request.eval_only:
+            require(request, "INFERENCEX_RESULTS_PYTHON")
         model_path = models.single_node_model_path(launch.cluster, request)
         staged = {"MODEL_PATH": model_path} if model_path.startswith("/") else {}
         run = SrtRun.create(launch, request, staged)
@@ -149,9 +151,9 @@ def run_batch(launch: Launch) -> int:
         backend.stream_logs(job)
     except BackendError:
         return 1
-    succeeded = backend.state(job).succeeded
+    status = backend.state(job)
     event.adopt_reentry()
-    return 0 if succeeded else 1
+    return 0 if status.succeeded else status.exit_code or 1
 
 
 def run_multinode(launch: Launch) -> int:
@@ -168,6 +170,8 @@ def run_multinode(launch: Launch) -> int:
             raise LaunchError(f"{srt_recipe} is not in the recipe mirror")
         decision = power.decide_power(launch.cluster.id, launch.path, request)
         event.set(power=asdict(decision))
+        if not request.eval_only and (decision.agentx or decision.adapter):
+            require(request, "INFERENCEX_RESULTS_PYTHON")
         model = models.checkpoint(launch.cluster, request)
         served = models.served_path(launch.cluster, request, model)
         model_paths = models.model_paths(launch.cluster, request, served)
@@ -204,6 +208,7 @@ def run_multinode(launch: Launch) -> int:
 
 
 def _srt_settings(cluster: Cluster | None) -> SrtSlurmSettings | None:
+    """Return the cluster's srt-slurm settings, or None if it is absent or not a Slurm cluster."""
     settings = cluster.scheduler_settings if cluster is not None else None
     return settings.srt_slurm if isinstance(settings, SlurmSettings) else None
 
@@ -213,15 +218,18 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
     problems: list[str] = []
 
     def scoped(cluster_id: str) -> bool:
+        """Return whether ``cluster_id`` is within the checked scope."""
         return only in (None, cluster_id)
 
     def profile(table: str, cluster_id: str) -> SrtSlurmSettings | None:
+        """Return the srt-slurm settings of ``cluster_id``, recording a problem if it has none."""
         srt = _srt_settings(clusters.get(cluster_id))
         if srt is None:
             problems.append(f"{table}[{cluster_id!r}]: no srt-slurm cluster {cluster_id!r}")
         return srt
 
     def volume(where: str, cluster_id: str, name: str) -> None:
+        """Record a problem at ``where`` if ``cluster_id`` has no volume ``name``."""
         if name not in clusters[cluster_id].scheduler_settings.volumes:
             problems.append(f"{where}: no volume {name!r}")
 

@@ -57,6 +57,7 @@ class JobStatus:
 
     @property
     def succeeded(self) -> bool:
+        """Return whether the job ended in the succeeded state."""
         return self.state is JobState.SUCCEEDED
 
 
@@ -115,6 +116,7 @@ class Backend(ABC):
     """Runs containers and follows jobs on one cluster's scheduler for one launch."""
 
     def __init__(self, cluster: Cluster, request: LaunchRequest, life: Lifecycle) -> None:
+        """Bind the backend to ``cluster``, the launch ``request`` and its ``life`` cycle."""
         self.cluster = cluster
         self.request = request
         self.life = life
