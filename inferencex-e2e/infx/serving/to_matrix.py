@@ -1,4 +1,4 @@
-"""Serving YAML -> the points .github/workflows/serving.yml runs.
+"""Serving YAML -> the points .github/workflows/gn-benchmark.yml runs.
 
     python -P -m infx.serving.to_matrix serving.yaml          # [{"config": row, "serving": json}, ...]
     python -P -m infx.serving.to_matrix --check serving.yaml  # the run title only

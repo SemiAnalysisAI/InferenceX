@@ -30,7 +30,7 @@ Design and decisions: `docs/superpowers/specs/2026-10-25-vng-serving-refactor-de
 flowchart TD
     Y["configs/serving/&lt;x&gt;.yaml"] --> D["utils/serving/dispatch.sh<br/>validate locally, gh workflow run"]
     D --> W
-    subgraph GHA["GitHub Actions: gn-benchmark (.github/workflows/serving.yml)"]
+    subgraph GHA["GitHub Actions: gn-benchmark (.github/workflows/gn-benchmark.yml)"]
         W["plan job (ubuntu-latest)<br/>infx.serving.to_matrix: one point per<br/>scenario variant x conc"] --> T["benchmark-tmpl.yml per point<br/>(upstream reusable workflow)"]
     end
     T -->|"runs-on: the YAML's runner label"| R["self-hosted runner on the GPU node<br/>python -m infx.launch run (upstream)"]
@@ -97,13 +97,13 @@ flowchart LR
     end
     subgraph GN["gn-benchmark"]
         direction TB
-        g1["serving.yml<br/>(workflow_dispatch, serving YAML)"] --> g2["benchmark-tmpl.yml"] --> g3["infx.launch run"] --> g4["serving driver<br/>job.sh"] --> g5["engine + router + storage,<br/>ports picked free, shared node"]
+        g1["gn-benchmark.yml<br/>(workflow_dispatch, serving YAML)"] --> g2["benchmark-tmpl.yml"] --> g3["infx.launch run"] --> g4["serving driver<br/>job.sh"] --> g5["engine + router + storage,<br/>ports picked free, shared node"]
     end
 ```
 
 | | upstream `srt-single` | gn-benchmark `serving` |
 |---|---|---|
-| Entry | `run-sweep.yml` on PRs, points from `perf-changelog.yaml` + master configs | `serving.yml` by `workflow_dispatch`, points from one serving YAML |
+| Entry | `run-sweep.yml` on PRs, points from `perf-changelog.yaml` + master configs | `gn-benchmark.yml` by `workflow_dispatch`, points from one serving YAML |
 | What starts the engine | `srtctl` with a recipe from `configs/srt-recipes` | the YAML's own command, rendered by `infx/serving/render.py` |
 | Router / KV storage | recipe-defined | any image + command as `--overlap` sidecar steps |
 | Node use | often `--exclusive`; srtctl uses fixed port bases | GPUs, 16 CPU/GPU and a memory share per GPU; every port picked free at run time |
@@ -129,7 +129,7 @@ Every VNG file has `serving` in its path, so `git grep -l serving` or
 | `infx/serving/scenarios.py` | base + overrides / grid point / search / slo → final config and legacy label |
 | `configs/runners.yaml` (VNG block) | `hcm-*` runner labels and cluster records |
 | `infx/serving/schema.py`, `render.py` | serving YAML model and validation; command rendering |
-| `infx/serving/to_matrix.py`, `utils/serving/dispatch.sh`, `.github/workflows/serving.yml` | points; local validation and dispatch; the `gn-benchmark` workflow |
+| `infx/serving/to_matrix.py`, `utils/serving/dispatch.sh`, `.github/workflows/gn-benchmark.yml` | points; local validation and dispatch; the `gn-benchmark` workflow |
 | `infx/serving/client.py`, `sweep_result.py` | in-container client; search result writer |
 | `benchmarks/single_node/serving/{job,bench,sidecar}.sh` | allocation steps; engine step; router/storage sidecar |
 | `infx/launch/drivers/serving.py` | the launch path |

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dispatch one serving YAML on vngcloud/InferenceX:
 #   inferencex-e2e/utils/serving/dispatch.sh inferencex-e2e/configs/serving/<name>.yaml [--ref <branch>]
-# Validates locally with the code CI runs, starts serving.yml with the YAML as input,
+# Validates locally with the code CI runs, starts gn-benchmark.yml with the YAML as input,
 # and prints the run URL.
 set -eo pipefail
 
@@ -44,15 +44,15 @@ if [[ -z "$ref" ]]; then
 fi
 
 started=$(( $(date +%s) - 60 ))  # 60 s early: tolerate a local clock ahead of GitHub's
-gh workflow run serving.yml --repo "$GH_REPO" --ref "$ref" -f serving="$(cat "$yaml_file")" -f test-name="$title"
+gh workflow run gn-benchmark.yml --repo "$GH_REPO" --ref "$ref" -f serving="$(cat "$yaml_file")" -f test-name="$title"
 for _ in $(seq 1 30); do
     sleep 4
-    run_id=$(gh run list --repo "$GH_REPO" -w serving.yml -L 20 --json databaseId,displayTitle,createdAt \
+    run_id=$(gh run list --repo "$GH_REPO" -w gn-benchmark.yml -L 20 --json databaseId,displayTitle,createdAt \
         --jq "[.[] | select(.displayTitle == \"$title\" and (.createdAt | fromdateiso8601) >= $started)][0].databaseId // empty")
     if [[ -n "$run_id" ]]; then
         echo "https://github.com/$GH_REPO/actions/runs/$run_id"
         exit 0
     fi
 done
-echo "ERROR dispatched, but the run did not show up within 2 minutes; do not redispatch, check: gh run list --repo $GH_REPO -w serving.yml -L 5" >&2
+echo "ERROR dispatched, but the run did not show up within 2 minutes; do not redispatch, check: gh run list --repo $GH_REPO -w gn-benchmark.yml -L 5" >&2
 exit 1
