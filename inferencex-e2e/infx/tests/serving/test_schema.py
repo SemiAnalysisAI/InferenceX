@@ -1,0 +1,77 @@
+import textwrap
+
+import pytest
+
+from infx.serving.schema import ServingError, load_serving, runner_gpus, variants
+from infx.clusters import load_inventory
+
+BASE = """\
+name: qwen-tp1
+runner: cluster:hcm-hgx02
+image: vllm/vllm-openai:v0.29.0
+model: Qwen/Qwen3.8-27B
+gpus: 1
+serve: vllm serve Qwen/Qwen3.8-27B --max-model-len 262144
+"""
+
+
+def yaml_of(extra: str) -> str:
+    return BASE + textwrap.dedent(extra)
+
+
+def errors(text: str) -> str:
+    with pytest.raises(ServingError) as caught:
+        load_serving(text)
+    return str(caught.value)
+
+
+def test_engine_only_agentx_with_smoke_override():
+    spec = load_serving(yaml_of("scenario: agentx\noverrides: {duration: 180}\nconc: [8, 16]\n"))
+    assert spec.conc == [8, 16]
+    [variant] = variants(spec)
+    assert variant.label == "agentx-cc-062126-smoke"
+
+
+def test_synthetic_grid_expands_to_points():
+    spec = load_serving(yaml_of(
+        "scenario: synthetic\nworkload: {isl: [8k, 32k], osl: 1k, cache: [0, 50], search: true}\nconc: 1\n"))
+    assert [v.label for v in variants(spec)] == [
+        "sweep-isl8k-osl1k-cache0", "sweep-isl8k-osl1k-cache50",
+        "sweep-isl32k-osl1k-cache0", "sweep-isl32k-osl1k-cache50",
+    ]
+
+
+def test_osl_numbers_read_as_labels():
+    spec = load_serving(yaml_of("scenario: synthetic\nworkload: {isl: 8k, osl: 512, cache: 0}\nconc: [4]\n"))
+    assert variants(spec)[0].label == "fixed-isl8k-osl512-cache0"
+
+
+@pytest.mark.parametrize("extra, message", [
+    ("scenario: agentx\noverrides: {warmup: 2}\nconc: 8\n", "overrides: unknown key(s) warmup"),
+    ("scenario: synthetic\nconc: 1\n", "workload: synthetic needs"),
+    ("scenario: agentx\nworkload: {isl: 8k, osl: 1k, cache: 0}\nconc: 1\n", "workload/slo: only for scenario synthetic"),
+    ("scenario: synthetic\nworkload: {isl: 8k, osl: 1k, cache: 0, search: true}\nconc: [8, 16]\n",
+     "conc: workload.search finds the concurrency itself"),
+    ("scenario: synthetic\nworkload: {isl: [8k, 32k], osl: 1k, cache: 0}\nconc: [8, 16]\n",
+     "conc: a workload grid runs one job per point"),
+    ("scenario: agentx\nconc: 8\nenv: {PORT: '1'}\n", "env.PORT: reserved"),
+    ("scenario: agentx\nconc: 8\nduration: 180\n", "duration: set it with overrides"),
+    ("scenario: agentx\nconc: 8\nreplicas: 2\n", "replicas: gpus 1 is not a multiple of replicas 2"),
+    ("scenario: agentx-cc-062126\nconc: 8\n", "scenario:"),
+])
+def test_bad_yaml_names_field_and_fix(extra, message):
+    assert message in errors(yaml_of(extra))
+
+
+def test_runner_must_be_a_vng_cluster_slot_or_pool():
+    inventory = load_inventory()
+    assert runner_gpus("cluster:hcm-hgx02", inventory) == 8
+    assert runner_gpus("hcm-hgx02_01", inventory) == 8
+    assert runner_gpus("h200-hcm", inventory) == 4  # the smallest node of the pool
+    with pytest.raises(ServingError, match="runner: h100-cw_00 is not a VNG serving runner"):
+        runner_gpus("h100-cw_00", inventory)
+
+
+def test_gpus_above_the_node_fail():
+    text = BASE.replace("runner: cluster:hcm-hgx02", "runner: cluster:hcm-hgx01").replace("gpus: 1", "gpus: 8")
+    assert "gpus: 8 > 4 GPUs per node" in errors(text + "scenario: agentx\nconc: 8\n")

@@ -1,0 +1,305 @@
+"""Serving YAML: the one file a team member writes to benchmark a serving config.
+
+Engine command (serve:), optional router and storage sidecars, replicas, and the scenario
+with its variant (overrides / workload / slo). Every error is one line
+"<field>: <problem and fix>" so a person or an agent can act on it.
+Spec: docs/superpowers/specs/2026-10-25-vng-serving-refactor-design.md
+"""
+
+from __future__ import annotations
+
+import itertools
+import re
+from typing import Annotated, Any, Literal
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+
+from infx.clusters import RunnerInventory, load_inventory
+from infx.serving import scenarios
+from infx.serving.scenarios import Point, Rendered, ScenarioError
+
+NAME_PATTERN = r"^[a-z0-9][a-z0-9.-]*$"
+LOCAL_PATH_MARKERS = ("/models/", "/mnt/", "/data/")
+ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# image is spliced into srun arguments on the GPU node; model is passed to the client argv.
+IMAGE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
+MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+")
+VNG_CLUSTER_PREFIX = "hcm-"
+# Variables job.sh / bench.sh / sidecar.sh / client.py set themselves.
+RESERVED_ENV = (
+    "PORT", "MODEL", "CONC", "RESULT_DIR", "HF_HUB_CACHE", "FRAMEWORK",
+    "SERVE_CMD", "SERVE_ENV", "SERVED_MODEL_NAME", "SERVING_YAML", "SERVING_SCENARIO_YAML",
+    "SERVING_SCENARIO_LABEL", "SERVING_DATASET", "SERVING_DATASET_KIND", "SERVING_SEARCH",
+    "SERVING_ENGINE_IMAGE", "SERVING_DCGM_IMAGE", "SERVING_HF_CACHE_HOST", "IX_CUSTOM_DATASET_FILE",
+    "AIPERF_SERVER_METRICS_URLS", "AIPERF_GPU_TELEMETRY_URL",
+    "DYN_DISCOVERY_BACKEND", "DYN_FILE_KV", "DYN_SYSTEM_ENABLED", "DYN_SYSTEM_PORT",
+    "ROUTER_IMAGE", "ROUTER_CMD", "ROUTER_ENV", "ROUTER_PROFILE", "ROUTER_METRICS_PORT",
+    "ENGINE_PORT", "ENGINE_PORTS", "REPLICAS",
+    "STORAGE_IMAGE", "STORAGE_CMD", "STORAGE_ENV", "STORAGE_MASTER_PORT", "STORAGE_META_PORT",
+)  # fmt: skip
+# {{name}} placeholders sidecar.sh / bench.sh expand at run time; {{ x }} (spaces) is inline Jinja.
+ROUTER_PLACEHOLDERS = ("router_port", "engine_url", "engine_port", "engine_urls",
+                       "storage_master_port", "storage_meta_port")
+ENV_PLACEHOLDERS = ("storage_master_port", "storage_meta_port")
+STORAGE_PLACEHOLDERS = ("storage_master_port", "storage_meta_port")
+PLACEHOLDER = re.compile(r"\{\{([a-z_]+)\}\}")
+
+
+class ServingError(ValueError):
+    """Validation failure; each line names a field and the fix."""
+
+
+def _coerce_env(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, item in value.items():
+        if isinstance(item, bool):
+            raise ValueError(f'{key}: quote boolean values, e.g. "1" or "true"')
+        out[key] = str(item) if isinstance(item, (int, float)) else item
+    return out
+
+
+def _listed(value: Any) -> Any:
+    return value if isinstance(value, list) else [value]
+
+
+class RouterSpec(BaseModel):
+    """A router sidecar in front of the engine(s)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image: str = Field(min_length=1)
+    serve: str = Field(min_length=1)
+    env: dict[str, str] = Field(default_factory=dict)
+    metrics_port: int | None = Field(default=None, ge=1, le=65535)
+
+    @field_validator("env", mode="before")
+    @classmethod
+    def _env_strings(cls, value: Any) -> Any:
+        return _coerce_env(value)
+
+
+class StorageSpec(BaseModel):
+    """A non-GPU storage sidecar started before the engine (e.g. Mooncake master)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image: str = Field(min_length=1)
+    serve: str = Field(min_length=1)
+    env: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("env", mode="before")
+    @classmethod
+    def _env_strings(cls, value: Any) -> Any:
+        return _coerce_env(value)
+
+
+class Workload(BaseModel):
+    """The synthetic grid: one job per (isl, osl, cache) point."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    isl: list[str] = Field(min_length=1)
+    osl: list[str] = Field(min_length=1)
+    cache: list[int] = Field(min_length=1)
+    search: bool = False
+
+    @field_validator("isl", "osl", mode="before")
+    @classmethod
+    def _labels(cls, value: Any) -> Any:
+        return [str(item) for item in _listed(value)]
+
+    @field_validator("cache", mode="before")
+    @classmethod
+    def _cache(cls, value: Any) -> Any:
+        return _listed(value)
+
+    def points(self) -> list[Point]:
+        return [Point(i, o, c) for i, o, c in itertools.product(self.isl, self.osl, self.cache)]
+
+
+class ServingSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(pattern=NAME_PATTERN)
+    runner: str = Field(min_length=1)
+    image: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    gpus: int = Field(gt=0)
+    replicas: int = Field(default=1, ge=1)
+    precision: str = Field(default="bf16", pattern=r"^[a-z0-9]+$")
+    env: dict[str, str] = Field(default_factory=dict)
+    serve: str = Field(min_length=1)
+    router: RouterSpec | None = None
+    storage: StorageSpec | None = None
+    scenario: Literal["agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic"]
+    overrides: dict[str, Any] = Field(default_factory=dict)
+    workload: Workload | None = None
+    slo: str | None = None
+    conc: list[Annotated[int, Field(gt=0)]] = Field(min_length=1)
+
+    @field_validator("conc", mode="before")
+    @classmethod
+    def _scalar_conc(cls, value: Any) -> Any:
+        return [value] if isinstance(value, int) and not isinstance(value, bool) else value
+
+    @field_validator("env", mode="before")
+    @classmethod
+    def _env_strings(cls, value: Any) -> Any:
+        return _coerce_env(value)
+
+
+def _format_validation_error(error: ValidationError) -> str:
+    models = {"router": RouterSpec, "storage": StorageSpec, "workload": Workload}
+    lines = []
+    for item in error.errors():
+        location = ".".join(str(part) for part in item["loc"]) or "serving"
+        message = item["msg"]
+        if item["type"] == "extra_forbidden":
+            model = models.get(str(item["loc"][0]), ServingSpec) if len(item["loc"]) > 1 else ServingSpec
+            message = "unknown key (allowed: " + ", ".join(model.model_fields) + ")"
+        elif item["loc"] == ("scenario",):
+            message = f"must be one of {', '.join(scenarios.FAMILIES)} (variants go in overrides:)"
+        lines.append(f"{location}: {message}")
+    return "\n".join(lines)
+
+
+def runner_gpus(runner: str, inventory: RunnerInventory) -> int:
+    """GPUs per node behind ``runner`` (a cluster label, a pool label or a slot name)."""
+    vng = sorted(cid for cid in inventory.clusters if cid.startswith(VNG_CLUSTER_PREFIX))
+    hint = f"runner: {runner} is not a VNG serving runner; use cluster:<id> with <id> in {', '.join(vng)}, or h200-hcm / rtx6000pro-hcm"
+    names = inventory.labels.get(runner, [runner])
+    gpus = set()
+    for name in names:
+        try:
+            cluster = inventory.cluster_for(name)
+        except ValueError:
+            raise ServingError(hint) from None
+        if not cluster.id.startswith(VNG_CLUSTER_PREFIX):
+            raise ServingError(hint)
+        gpus.add(cluster.gpus_per_node)
+    return min(gpus)
+
+
+def variants(spec: ServingSpec) -> list[Rendered]:
+    """Every scenario variant the YAML asks for (one per workload point, or exactly one)."""
+    try:
+        if spec.workload is None:
+            return [scenarios.render(spec.scenario, spec.overrides, slo=spec.slo)]
+        return [
+            scenarios.render(spec.scenario, spec.overrides, point, spec.workload.search, spec.slo)
+            for point in spec.workload.points()
+        ]
+    except ScenarioError as error:
+        raise ServingError(str(error)) from None
+
+
+def _command_problems(spec: ServingSpec) -> list[str]:
+    problems = []
+    commands = [("serve", spec.serve)]
+    commands += [("router.serve", spec.router.serve)] if spec.router else []
+    commands += [("storage.serve", spec.storage.serve)] if spec.storage else []
+    for field, command in commands:
+        marker = next((m for m in LOCAL_PATH_MARKERS if m in command), None)
+        if marker:
+            problems.append(f"{field}: local path containing {marker!r}; replace it with the HF repo id from model")
+        if "$" in command:
+            problems.append(f"{field}: shell variables ($...) are not expanded; write literal values")
+        if "--numa-node" in command:
+            problems.append(f"{field}: drop --numa-node (benchmark convention)")
+    envs = [("env", spec.env)]
+    envs += [("router.env", spec.router.env)] if spec.router else []
+    envs += [("storage.env", spec.storage.env)] if spec.storage else []
+    for prefix, env in envs:
+        for key, value in env.items():
+            if not ENV_NAME.fullmatch(key):
+                problems.append(f"{prefix}.{key}: not a valid environment variable name")
+            elif key in RESERVED_ENV:
+                problems.append(f"{prefix}.{key}: reserved, the benchmark sets it; remove it from env")
+            if "\n" in value:
+                problems.append(f"{prefix}.{key}: value must be a single line")
+    return problems
+
+
+def _placeholder_problems(spec: ServingSpec) -> list[str]:
+    problems = []
+    blocks = []
+    if spec.router:
+        if not IMAGE_PATTERN.fullmatch(spec.router.image):
+            problems.append("router.image: only letters, digits and ._/:@- are allowed")
+        blocks.append(("router", spec.router, ROUTER_PLACEHOLDERS))
+    if spec.storage:
+        if not IMAGE_PATTERN.fullmatch(spec.storage.image):
+            problems.append("storage.image: only letters, digits and ._/:@- are allowed")
+        blocks.append(("storage", spec.storage, STORAGE_PLACEHOLDERS))
+    for name, block, allowed in blocks:
+        texts = [(f"{name}.serve", block.serve)] + [(f"{name}.env.{k}", v) for k, v in block.env.items()]
+        for field, body in texts:
+            problems.extend(
+                f"{field}: unknown placeholder {{{{{found}}}}}; allowed: {', '.join(allowed)}"
+                for found in PLACEHOLDER.findall(body) if found not in allowed
+            )
+    allowed_env = ENV_PLACEHOLDERS if spec.storage else ()
+    for key, value in spec.env.items():
+        for found in PLACEHOLDER.findall(value):
+            if found not in allowed_env:
+                hint = (f"allowed: {', '.join(ENV_PLACEHOLDERS)}" if spec.storage
+                        else "no placeholders are allowed in env: without a storage block")
+                problems.append(f"env.{key}: unknown placeholder {{{{{found}}}}}; {hint}")
+    return problems
+
+
+def load_serving(text: str, inventory: RunnerInventory | None = None) -> ServingSpec:
+    """Validate a serving YAML; raise ``ServingError`` listing every problem."""
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise ServingError(f"serving: not valid YAML ({error})".replace("\n", " ")) from error
+    if not isinstance(raw, dict):
+        raise ServingError("serving: the top level must be a mapping of keys")
+    if "duration" in raw:
+        raise ServingError("duration: set it with overrides: {duration: 180} (180 s is the smoke run)")
+    try:
+        spec = ServingSpec.model_validate(raw)
+    except ValidationError as error:
+        raise ServingError(_format_validation_error(error)) from error
+
+    problems: list[str] = []
+    if not IMAGE_PATTERN.fullmatch(spec.image):
+        problems.append("image: only letters, digits and ._/:@- are allowed (e.g. vllm/vllm-openai:v0.29.0)")
+    if spec.model.startswith("/"):
+        problems.append("model: use the HF repo id (e.g. Qwen/Qwen3.8-27B), not a local path")
+    elif not MODEL_PATTERN.fullmatch(spec.model):
+        problems.append("model: must be an HF repo id <org>/<name> using letters, digits and ._-")
+    problems += _command_problems(spec)
+    problems += _placeholder_problems(spec)
+    if len(set(spec.conc)) != len(spec.conc):
+        problems.append("conc: duplicate values")
+    if spec.gpus % spec.replicas:
+        problems.append(f"replicas: gpus {spec.gpus} is not a multiple of replicas {spec.replicas}; "
+                        "each replica gets gpus/replicas GPUs")
+    if spec.replicas > 1:
+        if spec.router is None:
+            problems.append("replicas: more than 1 replica needs a router: block whose serve lists {{engine_urls}}")
+        elif "dynamo.frontend" in spec.router.serve:
+            problems.append("replicas: the Dynamo frontend discovers its engines itself; use replicas: 1")
+    try:
+        rendered = variants(spec)
+    except ServingError as error:
+        problems.append(str(error))
+        rendered = []
+    if any(variant.search for variant in rendered) and spec.conc != [1]:
+        problems.append(f"conc: workload.search finds the concurrency itself; set conc: 1 (got {spec.conc})")
+    elif len(rendered) > 1 and len(spec.conc) > 1:
+        problems.append(f"conc: a workload grid runs one job per point; set exactly one conc (got {len(spec.conc)})")
+    try:
+        per_node = runner_gpus(spec.runner, inventory or load_inventory())
+        if spec.gpus > per_node:
+            problems.append(f"gpus: {spec.gpus} > {per_node} GPUs per node on runner {spec.runner}; pick a bigger node")
+    except ServingError as error:
+        problems.append(str(error))
+    if problems:
+        raise ServingError("\n".join(problems))
+    return spec
