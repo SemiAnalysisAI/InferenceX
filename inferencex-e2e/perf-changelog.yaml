@@ -11142,3 +11142,10 @@
     - "Update the vLLM image from v0.32.0 to nightly-rocm72-c50aca14, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4461
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  description:
+    - "Update the SGLang image from v0.5.22-cu130 to nightly-dev-cu13-20261025-65633129, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4477
+  scenario-type: [agentic-coding]
