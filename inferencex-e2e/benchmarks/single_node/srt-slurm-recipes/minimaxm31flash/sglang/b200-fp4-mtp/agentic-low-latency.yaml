@@ -21,8 +21,8 @@ base:
       nodes: 1
       workers: 1
       gpus: 4
-      # Follows the GB300 Low-Latency cell: the MSA-V1 MonoKernel serves batch-size-1
-      # DSpark steps; larger batches take the standard path.
+      # The MSA-V1 MonoKernel serves batch-size-1 DSpark steps; larger batches take
+      # the standard path.
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         trust-remote-code: true
