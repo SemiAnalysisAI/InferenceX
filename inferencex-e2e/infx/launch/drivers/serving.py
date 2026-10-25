@@ -8,6 +8,8 @@ environment, submits it with the cluster's right-sized resources and follows it 
 from __future__ import annotations
 
 import os
+import subprocess
+import time
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -21,6 +23,26 @@ from infx.launch.request import LaunchRequest, RequestError
 JOB_SCRIPT = Path("benchmarks/single_node/serving/job.sh")
 DCGM_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
 HF_VOLUME = "hf-hub-cache"
+PENDING_NOTE_S = 60.0
+
+
+def wait_started(job_id: str, log: Path, *, poll_s: float = 10.0, note_s: float = PENDING_NOTE_S) -> None:
+    """Say why Slurm holds the job until it writes its log; stream_logs is silent meanwhile.
+
+    Returns once the log exists or squeue drops the job (stream_logs then reports how it ended).
+    """
+    start = time.monotonic()
+    noted = -note_s
+    while not log.exists():
+        held = subprocess.run(["squeue", "-h", "-j", job_id, "-o", "%T %r %N"],
+                              capture_output=True, text=True, check=False).stdout.strip()
+        if not held:
+            return
+        waited = time.monotonic() - start
+        if waited - noted >= note_s:
+            print(f"Slurm job {job_id} {held} ({int(waited // 60)}m queued)", flush=True)
+            noted = waited
+        time.sleep(poll_s)
 
 
 class ServingRequest(LaunchRequest):
@@ -119,6 +141,7 @@ def run(launch: Launch) -> int:
             event.fail(type(error).__name__, f"batch allocation unavailable: {error}", retriable=error.retriable)
             return 1
     print(f"Serving job {job.id}; log: {log}", flush=True)
+    wait_started(job.id, log)
     try:
         backend.stream_logs(job)
     except BackendError:
