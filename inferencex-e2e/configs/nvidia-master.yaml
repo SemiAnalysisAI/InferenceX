@@ -5709,7 +5709,7 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.5.0.dev20260908" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261023" }
   multinode: true
   disagg: false
   srt-recipe-dir: minimaxm3/vllm/gb200-fp4/agentx
