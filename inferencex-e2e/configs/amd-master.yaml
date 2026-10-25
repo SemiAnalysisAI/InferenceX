@@ -1050,7 +1050,8 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:v0.32.0@sha256:14f6a575e1fb0a580b0f633c09e06f648709d60405b85f6a7ff3f80d49f39905
+  # -rocm72 keeps the ROCm 7.2 stack the LMCache v0.5.3 ROCm wheel is ABI-matched to.
+  image: vllm/vllm-openai-rocm:nightly-rocm72-c50aca14416ef29f6ed0ed256302f30646726dcd@sha256:ebda27e713fcd6146dbb55fd1a5efa29def2424d59f60b8153819485319c63db
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:mi300x-amd
