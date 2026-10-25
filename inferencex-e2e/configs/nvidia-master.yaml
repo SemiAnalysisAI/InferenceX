@@ -5703,7 +5703,7 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
 # runtime uses Dynamo-native MiniMax parsing on the worker without the vLLM
 # chat processor in the frontend.
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
-  image: vllm/vllm-openai:nightly-9ea8f3ffc354901b740f0b31988900897b7221d7
+  image: vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:gb200-nv
