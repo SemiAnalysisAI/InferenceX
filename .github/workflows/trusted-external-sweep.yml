@@ -1,13 +1,7 @@
 name: Trusted External Sweep Dispatch
 run-name: Trusted external sweep - PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}
 
-# This workflow is intentionally control-plane only. It never checks out or
-# executes pull-request code. A write-authorized collaborator applies one primary
-# sweep label to approve the exact external head SHA, then this trusted event
-# dispatches the existing e2e workflow from main with repository secrets.
-# Each authorized label event approves an exact PR head; no event may cancel another.
 on: # zizmor: ignore[concurrency-limits]
-    # Control plane only: verifies writer permission and the exact labeled head, never executes PR code.
     pull_request_target: # zizmor: ignore[dangerous-triggers]
         branches:
             - main
@@ -147,6 +141,7 @@ jobs:
                           'ref': mergeSha,
                           'changelog-base-ref': pull.base.sha,
                           'changelog-head-ref': pull.head.sha,
+                          'source-pr-number': String(pull.number),
                           'trim-conc': 'false',
                           'all-evals': String(labels.includes('all-evals')),
                           'evals-only': String(labels.includes('evals-only')),

@@ -27,6 +27,7 @@ class BenchmarkData:
 
     @property
     def integration_duration_s(self) -> float:
+        """Seconds between the benchmark start and end timestamps."""
         return self.end_unix - self.start_unix
 
 
@@ -264,6 +265,8 @@ def patch_power_metrics(
 ) -> None:
     """Validate replacement metrics before atomically updating an aggregate."""
     data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"aggregate is not a JSON object: {path}")
     data = with_power_metrics(
         data,
         metric_keys=metric_keys,
