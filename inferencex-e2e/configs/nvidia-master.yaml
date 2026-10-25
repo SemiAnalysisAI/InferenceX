@@ -10029,7 +10029,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
           dp-attn: true
 
 dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-20ebb28
+  image: vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:gb200-nv
