@@ -37,10 +37,20 @@ reserved_pages=$(awk '/^HugePages_Rsvd:/ {print $2}' /proc/meminfo)
 (( (free_pages - reserved_pages) * page_kb * 1024 >= UMBP_DRAM_CAPACITY ))
 [[ ! -e $UMBP_ENDPOINT ]]
 mkdir -p "$(dirname "$UMBP_ENDPOINT")"
+# Host RDMA pins the full pool buffer lazily. Respect the inherited hard
+# limit; change only this pool launcher's own soft limit, never system policy.
+ulimit -Sl "$(ulimit -Hl)"
 server=/usr/local/lib/python3.12/dist-packages/mori/umbp_standalone_server
 log="/logs/umbp-${UMBP_NODE_ID}.log"
 "$server" "unix://$UMBP_ENDPOINT" > "$log" 2>&1 &
 server_pid=$!
+{
+    printf 'POOL_MEMLOCK_SOFT '; ulimit -Sl
+    printf 'POOL_MEMLOCK_HARD '; ulimit -Hl
+    cat "/proc/${server_pid}/limits"
+    grep -E '^(Name|Uid|VmLck|CapEff):' "/proc/${server_pid}/status"
+} > "/logs/pool-resources-daemon-${UMBP_NODE_ID}.txt"
+
 printf '%s\n' "$server_pid" > "/logs/umbp-${UMBP_NODE_ID}.pid"
 for ((attempt=0; attempt<900; attempt++)); do
     kill -0 "$server_pid"

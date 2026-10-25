@@ -20,7 +20,9 @@ standalone.address = "unix://" + os.environ["UMBP_ENDPOINT"]
 standalone.auto_start = False
 cfg.standalone_process = standalone
 client = UMBPClient(cfg)
-assert client.is_distributed(), "Expected distributed pool"
+# StandaloneProcessClient::IsDistributed() is hard-coded false: it describes
+# this IPC proxy, not the remote server backend. Cross-node bytes are the gate.
+print("PROXY_MODE", client.get_backend_mode(), flush=True)
 allocator = UMBPHostMemAllocator()
 size = 8 << 20
 handle = allocator.alloc(size, UMBPHostBufferBacking.AnonymousShm, 2 << 20, -1, True)
