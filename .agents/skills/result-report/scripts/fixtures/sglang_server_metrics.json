@@ -1,0 +1,75 @@
+{
+ "metrics": {
+  "sglang:prompt_tokens": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "tp_rank": "0"
+     },
+     "stats": {
+      "total": 1000.0
+     }
+    }
+   ]
+  },
+  "sglang:cached_tokens": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "cache_source": "device"
+     },
+     "stats": {
+      "total": 500.0
+     }
+    },
+    {
+     "labels": {
+      "cache_source": "host"
+     },
+     "stats": {
+      "total": 200.0
+     }
+    },
+    {
+     "labels": {
+      "cache_source": "storage_mooncake"
+     },
+     "stats": {
+      "total": 100.0
+     }
+    },
+    {
+     "labels": {
+      "cache_source": "total"
+     },
+     "stats": {
+      "total": 800.0
+     }
+    }
+   ]
+  },
+  "smg_cache_aware_hit": {
+   "type": "counter",
+   "series": [
+    {
+     "labels": {
+      "result": "hit"
+     },
+     "stats": {
+      "total": 90.0
+     }
+    },
+    {
+     "labels": {
+      "result": "miss"
+     },
+     "stats": {
+      "total": 10.0
+     }
+    }
+   ]
+  }
+ }
+}
