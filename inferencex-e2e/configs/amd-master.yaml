@@ -1766,3 +1766,4 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           # Inherits the same P-only scratch-reclaim setting as 1P1D c48.
           - TOTAL_CPU_DRAM_GB=1799
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+# signoff verifier e2e test, do not merge
