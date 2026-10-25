@@ -11170,3 +11170,10 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4456
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-cu130 to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4482
+  scenario-type: [agentic-coding]
