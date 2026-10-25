@@ -94,3 +94,9 @@ def test_router_metrics_port_can_be_picked_at_run_time():
 def test_router_metrics_port_fixed_and_placeholder_is_ambiguous():
     text = yaml_of(ROUTER.replace("router:\n", "router:\n  metrics_port: 29000\n"))
     assert "router.metrics_port: drop it" in errors(text)
+
+
+def test_router_metrics_port_placeholder_in_env_is_ambiguous_with_a_fixed_port():
+    router = ROUTER.replace("--prometheus-port {{router_metrics_port}}", "")
+    router = router.replace("router:\n", "router:\n  metrics_port: 29000\n  env: {METRICS: '{{router_metrics_port}}'}\n")
+    assert "router.metrics_port: drop it" in errors(yaml_of(router))

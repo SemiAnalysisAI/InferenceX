@@ -230,7 +230,8 @@ def _placeholder_problems(spec: ServingSpec) -> list[str]:
         if not IMAGE_PATTERN.fullmatch(spec.router.image):
             problems.append("router.image: only letters, digits and ._/:@- are allowed")
         blocks.append(("router", spec.router, ROUTER_PLACEHOLDERS))
-        if spec.router.metrics_port is not None and "{{router_metrics_port}}" in spec.router.serve:
+        router_texts = [spec.router.serve, *spec.router.env.values()]
+        if spec.router.metrics_port is not None and any("{{router_metrics_port}}" in t for t in router_texts):
             problems.append("router.metrics_port: drop it; {{router_metrics_port}} in router.serve picks the port at run time")
     if spec.storage:
         if not IMAGE_PATTERN.fullmatch(spec.storage.image):

@@ -80,6 +80,7 @@ fi
 if [[ -n "${ROUTER_CMD:-}" ]]; then
     # The router is ready once it lists the model (a Dynamo frontend only does after the engine registered).
     model="${SERVED_MODEL_NAME:-$MODEL}"
+    deadline=$(( SECONDS + 3600 ))  # engines are already healthy here; only the router can be this slow
     until python3 - "$PORT" "$model" <<'PY' 2>/dev/null
 import json, sys, urllib.request
 port, model = sys.argv[1], sys.argv[2]
@@ -88,13 +89,23 @@ with urllib.request.urlopen(f"http://localhost:{port}/v1/models", timeout=5) as 
 sys.exit(0 if model in ids else 1)
 PY
     do
-        if ! kill -0 "${pids[0]}" 2>/dev/null; then
-            echo "ERROR: engine exited before the router listed $model; last lines of server.log:" >&2
-            tail -n 50 "$RESULT_DIR/server.log" >&2
+        for ((replica = 0; replica < replicas; replica++)); do
+            if ! kill -0 "${pids[replica]}" 2>/dev/null; then
+                suffix=""
+                (( replica == 0 )) || suffix=".$replica"
+                echo "ERROR: engine replica $replica exited before the router listed $model; last lines of server$suffix.log:" >&2
+                tail -n 50 "$RESULT_DIR/server$suffix.log" >&2
+                exit 1
+            fi
+        done
+        if [[ -f "$RESULT_DIR/.router_exited" ]]; then
+            echo "ERROR: router step exited ($(cat "$RESULT_DIR/.router_exited")) before it listed $model; last lines of router.log:" >&2
+            tail -n 50 "$RESULT_DIR/router.log" >&2
             exit 1
         fi
-        if [[ -f "$RESULT_DIR/.router_exited" ]]; then
-            echo "ERROR: router step exited ($(cat "$RESULT_DIR/.router_exited")) before it listed $model; see results/router.log" >&2
+        if (( SECONDS > deadline )); then
+            echo "ERROR: router did not list $model within 3600 s; last lines of router.log:" >&2
+            tail -n 50 "$RESULT_DIR/router.log" >&2
             exit 1
         fi
         sleep 5

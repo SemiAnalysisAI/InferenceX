@@ -28,9 +28,11 @@ def test_router_metrics_port_is_a_placeholder(tmp_path):
     assert out.stdout.strip() == "--prometheus-port=21003"
 
 
-def test_dynamo_router_gets_the_http_flags(tmp_path):
-    out = run("router", tmp_path, ROUTER_CMD="echo frontend", ROUTER_PROFILE="dynamo", PORT="21000")
-    assert out.stdout.strip() == "frontend --http-host 0.0.0.0 --http-port 21000"
+def test_dynamo_router_gets_the_http_flags_and_expanded_env(tmp_path):
+    out = run("router", tmp_path, ROUTER_CMD="""bash -c 'echo frontend $STORE "$@"' _""", ROUTER_PROFILE="dynamo",
+              PORT="21000", STORAGE_MASTER_PORT="21005", ROUTER_ENV="STORE=master:{{storage_master_port}}")
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "frontend master:21005 --http-host 0.0.0.0 --http-port 21000"
 
 
 def test_storage_expands_its_own_ports(tmp_path):

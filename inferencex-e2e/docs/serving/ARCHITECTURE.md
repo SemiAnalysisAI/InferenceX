@@ -87,9 +87,10 @@ live into the Actions step. Cancelling the run cancels the Slurm job.
 | Replicas, one GPU slice each | `bench.sh:57` |
 | Client prepare / run | `bench.sh:25`, `bench.sh:106`; `infx/serving/client.py:58`, `:72` |
 
-If the engine dies before it is ready, the wait fails and prints the last 50 lines of
-`server.log`. If the router or storage step exits first, the job fails with a pointer to
-`results/router.log` or `results/storage.log`, which come back in the `server_logs_*` artifact.
+If an engine replica dies before it is ready, the wait fails and prints the last 50 lines of its
+`server.log`. If the router exits, or does not list the model within an hour, the job fails with
+the last 50 lines of `router.log`. A storage step that exits first fails the job with a pointer to
+`results/storage.log`. All logs come back in the `server_logs_*` artifact.
 
 ## 3. How this differs from the upstream Slurm path
 

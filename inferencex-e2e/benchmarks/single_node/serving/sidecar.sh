@@ -32,13 +32,13 @@ dynamo=""
 # Env values may hold tokens: export them without echoing the values.
 while IFS= read -r assignment; do
     [[ -z "$assignment" ]] && continue
-    [[ -z "$dynamo" ]] && assignment="$(expand "$assignment")"
+    assignment="$(expand "$assignment")"
     export "$assignment"
     echo "$mode env: ${assignment%%=*}" >&2
 done <<< "$env_lines"
 
 if [[ -n "$dynamo" ]]; then
-    eval "set -- $command"
+    eval "set -- $(expand "$command")"
     set -- "$@" --http-host 0.0.0.0 --http-port "$PORT"
 else
     eval "set -- $(expand "$command")"
