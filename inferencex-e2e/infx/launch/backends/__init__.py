@@ -15,5 +15,6 @@ BACKENDS: dict[str, str] = {"slurm": "infx.launch.backends.slurm:SlurmBackend"}
 
 
 def backend_class(scheduler: str) -> type[Backend]:
+    """Import and return the backend class registered for ``scheduler``, or raise KeyError."""
     module, _, name = BACKENDS[scheduler].partition(":")
     return getattr(importlib.import_module(module), name)
