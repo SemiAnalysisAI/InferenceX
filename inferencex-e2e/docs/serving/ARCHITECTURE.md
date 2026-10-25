@@ -1,66 +1,121 @@
-# Serving path: architecture
+# gn-benchmark: architecture
 
 ## 1. What this is
 
-This branch is upstream InferenceX plus one extra launch path, `serving`. It runs VNG serving-YAML
-benchmarks (AgentX, tau2, LiveKit, the E2/E3 prefix traces, and the synthetic ISL/OSL/cache grid at
-fixed concurrency or under SLO search) on the VNG Slurm nodes. Upstream does the scheduling, image
-staging, harness install and result processing; the VNG code turns a serving YAML into matrix
-points and starts the engine, router and storage containers inside one right-sized Slurm job.
+gn-benchmark is how GreenNode benchmarks an LLM serving setup on its own Slurm GPU nodes with
+the upstream InferenceX harness. You write one serving YAML: the engine command (vLLM, SGLang,
+Dynamo), an optional router and an optional KV storage service, the scenario (AgentX, tau2,
+LiveKit, E2/E3 prefix traces, or a synthetic ISL/OSL/cache grid) and the concurrencies or an
+SLO search. One command dispatches it to GitHub Actions, and each point comes back as an
+upstream-format result artifact that `result-report` reads.
+
+The branch is upstream InferenceX plus one launch path, `serving`. Everything that measures is
+upstream code, unchanged:
+
+- the AgentX harness `agentx-harness==1.0.12` (pinned in `infx/bench/agentic/requirements.txt`),
+  which runs aiperf; its venv comes from `infx.bench.agentic.venv`;
+- the result CLIs in `infx.results.agentic` that aggregate and validate a run;
+- the reusable workflow `benchmark-tmpl.yml`, `python -m infx.launch run`, cluster records,
+  image staging and Slurm submit/follow/cancel in `SlurmBackend`.
+
+The VNG part only turns a serving YAML into matrix points and, inside one Slurm job, starts the
+containers the YAML names and points the harness at them. `git diff upstream/main --stat` shows
+four upstream files touched (section 4); `infx/bench` and `infx/results` have no VNG change.
+
 Design and decisions: `docs/superpowers/specs/2026-10-25-vng-serving-refactor-design.md` (repo root).
 
-## 2. One benchmark point, end to end
+## 2. The flow
 
+```mermaid
+flowchart TD
+    Y["configs/serving/&lt;x&gt;.yaml"] --> D["utils/serving/dispatch.sh<br/>validate locally, gh workflow run"]
+    D --> W
+    subgraph GHA["GitHub Actions: gn-benchmark (.github/workflows/serving.yml)"]
+        W["plan job (ubuntu-latest)<br/>infx.serving.to_matrix: one point per<br/>scenario variant x conc"] --> T["benchmark-tmpl.yml per point<br/>(upstream reusable workflow)"]
+    end
+    T -->|"runs-on: the YAML's runner label"| R["self-hosted runner on the GPU node<br/>python -m infx.launch run (upstream)"]
+    R -->|"SERVING_JSON set"| S["drivers/serving.py<br/>stage images, sbatch, follow log"]
+    S --> J["Slurm job: job.sh<br/>right-sized, never exclusive"]
+    J --> A["artifacts: bmk_agentic_*, agentic_*,<br/>server_logs_* (upstream names)"]
+    A --> RR["result-report skill<br/>report.md, data.json"]
 ```
-utils/serving/dispatch.sh configs/serving/<x>.yaml
-  validates locally with the same code as CI, requires a pushed HEAD, runs gh workflow run serving.yml
-.github/workflows/serving.yml
-  plan job: python -m infx.serving.to_matrix -> one point per (scenario variant x conc)
-  bench job: benchmark-tmpl.yml per point, with config=<row> and serving=<SERVING_JSON>
-.github/workflows/benchmark-tmpl.yml -> python -m infx.launch run          (upstream)
-  resolve_cluster(runner) -> clusters.hcm-<node>
-  policy.launch_path -> SERVING, because SERVING_JSON is set
-infx/launch/drivers/serving.py run()
-  1. validate SERVING_JSON (every bad field reported at once)
-  2. stage_image for engine, DCGM, router, storage
-  3. submit_batch(job.sh, gpus=N, time limit); cluster salloc-args right-size it
-  4. stream the log, read the state, return its exit code
-benchmarks/single_node/serving/job.sh       (inside the allocation)
-  a. pick free ports on the node
-  b. DCGM exporter step (--overlap)
-  c. [storage] sidecar.sh storage (--overlap), e.g. the Mooncake master
-  d. [router]  sidecar.sh router  (--overlap): sglang-router, vllm-router or a Dynamo frontend
-  e. engine step: bench.sh in the engine container
-benchmarks/single_node/serving/bench.sh
-  client prepare (dataset fetch + sha256, model download), engine replicas,
-  infx.bench wait on each replica, router /v1/models wait, client run
-infx/serving/client.py run
-  agentx profile --config results/scenario.yaml ..., then the upstream result CLIs
-  (or infx.serving.sweep_result for search points), then writes the legacy label
+
+Inside the Slurm job, every container is one step of the same allocation:
+
+```mermaid
+sequenceDiagram
+    participant J as job.sh (allocation)
+    participant G as DCGM step
+    participant St as storage step (optional)
+    participant Ro as router step (optional)
+    participant E as engine step: bench.sh
+    J->>J: pick free ports 20000-32767 (engine, router, router metrics, DCGM)
+    J->>G: srun --overlap dcgm-exporter
+    J->>St: srun --overlap sidecar.sh storage (e.g. Mooncake master)
+    J->>Ro: srun --overlap sidecar.sh router (vllm-router, sglang-router, Dynamo frontend)
+    J->>E: srun bench.sh in the engine image
+    E->>E: client prepare: AgentX venv, dataset fetch + sha256, hf download
+    E->>E: start N engine replicas, one GPU slice each
+    E->>E: infx.bench wait on each replica's /health
+    E->>Ro: wait until /v1/models lists the model
+    E->>E: client run: agentx profile (aiperf), upstream result CLIs
+    J->>J: EXIT trap stops the sidecar steps
 ```
+
+While the job waits for GPUs the driver prints one line a minute
+(`Slurm job 6215 PENDING Resources (null) (3m queued)`); once the job starts, its log streams
+live into the Actions step. Cancelling the run cancels the Slurm job.
 
 | Step | Where |
 |---|---|
 | Validate and dispatch | `inferencex-e2e/utils/serving/dispatch.sh` |
 | Points | `infx/serving/to_matrix.py:56` (`build`), rows at `:22`, `SERVING_JSON` at `:32` |
-| Serving YAML schema | `infx/serving/schema.py:123` (`ServingSpec`), `:254` (`load_serving`) |
+| Serving YAML schema | `infx/serving/schema.py:123` (`ServingSpec`), `:256` (`load_serving`) |
 | Scenario render | `infx/serving/scenarios.py:173` (`render`) |
 | Routing hook | `infx/launch/policy.py:87` |
-| Driver | `infx/launch/drivers/serving.py:89` (`run`): staging `:111`, `submit_batch` `:116`, logs `:123`, state `:126` |
-| Job env | `infx/launch/drivers/serving.py:62` (`job_env`) |
-| Port picking | `benchmarks/single_node/serving/job.sh:16` |
-| Storage / router steps | `job.sh:63`, `job.sh:98` |
-| Engine step | `job.sh:109` |
+| Driver | `infx/launch/drivers/serving.py:111` (`run`); queue notes `:29` (`wait_started`); job env `:84` |
+| Port picking | `benchmarks/single_node/serving/job.sh:16`, router metrics `:97` |
+| DCGM / storage / router / engine steps | `job.sh:52`, `:63`, `:102`, `:113` |
 | Replicas, one GPU slice each | `bench.sh:57` |
-| Engine health wait | `bench.sh:76` |
-| Router wait | `bench.sh:81` |
 | Client prepare / run | `bench.sh:25`, `bench.sh:106`; `infx/serving/client.py:58`, `:72` |
 
 If the engine or router dies before it is ready, the wait fails and prints the tail of
-`server.log` or `router.log`. Cancelling the workflow cancels the Slurm job (upstream), and the
-EXIT trap in `job.sh` stops the sidecar steps.
+`server.log` or `router.log`.
 
-## 3. Where VNG code lives
+## 3. How this differs from the upstream Slurm path
+
+Upstream runs a single-node point through `srt-single`: `run-sweep.yml` plans points from
+`perf-changelog.yaml` against the master configs (`configs/nvidia-master.yaml`, `amd-master.yaml`), and the driver clones srt-slurm, binds a recipe
+variant and lets `srtctl` start the engine. gn-benchmark keeps the template workflow, the
+launcher, the harness and the result code, and replaces the entry workflow and the driver.
+
+```mermaid
+flowchart LR
+    subgraph UP["upstream"]
+        direction TB
+        u1["run-sweep.yml<br/>(PR, perf-changelog + master configs)"] --> u2["benchmark-tmpl.yml"] --> u3["infx.launch run"] --> u4["srt-single driver<br/>srtctl + recipe"] --> u5["engine, fixed port bases,<br/>exclusive node"]
+    end
+    subgraph GN["gn-benchmark"]
+        direction TB
+        g1["serving.yml<br/>(workflow_dispatch, serving YAML)"] --> g2["benchmark-tmpl.yml"] --> g3["infx.launch run"] --> g4["serving driver<br/>job.sh"] --> g5["engine + router + storage,<br/>ports picked free, shared node"]
+    end
+```
+
+| | upstream `srt-single` | gn-benchmark `serving` |
+|---|---|---|
+| Entry | `run-sweep.yml` on PRs, points from `perf-changelog.yaml` + master configs | `serving.yml` by `workflow_dispatch`, points from one serving YAML |
+| What starts the engine | `srtctl` with a recipe from `configs/srt-recipes` | the YAML's own command, rendered by `infx/serving/render.py` |
+| Router / KV storage | recipe-defined | any image + command as `--overlap` sidecar steps |
+| Node use | often `--exclusive`; srtctl uses fixed port bases | GPUs, 16 CPU/GPU and a memory share per GPU; every port picked free at run time |
+| Clusters | workspace on Lustre or rsynced to the compute node | one cluster record per node; runner, HF cache and squash files on that node's disk |
+| Scenarios | upstream AgentX configs | six base files + validated overrides, synthetic grid, SLO search |
+| Harness, aiperf, result format | `agentx-harness`, `infx.results` | same |
+| Artifacts | `bmk_agentic_*`, `agentic_*` | same names; aggregate `scenario` holds the legacy label |
+
+VNG needs its own path because of how its nodes are used: they are shared with the team and have
+no usable shared filesystem, while srtctl assumes exclusive nodes with fixed ports.
+
+## 4. Where VNG code lives
 
 Every VNG file has `serving` in its path, so `git grep -l serving` or
 `git diff upstream/main --stat` lists all of it.
@@ -74,7 +129,7 @@ Every VNG file has `serving` in its path, so `git grep -l serving` or
 | `infx/serving/scenarios.py` | base + overrides / grid point / search / slo → final config and legacy label |
 | `configs/runners.yaml` (VNG block) | `hcm-*` runner labels and cluster records |
 | `infx/serving/schema.py`, `render.py` | serving YAML model and validation; command rendering |
-| `infx/serving/to_matrix.py`, `utils/serving/dispatch.sh`, `.github/workflows/serving.yml` | points; local validation and dispatch; the workflow |
+| `infx/serving/to_matrix.py`, `utils/serving/dispatch.sh`, `.github/workflows/serving.yml` | points; local validation and dispatch; the `gn-benchmark` workflow |
 | `infx/serving/client.py`, `sweep_result.py` | in-container client; search result writer |
 | `benchmarks/single_node/serving/{job,bench,sidecar}.sh` | allocation steps; engine step; router/storage sidecar |
 | `infx/launch/drivers/serving.py` | the launch path |
@@ -83,7 +138,7 @@ Every VNG file has `serving` in its path, so `git grep -l serving` or
 
 Paths are relative to `inferencex-e2e/` except the workflow and the skills.
 
-Upstream files touched (the only places a merge can conflict):
+Upstream files touched (the only places a merge can conflict; four files, five spots):
 
 1. `configs/runners.yaml`: the VNG labels after the last upstream label, the four `hcm-*` records at the end of `clusters:`.
 2. `infx/launch/policy.py:63`: `SERVING = "serving"` in `LaunchPath`; `:87-88`: return it when `SERVING_JSON` is set.
@@ -91,7 +146,7 @@ Upstream files touched (the only places a merge can conflict):
 4. `.github/workflows/benchmark-tmpl.yml:8`: the optional `serving` input; `:99`: `SERVING_JSON: ${{ inputs.serving }}`.
 5. `.github/workflows/benchmark-tmpl.yml:311`: "Validate agentic result" is skipped for search points, which have no top-level `profile_export_aiperf.json`.
 
-## 4. VNG Slurm
+## 5. VNG Slurm
 
 Facts measured on 2026-10-25: one cluster `test-cluster`, Slurm 26.11.0rc1, `select/cons_tres` with
 `CR_CORE_MEMORY`, backfill, no preemption, pyxis on every node.
@@ -135,15 +190,15 @@ CPU or memory flags of its own; it passes `salloc-args` to `sbatch`.
 
 Pyxis containers share the host network, and other jobs can run on the
 same node, so fixed port bases would collide. `job.sh:16` picks each port free on the node from
-20000-32767, below the Linux ephemeral range. This is why VNG has its own path instead of
-upstream `srtctl`: srtctl uses fixed port bases and relies on exclusive nodes.
+20000-32767, below the Linux ephemeral range: engine, router, DCGM, and the router metrics port
+when the router command uses `{{router_metrics_port}}`. A serving YAML never writes a literal port.
 
 ### Squash import
 
 Squash records use `import: submit-host` and `single-node-import: true`. The runner sits on the node where the
 job runs, so the image is imported where it is used.
 
-## 5. Scenarios
+## 6. Scenarios
 
 Six base files in `benchmarks/single_node/serving/scenarios/`:
 
@@ -199,7 +254,7 @@ LiveKit warm is a dataset, nothing more. aiperf TTFT therefore includes the 601 
 requests (`max_tokens 1`), so avg and p50 TTFT read lower than the warm-up-filtered numbers in older
 reports.
 
-## 6. Results
+## 7. Results
 
 Artifact names are upstream's (`bmk_agentic_<RF>`, `agentic_<RF>`). Exp-names keep the old rule:
 `<name>_c<conc>`, `<name>_search`, and `<name>-<label>` for grid points.
@@ -216,13 +271,13 @@ The aggregate JSON's `scenario` field holds the legacy label (`agentx-cc-062126-
 `.agents/skills/result-report` turns run links into `report.md` / `data.json`. It reads the
 scenario from the aggregate first (`scenario_of` in `scripts/extract.py`).
 
-## 7. Syncing upstream
+## 8. Syncing upstream
 
 ```bash
 git fetch upstream && git merge upstream/main
 ```
 
-Conflicts can only land in the five touch points of section 3. After the merge, from
+Conflicts can only land in the five touch points of section 4. After the merge, from
 `inferencex-e2e/`:
 
 ```bash
@@ -237,7 +292,7 @@ Then check that these still exist with the same shape: `infx.bench.agentic.venv`
 `_optional_component_metadata`, `_validate_kv_offload_env`). The serving tests fail if any of
 them moves.
 
-## 8. Not done here
+## 9. Not done here
 
 - Multi-node PD disaggregation (upstream `srt-multi` and srt recipes).
 - Single-node PD through `roles:` in the serving driver.
@@ -250,4 +305,4 @@ them moves.
   `server_external_cache_hit_rate`; `result-report` computes the tiers from raw metrics and is not
   affected. Candidate for an upstream PR.
 - The other 46 legacy serving YAMLs stay on `vng-benchmark`; convert them with the table in
-  section 5 when needed.
+  section 6 when needed.
