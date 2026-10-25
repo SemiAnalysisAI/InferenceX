@@ -65,6 +65,37 @@ def test_delete_accepts_empty_response(monkeypatch):
     assert github.write("example/project", "git/refs/heads/claim", "DELETE") == {}
 
 
+def test_session_listings_see_the_state_after_a_write(monkeypatch):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+    )
+    refs = [{"ref": f"refs/heads/{session.branch}"}]
+    monkeypatch.setattr(github, "items", lambda *_args: list(refs))
+    monkeypatch.setattr(github.github, "api", lambda *_args, **_kwargs: refs.clear() or {})
+
+    assert session.branch_exists() is True
+    github.write("example/project", f"git/refs/heads/{session.branch}", "DELETE")
+    assert session.branch_exists() is False
+
+
+@pytest.mark.parametrize(("contents", "data"), [
+    ({"type": "file", "encoding": "base64", "size": 3, "content": "YWJj\n"}, b"abc"),
+    ([{"type": "file", "name": "recipe.yaml", "path": "recipes/recipe.yaml"}], None),
+], ids=["file", "directory"])  # fmt: skip
+def test_source_reads_return_file_bytes_or_a_fixed_failure(monkeypatch, contents, data):
+    def run(args, **_kwargs):
+        assert args[4] == f"repos/example/project/contents/recipes?ref={'a' * 40}"
+        return subprocess.CompletedProcess(args, 0, json.dumps(contents), "")
+
+    monkeypatch.setattr(github.subprocess, "run", run)
+
+    if data is None:
+        with pytest.raises(github.VerificationError, match="Source data unavailable or too large"):
+            github.file_at("example/project", "a" * 40, "recipes")
+    else:
+        assert github.file_at("example/project", "a" * 40, "recipes") == data
+
+
 @pytest.mark.parametrize(
     "failure,reason",
     [
@@ -92,7 +123,7 @@ def test_recovery_errors_do_not_publish_raw_api_data(
     executable.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
-    monkeypatch.setattr(sys, "argv", ["klaud", "recover", "--max-resumes", "5"])
+    monkeypatch.setattr(sys, "argv", ["klaud", "recover", "--max-sessions", "5"])
     assert klaud.main() == 1
     captured = capfd.readouterr()
     assert captured.out == f"::error::Klaud: {reason}.\n"
@@ -222,6 +253,23 @@ def test_finish_requires_specific_baseline_reason_before_touching_session(
     )
 
 
+@pytest.mark.parametrize("command", ["report", "check-final"])
+def test_pr_commands_fail_cleanly_before_the_candidate_pr_exists(
+    tmp_path, monkeypatch, capfd, command
+):
+    record = tmp_path / "record.json"
+    record.write_text(reporting.Baseline(
+        family=FAMILY, date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[], points=[],
+    ).model_dump_json(by_alias=True))  # fmt: skip
+    options = (["--kind", "baseline", "--file"] if command == "report" else ["--matrix-file"])
+    monkeypatch.setattr(sys, "argv", ["klaud", command, *options, str(record)])
+    monkeypatch.setattr(lifecycle, "current_session", lambda: SimpleNamespace(pulls=lambda: []))
+
+    assert klaud.main() == 1
+    assert capfd.readouterr().out == "::error::Klaud: Candidate PR not found.\n"
+
+
 def test_cooldown_skips_recent_blocks_across_bases_and_retries_capacity_deferrals(
     monkeypatch,
 ):
@@ -311,7 +359,7 @@ def test_cooldown_ages_each_candidates_newest_artifact_including_resumed_session
             queries.append(path)
             return [{"id": 39, "created_at": "2026-10-14T06:00:00Z"},
                     {"id": 41, "created_at": "2026-10-15T00:00:00Z"},
-                    {"id": 40, "created_at": "2026-10-13T11:59:59Z"}]
+                    {"id": 40, "created_at": "2026-10-12T23:59:59Z"}]
         run_id = int(path.split("/")[2])
         if run_id not in artifacts:
             pytest.fail(f"listed artifacts of run {run_id}")
@@ -560,8 +608,8 @@ UNEXPECTED_ERROR = CandidateOutcome(
 
 
 def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelled", state="open",
-                        artifacts=(), sessions=("failure",) * lifecycle.MAX_SESSIONS, reruns=(),
-                        planner="failure", gated=True):
+                        artifacts=(), sessions=("failure",) * lifecycle.MAX_EXPIRED_SESSIONS,
+                        reruns=(), planner="failure", gated=True):
     """Serve planner run 42 whose draft PR 7 has one final sweep, run 9, that ended
     ``conclusion`` (``None`` while it runs) at attempt ``attempt`` on 2026-10-15 00:00 UTC with
     ``jobs`` (a ``-timeout`` suffix marks a job GitHub stopped at its timeout).
@@ -708,7 +756,7 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
     world = SimpleNamespace(
         session=lifecycle.Session("example/project", parent, candidate, recovering=True),
         pull=pull, reads=reads, comments=comments, writes=[], dispatches=[], finished=[],
-        released=[], start_resume=start_resume,
+        released=[], start_resume=start_resume, sweep=sweep,
     )
 
     def write(_repository, path, method, payload=None):
@@ -741,11 +789,11 @@ def ended_session_sweep(monkeypatch, *, attempt=1, jobs=(), conclusion="cancelle
 
 @pytest.mark.parametrize(("now", "attempt", "jobs", "state", "waiting", "rerun"), [
     pytest.param("2026-10-15T00:29:59Z", 1, ["success", "cancelled"], "open",
-                 "Preempted final sweep is waiting for its rerun", False, id="within-grace"),
+                 "Preempted run is waiting for its rerun", False, id="within-grace"),
     pytest.param("2026-10-15T00:30:00Z", 9, ["success", "cancelled"], "open",
-                 "Reran preempted final sweep", True, id="after-grace"),
+                 "Reran preempted run", True, id="after-grace"),
     pytest.param("2026-10-15T23:59:59Z", 1, ["success", "cancelled"], "open",
-                 "Reran preempted final sweep", True, id="before-give-up"),
+                 "Reran preempted run", True, id="before-give-up"),
     pytest.param("2026-10-16T00:00:00Z", 1, ["success", "cancelled"], "open", None, False,
                  id="give-up"),
     pytest.param("2026-10-15T00:30:00Z", 10, ["success", "cancelled"], "open", None, False,
@@ -796,7 +844,7 @@ def test_recovery_retries_a_preempted_final_sweep_after_github_errors(
     assert world.finished == []
 
 
-def recovery_pass(monkeypatch, tmp_path, max_resumes=5, now="2026-10-15T01:00:00Z"):
+def recovery_pass(monkeypatch, tmp_path, max_sessions=5, now="2026-10-15T01:00:00Z"):
     """Run planner run 1000's recovery at ``now``; return its step summary and output files."""
     summary, output = tmp_path / "summary.md", tmp_path / "output"
     for name, value in (("GITHUB_REPOSITORY", "example/project"), ("GITHUB_RUN_ID", "1000"),
@@ -810,7 +858,7 @@ def recovery_pass(monkeypatch, tmp_path, max_resumes=5, now="2026-10-15T01:00:00
             return lifecycle.utc(now)
 
     monkeypatch.setattr(lifecycle, "datetime", Clock)
-    lifecycle.recover(max_resumes)
+    lifecycle.recover(max_sessions)
     return summary, output
 
 
@@ -822,10 +870,112 @@ def test_recovery_keeps_the_pr_claim_and_lease_of_a_rerun_final_sweep(monkeypatc
     assert world.writes == [("POST", "actions/runs/9/rerun-failed-jobs")]
     assert world.finished == world.released == []
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
-    assert output.read_text() == "resumed=0\n"
+    assert output.read_text() == "active-sessions=0\n"
     assert summary.read_text() == (
-        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted final "
-        "sweep). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
+        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted run). "
+        "[Parent run / 父运行](https://github.com/example/project/actions/runs/42)\n\n")
+
+
+@pytest.mark.parametrize("stale", ["deleted-claim-parent", "corrupt-artifact"])
+def test_recovery_skips_an_unreadable_owner_and_reconciles_the_others(
+    monkeypatch, tmp_path, capsys, stale
+):
+    world = ended_session_sweep(monkeypatch, jobs=["success", "cancelled"])
+    family = "configs/amd-master.yaml:other"
+    other = OwnedCandidate(id=f"{identity(family)[:16]}-{'6' * 16}", family=family, base="a" * 40)
+    owners = [Ownership(run_id=42, candidates=[world.session.candidate])]
+    if stale == "deleted-claim-parent":
+        owners.append(Ownership(run_id=77, candidates=[other]))
+    monkeypatch.setattr(claims, "family_owners", lambda _r: owners)
+    serve, read = github.items, github.read
+
+    def items(repository, path, key=None):
+        if path.startswith("actions/artifacts?") and stale == "corrupt-artifact":
+            return [{"id": 5, "expired": False, "size_in_bytes": 10, "workflow_run": {"id": 42}}]
+        return serve(repository, path, key)
+
+    def gone(repository, path):
+        if path == "actions/runs/77":
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return read(repository, path)
+
+    def corrupt(*_args):
+        raise github.VerificationError("Invalid artifact archive")
+
+    monkeypatch.setattr(github, "items", items)
+    monkeypatch.setattr(github, "read", gone)
+    monkeypatch.setattr(github, "download_json", corrupt)
+
+    summary, _ = recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == [("POST", "actions/runs/9/rerun-failed-jobs")]
+    rerun = (f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (Reran preempted "
+             "run). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
+             "\n\n")
+    if stale == "deleted-claim-parent":
+        assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [
+            "configs/amd-master.yaml:other", FAMILY]
+        assert summary.read_text() == (
+            f"Klaud `{other.id}`: needs inspection / 需要检查 (state unavailable or invalid). "
+            "[Parent run / 父运行](https://github.com/example/project/actions/runs/77)\n\n" + rerun)
+    else:
+        assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+        assert summary.read_text() == rerun
+        assert "::warning::Klaud: ownership artifact 5 is unreadable; skipped.\n" in (
+            capsys.readouterr().out)
+
+
+def test_recovery_leaves_the_draft_of_a_planner_run_it_could_not_read(monkeypatch, tmp_path):
+    world = ended_session_sweep(monkeypatch, sessions=("failure",))
+    read, failed = github.read, []
+
+    def flaky(repository, path):
+        if path == "actions/runs/42" and not failed:
+            failed.append(path)
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return read(repository, path)
+
+    monkeypatch.setattr(github, "read", flaky)
+
+    recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == world.released == []
+    assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+
+
+def test_abandoned_work_sweep_keeps_a_claim_whose_planner_run_is_gone(monkeypatch):
+    world = ended_session_sweep(monkeypatch, sessions=("failure",))
+    candidate = world.session.candidate
+    family = "configs/amd-master.yaml:other"
+    other = OwnedCandidate(id=f"{identity(family)[:16]}-{'6' * 16}", family=family, base="a" * 40)
+    monkeypatch.setattr(claims, "family_owners", lambda _r: [
+        Ownership(run_id=42, candidates=[candidate]), Ownership(run_id=77, candidates=[other])])
+    read, serve = github.read, github.items
+    draft = {**world.pull, "number": 8,
+             "head": {**world.pull["head"], "ref": f"klaud/auto-{other.id}"}}
+
+    def gone(repository, path):
+        if path == "actions/runs/77":
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return read(repository, path)
+
+    def items(repository, path, key=None):
+        if path == "pulls?state=open&per_page=100":
+            return [world.pull, draft]
+        if path == "pulls/8/commits?per_page=100":
+            return [{"committer": {"login": "github-actions[bot]"}}]
+        return serve(repository, path, key)
+
+    monkeypatch.setattr(github, "read", gone)
+    monkeypatch.setattr(github, "items", items)
+
+    assert lifecycle.sweep_abandoned("example/project", set()) == {other.id}
+    assert world.released == [(candidate.id, 42)]
+    assert world.writes == [
+        ("DELETE", f"git/refs/heads/klaud/recovery-42-{candidate.id}"),
+        ("POST", "issues/7/comments"), ("PATCH", "pulls/7"),
+        ("DELETE", f"git/refs/heads/klaud/auto-{candidate.id}"),
+    ]
 
 
 def test_recovery_warns_why_a_passed_final_sweep_failed_validation(monkeypatch, capsys):
@@ -879,11 +1029,21 @@ def resume_check(tmp_path, monkeypatch, world, number, attempt=1, run=None, sess
     return code, output.read_text()
 
 
+def park_comment(world, number, runs=(9,)):
+    """A Klaud comment recording that the world's session ``number`` parked on ``runs``."""
+    return {"id": 70 + number, "user": {"login": "Klaud-Cold"}, "body": (
+        lifecycle.park_marker(42, world.session.candidate.id, number)
+        + json.dumps({"runs": list(runs)}) + "\n-->\nParked.")}
+
+
+EXPIRED = lifecycle.MAX_EXPIRED_SESSIONS
+
+
 @pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
 @pytest.mark.parametrize(("sessions", "options", "started", "approved"), [
     pytest.param(("failure",), {}, 1, True, id="first-session"),
-    pytest.param(("failure",) * 3, {}, 3, True, id="below-the-cap"),
-    pytest.param(("failure",) * 4, {}, 4, False, id="at-the-cap"),
+    pytest.param(("failure",) * (EXPIRED - 1), {}, EXPIRED - 1, True, id="below-the-cap"),
+    pytest.param(("failure",) * EXPIRED, {}, EXPIRED, False, id="at-the-cap"),
     pytest.param(("failure", "gated-off", "failure"), {}, 2, True,
                  id="resume-run-without-its-grant-does-not-count"),
     pytest.param(("failure", "gated-off"), {}, 1, True, id="latest-started-session-decides"),
@@ -903,42 +1063,62 @@ def resume_check(tmp_path, monkeypatch, world, number, attempt=1, run=None, sess
     pytest.param(("failure",), {"gated": False}, 1, False, id="planner-run-predates-resumption"),
     pytest.param(("failure",), {"gated": False, "reruns": ("skipped",)}, 1, False,
                  id="rerun-of-a-planner-run-from-before-resumption"),
+    pytest.param(("success",), {"parked": {1: (9,)}}, 1, True, id="parked-session"),
+    pytest.param(("success",) * (EXPIRED + 1), {"parked": dict.fromkeys(range(1, EXPIRED + 2),
+                 (9,))}, EXPIRED + 1, True, id="parked-sessions-never-expire"),
+    pytest.param(("success",) * lifecycle.MAX_SESSIONS,
+                 {"parked": dict.fromkeys(range(1, lifecycle.MAX_SESSIONS + 1), (9,))},
+                 lifecycle.MAX_SESSIONS, False, id="at-the-session-cap"),
+    pytest.param(("failure",) * (EXPIRED - 1) + ("success",), {"parked": {EXPIRED: ()}},
+                 EXPIRED, False, id="parking-at-the-deadline-expires"),
+    pytest.param(("failure",) * EXPIRED, {"parked": dict.fromkeys(range(1, EXPIRED + 1), (9,))},
+                 EXPIRED, False, id="sessions-that-ran-out-after-parking-expire"),
 ])  # fmt: skip
 def test_recovery_approves_resuming_only_sessions_a_resume_run_can_continue(
     monkeypatch, conclusion, sessions, options, started, approved
 ):
-    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=sessions, **options)
+    harness = {key: value for key, value in options.items() if key != "parked"}
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=sessions, **harness)
+    for number, runs in options.get("parked", {}).items():
+        world.comments.append(park_comment(world, number, runs))
 
     assert lifecycle.sessions_started(world.session) == started
-    if approved:
+    if conclusion is None:
+        with pytest.raises(lifecycle.PendingCleanup, match="Owned work is still running"):
+            lifecycle.reconcile(world.session, NOW)
+    elif approved:
         with pytest.raises(lifecycle.ResumeSession, match="approved to resume") as raised:
             lifecycle.reconcile(world.session, NOW)
         assert raised.value.pull is world.pull
-    elif conclusion is None:
-        with pytest.raises(lifecycle.PendingCleanup, match="Owned work is still running"):
-            lifecycle.reconcile(world.session, NOW)
     else:
         assert lifecycle.reconcile(world.session, NOW) is True
     assert world.writes == world.released == []
     assert world.finished == ([UNEXPECTED_ERROR] if conclusion and not approved else [])
 
 
-@pytest.mark.parametrize(("sessions", "now", "approved"), [
-    pytest.param(("failure",), "2026-10-15T05:59:59Z", True, id="within-a-day"),
-    pytest.param(("failure",), "2026-10-15T06:00:00Z", False, id="a-day-later"),
-    pytest.param(("failure", "failure"), "2026-10-15T11:59:59Z", True,
+@pytest.mark.parametrize(("sessions", "updated", "now", "approved"), [
+    pytest.param(("failure",), "2026-10-14T03:00:00Z", "2026-10-15T05:59:59Z", True,
+                 id="within-a-day"),
+    pytest.param(("failure",), "2026-10-14T03:00:00Z", "2026-10-15T06:00:00Z", False,
+                 id="a-day-later"),
+    pytest.param(("failure", "failure"), "2026-10-14T03:00:00Z", "2026-10-15T11:59:59Z", True,
                  id="within-a-day-of-the-resume-run"),
-    pytest.param(("failure", "failure"), "2026-10-15T12:00:00Z", False,
+    pytest.param(("failure", "failure"), "2026-10-14T03:00:00Z", "2026-10-15T12:00:00Z", False,
                  id="a-day-after-the-resume-run"),
-    pytest.param(("failure", "ungranted"), "2026-10-15T05:59:59Z", True,
+    pytest.param(("failure", "ungranted"), "2026-10-14T03:00:00Z", "2026-10-15T05:59:59Z", True,
                  id="within-a-day-of-the-last-started-session"),
-    pytest.param(("failure", "ungranted"), "2026-10-15T06:00:00Z", False,
+    pytest.param(("failure", "ungranted"), "2026-10-14T03:00:00Z", "2026-10-15T06:00:00Z", False,
                  id="a-run-that-never-started-its-agent-does-not-extend-it"),
+    pytest.param(("failure",), "2026-10-15T00:00:00Z", "2026-10-15T23:59:59Z", True,
+                 id="within-a-day-of-the-last-run-ending"),
+    pytest.param(("failure",), "2026-10-15T00:00:00Z", "2026-10-16T00:00:00Z", False,
+                 id="a-day-after-the-last-run-ended"),
 ])  # fmt: skip
-def test_recovery_stops_resuming_a_day_after_the_last_session_ended(
-    monkeypatch, sessions, now, approved
+def test_recovery_stops_resuming_a_day_after_the_last_session_or_run_ended(
+    monkeypatch, sessions, updated, now, approved
 ):
     world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=sessions)
+    world.sweep["updated_at"] = updated
 
     if approved:
         with pytest.raises(lifecycle.ResumeSession):
@@ -946,6 +1126,169 @@ def test_recovery_stops_resuming_a_day_after_the_last_session_ended(
     else:
         assert lifecycle.reconcile(world.session, lifecycle.utc(now)) is True
     assert world.finished == ([] if approved else [UNEXPECTED_ERROR])
+
+
+@pytest.mark.parametrize(("conclusion", "kept"), [(None, True), ("failure", False)],
+                         ids=["run-live", "runs-ended"])
+def test_recovery_keeps_a_draft_while_its_runs_are_live_however_long_they_queue(
+    monkeypatch, conclusion, kept
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
+
+    assert lifecycle.retained(world.session, lifecycle.utc("2026-10-20T00:00:00Z")) is kept
+
+
+@pytest.mark.parametrize(("sweep", "targeted", "rerun"), [
+    pytest.param("failure", "cancelled", 11, id="preempted-targeted-run-after-a-failed-sweep"),
+    pytest.param("cancelled", "success", 9, id="preempted-sweep-before-a-passed-targeted-run"),
+])  # fmt: skip
+def test_recovery_reruns_the_preempted_final_sweep_or_a_newer_targeted_run(
+    monkeypatch, sweep, targeted, rerun
+):
+    world = ended_session_sweep(monkeypatch, conclusion=sweep, jobs=["success", "cancelled"])
+    run = {
+        "id": 11, "event": "workflow_dispatch", "head_sha": "a" * 40, "run_attempt": 1,
+        "display_title": f"e2e Test - klaud-42-{world.session.candidate.id}",
+        "actor": {"login": "Klaud-Cold"}, "head_repository": {"full_name": "example/project"},
+        "status": "completed", "conclusion": targeted,
+        "created_at": "2026-10-14T04:00:00Z", "updated_at": "2026-10-15T00:00:00Z",
+    }
+    serve = github.items
+
+    def items(repository, path, key=None):
+        if path.startswith("actions/workflows/e2e-tests.yml/runs?"):
+            return [run]
+        if path == "actions/runs/11/attempts/1/jobs?per_page=100":
+            return [{"id": 300, "conclusion": "cancelled", "runner_name": "gpu-0"}]
+        if path == "check-runs/300/annotations?per_page=100":
+            return [{"message": "The operation was canceled."}]
+        return serve(repository, path, key)
+
+    monkeypatch.setattr(github, "items", items)
+
+    with pytest.raises(lifecycle.AwaitingRerun, match="Reran preempted run"):
+        lifecycle.reconcile(world.session, NOW)
+    assert world.writes == [("POST", f"actions/runs/{rerun}/rerun-failed-jobs")]
+
+
+@pytest.mark.parametrize(("session", "resumed"), [("failure", True), (None, False)],
+                         ids=["own-job-ended", "own-job-running"])
+def test_recovery_resumes_a_candidate_whose_job_ended_while_its_planner_run_continues(
+    monkeypatch, tmp_path, session, resumed
+):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=(session,))
+    world.reads["actions/runs/42"] = {
+        **world.session.parent, "status": "in_progress", "conclusion": None}
+
+    _, output = recovery_pass(monkeypatch, tmp_path)
+
+    assert world.writes == ([GRANT, DISPATCH] if resumed else [])
+    assert output.read_text() == f"active-sessions={int(resumed)}\n"
+
+
+def report_comment(world, run):
+    """A Klaud attempt report on the world's PR for attempt 1 of owned run ``run``."""
+    return {"id": 90 + run, "user": {"login": "Klaud-Cold"},
+            "body": reporting.marker(world.session, f"run-{run}-1") + "{}\n-->\nQueued."}
+
+
+@pytest.mark.parametrize(("conclusion", "reported", "overdue", "error"), [
+    pytest.param(None, True, False, None, id="reported-live-run"),
+    pytest.param(None, False, False, "Publish an attempt report", id="unreported-live-run"),
+    pytest.param("failure", True, False, "No owned run is queued or running",
+                 id="nothing-to-wait-on"),
+    pytest.param("failure", False, True, None, id="at-the-deadline"),
+])  # fmt: skip
+def test_a_session_parks_only_on_reported_live_runs_or_at_its_deadline(
+    monkeypatch, conclusion, reported, overdue, error
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=(None,))
+    session = lifecycle.Session("example/project", world.session.parent, world.session.candidate)
+    if reported:
+        world.comments.append(report_comment(world, 9))
+
+    if error:
+        with pytest.raises(github.VerificationError, match=error):
+            lifecycle.park(session, 1, overdue=overdue)
+        assert world.writes == []
+    else:
+        waiting = [] if conclusion else [9]
+        assert lifecycle.park(session, 1, overdue=overdue) == waiting
+        assert lifecycle.parked(session, world.pull, 1) == waiting
+        lifecycle.park(session, 1, overdue=overdue)
+        assert [method for method, _ in world.writes] == ["POST", "PATCH"]
+
+
+@pytest.mark.parametrize(("parked", "conclusion", "blocked"), [
+    pytest.param((9,), None, False, id="parked-on-a-live-run"),
+    pytest.param((9,), "success", True, id="parked-runs-ended"),
+    pytest.param((), "success", False, id="parked-at-the-deadline"),
+    pytest.param(None, None, True, id="never-parked"),
+])  # fmt: skip
+def test_a_parked_session_may_stop_only_while_a_run_it_waits_on_is_live(
+    tmp_path, monkeypatch, parked, conclusion, blocked
+):
+    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=(None,))
+    if parked is not None:
+        world.comments.append(park_comment(world, 1, parked))
+    (tmp_path / "session-end.json").write_text('{"status": "parked"}\n')
+    monkeypatch.setattr(lifecycle, "current_session", lambda: world.session)
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path))
+    monkeypatch.setenv("KLAUD_SESSION", "1")
+
+    assert ("decision" in klaud.check_stop()) is blocked
+
+
+@pytest.mark.parametrize(("marker", "end", "action", "verified"), [
+    pytest.param(True, "parked", "success", True, id="parked"),
+    pytest.param(True, "parked", "failure", False, id="kept-working-after-parking-then-ran-out"),
+    pytest.param(False, None, "failure", False, id="ran-out"),
+])  # fmt: skip
+def test_diagnostics_verify_only_a_session_that_ended_parked(
+    tmp_path, monkeypatch, marker, end, action, verified
+):
+    world = ended_session_sweep(monkeypatch, conclusion=None, sessions=(None,))
+    if marker:
+        world.comments.append(park_comment(world, 1))
+    if end:
+        (tmp_path / "session-end.json").write_text(json.dumps({"status": end}))
+    monkeypatch.setattr(lifecycle, "current_session", lambda: world.session)
+    monkeypatch.setenv("KLAUD_SESSION", "1")
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path))
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    output = tmp_path / "diagnostics.json"
+
+    assert klaud.save_diagnostics(
+        tmp_path / "execution.json", tmp_path / "structured.json", action, output
+    ) is verified
+    diagnostics = json.loads(output.read_text())
+    if verified:
+        assert diagnostics["session-state"] == "parked"
+        assert diagnostics["candidate-outcome"] is None
+    else:
+        assert diagnostics["candidate-outcome"]["outcome"] == "unexpected-error"
+
+
+@pytest.mark.parametrize(("elapsed", "warned"), [
+    (lifecycle.PARK_AFTER_SECONDS - 1, False), (lifecycle.PARK_AFTER_SECONDS, True),
+])  # fmt: skip
+def test_the_deadline_hook_tells_a_session_to_park_near_its_time_limit(
+    monkeypatch, elapsed, warned
+):
+    now = lifecycle.utc("2026-10-15T05:00:00Z")
+
+    class Clock(klaud.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr(klaud, "datetime", Clock)
+    monkeypatch.setenv("KLAUD_SESSION_STARTED", str(int(now.timestamp()) - elapsed))
+
+    hook = klaud.check_deadline()
+    assert bool(hook) is warned
+    if warned:
+        assert "About 30 minutes remain" in hook["hookSpecificOutput"]["additionalContext"]
 
 
 @pytest.mark.parametrize("change", [
@@ -998,11 +1341,10 @@ def test_a_resumed_session_never_adopts_a_newer_runs_pr_on_its_branch(tmp_path, 
     assert resume_check(tmp_path, monkeypatch, world, 3) == (0, "run=false\nresume=false\n")
 
 
-@pytest.mark.parametrize("conclusion", [None, "failure"], ids=["running", "finished"])
 def test_recovery_dispatches_a_resume_run_that_continues_an_unfinished_session(
-    monkeypatch, tmp_path, conclusion
+    monkeypatch, tmp_path
 ):
-    world = ended_session_sweep(monkeypatch, conclusion=conclusion, sessions=("failure",))
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
     candidate = world.session.candidate.id
     link = "https://github.com/example/project/actions/runs/42"
 
@@ -1020,7 +1362,7 @@ def test_recovery_dispatches_a_resume_run_that_continues_an_unfinished_session(
     ]
     assert world.finished == world.released == []
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
-    assert output.read_text() == "resumed=1\n"
+    assert output.read_text() == "active-sessions=1\n"
     assert summary.read_text() == (
         f"Klaud `{candidate}`: resumed / 已恢复 (session 2). [Parent run / 父运行]({link})\n\n")
 
@@ -1034,7 +1376,7 @@ def test_recovery_dispatches_a_resume_run_that_continues_an_unfinished_session(
     writes = len(world.writes)
     _, output = recovery_pass(monkeypatch, tmp_path)
     assert world.writes[writes:] == []
-    assert output.read_text() == "resumed=1\nresumed=0\n"
+    assert output.read_text() == "active-sessions=1\nactive-sessions=1\n"
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
 
 
@@ -1043,14 +1385,14 @@ def test_recovery_keeps_an_approved_session_without_a_resume_slot_for_the_next_w
 ):
     world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
 
-    summary, output = recovery_pass(monkeypatch, tmp_path, max_resumes=0)
+    summary, output = recovery_pass(monkeypatch, tmp_path, max_sessions=0)
 
     assert world.writes == world.finished == world.released == []
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
-    assert output.read_text() == "resumed=0\n"
+    assert output.read_text() == "active-sessions=0\n"
     assert summary.read_text() == (
-        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (resume deferred: no slot "
-        "left in this wave). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
+        f"Klaud `{world.session.candidate.id}`: pending / 等待后续收尾 (resume deferred: every "
+        "session slot is in use). [Parent run / 父运行](https://github.com/example/project/actions/runs/42)"
         "\n\n")
 
 
@@ -1087,7 +1429,7 @@ def test_recovery_keeps_a_session_whose_resume_dispatch_failed_without_leaving_i
     assert world.writes[2:] == [GRANT, DISPATCH]
     assert [comment["body"].split("\n", 1)[0] for comment in world.comments] == [
         lifecycle.resume_marker(42, candidate, 2)]
-    assert output.read_text() == "resumed=0\nresumed=1\n"
+    assert output.read_text() == "active-sessions=0\nactive-sessions=1\n"
 
 
 @pytest.mark.parametrize("change", ["resume-run", "planner-rerun"])
@@ -1113,7 +1455,7 @@ def test_recovery_dispatches_nothing_for_a_session_that_resumed_meanwhile(
     _, output = recovery_pass(monkeypatch, tmp_path)
 
     assert world.writes == world.finished == world.released == []
-    assert output.read_text() == "resumed=0\n"
+    assert output.read_text() == f"active-sessions={int(change == 'resume-run')}\n"
     assert capsys.readouterr().out == (
         f"::warning::Klaud: resuming candidate {world.session.candidate.id} of planner run 42 "
         "failed: Session resumed; leave the active session intact.\n")
@@ -1185,10 +1527,11 @@ def test_a_planner_job_runs_only_its_first_attempts_session_without_reading_gith
 
 @pytest.mark.parametrize(("sessions", "change", "resumes"), [
     pytest.param(("failure", None), None, True, id="granted"),
-    pytest.param(("failure",) * 3 + (None,), None, True, id="last-session"),
+    pytest.param(("failure",) * (lifecycle.MAX_SESSIONS - 1) + (None,), None, True,
+                 id="last-session"),
     pytest.param(("failure", "gated-off", None), None, True,
                  id="ungranted-resume-run-not-counted"),
-    pytest.param(("failure",) * 4 + (None,), None, False, id="over-the-cap"),
+    pytest.param(("failure",) * lifecycle.MAX_SESSIONS + (None,), None, False, id="over-the-cap"),
     pytest.param(("failure", None), "outcome-recorded", False, id="outcome-recorded"),
     pytest.param(("failure", None), "aborted", False, id="aborted-despite-a-grant"),
     pytest.param(("failure", None), "ungranted", False, id="no-grant"),
@@ -1281,7 +1624,7 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
         ]
     }
 
-    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+    def resolve(_repository, candidate, _context, _model, _goal, _producers, _matrix):
         if candidate.id == first_id:
             raise OSError("transient")
         return reporting.Baseline(
@@ -1344,7 +1687,7 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
         for context in contexts
     ]}  # fmt: skip
 
-    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+    def resolve(_repository, candidate, _context, _model, _goal, _producers, _matrix):
         return reporting.Baseline(
             family=candidate.family, date="2026-09-19", image="example/image:1",
             goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
@@ -1366,14 +1709,16 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
     assert selection["capacity-deferred-candidates"] == [ids[name] for name in deferred]
 
 
-@pytest.mark.parametrize(("resumed", "selected", "note"), [
-    pytest.param(0, 3, "", id="none-resumed"),
-    pytest.param(1, 2, " 1 resumed sessions leave 2 of 3 slots.", id="cap-reduced"),
-    pytest.param(3, 0, " 3 resumed sessions leave no slot for new candidates.", id="cap-filled"),
-    pytest.param(4, 0, " 4 resumed sessions leave no slot for new candidates.", id="over-the-cap"),
+@pytest.mark.parametrize(("active", "selected", "note"), [
+    pytest.param(0, 3, "", id="no-active-sessions"),
+    pytest.param(1, 2, " 1 running or resumed sessions leave 2 of 3 slots.", id="cap-reduced"),
+    pytest.param(3, 0, " 3 running or resumed sessions leave no slot for new candidates.",
+                 id="cap-filled"),
+    pytest.param(4, 0, " 4 running or resumed sessions leave no slot for new candidates.",
+                 id="over-the-cap"),
 ])  # fmt: skip
-def test_select_leaves_the_slots_of_resumed_sessions_to_them(
-    tmp_path, monkeypatch, resumed, selected, note
+def test_select_leaves_the_slots_of_running_and_resumed_sessions_to_them(
+    tmp_path, monkeypatch, active, selected, note
 ):
     ids = [f"{digit * 16}-{digit * 16}" for digit in "123"]
     contexts = [
@@ -1389,7 +1734,7 @@ def test_select_leaves_the_slots_of_resumed_sessions_to_them(
         for context in contexts
     ]}  # fmt: skip
 
-    def resolve(_repository, candidate, _context, _model, _goal, _producers):
+    def resolve(_repository, candidate, _context, _model, _goal, _producers, _matrix):
         return reporting.Baseline(
             family=candidate.family, date="2026-09-19", image="example/image:1",
             goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
@@ -1409,7 +1754,7 @@ def test_select_leaves_the_slots_of_resumed_sessions_to_them(
     monkeypatch.setattr(claims, "claim_family", lambda _r, owned, _run: (
         claimed.append(owned.id) or True))
 
-    klaud.select(tmp_path, 3, resumed=resumed)
+    klaud.select(tmp_path, 3, active_sessions=active)
 
     assert json.loads((tmp_path / "selection.json").read_text())["candidates"] == ids[:selected]
     assert claimed == ids[:selected]
@@ -1517,8 +1862,12 @@ def test_prepare_baseline_keeps_the_baseline_the_candidate_pr_froze(tmp_path, mo
         published if frozen else preflight.model_copy(update={"goal": goal}))
 
 
+@pytest.mark.parametrize(("family_key", "published_key", "fingerprint"), [
+    ("test-family", "test-family", "fingerprint"),
+    ("model-fp8-h200-trtllm-mtp", "model-fp8-h200-trt-mtp", None),
+], ids=["fingerprinted", "legacy-row-under-aliased-key"])  # fmt: skip
 def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
-    monkeypatch,
+    monkeypatch, family_key, published_key, fingerprint
 ):
     base = "a" * 40
     historical_head = "b" * 40
@@ -1527,7 +1876,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
     entry = {
         "model-prefix": "Model",
         "runner": "h200",
-        "framework": "trtllm",
+        "framework": "trt",
         "precision": "fp8",
         "spec-decoding": "mtp",
         "disagg": False,
@@ -1556,7 +1905,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
     public_row = {
         "model": "Model",
         "hardware": "h200",
-        "framework": "trtllm",
+        "framework": "trt",
         "precision": "fp8",
         "spec_method": "mtp",
         "disagg": False,
@@ -1575,23 +1924,18 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "decode_ep": 1,
         "decode_dp_attention": False,
         "decode_num_workers": 0,
-        "recipe_fingerprint": "fingerprint",
+        "recipe_fingerprint": fingerprint,
         "run_url": "https://github.com/example/project/actions/runs/42",
         "tput_per_gpu": 10.0,
         "output_tput_per_gpu": 8.0,
         "mean_ttft": 0.1,
         "mean_tpot": 0.02,
-        "errors": 0,
     }
     info = {
         "runs": [{"github_run_id": "42", "run_attempt": 1}],
         "runConfigs": [{"github_run_id": "42", "head_sha": historical_head}],
-        "changelogs": [{"workflow_run_id": "42", "config_keys": ["test-family"]}],
+        "changelogs": [{"workflow_run_id": "42", "config_keys": [published_key]}],
     }
-
-    def canonical_matrix(_repository, head, _family):
-        assert head == base
-        return current
 
     feeds = {
         "benchmarks": [
@@ -1610,12 +1954,11 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             payload=feeds[resource],
         )
 
-    monkeypatch.setattr(validation, "canonical_matrix", canonical_matrix)
     monkeypatch.setattr(api, "fetch", fetch)
     producers = {historical_head: historical_matrix}
     candidate = OwnedCandidate(
         id="1" * 16 + "-" + "2" * 16,
-        family="configs/nvidia-master.yaml:test-family",
+        family=f"configs/nvidia-master.yaml:{family_key}",
         base=base,
     )
     context = {
@@ -1624,7 +1967,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             "image": public_image,
             "model": "Model",
             "hardware": "h200",
-            "framework": "trtllm",
+            "framework": "trt",
             "precision": "fp8",
             "spec_method": "mtp",
             "disagg": False,
@@ -1638,6 +1981,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         "Model",
         reporting.Prose(en="Update the image.", zh="更新镜像。"),
         producers,
+        current,
     )
 
     assert [(point.conc, point.result) for point in baseline.points] == [
@@ -1661,6 +2005,7 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
             "Model",
             reporting.Prose(en="Update the image.", zh="更新镜像。"),
             producers,
+            current,
         )
 
 
@@ -1696,6 +2041,26 @@ def test_multinode_identity_matches_published_aggregate_encodings(
     }  # fmt: skip
 
     assert reporting._matches_public_point(row, reporting.public_point(entry)) is matches
+
+
+def test_sglang_disagg_identity_matches_its_published_mori_sglang_rows():
+    worker = {"num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False}
+    entry = {
+        "model-prefix": "dsv4", "runner": "cluster:mi355x-amds", "framework": "sglang-disagg",
+        "precision": "fp4", "spec-decoding": "draft_model", "disagg": True,
+        "scenario-type": "agentic-coding", "kv-offloading": "dram", "conc": 16,
+        "image": "example/image:1", "prefill": worker, "decode": worker,
+    }  # fmt: skip
+    row = {
+        "model": "dsv4", "hardware": "mi355x", "framework": "mori-sglang", "precision": "fp4",
+        "spec_method": "draft_model", "disagg": True, "is_multinode": True,
+        "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "on",
+        "conc": 16, "image": "example/image:1", "prefill_tp": 4, "prefill_ep": 1,
+        "prefill_dp_attention": False, "prefill_num_workers": 1, "decode_tp": 4,
+        "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 1,
+    }  # fmt: skip
+
+    assert reporting._matches_public_point(row, reporting.public_point(entry)) is True
 
 
 @pytest.fixture
@@ -1795,7 +2160,7 @@ def publish(monkeypatch, head):
             "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 0,
             "run_url": "https://github.com/example/project/actions/runs/42",
             "tput_per_gpu": 5.0 * conc, "output_tput_per_gpu": 4.0 * conc, "mean_ttft": 0.1,
-            "mean_tpot": 0.02, "errors": 0,
+            "mean_tpot": 0.02,
         }
         for conc in (2, 6)
     ]
@@ -1966,7 +2331,7 @@ def serve_dsr1_baseline(monkeypatch, current, markdown):
             "recipe_fingerprint": f"{isl:064x}",
             "run_url": "https://github.com/example/project/actions/runs/42",
             "tput_per_gpu": 10.0, "output_tput_per_gpu": 8.0, "mean_ttft": 0.1,
-            "mean_tpot": 0.02, "errors": 0,
+            "mean_tpot": 0.02,
         }
         for isl in (1024, 8192)
     ]
@@ -2089,6 +2454,7 @@ def test_final_coverage_exempts_retired_points_and_reports_their_evidence(monkey
         "DeepSeek-R1",
         reporting.Prose(en="Update the image.", zh="更新镜像。"),
         producers,
+        {"single_node": {"all": current}},
     )
     retired, kept = baseline.points
 
@@ -2179,11 +2545,12 @@ def test_baselines_without_retirements_keep_the_earlier_record_format():
 def frozen_dsr1_baseline(monkeypatch):
     """The planner's baseline for a base family of 8k/1k c1 and c2 whose MODELS.md deprecated
     1k/1k after the 2026-05-22 publication: points are 1k/1k c1 (retired), 8k/1k c1 and c2."""
-    producers, source = serve_dsr1_baseline(monkeypatch, [dsr1_point(8192, [1, 2])], models_md())
+    current = [dsr1_point(8192, [1, 2])]
+    producers, source = serve_dsr1_baseline(monkeypatch, current, models_md())
     return reporting.resolve_baseline(
         "example/project", OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
         {"source": source}, "DeepSeek-R1", reporting.Prose(en="Update the image.", zh="更新镜像。"),
-        producers,
+        producers, {"single_node": {"all": current}},
     )
 
 
@@ -2286,7 +2653,7 @@ def attempt_comment(number, en, zh, *, author="Klaud-Cold", parent=42, candidate
         f"<!-- klaud-report:{parent}:{candidate}:run-{run}-1\n{json.dumps(data)}\n-->\nRendered.")}
 
 
-def finish_report(monkeypatch, outcome, comments, recovering=False):
+def finish_report(monkeypatch, outcome, comments, recovering=False, repairs=0):
     session = lifecycle.Session(
         "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
         recovering=recovering,
@@ -2312,11 +2679,54 @@ def finish_report(monkeypatch, outcome, comments, recovering=False):
 
     session.finish(CandidateOutcome(
         outcome=outcome, phase="final-sweep" if validated else "targeted", pull_request=7,
-        run_ids=[9], repairs_used=0,
+        run_ids=[9], repairs_used=repairs,
     ))
 
     [report] = [body for body in posted if body.startswith(session.marker)]
     return report.split("\n-->\n", 1)[1]
+
+
+@pytest.mark.parametrize("ended", [True, False], ids=["ended-meanwhile", "still-running"])
+def test_finish_tolerates_only_a_cancel_refused_because_the_run_already_ended(
+    monkeypatch, ended
+):
+    session = lifecycle.Session(
+        "example/project", {"id": 42}, OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40)
+    )
+    pull = {"number": 7, "head": {"sha": "c" * 40}, "merged_at": None, "draft": True,
+            "state": "closed", "labels": []}
+    run = {"id": 9, "event": "pull_request", "head_sha": "c" * 40, "run_attempt": 1,
+           "created_at": "2026-10-15T00:00:00Z", "status": "in_progress", "conclusion": None}
+    finished = {**run, "status": "completed", "conclusion": "success"}
+    current, writes = [run], []
+
+    def write(_repository, path, method, _payload=None):
+        writes.append((method, path))
+        if path == "actions/runs/9/cancel":
+            if ended:
+                current[0] = finished
+            raise subprocess.CalledProcessError(1, ["gh", "api"])
+        return {}
+
+    monkeypatch.setattr(session, "pulls", lambda: [pull])
+    monkeypatch.setattr(session, "runs", lambda: list(current))
+    monkeypatch.setattr(session, "refresh", lambda _pull: pull)
+    monkeypatch.setattr(claims, "release_family", lambda *_: None)
+    monkeypatch.setattr(github, "items", lambda *_args: [])
+    monkeypatch.setattr(github, "read", lambda _repository, path: (
+        current[0] if path == "actions/runs/9" else pytest.fail(path)))
+    monkeypatch.setattr(github, "write", write)
+    outcome = CandidateOutcome(outcome="failed", phase="targeted", pull_request=7, run_ids=[9],
+                               repairs_used=0)
+
+    if ended:
+        assert session.finish(outcome).run_ids == [9]
+        assert writes == [("POST", "issues/7/comments"), ("POST", "actions/runs/9/cancel"),
+                          ("POST", "issues/7/comments")]
+    else:
+        with pytest.raises(subprocess.CalledProcessError):
+            session.finish(outcome)
+        assert writes == [("POST", "issues/7/comments"), ("POST", "actions/runs/9/cancel")]
 
 
 @pytest.mark.parametrize(("labels", "accepted"), [
@@ -2400,6 +2810,14 @@ def test_closing_report_states_why_from_the_latest_own_attempt(
         f"**{outcome}** · 修复次数：0 · 运行：{runs}  \n{why[1]}所有自有运行均已结束。{done[1]}"
         "\n\n</details>"
     )
+
+
+def test_closing_report_translates_an_unknown_repair_count(monkeypatch):
+    report = finish_report(monkeypatch, "uncertain", [], recovering=True, repairs=None)
+    english, chinese = report.split("<summary>中文</summary>")
+
+    assert "· Repairs: unknown ·" in english
+    assert "· 修复次数：未知 ·" in chinese
 
 
 def test_every_candidate_pr_body_says_how_to_stop_the_candidate(monkeypatch):
@@ -2562,6 +2980,21 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
     }
 
 
+def test_live_families_name_atom_disagg_as_its_published_mooncake_atom(tmp_path, family_configs):
+    master, runners = family_configs
+    master["fixture"]["framework"] = "atom-disagg"
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "amd-master.yaml").write_text(yaml.safe_dump(master))
+    (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
+    write_fixture_recipe(tmp_path)
+
+    families = klaud.live_families(tmp_path)
+
+    assert [key[2] for key in families] == ["mooncake-atom"]
+
+
+
 def test_historical_families_ignore_leftover_nested_results(tmp_path, family_configs):
     master, runners = family_configs
     configs = tmp_path / "configs"
@@ -2649,7 +3082,8 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
         "spec_method": "none", "disagg": False, "benchmark_type": "agentic_traces", "isl": None,
         "osl": None, "image": "example/image:stable", "date": "2026-09-19",
     }  # fmt: skip
-    items = [{"source-status": "baseline", "source-id": "1", "source": source}]
+    items = [{"source-status": "baseline", "source-id": "1", "source": source,
+              "benchmark-age-days": 0}]
 
     def chosen(headroom):
         return sorted(
@@ -2695,6 +3129,110 @@ def test_agentx_deltas_compare_only_the_same_replay_corpus(old, new, cell, note)
     assert f"| 4 | {cell} |" in text
     notes = [line for line in text.splitlines() if "Δ N/A" in line]
     assert notes == ([f"**Note:** All rows: Δ N/A: {note}."] if note else [])
+
+
+@pytest.mark.parametrize(("completed", "errors", "note"), [
+    pytest.param(100, 0, None, id="no-failed-requests"),
+    pytest.param(97, 3, "**Note:** All rows: 3 request errors.", id="failed-requests"),
+])  # fmt: skip
+def test_a_fixed_sequence_result_reports_its_failed_requests(completed, errors, note):
+    from infx.results.fixed_sequence import build_result
+
+    raw = {
+        "max_concurrency": 4, "model_id": "m", "num_prompts": 100, "completed": completed,
+        "total_token_throughput": 800.0, "output_throughput": 400.0,
+        "mean_ttft_ms": 100.0, "mean_tpot_ms": 10.0,
+        "benchmark_outcome": {"status": "passed", "requested": 100, "completed": completed,
+                              "failed": 100 - completed, "max_failure_rate": 0.05},
+    }  # fmt: skip
+    env = {
+        "RUNNER_TYPE": "h100", "FRAMEWORK": "sglang", "PRECISION": "fp8", "SPEC_DECODING": "none",
+        "ISL": "1024", "OSL": "1024", "DISAGG": "false", "MODEL_PREFIX": "dsr1", "IMAGE": "i:1",
+        "TP": "8", "EP_SIZE": "1", "DP_ATTENTION": "false",
+    }  # fmt: skip
+    values = reporting.values(build_result(raw, env))
+    point = reporting.Point(
+        key="f" * 64, label="1024/1024 c4 TP8 EP1 ffffff", conc=4, scenario="fixed-seq-len",
+        values=values, result="passed",
+    )  # fmt: skip
+
+    text = reporting.point_table([point])
+
+    assert values.request_errors == errors
+    assert values.output_tps_gpu == 50.0
+    notes = [line.rstrip() for line in text.splitlines() if "request error" in line]
+    assert notes == ([note] if note else [])
+
+
+def test_baseline_notes_name_concurrency_rows_like_their_table():
+    points = [
+        agentx_point("cc", output_tps_gpu=10.0, request_errors=2),
+        agentx_point("cc", output_tps_gpu=10.0).model_copy(update={
+            "key": "e" * 64, "label": "AgentX c8 TP8 EP1 eeeeee", "conc": 8}),
+    ]  # fmt: skip
+    baseline = reporting.Baseline(
+        family=f"configs/nvidia-master.yaml:{KEY}", date="2026-09-19", image="example/image:1",
+        goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[], points=points,
+    )  # fmt: skip
+
+    text = reporting.baseline_table(baseline)
+
+    assert "| 4 | N/A | 10 | N/A | N/A |" in text
+    assert text.endswith("**Note:** c4: 2 request errors.")
+
+
+@pytest.mark.parametrize(("points", "change"), [
+    pytest.param([], "**变更：**更新镜像。  \n", id="queued-without-results"),
+    pytest.param([agentx_point("cc", output_tps_gpu=10.0, request_errors=0)],
+                 "**变更：**更新镜像。实测数值及异常说明见上表。  \n", id="with-results"),
+])  # fmt: skip
+def test_attempt_translation_points_to_a_table_only_when_one_is_shown(points, change):
+    record = reporting.Attempt(
+        kind="initial", number=0, head="c" * 40, image="example/image:2", run_id=7,
+        run_attempt=1, status="running",
+        change=reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        next=reporting.Prose(en="Wait.", zh="等待。"), benchmarks_expected=1,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=points,
+    )  # fmt: skip
+
+    english, chinese = reporting.render_attempt(record, None, "example/project").split("<details>")
+
+    assert ("| Concurrency |" in english) == bool(points)
+    assert change in chinese
+
+
+def test_chunked_attempt_tells_both_languages_where_results_continue(monkeypatch):
+    head = "c" * 40
+    session = SimpleNamespace(
+        repository="example/project", parent={"id": 42},
+        candidate=OwnedCandidate(id=CANDIDATE_ID, family=FAMILY, base="a" * 40),
+        pulls=lambda: [{"number": 7}], refresh=lambda _pull: {"body": ""},
+        runs=lambda: [{"id": 9, "head_sha": head, "run_attempt": 1, "status": "in_progress",
+                       "conclusion": None}],
+    )  # fmt: skip
+    points = [
+        agentx_point("cc", output_tps_gpu=10.0, request_errors=0).model_copy(update={
+            "key": f"{conc:064x}", "label": f"AgentX c{conc} TP8 EP1 {conc:06x}", "conc": conc})
+        for conc in range(1, 22)
+    ]  # fmt: skip
+    record = reporting.Attempt(
+        kind="initial", number=0, head=head, image="example/image:2", run_id=9, run_attempt=1,
+        status="running", change=reporting.Prose(en="Update the image.", zh="更新镜像。"),
+        next=reporting.Prose(en="Wait.", zh="等待。"), benchmarks_expected=21,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=points,
+    )  # fmt: skip
+    posted = []
+    monkeypatch.setattr(github, "items", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        github, "write", lambda _repo, _path, _method, payload: posted.append(payload["body"])
+    )
+
+    reporting.publish(session, record)
+
+    [main] = [body for body in posted if ":run-9-1\n" in body.split("-->", 1)[0]]
+    english, chinese = main.split("<details>")
+    assert "Results continue in numbered report comments." in english
+    assert "结果见后续编号的报告评论。" in chinese
 
 
 def eval_entry(tp):

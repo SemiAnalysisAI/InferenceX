@@ -19,7 +19,8 @@ class APIError(RuntimeError):
     """Authenticated gh failure, with an HTTP status when gh reports one."""
 
     def __init__(self, path: str, stderr: str) -> None:
-        match = re.search(r"\(HTTP ([1-5][0-9]{2})\)\s*$", stderr)
+        """Wrap a failed gh call on ``path``, parsing the HTTP status from ``stderr`` even when hints follow it."""
+        match = re.search(r"\(HTTP ([1-5][0-9]{2})\)\s*$", stderr, re.MULTILINE)
         self.status = int(match[1]) if match else None
         super().__init__(f"GitHub API {path} failed: {stderr.strip()}")
 
@@ -34,6 +35,10 @@ def api(
     data: dict[str, Any] | None = None,
     paginate: bool = False,
 ) -> Any:
+    """Call the GitHub REST endpoint ``path`` under ``repo`` through gh and return the decoded JSON.
+
+    With ``token``, failures raise ``APIError`` and an empty DELETE reply returns None.
+    """
     if token is not None and not token.strip():
         raise RuntimeError("GitHub API requires a non-empty token")
     endpoint, _, query = path.partition("?")
@@ -84,6 +89,10 @@ def paginate(
     item_key: str = "",
     params: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    """Fetch every page of a listing and return its rows, read from ``item_key`` when pages are objects.
+
+    Raises ``ListingError`` when the listing is missing, malformed, or shorter than ``total_count``.
+    """
     pages = api(
         repo, path, token, {**(params or {}), "per_page": "100", "page": "1"}, paginate=True
     )

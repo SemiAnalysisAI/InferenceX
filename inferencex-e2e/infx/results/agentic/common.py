@@ -9,6 +9,7 @@ from typing import Any
 
 
 def percentile(data: list[float], p: float) -> float:
+    """Return the linearly interpolated ``p``th percentile of ``data``, or 0.0 when empty."""
     if not data:
         return 0.0
     sorted_data = sorted(data)
@@ -21,6 +22,7 @@ def percentile(data: list[float], p: float) -> float:
 
 
 def stats_for(prefix: str, values: list[float]) -> dict[str, float]:
+    """Return mean, p50, p75, p90, p95 and std of ``values`` keyed with ``prefix``, or {} when empty."""
     if not values:
         return {}
     return {
@@ -34,6 +36,7 @@ def stats_for(prefix: str, values: list[float]) -> dict[str, float]:
 
 
 def to_float(value: Any) -> float | None:
+    """Return ``value`` as a float, or None when it is None or not numeric."""
     if value is None:
         return None
     try:
@@ -43,6 +46,7 @@ def to_float(value: Any) -> float | None:
 
 
 def to_int(value: Any) -> int | None:
+    """Return ``value`` as an int, or None when it is None or not convertible."""
     if value is None:
         return None
     try:
@@ -52,6 +56,7 @@ def to_int(value: Any) -> int | None:
 
 
 def rate(numerator: float | None, denominator: float | None) -> float | None:
+    """Return ``numerator / denominator``, or None when either is None or the denominator is not positive."""
     if numerator is None or denominator is None:
         return None
     if denominator <= 0:
@@ -98,6 +103,7 @@ def metric_series(
     metrics: dict[str, dict[str, Any]],
     metric_names: str | list[str],
 ) -> list[dict[str, Any]]:
+    """Return every series dict of the named metric or metrics in ``metrics``."""
     names = [metric_names] if isinstance(metric_names, str) else metric_names
     out: list[dict[str, Any]] = []
     for name in names:
@@ -115,6 +121,7 @@ def series_stat(
     series: dict[str, Any],
     preferred_keys: tuple[str, ...] = ("total", "sum", "max", "avg"),
 ) -> float | None:
+    """Return the first numeric stat of ``series`` among ``preferred_keys``, or None."""
     stats = series.get("stats")
     if not isinstance(stats, dict):
         return None
@@ -132,6 +139,7 @@ def sum_stat(
     preferred_keys: tuple[str, ...] = ("total", "sum", "max", "avg"),
     series_filter: Callable[[dict[str, Any]], bool] | None = None,
 ) -> float | None:
+    """Sum the preferred stat over matching series of ``metric_names``, or None when none has one."""
     total = 0.0
     found = False
     for series in metric_series(metrics, metric_names):
@@ -153,6 +161,7 @@ def gauge_stat(
     combine: str = "max",
     series_filter: Callable[[dict[str, Any]], bool] | None = None,
 ) -> float | None:
+    """Combine the preferred stat of matching series by max, avg or sum per ``combine``, or None."""
     values: list[float] = []
     for series in metric_series(metrics, metric_names):
         if series_filter is not None and not series_filter(series):
@@ -170,6 +179,7 @@ def gauge_stat(
 
 
 def label_value(series: dict[str, Any], key: str) -> str | None:
+    """Return the label ``key`` of ``series`` as a string, or None."""
     labels = series.get("labels")
     if not isinstance(labels, dict):
         return None
@@ -180,6 +190,7 @@ def label_value(series: dict[str, Any], key: str) -> str | None:
 
 
 def label_equals(key: str, value: str) -> Callable[[dict[str, Any]], bool]:
+    """Return a series filter that keeps series whose label ``key`` equals ``value``."""
     return lambda series: label_value(series, key) == value
 
 
@@ -190,6 +201,7 @@ def sum_by_label(
     *,
     preferred_keys: tuple[str, ...] = ("total", "sum", "max", "avg"),
 ) -> dict[str, float]:
+    """Sum the preferred stat of ``metric_names`` grouped by the first present label among ``label_keys``."""
     keys = [label_keys] if isinstance(label_keys, str) else label_keys
     out: dict[str, float] = {}
     for series in metric_series(metrics, metric_names):
@@ -215,6 +227,7 @@ def sum_server_log_capacities(
     logs: Iterable[str | None],
     parser: Callable[[str | None], int | None],
 ) -> int | None:
+    """Sum the capacities ``parser`` extracts from each of ``logs``, or None when none parse."""
     total = 0
     found = False
     for text in logs:

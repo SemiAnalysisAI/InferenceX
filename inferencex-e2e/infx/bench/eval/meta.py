@@ -19,10 +19,12 @@ _RESULT_FILENAME = re.compile(r".*_([^_]+)_([^_]+)_tp")
 
 
 def _first(values: Mapping[str, str], *names: str, default: str) -> str:
+    """The first non-empty value among ``names``, else ``default``."""
     return next((values[name] for name in names if values.get(name)), default)
 
 
 def _is_true(value: str) -> bool:
+    """Whether ``value`` spells true, ignoring case."""
     return value.lower() in _TRUE
 
 
@@ -60,6 +62,7 @@ def build(
         values.update(_disaggregated(values))
 
     def size(field: str, *names: str) -> int:
+        """The first set of ``names`` as an int, else 1, raising ``InputError`` if it is not a digit string."""
         name = next((name for name in names if values.get(name)), None)
         if name is None:
             return 1
@@ -70,6 +73,7 @@ def build(
         return int(values[name])
 
     def dp(*names: str) -> bool:
+        """Whether the first set of ``names`` is true, defaulting to false."""
         return _is_true(_first(values, *names, default="false"))
 
     framework, precision = values.get("FRAMEWORK", ""), values.get("PRECISION", "")
@@ -120,6 +124,7 @@ def build(
 
 
 def write(path: Path, document: Mapping[str, object]) -> None:
+    """Write ``document`` to ``path`` as indented JSON."""
     path.write_text(json.dumps(document, indent=2) + "\n")
 
 

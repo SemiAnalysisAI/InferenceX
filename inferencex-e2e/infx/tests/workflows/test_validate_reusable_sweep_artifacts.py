@@ -409,6 +409,19 @@ def write_agentic_artifacts(
     (root / f"agentic_{result_name}").mkdir()
 
 
+def test_eval_validation_matches_mixed_case_raw_meta_to_lowercased_aggregate(
+    tmp_path: Path,
+) -> None:
+    write_raw_eval_artifact(tmp_path, 32)
+    meta_path = tmp_path / "eval_result_conc32_h100-dgxc-slurm_00" / "meta_env.json"
+    meta_path.write_text(
+        json.dumps({**single_eval_meta(32), "framework": "VLLM", "precision": "FP4"})
+    )
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
 def test_eval_validation_accepts_legacy_results_alongside_debug_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -945,6 +958,19 @@ def test_agentic_validation_requires_point_and_raw_artifacts(
     errors = validate_agentic_artifacts(tmp_path)
 
     assert "agentic aggregate artifacts contain 1 unexpected row(s)" in errors
+
+
+def test_agentic_validation_ignores_raw_dir_of_superseded_attempt(tmp_path: Path) -> None:
+    for attempt in (1, 2):
+        name = f"agentic_dsv4_conc16_a{attempt}_runner"
+        point_dir = tmp_path / f"bmk_{name}"
+        point_dir.mkdir()
+        (point_dir / "point.json").write_text(
+            json.dumps({**agentic_result(), "run_attempt": attempt})
+        )
+        (tmp_path / name).mkdir()
+
+    assert validate_agentic_artifacts(tmp_path) == []
 
 
 def test_agentic_validation_rejects_duplicate_point_identity(

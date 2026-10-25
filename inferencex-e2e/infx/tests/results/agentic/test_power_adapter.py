@@ -287,6 +287,20 @@ def test_build_power_window_rejects_ambiguous_inputs(
     assert expected_reason in reasons
 
 
+@pytest.mark.parametrize(
+    ("aggregate", "records"),
+    [(["2023-11-14T22:13:21+00:00"], None), (None, [["not", "an", "object"]])],
+)
+def test_build_power_window_rejects_non_object_profile_json(
+    tmp_path: Path, aggregate: list | None, records: list | None
+):
+    from infx.results.agentic.power_adapter import build_power_window
+
+    result_dir = _write_artifacts(tmp_path, aggregate=aggregate, records=records)
+
+    assert build_power_window(result_dir) == (None, ["profile_artifacts_invalid"])
+
+
 _RETIRED_FORK_WINDOW_ENV = (
     "SRT_MEASUREMENT_WINDOW_BENCHMARK_TYPE",
     "SRT_MEASUREMENT_WINDOW_CONCURRENCIES",
