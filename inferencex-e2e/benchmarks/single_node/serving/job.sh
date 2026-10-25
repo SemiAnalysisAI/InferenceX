@@ -93,6 +93,10 @@ if [[ -n "${ROUTER_CMD:-}" ]]; then
         done
         export ENGINE_PORTS ENGINE_PORT="${ENGINE_PORTS%% *}"
     fi
+    if [[ "$ROUTER_CMD" == *'{{router_metrics_port}}'* ]]; then
+        pick ROUTER_METRICS_PORT  # bench.sh scrapes it; a fixed metrics_port would collide on a shared node
+        export ROUTER_METRICS_PORT
+    fi
     (
         rc=0
         srun --overlap --container-image="$ROUTER_IMAGE" "${CONTAINER[@]}" \

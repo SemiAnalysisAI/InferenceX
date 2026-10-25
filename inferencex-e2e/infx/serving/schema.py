@@ -39,7 +39,7 @@ RESERVED_ENV = (
     "STORAGE_IMAGE", "STORAGE_CMD", "STORAGE_ENV", "STORAGE_MASTER_PORT", "STORAGE_META_PORT",
 )  # fmt: skip
 # {{name}} placeholders sidecar.sh / bench.sh expand at run time; {{ x }} (spaces) is inline Jinja.
-ROUTER_PLACEHOLDERS = ("router_port", "engine_url", "engine_port", "engine_urls",
+ROUTER_PLACEHOLDERS = ("router_port", "router_metrics_port", "engine_url", "engine_port", "engine_urls",
                        "storage_master_port", "storage_meta_port")
 ENV_PLACEHOLDERS = ("storage_master_port", "storage_meta_port")
 STORAGE_PLACEHOLDERS = ("storage_master_port", "storage_meta_port")
@@ -230,6 +230,8 @@ def _placeholder_problems(spec: ServingSpec) -> list[str]:
         if not IMAGE_PATTERN.fullmatch(spec.router.image):
             problems.append("router.image: only letters, digits and ._/:@- are allowed")
         blocks.append(("router", spec.router, ROUTER_PLACEHOLDERS))
+        if spec.router.metrics_port is not None and "{{router_metrics_port}}" in spec.router.serve:
+            problems.append("router.metrics_port: drop it; {{router_metrics_port}} in router.serve picks the port at run time")
     if spec.storage:
         if not IMAGE_PATTERN.fullmatch(spec.storage.image):
             problems.append("storage.image: only letters, digits and ._/:@- are allowed")

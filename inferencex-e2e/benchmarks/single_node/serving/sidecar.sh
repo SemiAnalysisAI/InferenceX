@@ -9,6 +9,7 @@ mode="${1:-}"
 expand() {
     local text="$1" urls="" port
     text="${text//\{\{router_port\}\}/${PORT:-}}"
+    text="${text//\{\{router_metrics_port\}\}/${ROUTER_METRICS_PORT:-}}"
     text="${text//\{\{engine_port\}\}/${ENGINE_PORT:-}}"
     text="${text//\{\{engine_url\}\}/http://127.0.0.1:${ENGINE_PORT:-}}"
     for port in ${ENGINE_PORTS:-}; do

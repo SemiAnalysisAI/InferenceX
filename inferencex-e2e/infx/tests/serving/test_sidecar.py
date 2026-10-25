@@ -21,6 +21,13 @@ def test_generic_router_expands_engine_and_router_ports(tmp_path):
     assert (tmp_path / "router_command.txt").read_text().startswith("echo ")
 
 
+def test_router_metrics_port_is_a_placeholder(tmp_path):
+    command = shlex.join(["echo", "--prometheus-port={{router_metrics_port}}"])
+    out = run("router", tmp_path, ROUTER_CMD=command, ROUTER_PROFILE="generic", PORT="21000",
+              ROUTER_METRICS_PORT="21003")
+    assert out.stdout.strip() == "--prometheus-port=21003"
+
+
 def test_dynamo_router_gets_the_http_flags(tmp_path):
     out = run("router", tmp_path, ROUTER_CMD="echo frontend", ROUTER_PROFILE="dynamo", PORT="21000")
     assert out.stdout.strip() == "frontend --http-host 0.0.0.0 --http-port 21000"

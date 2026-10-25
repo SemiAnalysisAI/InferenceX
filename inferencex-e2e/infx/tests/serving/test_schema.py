@@ -76,3 +76,21 @@ def test_runner_must_be_a_vng_cluster_slot_or_pool():
 def test_gpus_above_the_node_fail():
     text = BASE.replace("runner: cluster:hcm-hgx02", "runner: cluster:hcm-hgx01").replace("gpus: 1", "gpus: 8")
     assert "gpus: 8 > 4 GPUs per node" in errors(text + "scenario: agentx\nconc: 8\n")
+
+
+ROUTER = """\
+scenario: tau2
+conc: 8
+router:
+  image: vllm/vllm-openai:v0.29.0
+  serve: vllm-router --port {{router_port}} --worker-urls {{engine_urls}} --prometheus-port {{router_metrics_port}}
+"""
+
+
+def test_router_metrics_port_can_be_picked_at_run_time():
+    assert load_serving(yaml_of(ROUTER)).router.metrics_port is None
+
+
+def test_router_metrics_port_fixed_and_placeholder_is_ambiguous():
+    text = yaml_of(ROUTER.replace("router:\n", "router:\n  metrics_port: 29000\n"))
+    assert "router.metrics_port: drop it" in errors(text)

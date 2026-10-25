@@ -27,12 +27,11 @@ serve: |
   --reasoning-parser gemma4
 router:
   image: vllm/vllm-openai:v0.25.1
-  metrics_port: 29000
   serve: >-
     bash -c "python3 -m pip install -q vllm-router==0.1.14
     && exec vllm-router --host 0.0.0.0 --port {{router_port}}
     --worker-urls {{engine_urls}} --policy cache_aware
-    --prometheus-host 127.0.0.1 --prometheus-port 29000
+    --prometheus-host 127.0.0.1 --prometheus-port {{router_metrics_port}}
     --request-timeout-secs 14400 --disable-retries"
 scenario: livekit
 conc: [8, 16, 32, 64, 96, 128]
