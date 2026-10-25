@@ -24,8 +24,8 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 
 Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves. All submissions evaluating the same model and mode use the same curve.
 
-For Qwen3.5 srt-slurm launches, `apply_srt_recipe` uses the
-`infx/srt_slurm/synthetic_acceptance.py` connector to select the committed curve
+For Qwen3.5 srt-slurm launches, the srt driver runs the
+`infx/srt_slurm/synthetic_acceptance.py` connector, which selects the committed curve
 from the generation role's `speculative-num-steps` and `THINKING_MODE` after
 caller overrides. The verification token is not an additional MTP step. For
 SGLang MTP synthetic throughput, the connector rejects a generation role whose
@@ -85,11 +85,11 @@ This policy follows the same broad principle as MLPerf Inference: prescribe the 
 
 The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.yml) workflow, introduced in [InferenceX#1650](https://github.com/SemiAnalysisAI/InferenceX/pull/1650) and extended to additional MTP and EAGLE3 models in [InferenceX#1706](https://github.com/SemiAnalysisAI/InferenceX/pull/1706), performs the following process. It superseded the early manually assembled reference in [InferenceX#1592](https://github.com/SemiAnalysisAI/InferenceX/pull/1592), making the exact commands, logs, outputs, and generated YAML auditable from one run.
 
-1. A maintainer dispatches the workflow with a model, model prefix, vLLM image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
-2. The workflow launches the model on a B300 runner and selects the matching collector under [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench).
-3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM server with real MTP or EAGLE3 decoding and the model's production sampling/chat-template settings.
-4. The collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again.
-5. It computes the mean acceptance length as:
+1. A maintainer dispatches the workflow with a model, model prefix, serving framework (`vllm` or `sglang`), image, draft lengths (normally 1–8), thinking modes, `category=coding`, and `output-len=4096`.
+2. The workflow launches the model on a B300 runner and selects the matching `<model-prefix>_fp4_b300_<framework>.sh` collector under [`benchmarks/single_node/speedbench/`](../../benchmarks/single_node/speedbench). A non-empty `collector-variant` input selects `<model-prefix>_fp4_b300_<framework>_<collector-variant>.sh` instead. For example, `model-prefix=kimik3` with `collector-variant=probabilistic_sample_method_block_rejection_sample_method` runs the Kimi K3 probabilistic-draft collector. The run fails before launch if the selected script does not exist.
+3. For every `(thinking mode, draft length)` cell, the collector starts a clean vLLM or SGLang server with real speculative decoding and the model's production sampling/chat-template settings.
+4. A vLLM collector snapshots vLLM's cumulative accepted-token and verification-draft counters, runs every prompt in the SPEED-Bench Qualitative `coding` category through `vllm bench serve`, and snapshots the counters again. The SGLang collector runs the same prompts through `sglang.bench_serving` and records the `accept_length` it reports.
+5. A vLLM collector computes the mean acceptance length as:
 
    ```text
    AL = 1 + (delta accepted draft tokens / delta verification drafts)
@@ -98,7 +98,7 @@ The push-button [`speedbench-al.yml`](../../../.github/workflows/speedbench-al.y
    The `1` is the target model's guaranteed verification token. Values are rounded to two decimal places.
 6. The collector emits a YAML matrix. The workflow publishes it in the GitHub Actions step summary and uploads it as a `speedbench-reference-al-<model-prefix>` artifact.
 7. Server logs and detailed per-request results are retained so reviewers can confirm sensible output, correct thinking mode, and the absence of silent server or chat-template failures.
-8. After review, the matrix is committed here with its exact sampling metadata and source Actions run URL.
+8. After review, the matrix is committed here with its exact sampling metadata and source Actions run URL. With `open-pr=true` and `golden-curve=<curve stem>` (for example `dsv4_mtp`), the workflow writes `<curve stem>.yaml` here with the source run URL on its first line. It loads the file through `python -m infx.golden_al_distribution show` and then opens the PR. The whole file is replaced, so cells the run did not collect are dropped.
 
 The collection measures real head quality only to establish the golden curve. AgentX then uses that committed curve as the synthetic acceptance target for every comparable submission.
 
@@ -166,7 +166,7 @@ python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39 (thin
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```
 
-`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
+`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`, `dflash`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
 
 ## Primary references
 
