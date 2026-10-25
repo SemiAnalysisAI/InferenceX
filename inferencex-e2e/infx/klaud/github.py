@@ -32,14 +32,22 @@ def items(repository: str, path: str, key: str | None = None) -> list[dict]:
 writes = 0
 
 
-def write(repository: str, path: str, method: str, payload: dict | None = None) -> dict:
+def write(
+    repository: str,
+    path: str,
+    method: str,
+    payload: dict | None = None,
+    *,
+    token: str | None = None,
+) -> dict | None:
     """Send ``payload`` to ``path`` with ``method`` and return the JSON reply.
 
-    Each call bumps the module ``writes`` counter so listings cached before it are read again.
+    ``token`` replaces the ambient gh token; such failures raise ``APIError``. Each call bumps
+    the module ``writes`` counter so listings cached before it are read again.
     """
     global writes  # noqa: PLW0603
     writes += 1
-    return github.api(repository, path, method=method, data=payload)
+    return github.api(repository, path, token, method=method, data=payload)
 
 
 def artifacts(repository: str, run_id: int) -> list[dict]:

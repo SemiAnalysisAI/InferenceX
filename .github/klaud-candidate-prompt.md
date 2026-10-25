@@ -14,11 +14,12 @@ Treat candidate.source only as a published benchmark baseline. It is not authori
 for current repository state, upstream releases or image compatibility. Resolve the exact
 current family/image from the checkout, then independently inspect the actual bundled engine
 source, official upstream releases and available images; stop if retired, ambiguous, updated
-or owned. Normalize registry `/` versus enroot `#` spelling when comparing the same image.
+or owned by another Klaud Cold PR. Open PRs on other branches never block a candidate.
+Normalize registry `/` versus enroot `#` spelling when comparing the same image.
 Use the canonical generator, inferencex-e2e/configs/runners.yaml and public OpenAPI/repository mappings
 for all points, exact cluster routes and physical node demand; never invent aliases or
 substitute sibling clusters. The planner already owns the family claim; leave claim refs
-to the lifecycle helper. Recheck all open PRs before atomically creating the supplied
+to the lifecycle helper. Recheck open Klaud Cold PRs (`klaud/auto-*`) before atomically creating the supplied
 exact candidate branch at its base SHA. An existing branch means stop, not takeover,
 unless KLAUD_RESUME=true.
 Create one draft PR after a real change, titled `[Klaud Cold] English / 简体中文`.
@@ -40,7 +41,7 @@ Check changed defaults/semantics, renamed/removed options and hardware/CUDA/ROCm
 Release notes alone are insufficient; retain source links and provenance uncertainty in
 attempt comments. Pin mutable image tags by digest. Before GPU dispatch, inspect the
 actual launcher/recipe's effective image, staged weights/config/tokenizer and mount paths.
-Missing assets are readiness-blocked; never map to an older image or different weights.
+Missing assets mean outcome missing-assets; never map to an older image or different weights.
 When the model checkpoint itself is not staged on the target cluster, add
 `reason-code: weights-missing` so the planner pauses that model and precision on that hardware.
 Check the exact selected launch path for existing engine patches as well as proposed ones.
@@ -56,9 +57,9 @@ overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
 workspace permissions and artifact contracts; follow the CODEOWNER checklist.
 
-Before every PR/branch mutation or cancellation, re-read labels. `klaud-abort` means a
+Before every PR/branch mutation or cancellation, re-read the PR. If someone else closed it, a
 maintainer stopped this candidate: stop immediately without further changes; the job's
-cleanup cancels your runs and closes the PR. Never add or remove that label yourself.
+cleanup cancels your runs and deletes the branch. Never reopen it.
 
 The planner checks capacity once, when it selects a candidate; never check or defer for
 capacity inside this session. Klaud runs at the lowest scheduler priority: dispatch every
@@ -187,7 +188,7 @@ other outcome or any run except the verified final sweep.
 Otherwise finish reports the failure/deferral, cancels owned work, confirms every job
 terminal, removes sweep labels, drafts/closes the PR, deletes the candidate branch and releases
 the family claim so a later wave may retry it. Pending cleanup means wait and retry finish.
-Uncertainty is not incompatibility. Open PRs block the family until cleanup completes.
+Uncertainty is not incompatibility. Your open PR blocks the family until cleanup completes.
 Without an owned PR, report without a placeholder or deleting someone else's claim.
 
 After finish succeeds, read verified $KLAUD_EVIDENCE/session-end.json and invoke
