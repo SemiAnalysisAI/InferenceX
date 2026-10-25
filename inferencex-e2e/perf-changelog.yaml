@@ -11102,6 +11102,12 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
+  description:
+    - "Set SGLANG_MINIMAX_M3_INDEX_TOPK_FREQ=1 on MI355X SGLang MiniMax-M3.1-Flash AgentX: every sparse layer computes its own index top-k instead of SGLang's ROCm default of sharing one across each pair of layers (sgl-project/sglang#36527)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4469
+
+- config-keys:
     - glm5.2-fp8-mi325x-sglang-agentic-mtp
   description:
     - "Update SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
