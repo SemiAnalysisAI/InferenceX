@@ -10915,6 +10915,16 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-b300-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add day-0 MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + NVFP4 KV cache) AgentX recipe on B300 with the vLLM day-0 image vllm/vllm-openai:minimax-m31-flash."
+    - "Serve flags follow recipes.vllm.ai Blackwell TP4: block-size 128, nvfp4 KV and indexer cache, prefill query quantization, FULL_AND_PIECEWISE graphs, minimax_m3 parsers, text-only."
+    - "DSpark with the built-in drafter (probabilistic drafting, FLASH_ATTN drafter, fp8 drafter KV); synthetic acceptance from the golden curve minimaxm31flash_dspark.yaml (#4425)."
+    - "TP4 c1-c32 drafting 7 tokens (golden AL 4.04); DEP4 (TP1 x DP4 + EP4 behind vllm-router) c64-c256 drafting 3 tokens (golden AL 2.88)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4421
+
+- config-keys:
     - minimaxm31flash-fp4-h100-vllm-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4 experts + MXFP8 dense) AgentX on H100 with vLLM image minimax-m31-flash (https://vllm.ai/blog/2026-10-23-minimax-m31-flash)."
@@ -11073,6 +11083,15 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on B300 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Serve flags follow the cookbook's B300 Balanced (TP4) and High-Throughput (TP8, attention DP2, EP8): DSpark with block verification, breakable prefill graphs, minimax-m3 reasoning and tool parsers, 8 tokenizer workers."
+    - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
+    - "Search space: Balanced TP4 at conc 1-32; TP8 + EP8 with attention DP2 at conc 64-256."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4441
+
+- config-keys:
     - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
   description:
     - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on MI355X with SGLang image lmsysorg/sglang:dev-minimax-m31-flash-mi35x (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
@@ -11099,6 +11118,84 @@
     - "Seven-token DSpark (the bundled draft's dspark_block_size); throughput runs use synthetic acceptance from the minimaxm31flash_dspark golden curve (AL 4.04 at 7 draft tokens, #4425)."
     - "Search space: Balanced TP4 at conc 1-32; TP8 + EP8 with attention DP2 at conc 64-128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4466
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-sglang-agentic-dspark
+  description:
+    - "Set SGLANG_MINIMAX_M3_INDEX_TOPK_FREQ=1 on MI355X SGLang MiniMax-M3.1-Flash AgentX: every sparse layer computes its own index top-k instead of SGLang's ROCm default of sharing one across each pair of layers (sgl-project/sglang#36527)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4469
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  description:
+    - "Update SGLang ROCm image from v0.5.21-rocm720-mi30x to v0.5.22-rocm720-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4427
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-cd10ed6f to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4428
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from dev-muse-spark-open to nightly-dev-20261021-c1c287a4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4430
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-sglang-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20261014-684fea8a to nightly-dev-cu13-20261021-c1c287a4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4448
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-20261016-a93f16f0 to nightly-dev-20261021-c1c287a4, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4449
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from v0.32.0 to nightly-rocm72-c50aca14, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4461
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Use latest configs for MiniMax M3.1 AgentX submission"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4465
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB300 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash, following the cookbook's GB300 cells (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Common flags: DSpark with block verification at block size 7 (the bundled draft's dspark_block_size; synthetic acceptance from the minimaxm31flash_dspark golden curve), minimax-m3 reasoning and tool parsers."
+    - "Balanced TP4 (TRT-LLM routed MoE, breakable prefill graphs, 8 tokenizer workers) at conc 1-32, with the scheduler batch at 2x CONC."
+    - "Low-Latency at conc 1 in agentic-low-latency.yaml: MSA-V1 MonoKernel, page size 128, one-step DSpark with 8 draft tokens, max-running-requests 8."
+    - "High-Throughput TP4 + EP4 at conc 32-128; above conc 32 it enables L2 HiCache with write_back at hicache-size 175 GB per rank, inside the gb300-nv 920,000 MiB step memory cap."
+    - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4456
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Add day-zero MiniMax-M3.1-Flash (MiniMaxAI/MiniMax-M3.1-Flash, NVFP4) AgentX on GB300 with SGLang image lmsysorg/sglang:dev-minimax-m31-flash, following the cookbook's GB300 cells (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1)."
+    - "Common flags: DSpark with block verification at block size 7 (the bundled draft's dspark_block_size; synthetic acceptance from the minimaxm31flash_dspark golden curve), minimax-m3 reasoning and tool parsers."
+    - "Balanced TP4 (TRT-LLM routed MoE, breakable prefill graphs, 8 tokenizer workers) at conc 1-32, with the scheduler batch at 2x CONC."
+    - "Low-Latency at conc 1 in agentic-low-latency.yaml: MSA-V1 MonoKernel, page size 128, one-step DSpark with 8 draft tokens, max-running-requests 8."
+    - "High-Throughput TP4 + EP4 at conc 32-128; above conc 32 it enables L2 HiCache with write_back at hicache-size 175 GB per rank, inside the gb300-nv 920,000 MiB step memory cap."
+    - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
   scenario-type: [agentic-coding]
 
 - config-keys:

@@ -1,0 +1,30 @@
+name: Klaud Cold wake on run end
+run-name: Klaud Cold wake on run end - ${{ github.event.workflow_run.display_title }}
+
+# A parked Klaud session resumes only after recovery sees its owned runs end. Rather than wait
+# for the next :15/:45 wake, start a recovery-only planner pass as soon as a Klaud-owned
+# targeted run (e2e Test - klaud-*) or PR sweep (klaud/auto-* branch) completes. No checkout and
+# no event data reaches a shell; the event only gates the job.
+on: # zizmor: ignore[concurrency-limits]
+  workflow_run: # zizmor: ignore[dangerous-triggers] runs no code from the triggering run
+    workflows: [End-to-End Tests, Run Sweep]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  wake:
+    name: Wake Klaud recovery
+    if: >-
+      github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.conclusion != 'skipped'
+      && (startsWith(github.event.workflow_run.display_title, 'e2e Test - klaud-')
+      || startsWith(github.event.workflow_run.head_branch, 'klaud/auto-'))
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # Dispatch the planner's recovery-only wake.
+    steps:
+      - name: Dispatch a recovery-only planner pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run klaud-plan.yml --repo "$GITHUB_REPOSITORY" --ref main -f wake=true

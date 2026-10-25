@@ -43,6 +43,9 @@ base:
         PYTHONUNBUFFERED: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_USE_AITER: '1'
+        # Recompute the sparse index top-k in every layer (SGLang's ROCm default 2 shares
+        # one selection across each pair of sparse layers).
+        SGLANG_MINIMAX_M3_INDEX_TOPK_FREQ: '1'
   benchmark:
     env:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
