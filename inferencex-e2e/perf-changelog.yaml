@@ -10848,5 +10848,5 @@
     - agentic-coding
   no-evals: true
   description:
-    - "Add B300 Kimi K3 DSpark DCP disaggregated configurations on the EFA cluster: Mooncake with the EFA handshake-lock and loopback-stream fixes, libfabric shm transfer disabled, and prefill KV-cache events off."
+    - "Add B300 Kimi K3 DSpark DCP disaggregated configurations on the EFA cluster: Mooncake with the EFA handshake-lock and loopback-stream fixes, libfabric shm transfer disabled, and prefill in eager mode (a prefill GPU stalls mid-CUDA-graph under this workload)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4304
