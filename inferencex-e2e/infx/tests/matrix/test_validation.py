@@ -632,6 +632,34 @@ class TestSingleNodeSearchSpaceEntry:
             })
         assert "must be greater than 0" in str(exc_info.value)
 
+    def test_conc_list_values_must_be_unique(self):
+        with pytest.raises(ValidationError, match="must not repeat"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "conc-list": [4, 8, 4],
+            })
+
+    @pytest.mark.parametrize("bound", ["conc-start", "conc-end"])
+    def test_conc_list_rejects_a_lone_range_bound(self, bound):
+        with pytest.raises(ValidationError, match="Cannot specify both"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "conc-list": [4],
+                bound: 1,
+            })
+
+
+@pytest.mark.parametrize(("schema", "entry"), [
+    (SingleNodeSearchSpaceEntry, {"tp": 0, "conc-list": [4]}),
+    (AgenticCodingSearchSpaceEntry, {"tp": -2, "kv-offloading": "none", "conc-list": [4]}),
+    (WorkerConfig, {"num-worker": 1, "tp": 0, "ep": 1, "dp-attn": False}),
+    (MultiNodeSearchSpaceEntry,
+     {"worker": {"tp": 0, "ep": 1, "dp-attn": False}, "num-nodes": 1, "conc-list": [4]}),
+])  # fmt: skip
+def test_tensor_parallelism_must_be_positive(schema, entry):
+    with pytest.raises(ValidationError, match="greater than 0"):
+        schema(**entry)
+
 
 class TestMultiNodeSearchSpaceEntry:
 

@@ -107,6 +107,7 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
 
 
 def srt_lane(cluster_id: str, path: LaunchPath) -> SrtLane:
+    """Return the srt-slurm lane for a cluster and launch path, or raise LaunchError if none."""
     try:
         return SRT_LANES[(cluster_id, path)]
     except KeyError:

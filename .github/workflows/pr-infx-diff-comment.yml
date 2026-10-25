@@ -1,15 +1,11 @@
 name: PR infx diff
 
-# synchronize covers pushes to PR branches, including branches in forks.
-# Use API data only: never check out or execute code from the PR.
 on:
-  # Control plane only: reads PR metadata through the API, never executes PR code.
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, ready_for_review, synchronize, edited]
 
 permissions: {}
 
-# Serialize comment writes; each run reads the current PR rather than old event data.
 concurrency:
   group: pr-infx-diff-${{ github.event.pull_request.number }}
   cancel-in-progress: false

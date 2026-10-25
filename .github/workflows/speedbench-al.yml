@@ -1,12 +1,5 @@
 name: SpeedBench AL Collection
 
-# Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
-# (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
-# DeepSeek-V4-Pro). Produces the golden reference consumed by the
-# synthetic-acceptance framework and (optionally) opens a PR updating
-# benchmarks/speedbench-reference-al.yaml.
-
-# Independent collection requests use priority-scheduled runner slots.
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
     inputs:
@@ -26,13 +19,17 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: 'dsv4'
       framework:
-        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>.sh collector"
+        description: "Serving framework; selects the <model-prefix>_fp4_b300_<framework>[_<collector-variant>].sh collector"
         required: false
         type: choice
         options: [vllm, sglang]
         default: 'vllm'
+      collector-variant:
+        description: "Collector variant suffix; non-empty selects <model-prefix>_fp4_b300_<framework>_<collector-variant>.sh (e.g. probabilistic_sample_method_block_rejection_sample_method)"
+        required: false
+        type: string
+        default: ''
       image:
-        # vLLM collectors need vLLM >= 0.30: thinking-on cells rely on --chat-template-kwargs (vllm-project/vllm#44244).
         description: "Container image (vLLM >= 0.30 for vLLM collectors)"
         required: false
         type: string
@@ -68,10 +65,15 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: '480'
       open-pr:
-        description: "Open a PR updating benchmarks/speedbench-reference-al.yaml (default off: artifact-only, paste values in manually)"
+        description: "Open a PR writing the matrix to infx/golden_al_distribution/<golden-curve>.yaml (default off: artifact-only)"
         required: false
         type: boolean
         default: false
+      golden-curve:
+        description: "Golden curve file stem that open-pr writes, e.g. dsv4_mtp or kimik3_dspark (required with open-pr)"
+        required: false
+        type: string
+        default: ''
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
@@ -86,15 +88,11 @@ env:
   DRAFT_SAMPLE_METHOD: greedy
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'
-  DSV41_MIN_CUDAGRAPH_CAPTURE_SIZE: '1'
-  MODEL_DOWNLOAD_LOCK_TIMEOUT: '21600'
   ENROOT_IMPORT_TIME_LIMIT: '120'
-  KEEP_LOGS: '0'
   IS_MULTINODE: 'false'
   EVAL_ONLY: 'false'
   RUN_EVAL: 'false'
   IS_AGENTIC: '0'
-  SCENARIO_SUBDIR: fixed_seq_len/
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   MODEL: ${{ inputs.model }}
@@ -107,9 +105,7 @@ env:
   EP_SIZE: '1'
   DP_ATTENTION: 'false'
   SPEC_DECODING: mtp
-  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_${{ inputs.framework }}.sh
   SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
-  # Matrix-collector tunables (propagated into the container via srun --export=ALL).
   MTP_LIST: ${{ inputs.mtp-list }}
   THINKING_MODES: ${{ inputs.thinking-modes }}
   CATEGORY: ${{ inputs.category }}
@@ -127,6 +123,15 @@ jobs:
       priority: ${{ steps.score.outputs.priority }}
       queue-token: ${{ steps.score.outputs.queue-token }}
     steps:
+      - name: Validate golden curve target
+        if: ${{ inputs.open-pr }}
+        env:
+          GOLDEN_CURVE: ${{ inputs.golden-curve }}
+        run: |
+          if [[ ! "$GOLDEN_CURVE" =~ ^[a-z0-9_.-]+$ ]]; then
+            echo "::error::open-pr needs golden-curve, a curve file stem such as dsv4_mtp (got '$GOLDEN_CURVE')." >&2
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { clean: true, persist-credentials: false }
       - name: Checkout the measured revision's launcher
@@ -200,7 +205,6 @@ jobs:
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
-          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
             for job_name in "${RUNNER_NAME}" "inferencex-${RUNNER_NAME}"; do
               echo "[Slurm] Cleaning up jobs with name: ${job_name} ..."
@@ -212,13 +216,9 @@ jobs:
             done
           fi
 
-          # Cleanup AL-matrix outputs from a prior job on this runner so a stale
-          # matrix from a previous run is never picked up as this job's output.
           rm -rf "${GITHUB_WORKSPACE}/speedbench_results" \
             "${GITHUB_WORKSPACE}/inferencex-e2e/speedbench_results" 2>/dev/null || true
 
-      # A cancelled or crashed job can leave git state in this persistent
-      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
       - id: checkout
         continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -244,12 +244,28 @@ jobs:
           rm -f speedbench-reference-al.yaml || true
           rm -rf speed_bench_data || true
 
+      - name: Resolve AL collector
+        env:
+          COLLECTOR_VARIANT: ${{ inputs.collector-variant }}
+        run: |
+          if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
+          collector_dir=benchmarks/single_node/speedbench
+          collector="${MODEL_PREFIX}_fp4_b300_${FRAMEWORK}"
+          if [[ -n "$COLLECTOR_VARIANT" ]]; then
+            collector+="_${COLLECTOR_VARIANT}"
+          fi
+          if [[ "$collector" == */* || "$collector" == *$'\n'* || ! -f "$collector_dir/$collector.sh" ]]; then
+            echo "::error::No SPEED-Bench collector $collector_dir/$collector.sh at this ref. Available collectors are listed below." >&2
+            ls "$collector_dir" >&2
+            exit 1
+          fi
+          echo "BENCH_SCRIPT_OVERRIDE=$collector_dir/$collector.sh" >> "$GITHUB_ENV"
+
       - name: Checkout launch tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
           path: .launch-tooling
-          # Only inferencex-e2e/ is read from this checkout.
           sparse-checkout: inferencex-e2e
           persist-credentials: false
 
@@ -304,33 +320,38 @@ jobs:
           path: ${{ env.INFERENCEX_E2E_ROOT }}/speedbench-reference-al.yaml
           if-no-files-found: warn
 
-      - name: Open PR updating reference yaml
+      - name: Open PR updating golden AL curve
         if: ${{ inputs.open-pr && success() }}
         env:
-          # Repository write credential for authorized reference-data collection.
           GH_TOKEN: ${{ secrets.SPEEDBENCH_PAT }} # zizmor: ignore[secrets-outside-env]
+          GOLDEN_CURVE: ${{ inputs.golden-curve }}
         run: |
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           set -eo pipefail
-          # NOTE: the reference yaml is keyed by model at the top level. This
-          # overwrites it with the current model's matrix; when more than one
-          # model is collected, replace this cp with a per-model-key YAML merge.
-          cp speedbench-reference-al.yaml benchmarks/speedbench-reference-al.yaml
+          source benchmarks/check_env.sh
+          check_env_vars GOLDEN_CURVE INFERENCEX_LAUNCH_PYTHON BENCH_SCRIPT_OVERRIDE
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          curve_file="infx/golden_al_distribution/${GOLDEN_CURVE}.yaml"
+          {
+            echo "# Source GitHub Actions run: ${run_url}"
+            cat speedbench-reference-al.yaml
+          } > "$curve_file"
+          PYTHONPATH="$PWD" "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.golden_al_distribution show "$GOLDEN_CURVE"
 
           BRANCH="speedbench-al/${MODEL_PREFIX}-auto-${GITHUB_RUN_ID}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git checkout -b "$BRANCH"
-          git add benchmarks/speedbench-reference-al.yaml
+          git add "$curve_file"
           if git diff --cached --quiet; then
-            echo "No change in reference yaml; skipping PR."
+            echo "No change in ${curve_file}; skipping PR."
             exit 0
           fi
-          git commit -m "Update SpeedBench AL reference matrix for ${MODEL} (auto, run ${GITHUB_RUN_ID})"
+          git commit -m "Update golden AL curve ${GOLDEN_CURVE} for ${MODEL} (auto, run ${GITHUB_RUN_ID})"
           git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push -u origin "$BRANCH"
           gh pr create \
-            --title "Update SpeedBench AL reference matrix for ${MODEL_PREFIX} (auto)" \
-            --body "Auto-generated by the SpeedBench AL Collection workflow (run ${GITHUB_RUN_ID}). Model: \`${MODEL}\`, category: \`${CATEGORY}\`, MTP: \`${MTP_LIST}\`, thinking: \`${THINKING_MODES}\`, output_len: \`${SPEEDBENCH_OUTPUT_LEN}\`. Please review the measured values before merging." \
+            --title "Update golden AL curve ${GOLDEN_CURVE} (auto)" \
+            --body "Auto-generated by the SpeedBench AL Collection workflow (${run_url}). Curve: \`${curve_file}\`, collector: \`${BENCH_SCRIPT_OVERRIDE}\`, model: \`${MODEL}\`, category: \`${CATEGORY}\`, MTP: \`${MTP_LIST}\`, thinking: \`${THINKING_MODES}\`, output_len: \`${SPEEDBENCH_OUTPUT_LEN}\`. Review the measured values against the checklist in infx/golden_al_distribution/README.md before merging. A new curve also needs its row in that README's curve table." \
             --base main \
             --head "$BRANCH"
 
@@ -342,9 +363,6 @@ jobs:
           path: ${{ env.INFERENCEX_E2E_ROOT }}/speedbench_results/server_*.log
           if-no-files-found: ignore
 
-      # Per-request benchmark detail (vllm bench serve --save-detailed): includes
-      # the model's response text per request, so the AL of each cell can be
-      # audited for output correctness (sensible text + correct thinking mode).
       - name: Upload detailed benchmark results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
