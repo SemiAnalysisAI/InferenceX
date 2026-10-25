@@ -21,7 +21,7 @@ uv run --locked python -m infx.matrix.generate test-config \
 ```
 
 Replace `<key>` with the selected config key. Workflow dispatch generator arguments
-also use paths relative to this directory. See [local checks](../AGENTS.md#local-checks)
+also use paths relative to this directory. See [local checks](infx/AGENTS.md#local-checks)
 for dependency groups and checks.
 
 The project-local [Python version](.python-version) selects its interpreter.
