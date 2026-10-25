@@ -10945,3 +10945,11 @@
     - "Preserve P64/D128, sparse decode graph cap512, vLLM GPU memory utilization0.9, the image, loader, queue defaults, precision, routing, standard warmup and full3600-second profiling; leave c70 unchanged."
   scenario-type: [agentic-coding]
   no-evals: true
+
+- config-keys:
+    - kimik3-fp4-mi355x-dynamo-vllm-disagg-agentic-umbp-c176
+  description:
+    - "Run Kimi-K3 UMBP 2P3D c176 through Dynamo native Rust least-loaded routing with 900-second session affinity, matching the NVIDIA performance path."
+    - "Preserve the AMD image, P64/D128, graph512, allocator0.92, GMU0.9, MoRIIO/UMBP, standard warmup and full3600 profiling; reuse the validated AMD Dynamo READ handoff adapter."
+  scenario-type: [agentic-coding]
+  no-evals: true

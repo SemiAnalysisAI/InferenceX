@@ -1751,3 +1751,41 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-umbp-scale:
         srt-recipe: disagg-umbp-scale-variants.yaml:override_2p3d_c176_p_hash_d_rr_p64_d128_allocator92
         prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+
+kimik3-fp4-mi355x-dynamo-vllm-disagg-agentic-umbp-c176:
+  image: yukiozzz/vllm-openai-rocm:k3-umbp-pr-stack-83d42f09-runtime@sha256:7b6ed1d61b1237c616acbd111ee5f76cb747f7cf27f5f53fa3a7010727e5a8fc
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3/vllm/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.6
+      search-space:
+      - spec-decoding: mtp
+        conc-list:
+        - 176
+        kv-offloading: dram
+        kv-offload-backend:
+          name: umbp
+        srt-recipe: disagg-umbp-2p3d-c176-dynamo.yaml
+        prefill:
+          num-worker: 2
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false

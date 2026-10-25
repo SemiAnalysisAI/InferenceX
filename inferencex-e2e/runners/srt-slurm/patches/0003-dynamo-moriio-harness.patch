@@ -1,0 +1,127 @@
+diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
+index fc9c9371..2c02a186 100644
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -589,9 +589,16 @@ class VLLMBackend(Backend):
+                 f"{process.endpoint_mode} worker on {process.node} has no MoRI-IO listeners; "
+                 "the topology was built without a discovery connector"
+             )
++        proxy = (
++            {}
++            if runtime.environment.get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
++            else {
++                "proxy_ip": runtime.head_node_ip,
++                "proxy_ping_port": str(VLLM_DISCOVERY_PORT),
++            }
++        )
+         return {
+-            "proxy_ip": runtime.head_node_ip,
+-            "proxy_ping_port": str(VLLM_DISCOVERY_PORT),
++            **proxy,
+             "http_port": str(process.http_port),
+             # Upstream falls back to its own interface guess, which is the wrong NIC on multi-homed nodes.
+             "host_ip": get_hostname_ip(process.node, runtime.network_interface),
+@@ -1392,9 +1399,16 @@ class VLLMBackend(Backend):
+         # Base command - use dynamo.vllm module
+         cmd.extend(
+             [
+-                "python3",
+-                "-m",
+-                "dynamo.vllm",
++                (
++                    f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/bin/python"
++                    if "DYNAMO_VENV_ROOT" in runtime.environment
++                    else "python3"
++                ),
++                *(
++                    ["/configs/dynamo_moriio_worker.py"]
++                    if runtime.environment.get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
++                    else ["-m", "dynamo.vllm"]
++                ),
+                 "--model",
+                 model_arg,
+                 "--served-model-name",
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 7e0d228c..b45415b9 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -3149,7 +3149,7 @@ class SrtConfig:
+         """
+         if not isinstance(self.backend, VLLMBackend) or not self.backend.discovers_workers():
+             return
+-        if self.frontend.type != "vllm-router":
++        if self.frontend.type not in {"vllm-router", "smg", "dynamo"}:
+             raise ValidationError(
+                 "a discovery connector (engine.connector: moriio) registers workers with the vLLM Router; "
+                 f"it requires frontend.type: vllm-router (got {self.frontend.type!r})"
+diff --git a/src/srtctl/frontends/dynamo.py b/src/srtctl/frontends/dynamo.py
+index d574f3c1..893042bc 100644
+--- a/src/srtctl/frontends/dynamo.py
++++ b/src/srtctl/frontends/dynamo.py
+@@ -222,7 +222,12 @@ class DynamoFrontend(DynamicFrontend):
+             logger.info("Starting dynamo frontend %d on %s", idx, node)
+ 
+             frontend_log = runtime.log_dir / f"{node}_frontend_{idx}.out"
+-            cmd = ["python3", "-m", "dynamo.frontend", f"--http-port={topology.frontend_port}"]
++            python = (
++                f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/bin/python"
++                if "DYNAMO_VENV_ROOT" in runtime.environment
++                else "python3"
++            )
++            cmd = [python, "-m", "dynamo.frontend", f"--http-port={topology.frontend_port}"]
+             cmd.extend(self.get_frontend_args_list(frontend_args))
+ 
+             automatic_nsys = getattr(config, "observability_nsys_enabled", False) is True
+@@ -255,6 +260,10 @@ class DynamoFrontend(DynamicFrontend):
+             # Add global recipe environment, including values derived from
+             # dynamo.source.wheel, before frontend-specific overrides.
+             env_to_set.update(runtime.environment)
++            if "DYNAMO_VENV_ROOT" in runtime.environment:
++                env_to_set["HOME"] = (
++                    f"{runtime.environment['DYNAMO_VENV_ROOT']}/{runtime.job_id}/home"
++                )
+ 
+             # Add frontend env from config
+             if config.frontend.env:
+diff --git a/tests/test_discovery_connector_templates.py b/tests/test_discovery_connector_templates.py
+index ffdae6a6..63c6be89 100644
+--- a/tests/test_discovery_connector_templates.py
++++ b/tests/test_discovery_connector_templates.py
+@@ -47,6 +47,7 @@ def _command(
+     *,
+     key: str = "kv-transfer-config",
+     extra_args: dict[str, Any] | None = None,
++    environment: dict[str, str] | None = None,
+ ) -> list[str]:
+     backend = VLLMBackend(
+         connector=connector,
+@@ -63,6 +64,7 @@ def _command(
+         moriio_notify_port=27008,
+     )
+     runtime = SimpleNamespace(
++        environment=environment or {},
+         model_path=Path("/weights"),
+         is_hf_model=False,
+         worker_model_arg="/model",
+@@ -240,3 +242,21 @@ def test_role_connector_selects_discovery_over_engine_default() -> None:
+     mori, cpu = result["kv_connector_extra_config"]["connectors"]
+     assert mori["kv_connector_extra_config"]["host_ip"] == "10.0.0.2"
+     assert cpu["kv_connector"] == "SimpleCPUOffloadConnector"
++
++
++@pytest.mark.parametrize("mode", ["prefill", "decode"])
++def test_explicit_moriio_registration_preserves_offload_and_ports(mode):
++    template = _template()
++    template["kv_connector_extra_config"]["connectors"][0]["kv_role"] = (
++        "kv_producer" if mode == "prefill" else "kv_consumer"
++    )
++    command = _command(template, mode=mode, environment={"SRT_MORIIO_EXPLICIT_REGISTRATION": "1"})
++    transfer = json.loads(command[command.index("--kv-transfer-config") + 1])
++    connectors = transfer["kv_connector_extra_config"]["connectors"]
++    mori = connectors[0]["kv_connector_extra_config"]
++    assert "proxy_ip" not in mori and "proxy_ping_port" not in mori
++    assert mori["host_ip"] == "10.0.0.2"
++    assert mori["handshake_port"] == "26008"
++    assert mori["notify_port"] == "27008"
++    assert mori["read_mode"] is True
++    assert connectors[1]["kv_connector"] == "SimpleCPUOffloadConnector"
