@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import re
 import urllib.parse
 from typing import Any
 
 from infx import github
+
+# trusted-external-sweep.yml dispatches e2e-tests.yml on main with this title.
+TRUSTED_EXTERNAL_PATH = ".github/workflows/e2e-tests.yml"
+TRUSTED_EXTERNAL_TITLE = re.compile(r"e2e Test - External PR #(\d+) @ ([0-9a-f]{12})")
 
 REUSABLE_AGGREGATE_ARTIFACTS = {
     "results_bmk",
@@ -46,8 +51,22 @@ def pr_commit_shas(repo: str, pr_number: int, token: str) -> set[str]:
     }
 
 
+def trusted_external_pr(run: dict[str, Any]) -> int | None:
+    """Return the external PR a trusted-external-sweep dispatch tested, if it is one."""
+    if (
+        run.get("event") != "workflow_dispatch"
+        or run.get("path") != TRUSTED_EXTERNAL_PATH
+        or run.get("head_branch") != "main"
+    ):
+        return None
+    match = TRUSTED_EXTERNAL_TITLE.fullmatch(str(run.get("display_title") or ""))
+    return int(match.group(1)) if match else None
+
+
 def run_pr_number(repo: str, run: dict[str, Any], token: str) -> int | None:
     """Return the run's PR; ``run.pull_requests`` is empty once that PR's head moves."""
+    if (external_pr := trusted_external_pr(run)) is not None:
+        return external_pr
     for pull in run.get("pull_requests") or []:
         if pull.get("number"):
             return int(pull["number"])
