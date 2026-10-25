@@ -1669,13 +1669,12 @@ def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
     assert any(source["role"] == "prefill" for source in agg["server_metrics"]["sources"])
 
 
-@pytest.mark.parametrize(("cached", "router_shared", "expected"), [
-    (0.0, 0.55, 0.0),
-    (25.0, None, 0.25),
-    (None, 0.55, 0.55),
-])
-def test_dynamo_overall_cache_hit_rate_falls_back_to_frontend_then_router(
-    cached, router_shared, expected,
+@pytest.mark.parametrize(
+    ("cached", "router_shared", "measured", "diagnostic"),
+    [(0.0, 0.55, 0.0, 0.0), (25.0, None, 0.25, 0.25), (None, 0.55, None, 0.55)],
+)
+def test_dynamo_measured_overall_uses_frontend_and_keeps_router_estimate_diagnostic(
+    cached, router_shared, measured, diagnostic,
 ):
     metrics = {
         "dynamo_frontend_input_sequence_tokens": {
@@ -1691,12 +1690,21 @@ def test_dynamo_overall_cache_hit_rate_falls_back_to_frontend_then_router(
             "type": "gauge", "series": [{"stats": {"avg": router_shared}}],
         }
 
-    _, nested, _ = compute_server_metrics(
+    flat, nested, _ = compute_server_metrics(
         {"metrics": metrics}, framework="dynamo-vllm", records=[],
     )
 
     assert nested["adapter"] == "dynamo-vllm"
-    assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(expected)
+    assert flat["server_overall_cache_hit_rate"] == pytest.approx(diagnostic)
+    if measured is None:
+        assert nested["cache"]["overall_cache_hit_rate"] is None
+        assert nested["cache"]["overall_source"] == "router_estimate"
+        assert nested["cache_validity"]["published"] is False
+        assert nested["cache_validity"]["basis"] is None
+    else:
+        assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(measured)
+        assert nested["cache"]["overall_source"] == "frontend"
+        assert nested["cache_validity"]["published"] is True
 
 
 
