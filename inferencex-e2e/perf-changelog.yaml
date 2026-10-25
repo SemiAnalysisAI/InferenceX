@@ -11201,6 +11201,6 @@
 - config-keys:
     - qwen3.8next-fp4-b200-sglang-agentic-mtp
   description:
-    - "Update SGLang image from qwen38flashnext to v0.5.22-cu130 with c16 mem-fraction-static lowered to 0.85."
+    - "Update SGLang image from qwen38flashnext to v0.5.22-cu130 with c16 mem-fraction-static lowered to 0.8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4504
   scenario-type: [agentic-coding]
