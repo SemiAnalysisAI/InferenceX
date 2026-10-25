@@ -5239,7 +5239,7 @@ qwen3.5-fp4-b200-trt-mtp:
         srt-recipe: 8k1k.yaml
 
 minimaxm3-fp8-h100-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-ddd6fbca148a867aad1fcab7ec72f582b9977db4
+  image: vllm/vllm-openai:nightly-c50aca14416ef29f6ed0ed256302f30646726dcd@sha256:1440cb63fac5fa19040c295fcd5c6e6d551a506aa72a68fe3425cfd6ef8cf4b8
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:h100-dsxe
