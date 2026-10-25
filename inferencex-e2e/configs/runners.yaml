@@ -463,6 +463,7 @@ clusters:
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
+        MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4}
@@ -531,6 +532,7 @@ clusters:
         MiniMax-M3: {root: scratch, dir: MiniMax-M3}
         MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
+        MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4}
@@ -584,6 +586,7 @@ clusters:
         DeepSeek-V4-Pro-0813: {root: lustre-models, dir: DeepSeek-V4-Pro-0813}
         MiniMax-M3-MXFP8: {root: lustre-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: lustre-models, dir: MiniMax-M3-NVFP4}
+        MiniMax-M3.1-Flash: {root: lustre-models, dir: MiniMax-M3.1-Flash}
         Qwen3.5-397B-A17B-FP8: {root: lustre-models, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4-V2}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: lustre-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
@@ -647,6 +650,7 @@ clusters:
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         MiniMax-M3-MXFP8: {root: data-models, dir: MiniMax-M3-MXFP8}
         MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
+        MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}

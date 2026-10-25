@@ -29,6 +29,7 @@ def copy(results_dir: Path, destination: Path, *, suffix: str = "") -> list[Path
 
 
 def _target(destination: Path, name: str, suffix: str) -> Path:
+    """Where ``name`` lands in ``destination``, with ``suffix`` before its extension and a clash counter."""
     if not suffix:
         return destination / name
     extension = next(extension for extension in _EXTENSIONS if name.endswith(extension))

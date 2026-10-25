@@ -1,15 +1,12 @@
 name: Klaud Cold auto-sweep
-# lifecycle.resume_title matches the resume runs' names.
 run-name: >-
   ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
   inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
+  || github.event.schedule == '15,45 * * * *' && 'Klaud Cold wake'
   || 'Klaud Cold auto-sweep' }}
 
-# Overlapping waves are intentional; candidate ownership claims prevent duplicate work.
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
-    # Recovery dispatches a resume run with these to continue an unfinished session; a manual
-    # dispatch leaves them empty and runs a normal wave.
     inputs:
       resume-parent:
         description: Planner run that owns the session to resume
@@ -24,7 +21,8 @@ on: # zizmor: ignore[concurrency-limits]
         type: string
         default: ''
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */3 * * *'
+    - cron: '15,45 * * * *'
 
 permissions:
   contents: read
@@ -32,13 +30,9 @@ permissions:
   pull-requests: read # Read PR metadata.
 
 env:
-  # Total candidates per invocation, resumed sessions included; they run in parallel.
   MAX_CANDIDATES_PER_RUN: '5'
 
 jobs:
-  # The overlap review reads untrusted open-PR content (including fork PRs). It runs in its own
-  # job with no write-capable credential; the credentialed jobs never share its workspace, runner
-  # temp directory or tool caches and only consume its validated structured output as data.
   recover:
     name: Reconcile interrupted candidates
     if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent == ''
@@ -50,8 +44,7 @@ jobs:
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       blocked-families: ${{ steps.recover.outputs.blocked-families }}
-      # Unfinished sessions recovery resumed in new runs; they share this wave's cap.
-      resumed: ${{ steps.recover.outputs.resumed }}
+      active-sessions: ${{ steps.recover.outputs.active-sessions }}
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -87,16 +80,15 @@ jobs:
       - name: Reconcile interrupted owned candidates
         id: recover
         env:
-          # Recovery mutates only sessions recorded by this workflow after their parent finishes.
-          # Repository automation credential; the planner runs only on main.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
         run: |
-          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-resumes "$MAX_CANDIDATES_PER_RUN"
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-sessions "$MAX_CANDIDATES_PER_RUN"
           echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
 
   review:
     name: Review candidate overlap
     needs: recover
+    if: github.event.schedule != '15,45 * * * *'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -127,7 +119,6 @@ jobs:
           echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          # Never save a cache the agent's job could have poisoned for credentialed jobs to restore.
           enable-cache: false
           python-version: '3.12'
       - name: Restore recovery-blocked families
@@ -138,7 +129,6 @@ jobs:
         id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
-          # Read-only dashboard key, used before the review agent starts and absent from its step.
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
         run: >-
           uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud plan
@@ -146,7 +136,6 @@ jobs:
           --review-batch-size "$REVIEW_BATCH_SIZE"
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
           --stale-pr-days "$STALE_PR_DAYS"
-      # Uploaded before the agent runs, so selection reads the planner's files, not agent-touched ones.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-review-input
@@ -178,7 +167,6 @@ jobs:
           KLAUD_EVIDENCE: ${{ runner.temp }}/klaud
         with:
           path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
-          # Repository automation credential; the planner runs only on main.
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           github_token: ${{ github.token }}
           track_progress: false
@@ -233,7 +221,6 @@ jobs:
         if: always() && steps.review.outputs.execution_file != ''
         env:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
-        # Keep only the final result fields selection diagnostics read; never transcript content.
         run: |
           execution=$(jq -c '
             [.[] | objects | select(.type == "result")] | last
@@ -295,14 +282,12 @@ jobs:
       - name: Select reviewed candidates within the total cap
         id: select
         env:
-          # Repository automation credential; the planner runs only on main.
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
-          # Repository automation credential; the planner runs only on main.
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
           KLAUD_PR_REVIEW: ${{ needs.review.outputs.review }}
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
-          KLAUD_RESUMED: ${{ needs.recover.outputs.resumed }}
-        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --resumed "${KLAUD_RESUMED:-0}" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
+          KLAUD_ACTIVE_SESSIONS: ${{ needs.recover.outputs.active-sessions }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud select --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}" --directory "$RUNNER_TEMP/klaud" --execution-file "$RUNNER_TEMP/review-execution.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-ownership
@@ -313,7 +298,6 @@ jobs:
         if: always()
         with:
           name: klaud-plan
-          # Deliberately exclude arbitrary agent scratch files.
           path: |
             ${{ runner.temp }}/klaud/candidates.json
             ${{ runner.temp }}/klaud/open-prs.json
@@ -321,7 +305,7 @@ jobs:
             ${{ runner.temp }}/klaud/review-diagnostics.json
             ${{ runner.temp }}/klaud/*/candidate.json
             ${{ runner.temp }}/klaud/*/baseline-preflight.json
-          retention-days: 14
+          retention-days: 90
 
   candidates:
     name: Run candidate ${{ matrix.candidate }}
@@ -340,8 +324,6 @@ jobs:
       AGENT_PAT: ${{ secrets.AGENT_PAT }}
       DASH_API_KEY: ${{ secrets.DASH_API_KEY }}
 
-  # A resume run continues one unfinished session. Only recovery, as Klaud-Cold, starts one, and
-  # klaud-candidate.yml's gate starts its agent only with recovery's grant for that session.
   resume:
     name: Run candidate ${{ inputs.resume-candidate }}
     if: >-
