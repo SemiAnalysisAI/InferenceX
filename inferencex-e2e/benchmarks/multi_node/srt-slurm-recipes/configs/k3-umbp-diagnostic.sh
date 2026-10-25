@@ -24,3 +24,15 @@ EOF
 cp -n "/logs/perf-analysis-${node}.md" /logs/perf-analysis.md
 bash /configs/k3-umbp-pool.sh
 timeout --signal=TERM --kill-after=10s 360s python3 /configs/umbp_crossnode_gate.py > "/logs/pool-gate-${node}.log" 2>&1
+
+if [[ ${UMBP_DIAGNOSTIC_GPU_PROBE:-0} == 1 ]]; then
+    probe_status=0
+    timeout --signal=TERM --kill-after=10s 180s python3 /configs/umbp_gpu_readback_probe.py > "/logs/gpu-readback-${node}.log" 2>&1 || probe_status=$?
+    if [[ $probe_status == 42 ]]; then
+        echo "Fatal GPU byte mismatch; do not load model" >&2
+        exit 42
+    fi
+    if [[ $probe_status != 0 ]]; then
+        echo "Auxiliary GPU probe failed with status $probe_status; retained as FAILURE. Continue actual connector diagnosis; this is not formal acceptance." >&2
+    fi
+fi

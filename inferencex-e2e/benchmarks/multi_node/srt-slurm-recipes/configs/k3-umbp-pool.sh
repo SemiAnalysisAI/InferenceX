@@ -42,6 +42,13 @@ mkdir -p "$(dirname "$UMBP_ENDPOINT")"
 ulimit -Sl "$(ulimit -Hl)"
 server=/usr/local/lib/python3.12/dist-packages/mori/umbp_standalone_server
 log="/logs/umbp-${UMBP_NODE_ID}.log"
+# Sampled native traces are opt-in for diagnostics only. They stay in
+# this pool launcher's environment; model workers keep their original env.
+if [[ ${UMBP_DIAGNOSTIC_NATIVE_TRACE:-0} == 1 ]]; then
+    export MORI_UMBP_LOG_LEVEL=INFO
+    export UMBP_RANGED_CALL_DEBUG=1 UMBP_RANGED_CALL_DEBUG_SAMPLE=4096 UMBP_RANGED_CALL_DEBUG_SUMMARY_SEC=10
+    export UMBP_HBM_COPY_DEBUG=1 UMBP_HBM_COPY_DEBUG_SAMPLE=4096 UMBP_HBM_COPY_DEBUG_FRAGMENTS=0 UMBP_HBM_COPY_DEBUG_SUMMARY_SEC=10
+fi
 "$server" "unix://$UMBP_ENDPOINT" > "$log" 2>&1 &
 server_pid=$!
 {
