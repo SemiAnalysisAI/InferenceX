@@ -166,6 +166,11 @@ def _format_validation_error(error: ValidationError) -> str:
     return "\n".join(lines)
 
 
+def is_local_squash(image: str) -> bool:
+    """A squash file already on one node; pyxis starts it as is, so there is nothing to stage."""
+    return image.startswith("/") and image.endswith(".sqsh")
+
+
 def runner_gpus(runner: str, inventory: RunnerInventory) -> int:
     """GPUs per node behind ``runner`` (a cluster label, a pool label or a slot name)."""
     vng = sorted(cid for cid in inventory.clusters if cid.startswith(VNG_CLUSTER_PREFIXES))
@@ -254,6 +259,18 @@ def _placeholder_problems(spec: ServingSpec) -> list[str]:
     return problems
 
 
+def _local_squash_problems(spec: ServingSpec, inventory: RunnerInventory) -> list[str]:
+    images = [("image", spec.image)]
+    images += [("router.image", spec.router.image)] if spec.router else []
+    images += [("storage.image", spec.storage.image)] if spec.storage else []
+    local = [field for field, image in images if is_local_squash(image)]
+    nodes = sorted({inventory.cluster_for(name).id for name in inventory.labels.get(spec.runner, [spec.runner])})
+    if local and len(nodes) > 1:
+        return [f"{local[0]}: a .sqsh file sits on one node, but runner {spec.runner} spans {', '.join(nodes)}; "
+                "use runner: cluster:<id> of the node that holds the file"]
+    return []
+
+
 def load_serving(text: str, inventory: RunnerInventory | None = None) -> ServingSpec:
     """Validate a serving YAML; raise ``ServingError`` listing every problem."""
     try:
@@ -297,10 +314,12 @@ def load_serving(text: str, inventory: RunnerInventory | None = None) -> Serving
         problems.append(f"conc: workload.search finds the concurrency itself; set conc: 1 (got {spec.conc})")
     elif len(rendered) > 1 and len(spec.conc) > 1:
         problems.append(f"conc: a workload grid runs one job per point; set exactly one conc (got {len(spec.conc)})")
+    inventory = inventory or load_inventory()
     try:
-        per_node = runner_gpus(spec.runner, inventory or load_inventory())
+        per_node = runner_gpus(spec.runner, inventory)
         if spec.gpus > per_node:
             problems.append(f"gpus: {spec.gpus} > {per_node} GPUs per node on runner {spec.runner}; pick a bigger node")
+        problems += _local_squash_problems(spec, inventory)
     except ServingError as error:
         problems.append(str(error))
     if problems:

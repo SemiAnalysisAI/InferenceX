@@ -7,6 +7,7 @@ environment, submits it with the cluster's right-sized resources and follows it 
 
 from __future__ import annotations
 
+import getpass
 import os
 import subprocess
 import time
@@ -19,6 +20,7 @@ from infx.launch.backends.base import BackendError
 from infx.launch.backends.slurm import SlurmBackend
 from infx.launch.context import Launch, LaunchError
 from infx.launch.request import LaunchRequest, RequestError
+from infx.serving.schema import is_local_squash
 
 JOB_SCRIPT = Path("benchmarks/single_node/serving/job.sh")
 DCGM_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
@@ -26,9 +28,15 @@ HF_VOLUME = "hf-hub-cache"
 PENDING_NOTE_S = 60.0
 
 
-def is_local_squash(image: str) -> bool:
-    """A squash file already on the node; pyxis starts it as is, so there is nothing to stage."""
-    return image.startswith("/") and image.endswith(".sqsh")
+def check_local_squash(role: str, image: str) -> None:
+    """Fail before sbatch when a node-local squash is missing, unreadable or not a squashfs."""
+    path = Path(image)
+    if not path.is_file():
+        raise LaunchError(f"{role} image {image} is not a file on this node; pin runner: cluster:<id> to the node that holds it")
+    if not os.access(path, os.R_OK):
+        raise LaunchError(f"{role} image {image} is not readable by {getpass.getuser()}; chmod o+r it and its directories")
+    if subprocess.run(["unsquashfs", "-l", image], capture_output=True, check=False).returncode:
+        raise LaunchError(f"{role} image {image} is not a valid squashfs (unsquashfs -l failed)")
 
 
 def wait_started(job_id: str, log: Path, *, poll_s: float = 10.0, note_s: float = PENDING_NOTE_S) -> None:
@@ -135,6 +143,9 @@ def run(launch: Launch) -> int:
     if serving.storage_image:
         wanted["storage"] = serving.storage_image
     with event.stage("prepare"):
+        for role, image in wanted.items():
+            if is_local_squash(image):
+                check_local_squash(role, image)
         images = {role: image if is_local_squash(image) else backend.stage_image(image, single_node=True).reference
                   for role, image in wanted.items()}
     os.environ.update(job_env(serving, images, volume.path))  # sbatch --export=ALL hands them to job.sh

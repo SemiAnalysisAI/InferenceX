@@ -197,6 +197,12 @@ Dynamo's system port. A serving YAML never writes a literal port.
 Squash records use `import: submit-host` and `single-node-import: true`. The runner sits on the node where the
 job runs, so the image is imported where it is used.
 
+An image can also be a squash file already on a node (`image: /data/<dir>/<name>.sqsh`), for
+example one built with enroot. It runs as is and is never imported. Validation requires a runner
+that resolves to one node (`cluster:<id>` or one slot), and before `sbatch` the driver checks on
+that node that the file exists, is readable by the runner user and passes `unsquashfs -l`. Images
+that several nodes need belong in a registry, where every node caches its own squash.
+
 ## 6. Scenarios
 
 Six base files in `benchmarks/single_node/serving/scenarios/`:

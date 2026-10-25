@@ -12,7 +12,7 @@ You turn the user's serving config into **one YAML file** and run **one command*
 ```yaml
 name: qwen38-bf16-tp1               # [a-z0-9.-], no "_"; prefixes the artifact names
 runner: cluster:hcm-hgx02           # see "Runner" below
-image: vllm/vllm-openai:v0.29.0     # required
+image: vllm/vllm-openai:v0.29.0     # required; or /abs/path.sqsh on the runner's node
 model: Qwen/Qwen3.8-27B             # HF repo id, never a local path
 gpus: 1                             # GPUs the command needs
 replicas: 1                         # optional: N engine copies, gpus/N each; N > 1 needs router: with {{engine_urls}}
@@ -83,6 +83,7 @@ Old scenario names (`agentx-cc-062126-smoke`, `custom-agentic-tau2`, `sweep-isl8
   - Placeholders exist only in `router.*`, `storage.*` and (storage ports only) `env:`. No `$VAR` anywhere.
 - **Env vars** (`NCCL_P2P_LEVEL=NVL`, compose `environment:`, k8s `env:`) go under `env:`. No secrets: the YAML is a run input and an artifact. Dataset access uses the runner's `GREENLAB_HF_TOKEN`.
 - **Images:** public ones and `vcr.vngcloud.vn` ones the runner can read need nothing. Another private registry fails at `enroot import`: tell the user it needs infra (credentials for `stackops` or a pre-imported squash).
+- **A `.sqsh` file** (an image built with enroot, e.g. `/data/<user>-enroot/images/x.sqsh`): use the absolute path as `image:`; it runs as is, never imported. It exists on one node only, so ask which node holds it and set `runner: cluster:<id>` of that node; a pool label fails validation. The file and its directories must be readable by `stackops`; the driver checks that and `unsquashfs -l` before submitting. An image several nodes need belongs in a registry instead.
 - **gpus:** tensor-parallel × pipeline-parallel (× replicas). If unclear, ask.
 - **Runner** (each VNG node is one cluster; the job takes only its GPUs, 16 CPUs and a memory share per GPU, the rest of the node stays usable by the team):
 

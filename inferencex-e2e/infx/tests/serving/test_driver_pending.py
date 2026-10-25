@@ -30,9 +30,25 @@ def test_job_gone_from_queue_returns_without_log(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_local_squash_is_used_as_is_and_registry_refs_are_staged():
-    from infx.launch.drivers.serving import is_local_squash
+def test_local_squash_preflight_fails_fast_with_the_reason(tmp_path, monkeypatch):
+    import pytest
 
-    assert is_local_squash("/data/images/sglang-v0.5.22.sqsh")
-    assert not is_local_squash("lmsysorg/sglang:v0.5.22")
-    assert not is_local_squash("/data/images/notes.txt")
+    from infx.launch.context import LaunchError
+    from infx.launch.drivers.serving import check_local_squash
+
+    image = tmp_path / "engine.sqsh"
+    with pytest.raises(LaunchError, match="not a file on this node"):
+        check_local_squash("engine", str(image))
+    image.write_text("not squashfs")
+    image.chmod(0)
+    with pytest.raises(LaunchError, match="not readable"):
+        check_local_squash("engine", str(image))
+    image.chmod(0o644)
+    fake_squeue(tmp_path, monkeypatch, "")  # puts tmp_path/bin first on PATH
+    unsquashfs = tmp_path / "bin" / "unsquashfs"
+    unsquashfs.write_text("#!/bin/bash\nexit 1\n")
+    unsquashfs.chmod(0o755)
+    with pytest.raises(LaunchError, match="not a valid squashfs"):
+        check_local_squash("engine", str(image))
+    unsquashfs.write_text("#!/bin/bash\nexit 0\n")
+    check_local_squash("engine", str(image))
