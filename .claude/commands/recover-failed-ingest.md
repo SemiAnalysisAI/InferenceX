@@ -56,8 +56,12 @@ ETL or mapping. Missing output is not repaired by rerunning a database ingest.
   recovery PR below. Never rerun the failed InferenceX target workflow or job.
 - For a failed reused AgentX dispatch, the existing
   [recover-reused-ingest workflow](../../.github/workflows/recover-reused-ingest.yml)
-  accepts a verified `source-run-id`/`merge-run-id` pair. It is not a generic
-  fixed-sequence repair. Do not create another recovery workflow.
+  accepts a verified `source-run-id`/`merge-run-id` pair. If the original
+  merge-ingest run failed before uploading `changelog-metadata`, pass
+  `original-merge-sha` instead of `merge-run-id`: the recovery run regenerates and
+  uploads that metadata with `infx.matrix.plan` for `<sha>^..<sha>` and dispatches
+  itself as the merge run (`ingest-results` or `ingest-agentic-results` by scope).
+  It is not a generic fixed-sequence repair. Do not create another recovery workflow.
 - Rerun PR sweeps only for diagnosed flakes, not deterministic code/config errors.
   For cluster faults, use [sweep debugging](../../.agents/skills/debug-runs/SKILL.md),
   [MI355X workspace cleanup](clean-amd-mi355-runner-root-files.md), or
@@ -124,6 +128,23 @@ for the entire ingest; if historical changelog bytes were malformed, recover the
 intended entries from the original PR diff or stop on ambiguity.
 
 ## Create the recovery PR
+
+`create-pr` automates this section. It verifies the original PR merged, that no
+merge-ingest push run for its merge commit is pending or succeeded, and that the
+source is completed, belongs to the PR, carries unexpired results, and passes the
+pinned `/use` reuse rules. It then extracts the merge's changelog append and fails
+closed on any ambiguity. It is a dry run by default; review the printed entries,
+then add `--execute`, which runs every step below through the push in a temporary
+worktree. `--post-use` also posts `/use`; post it yourself if you are not an
+authorized maintainer.
+
+```bash
+uv run --project inferencex-e2e --extra workflows python -m infx.workflows.recover_failed_ingest \
+  create-pr --pr-number "$ORIGINAL_PR" --source-run-id "$SOURCE_RUN_ID"
+# then: ... create-pr ... --execute --ai-disclosure "<model and role>" [--post-use]
+```
+
+The manual procedure it automates:
 
 Create an empty bootstrap branch/commit from current `origin/main`, then open the
 PR before changing the changelog. Use a bilingual title/body and the required AI
