@@ -238,7 +238,7 @@ qwen3.5-fp8-mi355x-sglang-mtp:
 # checkpoint leaves too little KV headroom there for the 256k-capped AgentX
 # corpus.
 qwen3.5-fp8-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi355x-amds
