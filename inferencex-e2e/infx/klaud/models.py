@@ -1,7 +1,4 @@
-"""Versioned local contracts, deliberately separate from external API schemas.
-
-``ABORT_LABEL`` is the maintainer label that stops a candidate now and blocks retries while set.
-"""
+"""Versioned local contracts, deliberately separate from external API schemas."""
 
 from __future__ import annotations
 
@@ -11,8 +8,6 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-ABORT_LABEL = "klaud-abort"
 
 
 def utc(value: str | datetime) -> datetime:
@@ -101,19 +96,28 @@ class Ownership(Contract):
     candidates: list[OwnedCandidate] = Field(max_length=256)
 
 
+LEGACY_OUTCOMES = {
+    "readiness-blocked": "missing-assets",
+    "uncertain": "inconclusive",
+    "unexpected-error": "no-outcome",
+    "capacity-deferred": "no-capacity",
+    "aborted": "closed-by-maintainer",
+}
+
+
 class CandidateOutcome(Contract):
     outcome: Literal[
         "validated",
-        "capacity-deferred",
-        "readiness-blocked",
+        "no-capacity",
+        "missing-assets",
         "incompatible",
         "duplicate",
         "retired",
         "already-updated",
-        "uncertain",
+        "inconclusive",
         "failed",
-        "aborted",
-        "unexpected-error",
+        "closed-by-maintainer",
+        "no-outcome",
     ]
     phase: Literal["resolve", "baseline", "targeted", "final-sweep", "cleanup", "unknown"]
     pull_request: Annotated[int, Field(gt=0)] | None
@@ -132,20 +136,28 @@ class CandidateOutcome(Contract):
         | None
     ) = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def current_names(cls, data: Any) -> Any:
+        """Return ``data`` with an outcome name from older PR comments and artifacts renamed."""
+        if isinstance(data, dict) and data.get("outcome") in LEGACY_OUTCOMES:
+            return {**data, "outcome": LEGACY_OUTCOMES[data["outcome"]]}
+        return data
+
     @model_validator(mode="after")
     def consistent_outcome(self) -> CandidateOutcome:
         """Return the outcome, raising ValueError if phase, PR, runs or reason code disagree."""
-        if self.outcome != "unexpected-error" and self.phase == "unknown":
+        if self.outcome != "no-outcome" and self.phase == "unknown":
             raise ValueError("Completed outcomes require a known phase")
-        if self.outcome in ("validated", "aborted") and self.pull_request is None:
+        if self.outcome in ("validated", "closed-by-maintainer") and self.pull_request is None:
             raise ValueError("This outcome requires a PR")
         if self.outcome == "validated" and (not self.run_ids or self.phase != "final-sweep"):
             raise ValueError("Validated requires final-sweep evidence")
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Run IDs must be distinct")
         if self.reason_code == "weights-missing":
-            if self.outcome != "readiness-blocked":
-                raise ValueError("weights-missing requires a readiness-blocked outcome")
+            if self.outcome != "missing-assets":
+                raise ValueError("weights-missing requires a missing-assets outcome")
         elif self.reason_code is not None and (
             self.outcome != "failed" or self.phase != "baseline"
         ):
