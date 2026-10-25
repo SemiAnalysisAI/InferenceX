@@ -1,0 +1,32 @@
+# Pattern: synthetic search grid. Gemma-4-31B FP8-block, SGLang, 1xH200. AIPerf adaptive search finds the max
+# concurrency under the SLO for every ISL/OSL/cache point (one job per point); slo: replaces the default SLO.
+name: gemma4-sweep-grid
+runner: cluster:hcm-hgx02
+image: lmsysorg/sglang:v0.5.22-cu130
+model: RedHatAI/gemma-4-31B-it-FP8-block
+gpus: 1
+precision: fp8
+env:
+  NCCL_P2P_LEVEL: NVL
+serve: |
+  python3 -m sglang.launch_server
+  --model-path RedHatAI/gemma-4-31B-it-FP8-block
+  --tp 1
+  --attention-backend fa4
+  --chunked-prefill-size 16384
+  --max-prefill-tokens 32768
+  --schedule-policy shortest-prefill-first
+  --swa-full-tokens-ratio 0.15
+  --mem-fraction-static 0.90
+  --page-size 1
+  --context-length 262144
+  --enable-metrics --enable-cache-report
+  --reasoning-parser gemma4 --tool-call-parser gemma4
+scenario: synthetic
+workload:
+  isl: [8k]
+  osl: ['512', 1k]
+  cache: [50]
+  search: true
+slo: "inter_token_latency:p90:lt:10"
+conc: 1
