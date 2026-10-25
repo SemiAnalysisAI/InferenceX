@@ -1,0 +1,127 @@
+"""The serving driver: one VNG serving-YAML point (infx/serving) as one Slurm batch job.
+
+benchmarks/single_node/serving/job.sh runs inside the allocation and starts the DCGM, storage
+and router sidecars and the engine step. This driver stages their images, hands the job its
+environment, submits it with the cluster's right-sized resources and follows it to the end.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from infx.launch import policy
+from infx.launch.backends.base import BackendError
+from infx.launch.backends.slurm import SlurmBackend
+from infx.launch.context import Launch, LaunchError
+from infx.launch.request import LaunchRequest, RequestError
+
+JOB_SCRIPT = Path("benchmarks/single_node/serving/job.sh")
+DCGM_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
+HF_VOLUME = "hf-hub-cache"
+
+
+class ServingRequest(LaunchRequest):
+    """What a serving point reads from the workflow environment."""
+
+    github_workspace: Path = Field(alias="GITHUB_WORKSPACE")
+    image: str = Field(alias="IMAGE")
+    gpu_count: int = Field(alias="GPU_COUNT")
+    salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
+    serving_json: str = Field(alias="SERVING_JSON")
+
+
+class Serving(BaseModel):
+    """SERVING_JSON, as infx/serving/to_matrix.py writes it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    framework: str
+    serve_cmd: str
+    serve_env: str = ""
+    served_model_name: str = ""
+    router_image: str = ""
+    router_cmd: str = ""
+    router_env: str = ""
+    router_profile: str = ""
+    router_metrics_port: str = ""
+    replicas: int = 1
+    storage_image: str = ""
+    storage_cmd: str = ""
+    storage_env: str = ""
+    scenario_yaml: str
+    scenario_label: str
+    dataset_kind: str
+    dataset: str
+    search: bool
+    yaml: str
+
+
+def job_env(serving: Serving, images: dict[str, str], hf_cache: Path) -> dict[str, str]:
+    """The environment job.sh, bench.sh, sidecar.sh and the client read."""
+    return {
+        "SERVE_CMD": serving.serve_cmd,
+        "SERVE_ENV": serving.serve_env,
+        "SERVED_MODEL_NAME": serving.served_model_name,
+        "ROUTER_IMAGE": images.get("router", ""),
+        "ROUTER_CMD": serving.router_cmd,
+        "ROUTER_ENV": serving.router_env,
+        "ROUTER_PROFILE": serving.router_profile,
+        "ROUTER_METRICS_PORT": serving.router_metrics_port,
+        "REPLICAS": str(serving.replicas),
+        "STORAGE_IMAGE": images.get("storage", ""),
+        "STORAGE_CMD": serving.storage_cmd,
+        "STORAGE_ENV": serving.storage_env,
+        "SERVING_ENGINE_IMAGE": images["engine"],
+        "SERVING_DCGM_IMAGE": images["dcgm"],
+        "SERVING_HF_CACHE_HOST": str(hf_cache),
+        "SERVING_SCENARIO_YAML": serving.scenario_yaml,
+        "SERVING_SCENARIO_LABEL": serving.scenario_label,
+        "SERVING_DATASET_KIND": serving.dataset_kind,
+        "SERVING_DATASET": serving.dataset,
+        "SERVING_SEARCH": "1" if serving.search else "0",
+        "SERVING_YAML": serving.yaml,
+    }
+
+
+def run(launch: Launch) -> int:
+    """Stage the images, sbatch job.sh, follow it, and return its exit code."""
+    event = launch.life.event
+    request = ServingRequest.from_env(launch.request.env)
+    try:
+        serving = Serving.model_validate_json(request.serving_json)
+    except ValidationError as error:
+        fields = ", ".join(".".join(map(str, item["loc"])) or "serving" for item in error.errors())
+        raise RequestError(f"SERVING_JSON is not a serving point (bad or missing: {fields})") from None
+    backend = launch.backend
+    if not isinstance(backend, SlurmBackend):
+        raise LaunchError(f"the serving path needs a slurm cluster, not {launch.cluster.scheduler!r}")
+    volume = backend.settings.volumes.get(HF_VOLUME)
+    if volume is None:
+        raise LaunchError(f"cluster {launch.cluster.id!r} has no {HF_VOLUME!r} volume")
+    minutes = policy.salloc_time_limit(launch.cluster.id, request)
+    wanted = {"engine": request.image, "dcgm": DCGM_IMAGE}
+    if serving.router_image:
+        wanted["router"] = serving.router_image
+    if serving.storage_image:
+        wanted["storage"] = serving.storage_image
+    with event.stage("prepare"):
+        images = {role: backend.stage_image(image, single_node=True).reference for role, image in wanted.items()}
+    os.environ.update(job_env(serving, images, volume.path))  # sbatch --export=ALL hands them to job.sh
+    log = Path(request.env.get("RUNNER_TEMP") or request.workspace) / f"serving-{os.getpid()}.log"
+    with event.stage("submit"):
+        try:
+            job = backend.submit_batch(request.workspace / JOB_SCRIPT, gpus=request.gpu_count,
+                                       time_min=minutes, log=log)
+        except BackendError as error:
+            event.fail(type(error).__name__, f"batch allocation unavailable: {error}", retriable=error.retriable)
+            return 1
+    print(f"Serving job {job.id}; log: {log}", flush=True)
+    try:
+        backend.stream_logs(job)
+    except BackendError:
+        return 1
+    status = backend.state(job)
+    return 0 if status.succeeded else status.exit_code or 1
