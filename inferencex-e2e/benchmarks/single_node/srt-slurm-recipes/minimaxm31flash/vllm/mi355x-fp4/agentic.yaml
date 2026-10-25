@@ -66,6 +66,7 @@ base:
         # expert stays a separate MLP (no shared-expert fusion).
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
+        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: 'INT4'
         VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
         # DBO needs the V2 model runner (the V1 runner refuses DSpark).
         VLLM_USE_V2_MODEL_RUNNER: '1'

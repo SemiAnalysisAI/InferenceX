@@ -11148,3 +11148,10 @@
     - "Update the vLLM image from v0.32.0 to nightly-rocm72-c50aca14, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4461
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+  description:
+    - "Enable VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 for MiniMax-M3.1-Flash MI355X vLLM AgentX; keep the pinned image and all other serving and workload settings unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
