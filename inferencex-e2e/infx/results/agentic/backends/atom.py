@@ -31,24 +31,31 @@ def _atom_counter_names(stem: str) -> list[str]:
     return [*_atom_names(stem), *_atom_names(f"{stem}_total")]
 
 
-def _counter_total(metrics: dict[str, dict[str, Any]], stem: str, endpoint: str) -> float | None:
+def _counter_values(
+    metrics: dict[str, dict[str, Any]], stem: str, endpoint: str
+) -> dict[tuple, float] | None:
     names = _atom_counter_names(f"prefix_cache_{stem}_tokens")
-    series = [s for s in metric_series(metrics, names) if s.get("endpoint_url") == endpoint]
-    if not series or any(
-        (value := series_stat(s, preferred_keys=("total",))) is None
-        or not math.isfinite(value)
-        or value < 0
-        for s in series
-    ):
-        logger.warning("ATOM %s cache counter missing or invalid at %s", stem, endpoint)
-        return None
-    total = sum_stat(
-        metrics,
-        names,
-        preferred_keys=("total",),
-        series_filter=lambda s: s.get("endpoint_url") == endpoint,
-    )
-    return total if total is not None and math.isfinite(total) else None
+    values = {}
+    for series in metric_series(metrics, names):
+        if series.get("endpoint_url") != endpoint:
+            continue
+        labels = series.get("labels")
+        labels = {} if labels is None else labels
+        value = series_stat(series, preferred_keys=("total",))
+        if (
+            not isinstance(labels, dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in labels.items())
+            or value is None
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            return None
+        key = tuple(sorted(labels.items()))
+        if key in values:
+            logger.warning("ATOM %s cache counter duplicated at %s", stem, endpoint)
+            return None
+        values[key] = value
+    return values
 
 
 def _cache_counts(
@@ -78,24 +85,35 @@ def _cache_counts(
         return None, None, None
     full_total = cached_total = offload_total = 0.0
     cpu_complete = True
-    offload_absent = not any(
-        s.get("endpoint_url") in accounted
-        for s in metric_series(metrics, _atom_counter_names("prefix_cache_offload_tokens"))
-    )
     for endpoint in accounted:
         full, cached, offload = (
-            _counter_total(metrics, stem, endpoint) for stem in ("full", "cached", "offload")
+            _counter_values(metrics, stem, endpoint) for stem in ("full", "cached", "offload")
         )
-        if cpu_offload_disabled and offload_absent:
-            offload = 0.0
-        if full is None or cached is None or cached > full:
+        if (
+            not full
+            or cached is None
+            or full.keys() != cached.keys()
+            or any(cached[key] > full[key] for key in full)
+        ):
             return None, None, None
-        full_total += full
-        cached_total += cached
-        if offload is None or cached + offload > full:
+        if cpu_offload_disabled:
+            offload = (
+                dict.fromkeys(full, 0.0)
+                if offload is not None
+                and offload.keys() <= full.keys()
+                and not any(offload.values())
+                else None
+            )
+        full_total += sum(full.values())
+        cached_total += sum(cached.values())
+        if (
+            offload is None
+            or offload.keys() != full.keys()
+            or any(cached[key] + offload[key] > full[key] for key in full)
+        ):
             cpu_complete = False
         else:
-            offload_total += offload
+            offload_total += sum(offload.values())
     if full_total <= 0 or not all(math.isfinite(v) for v in (full_total, cached_total)):
         return None, None, None
     return (
