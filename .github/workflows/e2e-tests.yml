@@ -620,6 +620,35 @@ jobs:
         with:
             tooling-ref: ${{ needs.get-jobs.outputs.tooling-ref }}
 
+    # EXPERIMENT (do not merge): grade AA-LCR generations off the GPU runner.
+    judge-aa-lcr:
+        name: judge-aa-lcr
+        needs: [get-jobs, test-sweep-agentic-evals]
+        if: ${{ always() && inputs.eval-framework == 'aa-lcr' && needs.test-sweep-agentic-evals.result != 'skipped' }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.get-jobs.outputs.tooling-ref }}
+                  persist-credentials: false
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  path: eval_results/
+                  pattern: eval_*
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+            - name: Judge with Claude Haiku 5.5 (low effort)
+              env:
+                  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+              run: |
+                  uv run --no-project --python 3.12 --with anthropic==1.15.0 \
+                    python inferencex-e2e/infx/evals/aa_lcr_judge.py eval_results/ aa_lcr_judged.json \
+                    >> "$GITHUB_STEP_SUMMARY"
+                  cat "$GITHUB_STEP_SUMMARY"
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: aa_lcr_judged
+                  path: aa_lcr_judged.json
+
     collect-job-events:
         name: collect-job-events
         needs: [get-jobs, test-sweep-multi-node, test-sweep-multi-node-evals, test-sweep-agentic, test-sweep-agentic-evals, test-sweep-multi-node-agentic, test-sweep-multi-node-agentic-evals, test-sweep-single-node, test-sweep-evals]

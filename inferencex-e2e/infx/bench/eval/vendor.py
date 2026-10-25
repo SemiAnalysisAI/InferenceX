@@ -239,6 +239,11 @@ def _prepare_minimax(job: Job) -> tuple[list[str], dict[str, str]]:
     ], {}  # fmt: skip
 
 
+def _prepare_aa_lcr(job: Job) -> tuple[list[str], dict[str, str]]:
+    """AA-LCR's adapter is stdlib-only; pass the eval concurrency."""
+    return ["--concurrency", str(job.ctx.concurrency)], {}
+
+
 def _bfcl_project(job: Job) -> Path:
     """The BFCL project directory inside the job's scratch space."""
     return job.scratch / "bfcl-project"
@@ -341,6 +346,22 @@ PROVIDERS: dict[str, Provider] = {
         },
         python_minor=12,
         prepare=_prepare_minimax,
+        run_command=("run",),
+        failure_command=("failure",),
+        message_flag="--message",
+    ),
+    "aa-lcr": Provider(
+        default_suite="aa_lcr",
+        suites={
+            "aa_lcr": Suite(
+                label="AA-LCR generation",
+                adapter="aa_lcr_eval.py",
+                results=("results_aa_lcr_*.json",),
+                timeout_s=6 * 3600,
+            ),
+        },
+        python_minor=10,
+        prepare=_prepare_aa_lcr,
         run_command=("run",),
         failure_command=("failure",),
         message_flag="--message",
