@@ -118,10 +118,10 @@ base:
     placement:
       node: head
 
-override_1p1d_c1:
-  roles:
-    prefill:
-      args:
+override_1p1d_c1: &latency_m1_k7
+  roles: &latency_m1_k7_roles
+    prefill: &latency_m1_k7_prefill
+      args: &latency_m1_k7_prefill_args
         decode-context-parallel-size: 8
         mamba-ssm-cache-dtype: float32
         max-num-seqs: 1
@@ -129,8 +129,8 @@ override_1p1d_c1:
         compilation-config: '{"mode":3,"cudagraph_mode":"NONE","max_cudagraph_capture_size":0,"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
         speculative-config: &spec_k7 '{"model":"/models/Inferact-Kimi-K3-DSpark","method":"dspark","num_speculative_tokens":7,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}}'
-    decode:
-      args:
+    decode: &latency_m1_k7_decode
+      args: &latency_m1_k7_decode_args
         decode-context-parallel-size: 8
         mamba-ssm-cache-dtype: float32
         max-num-seqs: 1
@@ -201,3 +201,33 @@ override_1p2d_c48:
       args:
         <<: *tp8_c48_decode_args
         max-num-seqs: 48
+
+override_1p2d_m1_k7_c2:
+  <<: *latency_m1_k7
+  roles:
+    <<: *latency_m1_k7_roles
+    decode:
+      <<: *latency_m1_k7_decode
+      nodes: 2
+      workers: 2
+
+override_1p1d_m2_k3_c1:
+  <<: *latency_m1_k7
+  roles:
+    prefill:
+      <<: *latency_m1_k7_prefill
+      args:
+        <<: *latency_m1_k7_prefill_args
+        max-num-seqs: 2
+        speculative-config: &spec_k3 '{"model":"/models/Inferact-Kimi-K3-DSpark","method":"dspark","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode:
+      <<: *latency_m1_k7_decode
+      args:
+        <<: *latency_m1_k7_decode_args
+        max-num-seqs: 2
+        speculative-config: *spec_k3
+        # K3 verifies four tokens per request, up to eight for two requests.
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":8,"cudagraph_capture_sizes":[1,2,4,8],"custom_ops":["+fused_rms_norm_gated","+quant_fp8","+grouped_topk","+sparse_attn_indexer","none"]}'
+
+override_1p1d_m1_k7_c2:
+  <<: *latency_m1_k7

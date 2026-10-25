@@ -11107,3 +11107,11 @@
     - "Use ROCm nightly-c50aca14416ef29f6ed0ed256302f30646726dcd pinned by digest and BF16 SSM states for the throughput points."
     - "Replace 1P1D c56 and 1P3D c12 with 1P1D c1, K7 specialized decode, and FP32 SSM states."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4391
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic-monokernel-probe
+  description:
+    - "Probe Kimi-K3 specialized decode throughput: 1P2D max-num-seqs=1 K7 c2, 1P1D max-num-seqs=2 K3 c1, and 1P1D max-num-seqs=1 K7 c2."
+    - "Use TP8/DCP8, FP32 SSM states, GPU-resident KV, and the same pinned ROCm nightly as the c1 baseline."
+  pr-link: XXX
+  scenario-type: [agentic-coding]
