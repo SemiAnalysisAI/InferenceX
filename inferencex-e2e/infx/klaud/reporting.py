@@ -31,7 +31,7 @@ from infx.bench.agentic.traces import LOADERS
 
 from . import github
 from .github import VerificationError
-from .models import ABORT_LABEL, Contract, identity, normalized_image
+from .models import Contract, identity, normalized_image
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
@@ -622,7 +622,7 @@ def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
 
 
 def render_body(baseline: Baseline) -> str:
-    """Return the bilingual PR body section that presents ``baseline`` and the abort label."""
+    """Return the bilingual PR body section that presents ``baseline`` and how to stop it."""
     _, _, settings = point_layout(baseline.points)
     sources = ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources)) or "N/A"
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
@@ -631,9 +631,8 @@ def render_body(baseline: Baseline) -> str:
         + baseline_table(baseline, context=False)
         + "\n\n"
         + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
-        + f"\n\n**Stop:** Add the `{ABORT_LABEL}` label at any time to stop this candidate now; "
-        "Klaud cancels its runs, closes this PR and does not retry it. Remove the label to let "
-        "the planner pick it up again."
+        + "\n\n**Stop:** Close this PR at any time to stop this candidate now; Klaud cancels its "
+        "runs and deletes its branch."
     )
     chinese = (
         f"**目标：**{baseline.goal.zh}  \n**基线：**{baseline.date} · `{baseline.image}`  \n"
@@ -641,8 +640,7 @@ def render_body(baseline: Baseline) -> str:
         .replace("Median latency", "中位延迟")
         .replace("Sources:", "来源：")
         + "；数值及异常说明见上表。  \n"
-        + f"**停止：**随时添加 `{ABORT_LABEL}` 标签即可立即停止该候选：Klaud 会取消其运行、"
-        "关闭此 PR 且不再重试。移除该标签后，规划器会在下次扫描时重新考虑它。"
+        + "**停止：**随时关闭此 PR 即可立即停止该候选：Klaud 会取消其运行并删除其分支。"
     )
     return translated(english, chinese)
 
