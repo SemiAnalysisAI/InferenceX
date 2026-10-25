@@ -100,6 +100,45 @@ class TestDynamoFrontendOverall:
 
 
 class TestVllmPrefillDecodeRoles:
+    @pytest.mark.parametrize("framework", ["vllm", "dynamo-vllm"])
+    def test_declared_endpoint_roles_scope_unlabelled_worker_counters(self, framework) -> None:
+        metrics = {
+            "vllm:prompt_tokens_by_source": _counter(
+                [
+                    (PRE, {"source": "local_cache_hit"}, 600),
+                    (PRE, {"source": "local_compute"}, 400),
+                    (DEC, {"source": "external_kv_transfer"}, 1000),
+                ]
+            )
+        }
+        _, nested, _ = compute_server_metrics(
+            {"metrics": metrics},
+            framework=framework,
+            records=[],
+            disaggregated=True,
+            endpoint_roles={PRE: "prefill", DEC: "decode"},
+        )
+        assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(0.6)
+        assert nested["cache"]["role_scope"] == "prefill"
+        assert {source["role"] for source in nested["sources"]} == {"prefill", "decode"}
+        assert nested["cache_validity"]["pricing_eligible"] is False
+
+    def test_declared_role_cannot_override_a_conflicting_explicit_label(self) -> None:
+        metrics = {
+            "vllm:prefix_cache_hits": _counter([(PRE, _vllm_role("prefill"), 600)]),
+            "vllm:prefix_cache_queries": _counter([(PRE, _vllm_role("prefill"), 1000)]),
+        }
+        _, nested, _ = compute_server_metrics(
+            {"metrics": metrics},
+            framework="vllm",
+            records=[],
+            disaggregated=True,
+            endpoint_roles={PRE: "decode"},
+        )
+        assert nested["cache"]["overall_cache_hit_rate"] is None
+        assert nested["cache"]["role_scope"] == "unresolved"
+        assert nested["cache_validity"]["pricing_eligible"] is False
+
     def test_decode_kv_transfer_is_not_a_cache_hit(self) -> None:
         metrics = {
             "vllm:prompt_tokens_by_source": _counter(
@@ -225,7 +264,11 @@ class TestSglangNonDeviceTiers:
         }
 
     def test_storage_tier_is_counted_with_the_other_non_device_tiers(self) -> None:
-        _, nested = _run(self._metrics({"device": 600, "host": 200, "storage": 100}), "sglang")
+        metrics = self._metrics({"device": 600, "host": 200, "storage": 100})
+        metrics["sglang:realtime_tokens"] = _counter(
+            [(PRE, {"mode": "prefill_compute"}, 100)]
+        )
+        _, nested = _run(metrics, "sglang")
         cache = nested["cache"]
         assert cache["gpu_cache_hit_rate"] == pytest.approx(0.6)
         assert cache["cpu_cache_hit_rate"] == pytest.approx(0.2)
@@ -234,6 +277,12 @@ class TestSglangNonDeviceTiers:
         assert cache["gpu_cache_hit_rate"] + cache["external_cache_hit_rate"] == pytest.approx(
             cache["overall_cache_hit_rate"]
         )
+        assert nested["tokens"]["prompt_by_source"] == {
+            "gpu_cache_hit": 600,
+            "cpu_or_external_cache_hit": 300,
+            "computed": 100,
+            "raw": {"device": 600, "host": 200, "storage": 100},
+        }
 
     def test_device_and_host_only_keep_external_equal_to_host(self) -> None:
         _, nested = _run(self._metrics({"device": 600, "host": 200}), "sglang")

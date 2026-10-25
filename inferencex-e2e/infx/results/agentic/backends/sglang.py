@@ -138,7 +138,7 @@ class SglangBackend(ServerMetricsBackend):
                 "generation_total": flat["total_generation_tokens"],
                 "prompt_by_source": {
                     "gpu_cache_hit": device_hits,
-                    "cpu_or_external_cache_hit": host_hits,
+                    "cpu_or_external_cache_hit": sum(non_device) if non_device else None,
                     "computed": prefill_compute,
                     "raw": cached_by_source,
                 },

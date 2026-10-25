@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from infx.results.agentic.common import (
@@ -22,6 +22,7 @@ from .base import ServerMetricsBackend, counter_int
 
 class VllmBackend(ServerMetricsBackend):
     name = "vllm"
+    accepts_context = True
     _ENGINE_TAG_RE = re.compile(r"\((?P<tag>EngineCore(?:_DP\d+)?)\s+pid=\d+\)")
     _GPU_KV_SIZE_RE = re.compile(r"GPU KV cache size:\s*(?P<tokens>[\d,]+)\s*tokens")
 
@@ -36,13 +37,16 @@ class VllmBackend(ServerMetricsBackend):
         metrics: dict[str, dict[str, Any]],
         flat: dict[str, Any],
         nested: dict[str, Any],
+        *,
+        context: dict[str, Any] | None = None,
     ) -> None:
+        endpoint_roles = (context or {}).get("endpoint_roles")
         prompt_total, generation_total = self.prompt_generation_totals(metrics)
         flat["total_prompt_tokens"] = counter_int(prompt_total)
         flat["total_generation_tokens"] = counter_int(generation_total)
 
         disaggregated = nested["validity"]["deployment"]["disaggregated"]
-        role_scope, role_filter = _cache_role_filter(metrics, disaggregated)
+        role_scope, role_filter = _cache_role_filter(metrics, disaggregated, endpoint_roles)
         prefix_hits = sum_stat(
             metrics,
             "vllm:prefix_cache_hits",
@@ -182,7 +186,7 @@ class VllmBackend(ServerMetricsBackend):
                 "generation_total": flat["total_generation_tokens"],
             }
         )
-        nested["sources"] = _vllm_sources(metrics, disaggregated)
+        nested["sources"] = _vllm_sources(metrics, disaggregated, endpoint_roles)
 
     def prompt_generation_totals(
         self,
@@ -262,7 +266,9 @@ def first_counter_total(
 
 
 def _vllm_sources(
-    metrics: dict[str, dict[str, Any]], disaggregated: bool | None
+    metrics: dict[str, dict[str, Any]],
+    disaggregated: bool | None,
+    endpoint_roles: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     source_ids = set()
     for metric_name in (
@@ -274,7 +280,7 @@ def _vllm_sources(
         "vllm:prompt_tokens_by_source",
     ):
         for series in metric_series(metrics, metric_name):
-            source_ids.add(_source_id(series, disaggregated))
+            source_ids.add(_source_id(series, disaggregated, endpoint_roles))
 
     sources: list[dict[str, Any]] = []
     for source_id in sorted(source_ids):
@@ -282,7 +288,7 @@ def _vllm_sources(
             continue
 
         def series_filter(series: dict, source_id: str = source_id) -> bool:
-            return _source_id(series, disaggregated) == source_id
+            return _source_id(series, disaggregated, endpoint_roles) == source_id
 
         prompt_tokens = sum_stat(metrics, "vllm:prompt_tokens", series_filter=series_filter)
         generation_tokens = sum_stat(metrics, "vllm:generation_tokens", series_filter=series_filter)
@@ -318,7 +324,28 @@ _CACHE_METRICS = (
 )
 
 
-def _series_role(series: dict[str, Any], disaggregated: bool | None = None) -> str:
+def _series_role(
+    series: dict[str, Any],
+    disaggregated: bool | None = None,
+    endpoint_roles: Mapping[str, str] | None = None,
+) -> str:
+    role = _label_role(series, disaggregated)
+    declared = (endpoint_roles or {}).get(str(series.get("endpoint_url", "")))
+    if declared is None:
+        return role
+    declared = {
+        "prefill": "prefill",
+        "decode": "decode",
+        "unified": "combined",
+        "combined": "combined",
+    }.get(declared, "unknown")
+    labels = series.get("labels") if isinstance(series.get("labels"), dict) else {}
+    if any(key in labels for key in ("disaggregation_mode", "dynamo_component", "component")):
+        return role if role == declared else "unknown"
+    return declared
+
+
+def _label_role(series: dict[str, Any], disaggregated: bool | None = None) -> str:
     labels = series.get("labels") if isinstance(series.get("labels"), dict) else {}
     mode = str(labels.get("disaggregation_mode") or "").lower()
     if mode in ("prefill", "context"):
@@ -342,10 +369,12 @@ def _series_role(series: dict[str, Any], disaggregated: bool | None = None) -> s
 
 
 def _cache_role_filter(
-    metrics: dict[str, dict[str, Any]], disaggregated: bool | None
+    metrics: dict[str, dict[str, Any]],
+    disaggregated: bool | None,
+    endpoint_roles: Mapping[str, str] | None = None,
 ) -> tuple[str, Any]:
     roles = {
-        _series_role(s, disaggregated)
+        _series_role(s, disaggregated, endpoint_roles)
         for name in _CACHE_METRICS
         for s in metric_series(metrics, name)
     }
@@ -356,11 +385,18 @@ def _cache_role_filter(
     if "unknown" in roles or (disaggregated is True and "combined" in roles):
         scope = "unresolved"
     # Known decode counters measure KV transfer, including alongside unlabelled workers.
-    return scope, lambda series: _series_role(series, disaggregated) in ("prefill", "combined")
+    return scope, lambda series: _series_role(series, disaggregated, endpoint_roles) in (
+        "prefill",
+        "combined",
+    )
 
 
-def _source_id(series: dict[str, Any], disaggregated: bool | None) -> str:
-    role = _series_role(series, disaggregated)
+def _source_id(
+    series: dict[str, Any],
+    disaggregated: bool | None,
+    endpoint_roles: Mapping[str, str] | None = None,
+) -> str:
+    role = _series_role(series, disaggregated, endpoint_roles)
 
     parts = [role]
     endpoint = series.get("endpoint_url")

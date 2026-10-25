@@ -42,8 +42,10 @@ class DynamoVllmBackend(VllmBackend):
         metrics: dict[str, dict[str, Any]],
         flat: dict[str, Any],
         nested: dict[str, Any],
+        *,
+        context: dict[str, Any] | None = None,
     ) -> None:
-        super().populate(metrics, flat, nested)
+        super().populate(metrics, flat, nested, context=context)
         self._populate_dynamo(metrics, flat, nested)
 
     def _populate_dynamo(
