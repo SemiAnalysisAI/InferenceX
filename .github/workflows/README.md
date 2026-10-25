@@ -238,8 +238,14 @@ Remove and re-add the primary sweep label to approve the new SHA. The trusted
 dispatcher never checks out or executes PR code itself.
 
 This proof of concept produces benchmark and evaluation artifacts through the
-End-to-End Tests workflow. Those runs are not yet eligible for
-`/use`, which currently accepts only `run-sweep.yml` runs. The PoC
+End-to-End Tests workflow. The dispatch also uploads a `source-identity`
+artifact (PR number, full approved head SHA, merge SHA, and the `evals-only`,
+`agentx-fast`, `all-evals`, and fail-fast modifiers) and `changelog-metadata`.
+A pinned `/use <run_id>` accepts these runs; reuse and staging report the
+recorded PR head and judge modifiers from the recorded dispatch rather than the
+PR's current labels. Older runs without the artifact fall back to the run title
+and the PR's current labels. On the fork PR, `/stage-results <run_id>` stages
+such a run when its recorded head is one of the PR's commits. The PoC
 also fans out the selected matrix immediately. It does not reproduce
 `run-sweep.yml`'s canary-first sequencing: no label runs a canary here, and
 only `full-sweep-fail-fast` sets fail-fast, so the other two primary labels
@@ -251,7 +257,7 @@ behave identically.
 run. The push-to-`main` `merge-ingest.yml` run ignores it.
 
 An authorized maintainer can reuse an eligible completed sweep without keeping
-a primary sweep label on the PR, although staging its results requires one:
+a primary sweep label on the PR:
 
 ```
 /use <run_id>
@@ -276,8 +282,10 @@ pinned run's commit is not part of the PR, it also posts one warning comment for
 that request and run; reuse still proceeds. Details are in the Actions run summary.
 Edits replace the bot's old reaction. `/use <run_id>` also triggers `stage-results.yml`.
 Staging requires a primary sweep label on the PR and a source run created while
-one was applied. It posts a staging comment, or a rejection comment when the PR
-has no primary label. Comments do not trigger or cancel GPU sweeps. Later commits
+one was applied. A PR without a primary label can instead stage only the run
+pinned by its latest authorized `/use <run_id>`, after the same validation that
+acknowledges the request. It posts a staging comment, or a rejection comment
+when neither applies. Comments do not trigger or cancel GPU sweeps. Later commits
 skip a new sweep after changelog/matrix and source-run validation. Merge-time
 validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. Reuse is rejected while the PR currently carries
