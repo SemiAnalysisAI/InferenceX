@@ -48,7 +48,7 @@ gh workflow run serving.yml --repo "$GH_REPO" --ref "$ref" -f serving="$(cat "$y
 for _ in $(seq 1 30); do
     sleep 4
     run_id=$(gh run list --repo "$GH_REPO" -w serving.yml -L 20 --json databaseId,displayTitle,createdAt \
-        --jq "[.[] | select(.displayTitle == \"serving - $title\" and (.createdAt | fromdateiso8601) >= $started)][0].databaseId // empty")
+        --jq "[.[] | select(.displayTitle == \"$title\" and (.createdAt | fromdateiso8601) >= $started)][0].databaseId // empty")
     if [[ -n "$run_id" ]]; then
         echo "https://github.com/$GH_REPO/actions/runs/$run_id"
         exit 0

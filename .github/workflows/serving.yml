@@ -1,4 +1,5 @@
-run-name: serving - ${{ inputs.test-name }}
+name: gn-benchmark
+run-name: ${{ inputs.test-name }}
 # VNG serving-YAML benchmarks (inferencex-e2e/docs/serving/ARCHITECTURE.md).
 # Dispatch with inferencex-e2e/utils/serving/dispatch.sh, which validates first.
 on:
@@ -40,7 +41,7 @@ jobs:
     bench:
         needs: plan
         uses: $/.github/workflows/benchmark-tmpl.yml
-        name: serving /
+        name: gn-benchmark /
         strategy:
             fail-fast: false
             matrix:

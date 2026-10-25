@@ -71,7 +71,7 @@ def build(text: str, inventory=None) -> dict:
     durations = {int(variant.duration) for variant in chosen}
     seconds = f"{durations.pop()}s" if len(durations) == 1 else "mixed"
     concs = ",".join(str(conc) for conc in spec.conc)
-    return {"points": points, "title": f"serving {spec.name} {what} ({seconds}) c{concs} {spec.runner}"}
+    return {"points": points, "title": f"gn-benchmark {spec.name} {what} ({seconds}) c{concs} {spec.runner}"}
 
 
 def main(argv: list[str] | None = None) -> int:

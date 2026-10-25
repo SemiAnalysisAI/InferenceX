@@ -31,7 +31,7 @@ def test_one_point_per_conc_with_the_rendered_scenario():
     assert serving["search"] is False and serving["dataset_kind"] == "public"
     assert yaml.safe_load(serving["scenario_yaml"]) == scenarios.render("agentx", {"duration": 180}).doc
     assert "--port" not in serving["serve_cmd"]
-    assert result["title"] == "serving qwen-tp1 agentx-cc-062126-smoke (180s) c8,16 cluster:hcm-hgx02"
+    assert result["title"] == "gn-benchmark qwen-tp1 agentx-cc-062126-smoke (180s) c8,16 cluster:hcm-hgx02"
 
 
 def test_grid_is_one_job_per_point():
@@ -50,7 +50,7 @@ def test_cli_check_and_errors(tmp_path, capsys):
     good = tmp_path / "good.yaml"
     good.write_text(ENGINE + "scenario: tau2\nconc: 4\n")
     assert main(["--check", str(good)]) == 0
-    assert capsys.readouterr().out.startswith("serving qwen-tp1 custom-agentic-tau2")
+    assert capsys.readouterr().out.startswith("gn-benchmark qwen-tp1 custom-agentic-tau2")
     bad = tmp_path / "bad.yaml"
     bad.write_text(ENGINE + "scenario: tau2\nconc: 4\noverrides: {nope: 1}\n")
     assert main([str(bad)]) == 2
