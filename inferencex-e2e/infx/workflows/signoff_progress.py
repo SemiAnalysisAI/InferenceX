@@ -42,7 +42,7 @@ def mark(repo: str, token: str, signoff_key: str, *, running: bool) -> str:
             collection=collection,
             replace=() if running else (IN_PROGRESS,),
         )
-    except github.APIError as error:
+    except (github.APIError, github.ListingError) as error:
         return f"::warning::Could not update the progress reaction on {signoff_key}: {error}"
     return f"{signoff_key}: {'added' if running else 'cleared'} {IN_PROGRESS} reaction"
 

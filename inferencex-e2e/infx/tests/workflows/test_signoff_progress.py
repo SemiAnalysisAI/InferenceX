@@ -65,3 +65,12 @@ def test_github_errors_warn_instead_of_failing(monkeypatch):
     monkeypatch.setattr(github.subprocess, "run", run)
     message = signoff_progress.mark("o/r", "token", "issuecomment-42", running=True)
     assert message.startswith("::warning::")
+
+
+def test_unreadable_reaction_listing_warns_instead_of_failing(monkeypatch):
+    def run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, json.dumps([]), "")
+
+    monkeypatch.setattr(github.subprocess, "run", run)
+    message = signoff_progress.mark("o/r", "token", "issuecomment-42", running=False)
+    assert message.startswith("::warning::")
