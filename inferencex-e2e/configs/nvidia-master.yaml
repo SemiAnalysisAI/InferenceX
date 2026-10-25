@@ -6523,7 +6523,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0rc1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [4]
         srt-recipe: disagg-variants.yaml:override_1p4d_dep4_tep8_c4_b1
         prefill:
@@ -6538,7 +6538,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: false
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0rc1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [24]
         srt-recipe: disagg-variants.yaml:override_1p6d_dep4_tep4_c24_b4
         prefill:
@@ -6553,7 +6553,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: false
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0rc1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [388]
         srt-recipe: disagg-variants.yaml:override_1p1d_dep8_dep32_c388_b4
         prefill:
@@ -6568,7 +6568,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0rc1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [736]
         srt-recipe: disagg-variants.yaml:override_2p1d_dep8_dep32_c736_b8
         prefill:
@@ -6583,7 +6583,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0rc1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [1152]
         srt-recipe: disagg-variants.yaml:override_3p1d_dep8_dep16_c1152_b32
         prefill:
@@ -6598,7 +6598,7 @@ dsv4-fp4-gb300-dynamo-trt-agentx:
           dp-attn: true
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0rc1" }
+        kv-offload-backend: { name: native, version: "1.3.0rc24" }
         conc-list: [2626]
         srt-recipe: disagg-variants.yaml:override_5p1d_dep8_dep16_c2626_b96
         prefill:
