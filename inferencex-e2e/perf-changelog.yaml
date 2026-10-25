@@ -11158,4 +11158,4 @@
     - "Cap max-num-seqs for p90 interactivity, with graph capture at max-num-seqs x 6 rounded up to vLLM's capture grid: TP4 c1/c2 and TP2 c1/c2/c4 1 / 8, TP2 c8 2 / 16, TP2 c16 4 / 24, TP2 c32 8 / 48, TP2 c64 40 / 240 (was unset / 1024 except c16 4 and c32 8)."
     - "max-num-batched-tokens 32768 at c1-c4 (TP4 c1/c2, TP2 c1/c2/c4) and 8192 from TP2 c8 (TP2 c8 and c64 were 16384; c16 and c32 already 8192)."
     - "The unsearched TP4 c4-c64 recipe variants are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4480
