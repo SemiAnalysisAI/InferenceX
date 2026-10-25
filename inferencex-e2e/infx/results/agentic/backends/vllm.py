@@ -27,6 +27,7 @@ class VllmBackend(ServerMetricsBackend):
     _GPU_KV_SIZE_RE = re.compile(r"GPU KV cache size:\s*(?P<tokens>[\d,]+)\s*tokens")
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
+        """Return True for vllm: metric names, or for an empty scrape when ``framework`` is vllm."""
         metric_names = set(metrics)
         return any(name.startswith("vllm:") for name in metric_names) or (
             not metrics and framework.lower() == "vllm"
@@ -40,6 +41,7 @@ class VllmBackend(ServerMetricsBackend):
         *,
         context: dict[str, Any] | None = None,
     ) -> None:
+        """Fill token totals, cache rates, KV usage, offload statistics and sources."""
         endpoint_roles = (context or {}).get("endpoint_roles")
         prompt_total, generation_total = self.prompt_generation_totals(metrics)
         flat["total_prompt_tokens"] = counter_int(prompt_total)
@@ -192,6 +194,7 @@ class VllmBackend(ServerMetricsBackend):
         self,
         metrics: dict[str, dict[str, Any]],
     ) -> tuple[float | None, float | None]:
+        """Return the vLLM prompt and generation token totals from ``metrics``."""
         prompt_total = sum_stat(
             metrics,
             "vllm:prompt_tokens",
@@ -209,6 +212,7 @@ class VllmBackend(ServerMetricsBackend):
         metrics: dict[str, dict[str, Any]],  # noqa: ARG002
         server_logs: Iterable[str | None],
     ) -> int | None:
+        """Return the summed vLLM GPU KV cache size parsed from ``server_logs``, ignoring ``metrics``."""
         return sum_server_log_capacities(
             server_logs,
             self.kv_cache_pool_tokens_from_server_log,
@@ -216,6 +220,7 @@ class VllmBackend(ServerMetricsBackend):
 
     @classmethod
     def kv_cache_pool_tokens_from_server_log(cls, server_log: str | None) -> int | None:
+        """Return the GPU KV cache size in tokens from ``server_log``, summed per EngineCore, or None."""
         if not server_log:
             return None
 
@@ -254,6 +259,7 @@ def first_counter_total(
     metrics: dict[str, dict[str, Any]],
     metric_names: list[str],
 ) -> float | None:
+    """Return the first non-None counter total among ``metric_names`` in ``metrics``."""
     for metric_name in metric_names:
         value = sum_stat(
             metrics,
@@ -270,6 +276,7 @@ def _vllm_sources(
     disaggregated: bool | None,
     endpoint_roles: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    """Return per-source token, hit rate and KV usage rows, sorted by source id."""
     source_ids = set()
     for metric_name in (
         "vllm:prompt_tokens",
@@ -288,6 +295,7 @@ def _vllm_sources(
             continue
 
         def series_filter(series: dict, source_id: str = source_id) -> bool:
+            """Return whether the series belongs to the selected source."""
             return _source_id(series, disaggregated, endpoint_roles) == source_id
 
         prompt_tokens = sum_stat(metrics, "vllm:prompt_tokens", series_filter=series_filter)
@@ -402,6 +410,7 @@ def _source_id(
     disaggregated: bool | None,
     endpoint_roles: Mapping[str, str] | None = None,
 ) -> str:
+    """Build a role, endpoint and rank identity for a worker series."""
     role = _series_role(series, disaggregated, endpoint_roles)
 
     parts = [role]

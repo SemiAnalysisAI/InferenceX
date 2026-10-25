@@ -13,6 +13,7 @@ class DynamoVllmBackend(VllmBackend):
     name = "dynamo-vllm"
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
+        """Return True for dynamo frameworks or dynamo_ metrics, except dynamo-sglang with sglang metrics."""
         metric_names = set(metrics)
         framework = framework.lower()
         if framework == "dynamo-sglang" and any(
@@ -27,6 +28,7 @@ class DynamoVllmBackend(VllmBackend):
         self,
         metrics: dict[str, dict[str, Any]],
     ) -> tuple[float | None, float | None]:
+        """Return prompt and generation token totals, preferring Dynamo frontend counters over vLLM ones."""
         prompt_total = first_counter_total(
             metrics,
             ["dynamo_frontend_input_sequence_tokens", "vllm:prompt_tokens"],
@@ -45,6 +47,7 @@ class DynamoVllmBackend(VllmBackend):
         *,
         context: dict[str, Any] | None = None,
     ) -> None:
+        """Fill the vLLM fields, then the Dynamo frontend and router fields."""
         super().populate(metrics, flat, nested, context=context)
         self._populate_dynamo(metrics, flat, nested)
 
@@ -54,6 +57,7 @@ class DynamoVllmBackend(VllmBackend):
         flat: dict[str, Any],
         nested: dict[str, Any],
     ) -> None:
+        """Add Dynamo GPU usage, frontend and router hit rates where vLLM metrics left gaps."""
         dynamo_gpu_usage = normalize_fraction(
             gauge_stat(
                 metrics,

@@ -45,11 +45,6 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
     ),
     "gb200-nv": (
         Override(
-            Match(any_of("dsv4"), any_of("fp4"), any_of("llmd-vllm")),
-            entry="DeepSeek-V4-Pro@numa1",
-            served_name="deepseek-ai/DeepSeek-V4-Pro",
-        ),
-        Override(
             Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-sglang")),
             entry="deepseek-r1-0528-fp4-v2",
         ),
@@ -122,6 +117,7 @@ def checkpoint(cluster: Cluster, request: LaunchRequest) -> Checkpoint | None:
     entries = cluster.models.entries
 
     def node_local(key: str) -> bool:
+        """Return whether model entry ``key`` lives on a node-local volume."""
         return volumes[entries[key].root].visibility == "node-local"
 
     key = _override(cluster, request, "entry")

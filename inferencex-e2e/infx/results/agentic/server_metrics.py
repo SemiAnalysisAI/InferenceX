@@ -148,6 +148,10 @@ def compute_server_metrics(
     deployment: Mapping[str, Any] | None = None,
     disaggregated: bool | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """Return flat and nested server metrics plus warnings from aiperf's ``server_metrics`` export.
+
+    Token totals fall back to ``records``. Raises ValueError when no backend adapter matches.
+    """
     metrics = index_server_metrics(server_metrics)
     flat = SERVER_CACHE_FLAT_FIELDS.copy()
     warnings: list[str] = []

@@ -21,14 +21,17 @@ class RequestError(ValueError):
 
     @classmethod
     def missing(cls, *names: str) -> RequestError:
+        """Return an error naming the unset environment variables ``names``."""
         return cls(f"required environment variables are not set: {', '.join(names)}")
 
 
 def _equals(*truthy: str) -> BeforeValidator:
+    """Return a validator reading a string as True when it is one of ``truthy``."""
     return BeforeValidator(lambda value: value if isinstance(value, bool) else value in truthy)
 
 
 def _int_list(value: Any) -> Any:
+    """Split a whitespace-separated string into a list, passing other values through."""
     return value.split() if isinstance(value, str) else value
 
 
@@ -39,6 +42,7 @@ IntList = Annotated[list[int], BeforeValidator(_int_list)]
 
 
 def _describe(error: ValidationError) -> str:
+    """Render a validation error as one message listing missing then invalid inputs."""
     missing: list[str] = []
     invalid: list[str] = []
     for detail in error.errors(include_url=False, include_input=False):
@@ -113,6 +117,7 @@ class LaunchRequest(BaseModel):
 
     @property
     def workspace(self) -> Path:
+        """Return ``GITHUB_WORKSPACE``, or raise ``RequestError`` if it is unset."""
         if self.github_workspace is None:
             raise RequestError.missing("GITHUB_WORKSPACE")
         return self.github_workspace
@@ -181,17 +186,3 @@ class ScriptRequest(LaunchRequest):
     model: str = Field(alias="MODEL")
     gpu_count: int = Field(alias="GPU_COUNT")
     salloc_time_limit: int = Field(alias="SALLOC_TIME_LIMIT")
-
-
-class LlmdRequest(SrtRequest):
-    """An llm-d vLLM multinode job submitted through benchmarks/multi_node/llm-d."""
-
-    model: str = Field(alias="MODEL")
-    disagg: TrueFlag = Field(alias="DISAGG")
-    prefill_nodes: int = Field(alias="PREFILL_NODES")
-    decode_nodes: int = Field(alias="DECODE_NODES")
-    prefill_num_workers: int = Field(1, alias="PREFILL_NUM_WORKERS")
-    decode_num_workers: int = Field(1, alias="DECODE_NUM_WORKERS")
-    isl: int = Field(alias="ISL")
-    osl: int = Field(alias="OSL")
-    random_range_ratio: str = Field(alias="RANDOM_RANGE_RATIO")

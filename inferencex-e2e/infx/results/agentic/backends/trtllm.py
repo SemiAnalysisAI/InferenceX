@@ -30,6 +30,7 @@ class TrtllmBackend(ServerMetricsBackend):
     accepts_context = True
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
+        """Return True for trtllm_ metric names, or for an empty scrape from a TRT-LLM ``framework``."""
         metric_names = set(metrics)
         return any(name.startswith("trtllm_") for name in metric_names) or (
             not metrics and framework.lower() in ("trtllm", "dynamo-trt", "dynamo-trtllm")
@@ -43,6 +44,7 @@ class TrtllmBackend(ServerMetricsBackend):
         *,
         context: dict[str, Any] | None = None,
     ) -> None:
+        """Fill token totals, interval cache reuse and per-endpoint diagnostics."""
         context = context or {}
         prompt_total = sum_stat(
             metrics, "dynamo_frontend_input_sequence_tokens", preferred_keys=("total", "sum")
@@ -133,6 +135,7 @@ class TrtllmBackend(ServerMetricsBackend):
         metrics: dict[str, dict[str, Any]],
         server_logs: Iterable[str | None],
     ) -> int | None:
+        """Return KV max blocks times tokens per block from ``metrics``, or None if either is missing."""
         del server_logs
         max_blocks = sum_stat(
             metrics,
@@ -383,6 +386,7 @@ def _trtllm_sources(
     paired: dict[str, tuple[int, int]],
     disaggregated: bool | None,
 ) -> list[dict[str, Any]]:
+    """Return per-endpoint token, hit rate and KV usage rows, sorted by endpoint."""
     endpoints: set[str] = set()
     for entry in metrics.values():
         if not isinstance(entry, dict):
@@ -402,6 +406,7 @@ def _trtllm_sources(
     for endpoint in sorted(endpoints):
 
         def series_filter(series: dict, endpoint: str = endpoint) -> bool:
+            """Return whether ``series`` was scraped from ``endpoint``."""
             return str(series.get("endpoint_url", "")) == endpoint
 
         prompt_tokens = _alias_total(metrics, PROMPT_TOKENS, series_filter)
@@ -437,6 +442,7 @@ def _trtllm_sources(
 
 
 def _normalize_role(mode: str) -> str:
+    """Map a disaggregation ``mode`` label to prefill, decode or combined, else return it lowercased."""
     lowered = mode.lower()
     if lowered in ("prefill", "context", "ctx"):
         return "prefill"

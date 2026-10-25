@@ -119,6 +119,8 @@ def multinode_recipe(tmp_path):
     ({"prefill": {"nodes": 2}, "decode": {"nodes": 4}}, 6),
     ({"prefill": {"nodes": 2}, "decode": {"nodes": "colocate"}}, 2),
     ({"prefill": {"nodes": 2}, "decode": {"workers": 1}}, None),
+    ({"prefill": {"nodes": 2}, "decode": {"nodes": None}}, None),
+    ({"prefill": {"nodes": 2}, "decode": None}, None),
 ])
 def test_multinode_node_count_reads_schema_two_roles(tmp_path, multinode_recipe, roles, expected):
     import infx.matrix.generate as generate
@@ -130,11 +132,34 @@ def test_multinode_node_count_reads_schema_two_roles(tmp_path, multinode_recipe,
         assert generate.recipe_node_count(tmp_path, srt_recipe) == expected
 
 
+@pytest.mark.parametrize("sections", [
+    {"services": None},
+    {"infra": None},
+    {"frontend": None},
+    {"benchmark": None},
+    {"services": [{"type": "etcd", "placement": None}, {"type": "nats"}]},
+])
+def test_recipe_node_count_treats_null_sections_as_absent(tmp_path, multinode_recipe, sections):
+    import infx.matrix.generate as generate
+    srt_recipe = multinode_recipe(
+        {"schema": 2, "roles": {"prefill": {"nodes": 1}, "decode": {"nodes": 2}}, **sections}
+    )
+    assert generate.recipe_node_count(tmp_path, srt_recipe) == 3
+
+
+def test_recipe_node_count_rejects_an_empty_recipe(tmp_path, multinode_recipe):
+    import infx.matrix.generate as generate
+    srt_recipe = multinode_recipe(None)
+    with pytest.raises(ValueError, match="must declare schema: 2: .*test.yaml"):
+        generate.recipe_node_count(tmp_path, srt_recipe)
+
+
 @pytest.mark.parametrize("selector, expected", [
     ("base", 3),
     ("override_wide", 5),
     ("override_colocated", 2),
-    ("zip_override_sweep[0]", None),
+    ("zip_override_sweep[0]", 2),
+    ("zip_override_sweep[1]", 3),
 ])
 def test_recipe_node_count_resolves_override_selectors(tmp_path, multinode_recipe, selector, expected):
     srt_recipe = multinode_recipe({
@@ -1235,55 +1260,61 @@ class TestGenerateFullSweepSingleNode:
         } == {(2, 2, 2)}
 
     def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.model_prefix = ["dsr1"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
+        entry = sample_single_node_config["dsr1-fp8-mi300x-sglang"]
+        sample_single_node_config["dsr1flash-fp8-mi300x-sglang"] = {**entry, "model-prefix": "dsr1flash"}
 
-        full_sweep_args_single_node.model_prefix = ["nonexistent"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
+        selected = {}
+        for prefixes in (["dsr1"], ["dsr1flash"], ["dsr1", "dsr1flash"]):
+            full_sweep_args_single_node.model_prefix = prefixes
+            result = generate_full_sweep(
+                full_sweep_args_single_node,
+                sample_single_node_config,
+                sample_runner_config
+            )
+            selected[tuple(prefixes)] = sorted({row["model-prefix"] for row in result})
 
-    def test_filter_by_precision(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.precision = ["fp8"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
+        assert selected == {
+            ("dsr1",): ["dsr1"],
+            ("dsr1flash",): ["dsr1flash"],
+            ("dsr1", "dsr1flash"): ["dsr1", "dsr1flash"],
+        }
 
-        full_sweep_args_single_node.precision = ["fp4"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
+    @pytest.mark.parametrize("field", ["precision", "framework"])
+    def test_filter_by_config_field(
+        self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node, field,
+    ):
+        entry = sample_single_node_config["dsr1-fp8-mi300x-sglang"]
+        sample_single_node_config["dsr1-fp4-mi300x-vllm"] = {
+            **entry, "precision": "fp4", "framework": "vllm",
+        }
 
-    def test_filter_by_framework(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
-        full_sweep_args_single_node.framework = ["sglang"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
+        selected = {}
+        for value in ("fp8", "fp4") if field == "precision" else ("sglang", "vllm"):
+            setattr(full_sweep_args_single_node, field, [value])
+            result = generate_full_sweep(
+                full_sweep_args_single_node, sample_single_node_config, sample_runner_config,
+            )
+            selected[value] = {row["precision"] for row in result}
 
-        full_sweep_args_single_node.framework = ["vllm"]
-        result = generate_full_sweep(
-            full_sweep_args_single_node,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
+        if field == "precision":
+            assert selected == {"fp8": {"fp8"}, "fp4": {"fp4"}}
+        else:
+            assert selected == {"sglang": {"fp8"}, "vllm": {"fp4"}}
+
+    @pytest.mark.parametrize(("filters", "message"), [
+        ({"model_prefix": ["dsr1", "deepseek"]}, "No config has model prefix: deepseek"),
+        ({"precision": ["FP8"]}, "No config has precision: FP8"),
+        ({"framework": ["trtllm"]}, "No config has framework: trtllm"),
+    ])
+    def test_filter_value_no_config_has_is_rejected(
+        self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node,
+        filters, message,
+    ):
+        vars(full_sweep_args_single_node).update(filters)
+        with pytest.raises(ValueError, match=f"^{message}$"):
+            generate_full_sweep(
+                full_sweep_args_single_node, sample_single_node_config, sample_runner_config,
+            )
 
     def test_filter_by_runner_type(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         full_sweep_args_single_node.runner_type = ["mi300x"]
@@ -2266,6 +2297,16 @@ class TestCommandLine:
         assert result[0]['eval-conc'] == 4
         assert result[0]['run-eval'] is True
 
+    def test_trim_conc_merges_concurrencies_whose_recipe_variants_differ(self):
+        # A single-node bundle selects one variant per CONC, so each point has its own fingerprint.
+        shape = {'tp': 8, 'model': 'm', 'srt-recipe': 'agentic.yaml'}
+        rows = [
+            {**shape, 'conc': 8, 'recipe-fingerprint': 'b' * 64},
+            {**shape, 'conc': 2, 'recipe-fingerprint': 'a' * 64},
+        ]
+
+        assert trim_conc(rows) == [{**shape, 'conc': 2, 'recipe-fingerprint': 'a' * 64}]
+
     def test_trim_conc_never_merges_a_standalone_eval_into_another_suite(self):
         shape = {'tp': 8, 'model': 'm'}
         vendor = {**shape, 'conc': 16, 'run-eval': True,
@@ -2279,6 +2320,68 @@ class TestCommandLine:
         assert sorted(
             (row['eval-framework'], row['conc'], bool(row.get('eval-only'))) for row in result
         ) == [('kimi-vendor', 1, False), ('lm-eval', 16, True)]
+
+    @pytest.mark.parametrize('multinode', [False, True])
+    def test_trimmed_all_evals_keep_gsm8k_beside_the_vendor_eval(self, multinode):
+        shape = {
+            'scenario-type': 'agentic-coding', 'model-prefix': 'minimaxm3', 'model': 'm',
+            'runner': 'r', 'framework': 'vllm', 'precision': 'fp4', 'spec-decoding': 'none',
+            'dp-attn': False, 'image': 'img', 'kv-offloading': 'none',
+        }
+        if multinode:
+            shape |= {'prefill': {'tp': 8}, 'decode': {'tp': 8}}
+            rows = [{**shape, 'conc': [4, 8]}]
+        else:
+            shape |= {'tp': 4}
+            rows = [{**shape, 'conc': 4}, {**shape, 'conc': 8}]
+
+        result = generate_sweep_configs.select_matrix_evals(rows, mode='all', trim=True)
+
+        expected_conc = [4] if multinode else 4
+        assert sorted((row['eval-framework'], row['conc']) for row in result) == [
+            ('lm-eval', expected_conc), ('minimax-vendor', expected_conc),
+        ]
+
+    def test_trimming_does_not_give_two_recipes_the_same_app_eval(self):
+        # Each recipe's eval starts at its own highest concurrency; trimming moves both to 2.
+        shape = {
+            'model': 'm', 'model-prefix': 'm', 'runner': 'r', 'framework': 'f',
+            'precision': 'fp4', 'spec-decoding': 'none', 'disagg': True, 'isl': 8192,
+            'osl': 1024, 'prefill': {'tp': 8, 'num-worker': 1},
+            'decode': {'tp': 8, 'num-worker': 2},
+        }
+        rows = [
+            {**shape, 'srt-recipe': 'narrow.yaml', 'conc': [2, 64]},
+            {**shape, 'srt-recipe': 'wide.yaml', 'conc': [2, 128]},
+        ]
+
+        result = generate_sweep_configs.select_matrix_evals(rows, mode='default', trim=True)
+
+        assert [
+            (row['srt-recipe'], row['conc'], row['run-eval'], row.get('eval-conc'))
+            for row in result
+        ] == [('narrow.yaml', [2], True, 2), ('wide.yaml', [2], False, None)]
+
+    def test_trimmed_agentic_eval_without_a_framework_still_claims_its_app_eval(self):
+        # dense.yaml's eval moves from conc 64 to its conc-16 row; sparse.yaml evaluates conc 16.
+        shape = {
+            'scenario-type': 'agentic-coding', 'model': 'm', 'model-prefix': 'm',
+            'runner': 'r', 'framework': 'f', 'precision': 'fp4', 'spec-decoding': 'none',
+            'disagg': True, 'kv-offloading': 'none', 'prefill': {'tp': 8, 'num-worker': 1},
+            'decode': {'tp': 8, 'num-worker': 1},
+        }
+        rows = [
+            {**shape, 'srt-recipe': 'dense.yaml', 'conc': [16]},
+            {**shape, 'srt-recipe': 'dense.yaml', 'conc': [64]},
+            {**shape, 'srt-recipe': 'sparse.yaml', 'conc': [16]},
+        ]
+
+        result = generate_sweep_configs.select_matrix_evals(rows, mode='default', trim=True)
+
+        assert [
+            (row['srt-recipe'], row['conc'], row['run-eval'], row.get('eval-framework'))
+            for row in result
+        ] == [('dense.yaml', [16], True, 'lm-eval'), ('sparse.yaml', [16], False, None)]
 
     @pytest.mark.parametrize('entrypoint', ['cli', 'api'])
     def test_smoke_keeps_canonical_eval_instead_of_throughput_minimum(
@@ -2311,6 +2414,19 @@ class TestCommandLine:
         assert [(row['conc'], row.get('eval-only', False), row['run-eval']) for row in result] == [
             ([4], False, False), ([64], True, True)]
         assert result[1]['eval-conc'] == 64
+
+    def test_smoke_does_not_turn_a_standalone_eval_into_an_idle_row(self):
+        from infx.matrix.generate import smoke_entries
+        shape = {'tp': 4, 'model': 'm'}
+        vendor = {**shape, 'conc': 4, 'run-eval': True, 'eval-framework': 'minimax-vendor'}
+        gsm8k = {**shape, 'conc': 8, 'run-eval': True, 'eval-only': True,
+                 'eval-framework': 'lm-eval'}
+
+        result = smoke_entries([vendor, gsm8k])
+
+        assert [
+            (row['conc'], row.get('eval-only', False), row['run-eval']) for row in result
+        ] == [(4, False, False), (4, True, True), (8, True, True)]
 
     def test_all_evals_batches_each_multinode_concurrency(
         self,
@@ -2549,18 +2665,22 @@ class TestAgenticGeneration:
         assert [(e["runner"], e["conc"]) for e in entries] == expected
         assert config == original
 
-    @pytest.mark.parametrize(("full_filters", "exact_filters", "expected"), [
-        ({}, {}, [3, 6, 10]),
-        ({"min_conc": 5, "max_conc": 9}, {"conc": [6, 9]}, [6]),
-        ({"max_conc": 2}, {"conc": [2]}, []),
-        ({"min_conc": 11}, {"conc": [11]}, []),
+    @pytest.mark.parametrize(("full_filters", "exact_filters", "expected", "rejected"), [
+        ({}, {}, [3, 6, 10], None),
+        ({"min_conc": 5, "max_conc": 9}, {"conc": [6]}, [6], None),
+        ({"max_conc": 2}, {"conc": [2]}, [], "2"),
+        ({"min_conc": 11}, {"conc": [6, 11]}, [], "11"),
     ])
     def test_range_boundaries(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
-        agentic_mode, full_filters, exact_filters, expected,
+        agentic_mode, full_filters, exact_filters, expected, rejected,
     ):
         config, benchmark = agentic_config
         benchmark.update({"conc-start": 3, "conc-end": 10})
+        if agentic_mode == "test-config" and rejected is not None:
+            with pytest.raises(ValueError, match=f"not generated by the selected configs: {rejected}$"):
+                generate_agentic_sweep(config, sample_runner_config, **exact_filters)
+            return
         filters = full_filters if agentic_mode == "full-sweep" else exact_filters
         entries = generate_agentic_sweep(config, sample_runner_config, **filters)
         points = [entry["conc"] for entry in entries]
