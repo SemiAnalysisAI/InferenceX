@@ -11170,3 +11170,12 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4456
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+    - kimik3-fp4-h200-vllm-agentic-balanced
+    - kimik3-fp4-h200-vllm-agentic-simple
+  scenario-type: [agentic-coding]
+  description:
+    - Require validated GPU power across the full Kimi-K3 H200 AgentX curve
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4489

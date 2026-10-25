@@ -1375,7 +1375,8 @@ kimik3-fp4-h200-vllm-agentic-latency:
   srt-recipe-dir: kimik3/vllm/h200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - require-power: true
+      dram-utilization: 0.80
       search-space:
       # Latency-oriented: TP16 x DP2 with EP32 across four H200 nodes.
       - spec-decoding: mtp
@@ -1402,7 +1403,8 @@ kimik3-fp4-h200-vllm-agentic-balanced:
   srt-recipe-dir: kimik3/vllm/h200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - require-power: true
+      dram-utilization: 0.80
       search-space:
       # Balanced: TP8 x DP4 with EP32 across four H200 nodes.
       - spec-decoding: mtp
@@ -1429,7 +1431,8 @@ kimik3-fp4-h200-vllm-agentic-simple:
   srt-recipe-dir: kimik3/vllm/h200-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - require-power: true
+      dram-utilization: 0.80
       search-space:
       # Throughput-oriented hybrid TP/DEP/EP with vLLM's host-DRAM KV tier.
       - spec-decoding: mtp
