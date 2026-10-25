@@ -37,7 +37,7 @@ INVALID = (
 )
 
 
-CHECKS = range(18)
+CHECKS = range(19)
 
 
 def normalize_verdict(verdict: str) -> str:
@@ -66,7 +66,7 @@ def parse_verdict(verdict: str) -> tuple[dict[int, str], list[str]]:
         if check == 13:
             allowed.add("WARN")
         if check not in CHECKS:
-            errors.append(f"Line {number}: Check {check} does not exist; use Checks 0-17.")
+            errors.append(f"Line {number}: Check {check} does not exist; use Checks 0-18.")
         elif check in statuses:
             errors.append(f"Line {number}: Check {check} appears more than once.")
         elif status not in allowed:
@@ -78,7 +78,7 @@ def parse_verdict(verdict: str) -> tuple[dict[int, str], list[str]]:
         statuses.setdefault(check, status)
     missing = [str(check) for check in CHECKS if check not in statuses]
     if missing:
-        errors.append(f"Missing Check {', '.join(missing)}; include each of Checks 0-17 once.")
+        errors.append(f"Missing Check {', '.join(missing)}; include each of Checks 0-18 once.")
     expected = (
         REJECT
         if "FAIL" in statuses.values()

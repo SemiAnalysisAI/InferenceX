@@ -12,6 +12,13 @@ from urllib.parse import quote
 from infx import github
 from infx.workflows.reuse import write_outputs
 
+SIGNOFF_PHRASE = "As a PR reviewer and CODEOWNER"
+
+
+def is_signoff(body: str | None) -> bool:
+    """True when the checklist phrase opens the comment, so quoting it elsewhere is ignored."""
+    return (body or "").lstrip().startswith(SIGNOFF_PHRASE)
+
 
 def _positive_id(value: Any) -> int:
     """Return value as an int, raising ValueError unless it is a positive decimal ID."""
@@ -108,9 +115,7 @@ def resolve(
             else {"created", "edited"}
         )
         comment = event.get("review" if event_name == "pull_request_review" else "comment") or {}
-        if event.get("action") not in expected_actions or "As a PR reviewer and CODEOWNER" not in (
-            comment.get("body") or ""
-        ):
+        if event.get("action") not in expected_actions or not is_signoff(comment.get("body")):
             return {"proceed": "false"}
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
         raise ValueError("Invalid GitHub repository")
