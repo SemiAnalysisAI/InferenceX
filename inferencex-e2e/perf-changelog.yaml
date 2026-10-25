@@ -11197,3 +11197,10 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-b200-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from nightly-dev-20261021-c1c287a4 to nightly-dev-20261025-65633129, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4507
+  scenario-type: [agentic-coding]
