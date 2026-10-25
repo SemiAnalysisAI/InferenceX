@@ -23,6 +23,7 @@ from .artifacts import (
 
 
 def main() -> int:
+    """Build the AgentX aggregate from RESULT_DIR artifacts, write it to AGENTIC_OUTPUT_DIR and return the exit code."""
     result_filename = os.environ.get("RESULT_FILENAME", "")
     if not result_filename:
         print("ERROR: RESULT_FILENAME env var not set", file=sys.stderr)

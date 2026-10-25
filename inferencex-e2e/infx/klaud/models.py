@@ -9,11 +9,9 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# A maintainer label that stops a candidate now and keeps the planner from retrying it while set.
-ABORT_LABEL = "klaud-abort"
-
 
 def utc(value: str | datetime) -> datetime:
+    """Return an ISO timestamp or aware datetime as a UTC datetime, raising ValueError if naive."""
     result = (
         datetime.fromisoformat(value.replace("Z", "+00:00")) if isinstance(value, str) else value
     )
@@ -23,17 +21,22 @@ def utc(value: str | datetime) -> datetime:
 
 
 def stamp(value: datetime) -> str:
+    """Return an aware datetime as an ISO UTC string ending in ``Z``."""
     return utc(value).isoformat().replace("+00:00", "Z")
 
 
 def identity(value: Any) -> str:
+    """Return the SHA-256 hex digest of ``value`` as canonical JSON."""
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
 
 
 def normalized_image(value: str) -> str:
-    """Normalize registry paths without changing tags, digests or repositories."""
+    """Return image ``value`` with a ``registry#path`` separator turned into ``/``.
+
+    Tags, digests and repositories are left unchanged.
+    """
     registry, separator, remainder = value.partition("#")
     if separator and remainder and ("." in registry or ":" in registry):
         return registry + "/" + remainder
@@ -66,6 +69,7 @@ class CandidateReview(Contract):
 
     @model_validator(mode="after")
     def consistent_decision(self) -> CandidateReview:
+        """Return the review, raising ValueError if the decision contradicts its fields."""
         if self.decision == "proceed" and (
             not self.family or self.pull_requests or not self.baseline_model
         ):
@@ -92,19 +96,28 @@ class Ownership(Contract):
     candidates: list[OwnedCandidate] = Field(max_length=256)
 
 
+LEGACY_OUTCOMES = {
+    "readiness-blocked": "missing-assets",
+    "uncertain": "inconclusive",
+    "unexpected-error": "no-outcome",
+    "capacity-deferred": "no-capacity",
+    "aborted": "closed-by-maintainer",
+}
+
+
 class CandidateOutcome(Contract):
     outcome: Literal[
         "validated",
-        "capacity-deferred",
-        "readiness-blocked",
+        "no-capacity",
+        "missing-assets",
         "incompatible",
         "duplicate",
         "retired",
         "already-updated",
-        "uncertain",
+        "inconclusive",
         "failed",
-        "aborted",
-        "unexpected-error",
+        "closed-by-maintainer",
+        "no-outcome",
     ]
     phase: Literal["resolve", "baseline", "targeted", "final-sweep", "cleanup", "unknown"]
     pull_request: Annotated[int, Field(gt=0)] | None
@@ -123,23 +136,46 @@ class CandidateOutcome(Contract):
         | None
     ) = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def current_names(cls, data: Any) -> Any:
+        """Return ``data`` with an outcome name from older PR comments and artifacts renamed."""
+        if isinstance(data, dict) and data.get("outcome") in LEGACY_OUTCOMES:
+            return {**data, "outcome": LEGACY_OUTCOMES[data["outcome"]]}
+        return data
+
     @model_validator(mode="after")
     def consistent_outcome(self) -> CandidateOutcome:
-        if self.outcome != "unexpected-error" and self.phase == "unknown":
+        """Return the outcome, raising ValueError if phase, PR, runs or reason code disagree."""
+        if self.outcome != "no-outcome" and self.phase == "unknown":
             raise ValueError("Completed outcomes require a known phase")
-        if self.outcome in ("validated", "aborted") and self.pull_request is None:
+        if self.outcome in ("validated", "closed-by-maintainer") and self.pull_request is None:
             raise ValueError("This outcome requires a PR")
         if self.outcome == "validated" and (not self.run_ids or self.phase != "final-sweep"):
             raise ValueError("Validated requires final-sweep evidence")
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Run IDs must be distinct")
         if self.reason_code == "weights-missing":
-            if self.outcome != "readiness-blocked":
-                raise ValueError("weights-missing requires a readiness-blocked outcome")
+            if self.outcome != "missing-assets":
+                raise ValueError("weights-missing requires a missing-assets outcome")
         elif self.reason_code is not None and (
             self.outcome != "failed" or self.phase != "baseline"
         ):
             raise ValueError("Baseline reason codes require a failed baseline outcome")
+        return self
+
+
+class SessionEnd(Contract):
+    """How a candidate session ended: finished with a verified outcome, or parked on its runs."""
+
+    status: Literal["finished", "parked"]
+    outcome: CandidateOutcome | None = None
+
+    @model_validator(mode="after")
+    def outcome_only_when_finished(self) -> SessionEnd:
+        """Return the record, raising ValueError unless only a finished session has an outcome."""
+        if (self.status == "finished") != (self.outcome is not None):
+            raise ValueError("A finished session reports its outcome; a parked one reports none")
         return self
 
 
@@ -154,6 +190,7 @@ class Feed(Contract):
     @field_validator("retrieved_at")
     @classmethod
     def valid_timestamp(cls, value: str) -> str:
+        """Return ``value`` unchanged, raising ValueError unless it is an aware ISO timestamp."""
         utc(value)
         return value
 
@@ -175,6 +212,7 @@ class PublicRow(BaseModel):
     @field_validator("date")
     @classmethod
     def valid_date(cls, value: str) -> str:
+        """Return ``value`` unchanged, raising ValueError unless it is a YYYY-MM-DD date."""
         from datetime import date
 
         if date.fromisoformat(value).isoformat() != value:

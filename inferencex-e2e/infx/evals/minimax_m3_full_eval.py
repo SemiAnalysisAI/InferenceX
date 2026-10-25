@@ -58,7 +58,8 @@ class FullSuiteError(RuntimeError):
 
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
-        return None
+        """Refuse every redirect by returning None."""
+        return
 
 
 _NO_REDIRECT_OPENER = urllib.request.build_opener(_RejectRedirects())
@@ -91,6 +92,10 @@ def verify_source_content(relative_path: str, content: bytes) -> None:
 
 
 def _fetch_source(relative_path: str) -> bytes:
+    """Download the pinned source file at relative_path, verify its hash and return its bytes.
+
+    Retries transient failures and raises FullSuiteError once every attempt fails.
+    """
     url = source_url(relative_path)
     request = urllib.request.Request(  # noqa: S310
         url,
@@ -111,6 +116,7 @@ def _fetch_source(relative_path: str) -> bytes:
                 if declared_size is not None and int(declared_size) > MAX_SOURCE_BYTES:
                     raise FullSuiteError(f"pinned source {relative_path} exceeds the size limit")
                 content = response.read(MAX_SOURCE_BYTES + 1)
+            verify_source_content(relative_path, content)
         except (
             FullSuiteError,
             OSError,
@@ -122,7 +128,6 @@ def _fetch_source(relative_path: str) -> bytes:
                 time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
                 continue
             break
-        verify_source_content(relative_path, content)
         return content
     raise FullSuiteError(
         f"failed to download pinned source {relative_path} after "
@@ -131,6 +136,10 @@ def _fetch_source(relative_path: str) -> bytes:
 
 
 def _validate_sample(content: bytes) -> None:
+    """Check that pinned sample.jsonl content has the expected number of JSON object rows.
+
+    Raises ValueError otherwise.
+    """
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -226,6 +235,7 @@ def build_verifier_command(
 
 
 def _error_dict(error: BaseException) -> dict[str, str]:
+    """Return the type name and message of error as a dict."""
     return {"type": type(error).__name__, "message": str(error)}
 
 
@@ -236,6 +246,10 @@ def _compatibility_result(
     effective: int,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
+    """Build the lm-eval style result for model with score over effective samples.
+
+    Records integration_error in the result when given.
+    """
     result: dict[str, Any] = {
         "result_format": RESULT_FORMAT,
         "eval_adapter": ADAPTER_NAME,
@@ -272,6 +286,7 @@ def _compatibility_result(
 
 
 def _compatibility_path(output_dir: Path) -> Path:
+    """Delete stale compatibility results in output_dir and return a new timestamped result path."""
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
@@ -279,10 +294,15 @@ def _compatibility_path(output_dir: Path) -> Path:
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
+    """Write value to path as indented UTF-8 JSON."""
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _read_native_report(path: Path) -> dict[str, Any]:
+    """Load the native summary JSON object at path.
+
+    Raises FullSuiteError if it is missing or invalid.
+    """
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -293,8 +313,12 @@ def _read_native_report(path: Path) -> dict[str, Any]:
 
 
 def _read_native_results(path: Path) -> list[dict[str, Any]]:
+    """Load the native JSONL result rows at path.
+
+    Raises FullSuiteError unless there are exactly the expected number of object rows.
+    """
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8").removesuffix("\n").split("\n")
     except OSError as exc:
         raise FullSuiteError(f"native results are unavailable: {exc}") from exc
     if len(lines) != EXPECTED_RESULT_COUNT or any(not line.strip() for line in lines):
@@ -314,12 +338,17 @@ def _read_native_results(path: Path) -> list[dict[str, Any]]:
 
 
 def _count(value: Any, name: str) -> int:
+    """Return value if it is a non-negative int, else raise FullSuiteError naming field name."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise FullSuiteError(f"native summary {name} must be a non-negative integer")
     return value
 
 
 def _rate(value: Any, name: str) -> float:
+    """Return value as a float if it is a finite rate in [0, 1].
+
+    Raises FullSuiteError naming field name otherwise.
+    """
     if (
         isinstance(value, bool)
         or not isinstance(value, (int, float))
@@ -460,6 +489,7 @@ def run_full_suite(
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse argv into the prepare-source, run, project or failure subcommand and its options."""
     parser = argparse.ArgumentParser(
         description="Run or project the pinned full MiniMax M3 verifier."
     )
@@ -488,6 +518,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the chosen subcommand and return 0 on success or 1 on failure."""
     args = parse_args(argv)
     if args.command == "prepare-source":
         try:

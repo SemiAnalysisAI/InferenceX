@@ -177,13 +177,17 @@ def test_unreadable_series_does_not_get_silently_skipped() -> None:
 
 
 @pytest.mark.parametrize("offload", [30, math.nan])
+@pytest.mark.parametrize("labelled", [False, True])
 def test_invalid_worker_cpu_count_cannot_hide_in_another_workers_denominator(
-    offload: float,
+    offload: float, labelled: bool
 ) -> None:
-    flat, nested = _compute(
-        _export({"p": 100, "q": 900}, {"p": 80, "q": 20}, {"p": offload, "q": 0}),
-        {"SRT_PREFILL_ENDPOINTS": "p,q"},
-    )
+    export = _export({"p": 100, "q": 900}, {"p": 80, "q": 20}, {"p": offload, "q": 0})
+    if labelled:
+        for metric in export["metrics"].values():
+            for series in metric["series"]:
+                series["labels"] = {"engine": series["endpoint_url"]}
+                series["endpoint_url"] = "http://worker/metrics"
+    flat, nested = _compute(export, {"SRT_PREFILL_ENDPOINTS": "worker" if labelled else "p,q"})
     _assert_rates(flat, nested, 0.1, None, None)
 
 
@@ -216,10 +220,30 @@ def test_unknown_cache_roles_preserve_other_atom_telemetry() -> None:
         ({"KV_OFFLOADING": "none", "KV_OFFLOAD_BACKEND": "mooncake"}, None, None),
     ],
 )
+@pytest.mark.parametrize("offload", [{}, {"p": 0}])
 def test_missing_offload_is_zero_only_with_confirmed_disabled_tier(
-    env: dict, cpu: float | None, overall: float | None
+    env: dict, cpu: float | None, overall: float | None, offload: dict
 ) -> None:
     flat, nested = _compute(
-        _export({"worker": 100}, {"worker": 60}, {}), {"DISAGG": "false", **env}
+        _export({"p": 100, "q": 100}, {"p": 60, "q": 60}, offload),
+        {"SRT_PREFILL_ENDPOINTS": "p,q", **env},
     )
     _assert_rates(flat, nested, 0.6, cpu, overall)
+
+
+@pytest.mark.parametrize("offload", [10, math.nan, None])
+def test_disabled_cpu_tier_does_not_hide_invalid_present_offload(offload: object) -> None:
+    flat, nested = _compute(
+        _export({"p": 100, "q": 100}, {"p": 60, "q": 60}, {"p": offload}),
+        {"SRT_PREFILL_ENDPOINTS": "p,q", "KV_OFFLOADING": "none"},
+    )
+    _assert_rates(flat, nested, 0.6, None, None)
+
+
+def test_disabled_cpu_tier_does_not_fill_an_unmatched_label_domain() -> None:
+    export = _export({"worker": 100}, {"worker": 60}, {"worker": 0})
+    export["metrics"]["atom:prefix_cache_offload_tokens"]["series"][0]["labels"] = {
+        "engine": "other"
+    }
+    flat, nested = _compute(export, {"DISAGG": "false", "KV_OFFLOADING": "none"})
+    _assert_rates(flat, nested, 0.6, None, None)

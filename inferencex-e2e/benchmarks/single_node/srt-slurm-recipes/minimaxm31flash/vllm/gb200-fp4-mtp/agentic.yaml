@@ -1,0 +1,86 @@
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-gb200-vllm-agentic-dspark
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Cold loads of the 250 GB checkpoint from the hub cache run past half an hour.
+  health_check:
+    interval_seconds: 5
+    max_attempts: 1440
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        # The checkpoint is QAT-trained for an NVFP4 KV cache.
+        kv-cache-dtype: nvfp4
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        max-model-len: 1048576
+        max-num-batched-tokens: 8192
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        disable-uvicorn-access-log: true
+      env:
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+zip_override_tp4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        max-num-seqs: [2, 8, 16, 32, 64]
+        # Golden AL 4.04.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: ['1', '4', '8', '16', '32']
+
+zip_override_dep4:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 4
+        enable-expert-parallel: true
+        max-num-seqs: [32, 64]
+        # Golden AL 2.88.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: ['64', '128']

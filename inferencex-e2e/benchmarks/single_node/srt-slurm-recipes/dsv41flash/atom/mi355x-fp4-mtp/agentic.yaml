@@ -45,8 +45,6 @@ base:
         AITER_LOG_LEVEL: WARNING
   benchmark:
     env:
-      # The upstream one-hour profile warms five requests per lane.
-      AIPERF_WARMUP_REQUESTS_PER_LANE: '5'
       # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'
