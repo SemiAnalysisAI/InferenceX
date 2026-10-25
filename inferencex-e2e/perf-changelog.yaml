@@ -11197,3 +11197,10 @@
     - "Balanced TP4 at conc 64 with L2 HiCache (write_back, hicache-size 180 GB per rank), and the scheduler and decode graph batch at 128."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4499
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-b200-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from qwen38flashnext to v0.5.22-cu130 with c16 mem-fraction-static lowered to 0.85."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4504
+  scenario-type: [agentic-coding]
