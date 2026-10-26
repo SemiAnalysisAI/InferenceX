@@ -11226,3 +11226,12 @@
     - "ATOM changes in the new image that matter here: GLM-5.2 mono decode and ATOM_MONO_ENABLE (ROCm/ATOM #2479, #2483, #2535). ATOM_DCP_PREFILL_QREP (#2437) and QREP together with MTP (#2290); the old image turned QREP off whenever MTP was on. DCP prefill fixes with the MTP draft (#2430, #2496, #2506, #2348). MTP verify and draft-graph fixes (#2451, #2367, #2566, #2495). lmcache_offload lookup and save fixes (#2305, #2339, #2547) and the LMCache 0.5.6.dev139+gf22dec28 pin (#2438)."
     - "Draft data types unchanged: the MTP draft (model.layers.78 of amd/GLM-5.2-MXFP4, which ships all-BF16 including its routed experts) stays BF16 because online_quant_config excludes model.layers.78.* from ptpc_fp8. It uses the FP8 KV cache and FP4 indexer cache like the target. Mono decode covers only target layers 0-77."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4308
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-agentic-mtp-mono
+  scenario-type:
+    - agentic-coding
+  evals-only: true
+  description:
+    - "GSM8K on the GLM-5.2 mono-decode path. The default agentic selector evals one point per group, at the highest concurrency: DCP4 C48, where ATOM_MONO_ENABLE is 0. TP4 C1 and C2 are the points that set ATOM_MONO_ENABLE=1, so this key contains only those two and the eval lands on C2. Throughput stays on glm5.2-fp4-mi355x-atom-agentic-mtp."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4308
