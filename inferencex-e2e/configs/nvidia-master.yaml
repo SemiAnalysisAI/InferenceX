@@ -10369,7 +10369,7 @@ musespark-fp4-h100-sglang-agentic-dflash:
 # TP16/DCP16 prefill role and one TP16/DCP16 decode role, four 4-GPU nodes each
 # (32 GPUs). DSpark depth 4 with the golden acceptance selected by the launcher.
 kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg:
-  image: vllm/vllm-openai:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f@sha256:1ff6716fe240a922d0d518b8884261e25b0c02eda8e2ce90888e364978249cad
+  image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb200-nv
