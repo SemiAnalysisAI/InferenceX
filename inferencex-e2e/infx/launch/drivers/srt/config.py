@@ -269,6 +269,7 @@ def binder_inputs(
         return port, {}
     return port, {
         **agentic_client_env(cluster, srt, lane, request),
+        **({"RESULT_DIR": "/logs/agentic"} if decision.native else {}),
         "IS_MULTINODE": str(request.is_multinode).lower(),
         "ENABLE_AGENTX_POWER": "1" if decision.agentx or decision.adapter else "0",
         "REQUIRE_POWER": "1" if decision.require or request.require_power else "0",

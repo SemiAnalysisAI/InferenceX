@@ -10,7 +10,8 @@ from typing import Any
 import yaml
 
 from infx.clusters import load_inventory
-from infx.config import repository_root
+from infx.clusters.slurm import slurm_settings
+from infx.config import RUNNER_CONFIG, repository_root
 from infx.launch.drivers.srt.power import POWER_LANES
 from infx.launch.policy import LaunchPath
 from infx.srt_slurm.generate import _binder_inputs, _placement, bound_variant, point_environment
@@ -54,20 +55,25 @@ def _without(block: dict[str, Any], path: tuple[str, ...]) -> dict[str, Any]:
     return {**block, key: _without(block[key], tuple(rest))}
 
 
-def _concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
+def _concrete_recipes(
+    entry: Mapping[str, Any], root: Path, runner_config: str | Path | Mapping[str, Any]
+) -> list[dict[str, Any]]:
     """Render the row's bound srt recipe, minus the fields that vary per point or run."""
     power_port = EXPORTER_PORT if entry.get("power") else None
     environment = point_environment(entry)
     native_power = False
+    native_exporter = None
     client_env = None
     if entry.get("power") and entry.get("scenario-type") == "agentic-coding":
-        inventory = load_inventory(root / "configs/runners.yaml")
+        inventory = load_inventory(runner_config)
         placement = _placement(inventory, entry["runner"])
         lane = POWER_LANES.get((placement[1].id, LaunchPath.SRT_MULTI)) if placement else None
         if lane and any(rule.native for rule in lane.rules):
             _, native_client, native_power = _binder_inputs(entry, environment, placement, root)
             if native_power:
                 power_port, client_env = None, {"REQUIRE_POWER": native_client["REQUIRE_POWER"]}
+                srt = slurm_settings(placement[1]).srt_slurm
+                native_exporter = srt.extra.get("default_gpu_exporter") if srt else None
     _, recipe = bound_variant(
         entry,
         environment,
@@ -77,12 +83,25 @@ def _concrete_recipes(entry: Mapping[str, Any], root: Path) -> list[dict[str, An
         native_power=native_power,
         client_env=client_env,
     )
+    telemetry = recipe.get("telemetry")
+    if (
+        native_power
+        and isinstance(native_exporter, dict)
+        and isinstance(telemetry, dict)
+        and telemetry.get("enabled")
+        and "dcgm_exporter" not in telemetry
+        and telemetry.get("cpu_power_exporter") is None
+        and not (telemetry.get("cpu_power") or {}).get("enabled")
+    ):
+        telemetry["dcgm_exporter"] = native_exporter
     for path in RECIPE_EXCLUDED:
         recipe = _without(recipe, path)
     return [recipe]
 
 
-def recipe_fingerprint(entry: Mapping[str, Any], root: Path) -> str:
+def recipe_fingerprint(
+    entry: Mapping[str, Any], root: Path, runner_config: str | Path | Mapping[str, Any]
+) -> str:
     """Return the digest of a row and its rendered srt recipe, or the row digest if it has none.
 
     Raise ValueError naming the recipe and point when the recipe cannot be rendered.
@@ -90,7 +109,7 @@ def recipe_fingerprint(entry: Mapping[str, Any], root: Path) -> str:
     if not entry.get("srt-recipe"):
         return row_fingerprint(entry)
     try:
-        recipes = _concrete_recipes(entry, root)
+        recipes = _concrete_recipes(entry, root, runner_config)
     except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as error:
         point = f"{entry.get('exp-name')} conc {entry.get('conc')}"
         raise ValueError(f"{entry['srt-recipe']} ({point}): {error}") from error
@@ -100,7 +119,11 @@ def recipe_fingerprint(entry: Mapping[str, Any], root: Path) -> str:
 def main() -> None:
     """Read matrix rows as JSON from stdin and print their recipe fingerprints as a JSON list."""
     root = repository_root()
-    print(json.dumps([recipe_fingerprint(row, root) for row in json.load(sys.stdin)]))
+    print(
+        json.dumps(
+            [recipe_fingerprint(row, root, root / RUNNER_CONFIG) for row in json.load(sys.stdin)]
+        )
+    )
 
 
 if __name__ == "__main__":

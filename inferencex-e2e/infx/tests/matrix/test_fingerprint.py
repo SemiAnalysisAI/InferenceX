@@ -95,7 +95,7 @@ def fingerprints(project: Path) -> dict[tuple, str]:
         for row in generate_config_matrix([key], master, runners, eval_mode="none", root=project):
             recipe = row["srt-recipe"].rpartition("/")[2]
             for conc in row["conc"] if isinstance(row["conc"], list) else [row["conc"]]:
-                points[key, recipe, conc] = recipe_fingerprint(row, project)
+                points[key, recipe, conc] = recipe_fingerprint(row, project, runners)
     return points
 
 
@@ -215,12 +215,12 @@ def test_a_point_no_variant_serves_cannot_be_fingerprinted(project):
     [row, _] = generate_config_matrix(["single"], master, runners, eval_mode="none", root=project)
 
     with pytest.raises(ValueError, match=r"fixture/bundle\.yaml .*Single-node SRT gpus"):
-        recipe_fingerprint(row, project)
+        recipe_fingerprint(row, project, runners)
 
 
 def test_rows_without_an_srt_recipe_hash_the_row_alone():
     row = {"image": "img", "model": "m", "conc": 4, "exp-name": "x", "recipe-fingerprint": "old"}
-    assert recipe_fingerprint(row, Path("/nonexistent")) == (
+    assert recipe_fingerprint(row, Path("/nonexistent"), {}) == (
         "adfebb88b80b867b258d2e9f972eb51f9f8c8bb2ae2bef10ab80ca8226913878"
     )
 
@@ -239,9 +239,21 @@ def test_the_planner_binds_a_script_installed_version_from_the_row(project):
 
 
 @pytest.mark.parametrize("native", [False, True])
-def test_agentx_power_fingerprints_use_the_selected_telemetry_block(project, monkeypatch, native):
+@pytest.mark.parametrize("collector", [{}, {"dcgm_exporter": {}}, {"cpu_power_exporter": {}},
+                                      {"cpu_power": {"enabled": True}}])
+def test_agentx_power_fingerprints_use_the_selected_telemetry_block(
+    project, monkeypatch, native, collector
+):
     edit(project, "configs/master.yaml", lambda master:
          master["agentx"]["scenarios"]["agentic-coding"][0]["search-space"][0].update(power=True))
+    edit(project, f"{MULTI}/agentx.yaml", lambda recipe:
+         recipe["base"].update(telemetry=collector))
+    edit(project, "configs/runners.yaml", lambda runners:
+         runners["clusters"]["fixture"]["slurm"]["srt-slurm"].update(extra={
+             "default_gpu_exporter": {"container_image": "exporter:1", "port": 9400,
+                                      "gpu_metrics": {"power": {"metric": "watts"}},
+                                      "gpu_labels": {"identity": "serial"}},
+         }))
     if native:
         monkeypatch.setitem(lanes.SRT_LANES, ("fixture", LaunchPath.SRT_MULTI), lanes.SrtLane())
         rule = power.PowerRule(Match(agentic=True), agentx=True, require=True, native=True)
@@ -255,3 +267,21 @@ def test_agentx_power_fingerprints_use_the_selected_telemetry_block(project, mon
     edit(project, f"configs/srt-recipes/telemetry-{selected}.yaml",
          lambda block: block["telemetry"].update(collect_interval_ms=500))
     assert fingerprints(project)[next(iter(AGENTX_POINTS))] != before[next(iter(AGENTX_POINTS))]
+
+    for change in (
+        lambda exporter: exporter.update(container_image="exporter:2"),
+        lambda exporter: exporter["gpu_metrics"]["power"].update(metric="board_watts"),
+        lambda exporter: exporter["gpu_labels"].update(identity="uuid"),
+    ):
+        before = fingerprints(project)
+        edit(project, "configs/runners.yaml", lambda runners:
+             change(runners["clusters"]["fixture"]["slurm"]["srt-slurm"]["extra"]["default_gpu_exporter"]))
+        after = fingerprints(project)
+        assert {point for point in before if after[point] != before[point]} == (
+            AGENTX_POINTS if native and not collector else set()
+        )
+
+    before = fingerprints(project)
+    edit(project, "configs/runners.yaml", lambda runners:
+         runners["clusters"]["fixture"]["slurm"]["srt-slurm"]["extra"]["default_gpu_exporter"].update(port=9555))
+    assert fingerprints(project) == before

@@ -503,6 +503,7 @@ def test_power_lane_stages_provenance_and_validates_each_concurrency(
     resolved = resolve_config_with_defaults(bound, srtslurm(checkout))
     assert resolved["telemetry"]["enabled"] is True
     if cluster == "mi355x-amds":
+        assert bound["benchmark"]["env"]["RESULT_DIR"] == "/logs/agentic"
         assert resolved["telemetry"]["required"] is True
         gpu_exporter = resolved["telemetry"]["dcgm_exporter"]
         assert (gpu_exporter["kind"], gpu_exporter["port"]) == ("custom", 19555)

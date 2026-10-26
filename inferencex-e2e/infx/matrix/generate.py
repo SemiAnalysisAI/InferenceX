@@ -1653,7 +1653,7 @@ def generate_config_matrix(
     return json.loads(json.dumps(rows))
 
 
-def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
+def with_fingerprints(rows: list[dict], root: Path, runner_data: dict) -> list[dict]:
     """``rows`` with the ``recipe-fingerprint`` changelog plans give the same throughput rows.
 
     Eval selection copies it to the rows it derives. A row whose recipe cannot be bound gets
@@ -1665,7 +1665,7 @@ def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
     fingerprinted = []
     for row in rows:
         try:
-            fingerprint = recipe_fingerprint(row, root)
+            fingerprint = recipe_fingerprint(row, root, runner_data)
         except ValueError as error:
             print(f"WARNING: no recipe fingerprint: {error}", file=sys.stderr)
             fingerprinted.append(row)
@@ -1889,7 +1889,7 @@ def main() -> list[dict]:
         matrix_values = generate_test_config_sweep(args, all_config_data, runner_data, root)
     else:
         parser.error(f"Unknown command: {args.command}")
-    matrix_values = with_fingerprints(matrix_values, root)
+    matrix_values = with_fingerprints(matrix_values, root, runner_data)
 
     if args.command == "test-config" and args.exp_names:
         try:
