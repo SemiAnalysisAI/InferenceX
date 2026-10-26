@@ -15,6 +15,8 @@ from typing import Any, NamedTuple
 
 import yaml
 
+from infx import yamlio
+from infx.bench.proc import status
 from infx.golden_al_distribution import GOLDEN_DIR, golden_length
 from infx.srt_slurm.variants import ZIP_VARIANT, without_nulls
 
@@ -42,6 +44,11 @@ TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
+    """Return a role's speculative config for ``engine`` as method, draft length and draft model.
+
+    Empty when the role does not speculate. DFlash's draft length is its verify block minus the
+    current token. Raises ValueError on a malformed or conflicting config.
+    """
     args = role.get("args", {})
     if engine == "tilert":
         if args.get("with-mtp") is not True:
@@ -79,7 +86,6 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         if not algorithm:
             return {}
         if algorithm == "dflash":
-            # DFlash verifies a block of the current token plus its drafts.
             width = args.get("speculative-num-draft-tokens")
             return {
                 "method": "dflash",
@@ -114,7 +120,30 @@ def acceptance_length(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> float | None:
-    """The golden AL a speculative AgentX throughput run of ``recipe`` simulates, else None."""
+    """The golden AL the generation role of a speculative AgentX throughput run simulates,
+    else None."""
+    roles = recipe.get("roles", {})
+    generation = roles.get("decode", roles.get("agg", {}))
+    if (
+        ENGINES.get(framework) == "vllm"
+        and spec_parameters(generation, "vllm").get("enable_adaptive_verification") is True
+    ):
+        return None
+    return _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
+
+
+def _simulated_length(
+    recipe: Mapping[str, Any],
+    framework: str,
+    environment: Mapping[str, str],
+    *,
+    golden_dir: Path = GOLDEN_DIR,
+) -> float | None:
+    """The golden AL ``build_overrides`` sets on non-adaptive speculative roles, else None.
+
+    Raises ValueError unless a Qwen3.5 SGLang MTP generation role's window is its draft steps
+    plus one verification token.
+    """
     engine = ENGINES.get(framework)
     if engine is None:
         return None
@@ -128,13 +157,18 @@ def acceptance_length(
     spec = spec_parameters(generation, engine)
     if not (synthetic and spec):
         return None
+    if engine == "vllm" and all(
+        spec_parameters(role, engine).get("enable_adaptive_verification") is True
+        for name, role in roles.items()
+        if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
+    ):
+        return None
     al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)
     if (
         engine == "sglang"
         and environment["MODEL_PREFIX"] == "qwen3.5"
         and spec.get("method") in ("eagle", "nextn", "mtp")
     ):
-        # The generation role's MTP window includes one verification token.
         drafts = generation.get("args", {}).get("speculative-num-draft-tokens")
         expected = spec["num_speculative_tokens"] + 1
         if not isinstance(drafts, int) or isinstance(drafts, bool) or drafts != expected:
@@ -157,7 +191,7 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
-    al = acceptance_length(recipe, framework, environment, golden_dir=golden_dir)
+    al = _simulated_length(recipe, framework, environment, golden_dir=golden_dir)
     overrides = []
     variables = {
         "sglang": SGLANG_VARIABLES,
@@ -294,7 +328,7 @@ def plan_commands(
     from srtctl.core.overrides import apply_overrides_to_recipe, parse_overrides
 
     path, _, selector = config.partition(":")
-    raw = yaml.safe_load(Path(path).read_text())
+    raw = yamlio.safe_load(Path(path).read_text())
     if not isinstance(raw, dict):
         raise ValueError("Recipe must be a mapping")
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
@@ -324,6 +358,7 @@ def plan_commands(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Plan srtctl commands with golden acceptance from ``argv``, run them and return the rc."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--record", type=Path, help="write the plan's golden acceptance length here as JSON"
@@ -345,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     for plan in plans:
         result = subprocess.run(plan.command, check=False)
         if result.returncode:
-            return result.returncode
+            return status(result.returncode)
     return 0
 
 

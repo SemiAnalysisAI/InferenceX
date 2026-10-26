@@ -4,29 +4,24 @@ Reads profile_export.jsonl and produces mean/median/p75/p90/p95 ISL and OSL
 summary stats.
 
 Usage:
-    python analyze_benchmark_distributions.py path/to/aiperf_artifacts/ -o output_dir/
+    python -m infx.results.agentic.analyze_benchmark_distributions <artifacts_dir> -o <out>
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
+
+from .artifacts import load_records as load_profiled_records
 
 
 def load_records(artifacts_dir: Path) -> list[dict]:
-    """Load per-request records from profile_export.jsonl."""
-    jsonl_path = artifacts_dir / "profile_export.jsonl"
-    records = []
-    with open(jsonl_path) as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                records.append(json.loads(line))
-    return records
+    """Load successful profiling records from profile_export.jsonl."""
+    return load_profiled_records(artifacts_dir / "profile_export.jsonl")
 
 
 def _stats(values: list[int]) -> dict[str, float]:
+    """Return count, mean, median, p75, p90 and p95 of the integer ``values``."""
     sv = sorted(values)
     n = len(sv)
     return {
@@ -40,6 +35,7 @@ def _stats(values: list[int]) -> dict[str, float]:
 
 
 def _fmt(s: dict[str, float]) -> str:
+    """Format a ``_stats`` dict as one indented summary line."""
     return (
         f"  n={s['n']:,}  mean={s['mean']:,.0f}  median={s['median']:,}  "
         f"p75={s['p75']:,}  p90={s['p90']:,}  p95={s['p95']:,}"
@@ -47,6 +43,7 @@ def _fmt(s: dict[str, float]) -> str:
 
 
 def analyze(records: list[dict], output_dir: Path) -> None:
+    """Print ISL/OSL stats for ``records`` and write them to workload_distribution_summary.txt in ``output_dir``."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     all_isl: list[int] = []
@@ -83,6 +80,7 @@ def analyze(records: list[dict], output_dir: Path) -> None:
 
 
 def main() -> None:
+    """Parse the artifacts dir and output dir from argv and write the distribution summary."""
     parser = argparse.ArgumentParser(description="Analyze benchmark workload distributions")
     parser.add_argument("artifacts_dir", help="Path to aiperf_artifacts/ directory")
     parser.add_argument(
