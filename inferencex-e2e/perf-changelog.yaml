@@ -11266,3 +11266,10 @@
     - "Add TP4 DRAM KV offload points at conc 40, 48 and 56."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4491
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261026-8252e3af"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4544
+  scenario-type: [agentic-coding]
