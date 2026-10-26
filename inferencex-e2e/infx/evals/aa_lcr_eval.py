@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 import zipfile
@@ -68,11 +69,19 @@ def load_questions() -> list[dict[str, Any]]:
     """The 100 questions with their prompts, documents in ``data_source_filenames`` order."""
     rows = list(csv.DictReader(io.StringIO(_fetch("AA-LCR_Dataset.csv").decode("utf-8"))))
     archive = zipfile.ZipFile(io.BytesIO(_fetch("extracted_text/AA-LCR_extracted-text.zip")))
+    # The archive stores UTF-8 names without the UTF-8 flag (so zipfile decodes
+    # them as cp437), and some names are NFD while the CSV is NFC.
+    members = {
+        unicodedata.normalize(
+            "NFC", info.filename if info.flag_bits & 0x800 else info.filename.encode("cp437").decode()
+        ): info
+        for info in archive.infolist()
+    }
     questions = []
     for row in rows:
         folder = f"lcr/{row['document_category']}/{row['document_set_id']}"
         docs = [
-            archive.read(f"{folder}/{name}").decode("utf-8")
+            archive.read(members[unicodedata.normalize("NFC", f"{folder}/{name}")]).decode("utf-8")
             for name in row["data_source_filenames"].split(";")
         ]
         documents_text = "\n\n".join(
