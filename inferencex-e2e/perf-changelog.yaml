@@ -11244,7 +11244,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   scenario-type: [agentic-coding]
 
-- config-keys:  
+- config-keys:
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Add TP2 points with DRAM KV offload (L2 HiCache) at conc 20, 24, 28 and 36 to the existing curve."
