@@ -116,12 +116,17 @@ override_tp8_c10:
     agg:
       gpus: 8
       args:
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4","indexer_tp_shard_min_rows":4096}'
+        prefix-cache-retention-interval: 32768
+        prefill-schedule-interval: 64
         tensor-parallel-size: 8
         data-parallel-size: 1
         max-num-batched-tokens: 16384
         kv-cache-memory-bytes: 53687091200
         max-num-seqs: 10
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,100,200,300,400,500]}'
+      env:
+        VLLM_DSV4_MEGA_FP8_COMBINE: null
   benchmark:
     env:
       CONC: '10'
@@ -148,16 +153,22 @@ override_tp8_c16:
     agg:
       gpus: 8
       args:
+        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4","indexer_tp_shard_min_rows":4096}'
+        prefix-cache-retention-interval: 32768
+        prefill-schedule-interval: 64
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":120000000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
         tensor-parallel-size: 8
         data-parallel-size: 1
         max-num-batched-tokens: 16384
         kv-cache-memory-bytes: 53687091200
         max-num-seqs: 16
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,100,105,112,200,300,400,500]}'
+      env:
+        VLLM_DSV4_MEGA_FP8_COMBINE: null
   benchmark:
     env:
       CONC: '16'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_dep8_c32:
   frontend:
@@ -173,20 +184,21 @@ override_dep8_c32:
     agg:
       gpus: 8
       args:
-        tensor-parallel-size: 1
-        data-parallel-size: 8
+        tensor-parallel-size: 4
+        data-parallel-size: 2
         enable-expert-parallel: true
         enable-ep-weight-filter: true
-        moe-backend: deep_gemm_amxf4_mega_moe
+        moe-backend: deep_gemm_mega_moe
         prefill-schedule-interval: 16
         long-prefill-token-threshold: 512
-        kv-cache-memory-bytes: 37580963840
-        max-num-batched-tokens: 8248
-        max-num-seqs: 8
-        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56],"mode":0}'
+        kv-cache-memory-bytes: 51539607552
+        max-num-batched-tokens: 8416
+        max-num-seqs: 32
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224],"mode":0}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":241500000000,"enable_cross_layers_blocks":"true","lazy_offload":false}}'
       env:
         PYTORCH_ALLOC_CONF: 'expandable_segments:True'
+        VLLM_DSV4_MEGA_FP8_COMBINE: null
         PYTHONHASHSEED: '42'
   benchmark:
     env:

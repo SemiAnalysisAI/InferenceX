@@ -11290,3 +11290,13 @@
     - "Pin vLLM to digest-pinned nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294; configure TP8 c1 and TP4 c20/c24 without offload, plus TP2 c24/c28 with 749 GB lazy DRAM offload and CUTLASS MSA decode."
     - "Set TP4 c20 max-num-active-seqs to 6 and TP2 c28 Slurm time limit to 02:20:00."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4357
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+    - dsv4-fp4-b200-vllm-agentic-mtp-lowconc
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM image to vllm/vllm-openai:nightly-8e2beaa3bff595577a069d49d96bde9074294ec2 (digest-pinned), and retune DeepSeek-V4-Pro-0813 FP4 B200 AgentX DEP8 c32 with MegaMoE and SimpleCPU offload."
+    - "Add the dsv4-fp4-b200-vllm-agentic-mtp-lowconc key (vllm/vllm-openai digest-pinned) with TP8 c1, c4, c10 and c16 and TP2 x DP4 c48 and c64."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4554
