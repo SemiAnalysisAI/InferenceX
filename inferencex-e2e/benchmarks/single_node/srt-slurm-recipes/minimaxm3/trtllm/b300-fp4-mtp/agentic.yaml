@@ -18,7 +18,8 @@ base:
     agg:
       nodes: 1
       workers: 1
-      extra_args: [--chat_template, /model/chat_template.jinja]
+      # --tool_parser is a trtllm-serve CLI flag; no YAML args key reaches it.
+      extra_args: [--chat_template, /model/chat_template.jinja, --tool_parser, minimax_m3]
       args:
         moe_expert_parallel_size: 1
         max_seq_len: 1048576
@@ -547,6 +548,106 @@ override_tp4_c15:
       CONC: '15'
       TOTAL_CPU_DRAM_GB: '1499'
 
+override_tp4_c20:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 20
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 13
+            - 14
+            - 15
+            - 16
+            - 17
+            - 18
+            - 19
+            - 20
+        kv_cache_config:
+          host_cache_size: 374750000000
+        torch_compile_config:
+          capture_num_tokens:
+            - 1
+            - 256
+            - 512
+            - 768
+            - 1024
+            - 1536
+            - 2048
+            - 3072
+            - 4096
+            - 6144
+            - 8192
+            - 12288
+  benchmark:
+    env:
+      CONC: '20'
+      TOTAL_CPU_DRAM_GB: '1499'
+
+override_tp4_c25:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor_parallel_size: 4
+        max_batch_size: 25
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 7
+            - 8
+            - 9
+            - 10
+            - 11
+            - 12
+            - 13
+            - 14
+            - 15
+            - 17
+            - 19
+            - 21
+            - 23
+            - 25
+        kv_cache_config:
+          host_cache_size: 374750000000
+        torch_compile_config:
+          capture_num_tokens:
+            - 1
+            - 256
+            - 512
+            - 768
+            - 1024
+            - 1536
+            - 2048
+            - 3072
+            - 4096
+            - 6144
+            - 8192
+            - 12288
+  benchmark:
+    env:
+      CONC: '25'
+      TOTAL_CPU_DRAM_GB: '1499'
+
 override_tp8_c1:
   roles:
     agg:
@@ -578,4 +679,39 @@ override_tp8_c1:
   benchmark:
     env:
       CONC: '1'
+      TOTAL_CPU_DRAM_GB: '2999'
+
+override_tp8_c5:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor_parallel_size: 8
+        max_batch_size: 5
+        cuda_graph_config:
+          batch_sizes:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+        kv_cache_config:
+          host_cache_size: 309237645312
+        torch_compile_config:
+          capture_num_tokens:
+            - 1
+            - 256
+            - 512
+            - 768
+            - 1024
+            - 1536
+            - 2048
+            - 3072
+            - 4096
+            - 6144
+            - 8192
+            - 12288
+  benchmark:
+    env:
+      CONC: '5'
       TOTAL_CPU_DRAM_GB: '2999'

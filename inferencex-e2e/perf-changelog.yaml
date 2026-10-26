@@ -11059,9 +11059,10 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update the B300 TRT-LLM MiniMax-M3 AgentX recipe to the 13 scheduled TP2/TP4/TP8 profiles with NVFP4 KV cache, EAGLE3 speculative decoding, and native DRAM KV offload."
+    - "Update the B300 TRT-LLM MiniMax-M3 AgentX recipe to 16 scheduled TP2/TP4/TP8 profiles with NVFP4 KV cache, EAGLE3 speculative decoding, and native DRAM KV offload; TP4 c20/c25 and TP8 c5 are kept from the published curve and TP4 c30 is dropped."
     - "Pin the master config image to nvcr.io#nvidia/tensorrt-llm/release:1.4.0rc0.dev202610070001."
     - "Drop the TensorRT-LLM chat store patch (setup_script minimaxm3-trtllm-agentx.sh) from the B300 recipe."
     - "Pin thinking_mode enabled for the AgentX replay through chat_template_kwargs (AIPERF_EXTRA_INPUTS), matching the thinking_on golden acceptance curve."
     - "Rebase the host pools onto the #3804 DRAM policy: dram-utilization 1.0, host_cache_size 374500000000 bytes per rank at TP2, 374750000000 at TP4 and 309237645312 at TP8, TOTAL_CPU_DRAM_GB 749/1499/2999."
+    - "Parse MiniMax-M3 tool calls with trtllm-serve --tool_parser minimax_m3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3835
