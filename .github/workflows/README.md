@@ -50,9 +50,9 @@ usage: python -m infx.matrix.generate full-sweep
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
 
-By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset and the AgentX GSM8K subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand, but it cannot be combined with `--no-evals`.
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset and the AgentX GSM8K subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every eligible 8k1k fixed-sequence and agentic config. `--all-evals` always emits only those eval-only jobs, with or without `--evals-only`, but it cannot be combined with `--no-evals`.
 
-`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
+`--step-size` must be greater than 1 and applies to concurrency ranges. `--min-conc` / `--max-conc` drop concurrencies outside the bounds, including explicit `conc-list` values. A single-node fixed-sequence `conc-start`/`conc-end` range that crosses a bound is clamped to it, and a fixed-sequence config with no concurrency left under `--max-conc` runs at the cap. When both bounds are set, `--min-conc` must not exceed `--max-conc`.
 
 `--trim-conc` (the `trim-conc` input of `e2e-tests.yml`) keeps only the minimum concurrency of every generated single- and multi-node deployment shape, after eval selection, for a lowest-concurrency smoke run; in changelog-ref mode only throughput rows are trimmed, and evals keep their selected concurrency. No PR label enables trimming.
 
@@ -65,7 +65,7 @@ full-sweep --config-files configs/nvidia-master.yaml
 
 **Test all single-node dsr1 configurations on B200 with 8k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --seq-lens 8k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type cluster:b200-nscale --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 8k1k workloads:**
@@ -75,12 +75,12 @@ full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files configs/
 
 **Test all single-node TRT configs on H200 runners:**
 ```
-full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files configs/nvidia-master.yaml
+full-sweep --single-node --framework trt --runner-type h200 cluster:h200-dgxc --config-files configs/nvidia-master.yaml
 ```
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 8k1k --config-files configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type cluster:b200-nscale --precision fp4 --framework sglang --seq-lens 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**
@@ -238,8 +238,14 @@ Remove and re-add the primary sweep label to approve the new SHA. The trusted
 dispatcher never checks out or executes PR code itself.
 
 This proof of concept produces benchmark and evaluation artifacts through the
-End-to-End Tests workflow. Those runs are not yet eligible for
-`/use`, which currently accepts only `run-sweep.yml` runs. The PoC
+End-to-End Tests workflow. The dispatch also uploads a `source-identity`
+artifact (PR number, full approved head SHA, merge SHA, and the `evals-only`,
+`agentx-fast`, `all-evals`, and fail-fast modifiers) and `changelog-metadata`.
+A pinned `/use <run_id>` accepts these runs; reuse and staging report the
+recorded PR head and judge modifiers from the recorded dispatch rather than the
+PR's current labels. Older runs without the artifact fall back to the run title
+and the PR's current labels. On the fork PR, `/stage-results <run_id>` stages
+such a run when its recorded head is one of the PR's commits. The PoC
 also fans out the selected matrix immediately. It does not reproduce
 `run-sweep.yml`'s canary-first sequencing: no label runs a canary here, and
 only `full-sweep-fail-fast` sets fail-fast, so the other two primary labels
@@ -251,15 +257,15 @@ behave identically.
 run. The push-to-`main` `merge-ingest.yml` run ignores it.
 
 An authorized maintainer can reuse an eligible completed sweep without keeping
-a primary sweep label on the PR, although staging its results requires one:
+a primary sweep label on the PR:
 
 ```
 /use <run_id>
 ```
 
 Keep the command and required run ID on one line. This pins an eligible completed
-`run-sweep.yml` PR run whose commit remains in the PR, including failed or cancelled
-runs with usable results.
+`run-sweep.yml` PR run, including failed or cancelled runs with usable results. The
+run may come from any PR; its commit need not be part of this one.
 
 The legacy `/reuse-sweep-run <run_id>` remains equivalent. Bare `/reuse-sweep-run`
 selects the latest successful eligible run automatically; bare `/use` is rejected.
@@ -271,12 +277,15 @@ certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
 The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
-The bot reacts with 👍 after validating the request, or 👎 on rejection; details
-are in the Actions run summary. Edits replace the bot's old reaction. The reuse
-check posts no comment, but `/use <run_id>` also triggers `stage-results.yml`.
+The bot reacts with 👍 after validating the request, or 👎 on rejection. When the
+pinned run's commit is not part of the PR, it also posts one warning comment for
+that request and run; reuse still proceeds. Details are in the Actions run summary.
+Edits replace the bot's old reaction. `/use <run_id>` also triggers `stage-results.yml`.
 Staging requires a primary sweep label on the PR and a source run created while
-one was applied. It posts a staging comment, or a rejection comment when the PR
-has no primary label. Comments do not trigger or cancel GPU sweeps. Later commits
+one was applied. A PR without a primary label can instead stage only the run
+pinned by its latest authorized `/use <run_id>`, after the same validation that
+acknowledges the request. It posts a staging comment, or a rejection comment
+when neither applies. Comments do not trigger or cancel GPU sweeps. Later commits
 skip a new sweep after changelog/matrix and source-run validation. Merge-time
 validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. Reuse is rejected while the PR currently carries
@@ -306,6 +315,13 @@ artifact name, and ingests them with changelog metadata from the merge run. The
 normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
 matrix/eval policy changes do not invalidate reuse.
+
+When the app's ingest finishes, on success or failure, it sends
+`ingest-results-completed` back with per-run counts (benchmark, eval, trace and
+power rows: new, duplicate, skipped, unmapped, failed). `ingest-results-callback.yml`
+checks that `merge-run-id` is a Merge Ingest push to `main`, resolves the PR merged
+by that commit, and posts one comment per merge run, updated in place on reruns
+(marker `<!-- ingest-results-report merge-run=<id> -->`).
 
 Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization

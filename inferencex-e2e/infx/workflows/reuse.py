@@ -5,7 +5,9 @@ This script is used by ``merge-ingest.yml`` on push-to-main runs and by the
 commit maps unambiguously to one pull request and a maintainer has left a
 ``/use <run_id>`` or legacy ``/reuse-sweep-run`` comment.
 The legacy command may omit the source run ID; without one, the latest successful
-``pull_request`` ``run-sweep.yml`` run for the PR head is used.
+``pull_request`` ``run-sweep.yml`` run for the PR head is used. A pinned run ID may
+come from any PR, or be a trusted external-PR ``e2e-tests.yml`` dispatch; its commit
+need not be part of the PR being merged.
 """
 
 from __future__ import annotations
@@ -25,6 +27,10 @@ from .sweep_runs import (
     completed_pr_runs,
     has_reusable_result_artifacts as has_reusable_result_artifacts,
     pr_commit_shas as pr_commit_shas,
+    run_pr_number as run_pr_number,
+    source_head_sha as source_head_sha,
+    source_identity,
+    trusted_external_pr,
 )
 
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
@@ -117,6 +123,7 @@ def find_reuse_authorization(
     command: str,
     allowed_author_associations: set[str],
 ) -> tuple[bool, int | None]:
+    """Return whether an allowed reuse command exists on the PR, and the run ID it pins if any."""
     comment, pinned_run_id = find_reuse_request(
         repo,
         pr_number,
@@ -164,14 +171,14 @@ def workflow_path(workflow_id: str) -> str:
 def validate_reusable_run(
     repo: str,
     workflow_id: str,
-    pr_number: int,
     run: dict[str, Any],
     token: str,
     allow_failed: bool = False,
 ) -> None:
     """Fail closed unless an Actions run is a valid reusable source run."""
     run_id = int(run["id"])
-    if run.get("event") != "pull_request":
+    external_pr = trusted_external_pr(run) if allow_failed else None
+    if run.get("event") != "pull_request" and external_pr is None:
         raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
     if run.get("status") != "completed":
         raise RuntimeError(f"Reusable source run {run_id} is not completed.")
@@ -184,19 +191,13 @@ def validate_reusable_run(
         )
     expected_path = workflow_path(workflow_id)
     run_path = str(run.get("path") or "")
-    if run_path and run_path != expected_path:
+    if external_pr is None and run_path and run_path != expected_path:
         raise RuntimeError(
             f"Reusable source run {run_id} is from {run_path}, expected {expected_path}."
         )
     run_head_sha = str(run.get("head_sha") or "")
     if not run_head_sha:
         raise RuntimeError(f"Reusable source run {run_id} has no head_sha.")
-    pr_shas = pr_commit_shas(repo, pr_number, token)
-    if run_head_sha not in pr_shas:
-        raise RuntimeError(
-            f"Reusable source run {run_id} head {run_head_sha} is not in PR #{pr_number}'s "
-            f"commit list; pin a run whose commit is still part of the PR."
-        )
 
     names = artifact_names(repo, run_id, token)
     if not has_reusable_result_artifacts(names):
@@ -247,15 +248,34 @@ def resolve_reusable_run(
     validate_reusable_run(
         repo,
         workflow_id,
-        pr_number,
         run,
         token,
         allow_failed=pinned_run_id is not None,
     )
+    if pinned_run_id is not None and (external_pr := trusted_external_pr(run)) is not None:
+        if (identity := source_identity(repo, run, token)) is not None:
+            modifiers = {
+                label
+                for label in incompatible_labels
+                if identity.get(label.replace("-", "_")) is True
+            }
+        else:
+            # Runs without a source-identity artifact fall back to the tested PR's current labels.
+            source = github.api(repo, f"/pulls/{external_pr}", token)
+            modifiers = incompatible_labels.intersection(label_names(source))
+        if modifiers:
+            raise RuntimeError(
+                f"External source PR #{external_pr} uses reuse-incompatible label(s): "
+                f"{', '.join(sorted(modifiers))}."
+            )
     return run
 
 
 def main() -> int:
+    """Decide from CLI arguments whether the sweep can reuse a prior run.
+
+    Writes the outputs and returns the exit code. Raises RuntimeError if no GitHub token is set.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
     parser.add_argument("--commit-sha", required=True)
@@ -404,6 +424,11 @@ def main() -> int:
     )
     run_id = int(run["id"])
     reason = f"PR #{pr_number} approved sweep reuse from run {run_id}"
+    head_sha = source_head_sha(args.repo, run, token)
+    if head_sha in pr_commit_shas(args.repo, pr_number, token):
+        source_pr: int | None = pr_number
+    else:
+        source_pr = run_pr_number(args.repo, run, token)
 
     outputs = result(
         enabled=True,
@@ -411,8 +436,8 @@ def main() -> int:
         source_run_id=str(run_id),
         source_run_attempt=str(run.get("run_attempt") or "1"),
         source_run_url=str(run.get("html_url") or ""),
-        source_pr_number=str(pr_number),
-        source_head_sha=str(run.get("head_sha") or ""),
+        source_pr_number=str(source_pr or ""),
+        source_head_sha=head_sha,
     )
     write_outputs(args.github_output, outputs)
     print(json.dumps(outputs, indent=2))
