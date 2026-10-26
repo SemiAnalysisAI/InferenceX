@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 from collections.abc import Collection
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode
 
 
@@ -19,7 +19,8 @@ class APIError(RuntimeError):
     """Authenticated gh failure, with an HTTP status when gh reports one."""
 
     def __init__(self, path: str, stderr: str) -> None:
-        match = re.search(r"\(HTTP ([1-5][0-9]{2})\)\s*$", stderr)
+        """Wrap a failed gh call on ``path``, parsing the HTTP status from ``stderr`` even when hints follow it."""
+        match = re.search(r"\(HTTP ([1-5][0-9]{2})\)\s*$", stderr, re.MULTILINE)
         self.status = int(match[1]) if match else None
         super().__init__(f"GitHub API {path} failed: {stderr.strip()}")
 
@@ -34,6 +35,10 @@ def api(
     data: dict[str, Any] | None = None,
     paginate: bool = False,
 ) -> Any:
+    """Call the GitHub REST endpoint ``path`` under ``repo`` through gh and return the decoded JSON.
+
+    With ``token``, failures raise ``APIError`` and an empty DELETE reply returns None.
+    """
     if token is not None and not token.strip():
         raise RuntimeError("GitHub API requires a non-empty token")
     endpoint, _, query = path.partition("?")
@@ -77,6 +82,24 @@ def api(
     return json.loads(result.stdout)
 
 
+def download(repo: str, path: str, token: str) -> bytes:
+    """Return the raw body of the GitHub endpoint ``path`` under ``repo``, following redirects."""
+    if not token.strip():
+        raise RuntimeError("GitHub API requires a non-empty token")
+    endpoint = f"repos/{repo}/{path.lstrip('/')}"
+    try:
+        result = subprocess.run(
+            ["gh", "api", "--hostname", "github.com", endpoint],
+            env={**os.environ, "GH_TOKEN": token},
+            capture_output=True,
+            timeout=60,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise APIError(path, (exc.stderr or b"").decode(errors="replace")) from exc
+    return result.stdout
+
+
 def paginate(
     repo: str,
     path: str,
@@ -84,6 +107,10 @@ def paginate(
     item_key: str = "",
     params: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    """Fetch every page of a listing and return its rows, read from ``item_key`` when pages are objects.
+
+    Raises ``ListingError`` when the listing is missing, malformed, or shorter than ``total_count``.
+    """
     pages = api(
         repo, path, token, {**(params or {}), "per_page": "100", "page": "1"}, paginate=True
     )
@@ -112,14 +139,18 @@ def set_comment_reaction(
     token: str,
     content: str | None,
     *,
+    collection: Literal["issues", "pulls"],
     replace: Collection[str] = (),
 ) -> None:
     """Replace selected github-actions reactions while preserving human reactions.
 
-    With no replacement set, simply add the requested reaction. GitHub makes
-    repeated additions of the same reaction idempotent.
+    ``collection`` is ``issues`` for PR conversation comments and ``pulls`` for inline
+    review comments. With no replacement set, simply add the requested reaction. GitHub
+    makes repeated additions of the same reaction idempotent.
     """
-    path = f"/issues/comments/{comment_id}/reactions"
+    if collection not in ("issues", "pulls"):
+        raise ValueError(f"Unsupported comment collection: {collection!r}")
+    path = f"/{collection}/comments/{comment_id}/reactions"
     if replace:
         reactions = paginate(repo, path, token, "")
         for reaction in reactions:

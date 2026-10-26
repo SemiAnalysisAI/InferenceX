@@ -24,7 +24,6 @@ from infx.srt_slurm.workload import (
 )
 
 SINGLE_NODE_ENGINES = {**ENGINES, "atom": "atom"}
-# SGLang spells decode context parallelism --dcp-size, with the vLLM name as an alias.
 DCP_FLAGS = {
     "sglang": ("dcp-size", "decode-context-parallel-size"),
     "vllm": ("decode-context-parallel-size",),
@@ -100,6 +99,8 @@ def select_recipe(
             validate_recipe(recipe, environment)
         except ValueError as exc:
             errors.append(f"{name}: {exc}")
+        except (KeyError, TypeError) as exc:
+            errors.append(f"{name}: missing or malformed field {exc}")
         else:
             matches.append((f"{path}:{name}" if name else path, recipe))
     if len(matches) != 1:
@@ -200,6 +201,8 @@ def runtime_arguments(config: str, environment: Mapping[str, str]) -> list[str]:
 def submission_fields(path: Path) -> tuple[str, str]:
     """Accept exactly one successful native JSON submission, never scrape prose."""
     record = json.loads(path.read_text())
+    if not isinstance(record, dict):
+        raise ValueError("SRT submission manifest is not a JSON object")
     if record.get("status") != "submitted":
         raise ValueError("SRT did not submit a job")
     job_id = str(record["slurm_job_id"])
@@ -212,6 +215,7 @@ def submission_fields(path: Path) -> tuple[str, str]:
 
 
 def main() -> None:
+    """Run ``prepare`` to bind a recipe, or ``submission`` to print a job's id and output dir."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare")
@@ -221,6 +225,8 @@ def main() -> None:
     submitted = commands.add_parser("submission")
     submitted.add_argument("manifest", type=Path)
     parsed = parser.parse_args()
+    if parsed.command == "prepare" and parsed.output.name == BOUND_RECIPE:
+        parser.error(f"{parsed.output} would overwrite the bound recipe written beside it")
     try:
         if parsed.command == "prepare":
             selected, recipe = select_recipe(parsed.recipe, os.environ)
