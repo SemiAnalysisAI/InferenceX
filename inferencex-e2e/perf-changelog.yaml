@@ -10915,6 +10915,26 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-b300-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4-Pro-0813 FP4 B300 Dynamo+SGLang AgentX aggregate TP8 c1, TP4 c4, TP4 c8 and DEP8 c384 recipes, plus disaggregated 1P1D DEP8 c64/c240 and 1P2D DEP8 c64 recipes, on lmsysorg/sglang:nightly-dev-efa-20261019-3c560089."
+    - "DEP8 workers enable attention DP with attn-dp-size 8, which replaces the deprecated dp-size 8 + enable-dp-attention in this image."
+    - "Use the image's bundled Dynamo 1.6.0.dev20261018, which includes ai-dynamo/dynamo#16005: each DEP8 worker registers all eight attention-DP ranks and publishes KV events from each. Without that fix, the KV router would send every request to DP rank 0."
+    - "TP4 c8 adds a HiCache DRAM tier (ratio 2.75, write_through, direct I/O, page_first_direct) because TP4 c4 already fills about 60% of the GPU KV pool. 1P2D DEP8 c64 is the 1P1D c64 recipe with a second decode worker, which halves each decode rank's load."
+    - "The aggregate DEP8 c384 recipe follows the single-node SGLang DEP8 c384 point (attention DP8 + EP8 Mega-MoE, FP4 indexer, prefill delayer, chunked prefill 65536, max-running-requests 768, mem-fraction-static 0.88, HiCache ratio 3 write_back DRAM tier), with cuda-graph-max-bs-decode set to the 96-request per-rank cap (768 / 8), behind the Dynamo KV router with per-DP-rank KV events and session affinity. Its scheduling follows the single-node SGLang EAGLE DEP8 recipe (dsv4-fp4-b300-sglang-agentic-hicache-eagle): enable-mixed-chunk, schedule-policy shortest-prefill-first, SGLANG_ENABLE_DP_SPEC_PREFILL_COORDINATION=1 and prefill-decode-interval 32. Without them, this point queued prefills behind decode (TTFT p50 33.5 s, p90 89 s in run 39191181928)."
+    - "Mega-MoE uses the image's default FP8xFP4 kernels in every DEP8 recipe; the W4A4 MXFP4 Mega-MoE path is not enabled."
+    - "Use Mooncake for disaggregated KV transfer over the DSXE EFA fabric. The EFA image variant (sgl-project/sglang#41006) ships mooncake-transfer-engine-efa-cuda13 0.3.13.post1 and defaults MOONCAKE_PROTOCOL to efa, so there is no setup script or package change; the recipes also set MOONCAKE_PROTOCOL: efa explicitly. Each rank's transfer engine auto-discovers all 16 EFA NICs on the node. MC_MS_FILTERS (a Mooncake Store setting) and WITH_NVIDIA_PEERMEM (RDMA transport only) are not set, since the EFA transfer path does not read them."
+    - "Mooncake replaces NIXL with the LIBFABRIC backend. The image's PyPI NIXL wheel was built against libfabric headers that predate the option to turn off the EFA provider's unsolicited write recv, which libfabric 2.6 enables by default, so NIXL needed FI_EFA_USE_UNSOLICITED_WRITE_RECV=0; without it, about 1.4% of 1P1D c240 requests timed out on decode after 900 s (run 39191181928). Mooncake's EFA transport issues plain fi_write/fi_read and reaps completions only on the initiator, and SGLang's Mooncake backend tells decode over ZMQ that the KV has arrived, so it needs no such setting. In run 39419275574, Mooncake matched NIXL at 1P1D and 1P2D c64 and delivered about 4.5% more throughput per GPU at 1P1D c240 (66.7k vs 63.8k tok/s, run 39349167469) with zero errors."
+    - "Drop settings with no effect on this image: env vars it no longer reads or never defined (SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT, SGLANG_OPT_USE_JIT_NORM, SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE, SGLANG_OPT_DEEPGEMM_MEGA_MOE, SGLANG_DSV4_MHC_PREWARM, NCCL_TIMEOUT); env vars only SGLang's own HTTP server reads (SGLANG_DEFAULT_THINKING, SGLANG_DSV4_REASONING_EFFORT, SGLANG_REQUEST_STATE_WAIT_TIMEOUT); env vars and args equal to their defaults or set automatically for DeepSeek-V4, DSpark or Dynamo (SGLANG_RAGGED_VERIFY_MODE, SGLANG_JIT_DEEPGEMM_PRECOMPILE, SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS, SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2, SGLANG_OPT_USE_ONLINE_COMPRESS, SGLANG_OPT_USE_JIT_INDEXER_METADATA, SGLANG_OPT_USE_TOPK_V2, attention-backend, page-size, speculative-num-steps, speculative-eagle-topk, speculative-num-draft-tokens, incremental-streaming-output, enable-cache-report, disable-shared-experts-fusion, cuda-graph-max-bs-prefill, swa-full-tokens-ratio 0.1, hicache-write-policy write_through); and the Dynamo router rejection thresholds, which are off by default."
+    - "Rename SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW to SGLANG_OPT_RELEASE_PREFILL_SWA, its name in this image."
+    - "Use the DSXE cluster's 24 CPUs per GPU, HiCache ratio 3 and decode max-running-requests at twice concurrency. The recipes set no Slurm node exclusions of their own, so the cluster-level exclusion in runners.yaml applies."
+    - "Serve B300 DSXE Dynamo+SGLang DeepSeek-V4-Pro-0813 weights from the node-local NVMe copy (DeepSeek-V4-Pro-0813@scratch, as for vLLM) instead of the shared /data/models copy, which slowed startup by hours when several points loaded concurrently."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4346
+
+- config-keys:
     - minimaxm31flash-fp4-b300-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
