@@ -7684,7 +7684,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
           ep: 16
           dp-attn: true
 glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
+  image: lmsysorg/sglang:nightly-dev-20261026-8252e3af@sha256:b4e4abb9e1dc038f7e14c85805be97e4f74abb46e541bd4edd31401d50a2e593
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
