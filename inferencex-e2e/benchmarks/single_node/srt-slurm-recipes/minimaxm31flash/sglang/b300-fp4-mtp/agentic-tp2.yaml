@@ -48,9 +48,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# TP2 with L2 HiCache (write_back, 295 GB per rank). The scheduler batch is 2x CONC;
-# the decode graph batch matches it.
-
 zip_override_tp2_hicache:
   roles:
     agg:
@@ -58,6 +55,7 @@ zip_override_tp2_hicache:
         tensor-parallel-size: 2
         moe-runner-backend: flashinfer_trtllm_routed
         chunked-prefill-size: 32768
+        # 2x CONC (AgentX subagent fan-out); the decode graph batch matches it.
         max-running-requests: [64, 72, 80]
         cuda-graph-max-bs-decode: [64, 72, 80]
         mem-fraction-static: 0.87
@@ -68,8 +66,6 @@ zip_override_tp2_hicache:
     env:
       CONC: ['32', '36', '40']
       KV_OFFLOADING: dram
-
-# Higher-concurrency points use longest-prefix-match scheduling.
 
 zip_override_tp2_hicache_lpm:
   roles:
