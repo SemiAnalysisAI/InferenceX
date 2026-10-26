@@ -150,11 +150,11 @@ def _result(model: str, score: float, effective: int, error: str | None = None) 
     return result
 
 
-def _write(output_dir: Path, result: dict[str, Any]) -> None:
+def _write(output_dir: Path, result: dict[str, Any], prefix: str = "aa_lcr") -> None:
     """Write the compatibility result."""
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
-    path = output_dir / f"results_aa_lcr_{stamp}.json"
+    path = output_dir / f"results_{prefix}_{stamp}.json"
     path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
 

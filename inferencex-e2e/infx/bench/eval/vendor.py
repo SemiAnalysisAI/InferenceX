@@ -366,6 +366,22 @@ PROVIDERS: dict[str, Provider] = {
         failure_command=("failure",),
         message_flag="--message",
     ),
+    "aime": Provider(
+        default_suite="aime_2025_2026",
+        suites={
+            "aime_2025_2026": Suite(
+                label="AIME 2025+2026",
+                adapter="aime_eval.py",
+                results=("results_aime_*.json",),
+                timeout_s=6 * 3600,
+            ),
+        },
+        python_minor=10,
+        prepare=_prepare_aa_lcr,
+        run_command=("run",),
+        failure_command=("failure",),
+        message_flag="--message",
+    ),
     "bfcl": Provider(
         default_suite="bfcl_smoke",
         suites={
