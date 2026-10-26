@@ -11288,3 +11288,10 @@
     - "Require valid measured GPU power for the Qwen3.8 GB300 AgentX sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4552
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Collect GPU-board power and require valid AgentX power for the seven existing GB200 Dynamo-SGLang disaggregated variants."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
