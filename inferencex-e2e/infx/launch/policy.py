@@ -6,7 +6,6 @@ belong in the cluster record. :func:`table_problems` checks every table here aga
 
 from __future__ import annotations
 
-import contextlib
 import fnmatch
 import json
 from collections.abc import Mapping
@@ -14,12 +13,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from infx.launch.request import RequestError
+
 if TYPE_CHECKING:
     from infx.clusters import Cluster
     from infx.launch.request import LaunchRequest
 
 
 def any_of(*values: str) -> frozenset[str]:
+    """Return ``values`` as a frozenset for a ``Match`` field."""
     return frozenset(values)
 
 
@@ -36,6 +38,7 @@ class Match:
     model_glob: str | None = None
 
     def __call__(self, request: LaunchRequest) -> bool:
+        """Return whether ``request`` satisfies every set field."""
         return (
             (self.prefixes is None or request.model_prefix in self.prefixes)
             and (self.precisions is None or request.precision in self.precisions)
@@ -75,6 +78,7 @@ BATCH_WRAPPED_LANES: dict[str, Match] = {
 
 
 def launch_path(cluster_id: str, request: LaunchRequest) -> LaunchPath:
+    """Return the launch path that runs ``request`` on the cluster ``cluster_id``."""
     if request.is_multinode:
         if any(lane(request) for lane in NATIVE_SRT_LANES.get(cluster_id, ())):
             return LaunchPath.SRT_NATIVE
@@ -133,12 +137,23 @@ def runtime_env(
 
 
 def point_settings(request: LaunchRequest) -> frozenset[str]:
-    """The names the point's NAME=value additional-settings set; the workflow exports them."""
+    """The names the point's NAME=value additional-settings set; the workflow exports them.
+
+    A null value, which the workflow sends for a role without additional-settings, sets none.
+    Raises ``RequestError`` if a value is not a JSON list.
+    """
     names: set[str] = set()
     for name in ("PREFILL_ADDITIONAL_SETTINGS", "DECODE_ADDITIONAL_SETTINGS"):
-        with contextlib.suppress(ValueError):
+        try:
             values = json.loads(request.env.get(name) or "[]")
-            names.update(v.partition("=")[0] for v in values or [] if isinstance(v, str))
+        except ValueError:
+            continue
+        if values is None:
+            continue
+        if not isinstance(values, list):
+            kind = type(values).__name__
+            raise RequestError(f"{name} must be a JSON list of NAME=value strings, got {kind}")
+        names.update(v.partition("=")[0] for v in values if isinstance(v, str))
     return frozenset(names)
 
 
@@ -146,6 +161,7 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
     """Rows of this module's tables that ``clusters`` contradicts; only ``only``'s rows if given."""
 
     def keys(table: Mapping[str, object]) -> list[str]:
+        """Return the keys of ``table`` within the checked scope."""
         return [key for key in table if only in (None, key)]
 
     tables: dict[str, Mapping[str, object]] = {

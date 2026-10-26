@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:4271692397830e1198b6aee1fe81c29c39f3704b0816f2746162f778cfa93048
+    container_image: rocm/atom-dev@sha256:57477e7a4b5156fcc7b21bab082eba98577752465f58479ac2ead8514f882a61
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -44,8 +44,6 @@ base:
         AITER_LOG_LEVEL: WARNING
   benchmark:
     env:
-      # The upstream one-hour profile warms five requests per lane.
-      AIPERF_WARMUP_REQUESTS_PER_LANE: '5'
       # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_TIMING_CANCEL_DRAIN_TIMEOUT: '300'

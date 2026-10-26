@@ -140,3 +140,18 @@ def test_cleanup_hands_the_backend_the_runners_settings_when_it_has_a_record(
 
     [(settings, cleaned)] = FakeBackend.cleaned
     assert (getattr(settings, "namespace", None), cleaned) == (namespace, runner)
+
+
+def test_a_runner_without_a_cluster_record_fails_the_run_with_one_error_line(
+    fake, workspace, tmp_path, monkeypatch, capsys
+):
+    config = tmp_path / "runners.yaml"
+    config.write_text(yaml.safe_dump(fake))
+    monkeypatch.setenv("RUNNER_NAME", "unlisted_00")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    assert main(["--runner-config", str(config), "run"]) == 1
+
+    err = capsys.readouterr().err
+    assert "ERROR: runner 'unlisted_00' must be in exactly one cluster label, found []" in err
+    assert "Traceback" not in err
