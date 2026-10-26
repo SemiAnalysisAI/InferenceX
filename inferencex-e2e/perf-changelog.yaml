@@ -11187,5 +11187,6 @@
     - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
   description:
     - "Add TP4 points with DRAM KV offload, enable DRAM KV offload on the TP4 + EP4 points, and adjust the memory settings."
+    - "Add TP4 DRAM KV offload points at conc 40, 48 and 56."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4491
   scenario-type: [agentic-coding]

@@ -145,6 +145,63 @@ override_tp4_dram_c32:
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '721'
 
+override_tp4_dram_c40:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 80
+        cuda-graph-max-bs-decode: 80
+        mem-fraction-static: 0.81
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '721'
+
+override_tp4_dram_c48:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        mem-fraction-static: 0.81
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '721'
+
+override_tp4_dram_c56:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 112
+        cuda-graph-max-bs-decode: 112
+        mem-fraction-static: 0.81
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '56'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '721'
+
 override_tp4_dram_c64:
   roles:
     agg:
