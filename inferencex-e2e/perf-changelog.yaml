@@ -11334,6 +11334,13 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-8e2beaa3 to the digest-pinned nightly-e4a5b553."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4521
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
