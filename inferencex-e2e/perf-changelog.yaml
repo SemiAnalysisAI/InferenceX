@@ -11304,3 +11304,10 @@
     - "Update the SGLang image from nightly-dev-cu13-20261015-a6a8c560 to nightly-dev-cu13-20261025-65633129, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4497
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-agentic-mtp
+  description:
+    - "Update the vLLM image from nightly-rocm72-c50aca14 to nightly-rocm72-00b6c4c5, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4551
+  scenario-type: [agentic-coding]
