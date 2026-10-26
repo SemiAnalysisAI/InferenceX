@@ -144,7 +144,7 @@ override_c16:
         dcp-size: 8
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
-        mem-fraction-static: 0.88
+        mem-fraction-static: 0.83
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
         # Hold prefills until min(0.5 x running, prefill-max-requests) are queued,
