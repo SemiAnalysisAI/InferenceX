@@ -11292,6 +11292,48 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4357
 
 - config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-rocm100-3df4ae15 to v0.32.0, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4496
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261015-a6a8c560 to nightly-dev-cu13-20261025-65633129, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4497
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-ac9126e58aa7 to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4505
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image from v0.5.20-rocm720-mi35x-20260930 to v0.5.22-rocm720-mi35x, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4506
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4512
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261025-65633129."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4515
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
