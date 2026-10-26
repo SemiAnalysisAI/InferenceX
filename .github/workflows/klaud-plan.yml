@@ -2,13 +2,14 @@ name: Klaud Cold auto-sweep
 run-name: >-
   ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
   inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
-  || (github.event.schedule == '15,45 * * * *' || inputs.wake) && 'Klaud Cold wake'
+  || (github.event.schedule == '30 * * * *' || inputs.wake) && 'Klaud Cold wake'
   || 'Klaud Cold auto-sweep' }}
 
-# klaud-wake.yml dispatches a wake whenever a Klaud-owned run ends; one runs and one waits, so a
-# burst of endings collapses into a single recovery pass. Every other run is its own group.
+# Wakes, dispatched by klaud-wake.yml when a Klaud-owned run ends or scheduled hourly as a
+# backstop, share one group: one runs and one waits, so a burst collapses into a single recovery
+# pass and two passes never contend for recovery leases. Every other run is its own group.
 concurrency:
-  group: ${{ inputs.wake && 'klaud-wake' || github.run_id }}
+  group: ${{ (inputs.wake || github.event.schedule == '30 * * * *') && 'klaud-wake' || github.run_id }}
   cancel-in-progress: false
 
 on: # zizmor: ignore[concurrency-limits]
@@ -32,7 +33,7 @@ on: # zizmor: ignore[concurrency-limits]
         default: false
   schedule:
     - cron: '0 */4 * * *'
-    - cron: '15,45 * * * *'
+    - cron: '30 * * * *'
 
 permissions:
   contents: read
@@ -50,12 +51,13 @@ jobs:
     permissions:
       contents: read
       actions: read # Read workflow runs and artifacts.
-      pull-requests: read # Read PR metadata.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
       issues: write # Set display-only Klaud status labels on its PRs.
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       blocked-families: ${{ steps.recover.outputs.blocked-families }}
       active-sessions: ${{ steps.recover.outputs.active-sessions }}
+      deferred: ${{ steps.recover.outputs.deferred }}
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -95,12 +97,14 @@ jobs:
           KLAUD_STATUS_TOKEN: ${{ github.token }}
         run: |
           uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-sessions "$MAX_CANDIDATES_PER_RUN"
-          echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
+          if [[ -f "$RUNNER_TEMP/klaud-recovery.json" ]]; then
+            echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
+          fi
 
   review:
     name: Review candidate overlap
     needs: recover
-    if: github.event.schedule != '15,45 * * * *' && !inputs.wake
+    if: github.event.schedule != '30 * * * *' && !inputs.wake && needs.recover.outputs.deferred != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -326,7 +330,7 @@ jobs:
     permissions:
       contents: read
       actions: read # Read workflow runs and artifacts.
-      pull-requests: read # Read PR metadata.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
       issues: write # Set display-only Klaud status labels on its PR.
     uses: $/.github/workflows/klaud-candidate.yml
     with:
@@ -345,7 +349,7 @@ jobs:
     permissions:
       contents: read
       actions: read # Read workflow runs and artifacts.
-      pull-requests: read # Read PR metadata.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
       issues: write # Set display-only Klaud status labels on its PR.
     uses: $/.github/workflows/klaud-candidate.yml
     with:

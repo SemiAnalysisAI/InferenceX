@@ -1,0 +1,68 @@
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-gb300-sglang-agentic-tp2
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Cold loads of the 250 GB checkpoint plus JIT MSA kernel builds and graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      # Serve flags follow the cookbook's GB300 cells at
+      # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1.
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        # Seven-token DSpark, the bundled draft's dspark_block_size. Throughput runs
+        # switch to synthetic acceptance at the golden acceptance length.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        cuda-graph-backend-prefill: breakable
+        tokenizer-worker-num: 8
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        FMHA_SM100_ALLOW_JIT: '1'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+zip_override_tp2_hicache:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        # 2x CONC (AgentX subagent fan-out); the decode graph batch matches it.
+        max-running-requests: [40, 48, 56, 72]
+        cuda-graph-max-bs-decode: [40, 48, 56, 72]
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: ['20', '24', '28', '36']
+      KV_OFFLOADING: dram
