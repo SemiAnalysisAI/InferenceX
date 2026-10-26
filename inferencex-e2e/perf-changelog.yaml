@@ -11217,5 +11217,5 @@
     - "Concurrency 1: 1P1D TP4/TP4 (8 GPUs) instead of TP8/TP8, with six DSpark draft tokens on both roles."
     - "Concurrency 16: 1P1D with a TP4 prefill and a TP8 decode (12 GPUs) instead of TP8/TP8, with six DSpark draft tokens; the TP4 prefill adds the lmcache_offload host KV tier (374 GB per rank, dram-utilization 0.50)."
     - "gpu-memory-utilization, image and the conc 64/128/256 points are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4527
   scenario-type: [agentic-coding]
