@@ -1000,3 +1000,155 @@ override_x_l1_c16:
         num-speculative-tokens: 6
         max-num-seqs: 32
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
+override_x_m_c32:
+  frontend:
+    args:
+      prefill-policy: round_robin
+      decode-policy: round_robin
+      atom-pd-rank-mapping-policy: none
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        PYTHONHASHSEED: '0'
+        OFFLOAD_COPY_WORKERS: '1'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+        OFFLOAD_SLOT_STAGING_SLOTS: '4'
+      args:
+        num-speculative-tokens: 6
+        max-num-seqs: 64
+        extra-kv-connectors:
+        - kv_connector: lmcache_offload
+          kv_role: offload
+          offload_layout: hybrid
+          max_pending_saves: 8
+          slot_sidecar_staging_slots: 4
+          lmcache.local_cpu: true
+          lmcache.max_local_cpu_size: 374
+          lmcache.local_disk: null
+          lmcache.max_local_disk_size: 0
+          lmcache.remote_url: null
+          lmcache.chunk_size: 256
+          lmcache.cache_policy: LRU
+          lmcache.lookup_server_worker_ids: []
+          lmcache.store_location: LocalCPUBackend
+          lmcache.retrieve_locations:
+          - LocalCPUBackend
+    decode:
+      args:
+        num-speculative-tokens: 6
+        max-num-seqs: 64
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'
+override_x_m_c48:
+  frontend:
+    args:
+      prefill-policy: round_robin
+      decode-policy: round_robin
+      atom-pd-rank-mapping-policy: none
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        PYTHONHASHSEED: '0'
+        OFFLOAD_COPY_WORKERS: '1'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+        OFFLOAD_SLOT_STAGING_SLOTS: '4'
+      args:
+        num-speculative-tokens: 3
+        max-num-seqs: 96
+        extra-kv-connectors:
+        - kv_connector: lmcache_offload
+          kv_role: offload
+          offload_layout: hybrid
+          max_pending_saves: 8
+          slot_sidecar_staging_slots: 4
+          lmcache.local_cpu: true
+          lmcache.max_local_cpu_size: 374
+          lmcache.local_disk: null
+          lmcache.max_local_disk_size: 0
+          lmcache.remote_url: null
+          lmcache.chunk_size: 256
+          lmcache.cache_policy: LRU
+          lmcache.lookup_server_worker_ids: []
+          lmcache.store_location: LocalCPUBackend
+          lmcache.retrieve_locations:
+          - LocalCPUBackend
+    decode:
+      args:
+        num-speculative-tokens: 3
+        max-num-seqs: 96
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96]'
+override_x_h2_c64:
+  services:
+  - name: lmcache
+    type: lmcache-server
+    placement:
+      node: prefill
+    args:
+    - --chunk-size
+    - '256'
+    - --null-block-id
+    - '-1'
+    - --separate-object-groups
+    - --supported-transfer-mode
+    - lmcache_driven
+    - --l1-size-gb
+    - '1000'
+    - --l1-use-lazy
+    - --l1-read-ttl-seconds
+    - '900'
+    - --eviction-policy
+    - LRU
+    - --eviction-trigger-watermark
+    - '0.98'
+  frontend:
+    args:
+      dp-aware: true
+      prefill-policy: dp_sticky
+      decode-policy: dp_sticky
+      atom-pd-rank-mapping-policy: none
+  roles:
+    prefill:
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '0'
+        GPU_MAX_HW_QUEUES: '5'
+        PYTHONHASHSEED: '0'
+        OFFLOAD_COPY_WORKERS: '1'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+        OFFLOAD_MIN_SAVE_TOKENS: '8192'
+        OFFLOAD_MAX_PENDING_SAVES: '8'
+        LMCACHE_CHUNK_SIZE: '256'
+        MORI_SHMEM_HEAP_SIZE: 8G
+        ATOM_MEGA_MASK_PAD_ROWS: '1'
+        ATOM_MEGA_DECODE_MTPR: '512'
+        AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
+        ATOM_EPLB_MAX_REBALANCES: '4'
+      args:
+        max-num-seqs: 64
+        enable-dp-attention: true
+        enable-expert-parallel: true
+        all2all-backend: high-throughput
+        moe-backend: mega
+        enable-eplb: true
+        eplb-config: '{"load_window_size":100,"rebalance_interval":200}'
+        extra-kv-connectors:
+        - kv_connector: lmcache_mp
+          kv_role: offload
+          kv_connector_extra_config:
+            lmcache.mp.host: tcp://127.0.0.1
+            lmcache.mp.port: 8750
+            lmcache.mp.tp_rank_collapse: true
+        state-checkpoint-interval-tokens: -1
+        max-num-batched-tokens: 8192
+        attn-prefill-chunk-size: 8192
+    decode:
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '0'
+      args:
+        max-num-seqs: 64
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
+        enable-dp-attention: true
+        state-checkpoint-interval-tokens: -1
+  benchmark:
+    env:
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: '1'
