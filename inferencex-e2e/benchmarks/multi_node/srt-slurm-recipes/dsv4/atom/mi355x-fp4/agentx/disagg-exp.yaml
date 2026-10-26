@@ -68,6 +68,7 @@ base:
   sbatch_directives:
     cpus-per-task: "128"
     mem: "0"
+    exclude: "mia1-p01-g14"
   srun_options:
     mem: "0"
     container-writable: ""
