@@ -126,66 +126,78 @@ override_tp4_c32:
       CONC: '32'
       KV_OFFLOADING: none
 
-# High-Throughput cell: TP8 with attention DP2 and EP8 (MegaMoE). The scheduler
-# batch is 2x CONC up to the cookbook's 256, and each of the two attention-DP
-# ranks captures decode graphs for half of it.
-
-override_tp8_ep8_c64:
+override_tp4_dram_c32:
   roles:
     agg:
-      gpus: 8
       args:
-        tensor-parallel-size: 8
-        attn-dp-size: 2
-        enable-dp-lm-head: true
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 128
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 64
         cuda-graph-max-bs-decode: 64
-        mem-fraction-static: 0.8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '32768'
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 290
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
+
+override_tp4_dram_c64:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 290
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '64'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
 
-override_tp8_ep8_c128:
+override_tp4_dram_c80:
   roles:
     agg:
-      gpus: 8
       args:
-        tensor-parallel-size: 8
-        attn-dp-size: 2
-        enable-dp-lm-head: true
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 256
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 128
         cuda-graph-max-bs-decode: 128
-        mem-fraction-static: 0.8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '32768'
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 290
+        hicache-write-policy: write_back
   benchmark:
     env:
-      CONC: '128'
-      KV_OFFLOADING: none
+      CONC: '80'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'
 
-override_tp8_ep8_c256:
+override_tp4_dram_c96:
   roles:
     agg:
-      gpus: 8
       args:
-        tensor-parallel-size: 8
-        attn-dp-size: 2
-        enable-dp-lm-head: true
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 256
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 128
         cuda-graph-max-bs-decode: 128
-        mem-fraction-static: 0.8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '32768'
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 290
+        hicache-write-policy: write_back
   benchmark:
     env:
-      CONC: '256'
-      KV_OFFLOADING: none
+      CONC: '96'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1199'

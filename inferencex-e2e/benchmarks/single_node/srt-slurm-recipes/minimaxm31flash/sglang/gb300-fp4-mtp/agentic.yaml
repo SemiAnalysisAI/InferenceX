@@ -78,13 +78,35 @@ override_tp4_hicache_c64:
         chunked-prefill-size: 32768
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
-        mem-fraction-static: 0.8
+        mem-fraction-static: 0.87
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '64'
+      KV_OFFLOADING: dram
+
+# TP2 with L2 HiCache: two-GPU engines at 180 GB per rank, inside their share of the
+# node's step memory cap. The scheduler batch is 2x CONC and the decode graph batch matches it.
+
+zip_override_tp2_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: [64, 80, 88]
+        cuda-graph-max-bs-decode: [64, 80, 88]
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: ['32', '40', '44']
       KV_OFFLOADING: dram
 
 # High-Throughput cell: TP4 with EP4 (MegaMoE). The scheduler batch and decode graph
@@ -117,7 +139,7 @@ override_tp4_ep4_hicache_c64:
         chunked-prefill-size: 32768
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
-        mem-fraction-static: 0.8
+        mem-fraction-static: 0.87
         enable-hierarchical-cache: true
         hicache-size: 175
         hicache-write-policy: write_back
@@ -137,7 +159,7 @@ override_tp4_ep4_hicache_c128:
         chunked-prefill-size: 32768
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
-        mem-fraction-static: 0.8
+        mem-fraction-static: 0.87
         enable-hierarchical-cache: true
         hicache-size: 175
         hicache-write-policy: write_back
