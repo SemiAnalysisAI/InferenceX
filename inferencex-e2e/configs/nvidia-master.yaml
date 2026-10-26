@@ -9448,8 +9448,7 @@ dsv41flash-fp4-b300-sglang-agentic-dspark:
 
 # MiniMax-M3.1-Flash AgentX on B300 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
-# manifest digest verified 2026-10-24. Serve flags follow the cookbook's
-# B300 Balanced (TP4) and High-Throughput (TP8, attention DP2, EP8).
+# manifest digest verified 2026-10-24.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
 # infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
 minimaxm31flash-fp4-b300-sglang-agentic-dspark:
@@ -9466,9 +9465,9 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
     - search-space:
       # Balanced: TP4.
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
-      # High-Throughput: TP8 + EP8 with attention DP2 inside the server (--attn-dp-size 2,
-      # not full DP attention, so dp-attn stays false).
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], srt-recipe: agentic.yaml }
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 64, 80, 96], srt-recipe: agentic.yaml }
 
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
