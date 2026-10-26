@@ -9468,6 +9468,22 @@ minimaxm31flash-fp4-b300-sglang-agentic-dspark:
       # not full DP attention, so dp-attn stays false).
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], srt-recipe: agentic.yaml }
 
+minimaxm31flash-fp4-b300-sglang-agentic-dspark-tp2:
+  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/sglang/b300-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # TP2 with L2 HiCache: 295 GB per rank at conc 32-48.
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 36, 40, 44, 46, 48], srt-recipe: agentic-tp2.yaml }
+
 # Official SGLang nightly; TP4 C1 uses GPU Engram, other points use host DRAM.
 dsv41flash-fp4-gb300-sglang-agentic-dspark:
   image: lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
