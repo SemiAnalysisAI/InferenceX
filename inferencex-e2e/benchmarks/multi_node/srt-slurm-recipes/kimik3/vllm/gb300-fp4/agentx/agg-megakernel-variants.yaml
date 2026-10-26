@@ -4,7 +4,7 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: 49cb2bbf71cfd36ee5aa33d1e184b1cddff55294
+      vllm: 1b2a666391f2a24228a1436b64d547c34cc6b6ce
   dynamo:
     install: false
   slurm:
@@ -37,6 +37,7 @@ base:
         VLLM_USE_RUST_FRONTEND: '0'
         VLLM_PREFIX_CACHE_RETENTION_INTERVAL: '0'
         VLLM_LOG_STATS_INTERVAL: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
       args:
         served-model-name: moonshotai/Kimi-K3
         enable-auto-tool-choice: true
@@ -86,10 +87,3 @@ override_tp16_dspark5:
         max-cudagraph-capture-size: 48
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,10,12,20,24,40,48]}'
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-override_tp8_dspark7:
-  roles:
-    agg:
-      args:
-        max-cudagraph-capture-size: 64
-        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,8,14,16,28,32,56,64]}'
-        speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","attention_backend":"TOKENSPEED_MLA","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'

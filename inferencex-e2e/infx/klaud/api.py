@@ -31,6 +31,7 @@ ENDPOINTS = {
     "benchmarks": PUBLIC + "/api/v1/benchmarks",
     "workflow-info": PUBLIC + "/api/v1/workflow-info",
     "evaluations": PUBLIC + "/api/v1/evaluations",
+    "benchmark-siblings": PUBLIC + "/api/v1/benchmark-siblings",
 }
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
@@ -52,14 +53,17 @@ class NoRedirects(urllib.request.HTTPRedirectHandler):
         headers: Any,  # noqa: ARG002
         newurl: str,  # noqa: ARG002
     ) -> None:
-        return None
+        """Refuse every redirect by returning None."""
+        return
 
 
 def reject_nonfinite(value: str) -> Never:  # noqa: ARG001
+    """Raise ReadError for a NaN or Infinity constant ``value`` in JSON."""
     raise ReadError("invalid-json-number")
 
 
 def finite_float(value: str) -> float:
+    """Return JSON number text ``value`` as a float, raising ReadError unless finite."""
     result = float(value)
     if not math.isfinite(result):
         raise ReadError("invalid-json-number")
@@ -72,11 +76,22 @@ def fetch(
     token: str | None = None,
     model: str | None = None,
     date: str | None = None,
+    exact: bool = True,
+    benchmark: int | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     opener: Callable[..., Any] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> Feed:
+    """GET one ``resource`` from ENDPOINTS and return it as a Feed.
+
+    ``model``, ``date``, ``benchmark`` and ``token`` fill the query or auth header where the
+    resource takes them. Retries transient failures, then raises ReadError with a fixed code.
+    """
     query = {}
+    if resource == "benchmark-siblings":
+        if benchmark is None:
+            raise ReadError("benchmark-id-required")
+        query["id"] = str(benchmark)
     if resource == "benchmarks" and model:
         query["model"] = model
     if resource in ("benchmarks", "workflow-info") and date:
@@ -85,7 +100,7 @@ def fetch(
         if calendar_date.fromisoformat(date).isoformat() != date:
             raise ReadError("invalid-baseline-date")
         query["date"] = date
-        if resource == "benchmarks":
+        if resource == "benchmarks" and exact:
             query["exact"] = "true"
     url = ENDPOINTS[resource] + ("?" + urllib.parse.urlencode(query) if query else "")
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
@@ -171,6 +186,7 @@ def fetch(
 
 
 def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
+    """Return issue codes for a missing, failed or stale ``feed`` at time ``now``."""
     if feed is None:
         return ["feed-unavailable"]
     issues = ["feed-refresh-failed"] if feed.error else []
@@ -181,6 +197,7 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
 
 
 def catalog(images: Feed | None, now: datetime, policy: Policy) -> tuple[list[dict], list[str]]:
+    """Return one catalog item per public image row plus the sorted feed issue codes."""
     issues = [f"images:{issue}" for issue in feed_issues(images, now, policy)]
     if images is None or not isinstance(images.payload, list):
         return [], [*issues, "images:invalid-or-missing-payload"]
@@ -215,6 +232,7 @@ def catalog(images: Feed | None, now: datetime, policy: Policy) -> tuple[list[di
 
 
 def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
+    """Fetch the public image feed and return its catalog and issues, or raise ReadError."""
     try:
         images = fetch("images")
     except ReadError as error:
@@ -223,6 +241,7 @@ def fetch_catalog(policy: Policy) -> tuple[list[dict], list[str]]:
 
 
 def fresh(value: Any, now: datetime, policy: Policy) -> bool:
+    """Return True if timestamp ``value`` is within the response age limit at ``now``."""
     try:
         return (
             -policy.clock_skew_seconds
@@ -237,7 +256,8 @@ def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int
     """Return the idle nodes of each cluster that waiting Klaud jobs have not already requested.
 
     Clusters a waiting human job could run on, and clusters without headroom, are omitted.
-    Malformed or duplicate scheduler status yields no clusters.
+    A queued job without a node count needs one node, and jobs already holding a runner are
+    counted in allocatedNodes. Malformed or duplicate scheduler status yields no clusters.
     """
     try:
         raw = feed.payload
@@ -256,7 +276,6 @@ def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int
         human: set[str] = set()
         klaud: Counter[str] = Counter()
         for job in snapshot["queue"]:
-            # A job without a nodes label runs on one runner.
             nodes = 1 if job["nodeCount"] is None else job["nodeCount"]
             labels, runner = job["clusterIds"], job["runnerName"]
             if (
@@ -267,7 +286,6 @@ def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int
                 or not isinstance(runner, str | None)
             ):
                 return {}
-            # A job holding a runner is already counted in allocatedNodes.
             if runner is not None:
                 continue
             if KLAUD_JOB.search(job["name"]):
@@ -294,6 +312,7 @@ def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int
 
 
 def fetch_capacity(policy: Policy) -> dict[str, int]:
+    """Return per-cluster idle headroom from the private scheduler status feed."""
     return cluster_headroom(
         fetch("scheduler", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
         policy,

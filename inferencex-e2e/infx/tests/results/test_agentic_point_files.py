@@ -24,3 +24,9 @@ def test_keeps_files_without_run_attempt(tmp_path: Path):
     first = write(tmp_path, "old_runner", ROW)
     second = write(tmp_path, "new_runner", {**ROW, "run_attempt": 2})
     assert agentic_point_files(tmp_path) == sorted([first, second])
+
+
+def test_rerun_does_not_supersede_a_point_with_other_spec_decoding(tmp_path: Path):
+    mtp = write(tmp_path, "mtp_a1_runner", {**ROW, "spec_decoding": "mtp", "run_attempt": 1})
+    plain = write(tmp_path, "none_a2_runner", {**ROW, "spec_decoding": "none", "run_attempt": 2})
+    assert agentic_point_files(tmp_path) == sorted([mtp, plain])
