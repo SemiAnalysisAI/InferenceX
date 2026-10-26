@@ -11327,6 +11327,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4512
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261025-65633129."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4515
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-8e2beaa3 to the digest-pinned nightly-e4a5b553."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4521
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
   scenario-type:
     - agentic-coding
