@@ -57,17 +57,11 @@ def test_power_replacement_rejects_nonfinite_without_overwriting(
     assert path.read_bytes() == original
 
 
-@pytest.mark.parametrize(("raw", "error_type"), [
-    ("[]", TypeError), ('[["model","fixture"]]', TypeError),
-    ("null", AttributeError), ('"fixture"', AttributeError),
-    ("4", AttributeError), ("false", AttributeError),
-])
-def test_power_replacement_rejects_nonobject_json(
-    tmp_path, patch_validated_power, raw, error_type
-):
+@pytest.mark.parametrize("raw", ["[]", '[["model","fixture"]]', "null", '"fixture"', "4", "false"])
+def test_power_replacement_rejects_nonobject_json(tmp_path, patch_validated_power, raw):
     path = tmp_path / "agg.json"
     path.write_text(raw)
-    with pytest.raises(error_type):
+    with pytest.raises(ValueError, match="aggregate is not a JSON object"):
         patch_validated_power(path, power_valid=False, metrics={})
     assert path.read_text() == raw
 
