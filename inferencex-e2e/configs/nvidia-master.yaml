@@ -8956,24 +8956,10 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64], srt-recipe: agentic.yaml }
       # TP2 with L2 HiCache: 180 GB per rank at conc 32-44.
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 40, 44], srt-recipe: agentic.yaml }
-      # High-Throughput with L2 HiCache: 175 GB per rank at conc 64 and 128.
-      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 128], srt-recipe: agentic.yaml }
-
-minimaxm31flash-fp4-gb300-sglang-agentic-dspark-tp2:
-  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
-  model: MiniMaxAI/MiniMax-M3.1-Flash
-  model-prefix: minimaxm31flash
-  runner: cluster:gb300-nv
-  precision: fp4
-  framework: sglang
-  multinode: false
-  srt-recipe-dir: minimaxm31flash/sglang/gb300-fp4-mtp
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
       # TP2 with L2 HiCache: 180 GB per rank at conc 20-36.
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 36], srt-recipe: agentic-tp2.yaml }
+      # High-Throughput with L2 HiCache: 175 GB per rank at conc 64 and 128.
+      - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 128], srt-recipe: agentic.yaml }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
