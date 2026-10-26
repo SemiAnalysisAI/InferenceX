@@ -6,11 +6,11 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: "1.6.0.dev20261010"
+      dynamo: "1.6.0.dev20261018"
   dynamo:
     install: true
     source:
-      wheel: "1.6.0.dev20261010"
+      wheel: "1.6.0.dev20261018"
   environment:
     PYTHONHASHSEED: "0"
     WITH_NVIDIA_PEERMEM: "0"
