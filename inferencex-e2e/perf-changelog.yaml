@@ -11266,3 +11266,10 @@
     - "Add TP4 DRAM KV offload points at conc 40, 48 and 56."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4491
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  description:
+    - "Require valid measured GPU power for the Qwen3.8 GB300 AgentX sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
