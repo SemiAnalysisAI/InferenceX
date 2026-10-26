@@ -38,7 +38,7 @@ class Override:
 OVERRIDES: dict[str, tuple[Override, ...]] = {
     "b300-dsxe": (
         Override(
-            Match(frameworks=any_of("vllm"), model_glob="*/DeepSeek-V4-Pro-0813"),
+            Match(frameworks=any_of("vllm", "dynamo-sglang"), model_glob="*/DeepSeek-V4-Pro-0813"),
             entry="DeepSeek-V4-Pro-0813@scratch",
         ),
         Override(Match(model_glob="*/DeepSeek-V4-Pro-0813"), entry="DeepSeek-V4-Pro-0813"),
@@ -117,6 +117,7 @@ def checkpoint(cluster: Cluster, request: LaunchRequest) -> Checkpoint | None:
     entries = cluster.models.entries
 
     def node_local(key: str) -> bool:
+        """Return whether model entry ``key`` lives on a node-local volume."""
         return volumes[entries[key].root].visibility == "node-local"
 
     key = _override(cluster, request, "entry")
