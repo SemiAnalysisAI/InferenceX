@@ -107,6 +107,25 @@ override_tp8_c4:
       CONC: '4'
       KV_OFFLOADING: none
 
+override_tp8_c8:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 64
+        swa-full-tokens-ratio: 0.3
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
 override_tp8_c10:
   roles:
     agg:
@@ -208,6 +227,29 @@ override_tp8_c24:
     env:
       CONC: '24'
       KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 96
+        swa-full-tokens-ratio: 0.1
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-hierarchical-cache: true
+        hicache-size: 120
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '2048'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
 
 override_tp4_c28:
   roles:
