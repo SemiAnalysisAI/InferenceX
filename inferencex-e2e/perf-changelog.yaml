@@ -11209,5 +11209,5 @@
     - dsv4-fp4-mi355x-vllm-agentic-mtp
   description:
     - "Update DeepSeek-V4-Pro-0813 on MI355X to vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d and enable --monokernel for TP8 points; keep it disabled for data-parallel points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4526
   scenario-type: [agentic-coding]
