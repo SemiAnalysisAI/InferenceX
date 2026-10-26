@@ -48,6 +48,7 @@ class SmokeSuiteError(RuntimeError):
 
 
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
+    """Return value if it is a mapping, else raise ValueError naming it as name."""
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be an object")
     return value
@@ -82,6 +83,10 @@ def load_fixture(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
 
 def _normalized_base_url(value: str) -> str:
+    """Return value stripped of whitespace and trailing slashes.
+
+    Raises ValueError unless it is an absolute HTTP(S) URL without query or fragment.
+    """
     if not isinstance(value, str) or not value.strip():
         raise ValueError("base_url must be a non-empty string")
     normalized = value.strip().rstrip("/")
@@ -147,10 +152,15 @@ def build_verifier_command(
 
 
 def _error_dict(error: BaseException) -> dict[str, str]:
+    """Return the type name and message of error as a dict."""
     return {"type": type(error).__name__, "message": str(error)}
 
 
 def _rate(value: Any, name: str) -> float:
+    """Return value as a float if it is a finite rate in [0, 1].
+
+    Raises SmokeSuiteError naming field name otherwise.
+    """
     if (
         isinstance(value, bool)
         or not isinstance(value, (int, float))
@@ -162,12 +172,14 @@ def _rate(value: Any, name: str) -> float:
 
 
 def _nonnegative_count(value: Any, name: str) -> int:
+    """Return value if it is a non-negative int, else raise SmokeSuiteError naming field name."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise SmokeSuiteError(f"native summary {name} must be a non-negative integer")
     return value
 
 
 def _compatibility_path(output_dir: Path) -> Path:
+    """Delete stale compatibility results in output_dir and return a new timestamped result path."""
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S.%f")
@@ -181,6 +193,10 @@ def _compatibility_result(
     effective: int,
     integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
+    """Build the lm-eval style result for model with score over effective samples.
+
+    Records integration_error in the result when given.
+    """
     result: dict[str, Any] = {
         "result_format": RESULT_FORMAT,
         "eval_adapter": ADAPTER_NAME,
@@ -218,6 +234,7 @@ def _compatibility_result(
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
+    """Write value to path as indented UTF-8 JSON."""
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -227,7 +244,8 @@ def project_native_artifacts(*, output_dir: Path, model: str) -> Path:
         json.loads((output_dir / NATIVE_REPORT_FILENAME).read_text(encoding="utf-8")),
         "native summary",
     )
-    result_lines = (output_dir / NATIVE_RESULTS_FILENAME).read_text(encoding="utf-8").splitlines()
+    result_text = (output_dir / NATIVE_RESULTS_FILENAME).read_text(encoding="utf-8")
+    result_lines = result_text.removesuffix("\n").split("\n")
     if len(result_lines) != 1 or not result_lines[0].strip():
         raise SmokeSuiteError("native results must contain exactly one row")
     result = _mapping(json.loads(result_lines[0]), "native result")
@@ -350,6 +368,7 @@ def run_evaluation(
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse argv into the run or failure subcommand and its options."""
     parser = argparse.ArgumentParser(
         description="Run the pinned MiniMax M3 smoke through stock verify.py."
     )
@@ -372,6 +391,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the smoke eval, or record the given failure, and return 0 on success or 1 on failure."""
     args = parse_args(argv)
     if args.command == "failure":
         publish_failure(

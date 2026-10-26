@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from infx.srt_slurm.synthetic_acceptance import (
+    acceptance_length,
     build_overrides,
     plan_commands,
     selected_recipes,
@@ -200,6 +201,42 @@ def test_adaptive_dspark_skips_golden_acceptance_on_throughput(golden_dir: Path)
     spec = json.loads(tp8["roles"]["agg"]["args"]["speculative-config"])
     assert spec["synthetic_acceptance_length"] == 2.7
     assert spec["rejection_sample_method"] == "synthetic"
+
+
+def test_adaptive_verification_records_no_golden_acceptance(golden_dir: Path) -> None:
+    adaptive = {
+        "args": {
+            "speculative-config": json.dumps(
+                {"method": "dspark", "num_speculative_tokens": 5, "enable_adaptive_verification": True}
+            )
+        }
+    }
+    recipe = {"roles": {"prefill": adaptive, "decode": adaptive}}
+    env = {**ENV, "SPEC_DECODING": "dspark"}
+
+    assert acceptance_length(recipe, "vllm-disagg", env, golden_dir=golden_dir) is None
+    assert build_overrides(recipe, "vllm-disagg", env, golden_dir=golden_dir) == []
+
+
+def test_adaptive_generation_records_no_golden_acceptance_while_prefill_simulates(
+    golden_dir: Path,
+) -> None:
+    decode = vllm_recipe("dspark", enable_adaptive_verification=True)["roles"]["agg"]
+    prefill = vllm_recipe("dspark")["roles"]["agg"]
+    recipe = {"roles": {"prefill": prefill, "decode": decode}}
+    env = {**ENV, "SPEC_DECODING": "dspark"}
+
+    assert acceptance_length(recipe, "vllm-disagg", env, golden_dir=golden_dir) is None
+    result = apply_native(
+        recipe, build_overrides(recipe, "vllm-disagg", env, golden_dir=golden_dir)
+    )
+    assert result["roles"]["decode"] == decode
+    assert json.loads(result["roles"]["prefill"]["args"]["speculative-config"]) == {
+        "method": "dspark",
+        "num_speculative_tokens": 3,
+        "rejection_sample_method": "synthetic",
+        "synthetic_acceptance_length": 2.7,
+    }
 
 
 @pytest.mark.parametrize("sampling", [None, "unknown"])
@@ -609,7 +646,12 @@ def test_caller_json_is_merged_before_golden_selection(tmp_path: Path, golden_di
     }
 
 
-def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("ending", "returncode"), [("sys.exit(7)", 7), ("os.kill(os.getpid(), signal.SIGKILL)", 137)]
+)
+def test_cli_forwards_options_and_submission_failure(
+    tmp_path: Path, ending: str, returncode: int
+) -> None:
     recipe = tmp_path / "recipe.yaml"
     recipe.write_text(
         yaml.safe_dump(
@@ -618,7 +660,8 @@ def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
     )
     binary = tmp_path / "srtctl"
     binary.write_text(
-        f"#!{sys.executable}\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\nsys.exit(7)\n"
+        f"#!{sys.executable}\nimport json,os,signal,sys\n"
+        f"print(json.dumps(sys.argv[1:]), flush=True)\n{ending}\n"
     )
     binary.chmod(0o755)
     record = tmp_path / "acceptance.json"
@@ -639,7 +682,7 @@ def test_cli_forwards_options_and_submission_failure(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 7, result.stderr
+    assert result.returncode == returncode, result.stderr
     assert json.loads(record.read_text()) == {"golden_acceptance_length": None}
     argv = json.loads(result.stdout)
     assert argv[:5] == ["apply", "-f", str(recipe), "--tags", "a b"]
