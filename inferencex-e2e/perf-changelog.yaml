@@ -11216,8 +11216,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Image, search space, DSpark settings and quantization unchanged."
-    - "Cap max-num-seqs for p90 interactivity, with graph capture at max-num-seqs x 6 rounded up to vLLM's capture grid: TP4 c1/c2 and TP2 c1/c2/c4 1 / 8 and TP2 c8 2 / 16 (was unset / 1024)."
-    - "max-num-batched-tokens 32768 at TP4 c1/c2 and TP2 c1/c2/c4, and 8192 at TP2 c8 (was 16384)."
-    - "TP2 c16-c64 and the unsearched TP4 c4-c64 recipe variants are unchanged."
+    - "Image unchanged: vllm/vllm-openai-rocm:nightly-e68efc685ab1e6f1eda004ced7157e3ca411da2f. Search space unchanged: TP4 c1-c2 and TP2 c1-c64."
+    - "TP4 c1/c2 and TP2 c1/c2/c4: max-num-seqs 1 (was unset), max-cudagraph-capture-size 1024 -> 8 and max-num-batched-tokens 16384 -> 32768, so each server decodes one sequence at a time and its 6-token step (1 + 5 drafts) pads into the size-8 graph."
+    - "TP2 c8: max-num-seqs 2 (was unset), max-cudagraph-capture-size 1024 -> 16 and max-num-batched-tokens 16384 -> 8192."
+    - "TP2 c16-c64, the unsearched TP4 c4-c64 recipe variants, the DSpark speculative config (5 drafts, probabilistic drafting) and mono decode are unchanged."
+    - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), inherits the target fp8_ds_mla KV cache, and the mono draft kernels read those weights in place."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4480
