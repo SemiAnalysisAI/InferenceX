@@ -4,16 +4,24 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import subprocess
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 from infx import github
 
+MIN_API_BUDGET = 1000
+
 
 class VerificationError(ValueError):
     """A fixed public failure reason; never constructed from raw API/artifact content."""
+
+
+class ListingUnavailable(VerificationError):  # noqa: N818
+    """A GitHub listing was missing, malformed or incomplete; a later read may succeed."""
 
 
 def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
@@ -22,11 +30,37 @@ def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
 
 
 def items(repository: str, path: str, key: str | None = None) -> list[dict]:
-    """Return every listed item at ``path``, unwrapped from ``key``, or raise VerificationError."""
+    """Return every listed item at ``path``, unwrapped from ``key``, or raise ListingUnavailable."""
     try:
         return github.paginate(repository, path, item_key=key or "")
     except github.ListingError as error:
-        raise VerificationError(str(error)) from error
+        raise ListingUnavailable(str(error)) from error
+
+
+def api_budget() -> int | None:
+    """Print and return the REST requests gh's token has left this hour, or None if unreadable.
+
+    GitHub does not count reads of the rate limit against it.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "api", "rate_limit"], capture_output=True, text=True, timeout=60, check=True
+        )
+        core = json.loads(result.stdout)["resources"]["core"]
+        remaining, limit, reset = int(core["remaining"]), int(core["limit"]), int(core["reset"])
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return None
+    print(
+        f"Klaud GitHub API budget: {remaining} of {limit} requests left, "
+        f"resets {datetime.fromtimestamp(reset, UTC):%H:%M} UTC."
+    )
+    return remaining
+
+
+def budget_low() -> bool:
+    """Whether gh's token has fewer than MIN_API_BUDGET requests left; unreadable is not low."""
+    remaining = api_budget()
+    return remaining is not None and remaining < MIN_API_BUDGET
 
 
 writes = 0

@@ -108,6 +108,7 @@ def test_source_reads_return_file_bytes_or_a_fixed_failure(monkeypatch, contents
     "failure,reason",
     [
         ("command", "State unavailable or invalid; inspect GitHub before retrying"),
+        ("rate-limit", "GitHub API rate limit exhausted; retry after it resets"),
         ("json", "State unavailable or invalid; inspect GitHub before retrying"),
         ("shape", "GitHub listing returned an unexpected shape"),
         ("incomplete", "Incomplete GitHub listing"),
@@ -121,11 +122,11 @@ def test_recovery_errors_do_not_publish_raw_api_data(
         "shape": '[{"artifacts": ["private"], "total_count": 1}]',
         "incomplete": '[{"artifacts": [], "total_count": 1, "detail": "private"}]',
     }
-    command = (
-        "printf '%s' private >&2\nexit 1"
-        if failure == "command"
-        else f"printf '%s' {shlex.quote(responses[failure])}"
-    )
+    command = {
+        "command": "printf '%s' private >&2\nexit 1",
+        "rate-limit": "printf '%s' 'gh: API rate limit exceeded for user ID 1. private' >&2\n"
+        "exit 1",
+    }.get(failure, f"printf '%s' {shlex.quote(responses.get(failure, ''))}")
     executable = tmp_path / "gh"
     executable.write_text(f"#!/bin/sh\n{command}\n")
     executable.chmod(0o755)
@@ -952,6 +953,59 @@ def test_recovery_leaves_the_draft_of_a_planner_run_it_could_not_read(monkeypatc
 
     assert world.writes == world.released == []
     assert json.loads((tmp_path / "klaud-recovery.json").read_text()) == [FAMILY]
+
+
+@pytest.mark.parametrize(("now", "error", "retired"), [
+    pytest.param("2026-10-21T06:00:00Z", github.VerificationError("Candidate ownership mismatch"),
+                 True, id="a-week-after-its-last-session"),
+    pytest.param("2026-10-21T05:59:59Z", github.VerificationError("Candidate ownership mismatch"),
+                 False, id="within-a-week"),
+    pytest.param("2026-10-28T00:00:00Z", github.ListingUnavailable("Incomplete GitHub listing"),
+                 False, id="unreadable-listing"),
+    pytest.param("2026-10-28T00:00:00Z", lifecycle.PendingCleanup("Owned jobs are unfinished"),
+                 False, id="unfinished-work"),
+])  # fmt: skip
+def test_recovery_stops_tracking_a_session_it_cannot_reconcile_a_week_after_it_ended(
+    monkeypatch, tmp_path, capsys, now, error, retired
+):
+    world = ended_session_sweep(monkeypatch, sessions=("failure",))
+    candidate = world.session.candidate
+    serve = github.items
+
+    def items(repository, path, key=None):
+        if path.startswith("actions/artifacts?"):
+            return [{"id": 5, "expired": False, "workflow_run": {"id": 42}}]
+        return serve(repository, path, key)
+
+    def download(_repository, _artifact, destination):
+        (destination / "ownership.json").write_text(
+            Ownership(run_id=42, candidates=[candidate]).model_dump_json(by_alias=True))
+
+    def unreconciled(_session, _now):
+        raise error
+
+    monkeypatch.setattr(github, "items", items)
+    monkeypatch.setattr(github, "download_json", download)
+    monkeypatch.setattr(lifecycle, "reconcile", unreconciled)
+
+    summary, _ = recovery_pass(monkeypatch, tmp_path, now=now)
+
+    assert (("DELETE", "actions/artifacts/5") in world.writes) is retired
+    assert (f"::warning::Klaud: stopped tracking candidate {candidate.id} of planner run 42, "
+            f"unreconciled for 7 days: {error}.\n" in capsys.readouterr().out) is retired
+    assert ("retired / 已停止跟踪" in summary.read_text()) is retired
+
+
+def test_recovery_defers_without_reading_github_while_the_api_budget_is_low(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(github, "api_budget", lambda: github.MIN_API_BUDGET - 1)
+    monkeypatch.setattr(github, "items", lambda *_args: pytest.fail("recovery read GitHub"))
+
+    _, output = recovery_pass(monkeypatch, tmp_path)
+
+    assert output.read_text() == "deferred=true\n"
+    assert not (tmp_path / "klaud-recovery.json").exists()
 
 
 def test_abandoned_work_sweep_keeps_a_claim_whose_planner_run_is_gone(monkeypatch):
@@ -1840,16 +1894,20 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
     assert selection["capacity-deferred-candidates"] == [ids[name] for name in deferred]
 
 
-@pytest.mark.parametrize(("active", "selected", "note"), [
-    pytest.param(0, 3, "", id="no-active-sessions"),
-    pytest.param(1, 2, " 1 running or resumed sessions leave 2 of 3 slots.", id="cap-reduced"),
-    pytest.param(3, 0, " 3 running or resumed sessions leave no slot for new candidates.",
+@pytest.mark.parametrize(("active", "budget", "selected", "note"), [
+    pytest.param(0, None, 3, "", id="no-active-sessions"),
+    pytest.param(1, None, 2, " 1 running or resumed sessions leave 2 of 3 slots.",
+                 id="cap-reduced"),
+    pytest.param(3, None, 0, " 3 running or resumed sessions leave no slot for new candidates.",
                  id="cap-filled"),
-    pytest.param(4, 0, " 4 running or resumed sessions leave no slot for new candidates.",
+    pytest.param(4, None, 0, " 4 running or resumed sessions leave no slot for new candidates.",
                  id="over-the-cap"),
+    pytest.param(0, github.MIN_API_BUDGET, 3, "", id="budget-at-the-floor"),
+    pytest.param(0, github.MIN_API_BUDGET - 1, 0, " Selection stopped: api-budget-low.",
+                 id="budget-below-the-floor"),
 ])  # fmt: skip
 def test_select_leaves_the_slots_of_running_and_resumed_sessions_to_them(
-    tmp_path, monkeypatch, active, selected, note
+    tmp_path, monkeypatch, active, budget, selected, note
 ):
     ids = [f"{digit * 16}-{digit * 16}" for digit in "123"]
     contexts = [
@@ -1880,6 +1938,7 @@ def test_select_leaves_the_slots_of_running_and_resumed_sessions_to_them(
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"cluster-a": 3})
+    monkeypatch.setattr(github, "api_budget", lambda: budget)
     monkeypatch.setattr(reporting, "resolve_baseline", resolve)
     monkeypatch.setattr(validation, "canonical_matrix", lambda *_: {"single_node": {"all": []}})
     monkeypatch.setattr(claims, "claim_family", lambda _r, owned, _run: (
