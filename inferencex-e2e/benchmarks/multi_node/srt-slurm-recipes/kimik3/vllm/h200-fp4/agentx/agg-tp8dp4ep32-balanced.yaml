@@ -60,7 +60,7 @@ roles:
       gpu-memory-utilization: 0.95
       max-num-seqs: 8
       max-num-batched-tokens: 4096
-      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      speculative-config: '{"method":"dspark","model":"/hf_hub_cache/models--Inferact--Kimi-K3-DSpark/snapshots/cf6b8244620e7ea4b0651d214f28e89eac75bed6","num_speculative_tokens":2,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       enforce-eager: true
       no-async-scheduling: true
       compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'

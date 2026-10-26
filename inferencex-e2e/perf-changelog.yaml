@@ -11205,4 +11205,5 @@
   scenario-type: [agentic-coding]
   description:
     - Require validated GPU power across the full Kimi-K3 H200 AgentX curve
+    - Load the DSpark draft from its pinned local snapshot to avoid Hub metadata rate limits during startup
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4489
