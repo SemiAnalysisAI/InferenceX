@@ -58,7 +58,8 @@ base:
         disable_overlap_scheduler: false
         enable_attention_dp: false
         enable_chunked_prefill: true
-        enable_iter_perf_stats: false
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
         enable_iter_req_stats: false
         iter_stats_max_iterations: 10000
         request_stats_max_iterations: 10000
@@ -68,6 +69,7 @@ base:
         perf_metrics_max_requests: 100000
         perf_metrics_output_dir: /logs/perf_metrics/agg
         kv_cache_config:
+          iteration_stats_interval: 20
           use_kv_cache_manager_v2: true
           block_reuse_config:
             policy: all_reusable
