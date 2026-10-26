@@ -30,7 +30,6 @@ base:
         gpu-memory-utilization: 0.9
         language-model-only: true
         trust-remote-code: true
-        hf-overrides: '{"text_config":{"use_index_cache":true,"index_topk_freq":2}}'
         reasoning-parser: minimax_m3
         tool-call-parser: minimax_m3
         enable-auto-tool-choice: true
@@ -102,6 +101,8 @@ zip_override_tp4_dspark7:
   roles:
     agg:
       args:
+        # Index reuse is incompatible with mono decode at lower concurrency.
+        hf-overrides: '{"text_config":{"use_index_cache":true,"index_topk_freq":2}}'
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         max-num-seqs: [32, 64, 128]
   benchmark:
