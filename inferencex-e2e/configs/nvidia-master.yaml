@@ -8957,6 +8957,7 @@ minimaxm31flash-fp4-gb300-sglang-agentic-dspark:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64], srt-recipe: agentic.yaml }
       # TP2 with L2 HiCache: 180 GB per rank at conc 32-44.
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 40, 44], srt-recipe: agentic.yaml }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 36], srt-recipe: agentic-tp2.yaml }
       # High-Throughput with L2 HiCache: 175 GB per rank at conc 64 and 128.
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 128], srt-recipe: agentic.yaml }
 
