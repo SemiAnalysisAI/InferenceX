@@ -20,6 +20,7 @@ base:
       gpus: 4
       env:
         HF_HUB_CACHE: /hf_hub_cache
+        HF_HUB_OFFLINE: '1'
         TQDM_DISABLE: '1'
         HF_HUB_DISABLE_PROGRESS_BARS: '1'
         TLLM_LOG_LEVEL: INFO
@@ -97,12 +98,14 @@ base:
         speculative_config:
           decoding_type: DFlash
           max_draft_len: 7
-          speculative_model: RadixArk/Muse-Spark-Open-DFlash2
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
   benchmark:
     env:
       SERVED_MODEL_NAME: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
       TOKENIZER: /model
       AIPERF_HTTP_TCP_USER_TIMEOUT: '1000000'
+      AIPERF_SERVER_METRICS_URLS: http://localhost:8000/prometheus/metrics
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
 
 override_tep8_c1:
   name: musespark-trt-agg-gb300-tep8-c1-dflash7

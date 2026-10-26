@@ -9995,7 +9995,7 @@ musespark-fp4-gb300-trt-agentic-dflash:
           tp: 8
           ep: 8
           dp-attn: false
-    - dram-utilization: 0.10686
+    - dram-utilization: 0.427409
       search-space:
       - spec-decoding: draft_model
         kv-offloading: dram
@@ -10030,7 +10030,7 @@ musespark-fp4-gb300-trt-agentic-dflash:
           tp: 4
           ep: 4
           dp-attn: false
-    - dram-utilization: 0.17809
+    - dram-utilization: 0.712348
       search-space:
       - spec-decoding: draft_model
         kv-offloading: dram
