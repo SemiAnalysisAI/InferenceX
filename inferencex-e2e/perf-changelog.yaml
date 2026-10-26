@@ -11209,5 +11209,5 @@
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark-tp2
   description:
     - "Add more TP2 points with DRAM KV offload (L2 HiCache)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4525
   scenario-type: [agentic-coding]
