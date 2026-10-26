@@ -60,7 +60,7 @@ zip_override_tp2_hicache:
         cuda-graph-max-bs-decode: [64, 72, 80]
         mem-fraction-static: 0.87
         enable-hierarchical-cache: true
-        hicache-size: 295
+        hicache-size: 210
         hicache-write-policy: write_back
   benchmark:
     env:
@@ -78,7 +78,7 @@ zip_override_tp2_hicache_lpm:
         cuda-graph-max-bs-decode: [88, 92, 96]
         mem-fraction-static: 0.87
         enable-hierarchical-cache: true
-        hicache-size: 295
+        hicache-size: 210
         hicache-write-policy: write_back
         schedule-policy: lpm
   benchmark:
