@@ -30,6 +30,7 @@ base:
         gpu-memory-utilization: 0.9
         language-model-only: true
         trust-remote-code: true
+        hf-overrides: '{"text_config":{"use_index_cache":true,"index_topk_freq":2}}'
         reasoning-parser: minimax_m3
         tool-call-parser: minimax_m3
         enable-auto-tool-choice: true
