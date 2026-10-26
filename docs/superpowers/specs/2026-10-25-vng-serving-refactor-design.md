@@ -308,6 +308,23 @@ fixed-concurrency path driven by `conc`.
   - one parity run of the same serving YAML (agentx smoke) on `vng-benchmark` and on this
     branch, metrics within run-to-run noise.
 
+### Release gates (2026-10-26): passed
+
+Each gate replays an old `vng-benchmark` run at one concurrency on `gn-benchmark`, branch
+`refactor/vng-benchmark`. Metrics come from the `bmk_*` result JSON.
+
+| Gate | New run | Old run | Result |
+|---|---|---|---|
+| Gemma4 vLLM TP4 LiveKit c50 | 40207508684 | 39717833048 | 8799 vs 8825 req, 7.32 vs 7.34 req/s, ITL p90 40.3 vs 39.5 ms, TTFT p90 431 vs 398 ms |
+| Gemma4 SGLang TP4 LiveKit c50, local `.sqsh` image | 40208879855 | 39718341220 | 9425/9975 vs 9430/9980 ok/total, 220.4 vs 220.5 out tok/s, cache hit 0.925 both, same KV pool |
+| GLM-5.3-Flash agentx1m c24, router | 40207499165 | 39889534365 | 703 vs 667 out tok/s, ITL p90 36 vs 39 ms, cache hit 0.962 vs 0.957, 266 failed requests in both, same KV pool |
+| Qwen3.8-27B SLO search 8k/512/cache50, 1 GPU | 40208237757 | earlier HAN search | `state=ok`, `max_conc=40` in both, binding ITL p90 < 50 ms, measured cache hit 0.473 |
+
+All runs are in `vngcloud/InferenceX`. Every gate stays within run-to-run noise, so the refactor is
+ready for cutover step 4. Known difference: the result JSON no longer has `power_valid` or
+`power_metric_schema_version`, and the run uploads no `gpu_metrics_*` artifact. Upstream dropped
+that path; per-GPU power and energy stay in aiperf's `gpu_telemetry_export.jsonl`.
+
 ## Cutover
 
 1. Port and unit-test on `refactor/vng-benchmark`.
