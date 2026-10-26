@@ -9819,7 +9819,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
 
 # One serving GPU, stock ARM64 release, native AgentX client and proportional host cache.
 qwen3.8next-fp4-gb300-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.21-cu130@sha256:1f176b3a1dd1205d2a462ab80ea9fc17769a32e53cb6f3c690efa2dc2c384977
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:06441be3de19a816ddbac917535e920cbfc7fc43171abc08417394f43634ffb6
   model: nvidia/Qwen3.8-Flash-Next-NVFP4
   model-prefix: qwen3.8next
   runner: cluster:gb300-nv

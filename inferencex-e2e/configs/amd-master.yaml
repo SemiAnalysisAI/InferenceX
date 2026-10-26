@@ -1417,7 +1417,7 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
 #     c4 intentionally overlaps both arms to compare the topology crossover.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260930
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
