@@ -11216,5 +11216,5 @@
   description:
     - "Increase MiniMax-M3.1-Flash MI355X vLLM AgentX TP4 C16 from 3 to 7 DSpark draft tokens; throughput uses the existing golden acceptance curve for K7. Keep the C16 NVFP4 KV cache, DBO, and 32-sequence admission limit."
     - "Leave C1-C8 mono decode and C32-C64 K3 variants unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4528
   scenario-type: [agentic-coding]
