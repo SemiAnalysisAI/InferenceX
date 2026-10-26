@@ -11266,3 +11266,10 @@
     - "Add TP4 DRAM KV offload points at conc 40, 48 and 56."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4491
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly 3df4ae15 to the v0.32.0 ROCm release."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4539
+  scenario-type: [agentic-coding]
