@@ -11327,6 +11327,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4512
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261025-65633129."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4515
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type:
     - agentic-coding

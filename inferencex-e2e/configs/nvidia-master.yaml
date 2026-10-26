@@ -9657,7 +9657,7 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261021-c1c287a4@sha256:b0473834763b2753e069cb96c1acaf235ba7fd632ccd9bbeb44da809c437fdeb
+  image: lmsysorg/sglang:nightly-dev-cu13-20261025-65633129@sha256:069efa1d6a2d58309529f53eeee34c39d69b1cdb455eaf7fb8de83e3fd0be727
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
