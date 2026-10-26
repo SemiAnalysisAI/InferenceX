@@ -11222,7 +11222,7 @@
 - config-keys:
     - minimaxm31flash-fp4-b200-sglang-agentic-dspark
   description:
-    - "Raise the TP4 DRAM KV offload points to mem-fraction-static 0.85 with a 16384 prefill chunk, 260 GB of HiCache per rank at DRAM utilization 1.0, and a scheduler batch of 1.5x conc."
+    - "Raise the TP4 DRAM KV offload points to mem-fraction-static 0.85 with a 16384 prefill chunk, 210 GB of HiCache per rank at DRAM utilization 1.0, and a scheduler batch of 1.5x conc."
     - "Add TP4 DRAM KV offload points at conc 24 and 44, and drop the TP4 DRAM conc 64 and TP4 + EP4 conc 72 and 80 points."
     - "Add TP2 points with DRAM KV offload at conc 16, 24 and 32."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4536

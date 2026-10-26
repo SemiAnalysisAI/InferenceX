@@ -128,7 +128,7 @@ override_tp4_c32:
 
 # TP4 with L2 HiCache. The 16384 prefill chunk halves the prefill graph and activation
 # footprint, which leaves room for the 0.85 static pool. The scheduler batch is 1.5x CONC
-# and the decode graph batch matches it; each rank's 260 GB host pool fits the 1073 GB share.
+# and the decode graph batch matches it; each rank's 210 GB host pool leaves headroom in the 1073 GB share.
 
 override_tp4_dram_c24:
   roles:
@@ -141,7 +141,7 @@ override_tp4_dram_c24:
         cuda-graph-max-bs-decode: 36
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        hicache-size: 260
+        hicache-size: 210
         hicache-write-policy: write_back
   benchmark:
     env:
@@ -160,7 +160,7 @@ override_tp4_dram_c32:
         cuda-graph-max-bs-decode: 48
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        hicache-size: 260
+        hicache-size: 210
         hicache-write-policy: write_back
   benchmark:
     env:
@@ -179,7 +179,7 @@ override_tp4_dram_c40:
         cuda-graph-max-bs-decode: 60
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        hicache-size: 260
+        hicache-size: 210
         hicache-write-policy: write_back
   benchmark:
     env:
@@ -198,7 +198,7 @@ override_tp4_dram_c44:
         cuda-graph-max-bs-decode: 66
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        hicache-size: 260
+        hicache-size: 210
         hicache-write-policy: write_back
   benchmark:
     env:
@@ -217,7 +217,7 @@ override_tp4_dram_c48:
         cuda-graph-max-bs-decode: 72
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        hicache-size: 260
+        hicache-size: 210
         hicache-write-policy: write_back
   benchmark:
     env:
@@ -236,7 +236,7 @@ override_tp4_dram_c56:
         cuda-graph-max-bs-decode: 84
         mem-fraction-static: 0.85
         enable-hierarchical-cache: true
-        hicache-size: 260
+        hicache-size: 210
         hicache-write-policy: write_back
   benchmark:
     env:
