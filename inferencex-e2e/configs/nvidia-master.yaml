@@ -6386,13 +6386,13 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-mtp2-disagg:
 # decoding methods; the checked-in recipes select DSpark explicitly.
 # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200
 kimik3-fp4-gb200-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:kimi-k3
+  image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0" }
+  router: { name: dynamo-router, version: "ffbbaaa6c44370e798687881317535ac17d66a76" }
   multinode: true
   disagg: false
   srt-recipe-dir: kimik3/vllm/gb200-fp4/agentx

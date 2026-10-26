@@ -6,12 +6,12 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: "1.3.0"
+      vllm: "00b6c4c565a8732c131e1f452d4a17803bb0842b"
+      dynamo: "ffbbaaa6c44370e798687881317535ac17d66a76"
   dynamo:
     install: true
     source:
-      rev: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
-  setup_script: kimik3-dspark-config-compat.sh
+      rev: "ffbbaaa6c44370e798687881317535ac17d66a76"
   environment:
     ETCD_LEASE_TTL: "7200"
   health_check:
@@ -63,7 +63,6 @@ base:
         VLLM_RPC_TIMEOUT: "600000"
         VLLM_LOG_STATS_INTERVAL: "1"
         VLLM_USE_V2_MODEL_RUNNER: "1"
-        VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
         VLLM_ALLREDUCE_USE_FLASHINFER: "1"
         VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
         NCCL_CUMEM_ENABLE: "1"
