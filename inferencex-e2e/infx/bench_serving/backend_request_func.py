@@ -33,13 +33,15 @@ class RequestFuncInput:
 
 @dataclass
 class RequestFuncOutput:
+    """One request's result. ``ttft`` is time to first token, ``itl`` the inter-token gaps."""
+
     generated_text: str = ""
     success: bool = False
     latency: float = 0.0
     output_tokens: int = 0
-    ttft: float = 0.0  # Time to first token
-    itl: list[float] = field(default_factory=list)  # List of inter-token latencies
-    tpot: float = 0.0  # avg next-token latencies
+    ttft: float = 0.0
+    itl: list[float] = field(default_factory=list)
+    tpot: float = 0.0
     prompt_len: int = 0
     error: str = ""
 
@@ -48,6 +50,10 @@ async def async_request_tgi(
     request_func_input: RequestFuncInput,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
+    """Stream one TGI ``generate_stream`` request and return its timings and text.
+
+    TGI rejects temperature 0.0, top_p 1.0, and ``ignore_eos``, so near values are sent and EOS is honored.
+    """
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")  # noqa: S101
 
@@ -56,10 +62,9 @@ async def async_request_tgi(
             "best_of": request_func_input.best_of,
             "max_new_tokens": request_func_input.output_len,
             "do_sample": True,
-            "temperature": 0.01,  # TGI does not accept 0.0 temperature.
-            "top_p": 0.99,  # TGI does not accept 1.0 top_p.
+            "temperature": 0.01,
+            "top_p": 0.99,
             "truncate": request_func_input.prompt_len,
-            # TGI does not accept ignore_eos flag.
         }
         payload = {
             "inputs": request_func_input.prompt,
@@ -80,19 +85,16 @@ async def async_request_tgi(
                             continue
                         chunk_bytes = chunk_bytes.decode("utf-8")
 
-                        # TGI pings may contain no data.
                         if chunk_bytes.startswith(":"):
                             continue
                         chunk = chunk_bytes.removeprefix("data:")
 
                         data = json.loads(chunk)
                         timestamp = time.perf_counter()
-                        # First token
                         if ttft == 0.0:
                             ttft = time.perf_counter() - st
                             output.ttft = ttft
 
-                        # Decoding phase
                         else:
                             output.itl.append(timestamp - most_recent_timestamp)
 
@@ -118,6 +120,7 @@ async def async_request_trt_llm(
     request_func_input: RequestFuncInput,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
+    """Stream one TensorRT-LLM ``generate_stream`` request and return its timings and text."""
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")  # noqa: S101
 
@@ -152,12 +155,10 @@ async def async_request_trt_llm(
                         data = json.loads(chunk)
                         output.generated_text += data["text_output"]
                         timestamp = time.perf_counter()
-                        # First token
                         if ttft == 0.0:
                             ttft = timestamp - st
                             output.ttft = ttft
 
-                        # Decoding phase
                         else:
                             output.itl.append(timestamp - most_recent_timestamp)
 
@@ -183,21 +184,22 @@ async def async_request_deepspeed_mii(
     request_func_input: RequestFuncInput,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
+    """Send one non-streaming DeepSpeed-MII request and return its latency and text.
+
+    MII rejects temperature 0.0 and cannot stream, so ``ttft`` stays 0 (see DeepSpeed-MII PR 311).
+    """
     async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
         assert request_func_input.best_of == 1  # noqa: S101
 
         payload = {
             "prompt": request_func_input.prompt,
             "max_tokens": request_func_input.output_len,
-            "temperature": 0.01,  # deepspeed-mii does not accept 0.0 temp.
+            "temperature": 0.01,
             "top_p": 1.0,
         }
         output = RequestFuncOutput()
         output.prompt_len = request_func_input.prompt_len
 
-        # NOTE: DeepSpeed-MII doesn't support streaming as of Jan 28 2024,
-        # will use 0 as placeholder.
-        # See https://github.com/microsoft/DeepSpeed-MII/pull/311
         output.ttft = 0
 
         st = time.perf_counter()
@@ -225,6 +227,10 @@ async def async_request_openai_completions(
     request_func_input: RequestFuncInput,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
+    """Stream one OpenAI completions request and return its timings, text, and token count.
+
+    Skips SSE comment and event lines, and treats a choice-less chunk as the final usage report.
+    """
     api_url = request_func_input.api_url
     assert api_url.endswith(("completions", "profile")), (  # noqa: S101
         "OpenAI Completions API URL must end with 'completions' or 'profile'."
@@ -264,22 +270,21 @@ async def async_request_openai_completions(
                         if not chunk_bytes:
                             continue
 
-                        chunk = chunk_bytes.decode("utf-8").removeprefix("data: ")
+                        chunk = chunk_bytes.decode("utf-8")
+                        if chunk.startswith((":", "event:")):
+                            continue
+                        chunk = chunk.removeprefix("data: ")
                         if chunk != "[DONE]":
                             data = json.loads(chunk)
 
-                            # The final usage-only chunk may contain no token.
                             if choices := data.get("choices"):
-                                # Special tokens may have empty text.
                                 text = choices[0].get("text")
                                 timestamp = time.perf_counter()
-                                # First token
                                 if not first_chunk_received:
                                     first_chunk_received = True
                                     ttft = time.perf_counter() - st
                                     output.ttft = ttft
 
-                                # Decoding phase
                                 else:
                                     output.itl.append(timestamp - most_recent_timestamp)
 
@@ -287,7 +292,12 @@ async def async_request_openai_completions(
                                 generated_text += text or ""
                             elif usage := data.get("usage"):
                                 output.output_tokens = usage.get("completion_tokens")
-                    if first_chunk_received:
+                            elif error := data.get("error"):
+                                output.error = json.dumps(error)
+                                break
+                    if output.error:
+                        output.success = False
+                    elif first_chunk_received:
                         output.success = True
                     else:
                         output.success = False
@@ -314,6 +324,7 @@ async def async_request_openai_chat_completions(
     request_func_input: RequestFuncInput,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
+    """Stream one OpenAI chat completions request and return its timings, text, and token count."""
     api_url = request_func_input.api_url
     assert api_url.endswith("chat/completions"), (  # noqa: S101
         "OpenAI Chat Completions API URL must end with 'chat/completions'."
@@ -360,30 +371,39 @@ async def async_request_openai_chat_completions(
                         if not chunk_bytes:
                             continue
 
-                        chunk = chunk_bytes.decode("utf-8").removeprefix("data: ")
+                        chunk = chunk_bytes.decode("utf-8")
+                        if chunk.startswith((":", "event:")):
+                            continue
+                        chunk = chunk.removeprefix("data: ")
                         if chunk != "[DONE]":
                             timestamp = time.perf_counter()
                             data = json.loads(chunk)
 
                             if choices := data.get("choices"):
                                 content = choices[0]["delta"].get("content")
-                                # First token
                                 if ttft == 0.0:
                                     ttft = timestamp - st
                                     output.ttft = ttft
 
-                                # Decoding phase
                                 else:
                                     output.itl.append(timestamp - most_recent_timestamp)
 
                                 generated_text += content or ""
                             elif usage := data.get("usage"):
                                 output.output_tokens = usage.get("completion_tokens")
+                            elif error := data.get("error"):
+                                output.error = json.dumps(error)
+                                break
 
                             most_recent_timestamp = timestamp
 
                     output.generated_text = generated_text
-                    output.success = True
+                    if not output.error and ttft == 0.0:
+                        output.error = (
+                            "Never received a valid chunk to calculate TTFT."
+                            "This response will be marked as failed!"
+                        )
+                    output.success = not output.error
                     output.latency = most_recent_timestamp - st
                 else:
                     output.error = response.reason or ""
@@ -399,6 +419,7 @@ async def async_request_openai_chat_completions(
 
 
 def get_model(pretrained_model_name_or_path: str) -> str:
+    """A ModelScope snapshot path when ``VLLM_USE_MODELSCOPE`` is true, else the name unchanged."""
     if os.getenv("VLLM_USE_MODELSCOPE", "False").lower() == "true":
         from modelscope import snapshot_download
 
@@ -500,6 +521,10 @@ def get_tokenizer(
     trust_remote_code: bool = False,
     **kwargs: Any,
 ) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
+    """Load the tokenizer for a model path or hub id in ``tokenizer_mode`` with sglang's v5 fixes applied.
+
+    Raises ``ValueError`` for slow mode with ``use_fast`` and ``ImportError`` for mistral mode without vllm.
+    """
     if pretrained_model_name_or_path is not None and not os.path.exists(
         pretrained_model_name_or_path
     ):

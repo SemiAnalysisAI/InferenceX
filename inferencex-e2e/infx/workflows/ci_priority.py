@@ -17,6 +17,21 @@ import yaml
 from infx.config import repository_root
 
 SCORE_QUANTUM = Decimal("0.001")
+POLICY_KEYS = frozenset({"version", "base-score", "adjustments", "patchwork-score"})
+ADJUSTMENT_KEYS = frozenset(
+    {
+        "additional-node",
+        "event",
+        "multi-node",
+        "agentic",
+        "eval-only",
+        "checklist-complete",
+        "precision",
+        "spec-decoding",
+        "framework-prefix",
+        "model-prefix",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -27,18 +42,32 @@ class PriorityContext:
 
 
 def _decimal(value: Any) -> Decimal:
+    """Convert value to an exact Decimal via its string form."""
     return Decimal(str(value))
 
 
 def load_policy(path: str | Path) -> dict[str, Any]:
+    """Load the priority policy YAML at path.
+
+    Raises ValueError on an unsupported version or unknown keys.
+    """
     with Path(path).open() as policy_file:
         policy = yaml.safe_load(policy_file)
     if policy.get("version") != 1:
         raise ValueError(f"Unsupported CI priority policy version: {policy.get('version')}")
+    unknown = sorted(set(policy) - POLICY_KEYS) + sorted(
+        f"adjustments.{key}" for key in set(policy.get("adjustments") or {}) - ADJUSTMENT_KEYS
+    )
+    if unknown:
+        raise ValueError(f"Unknown CI priority policy keys: {', '.join(unknown)}")
     return policy
 
 
 def _first_prefix_adjustment(value: str, adjustments: dict[str, Any]) -> Decimal:
+    """Return the adjustment for the first prefix matching value, or 0 if none matches.
+
+    A prefix matches when value equals it or starts with it followed by a hyphen.
+    """
     for prefix, adjustment in adjustments.items():
         if value == prefix or value.startswith(f"{prefix}-"):
             return _decimal(adjustment)
@@ -68,6 +97,10 @@ def _entry_from_criteria(
     policy: dict[str, Any],
     entry: dict[str, Any],
 ) -> dict[str, Any]:
+    """Project entry onto only the fields named in criteria, for priority grouping.
+
+    Raises ValueError if criteria contains names the policy does not support.
+    """
     unknown = criteria - supported_criteria(policy)
     if unknown:
         raise ValueError(f"Unknown CI priority criteria: {sorted(unknown)}")
@@ -155,10 +188,12 @@ def calculate_priority(
 
 
 def format_priority(score: Decimal) -> str:
+    """Format score with three decimals."""
     return f"{score:.3f}"
 
 
 def queue_token(value: dict[str, Any], namespace: str, path: tuple[str, ...]) -> str:
+    """Return a 32-hex-character hash of value, namespace and path for queue grouping."""
     canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
     material = f"{namespace}:{'/'.join(path)}:{canonical}".encode()
     return hashlib.sha256(material).hexdigest()[:32]
@@ -191,6 +226,10 @@ def annotate_jobs(
 
 
 def _criteria_from_json(raw_criteria: str) -> frozenset[str] | None:
+    """Parse --criteria-json into a set of names, or None when empty or null.
+
+    Raises ValueError unless it is a JSON array of strings.
+    """
     if not raw_criteria:
         return None
     value = json.loads(raw_criteria)
@@ -202,6 +241,7 @@ def _criteria_from_json(raw_criteria: str) -> frozenset[str] | None:
 
 
 def main() -> int:
+    """Annotate the matrix JSON from --input or stdin with priorities, print it and return 0."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--policy", default=str(repository_root() / "configs/ci-priority.yaml"))
     parser.add_argument("--event-name", default="")
