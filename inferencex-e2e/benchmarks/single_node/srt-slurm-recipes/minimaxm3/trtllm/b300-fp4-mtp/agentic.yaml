@@ -503,51 +503,6 @@ override_tp4_c10:
       CONC: '10'
       TOTAL_CPU_DRAM_GB: '1499'
 
-override_tp4_c15:
-  roles:
-    agg:
-      gpus: 4
-      args:
-        tensor_parallel_size: 4
-        max_batch_size: 15
-        cuda_graph_config:
-          batch_sizes:
-            - 1
-            - 2
-            - 3
-            - 4
-            - 5
-            - 6
-            - 7
-            - 8
-            - 9
-            - 10
-            - 11
-            - 12
-            - 13
-            - 14
-            - 15
-        kv_cache_config:
-          host_cache_size: 374750000000
-        torch_compile_config:
-          capture_num_tokens:
-            - 1
-            - 256
-            - 512
-            - 768
-            - 1024
-            - 1536
-            - 2048
-            - 3072
-            - 4096
-            - 6144
-            - 8192
-            - 12288
-  benchmark:
-    env:
-      CONC: '15'
-      TOTAL_CPU_DRAM_GB: '1499'
-
 override_tp4_c20:
   roles:
     agg:
