@@ -11199,6 +11199,12 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Update the larger-concurrency points from TP8 + EP8 to TP4 with DRAM KV offload, and adjust the memory settings."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4492
+
+- config-keys:
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Add TP2 points with DRAM KV offload, and adjust the memory settings on the DRAM KV offload points."
