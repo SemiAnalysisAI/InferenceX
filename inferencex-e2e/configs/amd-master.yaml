@@ -1325,36 +1325,22 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
   scenarios:
     agentic-coding:
     # srt-slurm recipe benchmarks/multi_node/srt-slurm-recipes/dsv4/atom/mi355x-fp4/agentx/disagg-lmcache-dspark.yaml
-    # (ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md). Concurrency 1/16 run plain
-    # TP8; 64/128 add DP attention with prefill TBO and the cache-aware router.
+    # (ATOM recipes/DeepSeek-V4-Agentic-PD-Max.md). Concurrency 1 runs TP4/TP4;
+    # 64/128 add DP attention with prefill TBO and the cache-aware router.
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "draft_model"
         conc-list: [ 1 ]
         kv-offloading: none
-        srt-recipe: disagg-lmcache-dspark.yaml:override_tp8_c1
+        srt-recipe: disagg-lmcache-dspark.yaml:override_tp4_c1
         prefill:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
         decode:
           num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - spec-decoding: "draft_model"
-        conc-list: [ 16 ]
-        kv-offloading: none
-        srt-recipe: disagg-lmcache-dspark.yaml:override_tp8_c16
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
       - spec-decoding: "draft_model"
@@ -1385,11 +1371,27 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
           tp: 8
           ep: 1
           dp-attn: true
-    # DP attention plus ATOM's in-process LMCache CPU offload on prefill
-    # (lmcache_offload); decode is plain Mooncake. dram-utilization 0.50 as
-    # measured in run 35825955863.
+    # ATOM's in-process LMCache CPU offload on prefill (lmcache_offload); decode
+    # is plain Mooncake. Concurrency 16 runs a TP4 prefill and a TP8 decode;
+    # concurrency 256 adds DP attention. dram-utilization 0.50 as measured in
+    # run 35825955863.
     - dram-utilization: 0.50
       search-space:
+      - spec-decoding: "draft_model"
+        conc-list: [ 16 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: lmcache }
+        srt-recipe: disagg-lmcache-dspark.yaml:override_tp4tp8_c16_lmcache
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
       - spec-decoding: "draft_model"
         conc-list: [ 256 ]
         kv-offloading: dram
