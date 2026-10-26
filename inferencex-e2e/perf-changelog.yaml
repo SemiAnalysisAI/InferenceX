@@ -11266,3 +11266,11 @@
     - "Add TP4 DRAM KV offload points at conc 40, 48 and 56."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4491
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic-latency
+  description:
+    - "Update the image from vllm/vllm-openai:kimi-k3 (vLLM 0.1.dev19262+gb6bbf29dd, 2026-07-27) to the latest upstream nightly, vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b (v0.32.1rc0 + 505 commits, 2026-10-26), pinned by digest."
+    - "Drop VLLM_ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD. Upstream Kimi-K3 no longer reads it and fixes the router/down-proj overlap cutoff at 256 tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4548
+  scenario-type: [agentic-coding]
