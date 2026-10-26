@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 from collections.abc import Collection
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode
 
 
@@ -82,6 +82,24 @@ def api(
     return json.loads(result.stdout)
 
 
+def download(repo: str, path: str, token: str) -> bytes:
+    """Return the raw body of the GitHub endpoint ``path`` under ``repo``, following redirects."""
+    if not token.strip():
+        raise RuntimeError("GitHub API requires a non-empty token")
+    endpoint = f"repos/{repo}/{path.lstrip('/')}"
+    try:
+        result = subprocess.run(
+            ["gh", "api", "--hostname", "github.com", endpoint],
+            env={**os.environ, "GH_TOKEN": token},
+            capture_output=True,
+            timeout=60,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise APIError(path, (exc.stderr or b"").decode(errors="replace")) from exc
+    return result.stdout
+
+
 def paginate(
     repo: str,
     path: str,
@@ -121,14 +139,18 @@ def set_comment_reaction(
     token: str,
     content: str | None,
     *,
+    collection: Literal["issues", "pulls"],
     replace: Collection[str] = (),
 ) -> None:
     """Replace selected github-actions reactions while preserving human reactions.
 
-    With no replacement set, simply add the requested reaction. GitHub makes
-    repeated additions of the same reaction idempotent.
+    ``collection`` is ``issues`` for PR conversation comments and ``pulls`` for inline
+    review comments. With no replacement set, simply add the requested reaction. GitHub
+    makes repeated additions of the same reaction idempotent.
     """
-    path = f"/issues/comments/{comment_id}/reactions"
+    if collection not in ("issues", "pulls"):
+        raise ValueError(f"Unsupported comment collection: {collection!r}")
+    path = f"/{collection}/comments/{comment_id}/reactions"
     if replace:
         reactions = paginate(repo, path, token, "")
         for reaction in reactions:

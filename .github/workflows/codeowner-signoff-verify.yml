@@ -1,7 +1,7 @@
 name: CODEOWNER Sign-off Verify
 
 on:
-  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; signoff_resolve checks eligibility before the read-only agent; only publish writes
+  issue_comment: # zizmor: ignore[dangerous-triggers] runs trusted default-branch code; signoff_resolve checks eligibility before the read-only agent; only the reaction and publish jobs write
     types: [created, edited]
   pull_request_review:
     types: [submitted, edited]
@@ -25,8 +25,8 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Check sign-off
+  resolve:
+    name: Resolve sign-off
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
@@ -37,25 +37,24 @@ jobs:
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
     runs-on: ubuntu-latest
     concurrency:
-      group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr-number }}
+      group: codeowner-signoff-resolve-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr-number }}
       cancel-in-progress: false
     permissions:
       contents: read
-      pull-requests: read # Read PR metadata, diff, and review comments.
+      pull-requests: read # Read PR metadata and review comments.
       issues: read # Read PR conversation comments.
-      actions: read # Read workflow runs and artifacts.
-      checks: read # Read check-runs on PR commits.
     outputs:
       proceed: ${{ steps.resolve.outputs.proceed }}
       pr-number: ${{ steps.scope.outputs.pr-number }}
       head-sha: ${{ steps.scope.outputs.head-sha }}
       signoff-key: ${{ steps.resolve.outputs.signoff-key }}
-      verification-succeeded: ${{ steps.outcome.outputs.succeeded }}
+      signoff-author: ${{ steps.resolve.outputs.signoff-author }}
+      signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
+      signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
     steps:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
@@ -91,15 +90,99 @@ jobs:
           SCOPED_HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
         run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_resolve
 
+  acknowledge:
+    name: Mark sign-off in progress
+    needs: resolve
+    if: needs.resolve.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: codeowner-signoff-progress-${{ needs.resolve.outputs.signoff-key }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write # React to inline review comments.
+      issues: write # React to PR conversation comments.
+    steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
+
+      - name: Add in-progress reaction
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNOFF_KEY: ${{ needs.resolve.outputs.signoff-key }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_progress start
+
+  verify:
+    name: Check sign-off
+    needs: resolve
+    if: needs.resolve.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: codeowner-signoff-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr-number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: read # Read PR metadata, diff, and review comments.
+      issues: read # Read PR conversation comments.
+      actions: read # Read workflow runs and artifacts.
+      checks: read # Read check-runs on PR commits.
+    outputs:
+      verification-succeeded: ${{ steps.outcome.outputs.succeeded }}
+    steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Select Python project
+        run: |
+          python_project="$GITHUB_WORKSPACE"
+          if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
+            python_project="$python_project/inferencex-e2e"
+          fi
+          test -f "$python_project/pyproject.toml"
+          echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            inferencex-e2e/pyproject.toml
+            inferencex-e2e/uv.lock
+
       - name: Render verifier prompt
-        if: steps.resolve.outputs.proceed == 'true'
         env:
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.scope.outputs.pr-number }}
-          HEAD_SHA: ${{ steps.scope.outputs.head-sha }}
-          SIGNOFF_AUTHOR: ${{ steps.resolve.outputs.signoff-author }}
-          SIGNOFF_KIND: ${{ steps.resolve.outputs.signoff-kind }}
-          SIGNOFF_FETCH_CMD: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head-sha }}
+          SIGNOFF_AUTHOR: ${{ needs.resolve.outputs.signoff-author }}
+          SIGNOFF_KIND: ${{ needs.resolve.outputs.signoff-kind }}
+          SIGNOFF_FETCH_CMD: ${{ needs.resolve.outputs.signoff-fetch-cmd }}
         run: |
           # shellcheck disable=SC2016
           envsubst '${REPO} ${PR_NUMBER} ${HEAD_SHA} ${SIGNOFF_AUTHOR} ${SIGNOFF_KIND} ${SIGNOFF_FETCH_CMD}' \
@@ -108,9 +191,24 @@ jobs:
           grep -q "PR #${PR_NUMBER}" /tmp/codeowner-signoff-verify-prompt.md
           wc -c /tmp/codeowner-signoff-verify-prompt.md
 
+      # Trusted default-branch code reads PR commits only as git data; no PR code runs.
+      - name: Collect deterministic facts
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head-sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-head"
+          git cat-file -e "${HEAD_SHA}^{commit}" || git fetch --no-tags origin "${HEAD_SHA}"
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.workflows.signoff_facts report \
+            --repo "$REPO" --pr "$PR_NUMBER" --sha "$HEAD_SHA" \
+            --base-ref "origin/${DEFAULT_BRANCH}" --out /tmp/signoff-facts.json
+
       - name: Install Claude Code 2.1.282
         id: claude_cli
-        if: steps.resolve.outputs.proceed == 'true'
         run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
           npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
           claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
@@ -118,7 +216,6 @@ jobs:
           echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
       - name: Verify sign-off with Claude
         id: claude
-        if: steps.resolve.outputs.proceed == 'true'
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         env:
           GH_TOKEN: ${{ github.token }}
@@ -138,7 +235,7 @@ jobs:
 
           claude_args: |
             --model 'claude-opus-5-5'
-            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
+            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(docker manifest inspect:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
             --disallowedTools "Read(//proc/**),Write(//proc/**)"
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
@@ -148,7 +245,7 @@ jobs:
 
       - name: Record verification outcome
         id: outcome
-        if: always() && steps.resolve.outputs.proceed == 'true'
+        if: always()
         env:
           CLAUDE_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
           VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
@@ -170,11 +267,11 @@ jobs:
 
   publish:
     name: Publish sign-off verdict
-    needs: verify
-    if: always() && needs.verify.outputs.proceed == 'true'
+    needs: [resolve, acknowledge, verify]
+    if: always() && needs.resolve.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: codeowner-signoff-publish-pr-${{ needs.verify.outputs.pr-number }}
+      group: codeowner-signoff-publish-pr-${{ needs.resolve.outputs.pr-number }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -215,9 +312,16 @@ jobs:
       - name: Post verdict comment
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ needs.verify.outputs.head-sha }}
-          PR_NUMBER: ${{ needs.verify.outputs.pr-number }}
-          SIGNOFF_KEY: ${{ needs.verify.outputs.signoff-key }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head-sha }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+          SIGNOFF_KEY: ${{ needs.resolve.outputs.signoff-key }}
           VERIFICATION_SUCCEEDED: ${{ needs.verify.outputs.verification-succeeded == 'true' }}
           VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
         run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_publish
+
+      - name: Clear in-progress reaction
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNOFF_KEY: ${{ needs.resolve.outputs.signoff-key }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked --extra workflows python -m infx.workflows.signoff_progress finish
