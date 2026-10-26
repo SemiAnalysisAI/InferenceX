@@ -6,7 +6,7 @@ identity:
     revision: "9f62e4e9fffbd0a83ddd60e1c209d828994b3569"
   container: {}
   frameworks:
-    vllm: "0.1.dev19262+gb6bbf29dd.d20260727"
+    vllm: "00b6c4c565a8732c131e1f452d4a17803bb0842b"
 
 dynamo:
   install: false
@@ -46,7 +46,6 @@ roles:
       TRANSFORMERS_CACHE: "/hf_hub_cache"
       VLLM_ENGINE_READY_TIMEOUT_S: "7200"
       VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-      VLLM_ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD: "0"
       VLLM_USE_V2_MODEL_RUNNER: "1"
     args:
       served-model-name: "moonshotai/Kimi-K3"
