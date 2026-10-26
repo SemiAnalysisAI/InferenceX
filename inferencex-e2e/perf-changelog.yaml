@@ -11210,3 +11210,10 @@
     - "Add TP2 points with DRAM KV offload, and adjust the memory settings on the DRAM KV offload points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4529
+  scenario-type: [agentic-coding]
