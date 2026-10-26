@@ -13,16 +13,6 @@ base:
     source:
       wheel: 1.6.0.dev20261016
     request_plane: tcp
-    sidecar: true
-    sidecar_args:
-      - --grpc-connections
-      - "8"
-      - --grpc-startup-deadline-secs
-      - "3600"
-      - --dyn-tool-call-parser
-      - minimax_m3
-      - --dyn-reasoning-parser
-      - minimax_m3
   health_check:
     max_attempts: 270
     interval_seconds: 10
@@ -33,6 +23,7 @@ base:
     type: trtllm
     numa_memory_bind: true
     served_model_name: /model
+    publish_metrics: true
   roles:
     agg:
       nodes: 1
@@ -138,7 +129,7 @@ base:
   benchmark:
     use_chat_template: true
     env:
-      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: ''
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES: '0'
       SERVED_MODEL_NAME: /model

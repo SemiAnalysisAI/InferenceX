@@ -19,8 +19,15 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from . import claims, github
-from .github import VerificationError
-from .models import ABORT_LABEL, CandidateOutcome, OwnedCandidate, Ownership, identity, utc
+from .github import ListingUnavailable, VerificationError
+from .models import (
+    LEGACY_OUTCOMES,
+    CandidateOutcome,
+    OwnedCandidate,
+    Ownership,
+    identity,
+    utc,
+)
 from .reporting import Prose, latest_next, translated
 from .validation import verify_sweep
 
@@ -41,14 +48,33 @@ RERUN_GIVE_UP_SECONDS = 24 * 60 * 60
 MAX_RUN_ATTEMPTS = 10
 MAX_SESSIONS = 12
 MAX_EXPIRED_SESSIONS = 4
-WAVE_HOURS = 3
+WAVE_HOURS = 4
 RESUME_GIVE_UP_SECONDS = 24 * 60 * 60
 SESSION_SECONDS = 330 * 60
 PARK_AFTER_SECONDS = 300 * 60
+RETIRE_SECONDS = 7 * 24 * 60 * 60
 GATE_STEP = "Check whether this session should run"
 AGENT_STEP = "Let Klaud Cold own the candidate PR"
 WAKE_TITLE = "Klaud Cold wake"
 TIMEOUT_ANNOTATION = "exceeded the maximum execution time"
+
+STATUS_LABELS = {
+    "klaud-in-progress": ("1d76db", "Klaud is working on this candidate or will resume it"),
+    "klaud-parked": ("fbca04", "Klaud parked until its queued or running benchmark runs end"),
+    "klaud-finished": ("0e8a16", "Klaud verified the full sweep; ready for review"),
+    "klaud-infra": ("d93f0b", "Stopped by cluster capacity or readiness (weights, mounts)"),
+    "klaud-incompatible": ("5319e7", "The new image cannot run this recipe without engine work"),
+    "klaud-error": ("b60205", "Klaud failed or could not decide; needs a look"),
+}
+OUTCOME_LABELS = {
+    "validated": "klaud-finished",
+    "no-capacity": "klaud-infra",
+    "missing-assets": "klaud-infra",
+    "incompatible": "klaud-incompatible",
+    "failed": "klaud-error",
+    "no-outcome": "klaud-error",
+    "inconclusive": "klaud-error",
+}
 
 
 def resume_title(parent: int, candidate: str, session: int) -> str:
@@ -278,9 +304,12 @@ class Session:
             raise VerificationError("Maintainer started runs after the session; leave them intact")
         return targeted + sweeps
 
-    def aborted(self, pull: dict) -> bool:
-        """Return True if ``pull`` carries the abort label."""
-        return any(label["name"] == ABORT_LABEL for label in pull["labels"])
+    def closed_by_maintainer(self, pull: dict) -> bool:
+        """Return True if someone other than Klaud closed ``pull`` without merging it."""
+        if pull["state"] != "closed" or pull["merged_at"]:
+            return False
+        closer = github.read(self.repository, f"issues/{pull['number']}").get("closed_by") or {}
+        return closer.get("login") != BOT
 
     def refresh(self, pull: dict) -> dict:
         """Return fresh ``pull``, raising VerificationError if it moved, merged or changed hands."""
@@ -301,7 +330,10 @@ class Session:
             raise VerificationError("Session resumed; leave the active session intact")
 
     def report(self, pull: dict) -> dict | None:
-        """Return the outcome record of this session's latest bot report on ``pull``, or None."""
+        """Return the outcome record of this session's latest bot report on ``pull``, or None.
+
+        An outcome name from an older report is renamed to its current name.
+        """
         comments = self.listing(f"issues/{pull['number']}/comments?per_page=100")
         matches = [
             comment
@@ -311,7 +343,10 @@ class Session:
         if not matches:
             return None
         body = max(matches, key=lambda c: c["id"])["body"]
-        return json.loads(body[len(self.marker) :].split("\n-->", 1)[0])
+        record = json.loads(body[len(self.marker) :].split("\n-->", 1)[0])
+        name = record["outcome"]["outcome"]
+        record["outcome"]["outcome"] = LEGACY_OUTCOMES.get(name, name)
+        return record
 
     def pending(self, pull: dict) -> CandidateOutcome | None:
         """Return the outcome of this session's pending cleanup request on ``pull``, or None.
@@ -408,7 +443,7 @@ class Session:
         else:
             if pull and (
                 pull["state"] != "closed"
-                or not pull["draft"]
+                or (not pull["draft"] and outcome.outcome != "closed-by-maintainer")
                 or any(label["name"] in SWEEP_LABELS for label in pull["labels"])
             ):
                 raise VerificationError("Failure/deferral PR cleanup is incomplete")
@@ -507,7 +542,7 @@ class Session:
                             "DELETE",
                         )
                 current = self.refresh(pull)
-                if not current["draft"]:
+                if current["state"] == "open" and not current["draft"]:
                     subprocess_ready(self.repository, pull["number"])
                 self.refresh(pull)
                 if current["state"] != "closed":
@@ -557,8 +592,8 @@ class Session:
                 reason_en = f" · Reason: {outcome.reason_code}" if outcome.reason_code else ""
                 reason_zh = f" · 原因：{outcome.reason_code}" if outcome.reason_code else ""
                 why = (
-                    Prose(en="Stopped by the klaud-abort label.", zh="已由 klaud-abort 标签停止。")
-                    if outcome.outcome == "aborted"
+                    Prose(en="Closed by a maintainer.", zh="已由维护者关闭。")
+                    if outcome.outcome == "closed-by-maintainer"
                     else None
                     if proof or self.recovering
                     else latest_next(self, pull)
@@ -574,12 +609,16 @@ class Session:
                         + (
                             "Full sweep verified; ready for review."
                             if proof
+                            else "PR closed; branch deleted."
+                            if outcome.outcome == "closed-by-maintainer"
                             else "PR closed; branch deleted for retry."
                         ),
                         f"**{outcome.outcome}**{reason_zh} · 修复次数：{repairs_zh} · 运行：{links}  \n{why_zh}所有自有运行均已结束。"
                         + (
                             "完整 sweep 已验证；已就绪，等待审查。"
                             if proof
+                            else "PR 已关闭；分支已删除。"
+                            if outcome.outcome == "closed-by-maintainer"
                             else "PR 已关闭；分支已删除，可重新尝试。"
                         ),
                     )
@@ -685,7 +724,6 @@ def resumable(session: Session, pull: dict | None) -> bool:
     """Whether a later session may continue this candidate's unfinished draft PR."""
     return (
         unfinished_draft(session, pull)
-        and not session.aborted(pull)
         and session.branch_exists()
         and not session.report(pull)
         and not session.pending(pull)
@@ -832,7 +870,7 @@ def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
     Every owned run must have ended, and the last started job must have run the gate step and
     parked, failed, timed out or been cancelled. Resuming stops RESUME_GIVE_UP_SECONDS after
     the later of that job's end and the last owned run's update, or when the session budget is
-    spent. Only klaud-abort stops a candidate otherwise.
+    spent. Closing the PR stops a candidate otherwise.
     """
     if session.last_session_end() is None or not resumable(session, pull):
         return False
@@ -956,6 +994,26 @@ def retained(session: Session, now: datetime) -> bool:
     return bool(pulls) and unfinished_draft(session, pulls[0])
 
 
+def retirable(session: Session, error: Exception, now: datetime) -> bool:
+    """Whether recovery stops tracking a session that ``error`` keeps it from reconciling.
+
+    Only a fixed verification failure qualifies, not unfinished work or an unreadable listing,
+    and only RETIRE_SECONDS after the session's last job ended, long after any resume or rerun.
+    """
+    if (
+        not isinstance(error, VerificationError)
+        or isinstance(error, (PendingCleanup, ListingUnavailable))
+        or not terminal(session.parent)
+        or now - utc(session.parent["updated_at"]) < timedelta(seconds=RETIRE_SECONDS)
+    ):
+        return False
+    try:
+        ended = session.last_session_end()
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return False
+    return ended is not None and now - utc(ended) >= timedelta(seconds=RETIRE_SECONDS)
+
+
 def summarize(repository: str, candidate: OwnedCandidate, parent: int, status: str) -> None:
     """Append ``status`` for ``candidate`` of run ``parent`` to the job summary, if one exists."""
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -964,6 +1022,84 @@ def summarize(repository: str, candidate: OwnedCandidate, parent: int, status: s
                 f"Klaud `{candidate.id}`: {status}. "
                 f"[Parent run / 父运行](https://github.com/{repository}/actions/runs/{parent})\n\n"
             )
+
+
+def status_label(session: Session, pull: dict) -> str | None:
+    """Return the display label for ``pull``'s current state, or None for no label.
+
+    Derived only from the outcome record, pending cleanup, park markers and owned runs. Labels
+    are display-only: Klaud never reads them back.
+    """
+    record = session.report(pull)
+    outcome = (
+        CandidateOutcome.model_validate(record["outcome"]) if record else session.pending(pull)
+    )
+    if outcome:
+        return OUTCOME_LABELS.get(outcome.outcome)
+    if not unfinished_draft(session, pull):
+        return None
+    if parked(session, pull, sessions_started(session)) is not None and any(
+        not terminal(run) for run in session.runs()
+    ):
+        return "klaud-parked"
+    return "klaud-in-progress"
+
+
+def show_status(session: Session) -> None:
+    """Best effort: give ``session``'s unmerged PR exactly its status label.
+
+    Writes with ``$KLAUD_STATUS_TOKEN``, the workflow token, whose label events start no
+    workflows, so no extra Run Sweep run joins the candidate's owned runs. Does nothing without
+    that token.
+    """
+    token = os.environ.get("KLAUD_STATUS_TOKEN")
+    if not token:
+        return
+    try:
+        pulls = session.pulls()
+        if not pulls or pulls[0]["merged_at"]:
+            return
+        pull = pulls[0]
+        wanted = status_label(session, pull)
+        shown = {label["name"] for label in pull["labels"]} & STATUS_LABELS.keys()
+        if wanted and wanted not in shown:
+            color, description = STATUS_LABELS[wanted]
+            with contextlib.suppress(RuntimeError):
+                github.write(
+                    session.repository,
+                    "labels",
+                    "POST",
+                    {"name": wanted, "color": color, "description": description},
+                    token=token,
+                )
+            github.write(
+                session.repository,
+                f"issues/{pull['number']}/labels",
+                "POST",
+                {"labels": [wanted]},
+                token=token,
+            )
+        for name in sorted(shown - {wanted}):
+            with contextlib.suppress(RuntimeError):
+                github.write(
+                    session.repository,
+                    f"issues/{pull['number']}/labels/{name}",
+                    "DELETE",
+                    token=token,
+                )
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        RuntimeError,
+        subprocess.SubprocessError,
+    ) as error:
+        status = getattr(error, "status", None)
+        print(
+            f"::warning::Klaud: status label of candidate {session.candidate.id} not updated: "
+            f"{type(error).__name__}{f' (HTTP {status})' if status else ''}."
+        )
 
 
 def reconcile(session: Session, now: datetime) -> bool:
@@ -991,10 +1127,10 @@ def reconcile(session: Session, now: datetime) -> bool:
     if not pull and not runs:
         return False
     pending = session.pending(pull) if pull else None
-    if pull and not pending and session.aborted(pull):
+    if pull and not pending and session.closed_by_maintainer(pull):
         session.finish(
             CandidateOutcome(
-                outcome="aborted",
+                outcome="closed-by-maintainer",
                 phase="cleanup",
                 pull_request=pull["number"],
                 run_ids=[run["id"] for run in runs],
@@ -1045,7 +1181,7 @@ def reconcile(session: Session, now: datetime) -> bool:
         if not session.recovering and resumable(session, pull) and within_budget(session, pull):
             raise PendingCleanup("Unfinished session kept for a later resume")
     outcome = pending or CandidateOutcome(
-        outcome="validated" if validated else "unexpected-error",
+        outcome="validated" if validated else "no-outcome",
         phase="final-sweep" if validated else "cleanup",
         pull_request=pull["number"] if pull else None,
         run_ids=[r["id"] for r in runs],
@@ -1061,9 +1197,20 @@ def recover(max_sessions: int) -> None:
     Resumes only while sessions already running plus those resumed here stay below
     ``max_sessions``. Writes still-blocked families to ``$RUNNER_TEMP/klaud-recovery.json`` and
     the running plus resumed session count to ``$GITHUB_OUTPUT``. Unreadable state counts as
-    live work.
+    live work. With the API budget below MIN_API_BUDGET, does nothing but write ``deferred=true``
+    to ``$GITHUB_OUTPUT``. Sessions ``retirable`` names are dropped with a warning, so their
+    ownership artifact can be deleted.
     """
     repository = os.environ["GITHUB_REPOSITORY"]
+    if github.budget_low():
+        print(
+            f"::warning::Klaud: under {github.MIN_API_BUDGET} GitHub API requests left; "
+            "recovery deferred to the next pass."
+        )
+        if filename := os.environ.get("GITHUB_OUTPUT"):
+            with open(filename, "a") as output:
+                output.write("deferred=true\n")
+        return
     now = datetime.now(UTC)
     inventory = github.items(
         repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
@@ -1144,6 +1291,20 @@ def recover(max_sessions: int) -> None:
                 TypeError,
                 subprocess.SubprocessError,
             ) as error:
+                if retirable(session, error, now):
+                    results[key] = True
+                    print(
+                        f"::warning::Klaud: stopped tracking candidate {candidate.id} of planner "
+                        f"run {parent['id']}, unreconciled for "
+                        f"{RETIRE_SECONDS // 86400} days: {error}."
+                    )
+                    summarize(
+                        repository,
+                        candidate,
+                        parent["id"],
+                        f"retired / 已停止跟踪 ({error})",
+                    )
+                    continue
                 blocked.add(candidate.family)
                 if isinstance(error, ResumeSession):
                     live.add(candidate.id)
@@ -1166,6 +1327,7 @@ def recover(max_sessions: int) -> None:
                 status = "reconciled / 已收尾" if changed else None
             if status:
                 summarize(repository, candidate, parent["id"], status)
+            show_status(session)
     try:
         running = len(running_sessions(repository))
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
@@ -1195,6 +1357,7 @@ def recover(max_sessions: int) -> None:
                 resumed += 1
                 status = f"resumed / 已恢复 (session {number})"
         summarize(repository, session.candidate, run_id, status)
+        show_status(session)
     for owner, artifact in owners:
         if artifact and all(
             results[(owner.run_id, candidate.id)] for candidate in owner.candidates
@@ -1215,6 +1378,7 @@ def recover(max_sessions: int) -> None:
     if filename := os.environ.get("GITHUB_OUTPUT"):
         with open(filename, "a") as output:
             output.write(f"active-sessions={running + resumed}\n")
+    github.api_budget()
 
 
 def running_sessions(repository: str) -> set[str]:
