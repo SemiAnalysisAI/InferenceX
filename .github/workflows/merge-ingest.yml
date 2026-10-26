@@ -1,9 +1,6 @@
 name: "Merge Ingest"
 run-name: Merge Ingest - ${{ github.event.head_commit.message }}
 
-# Publishes a merged PR's reused run-sweep.yml artifacts. Pushes to main never
-# run benchmarks: without a valid reuse authorization this run fails.
-
 concurrency:
     group: merge-ingest-${{ github.sha }}
     cancel-in-progress: false
@@ -66,7 +63,7 @@ jobs:
               with:
                   script: |
                       await core.summary.addTable([
-                        ['Source PR', `#${process.env.SOURCE_PR}`],
+                        ['Source PR', process.env.SOURCE_PR ? `#${process.env.SOURCE_PR}` : 'unknown'],
                         ['Source run', process.env.SOURCE_RUN_URL],
                         ['Reused benchmark source', process.env.SOURCE_SHA],
                       ]).write();
@@ -101,7 +98,6 @@ jobs:
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   MERGE_RUN_ID: ${{ github.run_id }}
               with:
-                  # Repository integration credential for the scoped ingest job.
                   github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                   script: |
                     const agentic = process.env.AGENTIC === 'true';

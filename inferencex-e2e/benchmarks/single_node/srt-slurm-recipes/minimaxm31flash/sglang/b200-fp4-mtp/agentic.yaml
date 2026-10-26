@@ -1,0 +1,173 @@
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-b200-sglang-agentic
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Cold loads of the 250 GB checkpoint plus JIT MSA kernel builds and graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      # Serve flags follow the cookbook's B200 cells at
+      # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1.
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        # Seven-token DSpark, the bundled draft's dspark_block_size. Throughput runs
+        # switch to synthetic acceptance at the golden acceptance length.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        cuda-graph-backend-prefill: breakable
+        tokenizer-worker-num: 8
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        FMHA_SM100_ALLOW_JIT: '1'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# TP4 Balanced cell (TRT-LLM routed MoE). The scheduler batch is 2x CONC (AgentX
+# subagent fan-out), capped at the cookbook's 128; the decode graph batch matches it.
+
+override_tp4_c1:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c4:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+# High-Throughput cell: TP8 with attention DP2 and EP8 (MegaMoE). The scheduler
+# batch is 2x CONC up to the cookbook's 256, and each of the two attention-DP
+# ranks captures decode graphs for half of it.
+
+override_tp8_ep8_c64:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        attn-dp-size: 2
+        enable-dp-lm-head: true
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 64
+        cuda-graph-max-bs-prefill: 16384
+        mem-fraction-static: 0.75
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '32768'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: none
+
+override_tp8_ep8_c128:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        attn-dp-size: 2
+        enable-dp-lm-head: true
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+        cuda-graph-max-bs-prefill: 16384
+        mem-fraction-static: 0.75
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '32768'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: none

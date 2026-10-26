@@ -13,6 +13,7 @@ from .server_metrics import compute_server_metrics
 
 
 def _env_int(env: Mapping[str, str], name: str, default: int = 0) -> int:
+    """Return ``env[name]`` as an int, or ``default`` when unset or empty."""
     value = env.get(name)
     if value in (None, ""):
         return default
@@ -20,6 +21,7 @@ def _env_int(env: Mapping[str, str], name: str, default: int = 0) -> int:
 
 
 def _env_bool(env: Mapping[str, str], name: str, default: bool = False) -> bool:
+    """Return whether ``env[name]`` is a truthy word, or ``default`` when unset or empty."""
     value = env.get(name)
     if value in (None, ""):
         return default
@@ -27,6 +29,7 @@ def _env_bool(env: Mapping[str, str], name: str, default: bool = False) -> bool:
 
 
 def _required_env(env: Mapping[str, str], name: str) -> str:
+    """Return ``env[name]``, raising SystemExit when it is unset or empty."""
     value = env.get(name)
     if value in (None, ""):
         raise SystemExit(f"Missing required environment variable: {name}")
@@ -34,6 +37,7 @@ def _required_env(env: Mapping[str, str], name: str) -> str:
 
 
 def _optional_component_metadata(env: Mapping[str, str], env_name: str) -> dict[str, str] | None:
+    """Parse the component metadata JSON in ``env[env_name]``, or None when unset."""
     return parse_component_metadata(
         env.get(env_name),
         env_name,
@@ -44,6 +48,7 @@ def _optional_component_metadata(env: Mapping[str, str], env_name: str) -> dict[
 def _optional_kv_offload_backend_metadata(
     env: Mapping[str, str], env_name: str
 ) -> dict[str, str] | None:
+    """Parse the KV offload backend metadata in ``env[env_name]``, where the version may be absent."""
     return parse_component_metadata(
         env.get(env_name),
         env_name,
@@ -55,6 +60,10 @@ def _optional_kv_offload_backend_metadata(
 def _validate_kv_offload_env(
     env: Mapping[str, str],
 ) -> tuple[str, dict[str, str] | None]:
+    """Return KV_OFFLOADING and the backend metadata from ``env``.
+
+    Raises SystemExit when the backend name and metadata disagree with the offload mode.
+    """
     kv_offloading = _required_env(env, "KV_OFFLOADING")
     backend_name = env.get("KV_OFFLOAD_BACKEND", "")
     backend_metadata = _optional_kv_offload_backend_metadata(env, "KV_OFFLOAD_BACKEND_METADATA")
@@ -70,6 +79,10 @@ def _validate_kv_offload_env(
 
 
 def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, str]:
+    """Derive parallelism fields, GPU count, TP, EP and DP-attention from ``env``.
+
+    Multinode runs sum the prefill and decode workers. Raises SystemExit on invalid shapes.
+    """
     is_multinode = _env_bool(env, "IS_MULTINODE")
     tp = _env_int(env, "TP", 1)
     ep = _env_int(env, "EP_SIZE", 1)
