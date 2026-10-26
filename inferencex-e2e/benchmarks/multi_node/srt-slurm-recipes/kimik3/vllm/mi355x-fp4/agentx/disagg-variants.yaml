@@ -72,7 +72,7 @@ base:
         # The native srt driver supplies the measured AL for the selected DSpark
         # draft length in throughput runs and keeps real block rejection for eval.
         speculative-config: '{"model":"/models/Inferact-Kimi-K3-DSpark","method":"dspark","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1799000000000,"lazy_offload":false}}]}}'
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma"}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":2399000000000,"lazy_offload":false}}]}}'
       env: &common_env
         NCCL_IB_HCA: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
         NCCL_SOCKET_IFNAME: eno0
@@ -118,7 +118,7 @@ base:
     placement:
       node: head
 
-override_1p1d_c1:
+override_1p1d_c8:
   roles:
     prefill:
       args:

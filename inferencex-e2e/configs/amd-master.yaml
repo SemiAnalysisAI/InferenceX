@@ -1678,7 +1678,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
   srt-recipe-dir: kimik3/vllm/mi355x-fp4/agentx
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.6
+    - dram-utilization: 0.8
       search-space:
       - spec-decoding: mtp
         conc-list: [24]
@@ -1692,7 +1692,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
+          - TOTAL_CPU_DRAM_GB=2399
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         conc-list: [24]
@@ -1706,7 +1706,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - TOTAL_CPU_DRAM_GB=1799
+          - TOTAL_CPU_DRAM_GB=2399
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         conc-list: [48]
@@ -1721,7 +1721,7 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           dp-attn: false
           additional-settings:
           # Recipe enables P-only scratch reclaim; D and GMU0.90 are unchanged.
-          - TOTAL_CPU_DRAM_GB=1799
+          - TOTAL_CPU_DRAM_GB=2399
         decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         conc-list: [48]
@@ -1736,12 +1736,12 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           dp-attn: false
           additional-settings:
           # Inherits the same P-only scratch-reclaim setting as 1P1D c48.
-          - TOTAL_CPU_DRAM_GB=1799
+          - TOTAL_CPU_DRAM_GB=2399
         decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
     - search-space:
       - spec-decoding: mtp
-        conc-list: [1]
+        conc-list: [8]
         kv-offloading: none
-        srt-recipe: disagg-variants.yaml:override_1p1d_c1
+        srt-recipe: disagg-variants.yaml:override_1p1d_c8
         prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
         decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
