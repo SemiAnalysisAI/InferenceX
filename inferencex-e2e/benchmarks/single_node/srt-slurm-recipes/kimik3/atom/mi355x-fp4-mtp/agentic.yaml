@@ -82,7 +82,9 @@ override_tp8_c1:
   roles:
     agg:
       args:
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]'
+        # max-num-seqs 1 fails the DSpark drafter's warmup, which runs two sequences.
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
         # Mono loads in_proj, f_b_proj, o_proj and the two shared-expert
         # projections as plain BF16 and refuses them quantized.
         online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","*self_attn.[qkv]_conv1d*","*block_sparse_moe.experts*","*block_sparse_moe.routed_expert_*","*vision_tower*","*mm_projector*","layers.*.self_attn.fused_qkv_a_proj","layers.*.self_attn.q_b_proj","layers.*.self_attn.kv_b_proj","layers.*.self_attn.o_proj","layers.*.mlp.gate_up_proj","layers.*.mlp.down_proj","context_proj","*self_attn.in_proj*","*self_attn.f_b_proj*","*self_attn.o_proj*","*shared_experts.gate_up_proj*","*shared_experts.down_proj*"]}'
@@ -90,6 +92,9 @@ override_tp8_c1:
         ATOM_MONO_ENABLE: '1'
         # The mono KDA kernel reads the SSM state pool as fp32 and refuses fp16.
         ATOM_GDN_SSM_DTYPE: fp32
+        # Holds new prefill while any request decodes, so requests mostly decode
+        # one at a time.
+        ATOM_PREFILL_DECODE_INTERVAL: '1000000'
   benchmark:
     env:
       CONC: '1'
