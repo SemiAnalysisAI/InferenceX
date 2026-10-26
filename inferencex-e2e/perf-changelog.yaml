@@ -11266,3 +11266,12 @@
     - "Add TP4 DRAM KV offload points at conc 40, 48 and 56."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4491
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+  description:
+    - "Update the image from vllm/vllm-openai:kimi-k3 (vLLM 0.1.dev19262+gb6bbf29dd, 2026-07-27) to the latest upstream nightly, vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b (v0.32.1rc0 + 505 commits, 2026-10-26), pinned by digest."
+    - "Move Dynamo from the Kimi-K3 side-branch build ba83080e to ffbbaaa6, the revision the GB200 Kimi-K3 disaggregated config already runs on vLLM nightly, and drop the kimik3-dspark-config-compat.sh draft-config shim, which that disaggregated config runs without."
+    - "Drop VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION. Upstream enables K3 latent-MoE tail fusion automatically on SM100 at TP8 and TP16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  scenario-type: [agentic-coding]
