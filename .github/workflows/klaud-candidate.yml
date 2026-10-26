@@ -34,6 +34,11 @@ jobs:
   claude:
     name: Klaud Cold
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # Read workflow runs and artifacts.
+      pull-requests: read # Read PR metadata.
+      issues: write # Set display-only Klaud status labels on its PR.
     env:
       MAX_REPAIRS: '5'
       KLAUD_BRANCH: klaud/auto-${{ inputs.candidate }}
@@ -154,6 +159,7 @@ jobs:
         if: always() && steps.claude.outcome != 'skipped'
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }}
+          KLAUD_STATUS_TOKEN: ${{ github.token }}
         run: uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud recover-current
       - name: Save sanitized candidate diagnostics
         id: diagnostics

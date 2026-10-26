@@ -76,6 +76,7 @@ def fetch(
     token: str | None = None,
     model: str | None = None,
     date: str | None = None,
+    exact: bool = True,
     benchmark: int | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     opener: Callable[..., Any] | None = None,
@@ -99,7 +100,7 @@ def fetch(
         if calendar_date.fromisoformat(date).isoformat() != date:
             raise ReadError("invalid-baseline-date")
         query["date"] = date
-        if resource == "benchmarks":
+        if resource == "benchmarks" and exact:
             query["exact"] = "true"
     url = ENDPOINTS[resource] + ("?" + urllib.parse.urlencode(query) if query else "")
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
