@@ -1,0 +1,248 @@
+schema: 2
+base:
+  model: {}
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: 1.5.0.dev20260910
+  dynamo:
+    install: true
+    source:
+      wheel: 1.5.0.dev20260910
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: dedicated
+  - name: nats
+    type: nats
+    placement:
+      node: dedicated
+    options:
+      max_payload_mb: 32
+  frontend:
+    type: dynamo
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+    enable_multiple_frontends: true
+    num_additional_frontends: 4
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: '3600'
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '1800'
+        SGLANG_DISAGGREGATION_ENGINE_INIT_TIMEOUT: '900'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '1800'
+        SGLANG_DSV4_REASONING_EFFORT: high
+        SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+        SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '8320'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+        SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
+        SGLANG_OPT_USE_JIT_NORM: '1'
+        SGLANG_OPT_USE_TOPK_V2: '1'
+        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+      args:
+        host: 0.0.0.0
+        model-path: /model/
+        kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
+        chunked-prefill-size: 49152
+        disable-decode-cuda-graph: true
+        disable-flashinfer-autotune: true
+        disable-shared-experts-fusion: true
+        disaggregation-mode: prefill
+        disaggregation-transfer-backend: mooncake
+        # Use the eight external HCAs. mlx5_6..9 are on a separate low-LID
+        # fabric, while mlx5_bond_0 caused cross-fabric QP RTR timeouts.
+        disaggregation-ib-device: '@fabric.rdma-devices'
+        dp-size: 8
+        enable-cache-report: true
+        enable-deepseek-v4-fp4-indexer: true
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        enable-hierarchical-cache: true
+        enable-metrics: true
+        enable-w4a4-mxfp4-megamoe: true
+        ep-size: 8
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-ratio: 14
+        hicache-write-policy: write_back
+        load-balance-method: total_tokens
+        max-running-requests: 256
+        mem-fraction-static: 0.85
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        moe-a2a-backend: megamoe
+        page-size: 256
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 6
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 7
+        speculative-num-steps: 6
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.02
+        tp-size: 8
+        trust-remote-code: true
+        watchdog-timeout: 1000000
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '16384'
+        SGLANG_DEFAULT_THINKING: '1'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '1800'
+        SGLANG_DISAGGREGATION_ENGINE_INIT_TIMEOUT: '900'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '1800'
+        SGLANG_DSV4_REASONING_EFFORT: high
+        SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+        SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+        SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
+        SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+        SGLANG_OPT_USE_JIT_INDEXER_METADATA: '1'
+        SGLANG_OPT_USE_JIT_NORM: '1'
+        SGLANG_OPT_USE_TOPK_V2: '1'
+        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        TORCH_CUDA_ARCH_LIST: '10.0'
+      args:
+        host: 0.0.0.0
+        model-path: /model/
+        kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
+        cuda-graph-max-bs-decode: 64
+        disable-flashinfer-autotune: true
+        disable-shared-experts-fusion: true
+        disaggregation-mode: decode
+        disaggregation-transfer-backend: mooncake
+        # Use the eight external HCAs. mlx5_6..9 are on a separate low-LID
+        # fabric, while mlx5_bond_0 caused cross-fabric QP RTR timeouts.
+        disaggregation-ib-device: '@fabric.rdma-devices'
+        dp-size: 8
+        enable-cache-report: true
+        enable-deepseek-v4-fp4-indexer: true
+        enable-dp-attention: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-dp-lm-head: true
+        enable-metrics: true
+        enable-w4a4-mxfp4-megamoe: true
+        ep-size: 8
+        load-balance-method: total_tokens
+        max-running-requests: 512
+        mem-fraction-static: 0.9
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        moe-a2a-backend: megamoe
+        num-reserved-decode-tokens: 8192
+        page-size: 256
+        served-model-name: deepseek-ai/DeepSeek-V4-Pro-0813
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 6
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 7
+        speculative-num-steps: 6
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.02
+        tp-size: 8
+        trust-remote-code: true
+        watchdog-timeout: 1000000
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '192'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  benchmark:
+    type: custom
+    command: bash /infmax-workspace/benchmarks/srt_agentic.sh
+    env:
+      INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+      PORT: '8000'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+override_1p1d_dspark6_c8:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c8-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 2
+override_1p1d_dspark6_c16:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c16-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 4
+override_1p1d_dspark6_c32:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c32-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 8
+override_1p1d_dspark6_c64:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c64-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 16
+override_1p1d_dspark6_c128:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c128-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 32
+override_1p1d_dspark6_c160:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c160-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 320
+        cuda-graph-max-bs-decode: 40
+override_1p1d_dspark6_c192:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c192-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 384
+        cuda-graph-max-bs-decode: 48
+override_1p1d_dspark6_c256:
+  name: disagg-b200-1p1d-dep8-dep8-dspark6-c256-mtp-kvoffload
+  roles:
+    decode:
+      args:
+        max-running-requests: 512
+        cuda-graph-max-bs-decode: 64

@@ -11325,3 +11325,12 @@
   description:
     - "Update SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4512
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Declare the Dynamo router and KV transfer per search-space entry; existing Mooncake entries keep Dynamo 1.5.0.dev20260914."
+    - "Add 1P1D DEP8/DEP8 entries with Mooncake KV transfer, six-step DSpark and prefill HiCache at concurrency 8, 16, 32, 64, 128 and 160."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4556
