@@ -11216,6 +11216,6 @@
   description:
     - "Conc 48 and 64 move to the cookbook's High-Throughput cell: HiCache with 180 GB of host KV per rank written back on eviction (KV_OFFLOADING=dram, 735 GB declared for 4 of 8 GPUs), mem-fraction-static 0.8, default bf16 draft KV."
     - "Back the HiCache host pools with hipHostMalloc (HSA_USERPTR_FOR_PAGED_MEM=0) instead of registered pageable memory, which faulted at the first HiCache write on MI355X."
-    - "State the INT4 quick all-reduce SGLang already selects (ROCM_QUICK_REDUCE_QUANTIZATION=INT4); set SGLANG_SIMULATE_ACC_GREEDY=0 so synthetic-acceptance runs keep the draft and accept sampling path on HIP, as on NVIDIA."
+    - "Set SGLANG_SIMULATE_ACC_GREEDY=0 so synthetic-acceptance runs keep the draft and accept sampling path on HIP, as on NVIDIA."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4534
   scenario-type: [agentic-coding]

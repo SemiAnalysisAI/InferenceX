@@ -49,9 +49,6 @@ base:
         # Synthetic acceptance on HIP otherwise skips the draft and accept sampling of
         # temperature-only requests; NVIDIA runs them.
         SGLANG_SIMULATE_ACC_GREEDY: '0'
-        # The level SGLang's MiniMax-M3.1 gfx950 override already selects (from the
-        # image's INT8), stated here: an INT4-quantized quick all-reduce at TP4.
-        ROCM_QUICK_REDUCE_QUANTIZATION: INT4
   benchmark:
     env:
       # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
