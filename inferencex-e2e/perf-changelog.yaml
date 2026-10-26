@@ -11281,7 +11281,16 @@
     - "The new image includes vllm-project/vllm#60683 (Kimi-K3 specialized decode on MI355X), #59552 (AITER Gluon chunk_kda for KDA prefill), #59634 (fused GLA gate GEMM and MLA FP8 prefill q/k/v prep) and #59824 (DSpark adaptive verification on MI355X, not enabled here)."
     - "Draft model data type is unchanged: the Inferact/Kimi-K3-DSpark draft is BF16 with no quantization_config, it gets no quantization and does not inherit the target quantization-config at either image, and its KV cache stays FP8 via speculative-config kv_cache_dtype."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4393
-  
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin vLLM to digest-pinned nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294; configure TP8 c1 and TP4 c20/c24 without offload, plus TP2 c24/c28 with 749 GB lazy DRAM offload and CUTLASS MSA decode."
+    - "Set TP4 c20 max-num-active-seqs to 6 and TP2 c28 Slurm time limit to 02:20:00."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4357
+
 - config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type:
@@ -11293,4 +11302,3 @@
     - "TP2 c16-c64, the unsearched TP4 c4-c64 recipe variants, the DSpark speculative config (5 drafts, probabilistic drafting) and mono decode are unchanged."
     - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), inherits the target fp8_ds_mla KV cache, and the mono draft kernels read those weights in place."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4480
-
