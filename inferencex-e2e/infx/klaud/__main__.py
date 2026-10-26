@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from . import github
 from .api import PUBLIC, ReadError, fetch_capacity, fetch_catalog
 from .github import (
     VerificationError,
@@ -934,6 +935,8 @@ def select(
     decisions = {decision.candidate_id: decision for decision in review.decisions}
     selected = []
     slots = max(0, max_candidates - active_sessions)
+    if slots and github.budget_low():
+        slots, deferred = 0, deferred or "api-budget-low"
     headroom: dict[str, int] = {}
     if slots and any(decision.decision == "proceed" for decision in review.decisions):
         try:
@@ -1310,8 +1313,10 @@ def main() -> int:
                 )
             finally:
                 show_status(session)
+                github.api_budget()
             return 0
         if args.command == "resume-check":
+            github.api_budget()
             outputs = "".join(
                 f"{key}={str(value).lower()}\n" for key, value in resume_check().items()
             )
@@ -1425,6 +1430,10 @@ def main() -> int:
                 else item["msg"]
                 for item in error.errors(include_url=False)
             )
+        elif isinstance(error, subprocess.CalledProcessError) and "rate limit" in str(
+            error.stderr or ""
+        ):
+            reason = "GitHub API rate limit exhausted; retry after it resets"
         else:
             reason = "State unavailable or invalid; inspect GitHub before retrying"
         print(f"::error::Klaud: {reason}.")

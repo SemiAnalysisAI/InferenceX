@@ -28,6 +28,8 @@ from .sweep_runs import (
     has_reusable_result_artifacts as has_reusable_result_artifacts,
     pr_commit_shas as pr_commit_shas,
     run_pr_number as run_pr_number,
+    source_head_sha as source_head_sha,
+    source_identity,
     trusted_external_pr,
 )
 
@@ -251,9 +253,17 @@ def resolve_reusable_run(
         allow_failed=pinned_run_id is not None,
     )
     if pinned_run_id is not None and (external_pr := trusted_external_pr(run)) is not None:
-        # Dispatch inputs are not on the run, so the modifiers come from the tested PR's labels.
-        source = github.api(repo, f"/pulls/{external_pr}", token)
-        if modifiers := incompatible_labels.intersection(label_names(source)):
+        if (identity := source_identity(repo, run, token)) is not None:
+            modifiers = {
+                label
+                for label in incompatible_labels
+                if identity.get(label.replace("-", "_")) is True
+            }
+        else:
+            # Runs without a source-identity artifact fall back to the tested PR's current labels.
+            source = github.api(repo, f"/pulls/{external_pr}", token)
+            modifiers = incompatible_labels.intersection(label_names(source))
+        if modifiers:
             raise RuntimeError(
                 f"External source PR #{external_pr} uses reuse-incompatible label(s): "
                 f"{', '.join(sorted(modifiers))}."
@@ -414,7 +424,7 @@ def main() -> int:
     )
     run_id = int(run["id"])
     reason = f"PR #{pr_number} approved sweep reuse from run {run_id}"
-    head_sha = str(run.get("head_sha") or "")
+    head_sha = source_head_sha(args.repo, run, token)
     if head_sha in pr_commit_shas(args.repo, pr_number, token):
         source_pr: int | None = pr_number
     else:

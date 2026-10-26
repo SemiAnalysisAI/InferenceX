@@ -1,0 +1,33 @@
+name: Report Ingest Result
+
+run-name: Report ingest of merge run ${{ github.event.client_payload.merge-run-id }}
+
+on:
+  repository_dispatch:
+    types: [ingest-results-completed]
+
+permissions: {}
+
+concurrency:
+  group: ingest-results-callback-${{ github.event.client_payload.merge-run-id }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: Comment on merged pull request
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # Resolve the Merge Ingest run to its commit
+      contents: read # Read trusted callback implementation and commit PRs
+      pull-requests: write # Post the ingest report as github-actions
+    steps:
+      - name: Checkout trusted callback code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate callback and comment
+        working-directory: inferencex-e2e
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m infx.workflows.ingest_results_callback

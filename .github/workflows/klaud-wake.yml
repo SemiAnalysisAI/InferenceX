@@ -2,7 +2,7 @@ name: Klaud Cold wake on run end
 run-name: Klaud Cold wake on run end - ${{ github.event.workflow_run.display_title }}
 
 # A parked Klaud session resumes only after recovery sees its owned runs end. Rather than wait
-# for the next :15/:45 wake, start a recovery-only planner pass as soon as a Klaud-owned
+# for the hourly :30 wake, start a recovery-only planner pass as soon as a Klaud-owned
 # targeted run (e2e Test - klaud-*) or PR sweep (klaud/auto-* branch) completes. No checkout and
 # no event data reaches a shell; the event only gates the job.
 on: # zizmor: ignore[concurrency-limits]
