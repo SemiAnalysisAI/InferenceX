@@ -5773,6 +5773,27 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           tp: 8
           ep: 1
           dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [5]
+        num-nodes: 2
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp8_mns8_c5
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [22]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns12_c22
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
 
 # MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),

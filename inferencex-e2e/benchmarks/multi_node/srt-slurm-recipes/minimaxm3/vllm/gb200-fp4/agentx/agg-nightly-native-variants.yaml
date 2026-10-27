@@ -151,3 +151,27 @@ override_tp8_c1:
         tensor-parallel-size: 8
         max-num-seqs: 2
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,256,512,1024,2048]}'
+
+override_tp8_mns8_c5:
+  name: "minimax-m3-vllm-agg-gb200-tp8-mns8-c5-agentic-nightly-native"
+  roles:
+    agg:
+      nodes: 2
+      gpus: 8
+      env:
+        VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+      args:
+        tensor-parallel-size: 8
+        max-num-seqs: 8
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8,12,16,20,24,28,32,256,512,1024,2048]}'
+
+override_tp4_vllm_simple_mns12_c22:
+  name: "minimax-m3-vllm-agg-gb200-tp4-vllm-simple-mns12-c22-agentic-nightly-native"
+  roles:
+    agg:
+      env:
+        VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
+      args:
+        max-num-seqs: 12
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,256,512,1024,2048]}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":777389080576,"cpu_bytes_to_use_per_rank":194347270144,"lazy_offload":true}}'
