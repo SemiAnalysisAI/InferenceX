@@ -12,6 +12,7 @@ from .common import percentile, stats_for, to_float, to_int
 
 
 def _metric_value(record: dict[str, Any], key: str) -> Any:
+    """Return the value of metric ``key`` in ``record``, unwrapping ``{"value": ...}`` dicts."""
     metric = record.get("metrics", {}).get(key)
     if isinstance(metric, dict):
         return metric.get("value")
@@ -19,6 +20,7 @@ def _metric_value(record: dict[str, Any], key: str) -> Any:
 
 
 def extract_per_record_floats(records: list[dict[str, Any]], key: str) -> list[float]:
+    """Return the float values of metric ``key`` across ``records``, skipping missing ones."""
     out: list[float] = []
     for record in records:
         value = to_float(_metric_value(record, key))
@@ -28,6 +30,7 @@ def extract_per_record_floats(records: list[dict[str, Any]], key: str) -> list[f
 
 
 def extract_per_record_ints(records: list[dict[str, Any]], key: str) -> list[int]:
+    """Return the int values of metric ``key`` across ``records``, skipping missing ones."""
     out: list[int] = []
     for record in records:
         value = to_int(_metric_value(record, key))
@@ -37,6 +40,7 @@ def extract_per_record_ints(records: list[dict[str, Any]], key: str) -> list[int
 
 
 def _ms_to_s(values_ms: Iterable[float]) -> list[float]:
+    """Convert finite positive millisecond values to seconds, dropping the rest."""
     return [
         value / 1000.0
         for value in values_ms
@@ -45,6 +49,7 @@ def _ms_to_s(values_ms: Iterable[float]) -> list[float]:
 
 
 def _distribution(prefix: str, values: list[int]) -> dict[str, float]:
+    """Return mean, p50, p75, p90, p95 and std of integer ``values`` keyed with ``prefix``, or {} when empty."""
     if not values:
         return {}
     return {
@@ -58,6 +63,7 @@ def _distribution(prefix: str, values: list[int]) -> dict[str, float]:
 
 
 def _nest_stats(prefix: str, flat: dict[str, Any]) -> dict[str, Any]:
+    """Return the entries of ``flat`` ending in ``_<prefix>`` with that suffix stripped."""
     suffix = f"_{prefix}"
     return {key[: -len(suffix)]: value for key, value in flat.items() if key.endswith(suffix)}
 
@@ -115,6 +121,7 @@ def _e2e_normalized_interactivity_stats(
 def compute_latency_stats(
     records: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return flat and nested TTFT, E2EL, ITL, TPOT and interactivity stats in seconds for ``records``."""
     ttfts = _ms_to_s(extract_per_record_floats(records, "time_to_first_token"))
     e2els = _ms_to_s(extract_per_record_floats(records, "request_latency"))
     itls = _ms_to_s(extract_per_record_floats(records, "inter_token_latency"))
@@ -161,6 +168,7 @@ def compute_latency_stats(
 def compute_qps_stats(
     records: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return flat and nested completions-per-second stats over 1 s windows of ``records``' end times."""
     ends_ns = [
         int(record["metadata"]["request_end_ns"])
         for record in records
@@ -192,6 +200,7 @@ def compute_qps_stats(
 def compute_workload_stats(
     records: list[dict[str, Any]], traces: Iterable[dict[str, Any]]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return flat and nested input, actual output and trace-expected output token distributions."""
     input_tokens = extract_per_record_ints(records, "input_sequence_length")
     output_tokens = extract_per_record_ints(records, "output_sequence_length")
 
@@ -214,6 +223,7 @@ def compute_workload_stats(
 def compute_throughput_stats(
     records: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return flat and nested input, output and total tokens per second over the ``records`` time span."""
     input_tokens = extract_per_record_ints(records, "input_sequence_length")
     output_tokens = extract_per_record_ints(records, "output_sequence_length")
     starts_ns = [
@@ -254,6 +264,7 @@ def _aiperf_percent_metric_as_rate(
     aggregate: dict[str, Any],
     metric_name: str,
 ) -> float | None:
+    """Return aiperf ``metric_name`` from ``aggregate`` as a 0..1 rate, or None when absent."""
     metric = aggregate.get(metric_name)
     if not isinstance(metric, dict):
         return None
@@ -271,9 +282,9 @@ def _aiperf_percent_metric_as_rate(
 
 
 def compute_cache_stats(
-    records: list[dict[str, Any]],  # noqa: ARG001
     aggregate: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return flat and nested theoretical prefix cache hit rate from the aiperf ``aggregate``."""
     flat: dict[str, Any] = {
         "theoretical_cache_hit_rate": _aiperf_percent_metric_as_rate(
             aggregate,
@@ -292,13 +303,14 @@ def compute_request_metrics(
     *,
     traces: Iterable[dict[str, Any]] = (),
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return flat and nested QPS, latency, token, cache and throughput metrics for ``records``."""
     aggregate = aggregate or {}
     flat: dict[str, Any] = {}
     nested: dict[str, Any] = {}
     qps_flat, qps_nested = compute_qps_stats(records)
     latency_flat, latency_nested = compute_latency_stats(records)
     workload_flat, workload_nested = compute_workload_stats(records, traces)
-    cache_flat, cache_nested = compute_cache_stats(records, aggregate)
+    cache_flat, cache_nested = compute_cache_stats(aggregate)
     throughput_flat, throughput_nested = compute_throughput_stats(records)
 
     for part in (qps_flat, latency_flat, workload_flat, cache_flat, throughput_flat):
@@ -340,6 +352,7 @@ def _trace_output_lengths(traces: Iterable[dict[str, Any]]) -> dict[str, list[in
 def _expected_output_lengths(
     records: list[dict[str, Any]], traces: Iterable[dict[str, Any]]
 ) -> list[int]:
+    """Return the trace-declared output length for each record's conversation turn, skipping unmatched ones."""
     metadata = _trace_output_lengths(traces)
     if not metadata:
         return []

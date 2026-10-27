@@ -25,7 +25,7 @@ SERVE_MODEL="${MODEL_PATH}"
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 CONCURRENCY="1"
 TEMPERATURE="1.0"
-# MUST match the golden config: benchmarks/speedbench-reference-al.yaml was measured
+# MUST match the golden config: infx/golden_al_distribution/dsv4_mtp.yaml was measured
 # with reasoning_effort=high.
 
 SPEEDBENCH_DIR="/workspace/speed_bench_data"

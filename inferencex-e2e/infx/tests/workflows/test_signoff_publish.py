@@ -65,6 +65,7 @@ def verdict(
     else:
         rows.append("➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.")
     rows.append("➖ Check 17 (Metrics publication): N/A — No affected serving paths.")
+    rows.append("➖ Check 18 (Recipe consistency): N/A — No recipe or image changes.")
     return (
         header
         + "\n\n"
@@ -236,10 +237,10 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
             True,
         ),
         (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
-        (verdict() + "\n✅ Check 18 (Unknown): PASS — extra", True),
+        (verdict() + "\n✅ Check 19 (Unknown): PASS — extra", True),
         (
             verdict().replace(
-                "➖ Check 17 (Metrics publication): N/A — No affected serving paths.\n", ""
+                "➖ Check 18 (Recipe consistency): N/A — No recipe or image changes.\n", ""
             ),
             True,
         ),
@@ -316,10 +317,9 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(
     )
     body = result["comments"][0]["body"]
     assert body.startswith(marker() + "\n" + header)
-    assert body.count("@functionstackx") == 1
-    assert body.count("@cquil11") == 1
-    assert body.count("@Oseltamivir") == 1
-    assert body.count("@adibarra") == 1
+    escalation = [line for line in body.splitlines() if "needs additional review" in line]
+    assert len(escalation) == 1
+    assert "@" not in escalation[0]
     assert "does not grant or enforce a bypass" in body
     assert f"Assessed commit: `{SHA}`" in body
     assert len(result["writes"]) == 1
@@ -357,7 +357,6 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
         1 if advisory_warning == "nvidia_warning" else 0
     )
     assert ("Pareto coverage needs additional review" in body) == coverage_warning
-    assert ("@functionstackx" in body) == coverage_warning
     assert ("❌ Check 1 (Sweep): FAIL" in body) == failure
     assert "did not produce a valid verdict" not in body
     assert len(result["writes"]) == 1

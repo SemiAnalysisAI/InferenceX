@@ -204,8 +204,6 @@ srun_options:
   container-remap-root: ''
   cpu-bind: none
 benchmark:
-  type: custom
-  command: bash /infmax-workspace/benchmarks/srt_agentic.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     PORT: '8000'

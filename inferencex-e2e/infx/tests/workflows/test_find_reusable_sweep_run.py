@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -336,7 +338,6 @@ def test_validate_reusable_run_rejects_non_success_run_by_default(conclusion) ->
         reuse.validate_reusable_run(
             "SemiAnalysisAI/InferenceX",
             "run-sweep.yml",
-            1321,
             {
                 "id": 25763404168,
                 "event": "pull_request",
@@ -428,6 +429,160 @@ def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, la
     assert outputs["reuse-source-run-id"] == "25763404168"
     assert outputs["reuse-source-pr-number"] == "1321"
     assert outputs["reuse-source-head-sha"] == "abc123"
+
+
+def test_main_reports_outside_run_source_pr(monkeypatch, tmp_path) -> None:
+    run = {
+        "id": 77, "event": "pull_request", "status": "completed", "conclusion": "success",
+        "path": ".github/workflows/run-sweep.yml", "pull_requests": [],
+        "head_sha": "other-sha", "head_branch": "other-branch",
+    }
+
+    def fake_github_api(repo, path, token, params=None):
+        return {
+            "/commits/merge-sha/pulls": [{"number": 1321}],
+            "/pulls/1321": {"merged_at": "2026-05-13T00:01:00Z", "labels": []},
+            "/actions/runs/77": run,
+            "/commits/other-sha/pulls": [{"number": 900, "head": {"ref": "other-branch"}}],
+        }[path]
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        return {
+            "/issues/1321/comments": [{
+                "created_at": "2026-05-13T00:00:00Z", "author_association": "OWNER",
+                "body": "/use 77",
+            }],
+            "/pulls/1321/commits": [{"sha": "abc123"}],
+            "/actions/runs/77/artifacts": [{"name": "results_bmk"}],
+        }[path]
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse.github, "api", fake_github_api)
+    monkeypatch.setattr(reuse.github, "paginate", fake_paginated_github_api)
+    monkeypatch.setattr(reuse.sys, "argv", [
+        "find_reusable_sweep_run.py", "--repo", "SemiAnalysisAI/InferenceX",
+        "--commit-sha", "merge-sha", "--event-name", "push", "--ref", "refs/heads/main",
+        "--github-output", str(output_path),
+    ])
+
+    assert reuse.main() == 0
+    outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+    assert outputs["reuse-source-run-id"] == "77"
+    assert outputs["reuse-source-pr-number"] == "900"
+
+
+EXTERNAL_RUN = {
+    "id": 88, "event": "workflow_dispatch", "status": "completed", "conclusion": "success",
+    "path": ".github/workflows/e2e-tests.yml", "pull_requests": [], "head_branch": "main",
+    "head_sha": "main-sha", "display_title": "e2e Test - External PR #900 @ 75745991a66c",
+}
+
+
+EXTERNAL_HEAD = "75745991a66c" + "1" * 28
+
+
+def identity_zip(**changes) -> bytes:
+    identity = {
+        "pr_number": 900, "head_sha": EXTERNAL_HEAD, "merge_sha": "2" * 40,
+        "evals_only": False, "agentx_fast": False, "all_evals": True, "fail_fast": True,
+        **changes,
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        bundle.writestr("source_identity.json", json.dumps(identity))
+    return buffer.getvalue()
+
+
+def run_external_reuse(monkeypatch, tmp_path, run, source_labels=(), identity=None):
+    def fake_github_api(repo, path, token, params=None):
+        return {
+            "/commits/merge-sha/pulls": [{"number": 1321}],
+            "/pulls/1321": {"merged_at": "2026-05-13T00:01:00Z", "labels": []},
+            "/pulls/900": {"labels": [{"name": name} for name in source_labels]},
+            "/actions/runs/88": run,
+        }[path]
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        return {
+            "/issues/1321/comments": [{
+                "created_at": "2026-05-13T00:00:00Z", "author_association": "OWNER",
+                "body": "/use 88",
+            }],
+            "/pulls/1321/commits": [{"sha": "abc123"}],
+            "/actions/runs/88/artifacts": [{"name": "results_bmk"}] + (
+                [{"name": "source-identity", "id": 5}] if identity is not None else []
+            ),
+        }[path]
+
+    def fake_download(repo, path, token):
+        assert path == "/actions/artifacts/5/zip"
+        return identity
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse.github, "api", fake_github_api)
+    monkeypatch.setattr(reuse.github, "paginate", fake_paginated_github_api)
+    monkeypatch.setattr(reuse.github, "download", fake_download)
+    monkeypatch.setattr(reuse.sys, "argv", [
+        "find_reusable_sweep_run.py", "--repo", "SemiAnalysisAI/InferenceX",
+        "--commit-sha", "merge-sha", "--event-name", "push", "--ref", "refs/heads/main",
+        "--github-output", str(output_path),
+    ])
+    assert reuse.main() == 0
+    return dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+
+
+def test_main_reuses_pinned_trusted_external_sweep(monkeypatch, tmp_path) -> None:
+    outputs = run_external_reuse(monkeypatch, tmp_path, EXTERNAL_RUN)
+    assert outputs["reuse-enabled"] == "true"
+    assert outputs["reuse-source-run-id"] == "88"
+    assert outputs["reuse-source-pr-number"] == "900"
+    assert outputs["reuse-source-head-sha"] == "main-sha"
+
+
+def test_main_reports_recorded_external_head_and_ignores_current_labels(
+    monkeypatch, tmp_path,
+) -> None:
+    outputs = run_external_reuse(
+        monkeypatch, tmp_path, EXTERNAL_RUN, ["agentx-fast"], identity_zip(),
+    )
+    assert outputs["reuse-enabled"] == "true"
+    assert outputs["reuse-source-pr-number"] == "900"
+    assert outputs["reuse-source-head-sha"] == EXTERNAL_HEAD
+
+
+@pytest.mark.parametrize("archive,reason", [
+    (identity_zip(evals_only=True), "External source PR #900 .*evals-only"),
+    (identity_zip(pr_number=901), "disagrees with its title"),
+    (identity_zip(head_sha="f" * 40), "disagrees with its title"),
+    (identity_zip(agentx_fast="false"), "malformed source-identity"),
+    (b"not a zip", "unreadable source-identity"),
+])
+def test_main_rejects_by_recorded_external_identity(monkeypatch, tmp_path, archive, reason) -> None:
+    with pytest.raises(RuntimeError, match=reason):
+        run_external_reuse(monkeypatch, tmp_path, EXTERNAL_RUN, identity=archive)
+
+
+@pytest.mark.parametrize("change", [
+    {"display_title": "e2e Test - nightly"},
+    {"head_branch": "feature"},
+    {"path": ".github/workflows/other.yml"},
+    {"event": "push"},
+])
+def test_main_rejects_untrusted_dispatch_source(monkeypatch, tmp_path, change) -> None:
+    with pytest.raises(RuntimeError, match="not a pull_request run|is from"):
+        run_external_reuse(monkeypatch, tmp_path, {**EXTERNAL_RUN, **change})
+
+
+def test_main_rejects_external_sweep_with_incompatible_modifier(monkeypatch, tmp_path) -> None:
+    with pytest.raises(RuntimeError, match="External source PR #900 .*agentx-fast"):
+        run_external_reuse(monkeypatch, tmp_path, EXTERNAL_RUN, ["agentx-fast"])
+
+
+def test_unpinned_validation_rejects_external_sweep() -> None:
+    with pytest.raises(RuntimeError, match="not a pull_request run"):
+        reuse.validate_reusable_run("example/project", "run-sweep.yml", EXTERNAL_RUN, "token")
 
 
 def test_main_enables_explicitly_pinned_failed_run(monkeypatch, tmp_path) -> None:

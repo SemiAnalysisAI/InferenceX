@@ -17,10 +17,15 @@ CANONICAL_FLAG = "isOnNormalizedInteractivityFrontier"
 
 
 def _positive_finite(value: Any) -> bool:
+    """Return True if value is a positive finite int or float."""
     return type(value) in (int, float) and value > 0 and math.isfinite(value)
 
 
 def assess_curve(curve: dict[str, Any]) -> dict[str, Any]:
+    """Compute the Pareto frontier of one curve and return its coverage summary.
+
+    Raises ValueError if the curve lacks a key or a points list.
+    """
     key, points = curve.get("key"), curve.get("points")
     if not isinstance(key, str) or not key.strip() or not isinstance(points, list):
         raise ValueError("Each curve needs a nonempty key and a points array")
@@ -59,6 +64,10 @@ def assess_curve(curve: dict[str, Any]) -> dict[str, Any]:
 
 
 def assess_coverage(curves: Any) -> list[dict[str, Any]]:
+    """Assess every curve in curves and return their summaries.
+
+    Raises ValueError on empty input, non-object curves or duplicate keys.
+    """
     if not isinstance(curves, list) or not curves:
         raise ValueError("Provide every affected curve; an empty list cannot prove coverage")
     results = []
@@ -75,6 +84,7 @@ def assess_coverage(curves: Any) -> list[dict[str, Any]]:
 
 
 def main() -> None:
+    """Read curves JSON from stdin and print the coverage report, exiting 1 on invalid input."""
     try:
         results = assess_coverage(json.load(sys.stdin))
         print(json.dumps(results, indent=2, allow_nan=False))

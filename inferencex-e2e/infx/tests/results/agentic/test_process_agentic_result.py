@@ -1607,6 +1607,37 @@ def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
     assert any(source["role"] == "prefill" for source in agg["server_metrics"]["sources"])
 
 
+@pytest.mark.parametrize(("cached", "router_shared", "expected"), [
+    (0.0, 0.55, 0.0),
+    (25.0, None, 0.25),
+    (None, 0.55, 0.55),
+])
+def test_dynamo_overall_cache_hit_rate_falls_back_to_frontend_then_router(
+    cached, router_shared, expected,
+):
+    metrics = {
+        "dynamo_frontend_input_sequence_tokens": {
+            "type": "counter", "series": [{"stats": {"total": 100.0}}],
+        },
+    }
+    if cached is not None:
+        metrics["dynamo_frontend_cached_tokens"] = {
+            "type": "counter", "series": [{"stats": {"total": cached}}],
+        }
+    if router_shared is not None:
+        metrics["dynamo_component_router_shared_cache_hit_rate"] = {
+            "type": "gauge", "series": [{"stats": {"avg": router_shared}}],
+        }
+
+    _, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-vllm", records=[],
+    )
+
+    assert nested["adapter"] == "dynamo-vllm"
+    assert nested["cache"]["overall_cache_hit_rate"] == pytest.approx(expected)
+
+
+
 def test_processor_uses_aiperf_theoretical_cache_metric(tmp_path: Path):
     """Aiperf's exported profile aggregate is the theoretical cache source."""
     result_dir = _write_fixture(tmp_path)

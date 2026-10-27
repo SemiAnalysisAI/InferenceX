@@ -45,6 +45,10 @@ base:
         PYTHONUNBUFFERED: '1'
         # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # Serve from the pre-seeded shared HF cache with no Hub API calls: every
+        # rank's revision lookup otherwise trips the 1000-per-5-min 429 limit
+        # when several points start together.
+        HF_HUB_OFFLINE: '1'
   health_check:
     max_attempts: 1440
     interval_seconds: 5
