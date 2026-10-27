@@ -190,13 +190,6 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
-override_1p1d_dspark6_c8:
-  name: disagg-b200-1p1d-dep8-dep8-dspark6-c8-mtp-kvoffload
-  roles:
-    decode:
-      args:
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 2
 override_1p1d_dspark6_c16:
   name: disagg-b200-1p1d-dep8-dep8-dspark6-c16-mtp-kvoffload
   roles:

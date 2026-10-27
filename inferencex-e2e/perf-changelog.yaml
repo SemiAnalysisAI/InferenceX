@@ -11479,6 +11479,6 @@
     - agentic-coding
   description:
     - "Declare the Dynamo router and KV transfer per search-space entry; existing Mooncake entries keep Dynamo 1.5.0.dev20260914."
-    - "Add 1P1D DEP8/DEP8 entries with Mooncake KV transfer, six-step DSpark and prefill HiCache at concurrency 8, 16, 32, 64, 128 and 160."
+    - "Add 1P1D DEP8/DEP8 entries with Mooncake KV transfer, six-step DSpark and prefill HiCache at concurrency 16, 32, 64, 128 and 160."
     - "Include the existing TP8/EP1 aggregated HiCache entries (concurrency 1, 4 and 8) alongside the disaggregated entries."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4556
