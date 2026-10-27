@@ -11194,6 +11194,7 @@
 
 - config-keys:
     - minimaxm31flash-fp4-gb200-vllm-agentic-dspark
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
   description:
     - "Use latest configs for MiniMax M3.1 AgentX submission"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4464
