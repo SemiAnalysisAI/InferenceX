@@ -113,7 +113,9 @@ base:
         hicache-write-policy: write_back
         hicache-io-backend: kernel
         hicache-mem-layout: page_first_direct
-        hicache-ratio: 0.9
+        # Each of the 4 local ranks checks (available - 10 GiB) / 4 after its
+        # siblings pin their pools; 0.9 (130.52 GB/rank) can miss by ~1 GB.
+        hicache-ratio: 0.85
         watchdog-timeout: 1000000
         log-level: info
         nccl-port: 29500
