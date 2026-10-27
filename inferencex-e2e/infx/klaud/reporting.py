@@ -891,6 +891,18 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
     name = f"run-{record.run_id}-{record.run_attempt}"
     previous = stored(session, pull, name)
     baseline = baseline_for(session, pull)
+    if (
+        baseline
+        and baseline.evals
+        and record.evals
+        and not {(row.key, row.suite, row.metric) for row in baseline.evals}
+        & {(row.key, row.suite, row.metric) for row in record.evals}
+    ):
+        print(
+            f"::warning::Klaud: none of the {len(record.evals)} evals of run {record.run_id} "
+            "match a frozen baseline eval; the eval identity (topology, suite or metric) "
+            "drifted from the baseline."
+        )
     text = render_attempt(record, baseline, session.repository)
     packed = record.model_dump(by_alias=True)
     chunks = []

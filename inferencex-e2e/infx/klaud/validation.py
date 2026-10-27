@@ -313,11 +313,40 @@ def check_coverage(
     eval_artifacts.dedupe_reran_evals(directory)
     eval_rows, eval_errors = eval_artifacts.inspect_eval_artifacts(directory)
     errors += eval_errors
-    errors += artifacts.validate_identity_set(
-        "eval", expected_evals(matrix), {row[:-1] for row in eval_rows}
-    )
+    found_evals = {row[:-1] for row in eval_rows}
+    errors += artifacts.validate_identity_set("eval", expected_evals(matrix), found_evals)
     if errors:
-        raise VerificationError("Full-sweep result coverage or consistency failed")
+        point_labels = {
+            (entry["recipe-fingerprint"], int(conc), entry["image"]): f"{entry['exp-name']} c{conc}"
+            for entry in benchmark_entries(matrix)
+            for conc in (entry["conc"] if isinstance(entry["conc"], list) else [entry["conc"]])
+        }
+        eval_labels = {
+            key: f"{entry['exp-name']} {entry.get('eval-suite') or 'gsm8k'} c{conc}"
+            for key, entry, conc in eval_identities(matrix)
+        }
+        raise VerificationError(
+            "Full-sweep result coverage or consistency failed; "
+            + coverage_summary("benchmark point", point_labels, set(actual))
+            + "; "
+            + coverage_summary("eval", eval_labels, found_evals)
+        )
+
+
+COVERAGE_LABELS = 5
+
+
+def coverage_summary(kind: str, labels: dict[tuple, str], found: set[tuple]) -> str:
+    """Count the ``kind`` identities missing from or extra to ``labels``, naming a few missing.
+
+    Names come only from the canonical matrix, so the text never repeats artifact content.
+    """
+    missing = sorted(label for key, label in labels.items() if key not in found)
+    extra = len(found - labels.keys())
+    named = ", ".join(missing[:COVERAGE_LABELS])
+    more = f" and {len(missing) - COVERAGE_LABELS} more" if len(missing) > COVERAGE_LABELS else ""
+    named_part = f" ({named}{more})" if missing else ""
+    return f"{len(missing)} {kind}(s) missing{named_part}, {extra} unexpected"
 
 
 def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[dict]:
