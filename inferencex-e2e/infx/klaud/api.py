@@ -14,8 +14,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from collections.abc import Callable
-from datetime import UTC, datetime
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any, Never
 
 from pydantic import ValidationError
@@ -37,6 +38,7 @@ USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
 RETRY_DELAYS_SECONDS = (0.5, 1.5)
 KLAUD_JOB = re.compile(r"(?:^| / )klaud \| ", re.IGNORECASE)
+KLAUD_QUEUE_MAX_AGE = timedelta(hours=6)
 
 
 class ReadError(ValueError):
@@ -252,12 +254,37 @@ def fresh(value: Any, now: datetime, policy: Policy) -> bool:
         return False
 
 
-def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int]:
-    """Return the idle nodes of each cluster that waiting Klaud jobs have not already requested.
+@dataclass(frozen=True)
+class Capacity:
+    """Nodes of each cluster in one scheduler snapshot.
 
-    Clusters a waiting human job could run on, and clusters without headroom, are omitted.
+    ``idle`` holds schedulable less allocated nodes of clusters that no waiting human job could run
+    on and whose oldest waiting Klaud job is at most KLAUD_QUEUE_MAX_AGE old. ``queued`` holds the
+    nodes waiting Klaud jobs request and ``size`` every cluster's schedulable nodes.
+    """
+
+    idle: dict[str, int]
+    queued: dict[str, int]
+    size: dict[str, int]
+
+    def headroom(self, committed: Mapping[str, int]) -> dict[str, int]:
+        """Return the idle nodes of each cluster that Klaud work has not requested or committed.
+
+        ``committed`` is the expected demand of claimed families. Their queued jobs are part of
+        it, so only the larger of the two is subtracted. Clusters without headroom are omitted.
+        """
+        return {
+            cluster: free
+            for cluster, idle in self.idle.items()
+            if (free := idle - max(self.queued.get(cluster, 0), committed.get(cluster, 0))) > 0
+        }
+
+
+def cluster_capacity(feed: Feed, policy: Policy, now: datetime) -> Capacity | None:
+    """Return the cluster capacity in scheduler ``feed``, or None if the snapshot is unusable.
+
     A queued job without a node count needs one node, and jobs already holding a runner are
-    counted in allocatedNodes. Malformed or duplicate scheduler status yields no clusters.
+    counted in allocatedNodes. Stale, stalled, malformed or duplicate scheduler status is unusable.
     """
     try:
         raw = feed.payload
@@ -272,9 +299,10 @@ def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int
             or snapshot["stalled"] is not False
             or not -policy.clock_skew_seconds <= snapshot_age <= policy.scheduler_max_age_seconds
         ):
-            return {}
+            return None
         human: set[str] = set()
         klaud: Counter[str] = Counter()
+        oldest: dict[str, datetime] = {}
         for job in snapshot["queue"]:
             nodes = 1 if job["nodeCount"] is None else job["nodeCount"]
             labels, runner = job["clusterIds"], job["runnerName"]
@@ -285,35 +313,45 @@ def cluster_headroom(feed: Feed, policy: Policy, now: datetime) -> dict[str, int
                 or not all(isinstance(label, str) for label in labels)
                 or not isinstance(runner, str | None)
             ):
-                return {}
+                return None
             if runner is not None:
                 continue
             if KLAUD_JOB.search(job["name"]):
+                queued_at = utc(job["queuedAt"])
                 for label in set(labels):
                     klaud[label] += nodes
+                    oldest[label] = min(oldest.get(label, queued_at), queued_at)
             else:
                 human.update(labels)
-        headroom: dict[str, int] = {}
+        idle: dict[str, int] = {}
+        size: dict[str, int] = {}
         seen: set[str] = set()
         for metric in snapshot["packingMetrics"]:
             label = metric["clusterLabel"]
             if not isinstance(label, str) or not label.startswith("cluster:") or label in seen:
-                return {}
+                return None
             seen.add(label)
             schedulable, allocated = metric["schedulableNodes"], metric["allocatedNodes"]
             if type(schedulable) is not int or type(allocated) is not int or allocated < 0:
                 continue
-            free = schedulable - allocated - klaud[label]
-            if label not in human and free > 0:
-                headroom[label.removeprefix("cluster:")] = free
-        return headroom
+            cluster = label.removeprefix("cluster:")
+            size[cluster] = schedulable
+            stale = label in oldest and utc(now) - oldest[label] > KLAUD_QUEUE_MAX_AGE
+            if label not in human and not stale:
+                idle[cluster] = schedulable - allocated
+        queued = {
+            label.removeprefix("cluster:"): nodes
+            for label, nodes in klaud.items()
+            if label.startswith("cluster:")
+        }
+        return Capacity(idle=idle, queued=queued, size=size)
     except (KeyError, ValueError, TypeError, AttributeError):
-        return {}
+        return None
 
 
-def fetch_capacity(policy: Policy) -> dict[str, int]:
-    """Return per-cluster idle headroom from the private scheduler status feed."""
-    return cluster_headroom(
+def fetch_capacity(policy: Policy) -> Capacity | None:
+    """Return cluster capacity from the private scheduler status feed, None if it is unusable."""
+    return cluster_capacity(
         fetch("scheduler", token=os.environ.get("KLAUD_DASHBOARD_API_KEY")),
         policy,
         datetime.now(UTC),
