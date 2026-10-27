@@ -1,0 +1,35 @@
+name: CollectiveX Results Ingest
+
+# Committed CollectiveX results on main are the dashboard's source of truth. Each push that changes
+# them asks InferenceX-app to load that commit into its CollectiveX database.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "collectivex/results/**"
+
+permissions: {}
+
+concurrency:
+  group: collectivex-results-ingest-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Trigger CollectiveX ingest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch to InferenceX-app
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SHA: ${{ github.sha }}
+        with:
+          github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: "SemiAnalysisAI",
+              repo: "InferenceX-app",
+              event_type: "ingest-collectivex",
+              client_payload: { sha: process.env.SHA },
+            });
