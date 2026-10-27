@@ -6,7 +6,7 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 Maintain contributor-facing docs in English. Only READMEs retain Chinese translations: keep existing `README_zh.md` files synchronized with their English READMEs and preserve their language switchers. Do not add or recreate Chinese versions of other docs.
 
-PR titles must still include both English and Simplified Chinese, using `<English title> / <中文标题>`. The existing bilingual requirements for issue titles, PR and issue descriptions, human-authored PR comments, and commit bodies remain unchanged; see [AGENTS.md](AGENTS.md).
+PR titles must still include both English and Simplified Chinese, using `<English title> / <中文标题>`. The existing bilingual requirements for issue titles, PR and issue descriptions, and human-authored PR comments remain unchanged; see [AGENTS.md](AGENTS.md).
 
 ## PR descriptions
 
@@ -161,6 +161,7 @@ The verdict records only the commit actually assessed; it does not carry approva
 A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
 - After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line. The pinned run may come from any PR; if its commit is not part of this PR, reuse is still accepted but flagged as a warning.
+- External PRs sweep through `trusted-external-sweep.yml`, which dispatches `e2e-tests.yml`; pin that run explicitly with `/use <run_id>`, because automatic selection and `merge_with_reuse` only find `run-sweep.yml` runs.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
 - **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
@@ -225,6 +226,41 @@ Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
 3. **Test your teardown path.** Cancel a running benchmark mid-flight and verify no root-owned files remain in the workspace.
 
 If you find a stranded root-owned file blocking runners, the recovery procedure is documented in [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.claude/commands/clean-amd-mi355-runner-root-files.md): SSH into the hop host with `sudo`, scan the `_work` directories, and delete the offending files.
+
+## Test quality
+
+**The one rule: a test must exercise the real implementation with concrete inputs and assert on what it computes, returns, writes, or raises. A test that inspects the code, the repo, or a config file instead of running behavior is not a test and must be deleted.** These rules are mandatory for every test added, modified, or reviewed in this repository. When in doubt, delete the test.
+
+### Forbidden: tests about the code rather than its behavior
+
+Never write, and always delete on sight, a test that does any of the following:
+
+1. **Reads source text and asserts on it.** Opening a `.sh`, `.py`, `.yml`, `.yaml`, `.cjs`, or `.md` file and asserting that a string, flag, regex, command, or line is present or absent, counting occurrences, or checking line order. This includes launchers, workflow files, skill files, and docs. Grepping is not testing.
+2. **Parses source structure.** Using `ast.parse`, `inspect.getsource`, `inspect.signature`, `hasattr`, `callable`, `__doc__`, or import-succeeds checks to assert that a function, class, constant, argument, or flag exists or has a given shape.
+3. **Git-greps the repo.** Asserting which files contain a literal, how many files match, or that a pin appears in exactly N places.
+4. **Pins checked-in config or data.** Asserting the contents of a recipe, master config, `runners.yaml`, `platform_config.json`, a registry dict, an enum, an image tag, a SHA, a port number, or the current count of recipes, SKUs, backends, or models. Validate config through the real validation code with controlled inputs instead.
+5. **Is tautological.** Asserting a constant equals its own literal; asserting a dict or fixture equals what the test just built; asserting only that a mock was called with the arguments the test itself passed; or computing the expected value with the same helper, formula, or algorithm the test is supposed to check.
+6. **Reimplements the code under test.** Any parser, filter, jq/YAML expression, argparse tree, formula, or state machine copied into the test file so the test can run against the copy. This also covers "mirror" parsers and "reference specs" cross-checked against a second in-test implementation.
+7. **Tests the test infrastructure.** Tests of fixtures, conftest helpers, in-test expression evaluators, or "this test has teeth" self-checks.
+8. **Is smoke-only.** Module imports, `--help` exits 0, or "does not raise" with no assertion on output.
+9. **Duplicates a covered path.** Several tests that reach the same branch with trivially different inputs. Keep one, or use `pytest.mark.parametrize` / `subTest`. A second test is justified only by a distinct branch, error path, or boundary.
+
+### Required: what every kept test looks like
+
+- Feeds small, controlled inputs into the real function, CLI, or script and asserts on the computed output, written artifact, exit code, or raised error.
+- Uses expected values worked out independently by hand, never derived by calling the implementation or its helpers.
+- Covers a specific branch, boundary, malformed input, or failure path that no other test already covers.
+- Mocks only external collaborators (network, GitHub, Slurm, clocks, GPUs), never the behavior under test. Shell scripts are tested by running them with stubbed binaries on `PATH` and checking what they produced, not by reading their text.
+- Would fail on a plausible regression in observable behavior, and would not fail on a harmless refactor, a rename, or the addition of a valid recipe or SKU.
+
+### Before adding or approving a test, answer all four
+
+1. Which line of the real implementation does this run, and what bug in it would make the assertion fail?
+2. Would this test still pass if the code were rewritten with identical behavior? If not, it is testing structure and must go.
+3. Would this test fail because someone added a recipe, bumped an image tag, or reworded a comment? If yes, it is pinning config or source and must go.
+4. Does an existing test already reach this branch? If yes, extend it or drop the new one.
+
+Deleting a test that fails these questions needs no replacement. Do not preserve test counts. In timing tests, synchronize on observable readiness, bound waits and cleanup, and keep process termination and artifact writes real when those are the contract. See [Randy Coulman's Tautological Tests](https://randycoulman.com/blog/2016/12/20/tautological-tests/) for the distinction between independent expectations and assertions that repeat the implementation.
 
 ## After merging
 
