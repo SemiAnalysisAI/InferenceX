@@ -11431,6 +11431,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4308
 
 - config-keys:
+    - musespark-fp4-gb300-trt-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse-Spark-Open NVFP4 GB300 TensorRT-LLM AgentX with DFlash2: TEP8 on two nodes at concurrency 1 with GPU-only KV cache, and TEP4 on one node at concurrency 1, 4, 8, 20, 32, and 48 with FP8 KV cache and native DRAM offloading."
+    - "Configure per-point batch limits, CUDA graphs, scheduler intervals, and host-cache sizes."
+    - "Pin the DFlash2 draft snapshot, require KV-cache metrics, and account for per-rank host-cache pools."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4446
+
+- config-keys:
     - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
   description:
     - "Update the SGLang image from dev-minimax-m31-flash to nightly-cu134-20261026-5ef9901, pinned by digest."
