@@ -4,6 +4,8 @@ on:
     secrets:
       INFERENCEX_OFFICIAL_RO_HF_TOKEN:
         required: true
+      SERVING_API_KEY:
+        required: false
     inputs:
       serving:
         description: "VNG serving point (SERVING_JSON from infx/serving/to_matrix.py); empty for every other caller"
@@ -97,6 +99,7 @@ on:
 env:
   PYTHONPATH: ${{ github.workspace }}/inferencex-e2e
   SERVING_JSON: ${{ inputs.serving }}
+  SERVING_API_KEY: ${{ secrets.SERVING_API_KEY }}
   INFERENCEX_E2E_ROOT: ${{ github.workspace }}
   PORT: '8888'
   INFMAX_CONTAINER_WORKSPACE: '/workspace'

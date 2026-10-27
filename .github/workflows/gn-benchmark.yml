@@ -48,6 +48,7 @@ jobs:
                 include: ${{ fromJSON(needs.plan.outputs.points) }}
         secrets:
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+            SERVING_API_KEY: ${{ matrix.api_key_secret && secrets[matrix.api_key_secret] || '' }}
         with:
             config: ${{ toJSON(matrix.config) }}
             serving: ${{ matrix.serving }}

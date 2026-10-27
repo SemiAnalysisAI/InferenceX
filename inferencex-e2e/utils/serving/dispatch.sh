@@ -30,6 +30,20 @@ done
 title=$(cd "$E2E" && PYTHONPATH="$E2E" uv run -q --no-project --python 3.12 --with pydantic --with pyyaml \
     python -P -m infx.serving.to_matrix --check "$yaml_file") || exit 2
 
+secret=$(cd "$E2E" && uv run -q --no-project --python 3.12 --with pyyaml python -P -c \
+    'import sys, yaml; print((yaml.safe_load(open(sys.argv[1])).get("endpoint") or {}).get("api-key-secret") or "")' \
+    "$yaml_file")
+if [[ -n "$secret" ]]; then
+    if names=$(gh secret list --repo "$GH_REPO" --json name --jq '.[].name' 2>/dev/null); then
+        if ! grep -qx "$secret" <<<"$names"; then
+            echo "ERROR endpoint.api-key-secret: $secret is not a secret of $GH_REPO; add it: gh secret set $secret --repo $GH_REPO" >&2
+            exit 2
+        fi
+    else
+        echo "WARNING cannot list secrets of $GH_REPO (needs admin); assuming $secret exists" >&2
+    fi
+fi
+
 if [[ -z "$ref" ]]; then
     ref="$(git -C "$E2E" rev-parse --abbrev-ref HEAD)"
     remote_sha="$(git -C "$E2E" ls-remote origin "refs/heads/$ref" | cut -f1)"
