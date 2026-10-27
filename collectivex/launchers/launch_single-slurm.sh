@@ -82,7 +82,13 @@ for allocation_attempt in 1 2 3; do
   [ -z "$excluded_nodes" ] || attempt_allocation+=(--exclude="$excluded_nodes")
   export COLLX_SALLOC_ATTEMPT="$allocation_attempt"
   export COLLX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"
-  collx_salloc_jobid "${attempt_allocation[@]}"
+  JOB_ID=""
+  if ! collx_salloc_jobid "${attempt_allocation[@]}"; then
+    # A job that dies before its grant (a failed node prolog) is worth another allocation.
+    [ "$allocation_attempt" != 3 ] || collx_die "scheduler allocation failed on every attempt"
+    collx_log "allocation attempt $allocation_attempt failed; retrying"
+    continue
+  fi
   [ -n "$JOB_ID" ] || collx_die "could not resolve allocated JOB_ID from salloc"
   if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
     validation_failure=network

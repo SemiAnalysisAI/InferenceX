@@ -581,7 +581,25 @@ collx_salloc_jobid() {
     return 1
   fi
   collx_log "scheduler-request=submit"
-  if ! (salloc "$@" --no-shell) > "$log" 2>&1; then
+  # salloc --no-shell does not notice a job that ends between the grant and its own poll (a node
+  # prolog that fails the job ten seconds in leaves it waiting forever), so the job is watched
+  # here: once Slurm no longer lists the queued job and no grant was logged, salloc is stopped.
+  (salloc "$@" --no-shell) > "$log" 2>&1 &
+  local salloc_pid=$! queued=""
+  while kill -0 "$salloc_pid" 2>/dev/null; do
+    sleep 10
+    grep -q "Granted job allocation" "$log" && break
+    [ -n "$queued" ] || queued="$(sed -nE 's/.*Pending job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
+    if [ -n "$queued" ] && [ -z "$(squeue -h -j "$queued" -o %A 2>/dev/null)" ] \
+        && ! grep -q "Granted job allocation" "$log"; then
+      collx_log "ERROR: scheduled job $queued ended before its allocation was granted"
+      kill -TERM "$salloc_pid" 2>/dev/null
+      wait "$salloc_pid" 2>/dev/null
+      collx_log_tail "$log"
+      return 1
+    fi
+  done
+  if ! wait "$salloc_pid"; then
     collx_log "ERROR: scheduler allocation failed"
     collx_log_tail "$log"
     return 1
