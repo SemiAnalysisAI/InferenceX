@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import itertools
 import json
 import math
 import re
@@ -301,7 +302,7 @@ def _cover(point: dict, others: list[dict]) -> str | None:
         (other for other in others if not any(_dominates(o, other) for o in others)),
         key=lambda other: other[x],
     )
-    for low, high in zip(frontier, frontier[1:]):
+    for low, high in itertools.pairwise(frontier):
         if low[x] < point[x] < high[x]:
             line = low[y] + (high[y] - low[y]) * (point[x] - low[x]) / (high[x] - low[x])
             return f"between {low['label']} and {high['label']}" if line >= point[y] else None
@@ -462,7 +463,9 @@ def points_diff(base: dict, head: dict, ingested: list[Any], new_run: list[Any])
         ]
         added = [measured(point, after) for point in change["added"]]
         covers = [
-            other["measured"] | {"label": other["label"]} for other in head_points if other["measured"]
+            other["measured"] | {"label": other["label"]}
+            for other in head_points
+            if other["measured"]
         ]
         removed = []
         for point in change["removed"]:
