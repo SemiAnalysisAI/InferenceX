@@ -10101,5 +10101,5 @@
 - config-keys:
     - glm5.2-fp4-gb300-dynamo-trt-agentic-disagg-mtp
   description:
-    - "Update GLM-5.2 GB300 TensorRT-LLM image and disaggregated AgentX recipes"
+    - "Update GLM-5.2 GB300 TensorRT-LLM image and disaggregated AgentX recipes, using NVFP4 KV cache instead of FP8 for c424 and c520."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4273
