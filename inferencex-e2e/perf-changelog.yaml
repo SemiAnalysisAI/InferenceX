@@ -11381,3 +11381,10 @@
     - "Update the vLLM image from nightly-dev-x86_64-cu130-ac9126e58aa7 to v0.32.0, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4523
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+  description:
+    - "Update vLLM image from nightly-dev-arm64-cu13.0.1-20ebb28 to nightly-00b6c4c5 with Dynamo wheel 1.6.0.dev20261018."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4545
+  scenario-type: [agentic-coding]
