@@ -1,11 +1,9 @@
 # Kimi-K3 MXFP4 AgentX on MI355X with vLLM DSpark
 # (https://recipes.vllm.ai/moonshotai/Kimi-K3). TP8 only: the 1.56 TB checkpoint
 # is ~195 GB per GPU. Every point shards the KV read across all 8 GPUs (dcp8).
-# The KV cache is GPU-resident at c1 and c4 and backed by vLLM's
-# SimpleCPUOffloadConnector (dram) from the offload c4 point. Three bands, driven
-# by kimik3-fp4-mi355x-vllm-agentic-mtp: interactive c1 and c4 (GPU-resident),
-# mid c4-c32 and throughput c48-c60 (DRAM offload, DSpark draft with synthetic
-# acceptance). The 1799 GB DRAM budget splits evenly across the eight ranks.
+# The KV cache is GPU-resident at c1 and c4, backed by an LMCache MP server
+# (dram) at c48, and by vLLM's SimpleCPUOffloadConnector (dram) at the other
+# offload points. kimik3-fp4-mi355x-vllm-agentic-mtp drives c48 only.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
@@ -247,10 +245,49 @@ override_tp8_c32_dcp8_simple:
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
 
-# Throughput band: same dcp8 DRAM-offload layout with a 4-token DSpark draft.
+# Throughput band: dcp8 with the KV cache backed by one LMCache MP server
+# holding the whole 1799 GB DRAM budget as L1, and a 4-token DSpark draft.
 # Synthetic acceptance replaces block rejection with the golden acceptance
 # length. FULL_AND_PIECEWISE graphs cover every even size up to 2x CONC x 5.
-override_tp8_c48_dcp8_simple:
+override_tp8_c48_dcp8_lmcache:
+  # Installs LMCache in the worker container; the service installs its own.
+  setup_script: lmcache-mp-rocm.sh
+  services:
+    - name: lmcache
+      type: lmcache-server
+      preamble: bash /configs/lmcache-mp-rocm.sh
+      # The install and the 1799 GB L1 preallocation count against the probe.
+      readiness:
+        http:
+          port: 8751
+          path: /healthcheck
+        timeout_seconds: 1800
+      env:
+        LMCACHE_ROCM_ENABLE_BATCH_MEMCPY: '1'
+        LMCACHE_ROCM_FORCE_BATCH_MEMCPY: '1'
+      args:
+        - --l1-size-gb
+        - '1799'
+        - --l1-init-size-gb
+        - '1799'
+        - --l1-read-ttl-seconds
+        - '7200'
+        - --session-ttl-seconds
+        - '7200'
+        # The hybrid KDA model forces a 1536-token vLLM block; dcp8 scales the
+        # block span to 12288, the smallest chunk LMCache accepts.
+        - --chunk-size
+        - '12288'
+        - --separate-object-groups
+        # One GPU worker per vLLM rank; more threads give nothing.
+        - --max-cpu-workers
+        - '8'
+        - --max-gpu-workers
+        - '8'
+        - --eviction-policy
+        - LRU
+        - --supported-transfer-mode
+        - lmcache_driven
   roles:
     agg:
       args:
@@ -263,10 +300,14 @@ override_tp8_c48_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        # The default 10 s heartbeat marks the server unhealthy during long
+        # stores; a failed load then recomputes instead of failing the request.
+        kv-transfer-config: '{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"lmcache.mp.host":"tcp://localhost","lmcache.mp.port":8750,"lmcache.mp.mq_timeout":6000.0,"lmcache.mp.heartbeat_interval":30.0,"lmcache.mp.save_decode_cache":true}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
+        LMCACHE_ROCM_ENABLE_BATCH_MEMCPY: '1'
+        LMCACHE_ROCM_FORCE_BATCH_MEMCPY: '1'
   benchmark:
     env:
       CONC: '48'
