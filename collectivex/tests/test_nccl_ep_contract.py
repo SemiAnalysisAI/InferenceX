@@ -15,7 +15,7 @@ sys.path[:0] = [str(ROOT / "bench"), str(ROOT / "tests")]
 
 from test_backends import _import_stubbed  # noqa: E402
 
-VERSION = "0.2.0.dev20261005"
+VERSION = "0.2.0.dev20261013"
 DEVICE_SMS = 132
 
 
