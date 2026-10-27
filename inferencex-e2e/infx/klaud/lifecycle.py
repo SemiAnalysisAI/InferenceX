@@ -319,7 +319,6 @@ class Session:
                 or any(pr["number"] == pulls[0]["number"] for pr in run["pull_requests"])
             )
         ]
-        # A skipped run did no work: labelling or closing the PR starts one under its actor.
         if self.recovering and any(
             ended
             and utc(run["created_at"]) > utc(ended)
