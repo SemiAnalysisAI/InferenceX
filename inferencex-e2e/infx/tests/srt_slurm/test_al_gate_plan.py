@@ -16,6 +16,15 @@ from infx.srt_slurm.al_gate import main, plan, summarize  # noqa: E402
 EAGLE = {"speculative-algorithm": "EAGLE"}
 
 
+@pytest.fixture(autouse=True)
+def shared_workload(tmp_path: Path) -> None:
+    shared = tmp_path / "configs/srt-recipes"
+    shared.mkdir(parents=True)
+    command = {"benchmark": {"type": "custom", "command": "bash /infmax-workspace/benchmarks/srt_agentic.sh"}}
+    (shared / "agentic.yaml").write_text(yaml.safe_dump(command))
+    (shared / "telemetry-native.yaml").write_text("{}\n")
+
+
 def write_golden(directory: Path, concurrency: int | None = 2) -> Path:
     curve: dict[str, Any] = {"deepseek-v4-pro": {"thinking_on": {2: 2.0, 3: 2.4}}}
     if concurrency is not None:
@@ -36,12 +45,8 @@ def single_node_recipe(variants: dict[int, int | None]) -> dict[str, Any]:
     }
     base = {
         "name": "agentx", "engine": "sglang",
-        "model": {"path": "hf:test/model", "container": "test:tag", "precision": "fp8"},
         "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 4,
                           "args": {"tensor-parallel-size": 4}}},
-        "benchmark": {"type": "custom",
-                      "command": "bash /infmax-workspace/benchmarks/srt_agentic.sh",
-                      "env": {"MODEL": "test/model", "SPEC_DECODING": "mtp"}},
     }  # fmt: skip
     return {"schema": 2, "base": base, **overrides}
 
@@ -51,7 +56,7 @@ def single_node_row(conc: int) -> dict[str, Any]:
         "model": "test/model", "model-prefix": "dsv4", "image": "test:tag", "precision": "fp8",
         "framework": "sglang", "runner": "cluster:test", "tp": 4, "pp": 1, "dcp-size": 1,
         "pcp-size": 1, "ep": 1, "dp-attn": False, "spec-decoding": "mtp", "conc": conc,
-        "srt-recipe": "recipe.yaml", "exp-name": f"dsv4_conc{conc}", "queue-token": f"q{conc}",
+        "srt-recipe": "recipe.yaml", "kv-offloading": "none", "exp-name": f"dsv4_conc{conc}", "queue-token": f"q{conc}",
     }  # fmt: skip
 
 
@@ -59,9 +64,9 @@ def multi_node_row(conc: int, decode_tp: int, config: str, framework: str = "dyn
     return {
         "model": "test/model", "model-prefix": "dsv4", "framework": framework,
         "runner": "cluster:test", "spec-decoding": "mtp", "conc": [conc],
+        "srt-recipe": config, "image": "test:tag", "precision": "fp8", "kv-offloading": "none",
         "exp-name": f"dsv4_c{conc}", "prefill": {"num-worker": 1, "tp": 8},
-        "decode": {"num-worker": 1, "tp": decode_tp,
-                   "additional-settings": [f"CONFIG_FILE={config}"]},
+        "decode": {"num-worker": 1, "tp": decode_tp},
     }  # fmt: skip
 
 
@@ -70,7 +75,7 @@ def write_recipe(workspace: Path, name: str, recipe: dict[str, Any]) -> str:
     path = workspace / "benchmarks/multi_node/srt-slurm-recipes/test" / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(recipe))
-    return f"recipes/test/{name}"
+    return f"benchmarks/multi_node/srt-slurm-recipes/test/{name}"
 
 
 def sglang_decode(tokens: int) -> dict[str, Any]:
@@ -91,8 +96,9 @@ def test_gates_split_by_topology_and_draft_length(
     (tmp_path / "recipe.yaml").write_text(yaml.safe_dump(recipe))
     c16, c32, wide = (write_recipe(tmp_path, f"{n}.yaml", sglang_decode(3)) for n in "abc")
     multi = [multi_node_row(16, 8, c16), multi_node_row(32, 8, c32), multi_node_row(16, 16, wide)]
-    multi.append(multi_node_row(64, 8, "recipes/test/missing.yaml"))
+    multi.append(multi_node_row(64, 8, "benchmarks/multi_node/srt-slurm-recipes/test/missing.yaml"))
     rows = [single_node_row(conc) for conc in (1, 2, 4, 8, 16)]
+    rows[-1]["spec-decoding"] = "none"
     search_space = {"single_node": {"agentic": rows}, "multi_node": {"agentic": multi}}
     gates = plan(search_space, tmp_path, "thinking_on", golden_dir=golden_dir)
 
@@ -119,10 +125,10 @@ def test_gates_split_by_topology_and_draft_length(
     ]
     ids = {gate_id, two["al-gate"]["id"], *(gate["al-gate"]["id"] for gate in multi)}
     assert len(ids) == 4 and all(len(i) == 12 and int(i, 16) >= 0 for i in ids)
-    error = "recipe recipes/test/missing.yaml is not in the workspace mirror"
-    assert gates["unresolved"] == [
-        {"point": "dsv4_c64", "conc": [64], "reason": f"planning error: ValueError: {error}"}
-    ]
+    [unresolved] = gates["unresolved"]
+    assert (unresolved["point"], unresolved["conc"]) == ("dsv4_c64", [64])
+    assert "FileNotFoundError" in unresolved["reason"]
+    assert "missing.yaml" in unresolved["reason"]
     # The id names the deployment and drafting, whichever of its points a sweep includes.
     alone = {"single_node": {"agentic": [single_node_row(4)]}}
     gates = plan(alone, tmp_path, "thinking_on", golden_dir=golden_dir)
@@ -183,7 +189,7 @@ def test_dynamo_vllm_data_parallel_workers_across_nodes_are_exempt(
     cluster = {"gpus-per-node": cluster_gpus, "arch": "x86_64", "scheduler": "slurm",
                "slurm": {"partition": "batch", "exclusive": True}}  # fmt: skip
     runners = {"labels": {"cluster:test": ["test_0"]}, "clusters": {"test": cluster}}
-    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs").mkdir(exist_ok=True)
     (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump(runners))
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path))
     row = multi_node_row(8, 8, write_recipe(tmp_path, "dp.yaml", recipe), framework)
@@ -196,7 +202,7 @@ def test_dynamo_vllm_data_parallel_workers_across_nodes_are_exempt(
 def test_frameworks_the_gate_cannot_measure_are_exempt(tmp_path: Path) -> None:
     # Exempt points are reported without reading their recipes, which need not exist.
     rows = [
-        multi_node_row(conc, 8, "recipes/test/missing.yaml", framework)
+        multi_node_row(conc, 8, "benchmarks/multi_node/srt-slurm-recipes/test/missing.yaml", framework)
         for conc, framework in ((4, "dynamo-trt"), (1, "tilert"))
     ]
     gates = plan_multi_node(rows, tmp_path, write_golden(tmp_path / "golden"))

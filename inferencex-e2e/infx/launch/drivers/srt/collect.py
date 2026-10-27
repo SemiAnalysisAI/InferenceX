@@ -67,7 +67,9 @@ def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
             return 0
         rc = 0
         logs = output / "logs"
-        power_rc = 0 if run.request.eval_only or run.request.al_gate else _stage_power_package(run, logs)
+        power_rc = (
+            0 if run.request.eval_only or run.request.al_gate else _stage_power_package(run, logs)
+        )
         bundle_server_logs(output, run.workspace / SINGLE_NODE_LOGS)
         if run.request.al_gate:
             try:

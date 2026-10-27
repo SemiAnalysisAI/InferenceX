@@ -12,16 +12,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from infx.clusters import CLUSTER_LABEL_PREFIX, load_clusters
 from infx.golden_al_distribution import GOLDEN_DIR, curve_name, golden_length, load_curve
-from infx.launch.drivers.srt.recipe import recipe_mirror_path
-from infx.srt_slurm.single_node import select_recipe
+from infx.srt_slurm.generate import bound_variant, point_environment
 from infx.srt_slurm.synthetic_acceptance import (
     ENGINES,
     generation_role,
-    selected_recipes,
     spec_parameters,
 )
 
@@ -29,7 +25,7 @@ from infx.srt_slurm.synthetic_acceptance import (
 POINT_FIELDS = frozenset((
     "conc", "exp-name", "recipe-fingerprint", "priority", "queue-token", "run-eval", "eval-only",
     "eval-conc", "eval-framework", "eval-suite", "kv-offloading", "kv-offload-backend",
-    "total-cpu-dram-gb",
+    "total-cpu-dram-gb", "srt-recipe", "eval-srt-recipe",
 ))  # fmt: skip
 SPEC_FIELDS = (
     "method", "num_speculative_tokens", "model", "draft_sample_method", "rejection_sample_method"
@@ -48,42 +44,11 @@ def _concurrency(row: Mapping[str, Any]) -> int:
     return min(row["conc"]) if isinstance(row["conc"], list) else row["conc"]
 
 
-def point_environment(row: Mapping[str, Any]) -> dict[str, str]:
-    """The launch environment benchmark-tmpl.yml derives from a single-node AgentX row."""
-    tp, pp, pcp = int(row["tp"]), int(row["pp"]), int(row["pcp-size"])
-    kv_offloading, dram = row.get("kv-offloading"), row.get("total-cpu-dram-gb")
-    return {
-        "FRAMEWORK": row["framework"], "MODEL": row["model"], "IMAGE": row["image"],
-        "PRECISION": row["precision"], "TP": str(tp), "PP_SIZE": str(pp),
-        "DCP_SIZE": str(row["dcp-size"]), "PCP_SIZE": str(pcp), "EP_SIZE": str(row["ep"]),
-        "DP_ATTENTION": "true" if row["dp-attn"] else "false", "GPU_COUNT": str(tp * pp * pcp),
-        "CONC": str(row["conc"]), "SPEC_DECODING": row["spec-decoding"], "IS_AGENTIC": "1",
-        "KV_OFFLOADING": "" if kv_offloading is None else str(kv_offloading),
-        "TOTAL_CPU_DRAM_GB": "" if dram is None else str(dram),
-    }  # fmt: skip
-
-
 def point_recipe(row: Mapping[str, Any], workspace: Path) -> dict[str, Any]:
-    """The resolved recipe variant a point launches, as the srt driver selects it."""
-    if row.get("prefill") is None:
-        _, recipe = select_recipe(f"{workspace}/{row['srt-recipe']}", point_environment(row))
-        return recipe
-    configs = {
-        setting.split("=", 1)[1]
-        for role in ("prefill", "decode")
-        for setting in (row.get(role) or {}).get("additional-settings") or []
-        if setting.startswith("CONFIG_FILE=")
-    }
-    if len(configs) != 1:
-        raise ValueError(f"multi-node point names CONFIG_FILE {sorted(configs)}, expected one")
-    [config] = configs
-    path = recipe_mirror_path(workspace, config)
-    if not path.is_file():
-        raise ValueError(f"recipe {config} is not in the workspace mirror")
-    variants = selected_recipes(yaml.safe_load(path.read_text()), config.partition(":")[2] or None)
-    if len(variants) != 1:
-        raise ValueError(f"{config} selects {len(variants)} recipe variants, expected one")
-    return variants[0][1]
+    """The composed and bound recipe variant the current launcher selects for a point."""
+    point = {**row, "scenario-type": "agentic-coding"}
+    _, recipe = bound_variant(point, point_environment(point), workspace)
+    return recipe
 
 
 def deployment_key(row: Mapping[str, Any]) -> str:

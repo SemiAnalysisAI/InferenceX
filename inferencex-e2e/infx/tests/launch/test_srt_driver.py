@@ -537,12 +537,11 @@ def test_single_node_gate_measures_the_selected_variant_with_real_verification(h
     recipe = json.loads(json.dumps(POINT_RECIPE))
     recipe["roles"]["agg"]["args"].update({"speculative-algorithm": "EAGLE", "speculative-num-steps": 3})
     recipe["roles"]["agg"]["env"] = {"KEEP": "yes", "SGLANG_SIMULATE_ACC_LEN": "2.5"}
-    recipe["benchmark"]["command"] = AGENTX_COMMAND
     raw = {"base": recipe, "zip_override_conc": {"benchmark": {"env": {"CONC": ["2", "4"]}}}}
     workspace = harness.workspace
     (workspace / "recipe.yaml").write_text(yaml.safe_dump(raw))
     env = {
-        **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for("h200-cw"), "MODEL_PREFIX": "dsv4",
+        **harness.env, **POINT_ENV, **GATE_ENV, "RUNNER_NAME": runner_for("h200-dgxc"), "MODEL_PREFIX": "dsv4",
         "SPEC_DECODING": "mtp", "DURATION": "600", "AL_GATE_CURVE": "dsv4_mtp", "AL_GATE_DRAFT_TOKENS": "3",
     }  # fmt: skip
     download_gate_prompts(workspace)
@@ -550,8 +549,8 @@ def test_single_node_gate_measures_the_selected_variant_with_real_verification(h
 
     [call] = srtctl_calls(harness.logs)
     argv = call["argv"]
-    assert argv[argv.index("--file") + 1] == f"{workspace}/recipe.yaml:zip_override_conc[0]"
-    job = job_recipe(raw, argv, "zip_override_conc[0]")
+    submitted = Path(argv[argv.index("--file") + 1])
+    job = job_recipe(yaml.safe_load(submitted.read_text()), argv)
     assert_gate_ran(harness, call, job)
     names = ("CONC", "RESULT_FILENAME", "AL_GATE", "AL_GATE_CURVE", "AL_GATE_DRAFT_TOKENS", "AL_GATE_OUTPUT_DIR",
              "THINKING_MODE")  # fmt: skip
@@ -569,11 +568,7 @@ def test_single_node_gate_measures_the_selected_variant_with_real_verification(h
     assert not (workspace / "point-identity.json").exists()
 
 
-AGENTX_LANE_RECIPE = f"""name: "fixture"
-model:
-  path: "alias"
-  container: "test:tag"
-  precision: "fp4"
+AGENTX_LANE_RECIPE = """name: "fixture"
 roles:
   prefill:
     args:
@@ -581,11 +576,7 @@ roles:
   decode:
     args:
       tensor-parallel-size: 8
-      speculative-config: '{{"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy", "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 2.5}}'
-benchmark:
-  type: custom
-  command: {AGENTX_COMMAND}
-  concurrencies: [4]
+      speculative-config: '{"method": "dspark", "num_speculative_tokens": 3, "draft_sample_method": "greedy", "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 2.5}'
 """
 
 
@@ -605,9 +596,11 @@ def test_power_lane_gate_measures_real_acceptance_without_power(harness):
 
     [call] = srtctl_calls(harness.logs)
     checkout = Path(call["cwd"])
-    job = job_recipe(yaml.safe_load((checkout / "recipes/test/lane.yaml").read_text()), call["argv"])
+    submitted = Path(call["argv"][call["argv"].index("--file") + 1])
+    job = job_recipe(yaml.safe_load(submitted.read_text()), call["argv"])
     assert_gate_ran(harness, call, job)
-    assert job["benchmark"]["env"] == {
+    names = ("AL_GATE", "AL_GATE_CURVE", "AL_GATE_DRAFT_TOKENS", "AL_GATE_DATASET", "AL_GATE_OUTPUT_DIR", "THINKING_MODE")
+    assert {name: job["benchmark"]["env"][name] for name in names} == {
         "AL_GATE": "true", "AL_GATE_CURVE": "kimik3_dspark", "AL_GATE_DRAFT_TOKENS": "3",
         "AL_GATE_DATASET": GATE_DATASET, "AL_GATE_OUTPUT_DIR": "/logs", "THINKING_MODE": "thinking_on",
     }  # fmt: skip

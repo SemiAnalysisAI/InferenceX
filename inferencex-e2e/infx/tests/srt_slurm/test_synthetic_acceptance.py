@@ -988,7 +988,7 @@ MTP3 = {"speculative-config": json.dumps({"method": "mtp", "num_speculative_toke
         ("vllm", MTP3, {"AL_GATE_CURVE": "x"}, r"drafts \('dsv4_mtp', 3\), .* measures \('x', 3\)"),
         ("vllm", MTP3, {"AL_GATE_DRAFT_TOKENS": "2"}, r"gate measures \('dsv4_mtp', 2\)"),
         ("vllm", {"tensor-parallel-size": 8}, {}, "the recipe drafts None"),
-        ("llmd-vllm", MTP3, {}, "cannot read llmd-vllm's drafting settings"),
+        ("unknown", MTP3, {}, "cannot read unknown's drafting settings"),
     ],
     ids=["other-curve", "other-draft-length", "no-drafting", "unknown-framework"],
 )

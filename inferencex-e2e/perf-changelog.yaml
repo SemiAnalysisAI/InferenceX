@@ -11429,3 +11429,13 @@
     - "ATOM changes in the new image that matter here: GLM-5.2 mono decode and ATOM_MONO_ENABLE (ROCm/ATOM #2479, #2483, #2535). ATOM_DCP_PREFILL_QREP (#2437) and QREP together with MTP (#2290); the old image turned QREP off whenever MTP was on. DCP prefill fixes with the MTP draft (#2430, #2496, #2506, #2348). MTP verify and draft-graph fixes (#2451, #2367, #2566, #2495). lmcache_offload lookup and save fixes (#2305, #2339, #2547) and the LMCache 0.5.6.dev139+gf22dec28 pin (#2438)."
     - "Draft data types unchanged: the MTP draft (model.layers.78 of amd/GLM-5.2-MXFP4, which ships all-BF16 including its routed experts) stays BF16 because online_quant_config excludes model.layers.78.* from ptpc_fp8. It uses the FP8 KV cache and FP4 indexer cache like the target. Mono decode covers only target layers 0-77."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4308
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Upstream the report-only speculative acceptance gate from NVIDIA/InferenceMAX#1063. Measure real NEXTN MTP acceptance on pinned SPEED-Bench coding prompts before the remaining AgentX throughput jobs; report the comparison with golden AL 2.32 without blocking throughput."
+    - "Run the existing one-GPU Qwen3.8-Flash-Next NVFP4 SGLang GB300 concurrency ladder at 1, 2, 4, 8, 16, 32, 48, and 64, plus its selected real-verification accuracy eval. Gate planning shares one concurrency-64 measurement across all eight points."
+    - "Adapt the gate to the pinned agentx-harness runtime, bound schema-2 recipe fragments, and native power collection. Retain main's SGLang v0.5.22 image, serving configuration, cluster routing, caches, and canonical AgentX duration."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

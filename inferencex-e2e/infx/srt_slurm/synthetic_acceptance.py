@@ -160,14 +160,18 @@ def _simulated_length(
         return None
     roles = recipe.get("roles", {})
     synthetic = is_synthetic(environment)
-    generation = roles.get("decode", roles.get("agg", {}))
+    generation = generation_role(recipe, engine)
     spec = spec_parameters(generation, engine)
     if not (synthetic and spec):
         return None
-    if engine == "vllm" and all(
-        spec_parameters(role, engine).get("enable_adaptive_verification") is True
-        for name, role in roles.items()
-        if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
+    if (
+        engine == "vllm"
+        and roles
+        and all(
+            spec_parameters(role, engine).get("enable_adaptive_verification") is True
+            for name, role in roles.items()
+            if name in ("agg", "prefill", "decode") and spec_parameters(role, engine)
+        )
     ):
         return None
     al = golden_length(environment["MODEL_PREFIX"], spec, environment["THINKING_MODE"], golden_dir)

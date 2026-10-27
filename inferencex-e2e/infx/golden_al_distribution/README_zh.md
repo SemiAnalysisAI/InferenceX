@@ -97,7 +97,7 @@ python -m atom.entrypoints.openai_server \
 
 ## 收集设置
 
-每个曲线 YAML 在模型键旁的保留顶层键 `collection` 中记录该次收集使用的 SPEED-Bench 客户端设置，`load_curve(name).collection` 会返回这些设置（没有该块的曲线返回 `None`）。在 `run-sweep.yml` 的 PR 扫描中，仅作报告的接受长度门禁会以真实验证对每个投机解码 AgentX 部署重放这些设置，并将测得的 AL 与黄金 AL 比较，详见[投机解码接受门禁](../../docs/ci-procedures_zh.md#投机解码接受门禁)。
+每个曲线 YAML 在模型键旁的保留顶层键 `collection` 中记录该次收集使用的 SPEED-Bench 客户端设置，`load_curve(name).collection` 会返回这些设置（没有该块的曲线返回 `None`）。在 `run-sweep.yml` 的 PR 扫描中，仅作报告的接受长度门禁会以真实验证对每个投机解码 AgentX 部署重放这些设置，并将测得的 AL 与黄金 AL 比较，详见[投机解码接受门禁](../../../.github/workflows/README.md#speculative-acceptance-gate)。
 
 ```yaml
 collection:

@@ -84,7 +84,7 @@ def _measure(
         raise BenchError(f"{dataset} has sha256 {actual}, not {speedbench.PROMPTS_SHA256}")
     if not runtime.active():
         print(f"Preparing the AIPerf runtime in {runtime.venv}", flush=True)
-        rc = bootstrap(runtime, proc.REPO_ROOT / "utils" / "aiperf")
+        rc = bootstrap(runtime)
         if rc:
             document["error"] = f"creating the AIPerf runtime exited with code {rc}"
             return rc

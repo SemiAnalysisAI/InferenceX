@@ -104,7 +104,7 @@ The collection measures real head quality only to establish the golden curve. Ag
 
 ## Collection settings
 
-Each curve YAML records the SPEED-Bench client settings of its collection in a reserved top-level `collection` key beside the model key, and `load_curve(name).collection` returns them (`None` for a curve without the block). In `run-sweep.yml` PR sweeps, the report-only acceptance-length gate replays these settings with real verification against each speculative AgentX deployment and compares the measured AL with the golden AL; see [the speculative acceptance gate](../../docs/ci-procedures.md#speculative-acceptance-gate).
+Each curve YAML records the SPEED-Bench client settings of its collection in a reserved top-level `collection` key beside the model key, and `load_curve(name).collection` returns them (`None` for a curve without the block). In `run-sweep.yml` PR sweeps, the report-only acceptance-length gate replays these settings with real verification against each speculative AgentX deployment and compares the measured AL with the golden AL; see [the speculative acceptance gate](../../../.github/workflows/README.md#speculative-acceptance-gate).
 
 ```yaml
 collection:
