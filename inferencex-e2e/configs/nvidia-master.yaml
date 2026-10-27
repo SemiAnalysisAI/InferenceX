@@ -8667,7 +8667,7 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
 # caps batched tokens at 4096. Concurrency is bounded by the measured KV
 # ceiling rather than a guess; see the search-space comment.
 dsv41flash-fp4-h100-vllm-agentic-dspark:
-  image: vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d@sha256:6b90105076216e861cd30fae8828efef9263a0399137b894289f3b6a685bf4ff
+  image: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:h100-dsxe
