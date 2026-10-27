@@ -7,8 +7,8 @@ base:
       revision: f33c6dc501ee5a2c7e35155653b1b1abbc320951
     container: {}
     frameworks:
-      dynamo: 1.5.0.dev20260913
-      sglang: 4358a1617cad734fc37bf53d9e5c2092bd43d075
+      dynamo: 1.7.0.dev20261026
+      sglang: 5884e4fec6c0f4453940605896154f5fba4badd9
 
   dynamo:
     # This nightly includes the matching Dynamo adapter. Reinstalling an older
