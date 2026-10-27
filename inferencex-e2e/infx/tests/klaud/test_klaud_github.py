@@ -3400,13 +3400,14 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
     assert families == {
         ("dsr1", "h100", "sglang", "fp4", "none", False, "agentic_traces",
          None, None, "example/image:stable"): {
-            "configs/nvidia-master.yaml:alone": ({"h100-dsxe"}, 1),
+            "configs/nvidia-master.yaml:alone": ({"h100-dsxe"}, 1, 3, False),
         },
     }  # fmt: skip
     families = {
         ("dsr1", "h100", "sglang", "fp8", "none", False, "agentic_traces",
          None, None, "example/image:stable"): {
-            "configs/nvidia-master.yaml:exact,wide": (frozenset({"h100-cw", "h100-dsxe"}), 4, 14, False),
+            "configs/nvidia-master.yaml:exact,wide": klaud.Family(
+                frozenset({"h100-cw", "h100-dsxe"}), 4, 14, False),
         },
     }  # fmt: skip
     source = {
@@ -3488,7 +3489,7 @@ def test_live_families_make_one_curve_family_of_its_agg_disagg_and_mtp_keys(
     families = klaud.live_families(tmp_path)
 
     assert capsys.readouterr().out == ""
-    curve = {CURVE: (frozenset({"h100-cw", "h100-dsxe"}), 3)}
+    curve = {CURVE: (frozenset({"h100-cw", "h100-dsxe"}), 3, 11, False)}
     assert families == {
         curve_observation(): curve,
         curve_observation(disagg=True): curve,
@@ -3531,7 +3532,8 @@ def test_a_single_key_branch_or_claim_occupies_its_curve(occupant, chosen):
         "spec_method": "mtp", "disagg": False, "benchmark_type": "agentic_traces", "isl": None,
         "osl": None, "image": "example/image:stable", "date": "2026-09-19",
     }  # fmt: skip
-    families = {klaud.observation_key(source): {curve: (frozenset({"h100-cw"}), 1)}}
+    families = {klaud.observation_key(source): {
+        curve: klaud.Family(frozenset({"h100-cw"}), 1, 1, False)}}  # fmt: skip
     names = {
         "agg": identity("configs/nvidia-master.yaml:agg")[:16],
         "mtp": identity("configs/nvidia-master.yaml:mtp")[:16],
@@ -3556,7 +3558,7 @@ def test_plan_blocks_a_curve_sharing_a_key_with_a_blocked_or_held_family(
         "spec_method": "none", "disagg": False, "benchmark_type": "agentic_traces", "isl": None,
         "osl": None, "image": "example/image:stable", "date": "2026-09-19",
     }  # fmt: skip
-    target = (frozenset({"h100-cw"}), 1)
+    target = klaud.Family(frozenset({"h100-cw"}), 1, 1, False)
     families = {klaud.observation_key(source): {
         f"configs/nvidia-master.yaml:{keys}": target
         for keys in ("agg,mtp", "claimed", "free", "other,zeta")
@@ -3569,14 +3571,16 @@ def test_plan_blocks_a_curve_sharing_a_key_with_a_blocked_or_held_family(
         "source-status": "baseline", "source-id": "1", "source": source,
         "benchmark-age-days": 0}], []))  # fmt: skip
     monkeypatch.setattr(klaud, "github_read", lambda *_a, **_k: [[]])
-    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"h100-cw": 1})
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
+        idle={"h100-cw": 1}, queued={}, size={"h100-cw": 1}))
     monkeypatch.setattr(klaud, "live_families", lambda _root: families)
     monkeypatch.setattr(claims, "family_owners", lambda _r: [Ownership(run_id=7, candidates=[
         OwnedCandidate(id=CANDIDATE_ID, family="configs/nvidia-master.yaml:claimed,more",
                        base="a" * 40)])])  # fmt: skip
     monkeypatch.setattr(klaud, "maintainer_closed_families", lambda _r, _now: {
         identity("configs/nvidia-master.yaml:agg")[:16]})  # fmt: skip
-    monkeypatch.setattr(klaud, "recent_candidate_outcomes", lambda _r, _hours: ({}, set()))
+    monkeypatch.setattr(klaud, "recent_candidate_outcomes", lambda _r, _hours: klaud.History(
+        recent={}, paused_weights=set(), held_images={}, infra_clusters=set()))
 
     klaud.plan(tmp_path, tmp_path / "klaud", 5, 24)
 
