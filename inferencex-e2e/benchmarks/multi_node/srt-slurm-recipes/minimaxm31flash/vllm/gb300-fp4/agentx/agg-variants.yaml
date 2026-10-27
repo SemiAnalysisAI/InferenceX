@@ -12,6 +12,9 @@ base:
     gpu_type: gb300
     gpus_per_node: 4
   # Cold loads of the 250 GB checkpoint from the hub cache run past half an hour.
+  observability:
+    tachometer:
+      enabled: false
   health_check:
     max_attempts: 1440
     interval_seconds: 5
