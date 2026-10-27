@@ -294,7 +294,7 @@ collx_apply_network_profile() {
   unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
-  unset MORI_RDMA_DEVICES
+  unset MORI_RDMA_DEVICES MORI_SOCKET_IFNAME
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
@@ -317,7 +317,10 @@ collx_apply_network_profile() {
   if [ -n "${COLLX_SOCKET_IFNAME:-}" ]; then
     [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
       || collx_die "invalid private socket interface selector"
-    export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
+    # MoRI's shmem bootstrap otherwise picks its own interface, which can be a rail without a
+    # kernel route to the root rank (Barite's per-rail /31 links).
+    export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" \
+      MORI_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
   fi
   [[ "$COLLX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
     || collx_die "invalid private RDMA device selector"

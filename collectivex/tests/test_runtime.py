@@ -228,6 +228,19 @@ class SingleNodeHcaOverrideTests(unittest.TestCase):
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
+class SocketInterfaceProfileTests(unittest.TestCase):
+    def test_every_bootstrap_uses_the_registry_interface(self) -> None:
+        # MoRI's shmem bootstrap picks its own interface otherwise; on per-rail /31 links that can
+        # be one without a kernel route to the root rank.
+        stdout = run_common(
+            "export COLLX_RDMA_DEVICES=bnxt_re0 COLLX_SOCKET_IFNAME=mgmt0 MORI_SOCKET_IFNAME=stale;"
+            " collx_apply_network_profile 2 xgmi-rdma;"
+            ' echo "$NCCL_SOCKET_IFNAME $GLOO_SOCKET_IFNAME $MORI_SOCKET_IFNAME $UCCL_SOCKET_IFNAME"',
+            check=True,
+        ).stdout
+        self.assertEqual(stdout.strip().splitlines()[-1], "mgmt0 mgmt0 mgmt0 mgmt0")
+
+
 class RelaxedOrderingProfileTests(unittest.TestCase):
     def test_only_the_registry_flag_relaxes_the_deepep_window(self) -> None:
         for flag, expected in (("1", "1"), ("0", "unset"), ("", "unset")):
