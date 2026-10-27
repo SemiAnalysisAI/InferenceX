@@ -23,7 +23,7 @@ NA_ROW_WITH_PASS_EMOJI = re.compile(
     r"^([ \t]*(?:[-*+] )?)✅( Check [0-9]+ \([^\r\n]+\): N/A — \S.*)$", re.MULTILINE
 )
 ESCALATION = (
-    "⚠️ Pareto coverage needs additional review: @functionstackx @cquil11 @Oseltamivir @adibarra. "
+    "⚠️ Pareto coverage needs additional review. "
     "At least 5 points per affected throughput-versus-E2EL frontier are highly recommended. "
     "Below 5, or when coverage cannot be verified, merge only with an explicit, recorded admin bypass "
     "for the assessed commit; this advisory comment does not grant or enforce a bypass."
