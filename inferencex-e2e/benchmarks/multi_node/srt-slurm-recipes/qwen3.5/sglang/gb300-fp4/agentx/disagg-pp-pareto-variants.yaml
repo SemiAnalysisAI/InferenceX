@@ -3,9 +3,9 @@ schema: 2
 
 base:
   dynamo:
-    install: true
-    source:
-      rev: 61c37bc33c3e88da3facaa39fa2b5caf616740ba
+    # Use the image's bundled ai-dynamo 1.6.0.dev20261015. Dynamo 61c37bc
+    # cannot bind the interface-name DYN_TCP_RPC_HOST that gb300-nv exports.
+    install: false
   slurm:
     time_limit: '8:00:00'
   health_check:
