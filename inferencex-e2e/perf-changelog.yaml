@@ -11420,7 +11420,8 @@
   description:
     - "Concurrency 1: 1P1D TP4/TP4 (8 GPUs) instead of TP8/TP8, with six DSpark draft tokens on both roles."
     - "Concurrency 16: 1P1D with a TP4 prefill and a TP8 decode (12 GPUs) instead of TP8/TP8, with six DSpark draft tokens; the TP4 prefill adds the lmcache_offload host KV tier (374 GB per rank, dram-utilization 0.50)."
-    - "Concurrency 128 and 256 move to the new key dsv4-fp4-mi355x-atom-disagg-agentic-mega-mp-dspark on rocm/atom-dev:nightly_202610141644, which also adds concurrency 512. Prefill runs DP attention with EP8, the Mega MoE backend (high-throughput all2all) and EPLB (window 100, interval 200, at most 4 rebalances), without TBO, and offloads KV to an LMCache MP server on the prefill node (lmcache_mp connector, tp_rank_collapse, 1000 GB lazy L1, 900 s read TTL, LRU). Decode runs DP attention without offload. AToMesh routes dp_sticky on both roles."
+    - "Concurrency 128 and 256 move to the new key dsv4-fp4-mi355x-atom-disagg-agentic-mega-mp-dspark on rocm/atom-dev:nightly_202610271520_meta, which also adds concurrency 512. Prefill runs DP attention with EP8, the Mega MoE backend (high-throughput all2all) and EPLB (window 100, interval 200, at most 4 rebalances), without TBO, and offloads KV to an LMCache MP server on the prefill node (lmcache_mp connector, tp_rank_collapse, 1000 GB lazy L1, 900 s read TTL, LRU). Decode runs DP attention without offload. AToMesh routes dp_sticky on both roles."
+    - "On those points prefill keeps only prompt-end state checkpoints (state-checkpoint-interval-tokens -1, ATOM_STATE_CHECKPOINT_DEMAND=0) and rebuilds other hits by bounded state replay (ATOM_DSV4_STATE_REPLAY=1); max-num-seqs is sized per DP rank (prefill 128/192/256, decode 64/128/192 at concurrency 128/256/512)."
     - "gpu-memory-utilization (0.9) and the conc 64 point are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4527
   scenario-type: [agentic-coding]

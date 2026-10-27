@@ -179,7 +179,9 @@ override_dpa8_c64:
 # DP attention with EP8, the Mega MoE backend and EPLB, without TBO, and
 # offloads KV to one LMCache MP server on the prefill node (lazy 1000 GB L1
 # shared by the eight prefill ranks); decode is DP attention without offload.
-# Both roles route dp_sticky.
+# Both roles route dp_sticky. Prefill keeps only prompt-end state checkpoints
+# and rebuilds any other hit by bounded state replay. max-num-seqs is per DP
+# rank.
 override_ep8_c128_mega_mp:
   services: &mega_mp_services
     - name: lmcache
@@ -225,8 +227,11 @@ override_ep8_c128_mega_mp:
         ATOM_MEGA_DECODE_MTPR: '512'
         AITER_MEGA_FIXED_SLOT_MAX_MTPR: '1023'
         ATOM_EPLB_MAX_REBALANCES: '4'
+        ATOM_DSV4_STATE_REPLAY: '1'
+        ATOM_STATE_CHECKPOINT_DEMAND: '0'
       args: &mega_mp_prefill_args
-        max-num-seqs: 256
+        max-num-seqs: 128
+        state-checkpoint-interval-tokens: -1
         enable-dp-attention: true
         enable-expert-parallel: true
         all2all-backend: high-throughput
@@ -245,7 +250,8 @@ override_ep8_c128_mega_mp:
       env: &mega_mp_decode_env
         ATOM_ENABLE_PREFILL_DELAYER: '0'
       args:
-        max-num-seqs: 256
+        max-num-seqs: 64
+        state-checkpoint-interval-tokens: -1
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]'
         enable-dp-attention: true
   benchmark:
@@ -261,11 +267,12 @@ override_ep8_c256_mega_mp:
       env: *mega_mp_prefill_env
       args:
         <<: *mega_mp_prefill_args
-        max-num-seqs: 512
+        max-num-seqs: 192
     decode:
       env: *mega_mp_decode_env
       args:
-        max-num-seqs: 512
+        max-num-seqs: 128
+        state-checkpoint-interval-tokens: -1
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'
         enable-dp-attention: true
   benchmark:
@@ -280,11 +287,12 @@ override_ep8_c512_mega_mp:
       env: *mega_mp_prefill_env
       args:
         <<: *mega_mp_prefill_args
-        max-num-seqs: 1024
+        max-num-seqs: 256
     decode:
       env: *mega_mp_decode_env
       args:
-        max-num-seqs: 1024
+        max-num-seqs: 192
+        state-checkpoint-interval-tokens: -1
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128]'
         enable-dp-attention: true
   benchmark:

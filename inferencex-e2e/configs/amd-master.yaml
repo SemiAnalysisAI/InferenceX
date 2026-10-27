@@ -1413,7 +1413,7 @@ dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark:
 # node (1000 GB lazy L1); decode DP attention without offload; dp_sticky routing.
 # dram-utilization 0.34 records that 1000 GB.
 dsv4-fp4-mi355x-atom-disagg-agentic-mega-mp-dspark:
-  image: rocm/atom-dev:nightly_202610141644
+  image: rocm/atom-dev:nightly_202610271520_meta
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
