@@ -88,7 +88,9 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
     """Resolve public AgentX identities, target clusters and node demand from the generator.
 
     Archives and fixed-seq-len points are excluded. A family's node demand is the node count of
-    its largest generated AgentX job.
+    its largest generated AgentX job. Families whose AgentX dashboard curve (model, hardware,
+    framework, precision) also holds another master key are left out: a single-key run replaces
+    that whole curve and hides the sibling key's points.
     """
     from infx.clusters import load_inventory
     from infx.config import project_root
@@ -102,6 +104,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
     runners = load_runner_file(str(root / "configs/runners.yaml"))
     inventory = load_inventory(runners)
     index: dict[tuple, dict[str, tuple[frozenset[str], int]]] = {}
+    curves: dict[tuple, set[str]] = {}
     paths = sorted((root / "configs").glob("*-master.yaml"))
     if not paths:
         raise ReadError("live-configs-unavailable")
@@ -119,6 +122,16 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
             entries = [entry for entry in entries if in_scope(entry)]
             if not entries:
                 continue
+            for entry in entries:
+                curves.setdefault(
+                    (
+                        entry["model-prefix"],
+                        _hardware_family(entry["runner"]),
+                        public_framework(entry["framework"]),
+                        entry["precision"],
+                    ),
+                    set(),
+                ).add(family)
             clusters = target_clusters(entries, inventory)
             if not clusters:
                 print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
@@ -138,7 +151,14 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
                     "image": entry["image"],
                 }
                 index.setdefault(observation_key(row), {})[family] = (clusters, demand)
-    return index
+    shared = {family for members in curves.values() if len(members) > 1 for family in members}
+    for family in sorted(shared):
+        print(f"::notice::Klaud skips {family}: its AgentX curve has sibling keys.")
+    return {
+        key: kept
+        for key, families in index.items()
+        if (kept := {f: v for f, v in families.items() if f not in shared})
+    }
 
 
 def choose(

@@ -52,6 +52,11 @@ Recipes never set model.container or identity.container.image; the binder writes
 the master image. Preserve model, precision, topology, speculation, workload/dataset,
 duration, resources, recipe references, all points and default evals. No broad tuning,
 shared code/workflows or other-family edits.
+Other config keys with the same model, precision, hardware and framework, such as the agg and
+disagg keys of one Dynamo family, form one AgentX dashboard curve, and the newest normal run
+replaces that whole curve. Before branching, list those sibling keys in the master config. If any
+exist, stop in phase resolve with outcome inconclusive and name them; a single-key run hides every
+sibling point even when the sibling already uses the new image.
 ZERO runtime engine/serving-stack patching: no source/site-packages/container rewrites,
 overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing patches.
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,

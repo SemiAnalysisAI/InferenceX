@@ -3225,6 +3225,7 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
             ]}],
         }},
         "unmapped": {**fixture, "runner": "cluster:h100-retired"},
+        "alone": {**fixture, "runner": "cluster:h100-dsxe", "precision": "fp4"},
     }
     runners = {
         "labels": {
@@ -3244,14 +3245,25 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
 
     families = klaud.live_families(tmp_path)
 
+    # exact, wide and the unrenderable-cluster key share one dashboard curve, so none is chosen.
     assert capsys.readouterr().out == (
         "::warning::Klaud live-family-clusters-unresolved: configs/nvidia-master.yaml:unmapped\n"
+        "::notice::Klaud skips configs/nvidia-master.yaml:exact: its AgentX curve has sibling keys.\n"
+        "::notice::Klaud skips configs/nvidia-master.yaml:unmapped: its AgentX curve has sibling "
+        "keys.\n"
+        "::notice::Klaud skips configs/nvidia-master.yaml:wide: its AgentX curve has sibling keys.\n"
     )
     assert families == {
+        ("dsr1", "h100", "sglang", "fp4", "none", False, "agentic_traces",
+         None, None, "example/image:stable"): {
+            "configs/nvidia-master.yaml:alone": ({"h100-dsxe"}, 1),
+        },
+    }  # fmt: skip
+    families = {
         ("dsr1", "h100", "sglang", "fp8", "none", False, "agentic_traces",
          None, None, "example/image:stable"): {
-            "configs/nvidia-master.yaml:exact": ({"h100-dsxe"}, 1),
-            "configs/nvidia-master.yaml:wide": ({"h100-dsxe"}, 4),
+            "configs/nvidia-master.yaml:exact": (frozenset({"h100-dsxe"}), 1),
+            "configs/nvidia-master.yaml:wide": (frozenset({"h100-dsxe"}), 4),
         },
     }  # fmt: skip
     source = {
