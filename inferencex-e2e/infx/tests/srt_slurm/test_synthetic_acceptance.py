@@ -34,6 +34,34 @@ ENV = {
 }
 
 
+def test_natural_acceptance_removes_simulation_without_golden_curve(tmp_path: Path) -> None:
+    recipe = {
+        "roles": {
+            "agg": {
+                "args": {"speculative-algorithm": "NEXTN", "speculative-num-steps": 3},
+                "env": {
+                    "INFX_NATURAL_ACCEPTANCE": "1",
+                    "SGLANG_SIMULATE_ACC_LEN": "2.32",
+                    "SGLANG_SIMULATE_ACC_METHOD": "match-expected",
+                    "SGLANG_SIMULATE_ACC_TOKEN_MODE": "real-draft-token",
+                },
+            }
+        }
+    }
+    overrides = build_overrides(recipe, "sglang", ENV, golden_dir=tmp_path)
+    assert overrides == [
+        "--unset",
+        "roles.agg.env.SGLANG_SIMULATE_ACC_LEN",
+        "--unset",
+        "roles.agg.env.SGLANG_SIMULATE_ACC_METHOD",
+        "--unset",
+        "roles.agg.env.SGLANG_SIMULATE_ACC_TOKEN_MODE",
+    ]
+    assert apply_native(recipe, overrides)["roles"]["agg"]["env"] == {
+        "INFX_NATURAL_ACCEPTANCE": "1"
+    }
+
+
 @pytest.fixture
 def golden_dir(tmp_path: Path) -> Path:
     directory = tmp_path / "golden"

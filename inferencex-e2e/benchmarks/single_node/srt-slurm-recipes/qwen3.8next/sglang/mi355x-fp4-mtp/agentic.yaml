@@ -1,6 +1,7 @@
 # Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
 # FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP. The ~116 GiB
 # checkpoint fits on one MI355X, so TP1.
+# Measured C2/C16 runtime and workload references: reproduction/c2.json and c16.json.
 base:
   schema: 2
   name: qwen3.8next-fp4-mi355x-sglang-agentic
@@ -123,11 +124,18 @@ override_c2:
         enable-linear-replayssm-spec: null
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        context-length: 262144
+        speculative-use-rejection-sampling: true
       env:
         SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
         SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_GDN_FUSED_QKV_NORM: '1'
+        SGLANG_OPT_QWEN4_FUSED_HC: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
+        INFX_NATURAL_ACCEPTANCE: '1'
   benchmark:
     env:
       CONC: '2'
@@ -189,8 +197,16 @@ override_c16:
         cuda-graph-max-bs-decode: 16
         mem-fraction-static: 0.88
         chunked-prefill-size: 8192
+        context-length: 262144
+        speculative-use-rejection-sampling: true
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_ENABLE_QSA_PAGED_PREFILL: '0'
+        SGLANG_AITER_FUSE_RMSNORM_PAD: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
+        SGLANG_OPT_QWEN4_FUSED_HC: '0'
+        INFX_NATURAL_ACCEPTANCE: '1'
+        AITER_LOG_TUNED_CONFIG: '1'
   benchmark:
     env:
       CONC: '16'
