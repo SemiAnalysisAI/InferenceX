@@ -228,6 +228,33 @@ class SingleNodeHcaOverrideTests(unittest.TestCase):
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
 
 
+class HostVerbsProviderMountTests(unittest.TestCase):
+    PROVIDER = "/usr/local/lib/x86_64-linux-gnu/libbnxt_re-rdmav34.so"
+
+    @staticmethod
+    def _mounts(provider: str, nodes: int, platform: str = "linux/amd64"):
+        return run_common(
+            f"COLLX_HOST_VERBS_PROVIDER='{provider}' NODES={nodes} COLLX_TRANSPORT=xgmi-rdma"
+            f" COLLX_IMAGE_PLATFORM={platform} CONTAINER_MOUNTS=/stage:/ix;"
+            ' collx_add_host_verbs_provider_mount && echo "$CONTAINER_MOUNTS"')
+
+    def test_multi_node_shards_bind_the_host_provider_over_the_images(self) -> None:
+        result = self._mounts(self.PROVIDER, 2)
+        self.assertEqual(result.stdout.strip(), "/stage:/ix,"
+                         f"{self.PROVIDER}:/usr/lib/x86_64-linux-gnu/libibverbs/libbnxt_re-rdmav34.so:ro")
+
+    def test_single_node_and_unset_keep_their_mounts(self) -> None:
+        for provider, nodes in ((self.PROVIDER, 1), ("", 2)):
+            with self.subTest(provider=provider, nodes=nodes):
+                self.assertEqual(self._mounts(provider, nodes).stdout.strip(), "/stage:/ix")
+
+    def test_a_path_that_is_not_a_verbs_provider_fails_closed(self) -> None:
+        for provider in ("/usr/lib/libc.so.6", "relative/libbnxt_re-rdmav34.so",
+                         "/usr/../etc/libbnxt_re-rdmav34.so"):
+            with self.subTest(provider=provider):
+                self.assertNotEqual(self._mounts(provider, 2).returncode, 0)
+
+
 class SocketInterfaceProfileTests(unittest.TestCase):
     def test_every_bootstrap_uses_the_registry_interface(self) -> None:
         # MoRI's shmem bootstrap picks its own interface otherwise; on per-rail /31 links that can

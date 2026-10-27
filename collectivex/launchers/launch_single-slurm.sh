@@ -67,6 +67,7 @@ collx_select_image "$IMAGE"
 collx_stage_with_backend_cache
 # Multi-node shards on the EFA pools (b300, h100-dgxc) carry the host EFA user space themselves.
 collx_add_efa_host_mounts
+collx_add_host_verbs_provider_mount
 
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$COLLX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
