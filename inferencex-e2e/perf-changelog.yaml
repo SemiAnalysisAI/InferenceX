@@ -11215,6 +11215,7 @@
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   description:
     - "Use 7 DSpark draft tokens across the MiniMax-M3.1-Flash MI355X vLLM AgentX TP4 concurrency sweep, with the existing golden acceptance curve."
+    - "Reserve GPU memory for DBO prefill and runtime allocations by using 0.85 memory utilization throughout the sweep."
     - "Keep FP8 KV and mono decode at C1-C8, NVFP4 KV and DBO at C16-C64, and the per-concurrency admission limits."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4537
   scenario-type: [agentic-coding]

@@ -27,7 +27,8 @@ base:
       args:
         served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4
-        gpu-memory-utilization: 0.9
+        # Reserve headroom for DBO prefill and allocations after memory profiling.
+        gpu-memory-utilization: 0.85
         language-model-only: true
         trust-remote-code: true
         reasoning-parser: minimax_m3
