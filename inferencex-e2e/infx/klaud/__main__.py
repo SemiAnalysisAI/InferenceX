@@ -220,10 +220,10 @@ def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
             continue
         evals = [
             dict(row, **{"eval-only": True})
-            for row in mark_eval_entries(deepcopy(entries))
+            for row in mark_eval_entries(deepcopy(entries), root)
             if row.get("run-eval")
         ]
-        smoke = select_matrix_evals(deepcopy(entries), mode="smoke")
+        smoke = select_matrix_evals(deepcopy(entries), mode="smoke", root=root)
         smoke_evals = [row for row in smoke if row.get("eval-only")]
         record = Family(
             clusters=clusters,
