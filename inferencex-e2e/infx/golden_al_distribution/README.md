@@ -147,17 +147,6 @@ Before accepting an updated curve, reviewers should verify:
 
 ## Querying the curves
 
-### Explicit natural-acceptance reproduction
-
-The default AgentX throughput path uses the golden curve. A recipe can explicitly
-set `roles.agg.env.INFX_NATURAL_ACCEPTANCE: '1'` (or the generation `decode` role
-for disaggregated serving) to reproduce a measured natural-acceptance experiment.
-The srt launcher then skips golden lookup and removes simulated-acceptance
-variables from the recipe. Other recipes retain automatic golden acceptance.
-Natural-acceptance results use different workload semantics and must be disclosed
-separately from the golden synthetic-acceptance results. This option does not
-change eval behavior or the checkpoint's draft precision.
-
 This directory is the `infx.golden_al_distribution` Python package. `golden_length(model_prefix, spec, thinking)` returns the value AgentX synthetic acceptance applies, and `curve_name` shows which YAML a speculative config resolves to. The same lookup runs from a shell:
 
 ```bash

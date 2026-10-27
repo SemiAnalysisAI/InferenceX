@@ -108,16 +108,12 @@ def build_overrides(
     if engine is None:
         return []
     roles = recipe.get("roles", {})
-    generation = roles.get("decode", roles.get("agg", {}))
-    natural_acceptance = str(
-        (generation.get("env") or {}).get("INFX_NATURAL_ACCEPTANCE", "0")
-    ).lower() in ("1", "true")
     synthetic = (
         environment["EVAL_ONLY"].lower() != "true"
         and environment["IS_AGENTIC"].lower() in ("1", "true")
         and environment["SPEC_DECODING"] != "none"
-        and not natural_acceptance
     )
+    generation = roles.get("decode", roles.get("agg", {}))
     spec = spec_parameters(generation, engine)
     al = None
     if synthetic and spec:
