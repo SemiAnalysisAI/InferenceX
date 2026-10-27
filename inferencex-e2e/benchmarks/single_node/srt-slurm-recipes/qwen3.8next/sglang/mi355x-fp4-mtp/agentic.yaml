@@ -123,11 +123,15 @@ override_c2:
         enable-linear-replayssm-spec: null
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        context-length: 262144
+        speculative-use-rejection-sampling: true
       env:
         SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
         SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_GDN_FUSED_QKV_NORM: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
+        INFX_NATURAL_ACCEPTANCE: '1'
   benchmark:
     env:
       CONC: '2'

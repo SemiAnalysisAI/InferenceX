@@ -9768,3 +9768,11 @@
     - "Experimental C16 historical alignment: retain QSA paged prefill disabled, RMSNorm padding and MLA persist flags; disable fused HC, enable rejection sampling and natural MTP acceptance, and set context length 262144. Retain memory 0.88, chunk 8192, admission 32 and decode graph limit 16."
     - "Allow recipe-scoped INFX_NATURAL_ACCEPTANCE=1 to bypass automatic golden acceptance for experimental comparisons; enable tuned-kernel logging."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiments/pr4540-c16-natural-al-20261027
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Experimental C2 historical alignment: use natural MTP acceptance and rejection sampling, restore MLA persist and explicit context length 262144. Retain both monokernels, fused HC and QKV norm, memory 0.9, chunk 16384, admission 2 and decode graph limit 2."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/experiments/pr4540-c2-natural-al-20261027
