@@ -28,7 +28,7 @@ EXCLUDE_NODES="${COLLX_EXCLUDE_NODES:-}"
 NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
 case "$COLLX_BENCH" in
-  deepep-v2 | mori | uccl-ep | nccl-ep | flashinfer-ep | swap-blocks) ;;
+  mori | uccl-ep | swap-blocks) ;;
   *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
 
