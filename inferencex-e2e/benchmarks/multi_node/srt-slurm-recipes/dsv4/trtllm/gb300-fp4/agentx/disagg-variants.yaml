@@ -10,8 +10,10 @@ base:
   dynamo:
     install: true
     source:
-      git: https://github.com/cquil11/dynamo.git
-      rev: 2cbbdc863c336c2cfffa2a3668e2a6661801b259
+      # Upstream v1.6.1: resolves interface-name DYN_TCP_RPC_HOST (ai-dynamo/dynamo#11870)
+      # and decouples TRT-LLM KV events from metrics (ai-dynamo/dynamo#12162).
+      git: https://github.com/ai-dynamo/dynamo.git
+      rev: 0d9c24a8bf6db13c1a1223cf15fcbee9140d1ac3
     request_plane: tcp
   health_check:
     max_attempts: 1440
@@ -22,7 +24,7 @@ base:
   engine:
     type: trtllm
     publish_events_and_metrics: false
-    # Dynamo builds before ai-dynamo/dynamo#12162 reject --publish-metrics.
+    # Keep metrics publishing off, as with the earlier Dynamo pin.
     publish_metrics: false
   roles:
     prefill:
