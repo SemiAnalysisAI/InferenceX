@@ -14,6 +14,8 @@ import json
 import os
 import shlex
 import sys
+import urllib.error
+import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -23,6 +25,11 @@ from infx.bench.agentic.venv import Runtime, bootstrap
 OFFLINE = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE")
 DATASET_PATH = ".dataset_path"
 FAILED_REQUEST_THRESHOLD = "0.10"
+COUNT_SOURCE_MARKER = ".token_count"
+PROBE_BODY = {  # the shape agentx sends: streaming, usage requested, ignore_eos injected by the scenario
+    "messages": [{"role": "user", "content": "Say OK."}], "stream": True,
+    "stream_options": {"include_usage": True}, "max_completion_tokens": 16, "ignore_eos": True,
+}
 
 
 def online(env: Mapping[str, str]) -> dict[str, str]:
@@ -32,8 +39,11 @@ def online(env: Mapping[str, str]) -> dict[str, str]:
 
 def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str]:
     argv = [agentx, "profile", "--config", str(scenario)]
-    argv += ["--url", f"http://localhost:{env['PORT']}"]
-    argv += ["--model", env.get("SERVED_MODEL_NAME") or env["MODEL"], "--tokenizer", env["MODEL"]]
+    argv += ["--url", env.get("SERVING_REMOTE_URL") or f"http://localhost:{env['PORT']}"]
+    argv += ["--model", env.get("SERVED_MODEL_NAME") or env["MODEL"]]
+    argv += ["--tokenizer", env.get("SERVING_TOKENIZER") or env["MODEL"]]
+    if key := env.get("SERVING_API_KEY"):
+        argv += ["--api-key", key]
     if env.get("SERVING_SEARCH") != "1":
         argv += ["--concurrency", env["CONC"]]
     if telemetry := env.get("AIPERF_GPU_TELEMETRY_URL"):
@@ -46,12 +56,83 @@ def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str
     return argv
 
 
-def label_result(path: Path, label: str) -> None:
+def redacted(argv: list[str]) -> list[str]:
+    """``argv`` with the --api-key value replaced, for benchmark_command.txt (an uploaded artifact)."""
+    return ["***" if index and argv[index - 1] == "--api-key" else arg for index, arg in enumerate(argv)]
+
+
+class ProbeError(RuntimeError):
+    """The remote endpoint refused the pre-flight request; the message names the fix."""
+
+
+def _probe_hint(status: int, detail: str, has_key: bool, secret: str) -> str:
+    if status in (401, 403):
+        if has_key:
+            return f"HTTP {status}: key rejected; check GitHub secret {secret or '(unnamed)'}"
+        return f"HTTP {status}: the endpoint wants a key; set endpoint.api-key-secret"
+    if status == 404:
+        return f"HTTP 404: check endpoint.url and endpoint.model ({detail})"
+    if status == 400:
+        return (f"HTTP 400: {detail} -- the endpoint may reject ignore_eos or max_completion_tokens "
+                "(see the serving-bench skill, remote endpoint)")
+    return f"HTTP {status}: {detail}"
+
+
+def _error_detail(error: urllib.error.HTTPError) -> str:
+    """The response body, unwrapped from an OpenAI-style {"error": {"message": ...}} when it is one."""
+    detail = error.read(2000).decode(errors="replace").strip()
+    try:
+        parsed = json.loads(detail)["error"]
+    except (ValueError, KeyError, TypeError):
+        return detail
+    return parsed.get("message", str(parsed)) if isinstance(parsed, dict) else str(parsed)
+
+
+def probe(url: str, model: str, api_key: str, secret: str = "", timeout: float = 60.0) -> str:
+    """One streaming request shaped like agentx's: "server" if a chunk carries usage, else "client"."""
+    headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    body = json.dumps({"model": model, **PROBE_BODY}).encode()
+    request = urllib.request.Request(f"{url}/v1/chat/completions", data=body, headers=headers)  # noqa: S310 -- http(s) only, checked by the schema
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            for raw in response:
+                line = raw.decode(errors="replace").strip()
+                if not line.startswith("data:") or line == "data: [DONE]":
+                    continue
+                try:
+                    chunk = json.loads(line[5:])
+                except ValueError:
+                    continue
+                if isinstance(chunk, dict) and chunk.get("usage"):
+                    return "server"
+    except urllib.error.HTTPError as error:
+        raise ProbeError(_probe_hint(error.code, _error_detail(error), bool(api_key), secret)) from None
+    except (urllib.error.URLError, OSError) as error:
+        raise ProbeError(f"{url} unreachable: {getattr(error, 'reason', error)}") from None
+    return "client"
+
+
+def with_token_source(scenario_yaml: str, source: str) -> str:
+    """The scenario with server-side token counting off when the endpoint reports no usage."""
+    if source != "client":
+        return scenario_yaml
+    import yaml  # in the AgentX venv (agentx-harness depends on PyYAML)
+
+    doc = yaml.safe_load(scenario_yaml)
+    doc["benchmark"]["endpoint"]["useServerTokenCount"] = False
+    return yaml.safe_dump(doc, sort_keys=False)
+
+
+def label_result(path: Path, label: str, token_count_source: str | None = None) -> None:
     """File the aggregate under the legacy scenario label result-report reads first."""
     if not path.exists():
         return
     result = json.loads(path.read_text())
     result["scenario"] = label
+    if token_count_source:
+        result["token_count_source"] = token_count_source
     path.write_text(json.dumps(result, indent=2))
 
 
@@ -66,6 +147,19 @@ def prepare(env: Mapping[str, str], runtime: Runtime) -> int:
         except DatasetError as error:
             print(f"ERROR {error}", file=sys.stderr)
             return 1
+    if url := env.get("SERVING_REMOTE_URL"):
+        try:
+            source = probe(url, env["MODEL"], env.get("SERVING_API_KEY", ""), env.get("SERVING_API_KEY_SECRET", ""))
+        except ProbeError as error:
+            print(f"ERROR remote endpoint: {error}", file=sys.stderr)
+            return 1
+        (result_dir / COUNT_SOURCE_MARKER).write_text(source)
+        print(f"Remote endpoint {url} answered; token counts from the {source}", flush=True)
+        if source == "client":
+            print("WARNING remote endpoint streams no usage; ISL/OSL are counted client-side with "
+                  f"tokenizer {env.get('SERVING_TOKENIZER')} (approximate unless it is the model's own; "
+                  "hidden reasoning tokens are not counted)", file=sys.stderr)
+        return 0  # no weights to download; agentx fetches an HF tokenizer itself
     return proc.call([str(runtime.hf), "download", env["MODEL"]], online(env))
 
 
@@ -74,7 +168,9 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     artifacts = result_dir / "aiperf_artifacts"
     output_dir = Path(env.get("AGENTIC_OUTPUT_DIR") or "/workspace")
     scenario = result_dir / "scenario.yaml"
-    scenario.write_text(env["SERVING_SCENARIO_YAML"])
+    token_marker = result_dir / COUNT_SOURCE_MARKER
+    source = token_marker.read_text().strip() if token_marker.exists() else None
+    scenario.write_text(with_token_source(env["SERVING_SCENARIO_YAML"], source or "server"))
     child = online(env) | {
         "AIPERF_DATASET_CONFIGURATION_TIMEOUT": "1800",
         "AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT": "1800",
@@ -85,7 +181,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
     if (marker := result_dir / DATASET_PATH).exists():
         child["IX_CUSTOM_DATASET_FILE"] = marker.read_text().strip()
     argv = agentx_argv(str(runtime.agentx), scenario, env)
-    (result_dir / "benchmark_command.txt").write_text(shlex.join(argv) + "\n")
+    (result_dir / "benchmark_command.txt").write_text(shlex.join(redacted(argv)) + "\n")
     replay_rc = proc.tee(argv, result_dir / "benchmark.log", child)
     python = str(runtime.python)
     if env.get("SERVING_SEARCH") == "1":
@@ -95,7 +191,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
                str(artifacts), "-o", str(result_dir)], child)
     validate_rc = proc.call([python, "-m", "infx.results.agentic.validate_agentic_result", str(artifacts),
                              "--failed-request-threshold", FAILED_REQUEST_THRESHOLD], child)
-    label_result(output_dir / f"{env['RESULT_FILENAME']}.json", env["SERVING_SCENARIO_LABEL"])
+    label_result(output_dir / f"{env['RESULT_FILENAME']}.json", env["SERVING_SCENARIO_LABEL"], token_count_source=source)
     return replay_rc or aggregate_rc or validate_rc
 
 
