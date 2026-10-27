@@ -103,7 +103,7 @@ base:
         MC_WORKERS_PER_CTX: '4'
         # The setup script selects only InfiniBand rails, which use GID index 0.
         MC_GID_INDEX: '0'
-        # libibverbs appends -rdmav<ABI>.so and loads it before the image's providers.
+        # libibverbs appends -rdmav<ABI>.so; on an ABI mismatch it falls back to the image's provider.
         RDMAV_DRIVERS: /host-usr-lib/libibverbs/libmlx5
         WITH_NVIDIA_PEERMEM: '0'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
@@ -154,6 +154,18 @@ override_c8:
     env:
       CONC: '8'
 
+override_c12:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 24
+        gpu-memory-utilization: 0.92
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,128,256,512,1024,2048,4096,8192]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '12'
+
 override_c14:
   roles:
     agg:
@@ -165,6 +177,30 @@ override_c14:
   benchmark:
     env:
       CONC: '14'
+
+override_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        gpu-memory-utilization: 0.92
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,256,512,1024,2048,4096,8192]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '16'
+
+override_c24:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        gpu-memory-utilization: 0.92
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048,4096,8192]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":3,"attention_backend":"TOKENSPEED_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+  benchmark:
+    env:
+      CONC: '24'
 
 override_c28:
   roles:
