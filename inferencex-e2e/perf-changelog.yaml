@@ -11271,5 +11271,8 @@
     - minimaxm31flash-fp4-b300-vllm-agentic-dspark
   description:
     - "Use latest configs for MiniMax M3.1 AgentX submission"
+    - "Replace the DEP4 points (TP1 x DP4 + EP4 behind vllm-router, 3-token DSpark) at conc 64, 128 and 256 with TP4 and TP2 points that offload KV to host DRAM through SimpleCPUOffloadConnector (lazy offload; 1499 GB per TP4 and 749 GB per TP2 engine): TP4 at conc 24, 40, 48 and 56, and TP2 at conc 24, 32, 40 and 48."
+    - "Every point drafts 7 DSpark tokens with an fp8 draft KV cache. TP4 points keep the FLASH_ATTN draft attention backend; TP2 points use FLASHINFER_TS."
+    - "TP4 GPU-resident points stay at conc 1-32. Set max-num-batched-tokens 32768, gpu-memory-utilization 0.92 (TP4) and 0.9 (TP2), CUDA graph capture sizes up to 8192 and stream-interval 20, and raise VLLM_HTTP_TIMEOUT_KEEP_ALIVE and VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT to 600 s."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4467
   scenario-type: [agentic-coding]
