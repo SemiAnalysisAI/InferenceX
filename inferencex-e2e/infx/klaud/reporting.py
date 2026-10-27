@@ -31,7 +31,7 @@ from infx.bench.agentic.traces import LOADERS
 
 from . import github
 from .github import VerificationError
-from .models import Contract, identity, normalized_image
+from .models import Contract, Family, family_keys, identity, normalized_image
 
 if TYPE_CHECKING:
     from infx.klaud.lifecycle import Session
@@ -152,7 +152,7 @@ class Retirement(Contract):
 
 
 class Baseline(Contract):
-    family: str = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
+    family: Family
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     image: str = Field(pattern=r"^[A-Za-z0-9_./:@+-]+$")
     goal: Prose
@@ -891,6 +891,18 @@ def publish(session: Session, record: Baseline | Attempt) -> None:
     name = f"run-{record.run_id}-{record.run_attempt}"
     previous = stored(session, pull, name)
     baseline = baseline_for(session, pull)
+    if (
+        baseline
+        and baseline.evals
+        and record.evals
+        and not {(row.key, row.suite, row.metric) for row in baseline.evals}
+        & {(row.key, row.suite, row.metric) for row in record.evals}
+    ):
+        print(
+            f"::warning::Klaud: none of the {len(record.evals)} evals of run {record.run_id} "
+            "match a frozen baseline eval; the eval identity (topology, suite or metric) "
+            "drifted from the baseline."
+        )
     text = render_attempt(record, baseline, session.repository)
     packed = record.model_dump(by_alias=True)
     chunks = []
@@ -1140,9 +1152,10 @@ class Publication:
 
 
 def publication(repository: str, context: dict, model: str) -> Publication:
-    """Fetch the source-date rows of ``context``'s source workload for display ``model``.
+    """Fetch the source-date rows of ``context``'s source curve for display ``model``.
 
-    ISL/OSL are not filtered: that would erase other curves of the original family.
+    Speculation, disaggregation and ISL/OSL are not filtered, since that would erase other keys or
+    workloads of the family.
     """
     from .api import fetch
 
@@ -1164,15 +1177,7 @@ def publication(repository: str, context: dict, model: str) -> Publication:
                 if key == "image"
                 else row.get(key) != source[key]
             )
-            for key in (
-                "model",
-                "hardware",
-                "framework",
-                "precision",
-                "spec_method",
-                "disagg",
-                "image",
-            )
+            for key in ("model", "hardware", "framework", "precision", "image")
         ):
             continue
         producer = re.fullmatch(
@@ -1501,11 +1506,15 @@ def resolve_baseline(
             sources.append(feed.url)
         return datasets[run_id, run_attempt]
 
-    published_family = public_config_key(candidate.family.split(":", 1)[1])
+    published_keys = [public_config_key(key) for key in family_keys(candidate.family)]
     family_runs = {
         int(change["workflow_run_id"])
         for change in public.changelogs
-        if any(fnmatchcase(published_family, key) for key in change["config_keys"])
+        if any(
+            fnmatchcase(published, key)
+            for published in published_keys
+            for key in change["config_keys"]
+        )
     }
     for row, run_id, run_attempt, head in public.rows:
         if head is None:
