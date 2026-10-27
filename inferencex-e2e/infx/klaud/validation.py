@@ -19,15 +19,19 @@ from .models import OwnedCandidate, utc
 if TYPE_CHECKING:
     from infx.matrix.revision import Revision
 
-# Klaud autosweeps cover only AgentX; fixed-seq-len points are out of scope.
 SCENARIO = "agentic-coding"
 
 
 def in_scope(entry: dict) -> bool:
+    """Return True if matrix ``entry`` is an AgentX point.
+
+    Klaud autosweeps cover only AgentX, so fixed-seq-len points are out of scope.
+    """
     return entry.get("scenario-type") == SCENARIO
 
 
 def benchmark_entries(matrix: dict) -> list[dict]:
+    """Return every single-node and multi-node benchmark entry of ``matrix``."""
     return [
         entry
         for group in ("single_node", "multi_node")
@@ -37,6 +41,7 @@ def benchmark_entries(matrix: dict) -> list[dict]:
 
 
 def benchmark_points(entries: list[dict]) -> set[tuple]:
+    """Return the (recipe fingerprint, concurrency, image) point of each entry concurrency."""
     return {
         (entry["recipe-fingerprint"], int(conc), entry["image"])
         for entry in entries
@@ -51,7 +56,7 @@ def project_prefix(repository: str, head: str) -> str:
 
 
 def canonical_matrix(repository: str, head: str, family: str) -> dict:
-    """Generate the family's AgentX points from exact-head YAML using trusted local code.
+    """Return the family's AgentX matrix generated from exact-head YAML by trusted local code.
 
     Candidate source is data only. A future generator-policy change can require manual
     inspection of an older run; it cannot silently waive points or required evals.
@@ -116,6 +121,7 @@ class ProducerRegenerationError(VerificationError):
     """
 
     def __init__(self, stderr: str) -> None:
+        """Store the tool's ``stderr`` and carry the fixed public reason as the message."""
         super().__init__(PRODUCER_UNAVAILABLE)
         self.stderr = stderr
 
@@ -163,6 +169,10 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
 
 
 def throughput_rows(producer: Revision, key: str) -> list[dict]:
+    """Return the producer's throughput rows for config ``key`` without eval-only rows.
+
+    Producers too old for ``--no-evals`` have their eval rows stripped here instead.
+    """
     try:
         return producer.generate([key], ["--no-evals"])
     except subprocess.CalledProcessError as error:
@@ -179,6 +189,10 @@ def throughput_rows(producer: Revision, key: str) -> list[dict]:
 
 
 def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
+    """Raise VerificationError unless ``matrix`` matches ``canonical`` for ``head`` and ``family``.
+
+    Checks the selected family, per-point settings, duplicate points, coverage and default evals.
+    """
     from pydantic import TypeAdapter
 
     from infx.matrix.validation import (
@@ -227,6 +241,7 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
 
 
 def expected_evals(matrix: dict) -> set[tuple]:
+    """Return the artifact identities of every default eval in ``matrix``."""
     return {key for key, _, _ in eval_identities(matrix)}
 
 
@@ -271,6 +286,10 @@ def eval_identities(matrix: dict) -> list[tuple[tuple, dict, Any]]:
 def check_coverage(
     directory: Path, manifest: dict, run: dict, family: str, canonical: dict
 ) -> None:
+    """Raise VerificationError unless the artifacts in ``directory`` cover the sweep.
+
+    ``manifest`` must match ``run``, and its matrix must match ``canonical`` for ``family``.
+    """
     if (
         manifest["head"] != run["head_sha"]
         or manifest["run-id"] != run["id"]
@@ -302,11 +321,10 @@ def check_coverage(
 
 
 def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[dict]:
-    """Newest same-name artifact within this run; never overlay two archives.
+    """Return the newest ``inventory`` artifact of each wanted name in ``run``, never overlaid.
 
-    Retained point artifacts from successful jobs in an earlier attempt are allowed.
-    The final manifest must be current. An earlier aggregate is retained only when
-    none of its point producers reran. Coverage/raw agreement still must pass.
+    Points from before ``attempt`` may be retained, but the manifest must be current and an
+    older aggregate only stands if none of its producers reran. Raises VerificationError.
     """
     selected: dict[str, dict] = {}
     for artifact in inventory:
@@ -355,6 +373,10 @@ def select_artifacts(inventory: list[dict], run: dict, attempt: dict) -> list[di
 
 
 def verify_sweep(repository: str, run: dict, family: str) -> tuple[dict, list[dict], list[dict]]:
+    """Verify the passed final sweep ``run`` for ``family`` and return its data.
+
+    Return the canonical matrix, benchmark rows and eval rows, or raise VerificationError.
+    """
     if run["status"] != "completed" or run["conclusion"] != "success":
         raise VerificationError("Final sweep has not passed")
     attempt = github.read(repository, f"actions/runs/{run['id']}/attempts/{run['run_attempt']}")

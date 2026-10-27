@@ -12,8 +12,16 @@ from urllib.parse import quote
 from infx import github
 from infx.workflows.reuse import write_outputs
 
+SIGNOFF_PHRASE = "As a PR reviewer and CODEOWNER"
+
+
+def is_signoff(body: str | None) -> bool:
+    """True when the checklist phrase opens the comment, so quoting it elsewhere is ignored."""
+    return (body or "").lstrip().startswith(SIGNOFF_PHRASE)
+
 
 def _positive_id(value: Any) -> int:
+    """Return value as an int, raising ValueError unless it is a positive decimal ID."""
     if isinstance(value, bool) or not re.fullmatch(r"[1-9][0-9]*", str(value)):
         raise ValueError("Expected a positive GitHub resource ID")
     return int(value)
@@ -22,6 +30,11 @@ def _positive_id(value: Any) -> int:
 def _reference(
     event_name: str, event: dict[str, Any], repo: str, token: str
 ) -> tuple[int, str, str, str, str]:
+    """Locate the sign-off comment for an event and check it belongs to the PR.
+
+    Returns (PR number, author, comment kind, sign-off key, gh command to fetch the body). Raises
+    ValueError on a mismatched or invalid reference.
+    """
     if event_name == "workflow_dispatch":
         inputs = event["inputs"]
         match = re.fullmatch(
@@ -83,6 +96,11 @@ def resolve(
     scoped_head_sha: str,
     token: str,
 ) -> dict[str, str]:
+    """Decide whether an event is a trusted sign-off request and return the workflow outputs.
+
+    Returns {"proceed": "false"} for ignored events. Raises ValueError for bad input and
+    RuntimeError if the PR head moved.
+    """
     if event_name not in {
         "issue_comment",
         "pull_request_review",
@@ -97,9 +115,7 @@ def resolve(
             else {"created", "edited"}
         )
         comment = event.get("review" if event_name == "pull_request_review" else "comment") or {}
-        if event.get("action") not in expected_actions or "As a PR reviewer and CODEOWNER" not in (
-            comment.get("body") or ""
-        ):
+        if event.get("action") not in expected_actions or not is_signoff(comment.get("body")):
             return {"proceed": "false"}
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
         raise ValueError("Invalid GitHub repository")
@@ -131,6 +147,7 @@ def resolve(
 
 
 def main() -> None:
+    """Resolve the sign-off from the GitHub Actions environment and write the step outputs."""
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     outputs = resolve(
         os.environ["GITHUB_REPOSITORY"],

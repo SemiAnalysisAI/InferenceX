@@ -14,7 +14,6 @@ jobs:
     concurrency:
       group: pr-review-${{ github.event.pull_request.number }}
       cancel-in-progress: false
-    # Only review PRs opened by someone with write access.
     if: contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
     permissions:
       contents: read
@@ -42,7 +41,6 @@ jobs:
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         with:
           path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
-          # Repository review credential; the job gates eligible review requests.
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           track_progress: true
           allowed_bots: ''

@@ -7,8 +7,11 @@ from pathlib import Path
 import psycopg2
 from tabulate import tabulate
 
+from infx.results.identity import public_framework
+
 
 def parse_bool(value: object) -> bool:
+    """Return ``value`` if it is a bool, else whether its string form is ``"true"`` in any case."""
     if isinstance(value, bool):
         return value
     return str(value).lower() == "true"
@@ -44,8 +47,8 @@ def compute_delta_str(
 
 
 def extract_hardware(runner: str) -> str:
-    """Strip suffixes like -multinode, -trt, -disagg from runner to get hardware name."""
-    return re.split(r"-(multinode|trt|disagg)$", runner)[0].lower()
+    """The GPU of a runner label such as cluster:b200-nscale, the key ingestion stores."""
+    return runner.lower().rpartition(":")[2].split("-", 1)[0]
 
 
 def build_config_params(result: dict) -> dict:
@@ -53,7 +56,7 @@ def build_config_params(result: dict) -> dict:
     is_multinode = result.get("is_multinode", False)
     hw = extract_hardware(result["hw"])
     model = result["infmax_model_prefix"].lower()
-    framework = result["framework"].lower()
+    framework = public_framework(result["framework"])
     precision = result["precision"].lower()
     spec_method = result.get("spec_decoding", "none").lower()
     disagg = parse_bool(result.get("disagg", False))
@@ -102,7 +105,7 @@ BASELINE_QUERY = """
     JOIN workflow_runs wr ON wr.id = br.workflow_run_id
     WHERE c.hardware = %(hardware)s
       AND c.framework = %(framework)s
-      AND c.model LIKE %(model)s || '%%'
+      AND c.model = %(model)s
       AND c.precision = %(precision)s
       AND c.spec_method = %(spec_method)s
       AND c.disagg = %(disagg)s
@@ -182,6 +185,7 @@ def compute_metric_delta(
 
 
 def main() -> None:
+    """Print markdown tables comparing fixed-sequence results in the argv dir to DATABASE_URL baselines."""
     if len(sys.argv) < 2:
         print("Usage: python compare_results.py <results_dir>")
         sys.exit(1)

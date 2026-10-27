@@ -66,7 +66,9 @@ def _archive(*, missing: str | None = None, extra: tarfile.TarInfo | None = None
 
 
 @contextmanager
-def _serve(payload: bytes, *, transient_failures: int = 0) -> Iterator[tuple[str, list[str]]]:
+def _serve(
+    payload: bytes, *, transient_failures: int = 0, truncate: str | None = None
+) -> Iterator[tuple[str, list[str]]]:
     paths: list[str] = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -77,8 +79,16 @@ def _serve(payload: bytes, *, transient_failures: int = 0) -> Iterator[tuple[str
                 self.end_headers()
                 return
             self.send_response(200)
+            if truncate == "chunked" and len(paths) == transient_failures + 1:
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                self.wfile.write(f"{len(payload):x}\r\n".encode() + payload[:10])
+                return
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
+            if truncate == "short" and len(paths) == transient_failures + 1:
+                self.wfile.write(payload[: len(payload) // 2])
+                return
             self.wfile.write(payload)
 
         def log_message(self, *args: object) -> None:
@@ -102,11 +112,15 @@ def _fetch(
     *,
     sha256: str | None = None,
     transient_failures: int = 0,
+    truncate: str | None = None,
 ) -> list[str]:
     """Fetch ``payload`` from a local archive server into ``checkout``; return the paths asked."""
     checkout.mkdir()
     monkeypatch.setattr(archive.time, "sleep", lambda _: None)
-    with _serve(payload, transient_failures=transient_failures) as (repo_url, paths):
+    with _serve(payload, transient_failures=transient_failures, truncate=truncate) as (
+        repo_url,
+        paths,
+    ):
         digest = sha256 or hashlib.sha256(payload).hexdigest()
         monkeypatch.setattr(sys, "argv", ["archive", repo_url, REF, digest, str(checkout)])
         archive.main()
@@ -124,6 +138,32 @@ def test_extracts_only_the_required_subset_after_a_transient_server_error(
     assert "archive download attempt 1/3 failed" in capsys.readouterr().err
     extracted = {p.relative_to(checkout).as_posix() for p in checkout.rglob("*") if p.is_file()}
     assert extracted == REQUIRED_FILES
+    assert (checkout / "pyproject.toml").read_text() == "pyproject.toml"
+
+
+@pytest.mark.parametrize("truncate", ["short", "chunked"])
+def test_retries_a_download_cut_short_by_the_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], truncate: str
+) -> None:
+    checkout = tmp_path / "checkout"
+
+    paths = _fetch(monkeypatch, checkout, _archive(), truncate=truncate)
+
+    assert len(paths) == 2
+    assert "archive download attempt 1/3 failed" in capsys.readouterr().err
+    extracted = {p.relative_to(checkout).as_posix() for p in checkout.rglob("*") if p.is_file()}
+    assert extracted == REQUIRED_FILES
+
+
+def test_accepts_an_uppercase_pinned_archive_sha256(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    payload = _archive()
+
+    paths = _fetch(monkeypatch, checkout, payload, sha256=hashlib.sha256(payload).hexdigest().upper())
+
+    assert len(paths) == 1
     assert (checkout / "pyproject.toml").read_text() == "pyproject.toml"
 
 
