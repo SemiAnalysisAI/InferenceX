@@ -80,3 +80,30 @@ def test_bad_serving_json_fails_before_any_slurm_call(harness):
     assert result.returncode == 1
     assert "SERVING_JSON" in result.stdout + result.stderr
     assert lines(harness.logs, "sbatch") == []
+
+
+def test_remote_point_is_a_cpu_only_job_with_one_client_step(harness):
+    shutil.copy(ROOT / "benchmarks/single_node/serving/remote.sh",
+                harness.workspace / "benchmarks/single_node/serving/remote.sh")
+    env = {**harness.env, "IMAGE": "ghcr.io/astral-sh/uv:python3.12-bookworm-slim", "GPU_COUNT": "1",
+           "SERVING_API_KEY": "sk-secret-123",
+           "SERVING_JSON": serving_json(framework="remote", serve_cmd="", remote_url="https://api.example.com",
+                                        tokenizer="builtin", api_key_secret="OPENAI_API_KEY")}
+    result = launch(env, harness.config, harness.workspace)
+    assert result.returncode == 0, result.stdout + result.stderr
+    [submit] = lines(harness.logs, "sbatch")
+    flags = submit.split()
+    assert {"--cpus-per-task=4", "--mem=16G", "--nodelist=hgx-h200-02"} <= set(flags)
+    assert not [f for f in flags if f.startswith(("--gres", "--cpus-per-gpu", "--mem-per-gpu"))]
+    assert submit.endswith("remote.sh")
+    steps = "\n".join(lines(harness.logs, "srun"))  # the bash -c script spans several log lines
+    assert steps.count("--container-image=") == 1  # one client step, no DCGM sidecar
+    assert "infx.serving.client prepare" in steps and "infx.serving.client run" in steps
+    assert "sk-secret-123" not in result.stdout + result.stderr
+
+
+def test_remote_sbatch_args_keep_the_node_pin_only():
+    from infx.launch.drivers.serving import remote_sbatch_args
+
+    assert remote_sbatch_args(["--nodelist=n1", "--cpus-per-gpu=16", "--mem-per-gpu=110000M"]) == [
+        "--ntasks=1", "--cpus-per-task=4", "--mem=16G", "--nodelist=n1"]

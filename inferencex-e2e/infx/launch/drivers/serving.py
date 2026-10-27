@@ -11,18 +11,22 @@ import getpass
 import os
 import subprocess
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from infx.launch import policy
 from infx.launch.backends.base import BackendError
-from infx.launch.backends.slurm import SlurmBackend
+from infx.launch.backends.slurm import SlurmBackend, SlurmJob, cli
 from infx.launch.context import Launch, LaunchError
 from infx.launch.request import LaunchRequest, RequestError
 from infx.serving.schema import is_local_squash
 
 JOB_SCRIPT = Path("benchmarks/single_node/serving/job.sh")
+REMOTE_JOB_SCRIPT = Path("benchmarks/single_node/serving/remote.sh")
+REMOTE_RESOURCES = ("--ntasks=1", "--cpus-per-task=4", "--mem=16G")
+GPU_SHARE_FLAGS = ("--cpus-per-gpu", "--mem-per-gpu")  # a GPU-less job cannot ask for a per-GPU share
 DCGM_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
 HF_VOLUME = "hf-hub-cache"
 PENDING_NOTE_S = 60.0
@@ -92,6 +96,9 @@ class Serving(BaseModel):
     dataset: str
     search: bool
     yaml: str
+    remote_url: str = ""
+    tokenizer: str = ""
+    api_key_secret: str = ""
 
 
 def job_env(serving: Serving, images: dict[str, str], hf_cache: Path) -> dict[str, str]:
@@ -110,7 +117,7 @@ def job_env(serving: Serving, images: dict[str, str], hf_cache: Path) -> dict[st
         "STORAGE_CMD": serving.storage_cmd,
         "STORAGE_ENV": serving.storage_env,
         "SERVING_ENGINE_IMAGE": images["engine"],
-        "SERVING_DCGM_IMAGE": images["dcgm"],
+        "SERVING_DCGM_IMAGE": images.get("dcgm", ""),
         "SERVING_HF_CACHE_HOST": str(hf_cache),
         "SERVING_SCENARIO_YAML": serving.scenario_yaml,
         "SERVING_SCENARIO_LABEL": serving.scenario_label,
@@ -118,7 +125,32 @@ def job_env(serving: Serving, images: dict[str, str], hf_cache: Path) -> dict[st
         "SERVING_DATASET": serving.dataset,
         "SERVING_SEARCH": "1" if serving.search else "0",
         "SERVING_YAML": serving.yaml,
+        "SERVING_REMOTE_URL": serving.remote_url,
+        "SERVING_TOKENIZER": serving.tokenizer,
+        "SERVING_API_KEY_SECRET": serving.api_key_secret,
     }
+
+
+def remote_sbatch_args(salloc_args: Sequence[str]) -> list[str]:
+    """A remote point's sbatch flags: a few CPUs and some memory, the node pin, no per-GPU share."""
+    return [*REMOTE_RESOURCES, *(arg for arg in salloc_args if not arg.startswith(GPU_SHARE_FLAGS))]
+
+
+def submit_remote(backend: SlurmBackend, request: ServingRequest, minutes: int, log: Path) -> SlurmJob:
+    """sbatch remote.sh without gres; cancelled with the launch like submit_batch's jobs.
+
+    submit_batch cannot take this job: the cluster records' salloc-args carry --cpus-per-gpu and
+    --mem-per-gpu, which Slurm rejects for a job that asks for no GPU.
+    """
+    settings = backend.settings
+    resources = cli.Resources(partition=settings.partition, account=settings.account, time_min=minutes,
+                              job_name=request.runner_name, exclude=settings.exclude)
+    job = cli.sbatch(request.workspace / REMOTE_JOB_SCRIPT, resources, output=log,
+                     chdir=request.workspace, extra=remote_sbatch_args(settings.salloc_args))
+    backend.life.callback(cli.cancel, job)
+    backend.life.event.set(slurm_job_id=job.id)
+    backend.life.event.evidence(log)
+    return SlurmJob(job.id, log=log)
 
 
 def run(launch: Launch) -> int:
@@ -137,7 +169,7 @@ def run(launch: Launch) -> int:
     if volume is None:
         raise LaunchError(f"cluster {launch.cluster.id!r} has no {HF_VOLUME!r} volume")
     minutes = policy.salloc_time_limit(launch.cluster.id, request)
-    wanted = {"engine": request.image, "dcgm": DCGM_IMAGE}
+    wanted = {"engine": request.image} if serving.remote_url else {"engine": request.image, "dcgm": DCGM_IMAGE}
     if serving.router_image:
         wanted["router"] = serving.router_image
     if serving.storage_image:
@@ -152,8 +184,11 @@ def run(launch: Launch) -> int:
     log = Path(request.env.get("RUNNER_TEMP") or request.workspace) / f"serving-{os.getpid()}.log"
     with event.stage("submit"):
         try:
-            job = backend.submit_batch(request.workspace / JOB_SCRIPT, gpus=request.gpu_count,
-                                       time_min=minutes, log=log)
+            if serving.remote_url:
+                job = submit_remote(backend, request, minutes, log)
+            else:
+                job = backend.submit_batch(request.workspace / JOB_SCRIPT, gpus=request.gpu_count,
+                                           time_min=minutes, log=log)
         except BackendError as error:
             event.fail(type(error).__name__, f"batch allocation unavailable: {error}", retriable=error.retriable)
             return 1
