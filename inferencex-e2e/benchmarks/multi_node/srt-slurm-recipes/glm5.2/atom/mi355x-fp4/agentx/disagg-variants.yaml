@@ -94,8 +94,8 @@ base:
 
 override_1p1d_mcstore:
   sbatch_directives:
-    # c112 after IT's hot fix on the mia1 nodes other than g37 and g50 (both already at ATOM CI level).
-    exclude: mia1-p01-g37,mia1-p01-g50
+    # c112 after IT's hot fix, pinned to g11 (slow before the fix: 40.3K and 40.4K tok/s/GPU).
+    nodelist: mia1-p01-g11
   host_setup:
     nodes: all
     timeout_seconds: 1800
