@@ -47,7 +47,7 @@ collx_set_placement 1 8 8 nvlink
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 IMAGE="$COLLX_IMAGE"
 case "$COLLX_BENCH" in
-  deepep-v2 | uccl-ep | nccl-ep | swap-blocks) ;;
+  deepep-v2 | uccl-ep | nccl-ep | flashinfer-ep | swap-blocks) ;;
   *) collx_die "unsupported $RUNNER backend: $COLLX_BENCH" ;;
 esac
 
