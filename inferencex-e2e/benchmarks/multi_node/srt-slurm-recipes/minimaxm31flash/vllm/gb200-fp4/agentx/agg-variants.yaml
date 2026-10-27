@@ -93,24 +93,28 @@ override_tp4_c1:
     agg:
       args:
         max-num-seqs: 2
+        gpu-memory-utilization: 0.88
 override_tp4_c4:
   name: minimaxm31flash-gb200-agg-tp4-c4
   roles:
     agg:
       args:
         max-num-seqs: 8
+        gpu-memory-utilization: 0.88
 override_tp4_c8:
   name: minimaxm31flash-gb200-agg-tp4-c8
   roles:
     agg:
       args:
         max-num-seqs: 16
+        gpu-memory-utilization: 0.88
 override_tp4_c16:
   name: minimaxm31flash-gb200-agg-tp4-c16
   roles:
     agg:
       args:
         max-num-seqs: 32
+        gpu-memory-utilization: 0.88
 override_tp4_c32:
   name: minimaxm31flash-gb200-agg-tp4-dram-c32
   roles:
