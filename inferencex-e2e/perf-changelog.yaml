@@ -11413,3 +11413,11 @@
   - Restore the MI355X MiniMax-M3 FP4 vLLM AgentX TP2/TP4 grid from run 34609443618 attempt 2 using SRT recipes. Update nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e to nightly-df6603f0583375f244d1ac6d36265462b7490392 (2026-10-22, digest sha256:81899892d73777a4ae81e16f39e749169687f29249505eb4c56da83bd097d41c).
   - Enable upstream MiniMax-M3 monokernel at TP4 with Model Runner V2, AITER MoE, FP8 KV/indexer and block size 128; keep TP2 on ordinary decode. Preserve EAGLE3-GQA with three draft tokens and use automatic golden acceptance for throughput with real verification for evals.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4418
+
+- config-keys:
+  - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Update the vLLM ROCm image from nightly-e9757321 to nightly-5d35ce39, pinned by digest.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4578
