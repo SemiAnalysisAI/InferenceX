@@ -988,7 +988,7 @@ qwen3.5-fp8-mi325x-sglang-mtp:
 # DeepSeek-V4-Pro-0813 FP4 AgentX on one MI355X node using vLLM DSpark K6.
 # Keep the historical config key for changelog compatibility.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-e9757321527ca1ecd514c07c1418dd2c53da3d19
+  image: vllm/vllm-openai-rocm:nightly-5d35ce3934a7804b298559d2d99eec33792e1eb9@sha256:0c030ba9e2e5fd2f45f2a048a1c8bb239d9674b63297166b79e258b4ce65c6cc
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
