@@ -2199,6 +2199,65 @@ def test_baseline_normalizes_enroot_image_and_rejects_unverified_provenance(
         )
 
 
+def test_baseline_freezes_published_points_of_every_curve_key(monkeypatch):
+    head = "b" * 40
+
+    def entry(spec):
+        return {
+            "model-prefix": "dsr1", "runner": "cluster:fixture", "framework": "sglang",
+            "precision": "fp8", "spec-decoding": spec, "disagg": False,
+            "scenario-type": "agentic-coding", "kv-offloading": "none", "image": "example/image:1",
+            "conc": [4], "tp": 1, "ep": 1, "recipe-fingerprint": spec,
+        }  # fmt: skip
+
+    def row(spec, output):
+        return {
+            "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
+            "spec_method": spec, "disagg": False, "is_multinode": False,
+            "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "off",
+            "conc": 4, "image": "example/image:1", "prefill_tp": 1, "prefill_ep": 1,
+            "prefill_dp_attention": False, "prefill_num_workers": 0, "decode_tp": 1,
+            "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 0,
+            "run_url": "https://github.com/example/project/actions/runs/42",
+            "output_tput_per_gpu": output,
+        }  # fmt: skip
+
+    # Legacy rows without fingerprints; their producer run's changelog named only the MTP key.
+    feeds = {
+        "benchmarks": [row("none", 8.0), row("mtp", 12.0)],
+        "workflow-info": {
+            "runs": [{"github_run_id": "42", "run_attempt": 1}],
+            "runConfigs": [{"github_run_id": "42", "head_sha": head}],
+            "changelogs": [{"workflow_run_id": "42", "config_keys": ["mtp"]}],
+        },
+        "evaluations": [],
+    }
+    monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
+        url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
+        retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64, payload=feeds[resource],
+    ))  # fmt: skip
+    matrix = {"single_node": {"all": [entry("none"), entry("mtp")]}}
+    candidate = OwnedCandidate(
+        id=CANDIDATE_ID, family="configs/nvidia-master.yaml:agg,mtp", base="a" * 40
+    )
+    context = {"source": {
+        "date": "2026-09-19", "image": "example/image:1", "model": "dsr1", "hardware": "fixture",
+        "framework": "sglang", "precision": "fp8", "spec_method": "none", "disagg": False,
+    }}  # fmt: skip
+
+    baseline = reporting.resolve_baseline(
+        "example/project", candidate, context, "DeepSeek-R1",
+        reporting.Prose(en="Update the image.", zh="更新镜像。"), {head: matrix}, matrix,
+    )  # fmt: skip
+
+    assert {
+        point.key: (point.result, point.values.output_tps_gpu) for point in baseline.points
+    } == {
+        reporting.point_key({**entry("none"), "conc": 4}): ("passed", 8.0),
+        reporting.point_key({**entry("mtp"), "conc": 4}): ("passed", 12.0),
+    }
+
+
 @pytest.mark.parametrize("disagg, workers, published, matches", [
     (False, 1, (True, 1, 1, 8), True),
     (False, 1, (False, 0, 0, 8), True),
@@ -2331,6 +2390,54 @@ def test_canonical_family_matrix_reads_revision_layout(monkeypatch, family_confi
     assert {row["recipe-fingerprint"] for row in changed}.isdisjoint(
         row["recipe-fingerprint"] for row in rows
     )
+
+
+@pytest.mark.parametrize(("entry", "accepted"), [
+    ({"config-keys": ["mtp", "agg"]}, True),
+    ({"config-keys": ["agg"]}, False),
+    ({"config-keys": ["agg", "mtp", "other"]}, False),
+    ({"config-keys": ["agg", "mtp"], "append-only": True}, False),
+], ids=["every-key", "subset", "extra-key", "append-only"])  # fmt: skip
+def test_final_matrix_of_a_curve_needs_one_changelog_entry_for_all_its_keys(
+    monkeypatch, family_configs, entry, accepted
+):
+    master, runners = family_configs
+    agg = master["fixture"]
+    master = {
+        "agg": agg,
+        "mtp": {**agg, "scenarios": {"agentic-coding": [{"search-space": [{
+            "tp": 1, "kv-offloading": "none", "conc-list": [4], "spec-decoding": "mtp",
+            "srt-recipe": "mtp.yaml",
+        }]}]}},
+        "other": {**agg, "precision": "fp4"},
+    }  # fmt: skip
+    files = {
+        "configs/nvidia-master.yaml": yaml.safe_dump(master),
+        "configs/runners.yaml": yaml.safe_dump(runners),
+        "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml":
+            yaml.safe_dump(single_node_fragment(1)).encode(),
+        "benchmarks/single_node/srt-slurm-recipes/fixture/mtp.yaml":
+            yaml.safe_dump(single_node_fragment(1, **{"speculative-algorithm": "EAGLE"})).encode(),
+        **{path: text.encode() for path, text in shared_blocks().items()},
+    }  # fmt: skip
+    monkeypatch.setattr(github, "read", lambda *_: {"tree": [{"path": "configs"}]})
+    monkeypatch.setattr(github, "file_at", lambda _repo, _head, path: files[path])
+    head, family = "a" * 40, "configs/nvidia-master.yaml:agg,mtp"
+
+    canonical = validation.canonical_matrix("example/project", head, family)
+
+    assert sorted(
+        (row["spec-decoding"], row["conc"]) for row in canonical["single_node"]["all"]
+    ) == [("mtp", 4), ("none", 2), ("none", 6)]
+    matrix = {**canonical, "changelog_metadata": {"head_ref": head, "entries": [entry]}}
+    if accepted:
+        validation.check_matrix(matrix, canonical, head, family)
+        return
+    with pytest.raises(
+        github.VerificationError, match="Final changelog must select exactly the candidate curve"
+    ):
+        validation.check_matrix(matrix, canonical, head, family)
+
 
 
 CANDIDATE_ID = "1" * 16 + "-" + "2" * 16
@@ -3137,6 +3244,21 @@ def test_failing_producer_keeps_its_stderr_and_never_sees_credentials(tmp_path, 
     assert failure.value.stderr == "generator failed; token=None\n"
 
 
+def test_producer_regenerates_the_curve_keys_its_revision_defines(tmp_path, monkeypatch):
+    _, head = commit_history(tmp_path, master=AGENTX_MASTER)
+    monkeypatch.chdir(tmp_path)
+
+    matrix = validation.producer_matrix("example/project", head, f"{FAMILY},later")
+
+    assert [
+        (row["model"], row["conc"], row["image"]) for row in matrix["single_node"]["all"]
+    ] == POINTS
+    with pytest.raises(validation.ProducerRegenerationError) as failure:
+        validation.producer_matrix("example/project", head, "configs/nvidia-master.yaml:later")
+    assert failure.value.stderr == "the producer revision defines none of the family's config keys"
+
+
+
 @pytest.mark.parametrize("from_repository_root", [False, True])
 def test_live_families_preserve_public_identity_after_move(tmp_path, family_configs, from_repository_root):
     master, runners = family_configs
@@ -3225,6 +3347,7 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
             ]}],
         }},
         "unmapped": {**fixture, "runner": "cluster:h100-retired"},
+        "alone": {**fixture, "runner": "cluster:h100-dsxe", "precision": "fp4"},
     }
     runners = {
         "labels": {
@@ -3244,14 +3367,21 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
 
     families = klaud.live_families(tmp_path)
 
+    # exact, wide and unmapped form one curve, which the unmapped runner leaves unresolved.
     assert capsys.readouterr().out == (
-        "::warning::Klaud live-family-clusters-unresolved: configs/nvidia-master.yaml:unmapped\n"
+        "::warning::Klaud live-family-clusters-unresolved: "
+        "configs/nvidia-master.yaml:exact,unmapped,wide\n"
     )
     assert families == {
+        ("dsr1", "h100", "sglang", "fp4", "none", False, "agentic_traces",
+         None, None, "example/image:stable"): {
+            "configs/nvidia-master.yaml:alone": ({"h100-dsxe"}, 1),
+        },
+    }  # fmt: skip
+    families = {
         ("dsr1", "h100", "sglang", "fp8", "none", False, "agentic_traces",
          None, None, "example/image:stable"): {
-            "configs/nvidia-master.yaml:exact": ({"h100-dsxe"}, 1),
-            "configs/nvidia-master.yaml:wide": ({"h100-dsxe"}, 4),
+            "configs/nvidia-master.yaml:exact,wide": (frozenset({"h100-cw", "h100-dsxe"}), 4),
         },
     }  # fmt: skip
     source = {
@@ -3269,11 +3399,177 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
             for candidate in klaud.choose(items, headroom, set(), families)
         )
 
-    assert chosen({"h100-cw": 1}) == []
-    assert chosen({"h100-dsxe": 3}) == [("exact", ["h100-dsxe"], 1)]
-    assert chosen({"h100-cw": 1, "h100-dsxe": 4}) == [
-        ("exact", ["h100-dsxe"], 1), ("wide", ["h100-dsxe"], 4),
+    assert chosen({"h100-dsxe": 4}) == []
+    assert chosen({"h100-cw": 3, "h100-dsxe": 4}) == []
+    assert chosen({"h100-cw": 4, "h100-dsxe": 4}) == [
+        ("exact,wide", ["h100-cw", "h100-dsxe"], 4),
     ]
+
+
+def write_curve(root, record, *, mtp_image="example/image:stable", mtp_file="nvidia-master.yaml"):
+    """Write agg, disagg and MTP keys of one dsr1 fp8 h100 sglang curve across two clusters."""
+    agg = {
+        "image": "example/image:stable", "model": "example/model", "model-prefix": "dsr1",
+        "precision": "fp8", "framework": "sglang", "runner": "cluster:h100-cw",
+        "multinode": False, "srt-recipe-dir": "fixture",
+        "scenarios": {"agentic-coding": [{"search-space": [{
+            "tp": 1, "kv-offloading": "none", "conc-list": [2, 6], "srt-recipe": "recipe.yaml",
+        }]}]},
+    }  # fmt: skip
+    worker = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
+    keys = {
+        "agg": agg,
+        "disagg": {**agg, "runner": "cluster:h100-dsxe", "multinode": True, "disagg": True,
+                   "kv-p2p-transfer": "nixl", "scenarios": {"agentic-coding": [{"search-space": [{
+                       "prefill": worker, "decode": {**worker, "num-worker": 2},
+                       "kv-offloading": "none", "conc-list": [8], "srt-recipe": "disagg.yaml",
+                   }]}]}},
+        "mtp": {**agg, "image": mtp_image, "scenarios": {"agentic-coding": [{"search-space": [{
+            "tp": 1, "kv-offloading": "none", "conc-list": [4], "spec-decoding": "mtp",
+            "srt-recipe": "recipe.yaml",
+        }]}]}},
+    }  # fmt: skip
+    files = {"nvidia-master.yaml": {}, mtp_file: {}}
+    for key, config in keys.items():
+        files[mtp_file if key == "mtp" else "nvidia-master.yaml"][key] = config
+    configs = root / "configs"
+    configs.mkdir()
+    for name, master in files.items():
+        (configs / name).write_text(yaml.safe_dump(master))
+    (configs / "runners.yaml").write_text(yaml.safe_dump({
+        "labels": {"cluster:h100-cw": ["h100-cw_00"], "cluster:h100-dsxe": ["h100-dsxe_00"]},
+        "clusters": {"h100-cw": record, "h100-dsxe": record},
+    }))  # fmt: skip
+    write_fixture_recipe(root)
+    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/disagg.yaml"
+    recipe.parent.mkdir(parents=True)
+    recipe.write_text(yaml.safe_dump({"schema": 2, "roles": {
+        "prefill": {"nodes": 1}, "decode": {"nodes": 2}}}))  # fmt: skip
+
+
+CURVE = "configs/nvidia-master.yaml:agg,disagg,mtp"
+
+
+def curve_observation(spec_method="none", disagg=False):
+    return ("dsr1", "h100", "sglang", "fp8", spec_method, disagg, "agentic_traces", None, None,
+            "example/image:stable")  # fmt: skip
+
+
+def test_live_families_make_one_curve_family_of_its_agg_disagg_and_mtp_keys(
+    tmp_path, family_configs, capsys
+):
+    write_curve(tmp_path, family_configs[1]["clusters"]["fixture"])
+
+    families = klaud.live_families(tmp_path)
+
+    assert capsys.readouterr().out == ""
+    curve = {CURVE: (frozenset({"h100-cw", "h100-dsxe"}), 3)}
+    assert families == {
+        curve_observation(): curve,
+        curve_observation(disagg=True): curve,
+        curve_observation("mtp"): curve,
+    }
+
+
+@pytest.mark.parametrize(("variant", "notice"), [
+    pytest.param({"mtp_image": "example/image:next"},
+                 f"::notice::Klaud skips {CURVE}: its keys use different images.\n",
+                 id="mixed-images"),
+    pytest.param({"mtp_file": "amd-master.yaml"},
+                 "::notice::Klaud skips configs/amd-master.yaml:mtp, "
+                 "configs/nvidia-master.yaml:agg, configs/nvidia-master.yaml:disagg: its AgentX "
+                 "curve spans several master configs.\n",
+                 id="several-master-files"),
+])  # fmt: skip
+def test_live_families_skip_a_curve_one_candidate_cannot_update_whole(
+    tmp_path, family_configs, capsys, variant, notice
+):
+    write_curve(tmp_path, family_configs[1]["clusters"]["fixture"], **variant)
+
+    assert klaud.live_families(tmp_path) == {}
+    assert capsys.readouterr().out == notice
+
+
+@pytest.mark.parametrize(("occupant", "chosen"), [
+    (None, True),
+    ("klaud/auto-{agg}-", False),
+    ("klaude/auto-{mtp}-{image}", False),
+    ("klaud/claim-{mtp}", False),
+    ("klaud/claim-{curve}", False),
+    ("klaud/auto-{other}-", True),
+], ids=["free", "single-key-pr", "single-key-branch", "single-key-claim", "curve-claim",
+        "other-family-pr"])  # fmt: skip
+def test_a_single_key_branch_or_claim_occupies_its_curve(occupant, chosen):
+    curve = "configs/nvidia-master.yaml:agg,mtp"
+    source = {
+        "model": "dsr1", "hardware": "h100", "framework": "sglang", "precision": "fp8",
+        "spec_method": "mtp", "disagg": False, "benchmark_type": "agentic_traces", "isl": None,
+        "osl": None, "image": "example/image:stable", "date": "2026-09-19",
+    }  # fmt: skip
+    families = {klaud.observation_key(source): {curve: (frozenset({"h100-cw"}), 1)}}
+    names = {
+        "agg": identity("configs/nvidia-master.yaml:agg")[:16],
+        "mtp": identity("configs/nvidia-master.yaml:mtp")[:16],
+        "other": identity("configs/nvidia-master.yaml:other")[:16],
+        "curve": identity(curve)[:16],
+        "image": identity("example/image:stable")[:16],
+    }
+    occupied = {occupant.format(**names)} if occupant else set()
+    items = [{"source-status": "baseline", "source-id": "1", "source": source,
+              "benchmark-age-days": 0}]  # fmt: skip
+
+    candidates = klaud.choose(items, {"h100-cw": 1}, occupied, families)
+
+    assert [candidate["family"] for candidate in candidates] == ([curve] if chosen else [])
+
+
+def test_plan_blocks_a_curve_sharing_a_key_with_a_blocked_or_held_family(
+    tmp_path, monkeypatch
+):
+    source = {
+        "model": "dsr1", "hardware": "h100", "framework": "sglang", "precision": "fp8",
+        "spec_method": "none", "disagg": False, "benchmark_type": "agentic_traces", "isl": None,
+        "osl": None, "image": "example/image:stable", "date": "2026-09-19",
+    }  # fmt: skip
+    target = (frozenset({"h100-cw"}), 1)
+    families = {klaud.observation_key(source): {
+        f"configs/nvidia-master.yaml:{keys}": target
+        for keys in ("agg,mtp", "claimed", "free", "other,zeta")
+    }}  # fmt: skip
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    (tmp_path / "klaud-recovery.json").write_text(json.dumps(["configs/nvidia-master.yaml:zeta"]))
+    monkeypatch.setattr(klaud.subprocess, "check_output", lambda *_a, **_k: "a" * 40 + "\n")
+    monkeypatch.setattr(klaud, "fetch_catalog", lambda _policy: ([{
+        "source-status": "baseline", "source-id": "1", "source": source,
+        "benchmark-age-days": 0}], []))  # fmt: skip
+    monkeypatch.setattr(klaud, "github_read", lambda *_a, **_k: [[]])
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: {"h100-cw": 1})
+    monkeypatch.setattr(klaud, "live_families", lambda _root: families)
+    monkeypatch.setattr(claims, "family_owners", lambda _r: [Ownership(run_id=7, candidates=[
+        OwnedCandidate(id=CANDIDATE_ID, family="configs/nvidia-master.yaml:claimed,more",
+                       base="a" * 40)])])  # fmt: skip
+    monkeypatch.setattr(klaud, "maintainer_closed_families", lambda _r, _now: {
+        identity("configs/nvidia-master.yaml:agg")[:16]})  # fmt: skip
+    monkeypatch.setattr(klaud, "recent_candidate_outcomes", lambda _r, _hours: ({}, set()))
+
+    klaud.plan(tmp_path, tmp_path / "klaud", 5, 24)
+
+    candidates = json.loads((tmp_path / "klaud/candidates.json").read_text())
+    assert [candidate["family"] for candidate in candidates] == ["configs/nvidia-master.yaml:free"]
+
+
+@pytest.mark.parametrize("family", [
+    "configs/nvidia-master.yaml:mtp,agg", "configs/nvidia-master.yaml:agg,agg",
+    "configs/nvidia-master.yaml:agg,", "configs/nvidia-master.yaml:agg,,mtp",
+])  # fmt: skip
+def test_a_curve_family_lists_its_keys_sorted_and_distinct(family):
+    with pytest.raises(ValueError, match="family"):
+        OwnedCandidate(id=CANDIDATE_ID, family=family, base="a" * 40)
+    assert OwnedCandidate(
+        id=CANDIDATE_ID, family="configs/nvidia-master.yaml:agg,mtp", base="a" * 40
+    ).family == "configs/nvidia-master.yaml:agg,mtp"
+
 
 
 def agentx_point(dataset, **values):

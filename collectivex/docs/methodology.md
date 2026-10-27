@@ -358,7 +358,8 @@ share its double-buffer parity slots and corrupt each other's signalling
 
 ### FlashInfer EP
 
-FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens
+FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll` from FlashInfer 0.7.1, vLLM main's
+pin, in which each rank writes tokens
 directly into its peers' workspace windows and combine reads them back, so there is no send/recv
 pairing and no NVSHMEM. It is GB200/GB300-only for that reason, runs EP8 and EP16 inside the MNNVL
 scale-up domain, and has one kernel family, so it runs `normal` only, across the full ladder: a
@@ -849,7 +850,7 @@ Check 6 also publishes `correctness.chain_last_output_error`, the worst chained-
 error, cross-rank MAX, **reported whether or not the verdict passed**. Read it before reading the
 verdict. The check assumes a regime defect lands orders of magnitude past `COMBINE_REL_TOL` while
 ordinary kernel non-determinism stays well inside it, and that assumption is not free: FlashInfer EP
-before 0.6.16 (the image's 0.6.8.post1 included) accumulates its combine in the payload dtype (a BF16
+before 0.6.16 accumulates its combine in the payload dtype (a BF16
 slot-tree) rather than FP32, so its rounding over a large receive plane is far coarser than a backend
 reducing in FP32. A verdict alone cannot separate "the transport corrupted this" from "this tolerance
 is too tight for this accumulator", and the two call for opposite responses. The magnitude is the
@@ -1097,8 +1098,9 @@ DeepEP V2 also its torch and NVSHMEM specs; for DeepEP V2 and UCCL-EP a build-re
 and the cache is never
 committed. The DeepEP V2 build applies one local patch, the opt-in relaxed-ordering switch on its
 GIN window; UCCL-EP's AMD build swaps managed allocations for pinned host memory, because
-`hipMallocManaged` fails on these CDNA nodes. MoRI and FlashInfer ship in the image and are only
-import-checked. Per-execution stages remain isolated and disposable, and runtime probes fail closed
+`hipMallocManaged` fails on these CDNA nodes. MoRI ships in the image and is only import-checked.
+FlashInfer is vLLM's pin, installed over the image's older copy into a venv that keeps the image's
+torch and NCCL; its cache key hashes the pip specs. Per-execution stages remain isolated and disposable, and runtime probes fail closed
 before reuse. The running account is inside the trusted cluster boundary: this cache guards against
 stale or accidental mutation, not hostile same-UID jobs. Only an unpublished partial build may be
 reset automatically. A cache that fails integrity or runtime checks is left intact and rejected so a

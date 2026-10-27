@@ -11404,3 +11404,12 @@
     - "TP2 c16-c64, the unsearched TP4 c4-c64 recipe variants, the DSpark speculative config (5 drafts, probabilistic drafting) and mono decode are unchanged."
     - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), inherits the target fp8_ds_mla KV cache, and the mono draft kernels read those weights in place."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4480
+
+- config-keys:
+  - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+  - agentic-coding
+  description:
+  - Restore the MI355X MiniMax-M3 FP4 vLLM AgentX TP2/TP4 grid from run 34609443618 attempt 2 using SRT recipes. Update nightly-2a02f6efe319c885e3ccbcecde402e0028f9ec1e to nightly-df6603f0583375f244d1ac6d36265462b7490392 (2026-10-22, digest sha256:81899892d73777a4ae81e16f39e749169687f29249505eb4c56da83bd097d41c).
+  - Enable upstream MiniMax-M3 monokernel at TP4 with Model Runner V2, AITER MoE, FP8 KV/indexer and block size 128; keep TP2 on ordinary decode. Preserve EAGLE3-GQA with three draft tokens and use automatic golden acceptance for throughput with real verification for evals.
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4418

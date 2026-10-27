@@ -36,6 +36,7 @@ from .models import (
     PRReview,
     SessionEnd,
     identity,
+    key_families,
     normalized_image,
     utc,
 )
@@ -87,8 +88,11 @@ def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozense
 def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int]]]:
     """Resolve public AgentX identities, target clusters and node demand from the generator.
 
-    Archives and fixed-seq-len points are excluded. A family's node demand is the node count of
-    its largest generated AgentX job.
+    Archives and fixed-seq-len points are excluded. A family is one AgentX dashboard curve: every
+    master key of one master file whose points share model, hardware, framework and precision,
+    since the newest run replaces that whole curve. Its node demand is the node count of its
+    largest generated AgentX job. Curves spanning master files or using several images are left
+    out.
     """
     from infx.clusters import load_inventory
     from infx.config import project_root
@@ -101,43 +105,63 @@ def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int
     root = project_root(root)
     runners = load_runner_file(str(root / "configs/runners.yaml"))
     inventory = load_inventory(runners)
-    index: dict[tuple, dict[str, tuple[frozenset[str], int]]] = {}
+    curves: dict[tuple, dict[tuple[str, str], list[dict]]] = {}
     paths = sorted((root / "configs").glob("*-master.yaml"))
     if not paths:
         raise ReadError("live-configs-unavailable")
     for path in paths:
+        source = path.relative_to(root).as_posix()
         configs = load_config_files([str(path)])
         for key in configs:
-            family = f"{path.relative_to(root).as_posix()}:{key}"
             try:
                 entries = generate_test_config_sweep(
                     SimpleNamespace(config_keys=[key]), configs, runners, root
                 )
             except ValueError:
-                print(f"::warning::Klaud live-family-unrenderable: {family}")
+                print(f"::warning::Klaud live-family-unrenderable: {source}:{key}")
                 continue
-            entries = [entry for entry in entries if in_scope(entry)]
-            if not entries:
-                continue
-            clusters = target_clusters(entries, inventory)
-            if not clusters:
-                print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
-                continue
-            demand = max(entry.get("node-count", 1) for entry in entries)
             for entry in entries:
-                row = {
-                    "model": entry["model-prefix"],
-                    "hardware": _hardware_family(entry["runner"]),
-                    "framework": public_framework(entry["framework"]),
-                    "precision": entry["precision"],
-                    "spec_method": entry["spec-decoding"],
-                    "disagg": entry.get("disagg", False),
-                    "benchmark_type": "agentic_traces",
-                    "isl": None,
-                    "osl": None,
-                    "image": entry["image"],
-                }
-                index.setdefault(observation_key(row), {})[family] = (clusters, demand)
+                if in_scope(entry):
+                    curve = (
+                        entry["model-prefix"],
+                        _hardware_family(entry["runner"]),
+                        public_framework(entry["framework"]),
+                        entry["precision"],
+                    )
+                    curves.setdefault(curve, {}).setdefault((source, key), []).append(entry)
+    index: dict[tuple, dict[str, tuple[frozenset[str], int]]] = {}
+    for members in curves.values():
+        sources = {source for source, _ in members}
+        if len(sources) > 1:
+            print(
+                f"::notice::Klaud skips {', '.join(sorted(f'{s}:{k}' for s, k in members))}: "
+                "its AgentX curve spans several master configs."
+            )
+            continue
+        family = sources.pop() + ":" + ",".join(sorted(key for _, key in members))
+        entries = [entry for rows in members.values() for entry in rows]
+        clusters = target_clusters(entries, inventory)
+        if not clusters:
+            print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
+            continue
+        if len({normalized_image(entry["image"]) for entry in entries}) > 1:
+            print(f"::notice::Klaud skips {family}: its keys use different images.")
+            continue
+        demand = max(entry.get("node-count", 1) for entry in entries)
+        for entry in entries:
+            row = {
+                "model": entry["model-prefix"],
+                "hardware": _hardware_family(entry["runner"]),
+                "framework": public_framework(entry["framework"]),
+                "precision": entry["precision"],
+                "spec_method": entry["spec-decoding"],
+                "disagg": entry.get("disagg", False),
+                "benchmark_type": "agentic_traces",
+                "isl": None,
+                "osl": None,
+                "image": entry["image"],
+            }
+            index.setdefault(observation_key(row), {})[family] = (clusters, demand)
     return index
 
 
@@ -149,6 +173,7 @@ def choose(
 ) -> list[dict]:
     """Order one candidate per unclaimed family that fits the headroom of every target cluster.
 
+    A branch or claim of the family, or of a single-key family of one of its keys, occupies it.
     The order is a weighted shuffle: a family's weight is its benchmark age in days plus one, so
     older images tend to lead without starving recent ones. Headroom is checked but not consumed
     here, so the overlap review keeps alternatives.
@@ -179,14 +204,12 @@ def choose(
         )[:16]
         image_key = identity(observation_key(row)[-1])[:16]
         for family, (clusters, demand) in sorted(families.get(observation_key(row), {}).items()):
-            prefix = "klaud/auto-" + identity(family)[:16] + "-"
-            branch = prefix + image_key
-            claims = {
-                branch,
-                prefix,
-                f"klaud/auto-{legacy}-{image_key}",
-                f"klaud/auto-{legacy}-",
-            }
+            branch = "klaud/auto-" + identity(family)[:16] + "-" + image_key
+            claims = {f"klaud/auto-{legacy}-{image_key}", f"klaud/auto-{legacy}-"}
+            for member in {family, *key_families(family)}:
+                name = identity(member)[:16]
+                claims |= {f"klaud/auto-{name}-", f"klaud/auto-{name}-{image_key}"}
+                claims.add(f"klaud/claim-{name}")
             if (
                 family in seen
                 or claims & occupied
@@ -425,10 +448,21 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
     recovery_file = Path(os.environ.get("RUNNER_TEMP", directory.parent)) / "klaud-recovery.json"
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
-    candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
+    blocked_keys = {member for family in blocked for member in key_families(family)}
+    candidates = [
+        candidate
+        for candidate in candidates
+        if not key_families(candidate["family"]) & blocked_keys
+    ]
     held = maintainer_closed_families(repository, datetime.now(UTC))
     candidates = [
-        candidate for candidate in candidates if candidate["id"].split("-", 1)[0] not in held
+        candidate
+        for candidate in candidates
+        if not {
+            identity(member)[:16]
+            for member in {candidate["family"], *key_families(candidate["family"])}
+        }
+        & held
     ]
     recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
     candidates = [
