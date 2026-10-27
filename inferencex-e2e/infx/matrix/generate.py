@@ -10,8 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
-import yaml
-
+from infx import yamlio
 from infx.clusters import CLUSTER_LABEL_PREFIX
 from infx.clusters.slurm import Fabric
 from infx.srt_slurm.variants import deep_merge, expand_variants
@@ -44,10 +43,12 @@ seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
 
 def seq_len_to_str(isl: int, osl: int) -> str:
+    """Return the short name of an ISL/OSL pair, such as 1k1k, or ``{isl}_{osl}``."""
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 
 def freeze_config_value(value: Any) -> Any:
+    """Return ``value`` with dicts and lists turned into sorted tuples so it can be hashed."""
     if isinstance(value, dict):
         return tuple(sorted((key, freeze_config_value(item)) for key, item in value.items()))
     if isinstance(value, list):
@@ -56,9 +57,15 @@ def freeze_config_value(value: Any) -> Any:
 
 
 def trim_conc(entries: list[dict]) -> list[dict]:
+    """Keep only the lowest-concurrency row of each otherwise identical group of rows.
+
+    Multinode rows shrink to their lowest conc, and the kept row inherits the group's eval flags.
+    The recipe fingerprint is ignored since single-node bundles bind one variant per conc.
+    """
     ignored_fields = {
         "conc",
         "exp-name",
+        Fields.RECIPE_FINGERPRINT.value,
         "run-eval",
         "eval-only",
         "eval-conc",
@@ -70,6 +77,7 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     out: list[dict] = []
 
     def minimum_concurrency(entry: dict) -> int:
+        """Return the lowest concurrency of a row whose conc is an int or a list."""
         conc = entry["conc"]
         return min(conc) if isinstance(conc, list) else conc
 
@@ -105,8 +113,13 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     for indices in groups.values():
         keep = min(indices, key=lambda index: minimum_concurrency(out[index]))
         kept_entry = out[keep]
-        if any(out[index].get("run-eval") is True for index in indices):
+        eval_rows = [out[index] for index in indices if out[index].get("run-eval") is True]
+        if eval_rows:
             kept_entry = {**kept_entry, "run-eval": True}
+            if not kept_entry.get(Fields.EVAL_FRAMEWORK.value):
+                for field in (Fields.EVAL_FRAMEWORK.value, Fields.EVAL_SUITE.value):
+                    if field in eval_rows[0]:
+                        kept_entry[field] = eval_rows[0][field]
             if kept_entry.get("prefill") is not None:
                 kept_entry["eval-conc"] = minimum_concurrency(kept_entry)
             if any(out[index].get("eval-all-concs") is True for index in indices):
@@ -117,7 +130,10 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
 
 def smoke_entries(entries: list[dict]) -> list[dict]:
-    benchmarks = trim_conc([{**row, "run-eval": False} for row in entries])
+    """Return trimmed benchmark rows with evals off, followed by trimmed eval-only rows."""
+    benchmarks = trim_conc(
+        [{**row, "run-eval": False} for row in entries if not row.get(Fields.EVAL_ONLY.value)]
+    )
     evals = []
     for row in entries:
         if not row.get("run-eval"):
@@ -132,10 +148,12 @@ def smoke_entries(entries: list[dict]) -> list[dict]:
 
 
 def runner_labels(runner_data: dict) -> dict:
+    """Return the runner config's map of runner labels to node names."""
     return runner_data["labels"]
 
 
 def runner_hardware(runner_data: dict) -> dict:
+    """Return GPU and CPU DRAM facts keyed by cluster label, for clusters that declare them."""
     node_fields = (Fields.GPUS_PER_NODE.value, Fields.AVAILABLE_CPU_DRAM_MIB.value)
     return {
         f"{CLUSTER_LABEL_PREFIX}{cluster_id}": {
@@ -146,10 +164,12 @@ def runner_hardware(runner_data: dict) -> dict:
 
 
 def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:
+    """Return the node names of runner label ``runner``, or an empty list."""
     return runner_labels(runner_data).get(runner, [])
 
 
 def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
+    """Return the integer hardware ``field`` of ``runner``, or raise ValueError if it is unset."""
     hardware = runner_hardware(runner_data).get(runner, {})
     value = hardware.get(field)
     if value is None:
@@ -162,18 +182,25 @@ def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
 
 
 def runner_available_cpu_dram_mib(runner: str, runner_data: dict) -> int:
+    """Return the CPU DRAM in MiB available to ``runner``."""
     return runner_hardware_int(runner, runner_data, Fields.AVAILABLE_CPU_DRAM_MIB.value)
 
 
 def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
+    """Return the GPUs per node of ``runner``."""
     return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
 
 
 def _hardware_family(label: str) -> str:
+    """Return the hardware family of a label, such as b200 for cluster:b200-dgxc."""
     return label.removeprefix("cluster:").split("-", 1)[0]
 
 
 def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
+    """Return the GPUs per node of ``label``, or of its hardware family when that is unambiguous.
+
+    Raise ValueError when no cluster or more than one GPU count matches.
+    """
     hardware = runner_hardware(runner_data)
     exact = hardware.get(label)
     if exact is not None:
@@ -193,6 +220,10 @@ def scheduling_gpus_per_node(label: str, runner_data: dict) -> int:
 
 
 def _worker_node_override(worker: dict, setting_name: str) -> int | None:
+    """Return the positive ``setting_name=N`` value in a worker's additional settings, or None.
+
+    Raise ValueError when the settings disagree or are not positive.
+    """
     pattern = re.compile(rf"^{re.escape(setting_name)}=(\d+)$")
     values = []
     for setting in worker.get(Fields.ADDITIONAL_SETTINGS.value, []) or []:
@@ -207,13 +238,14 @@ def _worker_node_override(worker: dict, setting_name: str) -> int | None:
 
 
 def recipe_auxiliary_node_count(recipe: dict) -> int:
-    services = [service for service in recipe.get("services", []) if service.get("enabled", True)]
+    """Return the nodes a recipe needs beyond its workers, for service pools and dedicated roles."""
+    services = [service for service in recipe.get("services") or [] if service.get("enabled", True)]
     pool_nodes = sum(service.get("nodes") or 0 for service in services)
-    infra_dedicated = recipe.get("infra", {}).get("etcd_nats_dedicated_node", False)
+    infra_dedicated = (recipe.get("infra") or {}).get("etcd_nats_dedicated_node", False)
     discovery = [service for service in services if service.get("type") in ("etcd", "nats")]
     if discovery:
         placements = {
-            service.get("placement", {}).get("node") == "dedicated" for service in discovery
+            (service.get("placement") or {}).get("node") == "dedicated" for service in discovery
         }
         if len(placements) != 1:
             raise ValueError("Recipe etcd and nats must agree on dedicated placement")
@@ -223,34 +255,41 @@ def recipe_auxiliary_node_count(recipe: dict) -> int:
         ("frontend", "dedicated_node"),
         ("benchmark", "client_dedicated_node"),
     ):
-        settings = recipe.get(section, {})
+        settings = recipe.get(section) or {}
         dedicated_roles += int(
-            settings.get("placement", {}).get("node") == "dedicated"
+            (settings.get("placement") or {}).get("node") == "dedicated"
             or settings.get(legacy_key, False)
         )
-    if dedicated_roles and recipe.get("benchmark", {}).get("colocate_with_frontend", True):
+    if dedicated_roles and (recipe.get("benchmark") or {}).get("colocate_with_frontend", True):
         dedicated_roles = 1
     return pool_nodes + dedicated_roles
 
 
 def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
+    """Return the total node count of a schema 2 srt recipe, or None for an unknown variant.
+
+    Raise ValueError when the recipe is not schema 2 or its roles lack node counts.
+    """
     path, _, selector = srt_recipe.partition(":")
     recipe_path = root / path
-    recipe = yaml.safe_load(recipe_path.read_text())
-    if "base" in recipe:
-        if not (selector == "base" or selector.startswith("override_")):
+    recipe = yamlio.safe_load(recipe_path.read_text())
+    if isinstance(recipe, dict) and "base" in recipe:
+        if selector.startswith("zip_override_"):
+            [(_, recipe)] = expand_variants(recipe, selector)
+        elif selector == "base" or selector.startswith("override_"):
+            schema = recipe.get("schema")
+            recipe = deep_merge(recipe["base"], recipe[selector] or {})
+            recipe.setdefault("schema", schema)
+        else:
             return None
-        schema = recipe.get("schema")
-        recipe = deep_merge(recipe["base"], recipe[selector] or {})
-        recipe.setdefault("schema", schema)
         if recipe.get("schema") != 2:
             return None
-    if recipe.get("schema") != 2:
+    if not isinstance(recipe, dict) or recipe.get("schema") != 2:
         raise ValueError(f"srt-slurm recipes must declare schema: 2: {recipe_path}")
     roles = recipe.get("roles")
     if roles:
         for name, role in roles.items():
-            if "nodes" not in role:
+            if not isinstance(role, dict) or role.get("nodes") is None:
                 raise ValueError(f"Recipe role {name!r} must specify nodes: {recipe_path}")
         worker_nodes = sum(
             0 if role["nodes"] == "colocate" else int(role["nodes"]) for role in roles.values()
@@ -260,6 +299,7 @@ def recipe_node_count(root: Path, srt_recipe: str) -> int | None:
 
 
 def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
+    """Return the srt-slurm fabric of each cluster that runs ``label``, keyed by cluster ID."""
     labels = runner_labels(runner_data)
     runners = set(labels.get(label, [label]))
     fabrics = {}
@@ -273,8 +313,9 @@ def _label_fabrics(label: str, runner_data: dict) -> dict[str, Fabric]:
 
 
 def check_fabric_references(root: Path, srt_recipe: str, label: str, runner_data: dict) -> None:
+    """Raise ValueError if a recipe variant references a fabric field ``label``'s clusters lack."""
     path, _, selector = srt_recipe.partition(":")
-    variants = expand_variants(yaml.safe_load((root / path).read_text()), selector or None)
+    variants = expand_variants(yamlio.safe_load((root / path).read_text()), selector or None)
     fabrics = {
         f"cluster {cluster_id!r}": fabric.rendered()
         for cluster_id, fabric in _label_fabrics(label, runner_data).items()
@@ -294,6 +335,7 @@ def worker_node_count(
     runner: str,
     runner_data: dict,
 ) -> int:
+    """Return the nodes a worker role needs, from a ``<ROLE>_NODES`` setting or its GPU count."""
     override = _worker_node_override(worker, f"{role.upper()}_NODES")
     if override is not None:
         return override
@@ -318,6 +360,7 @@ def multinode_node_count(
     srt_recipe: str | None,
     root: Path | None,
 ) -> int:
+    """Return a multinode entry's node count from its srt recipe, else from its workers."""
     if srt_recipe is not None and root is None:
         raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
     recipe_count = recipe_node_count(root, srt_recipe) if srt_recipe is not None else None
@@ -334,6 +377,10 @@ def add_multinode_node_count(
     num_nodes: int | None,
     root: Path | None,
 ) -> dict:
+    """Set the entry's node count from ``num_nodes`` or its workers, and return the entry.
+
+    Raise ValueError when ``num_nodes`` is given for a disaggregated entry.
+    """
     if not entry[Fields.DISAGG.value] and num_nodes is not None:
         entry[Fields.NODE_COUNT.value] = num_nodes
     elif num_nodes is not None:
@@ -351,6 +398,7 @@ def add_multinode_node_count(
 
 
 def effective_gpu_count(benchmark: dict) -> int:
+    """Return the GPUs one benchmark worker uses, TP times PP times PCP."""
     return (
         benchmark[Fields.TP.value]
         * benchmark.get(Fields.PP.value, 1)
@@ -359,6 +407,7 @@ def effective_gpu_count(benchmark: dict) -> int:
 
 
 def with_worker_parallelism_defaults(worker: dict) -> dict:
+    """Return a copy of the worker with PP, DCP, and PCP defaulting to 1."""
     return {
         **worker,
         Fields.PP.value: worker.get(Fields.PP.value, 1),
@@ -368,6 +417,7 @@ def with_worker_parallelism_defaults(worker: dict) -> dict:
 
 
 def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
+    """Return the prefill and decode workers, splitting an aggregated worker into a pair."""
     if disagg:
         return (
             with_worker_parallelism_defaults(benchmark[Fields.PREFILL.value]),
@@ -392,6 +442,10 @@ def multinode_worker_pair(benchmark: dict, disagg: bool) -> tuple[dict, dict]:
 
 
 def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker") -> int:
+    """Return how many of a worker's GPUs land on each node.
+
+    Raise ValueError when its replica size and ``gpus_per_node`` do not divide one another.
+    """
     gpus_per_replica = (
         worker[Fields.TP.value]
         * worker.get(Fields.PP.value, 1)
@@ -421,6 +475,10 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int, role: str = "worker")
 def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
 ) -> tuple[int, int]:
+    """Return the CPU DRAM offload in GB for the prefill and decode sides of an agentic point.
+
+    Both are 0 without DRAM offload. Raise ValueError when the workers do not fit the nodes.
+    """
     kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
     if kv_offloading != "dram":
         return 0, 0
@@ -433,6 +491,7 @@ def agentic_dram_offload_gb(
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
 
     def share_gb(gpu_count: int) -> int:
+        """Return the GB of offload DRAM that ``gpu_count`` GPUs get as their share of a node."""
         proportional_bytes = (
             Decimal(available_mib) * BYTES_PER_MIB * utilization * gpu_count / gpus_per_node
         )
@@ -463,6 +522,7 @@ def agentic_kv_offload_suffix(
     kv_offloading: str,
     kv_offload_backend: dict | None,
 ) -> str:
+    """Return the experiment-name suffix for a KV offload mode and its backend."""
     if kv_offloading == "none":
         return "kvnone"
     return f"kv{kv_offloading}-{kv_offload_backend['name']}"
@@ -475,8 +535,10 @@ def multinode_agentic_exp_name(
     conc_batch: list[int],
     offload_suffix: str,
 ) -> str:
+    """Return a multinode agentic experiment name from the model, worker shapes, and concs."""
 
     def _worker_tag(worker: dict, role_prefix: str) -> str:
+        """Return a short tag of a worker's count, TP, EP, DP attention, and DWDP size."""
         ep = worker.get(Fields.EP.value, 1)
         dpa = worker.get(Fields.DP_ATTN.value, False)
         tag = f"{role_prefix}{worker[Fields.NUM_WORKER.value]}x{worker[Fields.TP.value]}"
@@ -497,6 +559,7 @@ def multinode_agentic_exp_name(
 
 
 def component_metadata(benchmark: dict, config: dict) -> dict:
+    """Return the router and KV transfer settings of a benchmark, falling back to its config."""
     metadata = {}
     for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
         value = benchmark.get(field.value, config.get(field.value))
@@ -506,6 +569,7 @@ def component_metadata(benchmark: dict, config: dict) -> dict:
 
 
 def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
+    """Return the benchmark's srt recipe fields resolved to paths under the config's recipe dir."""
     return {
         field.value: srt_recipe_path(
             config.get(Fields.MULTINODE.value, False),
@@ -518,6 +582,7 @@ def srt_recipe_fields(config: dict, benchmark: dict) -> dict:
 
 
 def _multinode_parallelism_key(entry: dict) -> tuple:
+    """Return a hashable identity of a multinode row, ignoring conc, eval, and naming fields."""
     ignored_fields = {
         Fields.CONC.value,
         Fields.RUN_EVAL.value,
@@ -538,12 +603,14 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
 
 
 def automatic_agentic_vendor_eval(entry: dict) -> tuple[str, str] | None:
+    """Return the vendor eval framework and suite run automatically for an agentic row, or None."""
     if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
         return None
     return AUTOMATIC_AGENTIC_VENDOR_EVALS.get(entry.get(Fields.MODEL_PREFIX.value))
 
 
 def app_eval_identity(entry: dict, conc: int) -> tuple:
+    """Return the identity of the app eval a row runs at ``conc``, to detect duplicate evals."""
     if Fields.PREFILL.value in entry:
         topology = tuple(
             tuple(
@@ -577,6 +644,7 @@ def app_eval_identity(entry: dict, conc: int) -> tuple:
 
 
 def _eval_concs(entry: dict) -> list[int]:
+    """Return the concurrencies a row would evaluate at."""
     conc = entry[Fields.CONC.value]
     conc_values = conc if isinstance(conc, list) else [conc]
     if Fields.PREFILL.value in entry and not entry.get(Fields.EVAL_ALL_CONCS.value):
@@ -585,6 +653,10 @@ def _eval_concs(entry: dict) -> list[int]:
 
 
 def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
+    """Remove eval concurrencies already claimed by another row and return the rows.
+
+    Rows without KV offload claim first. A row left with none stops running evals.
+    """
     claimed: set[tuple] = set()
     candidates = sorted(
         (row for row in rows if row.get(Fields.RUN_EVAL.value)),
@@ -611,6 +683,11 @@ def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
 
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
+    """Choose which rows run evals and return the rows, plus extra gsm8k eval-only rows.
+
+    Pick the top and median 8k1k concs per single-node group, the top eligible conc per multinode
+    shape, one gsm8k point per agentic deployment, and every automatic vendor eval.
+    """
     from collections import defaultdict
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
@@ -618,6 +695,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     mn_eval_conc = {}
 
     def _eligible_eval_concs(entry: dict) -> list[int]:
+        """Return a row's concurrencies of at least MIN_EVAL_CONC, sorted."""
         conc = entry[Fields.CONC.value]
         conc_values = conc if isinstance(conc, list) else [conc]
         return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
@@ -762,6 +840,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
 
 def _gsm8k_eval_only_row(entry: dict, eval_conc: int | None = None) -> dict:
+    """Return a gsm8k eval-only copy of ``entry``, at ``eval_conc`` when given."""
     row = {
         **entry,
         Fields.RUN_EVAL.value: True,
@@ -776,6 +855,10 @@ def _gsm8k_eval_only_row(entry: dict, eval_conc: int | None = None) -> dict:
 
 
 def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
+    """Mark every eligible row to run evals and return the rows, batching multinode concs.
+
+    Agentic vendor evals become separate eval-only rows.
+    """
     expanded_entries: list[dict] = []
     multinode_indices: dict[tuple, int] = {}
     multinode_agentic_indices: dict[tuple, int] = {}
@@ -791,6 +874,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             eval_entry = {
                 **entry,
                 Fields.RUN_EVAL.value: True,
+                Fields.EVAL_ONLY.value: True,
                 Fields.EVAL_FRAMEWORK.value: eval_framework,
                 Fields.EVAL_SUITE.value: eval_suite,
             }
@@ -876,6 +960,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
 
 def _concurrency_range(start: int, end: int, step: int) -> list[int]:
+    """Return ``start``, ``start * step``, and so on, capped so the last value is ``end``."""
     values = []
     while start <= end:
         values.append(start)
@@ -894,6 +979,10 @@ def _fixed_sequence_entries(
     runner_data: dict,
     root: Path | None,
 ) -> list[dict]:
+    """Return validated fixed-sequence rows for one benchmark, per runner and concurrency.
+
+    Multinode rows carry all concs in one row. Raise ValueError for an invalid power request.
+    """
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
@@ -979,6 +1068,7 @@ def _agentic_entries(
     conc_filter: list[int] | None = None,
     root: Path | None = None,
 ) -> list[dict]:
+    """Return validated agentic rows for one benchmark at each runner and allowed concurrency."""
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     model_code = config[Fields.MODEL_PREFIX.value]
@@ -1115,6 +1205,7 @@ def generate_full_sweep(
     runner_data: dict,
     root: Path | None = None,
 ) -> list[dict]:
+    """Return the full-sweep rows selected by the parsed command-line ``args``."""
     return expand_full_sweep(
         all_config_data,
         runner_data,
@@ -1145,6 +1236,10 @@ def expand_full_sweep(
     options: FullSweepOptions = FullSweepOptions(),
     root: Path | None = None,
 ) -> list[dict]:
+    """Return rows for every master config that passes the full-sweep filters in ``options``.
+
+    Raise ValueError for invalid options or filters that match no config.
+    """
     if options.step_size <= 1:
         raise ValueError("step_size must be greater than 1")
     if (
@@ -1161,12 +1256,25 @@ def expand_full_sweep(
                 f"Invalid runner type(s): {invalid_runners}. "
                 f"Valid runner types are: {', '.join(sorted(valid_runner_types))}"
             )
+    precisions = {config[Fields.PRECISION.value] for config in master_config.values()}
+    frameworks = {config[Fields.FRAMEWORK.value] for config in master_config.values()}
+    for label, requested, exists in (
+        (
+            "model prefix",
+            options.model_prefix,
+            lambda p: any(k.startswith(f"{p}-") for k in master_config),
+        ),
+        ("precision", options.precision, precisions.__contains__),
+        ("framework", options.framework, frameworks.__contains__),
+    ):
+        if missing := [value for value in requested or () if not exists(value)]:
+            raise ValueError(f"No config has {label}: {', '.join(missing)}")
 
     seq_filter = {seq_len_stoi[sl] for sl in options.seq_lens} if options.seq_lens else None
     configs = (
         config
         for key, config in master_config.items()
-        if (not options.model_prefix or any(key.startswith(p) for p in options.model_prefix))
+        if (not options.model_prefix or any(key.startswith(f"{p}-") for p in options.model_prefix))
         and (not options.precision or config[Fields.PRECISION.value] in options.precision)
         and (not options.framework or config[Fields.FRAMEWORK.value] in options.framework)
         and (not options.runner_type or config[Fields.RUNNER.value] in options.runner_type)
@@ -1189,6 +1297,10 @@ def _fixed_sequence_concurrencies(
     full_sweep: FullSweepOptions | None,
     concurrencies: list[int] | None,
 ) -> list[int] | None:
+    """Return a fixed-sequence benchmark's concurrencies after the sweep or ``--conc`` filters.
+
+    Return None when the filters leave nothing to run.
+    """
     if full_sweep is None:
         values = (
             benchmark[Fields.CONC_LIST.value]
@@ -1238,6 +1350,7 @@ def _runner_values_for_filter(
     *,
     include_label: bool = True,
 ) -> list[str]:
+    """Return the runner label, or its nodes and itself, that match ``runner_node_filter``."""
     if not runner_node_filter:
         return [runner]
     candidates = runner_nodes_for_label(runner, runner_data)
@@ -1254,6 +1367,7 @@ def generate_test_config_sweep(
     runner_data: dict | None = None,
     root: Path | None = None,
 ) -> list[dict]:
+    """Return the rows of the config keys named on the ``test-config`` command line."""
     return _expand_selected_configs(
         args.config_keys,
         all_config_data,
@@ -1277,8 +1391,12 @@ def _expand_selected_configs(
     concurrencies: list[int] | None = None,
     root: Path | None = None,
 ) -> list[dict]:
+    """Return rows for the selected config keys, with the given filters applied.
+
+    Raise ValueError when a requested concurrency is generated by no row.
+    """
     resolved_keys = expand_config_keys(config_keys, all_config_data.keys())
-    return _expand_configs(
+    rows = _expand_configs(
         (all_config_data[key] for key in resolved_keys),
         runner_data or {},
         runner_node_filter=runner_node_filter,
@@ -1287,6 +1405,17 @@ def _expand_selected_configs(
         concurrencies=concurrencies,
         root=root,
     )
+    if concurrencies:
+        generated = set()
+        for row in rows:
+            conc = row[Fields.CONC.value]
+            generated.update(conc if isinstance(conc, list) else [conc])
+        if missing := [conc for conc in concurrencies if conc not in generated]:
+            raise ValueError(
+                "--conc value(s) not generated by the selected configs: "
+                + ", ".join(map(str, missing))
+            )
+    return rows
 
 
 def _expand_configs(
@@ -1301,6 +1430,10 @@ def _expand_configs(
     full_sweep: FullSweepOptions | None = None,
     root: Path | None = None,
 ) -> list[dict]:
+    """Return the fixed-sequence and agentic rows of each config that pass the filters.
+
+    With ``root``, raise ValueError when a selected recipe references an unknown fabric field.
+    """
     rows = []
     for config in configs:
         multinode = config.get(Fields.MULTINODE.value, False)
@@ -1400,6 +1533,10 @@ def _expand_configs(
 
 
 def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]) -> list[str]:
+    """Return the config keys, with glob patterns expanded, in order and without duplicates.
+
+    Raise ValueError for a key or pattern that matches nothing.
+    """
     available = list(available_keys)
     seen = {}
     for key in config_keys:
@@ -1423,6 +1560,7 @@ def expand_config_keys(config_keys: Iterable[str], available_keys: Iterable[str]
 
 
 def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
+    """Return the rows named in ``exp_names``, raising ValueError unless each matches one row."""
     requested = set(exp_names)
     if len(requested) != len(exp_names):
         raise ValueError("--exp-names contains duplicate values")
@@ -1443,6 +1581,7 @@ def filter_exp_names(entries: list[dict], exp_names: list[str]) -> list[dict]:
 
 
 def apply_node_type_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    """Enable both node types in ``args`` when neither is set, and return ``args``."""
     if (
         hasattr(args, "single_node")
         and hasattr(args, "multi_node")
@@ -1463,6 +1602,10 @@ def select_matrix_evals(
     mode: EvalMode = "default",
     trim: bool = False,
 ) -> list[dict]:
+    """Apply eval selection ``mode`` to rows, optionally trimming to minimum concurrency.
+
+    Raise ValueError for an unknown mode or smoke combined with trimming.
+    """
     if mode not in ("default", "none", "subset", "all", "smoke"):
         raise ValueError(f"Unknown eval mode: {mode!r}")
     if mode == "smoke" and trim:
@@ -1474,7 +1617,11 @@ def select_matrix_evals(
     if mode == "smoke":
         return smoke_entries(rows)
     if trim:
-        rows = trim_conc(rows)
+        rows = [
+            row
+            for row in drop_app_colliding_evals(trim_conc(rows))
+            if row.get(Fields.RUN_EVAL.value) or not row.get(Fields.EVAL_ONLY.value)
+        ]
     if mode in ("subset", "all"):
         rows = [row for row in rows if row.get(Fields.RUN_EVAL.value, False)]
         for row in rows:
@@ -1492,6 +1639,7 @@ def generate_config_matrix(
     eval_mode: EvalMode = "default",
     root: Path | None = None,
 ) -> list[dict]:
+    """Return the JSON-ready rows of the config keys with ``eval_mode`` eval selection applied."""
     rows = _expand_selected_configs(
         config_keys,
         master_config,
@@ -1507,9 +1655,10 @@ def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
     """``rows`` with the ``recipe-fingerprint`` changelog plans give the same throughput rows.
 
     Eval selection copies it to the rows it derives. A row whose recipe cannot be bound gets
-    none and a warning; its job fails when it binds the recipe.
+    none and a warning, and its job fails when it binds the recipe. The fingerprint module is
+    imported here because it imports this module through srt_slurm.
     """
-    from infx.matrix.fingerprint import recipe_fingerprint  # imports this module via srt_slurm
+    from infx.matrix.fingerprint import recipe_fingerprint
 
     fingerprinted = []
     for row in rows:
@@ -1524,6 +1673,7 @@ def with_fingerprints(rows: list[dict], root: Path) -> list[dict]:
 
 
 def main() -> list[dict]:
+    """Parse the command line, print the generated matrix rows as JSON, and return them."""
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument(
         "--config-files",
@@ -1551,8 +1701,8 @@ def main() -> list[dict]:
         "--all-evals",
         action="store_true",
         help=(
-            "Expand eval selection to every generated fixed-sequence config. "
-            "Can be combined with --evals-only; used alone, it also emits eval-only jobs."
+            "Expand eval selection to every eligible 8k1k fixed-sequence and agentic config "
+            "and emit only those eval-only jobs, with or without --evals-only."
         ),
     )
     parent_parser.add_argument(
@@ -1634,25 +1784,31 @@ def main() -> list[dict]:
         "--min-conc",
         type=int,
         required=False,
-        help="Minimum concurrency value to include (filters out lower concurrency values)",
+        help=(
+            "Drop concurrencies below this value. A single-node fixed-sequence "
+            "conc-start/conc-end range that begins lower starts at this value instead."
+        ),
     )
     full_sweep_parser.add_argument(
         "--max-conc",
         type=int,
         required=False,
-        help="Maximum concurrency value to include (filters out higher concurrency values)",
+        help=(
+            "Drop concurrencies above this value. A single-node fixed-sequence range that "
+            "ends higher ends at it, and a fixed-sequence config with nothing left runs at it."
+        ),
     )
     full_sweep_parser.add_argument(
         "--max-tp",
         type=int,
         required=False,
-        help="Maximum tensor parallelism value to include (single-node only)",
+        help="Drop single-node fixed-sequence configs whose TP exceeds this value",
     )
     full_sweep_parser.add_argument(
         "--max-ep",
         type=int,
         required=False,
-        help="Maximum expert parallelism value to include (single-node only)",
+        help="Cap the EP of single-node fixed-sequence configs at this value",
     )
     full_sweep_parser.add_argument(
         "--single-node",

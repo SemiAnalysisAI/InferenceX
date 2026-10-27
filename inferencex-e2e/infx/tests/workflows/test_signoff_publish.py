@@ -65,6 +65,7 @@ def verdict(
     else:
         rows.append("➖ Check 16 (NVIDIA overview): N/A — No affected NVIDIA configurations.")
     rows.append("➖ Check 17 (Metrics publication): N/A — No affected serving paths.")
+    rows.append("➖ Check 18 (Recipe consistency): N/A — No recipe or image changes.")
     return (
         header
         + "\n\n"
@@ -236,10 +237,10 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
             True,
         ),
         (verdict() + "\n✅ Check 14 (Pareto coverage): PASS — duplicate", True),
-        (verdict() + "\n✅ Check 18 (Unknown): PASS — extra", True),
+        (verdict() + "\n✅ Check 19 (Unknown): PASS — extra", True),
         (
             verdict().replace(
-                "➖ Check 17 (Metrics publication): N/A — No affected serving paths.\n", ""
+                "➖ Check 18 (Recipe consistency): N/A — No recipe or image changes.\n", ""
             ),
             True,
         ),

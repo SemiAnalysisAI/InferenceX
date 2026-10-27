@@ -92,7 +92,7 @@ Required permissions (all of these endpoints require **admin access to the repos
 4. Configure the runners:
 
    ```bash
-   ./InferenceX/utils/runner_setup/setup.sh \
+   ./InferenceX/inferencex-e2e/utils/runner_setup/setup.sh \
      <TOKEN> \
      <RUNNER_URL> \
      <START_INDEX> <END_INDEX> \
@@ -104,7 +104,7 @@ Required permissions (all of these endpoints require **admin access to the repos
    For example, configure 18 runners (`b300-dsxe_00` … `b300-dsxe_17`) on the B300 DSXE cluster:
 
    ```bash
-   ./InferenceX/utils/runner_setup/setup.sh \
+   ./InferenceX/inferencex-e2e/utils/runner_setup/setup.sh \
      AOPHAHI... \
      https://github.com/actions/runner/releases/download/v2.335.1/actions-runner-linux-x64-2.335.1.tar.gz \
      0 17 \
@@ -119,7 +119,7 @@ Required permissions (all of these endpoints require **admin access to the repos
 5. Start the runners:
 
    ```bash
-   ./InferenceX/utils/runner_setup/start_runners.sh 0 17 ~/gharunners
+   ./InferenceX/inferencex-e2e/utils/runner_setup/start_runners.sh 0 17 ~/gharunners
    ```
 
    This (re)creates a tmux session (default name: `github-actions`) with one tiled pane
@@ -151,9 +151,7 @@ key off that name:
    runner names listed under each `labels` entry in
    [`configs/runners.yaml`](../../configs/runners.yaml). New runners do
    **not** receive sweep jobs until they are added there, and the entries must match the
-   registered names exactly, including zero-padding. Some older fleets predate the
-   padded convention, such as `gb200-nv_0`. Because `setup.sh` always zero-pads, new
-   entries should use the padded form.
+   registered names exactly, including zero-padding. `setup.sh` always zero-pads.
 
 ## Labels / `ADDITIONAL_RUNNER_TAGS`
 

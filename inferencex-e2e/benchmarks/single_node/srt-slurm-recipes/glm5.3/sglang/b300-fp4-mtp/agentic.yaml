@@ -1,0 +1,193 @@
+base:
+  schema: 2
+  name: glm5.3-fp4-b300-sglang-agentic
+  identity:
+    model:
+      revision: e3b8f9f2fad29727dfa95e766c5cac18ea1414bf
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/GLM-5.3-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        # GLM-5.3 emits the GLM-4.7 tool-call format.
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        context-length: 1048576
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.86
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 64
+        # The connector selects golden AL 2.99 for K=3 from glm5.3_mtp.yaml.
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        # Overlap checkpoint reads with weight loading.
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        watchdog-timeout: 1800
+        enable-cache-report: true
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_c1:
+  roles:
+    agg:
+      args:
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        # With expandable segments, lifts tokens/s/GPU at the same interactivity.
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_c4:
+  roles:
+    agg:
+      args:
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_c8:
+  roles:
+    agg:
+      args:
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_c10:
+  roles:
+    agg:
+      args:
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+override_c13:
+  roles:
+    agg:
+      args:
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '13'
+      KV_OFFLOADING: none
+
+override_c14:
+  roles:
+    agg:
+      args:
+        enable-torch-symm-mem: true
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  benchmark:
+    env:
+      CONC: '14'
+      KV_OFFLOADING: none
+
+override_c22:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        # GB per rank; each TP rank holds full MLA KV. The DSA indexer pool adds
+        # about 69 GB/rank, about 2.95 TB of host DRAM per node in total.
+        hicache-size: 300
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '22'
+      KV_OFFLOADING: dram
+
+override_c24:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 300
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+
+override_c25:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 300
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '25'
+      KV_OFFLOADING: dram
+
+override_c28:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 300
+        hicache-write-policy: write_back
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: dram

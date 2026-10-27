@@ -296,6 +296,10 @@ def aggregate_power_result(
 
 
 def process_result(env: Mapping[str, str]) -> int:
+    """Write agg_<RESULT_FILENAME>.json from the benchmark JSON and ``env``, join power when configured.
+
+    Returns 1 when power is required and fails or the benchmark failed, else 0.
+    """
     require_environment(env, _BASE_ENV_VARS)
     result_filename = env["RESULT_FILENAME"]
     bench_path = Path(f"{result_filename}.json")
@@ -409,6 +413,7 @@ def process_multinode_results(env: Mapping[str, str]) -> int:
 
 
 def main() -> int:
+    """Process every multinode point with ``--all``, else the single result named by the environment."""
     return (
         process_multinode_results(os.environ)
         if sys.argv[1:] == ["--all"]

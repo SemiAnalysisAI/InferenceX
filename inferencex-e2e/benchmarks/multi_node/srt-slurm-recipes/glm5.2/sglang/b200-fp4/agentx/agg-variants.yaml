@@ -6,7 +6,7 @@ base:
       revision: aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa
     container: {}
     frameworks:
-      dynamo: 1.5.0.dev20260903
+      dynamo: b4540b8767aaa8d98582251bbe9e2ceaba1ed1b1
   resources:
     gpu_type: b200
     gpus_per_node: 8
@@ -15,7 +15,7 @@ base:
   dynamo:
     install: true
     source:
-      wheel: 1.5.0.dev20260903
+      rev: b4540b8767aaa8d98582251bbe9e2ceaba1ed1b1
   frontend:
     type: dynamo
     env:
@@ -118,7 +118,7 @@ override_tp8_c1:
         tensor-parallel-size: 8
         # Fan-out subagents queue instead of widening the decode batch past 2.
         max-running-requests: 2
-        cuda-graph-max-bs: 2
+        cuda-graph-max-bs-decode: 2
 
 override_c1:
   name: glm52-b200-agg-tp4-c1-mtp
@@ -127,7 +127,7 @@ override_c1:
       args:
         # Fan-out subagents queue behind the running request instead of sharing its decode steps.
         max-running-requests: 1
-        cuda-graph-max-bs: 1
+        cuda-graph-max-bs-decode: 1
 
 override_c4:
   name: glm52-b200-agg-tp4-c4-mtp
@@ -135,7 +135,7 @@ override_c4:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
 
 override_c8:
   name: glm52-b200-agg-tp4-c8-mtp
@@ -143,7 +143,7 @@ override_c8:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
 
 override_c12:
   name: glm52-b200-agg-tp4-c12-mtp
@@ -151,7 +151,7 @@ override_c12:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
 
 override_tp8_dp8attn_c32:
   name: glm52-b200-agg-tp8-dp8attn-c32-mtp
@@ -168,6 +168,6 @@ override_tp8_dp8attn_c32:
         # Node totals under DP attention: 8192-token chunks and 16 requests per rank.
         chunked-prefill-size: 65536
         max-running-requests: 128
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         # Unsplit attention weights per rank; leaves room for the DSA indexer's fp32 prefill logits.
         mem-fraction-static: 0.82
