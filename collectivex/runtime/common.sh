@@ -125,7 +125,7 @@ collx_load_operator_config() {
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
-  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS
+  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS COLLX_HOST_VERBS_PROVIDER
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -241,6 +241,24 @@ collx_add_efa_host_mounts() {
   mounts="$(collx_efa_host_mounts "${COLLX_IMAGE_PLATFORM:-}")" \
     || collx_die "no host EFA user space layout for this image platform"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
+}
+
+# Some NIC vendors replace the host's rdma-core provider with their own build for an out-of-tree
+# kernel driver (Barite's Broadcom bnxt_re 237.x speaks kernel ABI 8; rdma-core's stock bnxt_re
+# provider, the image's, supports only ABI 1, so libibverbs lists no device). Multi-node shards bind
+# the registry-named host provider read-only over the image's file of the same name. libibverbs
+# loads providers by that name; both sides must share its private ABI (the -rdmavNN suffix).
+collx_add_host_verbs_provider_mount() {
+  local provider="${COLLX_HOST_VERBS_PROVIDER:-}" libdir
+  [ -n "$provider" ] && [ "${NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  [[ "$provider" =~ ^/[A-Za-z0-9_./-]+/lib[a-z0-9_]+-rdmav[0-9]+\.so$ ]] && [[ "$provider" != *..* ]] \
+    || collx_die "invalid host verbs provider path"
+  case "${COLLX_IMAGE_PLATFORM:-}" in
+    linux/amd64) libdir=/usr/lib/x86_64-linux-gnu ;;
+    linux/arm64) libdir=/usr/lib/aarch64-linux-gnu ;;
+    *) collx_die "no verbs provider layout for this image platform" ;;
+  esac
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$provider:$libdir/libibverbs/${provider##*/}:ro"
 }
 
 # AWS EFA scale-out (b300: p6-b300.48xlarge, 16 EFA devices per node; h100-dgxc: p5.48xlarge, 32).
