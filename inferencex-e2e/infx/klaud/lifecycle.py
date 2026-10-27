@@ -319,8 +319,12 @@ class Session:
                 or any(pr["number"] == pulls[0]["number"] for pr in run["pull_requests"])
             )
         ]
+        # A skipped run did no work: labelling or closing the PR starts one under its actor.
         if self.recovering and any(
-            ended and utc(run["created_at"]) > utc(ended) and run["actor"]["login"] != BOT
+            ended
+            and utc(run["created_at"]) > utc(ended)
+            and run["actor"]["login"] != BOT
+            and run.get("conclusion") != "skipped"
             for run in sweeps
         ):
             raise VerificationError("Maintainer started runs after the session; leave them intact")

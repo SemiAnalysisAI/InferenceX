@@ -574,6 +574,34 @@ def idle_first(
     )
 
 
+class WaveCapacity:
+    """Headroom one wave uses up as it takes candidates, one per infra-backoff cluster.
+
+    ``select`` and ``regenerate-producers`` walk candidates the same way, so producers are
+    prepared for the candidates a wave can actually take, not those capacity will skip.
+    """
+
+    def __init__(self, headroom: dict[str, int], size: dict[str, int], backoff: set[str]) -> None:
+        """Start from ``headroom`` of clusters of ``size`` nodes, with ``backoff`` clusters."""
+        self.headroom, self.size, self.backoff = dict(headroom), size, backoff
+        self.backed_off: set[str] = set()
+
+    def blocker(self, candidate: dict) -> str | None:
+        """Return why the wave cannot take ``candidate`` now ("backoff" or "capacity"), or None."""
+        clusters = candidate["clusters"]
+        if self.backed_off.intersection(clusters):
+            return "backoff"
+        if any(self.headroom.get(cluster, 0) < candidate["node-demand"] for cluster in clusters):
+            return "capacity"
+        return None
+
+    def take(self, candidate: dict) -> None:
+        """Reserve ``candidate``'s full sweep on each target cluster for the rest of the wave."""
+        for cluster in candidate["clusters"]:
+            self.headroom[cluster] -= min(candidate["sweep-node-demand"], self.size[cluster])
+        self.backed_off.update(self.backoff.intersection(candidate["clusters"]))
+
+
 def klaud_pulls(pulls: list[dict]) -> list[dict]:
     """Return ``pulls`` on Klaud candidate branches. Other PRs never own a family."""
     return [pr for pr in pulls if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])]
@@ -586,7 +614,8 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
     are ordered toward idle clusters, cooled down by ``cooldown_hours`` and the recent-outcome
     holds, held while a maintainer recently closed their family's PR, and capped at
     ``review_batch_size``. Only open Klaud PRs are indexed. CLUSTER_STATE gives ``select`` the
-    claimed families' committed demand and the clusters under infrastructure backoff.
+    claimed families' committed demand and the clusters under infrastructure backoff, and gives
+    ``regenerate-producers`` this plan's headroom and cluster sizes.
     """
     from . import claims
 
@@ -698,7 +727,12 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
     (directory / "open-prs.json").write_text(json.dumps(open_prs, indent=2) + "\n")
     (directory / CLUSTER_STATE).write_text(
         json.dumps(
-            {"committed-demand": committed, "infra-backoff": sorted(history.infra_clusters)},
+            {
+                "committed-demand": committed,
+                "infra-backoff": sorted(history.infra_clusters),
+                "headroom": headroom,
+                "size": capacity.size,
+            },
             indent=2,
         )
         + "\n"
@@ -1097,8 +1131,9 @@ def print_untrusted(title: str, text: str) -> None:
 def regenerate_producers(directory: Path, max_candidates: int, active_sessions: int = 0) -> None:
     """Write ``producers.json``: proceed candidates' producer families, by family and head.
 
-    ``select`` takes candidates in order up to ``max_candidates`` less ``active_sessions``, so
-    only that many proceed candidates plus PRODUCER_MARGIN replacements are regenerated, and none
+    ``select`` takes candidates in order up to ``max_candidates`` less ``active_sessions``,
+    skipping those the wave's capacity cannot take. This walks them the same way, with the plan's
+    headroom from CLUSTER_STATE, and regenerates that many plus PRODUCER_MARGIN replacements, none
     without a slot. Producer revisions regenerate their own families, so this step runs without
     credentials. A producer that fails is logged and left out; ``select`` defers the candidates
     needing it.
@@ -1115,10 +1150,24 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
         if decision.decision == "proceed" and decision.family not in excluded
     }
     slots = max(0, max_candidates - active_sessions)
-    proceeding = [candidate for candidate in contexts if candidate["id"] in models]
+    state = json.loads((directory / CLUSTER_STATE).read_text())
+    wave = WaveCapacity(state["headroom"], state["size"], set(state["infra-backoff"]))
+    proceeding = []
+    taken: set[str] = set()
+    for candidate in contexts:
+        if len(proceeding) >= (slots + PRODUCER_MARGIN if slots else 0):
+            break
+        if (
+            candidate["id"] in models
+            and candidate["family"] not in taken
+            and not wave.blocker(candidate)
+        ):
+            wave.take(candidate)
+            taken.add(candidate["family"])
+            proceeding.append(candidate)
     repository = os.environ["GITHUB_REPOSITORY"]
     families: dict[str, dict[str, dict]] = {}
-    for candidate in proceeding[: slots + PRODUCER_MARGIN if slots else 0]:
+    for candidate in proceeding:
         model = models[candidate["id"]]
         try:
             heads = publication(repository, candidate, model).heads
@@ -1173,11 +1222,13 @@ def select(
             deferred = "capacity-unavailable"
         else:
             deferred = None if capacity else "capacity-snapshot-unusable"
-    headroom = capacity.headroom(state["committed-demand"]) if capacity else {}
-    size = capacity.size if capacity else {}
+    wave = WaveCapacity(
+        capacity.headroom(state["committed-demand"]) if capacity else {},
+        capacity.size if capacity else {},
+        backoff,
+    )
     capacity_deferred = []
     backoff_deferred = []
-    backed_off: set[str] = set()
     baseline_deferred = []
     baseline_reasons: dict[str, str] = {}
     baseline_mismatches = []
@@ -1189,11 +1240,11 @@ def select(
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        clusters, demand = candidate["clusters"], candidate["node-demand"]
-        if backed_off.intersection(clusters):
+        blocker = wave.blocker(candidate)
+        if blocker == "backoff":
             backoff_deferred.append(candidate["id"])
             continue
-        if any(headroom.get(cluster, 0) < demand for cluster in clusters):
+        if blocker:
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(
@@ -1254,9 +1305,7 @@ def select(
             os.environ["GITHUB_REPOSITORY"], owned, int(os.environ["GITHUB_RUN_ID"])
         ):
             continue
-        for cluster in clusters:
-            headroom[cluster] -= min(candidate["sweep-node-demand"], size[cluster])
-        backed_off.update(backoff.intersection(clusters))
+        wave.take(candidate)
         selected.append(
             {
                 **candidate,
