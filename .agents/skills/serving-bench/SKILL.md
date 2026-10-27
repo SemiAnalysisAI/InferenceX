@@ -82,7 +82,7 @@ via an OpenAI-compatible API), write `endpoint:` instead of `image`/`model`/`gpu
   Never put the key in the YAML. Omit for an open endpoint.
 - `tokenizer`: `builtin` (default; exact for OpenAI GPT-4o/GPT-5, approximate for other closed
   models), `cl100k_base`/`o200k_harmony`, or the HF repo id of an open model.
-- `runner`: any VNG runner; the job takes 4 CPUs and 16 GB, no GPU.
+- `runner`: any VNG runner; the job takes 16 CPUs and 64 GB, no GPU.
 - No server metrics or GPU telemetry in the result. ISL/OSL come from the API's `usage`; if it
   streams none, the job counts client-side and the aggregate says `token_count_source: client`.
 - A probe request runs first: 401/404/400 fail the job in seconds with the fix. A 400 naming

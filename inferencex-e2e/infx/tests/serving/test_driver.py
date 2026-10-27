@@ -93,7 +93,7 @@ def test_remote_point_is_a_cpu_only_job_with_one_client_step(harness):
     assert result.returncode == 0, result.stdout + result.stderr
     [submit] = lines(harness.logs, "sbatch")
     flags = submit.split()
-    assert {"--cpus-per-task=4", "--mem=16G", "--nodelist=hgx-h200-02"} <= set(flags)
+    assert {"--cpus-per-task=16", "--mem=64G", "--nodelist=hgx-h200-02"} <= set(flags)
     assert not [f for f in flags if f.startswith(("--gres", "--cpus-per-gpu", "--mem-per-gpu"))]
     assert submit.endswith("remote.sh")
     steps = "\n".join(lines(harness.logs, "srun"))  # the bash -c script spans several log lines
@@ -106,4 +106,4 @@ def test_remote_sbatch_args_keep_the_node_pin_only():
     from infx.launch.drivers.serving import remote_sbatch_args
 
     assert remote_sbatch_args(["--nodelist=n1", "--cpus-per-gpu=16", "--mem-per-gpu=110000M"]) == [
-        "--ntasks=1", "--cpus-per-task=4", "--mem=16G", "--nodelist=n1"]
+        "--ntasks=1", "--cpus-per-task=16", "--mem=64G", "--nodelist=n1"]

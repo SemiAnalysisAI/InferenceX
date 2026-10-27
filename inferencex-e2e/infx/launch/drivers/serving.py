@@ -25,7 +25,7 @@ from infx.serving.schema import is_local_squash
 
 JOB_SCRIPT = Path("benchmarks/single_node/serving/job.sh")
 REMOTE_JOB_SCRIPT = Path("benchmarks/single_node/serving/remote.sh")
-REMOTE_RESOURCES = ("--ntasks=1", "--cpus-per-task=4", "--mem=16G")
+REMOTE_RESOURCES = ("--ntasks=1", "--cpus-per-task=16", "--mem=64G")  # dataset build: 1 GPU job's CPU share
 GPU_SHARE_FLAGS = ("--cpus-per-gpu", "--mem-per-gpu")  # a GPU-less job cannot ask for a per-GPU share
 DCGM_IMAGE = "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
 HF_VOLUME = "hf-hub-cache"
