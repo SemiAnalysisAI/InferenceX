@@ -11381,3 +11381,10 @@
     - "Update the vLLM image from nightly-dev-x86_64-cu130-ac9126e58aa7 to v0.32.0, pinned by digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4523
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic-dspark-mooncake-dcp16-disagg
+  description:
+    - "Update the vLLM image from nightly-e68efc68 to nightly-00b6c4c5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4538
+  scenario-type: [agentic-coding]
