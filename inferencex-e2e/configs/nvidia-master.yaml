@@ -902,8 +902,8 @@ dsv4-fp4-b200-vllm-agentic-mtp:
     - dram-utilization: 0.90
       search-space:
       # TP8 resident KV + DSpark6
-      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [6, 14], srt-recipe: agentic.yaml }
-      # DEP8 SimpleCPU + DSpark6; c32 runs TP4 x DP2 expert-parallel
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 6, 14], srt-recipe: agentic.yaml }
+      # DEP8 SimpleCPU + DSpark6
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [32, 64, 96, 128, 160, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 dsv4-fp4-b200-vllm-agentic-mtp-lowconc:
@@ -919,13 +919,9 @@ dsv4-fp4-b200-vllm-agentic-mtp-lowconc:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
-      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4], srt-recipe: agentic-lowconc.yaml }
-      # TP8 c10 and c16 use the agentic.yaml overrides; c16 adds SimpleCPU KV offload
+      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [4], srt-recipe: agentic-lowconc.yaml }
       - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [10], srt-recipe: agentic.yaml }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [16], srt-recipe: agentic.yaml }
-      # TP2 x DP4 expert-parallel SimpleCPU + DSpark6 at c64
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [64], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic-tp2dp4-c64.yaml }
-      # TP2 x DP4 expert-parallel SimpleCPU + DSpark6 at c48
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [48], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic-tp2dp4-c48.yaml }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
