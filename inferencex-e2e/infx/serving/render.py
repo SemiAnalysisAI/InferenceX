@@ -18,6 +18,16 @@ from infx.serving.schema import ServingError, ServingSpec
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _OWNED_FLAGS = ("--host", "--port")
 _ROUTER_OWNED_FLAGS = ("--http-host", "--http-port")
+CLIENT_IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"  # python + uv: the AgentX venv bootstrap needs no curl
+
+
+def render_remote() -> dict[str, str]:
+    """A remote endpoint launches nothing: every engine, router and storage field is empty."""
+    return {
+        "framework": "remote", "serve-cmd": "", "serve-env": "", "served-model-name": "",
+        "router-image": "", "router-cmd": "", "router-env": "", "router-profile": "",
+        "router-metrics-port": "", "storage-image": "", "storage-cmd": "", "storage-env": "",
+    }  # fmt: skip
 
 
 def split_serve(serve: str, field: str = "serve") -> list[str]:

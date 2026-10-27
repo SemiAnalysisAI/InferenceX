@@ -14,16 +14,20 @@ import json
 import sys
 from pathlib import Path
 
-from infx.serving.render import render
+from infx.serving.render import CLIENT_IMAGE, render, render_remote
 from infx.serving.scenarios import Rendered
 from infx.serving.schema import ServingError, ServingSpec, load_serving, variants
 
 
 def _row(spec: ServingSpec, framework: str, conc: int, duration: int, exp_name: str) -> dict:
+    remote = spec.endpoint
     return {
-        "image": spec.image, "model": spec.model, "model-prefix": spec.name,
-        "precision": spec.precision, "framework": framework, "runner": spec.runner,
-        "tp": spec.gpus, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
+        "image": CLIENT_IMAGE if remote else spec.image, "model": remote.model if remote else spec.model,
+        "model-prefix": spec.name, "precision": "remote" if remote else spec.precision,
+        "framework": framework, "runner": spec.runner,
+        # tp stays 1 for a remote point: upstream derives GPU_COUNT from it and divides by it;
+        # the serving driver, not GPU_COUNT, decides that a remote job takes no GPU.
+        "tp": 1 if remote else spec.gpus, "pp": 1, "dcp-size": 1, "pcp-size": 1, "ep": 1, "dp-attn": False,
         "spec-decoding": "none", "conc": conc, "kv-offloading": "none", "total-cpu-dram-gb": 0,
         "duration": duration, "exp-name": exp_name, "scenario-type": "agentic-coding",
     }  # fmt: skip
@@ -50,12 +54,20 @@ def _serving(spec: ServingSpec, rendered: dict[str, str], variant: Rendered, tex
         "dataset": variant.dataset,
         "search": variant.search,
         "yaml": text,
+        "remote_url": spec.endpoint.url if spec.endpoint else "",
+        "tokenizer": spec.endpoint.tokenizer if spec.endpoint else "",
+        "api_key_secret": _secret(spec),
     })
+
+
+def _secret(spec: ServingSpec) -> str:
+    """Name of the GitHub secret holding the endpoint's key; empty when there is none."""
+    return (spec.endpoint.api_key_secret or "") if spec.endpoint else ""
 
 
 def build(text: str, inventory=None) -> dict:
     spec = load_serving(text, inventory)
-    rendered = render(spec)
+    rendered = render_remote() if spec.endpoint else render(spec)
     chosen = variants(spec)
     multi = len(chosen) > 1
     points = []
@@ -66,7 +78,8 @@ def build(text: str, inventory=None) -> dict:
             else:
                 exp_name = f"{spec.name}_search" if variant.search else f"{spec.name}_c{conc}"
             row = _row(spec, rendered["framework"], conc, int(variant.duration), exp_name)
-            points.append({"config": row, "serving": _serving(spec, rendered, variant, text)})
+            points.append({"config": row, "serving": _serving(spec, rendered, variant, text),
+                           "api_key_secret": _secret(spec)})
     what = f"{len(chosen)} points" if multi else chosen[0].label
     durations = {int(variant.duration) for variant in chosen}
     seconds = f"{durations.pop()}s" if len(durations) == 1 else "mixed"

@@ -55,3 +55,34 @@ def test_cli_check_and_errors(tmp_path, capsys):
     bad.write_text(ENGINE + "scenario: tau2\nconc: 4\noverrides: {nope: 1}\n")
     assert main([str(bad)]) == 2
     assert "ERROR overrides: unknown key(s) nope" in capsys.readouterr().err
+
+
+REMOTE = """\
+name: gpt5-remote
+runner: cluster:hcm-rtx01
+endpoint: {url: "https://api.openai.com/v1", model: gpt-5, api-key-secret: OPENAI_API_KEY}
+scenario: agentx
+overrides: {duration: 180}
+conc: [4, 8]
+"""
+
+
+def test_remote_point_runs_the_client_image_against_the_endpoint():
+    points = build(REMOTE)["points"]
+    assert [p["config"]["exp-name"] for p in points] == ["gpt5-remote_c4", "gpt5-remote_c8"]
+    row = points[0]["config"]
+    assert set(row) == ROW_KEYS
+    assert row["image"] == "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
+    assert (row["model"], row["framework"], row["precision"], row["tp"]) == ("gpt-5", "remote", "remote", 1)
+    assert points[0]["api_key_secret"] == "OPENAI_API_KEY"
+    serving = json.loads(points[0]["serving"])
+    assert serving["remote_url"] == "https://api.openai.com"
+    assert serving["tokenizer"] == "builtin"
+    assert serving["api_key_secret"] == "OPENAI_API_KEY"
+    assert serving["serve_cmd"] == "" and serving["router_cmd"] == ""
+
+
+def test_engine_point_carries_no_remote_fields():
+    point = build(ENGINE + "scenario: tau2\nconc: 4\n")["points"][0]
+    serving = json.loads(point["serving"])
+    assert (serving["remote_url"], serving["tokenizer"], point["api_key_secret"]) == ("", "", "")
