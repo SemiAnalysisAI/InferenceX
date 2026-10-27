@@ -12,8 +12,8 @@ base:
     source:
       # Upstream v1.6.1: resolves interface-name DYN_TCP_RPC_HOST (ai-dynamo/dynamo#11870)
       # and decouples TRT-LLM KV events from metrics (ai-dynamo/dynamo#12162).
-      git: https://github.com/ai-dynamo/dynamo.git
-      rev: 0d9c24a8bf6db13c1a1223cf15fcbee9140d1ac3
+      # Prebuilt wheels: a source build's cudarc 0.19.8 rejects the image's CUDA 13.4.
+      pypi: "1.6.1"
     request_plane: tcp
   health_check:
     max_attempts: 1440
