@@ -363,6 +363,19 @@ class EfaHostMountTests(unittest.TestCase):
                          for target in (f"{name}.so.1", f"{name}.so")]
         self.assertEqual(mounts[1:], expected)
 
+    def test_uccl_shards_also_bind_the_host_rdma_core_headers(self) -> None:
+        # UCCL-EP compiles its EFA transport against headers matching the bound libefa.
+        result = run_common(
+            'COLLX_RDMA_FABRIC=efa NODES=2 COLLX_TRANSPORT=nvlink-rdma COLLX_BENCH=uccl-ep'
+            ' COLLX_IMAGE_PLATFORM=linux/amd64 CONTAINER_MOUNTS=/stage:/ix;'
+            ' collx_add_efa_host_mounts && echo "$CONTAINER_MOUNTS"')
+        mounts = result.stdout.strip().split(",")
+        self.assertEqual(mounts[-2:], [
+            "/usr/include/infiniband:/opt/collectivex/host-efa/include/infiniband:ro",
+            "/usr/include/rdma:/opt/collectivex/host-efa/include/rdma:ro",
+        ])
+        self.assertEqual(mounts[1:-2], self._mounts("efa", 2).stdout.strip().split(",")[1:])
+
     def test_single_node_and_non_efa_shards_keep_their_mounts(self) -> None:
         for fabric, nodes in (("efa", 1), ("", 2)):
             with self.subTest(fabric=fabric, nodes=nodes):
