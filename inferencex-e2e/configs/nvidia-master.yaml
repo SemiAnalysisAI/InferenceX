@@ -6504,7 +6504,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic-mooncake-dcp16-agg:
           dp-attn: false
 
 dsv4-fp4-gb300-dynamo-trt-agentx:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc24
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0rc1@sha256:3bedbe0321e7eb5430f3177d88894a3cf2dc2f6a087d0e85c13fc882667c75c0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv
