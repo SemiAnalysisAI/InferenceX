@@ -205,6 +205,8 @@ override_ep8_c128_mega_mp:
         - LRU
         - --eviction-trigger-watermark
         - '0.98'
+        - --max-workers
+        - '4'
   frontend: &mega_mp_frontend
     args:
       dp-aware: true
