@@ -117,37 +117,41 @@ override_tp4_c32:
     agg:
       args:
         max-num-seqs: 64
-        gpu-memory-utilization: 0.80
+        gpu-memory-utilization: 0.78
+        max-num-batched-tokens: 16384
         kv-cache-metrics: true
         load-format: fastsafetensors
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":720000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":600000000000,"lazy_offload":true}}'
 override_tp4_c40:
   name: minimaxm31flash-gb200-agg-tp4-dram-c40
   roles:
     agg:
       args:
         max-num-seqs: 64
-        gpu-memory-utilization: 0.80
+        gpu-memory-utilization: 0.78
+        max-num-batched-tokens: 16384
         kv-cache-metrics: true
         load-format: fastsafetensors
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":720000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":600000000000,"lazy_offload":true}}'
 override_tp4_c48:
   name: minimaxm31flash-gb200-agg-tp4-dram-c48
   roles:
     agg:
       args:
         max-num-seqs: 64
-        gpu-memory-utilization: 0.80
+        gpu-memory-utilization: 0.78
+        max-num-batched-tokens: 16384
         kv-cache-metrics: true
         load-format: fastsafetensors
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":720000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":600000000000,"lazy_offload":true}}'
 override_tp4_c56:
   name: minimaxm31flash-gb200-agg-tp4-dram-c56
   roles:
     agg:
       args:
         max-num-seqs: 96
-        gpu-memory-utilization: 0.80
+        gpu-memory-utilization: 0.78
+        max-num-batched-tokens: 16384
         kv-cache-metrics: true
         load-format: fastsafetensors
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":720000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":600000000000,"lazy_offload":true}}'
