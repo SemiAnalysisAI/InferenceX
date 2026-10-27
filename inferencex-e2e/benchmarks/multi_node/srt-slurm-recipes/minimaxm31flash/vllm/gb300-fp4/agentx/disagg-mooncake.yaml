@@ -40,7 +40,7 @@ base:
     options:
       store_config:
         metadata_server: P2PHANDSHAKE
-        global_segment_size: 180GB
+        global_segment_size: 160GB
         local_buffer_size: 4GB
         protocol: rdma
         device_name: '@fabric.rdma-devices'
@@ -228,7 +228,7 @@ override_2p2d8:
     options:
       store_config:
         metadata_server: P2PHANDSHAKE
-        global_segment_size: 180GB
+        global_segment_size: 160GB
         local_buffer_size: 4GB
         protocol: rdma
         device_name: '@fabric.rdma-devices'
