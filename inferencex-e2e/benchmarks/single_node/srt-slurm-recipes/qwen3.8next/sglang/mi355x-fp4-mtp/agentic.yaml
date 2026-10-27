@@ -191,6 +191,9 @@ override_c16:
         chunked-prefill-size: 8192
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_ENABLE_QSA_PAGED_PREFILL: '0'
+        SGLANG_AITER_FUSE_RMSNORM_PAD: '1'
+        SGLANG_AITER_MLA_PERSIST: '1'
   benchmark:
     env:
       CONC: '16'
