@@ -37,6 +37,18 @@ def online(env: Mapping[str, str]) -> dict[str, str]:
     return {key: value for key, value in env.items() if key not in OFFLINE}
 
 
+def datasets_cache(env: Mapping[str, str]) -> dict[str, str]:
+    """Keep the datasets Arrow cache on the node, beside the hub cache, so later jobs skip the rebuild.
+
+    The default (~/.cache in the container) dies with the job: every run re-read the 1.8 GB AgentX
+    trace JSON and rewrote ~4.5 GB of Arrow, and a cold read on a busy /mnt stalled a run 13 min.
+    """
+    hub = env.get("HF_HUB_CACHE")
+    if not hub or env.get("HF_DATASETS_CACHE"):
+        return {}
+    return {"HF_DATASETS_CACHE": f"{hub.rstrip('/')}/.datasets-arrow"}
+
+
 def agentx_argv(agentx: str, scenario: Path, env: Mapping[str, str]) -> list[str]:
     argv = [agentx, "profile", "--config", str(scenario)]
     argv += ["--url", env.get("SERVING_REMOTE_URL") or f"http://localhost:{env['PORT']}"]
@@ -177,6 +189,7 @@ def run(env: Mapping[str, str], runtime: Runtime) -> int:
         "RESULT_DIR": str(result_dir),
         "AGENTIC_OUTPUT_DIR": str(output_dir),
         "PYTHONPATH": proc.pythonpath(env),
+        **datasets_cache(env),
     }
     if (marker := result_dir / DATASET_PATH).exists():
         child["IX_CUSTOM_DATASET_FILE"] = marker.read_text().strip()

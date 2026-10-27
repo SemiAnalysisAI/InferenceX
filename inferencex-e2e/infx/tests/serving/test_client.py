@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from infx.serving.client import ProbeError, agentx_argv, label_result, online, probe, redacted, with_token_source
+from infx.serving.client import (
+    ProbeError, agentx_argv, datasets_cache, label_result, online, probe, redacted, with_token_source,
+)
 
 ENV = {
     "PORT": "21000", "MODEL": "Qwen/Qwen3.8-27B", "SERVED_MODEL_NAME": "", "CONC": "8",
@@ -151,3 +153,10 @@ def test_probe_failures_name_the_fix(status, body, secret, message):
         server.shutdown()
     assert message in str(caught.value)
     assert "sk-1" not in str(caught.value)
+
+
+def test_datasets_arrow_cache_lives_beside_the_node_hub_cache():
+    assert datasets_cache({"HF_HUB_CACHE": "/mnt/hf_hub_cache/"}) == {
+        "HF_DATASETS_CACHE": "/mnt/hf_hub_cache/.datasets-arrow"}
+    assert datasets_cache({"HF_HUB_CACHE": "/mnt/hf", "HF_DATASETS_CACHE": "/x"}) == {}  # caller's choice wins
+    assert datasets_cache({}) == {}  # no node cache mounted: keep the library default
