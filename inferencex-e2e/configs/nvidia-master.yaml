@@ -5746,13 +5746,12 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
           ep: 1
           dp-attn: false
 
-# MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
-# cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
-# manifest digest verified 2026-10-24.
+# MiniMax-M3.1-Flash AgentX on GB200 with SGLang: upstream arm64 CUDA 13.4
+# nightly, which carries the MiniMax-M3.1-Flash support of sgl-project/sglang#45925.
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
 # infx/golden_al_distribution/minimaxm31flash_dspark.yaml.
 minimaxm31flash-fp4-gb200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  image: lmsysorg/sglang:nightly-cu134-20261026-5ef9901@sha256:64460b432679d4555b6579832454d8b9a21cc8591b2d16b340b94abb59de28e6
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb200-nv
