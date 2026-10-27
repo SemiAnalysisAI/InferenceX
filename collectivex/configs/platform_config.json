@@ -4,7 +4,7 @@
     "h100-dgxc": {
       "arch": "sm90",
       "product": "h100",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
@@ -27,7 +27,7 @@
     "h200-dgxc": {
       "arch": "sm90",
       "product": "h200",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
@@ -133,7 +133,7 @@
     "mi300x": {
       "arch": "gfx942",
       "product": "mi300x",
-      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image": "vllm/vllm-openai-rocm:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
@@ -153,7 +153,7 @@
     "mi325x": {
       "arch": "gfx942",
       "product": "mi325x",
-      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image": "vllm/vllm-openai-rocm:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
