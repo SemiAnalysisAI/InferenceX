@@ -4579,7 +4579,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
 # fingerprints and C7 point below retain their measured aggregate TP shapes.
 # PR #36248 breakable prefill CUDA Graph settings are intentionally excluded.
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp-pareto:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260831-bb5e6198
+  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
