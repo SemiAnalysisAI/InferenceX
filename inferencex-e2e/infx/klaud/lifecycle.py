@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from . import claims, github
-from .github import VerificationError
+from .github import ListingUnavailable, VerificationError
 from .models import (
     LEGACY_OUTCOMES,
     CandidateOutcome,
@@ -52,6 +52,7 @@ WAVE_HOURS = 4
 RESUME_GIVE_UP_SECONDS = 24 * 60 * 60
 SESSION_SECONDS = 330 * 60
 PARK_AFTER_SECONDS = 300 * 60
+RETIRE_SECONDS = 7 * 24 * 60 * 60
 GATE_STEP = "Check whether this session should run"
 AGENT_STEP = "Let Klaud Cold own the candidate PR"
 WAKE_TITLE = "Klaud Cold wake"
@@ -993,6 +994,26 @@ def retained(session: Session, now: datetime) -> bool:
     return bool(pulls) and unfinished_draft(session, pulls[0])
 
 
+def retirable(session: Session, error: Exception, now: datetime) -> bool:
+    """Whether recovery stops tracking a session that ``error`` keeps it from reconciling.
+
+    Only a fixed verification failure qualifies, not unfinished work or an unreadable listing,
+    and only RETIRE_SECONDS after the session's last job ended, long after any resume or rerun.
+    """
+    if (
+        not isinstance(error, VerificationError)
+        or isinstance(error, (PendingCleanup, ListingUnavailable))
+        or not terminal(session.parent)
+        or now - utc(session.parent["updated_at"]) < timedelta(seconds=RETIRE_SECONDS)
+    ):
+        return False
+    try:
+        ended = session.last_session_end()
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return False
+    return ended is not None and now - utc(ended) >= timedelta(seconds=RETIRE_SECONDS)
+
+
 def summarize(repository: str, candidate: OwnedCandidate, parent: int, status: str) -> None:
     """Append ``status`` for ``candidate`` of run ``parent`` to the job summary, if one exists."""
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -1074,9 +1095,10 @@ def show_status(session: Session) -> None:
         RuntimeError,
         subprocess.SubprocessError,
     ) as error:
+        status = getattr(error, "status", None)
         print(
             f"::warning::Klaud: status label of candidate {session.candidate.id} not updated: "
-            f"{type(error).__name__}."
+            f"{type(error).__name__}{f' (HTTP {status})' if status else ''}."
         )
 
 
@@ -1175,9 +1197,20 @@ def recover(max_sessions: int) -> None:
     Resumes only while sessions already running plus those resumed here stay below
     ``max_sessions``. Writes still-blocked families to ``$RUNNER_TEMP/klaud-recovery.json`` and
     the running plus resumed session count to ``$GITHUB_OUTPUT``. Unreadable state counts as
-    live work.
+    live work. With the API budget below MIN_API_BUDGET, does nothing but write ``deferred=true``
+    to ``$GITHUB_OUTPUT``. Sessions ``retirable`` names are dropped with a warning, so their
+    ownership artifact can be deleted.
     """
     repository = os.environ["GITHUB_REPOSITORY"]
+    if github.budget_low():
+        print(
+            f"::warning::Klaud: under {github.MIN_API_BUDGET} GitHub API requests left; "
+            "recovery deferred to the next pass."
+        )
+        if filename := os.environ.get("GITHUB_OUTPUT"):
+            with open(filename, "a") as output:
+                output.write("deferred=true\n")
+        return
     now = datetime.now(UTC)
     inventory = github.items(
         repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
@@ -1258,6 +1291,20 @@ def recover(max_sessions: int) -> None:
                 TypeError,
                 subprocess.SubprocessError,
             ) as error:
+                if retirable(session, error, now):
+                    results[key] = True
+                    print(
+                        f"::warning::Klaud: stopped tracking candidate {candidate.id} of planner "
+                        f"run {parent['id']}, unreconciled for "
+                        f"{RETIRE_SECONDS // 86400} days: {error}."
+                    )
+                    summarize(
+                        repository,
+                        candidate,
+                        parent["id"],
+                        f"retired / 已停止跟踪 ({error})",
+                    )
+                    continue
                 blocked.add(candidate.family)
                 if isinstance(error, ResumeSession):
                     live.add(candidate.id)
@@ -1331,6 +1378,7 @@ def recover(max_sessions: int) -> None:
     if filename := os.environ.get("GITHUB_OUTPUT"):
         with open(filename, "a") as output:
             output.write(f"active-sessions={running + resumed}\n")
+    github.api_budget()
 
 
 def running_sessions(repository: str) -> set[str]:
