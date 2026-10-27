@@ -11266,3 +11266,118 @@
     - "Add TP4 DRAM KV offload points at conc 40, 48 and 56."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4491
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294 to vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392."
+    - "The GPU-resident concurrency 1 and 4 points move from dcp-size 1 to 8 (decode-context-parallel-size 8, dcp-comm-backend a2a), sharding the KV read across all 8 GPUs like the DRAM-offload points; the offload points (concurrency 4 to 60, dcp8) are unchanged."
+    - "Concurrency 1 runs additional-config {\"decode_backend\":\"latency_specialized\"} with VLLM_USE_V2_MODEL_RUNNER=1: pure spec-verify steps of at most 8 rows run each MoE decoder layer as persistent FlyDSL MonoKernels with in-kernel TP all-reduces."
+    - "Concurrency 1 drops its fp8_per_channel quantization-config: the specialized decode reads the in_proj, o_proj, shared-expert, gate and latent up/down weights in place and requires them in BF16."
+    - "Every point adds additional-config {\"kda_prefill_backend\":\"fused\"}, pinning KDA prefill to the fused gfx950 chunk kernel; at this image the auto default prefers AITER Gluon chunk_kda when it is available."
+    - "Speculative config is unchanged: DSpark with 7 draft tokens at the GPU-resident points, 5 at offload concurrency 4 and 4 from concurrency 10."
+    - "The new image includes vllm-project/vllm#60683 (Kimi-K3 specialized decode on MI355X), #59552 (AITER Gluon chunk_kda for KDA prefill), #59634 (fused GLA gate GEMM and MLA FP8 prefill q/k/v prep) and #59824 (DSpark adaptive verification on MI355X, not enabled here)."
+    - "Draft model data type is unchanged: the Inferact/Kimi-K3-DSpark draft is BF16 with no quantization_config, it gets no quantization and does not inherit the target quantization-config at either image, and its KV cache stays FP8 via speculative-config kv_cache_dtype."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4393
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Pin vLLM to digest-pinned nightly-49cb2bbf71cfd36ee5aa33d1e184b1cddff55294; configure TP8 c1 and TP4 c20/c24 without offload, plus TP2 c24/c28 with 749 GB lazy DRAM offload and CUTLASS MSA decode."
+    - "Set TP4 c20 max-num-active-seqs to 6 and TP2 c28 Slurm time limit to 02:20:00."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4357
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-rocm100-3df4ae15 to v0.32.0, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4496
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261015-a6a8c560 to nightly-dev-cu13-20261025-65633129, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4497
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-ac9126e58aa7 to v0.32.0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4505
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Update the SGLang image from v0.5.20-rocm720-mi35x-20260930 to v0.5.22-rocm720-mi35x, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4506
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - qwen3.8next-fp4-gb300-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4512
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261025-65633129."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4515
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-h100-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-8e2beaa3 to the digest-pinned nightly-e4a5b553."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4521
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb200-sglang-agentic-dspark
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261014-684fea8a to nightly-dev-cu13-20261025-65633129, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4522
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang-agentic-agg
+  description:
+    - "Update the SGLang image from v0.5.21-cu130 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4529
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from nightly-dev-20261021-c1c287a4 to nightly-dev-20261026-8252e3af, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4531
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly 3df4ae15 to the v0.32.0 ROCm release."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4539
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-b200-sglang-agentic-dspark
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261026-8252e3af"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4544
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-b200-vllm-agentic-dspark
+  description:
+    - "Update the vLLM image from nightly-dev-x86_64-cu130-ac9126e58aa7 to v0.32.0, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4523
+  scenario-type: [agentic-coding]
