@@ -60,6 +60,9 @@ base:
           event_buffer_max_size: 0
           free_gpu_memory_fraction: 0.8
           host_cache_size: 193273528320
+          # 1.4.0rc1 always enforces the SWA scratch resize check (debug-only in 1.3.0rc24),
+          # which c388 prefill tripped; DeepSeek-V4 model defaults turn scratch reuse on.
+          enable_swa_scratch_reuse: false
           pool_ratio:
             - 0.55
             - 0.22
