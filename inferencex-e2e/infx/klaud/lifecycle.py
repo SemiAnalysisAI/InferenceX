@@ -320,7 +320,10 @@ class Session:
             )
         ]
         if self.recovering and any(
-            ended and utc(run["created_at"]) > utc(ended) and run["actor"]["login"] != BOT
+            ended
+            and utc(run["created_at"]) > utc(ended)
+            and run["actor"]["login"] != BOT
+            and run.get("conclusion") != "skipped"
             for run in sweeps
         ):
             raise VerificationError("Maintainer started runs after the session; leave them intact")
