@@ -205,7 +205,10 @@ jobs:
             overlap; incomplete file lists require investigation, not assumptions.
 
             Each candidate names its live inferencex-e2e/configs/*-master.yaml:KEY family and an exact published
-            benchmark observation from the canonical matrix generator. The public observation is benchmark
+            benchmark observation from the canonical matrix generator. A family may list several
+            comma-separated keys of one master file, which together form one AgentX dashboard curve.
+            An open Klaud PR touching any of those keys overlaps it. Return the family unchanged.
+            The public observation is benchmark
             evidence only. Verify the exact current family; the candidate agent, not this review, owns
             upstream image research and compatibility. Never substitute a sibling or retired workload.
             Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
