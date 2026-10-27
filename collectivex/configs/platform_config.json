@@ -140,7 +140,7 @@
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
       "backends": {"mori": [8, 16], "uccl-ep": [8, 16]},
-      "ll_backends": {"mori": [16], "uccl-ep": [8]},
+      "ll_backends": {"mori": [16], "uccl-ep": [16]},
       "fabric": {
         "nic": "Broadcom 400GbE RoCE v2 (bnxt_re), 8 rails",
         "switch": "routed L3 RoCE fabric"
@@ -167,7 +167,7 @@
       "launcher": "mi-amds",
       "runner_label": "cluster:mi325x-amds",
       "backends": {"mori": [8, 16], "uccl-ep": [8, 16]},
-      "ll_backends": {"mori": [16], "uccl-ep": [8]},
+      "ll_backends": {"mori": [16], "uccl-ep": [16]},
       "fabric": {
         "nic": "Broadcom 400GbE RoCE v2 (bnxt_re), 8 rails",
         "switch": "routed L3 RoCE fabric"
