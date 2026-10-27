@@ -317,10 +317,9 @@ def test_coverage_warning_escalates_once_without_masking_other_failures(
     )
     body = result["comments"][0]["body"]
     assert body.startswith(marker() + "\n" + header)
-    assert body.count("@functionstackx") == 1
-    assert body.count("@cquil11") == 1
-    assert body.count("@Oseltamivir") == 1
-    assert body.count("@adibarra") == 1
+    escalation = [line for line in body.splitlines() if "needs additional review" in line]
+    assert len(escalation) == 1
+    assert "@" not in escalation[0]
     assert "does not grant or enforce a bypass" in body
     assert f"Assessed commit: `{SHA}`" in body
     assert len(result["writes"]) == 1
@@ -358,7 +357,6 @@ def test_advisory_warning_preserves_verdict_and_only_coverage_escalates(
         1 if advisory_warning == "nvidia_warning" else 0
     )
     assert ("Pareto coverage needs additional review" in body) == coverage_warning
-    assert ("@functionstackx" in body) == coverage_warning
     assert ("❌ Check 1 (Sweep): FAIL" in body) == failure
     assert "did not produce a valid verdict" not in body
     assert len(result["writes"]) == 1
