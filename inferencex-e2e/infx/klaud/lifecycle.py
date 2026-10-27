@@ -1,9 +1,11 @@
 """Finish owned sessions; park, resume or reconcile interrupted ones in later recovery passes.
 
-A session that waits on owned runs parks instead of idling: recovery reruns preempted runs and
-starts the next session only once every owned run has ended. A candidate gets at most
-``MAX_SESSIONS`` sessions, of which at most ``MAX_EXPIRED_SESSIONS`` may end without parking or
-finishing. Planner waves start every ``WAVE_HOURS`` as scheduled in klaud-plan.yml.
+A session that waits on owned runs parks instead of idling. Recovery reruns preempted runs,
+reruns once the failed jobs a session parked to retry after a delay, and starts the next session
+only once every owned run has ended, later after sessions that ended without parking. A
+candidate gets at most ``MAX_SESSIONS`` sessions, of which at most ``MAX_EXPIRED_SESSIONS`` whose
+agent used a tool may end without parking or finishing. Planner waves start every
+``WAVE_HOURS`` as scheduled in klaud-plan.yml.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import subprocess
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import NoReturn
 from urllib.parse import urlencode
 
 from . import claims, github
@@ -26,6 +29,7 @@ from .models import (
     OwnedCandidate,
     Ownership,
     identity,
+    stamp,
     utc,
 )
 from .reporting import Prose, latest_next, translated
@@ -50,11 +54,13 @@ MAX_SESSIONS = 12
 MAX_EXPIRED_SESSIONS = 4
 WAVE_HOURS = 4
 RESUME_GIVE_UP_SECONDS = 24 * 60 * 60
+RESUME_BACKOFF_MINUTES = (10, 30, 90)
 SESSION_SECONDS = 330 * 60
 PARK_AFTER_SECONDS = 300 * 60
 RETIRE_SECONDS = 7 * 24 * 60 * 60
 GATE_STEP = "Check whether this session should run"
 AGENT_STEP = "Let Klaud Cold own the candidate PR"
+UNSTARTED_STEP = "Record that the agent never used a tool"
 WAKE_TITLE = "Klaud Cold wake"
 TIMEOUT_ANNOTATION = "exceeded the maximum execution time"
 
@@ -118,15 +124,20 @@ class Session:
         candidate: OwnedCandidate,
         *,
         recovering: bool = False,
+        listings: dict[str, tuple[int, list[dict]]] | None = None,
     ) -> None:
-        """Track ``candidate`` of planner run ``parent`` in ``repository``, as recovery if set."""
+        """Track ``candidate`` of planner run ``parent`` in ``repository``, as recovery if set.
+
+        Sessions of one planner run may share ``listings``, so a recovery pass reads the run's
+        jobs, resume runs and terminal state once for all of its candidates.
+        """
         self.repository, self.parent, self.candidate = repository, parent, candidate
         self.recovering = recovering
         self.branch = f"klaud/auto-{candidate.id}"
         self.marker = f"<!-- klaud-outcome:{parent['id']}:{candidate.id}\n"
         self.validations = {}
         self.first_attempt_end: datetime | None = None
-        self.listings: dict[str, tuple[int, list[dict]]] = {}
+        self.listings = {} if listings is None else listings
 
     def listing(self, path: str, key: str | None = None) -> list[dict]:
         """``path``'s listing, reused until the next GitHub write or ownership check."""
@@ -134,6 +145,17 @@ class Session:
         if cached is None or cached[0] != github.writes:
             cached = self.listings[path] = (github.writes, github.items(self.repository, path, key))
         return cached[1]
+
+    def workflow_run(self, run_id: int) -> dict:
+        """Workflow run ``run_id``; once terminal it is reused like a listing."""
+        path = f"actions/runs/{run_id}"
+        cached = self.listings.get(path)
+        if cached is not None and cached[0] == github.writes:
+            return cached[1][0]
+        run = github.read(self.repository, path)
+        if terminal(run):
+            self.listings[path] = (github.writes, [run])
+        return run
 
     def validation(self, run: dict) -> tuple[dict, list[dict], list[dict]]:
         """Return the sweep evidence of final sweep ``run``, cached per run attempt.
@@ -236,7 +258,7 @@ class Session:
         """
         if not all(terminal(run) for run in self.resume_runs()):
             return False
-        parent = github.read(self.repository, f"actions/runs/{self.parent['id']}")
+        parent = self.workflow_run(self.parent["id"])
         if terminal(parent):
             return True
         jobs = [
@@ -700,12 +722,17 @@ def await_rerun(session: Session, pull: dict, run: dict, now: datetime) -> None:
         raise AwaitingRerun("Preempted run is waiting for its rerun")
     if run["run_attempt"] >= MAX_RUN_ATTEMPTS:
         return
+    request_rerun(session, pull, run, "Reran preempted run")
+
+
+def request_rerun(session: Session, pull: dict, run: dict, reason: str) -> NoReturn:
+    """Rerun the failed jobs of owned ``run``, then raise AwaitingRerun with ``reason``."""
     session.refresh(pull)
     try:
         github.write(session.repository, f"actions/runs/{run['id']}/rerun-failed-jobs", "POST")
     except (OSError, subprocess.SubprocessError) as error:
         raise AwaitingRerun("Rerun request failed; retrying next pass") from error
-    raise AwaitingRerun("Reran preempted run")
+    raise AwaitingRerun(reason)
 
 
 def unfinished_draft(session: Session, pull: dict | None) -> bool:
@@ -761,6 +788,13 @@ def started_session(job: dict) -> bool:
     )
 
 
+def agent_unstarted(job: dict) -> bool:
+    """Whether ``job``'s agent failed before its first tool call, so its session did no work."""
+    return any(
+        step["name"] == UNSTARTED_STEP and step["conclusion"] == "success" for step in job["steps"]
+    )
+
+
 def sessions_started(session: Session) -> int:
     """Sessions started for the candidate, a running one included."""
     return sum(started_session(job) for job in candidate_jobs(session))
@@ -771,11 +805,8 @@ def park_marker(parent: int, candidate: str, number: int) -> str:
     return f"<!-- klaud-park:{parent}:{candidate}:session-{number}\n"
 
 
-def parked(session: Session, pull: dict, number: int) -> list[int] | None:
-    """The owned runs session ``number`` parked on, or None if it never parked.
-
-    An empty list means the session parked at its deadline with no owned run left to wait on.
-    """
+def park_record(session: Session, pull: dict, number: int) -> dict | None:
+    """The record of what session ``number`` parked on, or None if it never parked."""
     marker = park_marker(session.parent["id"], session.candidate.id, number)
     matches = [
         comment
@@ -785,29 +816,81 @@ def parked(session: Session, pull: dict, number: int) -> list[int] | None:
     if not matches:
         return None
     body = max(matches, key=lambda comment: comment["id"])["body"]
-    return json.loads(body[len(marker) :].split("\n-->", 1)[0])["runs"]
+    return json.loads(body[len(marker) :].split("\n-->", 1)[0])
+
+
+def parked(session: Session, pull: dict, number: int) -> list[int] | None:
+    """The owned runs session ``number`` parked on, or None if it never parked.
+
+    An empty list means the session parked at its deadline with no owned run left to wait on,
+    or parked only for a delayed rerun.
+    """
+    record = park_record(session, pull, number)
+    return None if record is None else record["runs"]
+
+
+def expired(session: Session, pull: dict, number: int, job: dict) -> bool:
+    """Whether started session ``number``, run by candidate ``job``, ended without a clean park.
+
+    A clean park waits on owned runs or a delayed rerun, and the job then ended cleanly or still
+    runs. Running out, crashing, working on after parking or parking at the deadline is not.
+    """
+    record = park_record(session, pull, number)
+    return not (
+        record
+        and (record["runs"] or record.get("rerun"))
+        and job.get("conclusion") in (None, "success")
+    )
 
 
 def within_budget(session: Session, pull: dict) -> bool:
     """Return True while the candidate may start another session.
 
-    A session that parked on owned runs and then ended cleanly (or is still running) is free up
-    to MAX_SESSIONS. One that ran out, crashed, kept working after parking, or parked only at its
-    deadline counts toward MAX_EXPIRED_SESSIONS.
+    Every started session counts toward MAX_SESSIONS. One that ``expired`` also counts toward
+    MAX_EXPIRED_SESSIONS, unless its agent failed before its first tool call.
     """
     started = [job for job in candidate_jobs(session) if started_session(job)]
-    expired = sum(
-        not (parked(session, pull, number) and job.get("conclusion") in (None, "success"))
+    count = sum(
+        expired(session, pull, number, job) and not agent_unstarted(job)
         for number, job in enumerate(started, 1)
     )
-    return len(started) < MAX_SESSIONS and expired < MAX_EXPIRED_SESSIONS
+    return len(started) < MAX_SESSIONS and count < MAX_EXPIRED_SESSIONS
 
 
-def park(session: Session, number: int, *, overdue: bool) -> list[int]:
+def requested_rerun(session: Session, pull: dict, runs: list[dict]) -> tuple[dict, datetime] | None:
+    """The ended owned run the latest session parked to rerun and when, until it reran."""
+    number = sessions_started(session)
+    request = (park_record(session, pull, number) or {}).get("rerun") if number else None
+    run = next((run for run in runs if request and run["id"] == request["run"]), None)
+    if not run or not terminal(run) or run["run_attempt"] != request["attempt"]:
+        return None
+    return run, utc(request["not-before"])
+
+
+def due_rerun(session: Session, pull: dict, runs: list[dict], now: datetime) -> dict | None:
+    """The owned run whose failed jobs recovery reruns at ``now`` for the latest session.
+
+    Raises AwaitingRerun before the requested time. None without a request, once the run reran,
+    or RERUN_GIVE_UP_SECONDS after the requested time, when the next session takes over.
+    """
+    requested = requested_rerun(session, pull, runs)
+    if not requested:
+        return None
+    run, due = requested
+    if now < due:
+        raise AwaitingRerun("Infrastructure rerun is waiting for its requested time")
+    return run if now - due < timedelta(seconds=RERUN_GIVE_UP_SECONDS) else None
+
+
+def park(
+    session: Session, number: int, *, overdue: bool, rerun: tuple[int, datetime] | None = None
+) -> list[int]:
     """Record that session ``number`` waits on its live owned runs, and return their IDs.
 
     Each waited-on run needs a published attempt report so the next session can find it.
-    Without live runs only an ``overdue`` session may park. Raises VerificationError otherwise.
+    ``rerun`` names a reported, ended owned run with failed or cancelled jobs and the time after
+    which recovery reruns them once, before it starts the next session. Without live runs or a
+    rerun only an ``overdue`` session may park. Raises VerificationError otherwise.
     """
     from .reporting import reported_runs
 
@@ -815,34 +898,70 @@ def park(session: Session, number: int, *, overdue: bool) -> list[int]:
     pull = pulls[0] if pulls else None
     if not resumable(session, pull):
         raise VerificationError("Only an unfinished draft candidate PR can park; finish instead")
-    waiting = sorted(run["id"] for run in session.runs() if not terminal(run))
-    if not waiting and not overdue:
+    runs = session.runs()
+    waiting = sorted(run["id"] for run in runs if not terminal(run))
+    request = None
+    if rerun:
+        failed = next((run for run in runs if run["id"] == rerun[0]), None)
+        if (
+            not failed
+            or not terminal(failed)
+            or failed["run_attempt"] >= MAX_RUN_ATTEMPTS
+            or not any(
+                job["conclusion"] in ("failure", "cancelled", "timed_out")
+                for job in session.listing(
+                    f"actions/runs/{failed['id']}/attempts/{failed['run_attempt']}/jobs"
+                    "?per_page=100",
+                    "jobs",
+                )
+            )
+        ):
+            raise VerificationError(
+                "Only an ended owned run with failed or cancelled jobs can rerun later"
+            )
+        request = {
+            "run": failed["id"],
+            "attempt": failed["run_attempt"],
+            "not-before": stamp(rerun[1]),
+        }
+    if not waiting and not request and not overdue:
         raise VerificationError("No owned run is queued or running; continue or finish")
-    if set(waiting) - reported_runs(session, pull):
+    if {*waiting, *([request["run"]] if request else [])} - reported_runs(session, pull):
         raise VerificationError("Publish an attempt report for every owned run before parking")
     session.refresh(pull)
     repository = session.repository
     links = ", ".join(
         f"[{run}](https://github.com/{repository}/actions/runs/{run})" for run in waiting
     )
+    if request:
+        link = f"https://github.com/{repository}/actions/runs/{request['run']}"
+        target = f"[{request['run']}]({link})"
+        due = f"{utc(rerun[1]):%Y-%m-%d %H:%M} UTC"
+        text = translated(
+            f"**parked** · Session {number} is waiting for recovery to rerun the failed jobs of "
+            f"{target} after {due}" + (f" and on {links}" if waiting else "") + ". Recovery "
+            "starts the next session once they end.",
+            f"**parked** · 第 {number} 个会话正在等待恢复流程在 {due} 后重跑 {target} 的失败作业"
+            + (f"，并等待 {links}" if waiting else "")
+            + "。运行结束后，恢复流程将启动下一个会话。",
+        )
+    elif waiting:
+        text = translated(
+            f"**parked** · Session {number} is waiting on {links}. Recovery reruns "
+            "preempted runs and starts the next session once they end.",
+            f"**parked** · 第 {number} 个会话正在等待 {links}。恢复流程会重跑被抢占的运行，"
+            "并在运行结束后启动下一个会话。",
+        )
+    else:
+        text = translated(
+            f"**parked** · Session {number} reached its time limit; the next session continues it.",
+            f"**parked** · 第 {number} 个会话已到时限；下一个会话将继续。",
+        )
     body = (
         park_marker(session.parent["id"], session.candidate.id, number)
-        + json.dumps({"runs": waiting})
+        + json.dumps({"runs": waiting, **({"rerun": request} if request else {})})
         + "\n-->\n"
-        + (
-            translated(
-                f"**parked** · Session {number} is waiting on {links}. Recovery reruns "
-                "preempted runs and starts the next session once they end.",
-                f"**parked** · 第 {number} 个会话正在等待 {links}。恢复流程会重跑被抢占的运行，"
-                "并在运行结束后启动下一个会话。",
-            )
-            if waiting
-            else translated(
-                f"**parked** · Session {number} reached its time limit; the next session "
-                "continues it.",
-                f"**parked** · 第 {number} 个会话已到时限；下一个会话将继续。",
-            )
-        )
+        + text
     )
     previous = [
         comment
@@ -894,12 +1013,34 @@ def resumes(session: Session, pull: dict | None, now: datetime) -> bool:
     )
 
 
+def resume_after(session: Session, pull: dict) -> datetime | None:
+    """When recovery may resume after sessions that ended in a row without a clean park.
+
+    The latest of them must have ended RESUME_BACKOFF_MINUTES ago, by how many there were, so
+    a provider outage cannot spend every session in minutes. None after a clean park.
+    """
+    started = [job for job in candidate_jobs(session) if started_session(job)]
+    streak = 0
+    while streak < len(started) and expired(
+        session, pull, len(started) - streak, started[-1 - streak]
+    ):
+        streak += 1
+    if not streak:
+        return None
+    delay = RESUME_BACKOFF_MINUTES[min(streak, len(RESUME_BACKOFF_MINUTES)) - 1]
+    return utc(started[-1]["completed_at"]) + timedelta(minutes=delay)
+
+
 def resume(session: Session, pull: dict | None, now: datetime) -> None:
     """Raise ResumeSession with ``pull`` when recovery may resume this session, else return.
 
+    Raises PendingCleanup instead while the session waits out its ``resume_after`` back-off.
     Recovery grants the approved sessions after its pass.
     """
     if session.recovering and resumes(session, pull, now):
+        after = resume_after(session, pull)
+        if after and now < after:
+            raise PendingCleanup("Resume is backing off after a session that did not park")
         raise ResumeSession(pull)
 
 
@@ -1038,10 +1179,10 @@ def status_label(session: Session, pull: dict) -> str | None:
         return OUTCOME_LABELS.get(outcome.outcome)
     if not unfinished_draft(session, pull):
         return None
-    if parked(session, pull, sessions_started(session)) is not None and any(
-        not terminal(run) for run in session.runs()
-    ):
-        return "klaud-parked"
+    if parked(session, pull, sessions_started(session)) is not None:
+        runs = session.runs()
+        if any(not terminal(run) for run in runs) or requested_rerun(session, pull, runs):
+            return "klaud-parked"
     return "klaud-in-progress"
 
 
@@ -1102,12 +1243,30 @@ def show_status(session: Session) -> None:
         )
 
 
+def check_waiting(session: Session, now: datetime) -> None:
+    """Raise PendingCleanup while ``session`` only waits, so recovery needs no lease this pass.
+
+    That is while no outcome or cleanup was recorded on its open or missing PR and an owned run
+    is live or the rerun its latest session requested is not due at ``now``.
+    """
+    pulls = session.pulls()
+    pull = pulls[0] if pulls else None
+    if pull and (pull["state"] != "open" or session.report(pull) or session.pending(pull)):
+        return
+    runs = session.runs()
+    if any(not terminal(run) for run in runs):
+        raise PendingCleanup("Owned work is still running; retained for the next recovery pass")
+    if pull:
+        due_rerun(session, pull, runs, now)
+
+
 def reconcile(session: Session, now: datetime) -> bool:
     """Settle interrupted ``session`` at ``now`` and return True if anything changed.
 
     Raises PendingCleanup subclasses while owned work runs, while the latest exact-head final
-    sweep or a newer targeted run was preempted and may rerun, or when the session may resume.
-    Returns False for a merged PR or no owned work.
+    sweep or a newer targeted run was preempted and may rerun, while the rerun the latest
+    session requested is due, or when the session may resume. Returns False for a merged PR or
+    no owned work.
     """
     pulls = session.pulls()
     pull = pulls[0] if pulls else None
@@ -1148,6 +1307,13 @@ def reconcile(session: Session, now: datetime) -> bool:
     ]
     if not pending and any(not terminal(run) for run in runs):
         raise PendingCleanup("Owned work is still running; retained for the next recovery pass")
+    if (
+        not pending
+        and pull
+        and pull["state"] == "open"
+        and (due := due_rerun(session, pull, runs, now))
+    ):
+        request_rerun(session, pull, due, "Reran failed jobs at the requested time")
     latest = max(final, key=lambda r: r["created_at"]) if final else None
     targeted = max(
         (run for run in runs if run["event"] != "pull_request" and run["conclusion"] != "skipped"),
@@ -1197,7 +1363,9 @@ def recover(max_sessions: int) -> None:
     Resumes only while sessions already running plus those resumed here stay below
     ``max_sessions``. Writes still-blocked families to ``$RUNNER_TEMP/klaud-recovery.json`` and
     the running plus resumed session count to ``$GITHUB_OUTPUT``. Unreadable state counts as
-    live work. With the API budget below MIN_API_BUDGET, does nothing but write ``deferred=true``
+    live work: if a family claim cannot be read, every claim keeps its family this pass and the
+    abandoned-work sweep is skipped. A session that only waits is reported without taking its
+    lease. With the API budget below MIN_API_BUDGET, does nothing but write ``deferred=true``
     to ``$GITHUB_OUTPUT``. Sessions ``retirable`` names are dropped with a warning, so their
     ownership artifact can be deleted.
     """
@@ -1215,12 +1383,19 @@ def recover(max_sessions: int) -> None:
     inventory = github.items(
         repository, "actions/artifacts?name=klaud-ownership&per_page=100", "artifacts"
     )
-    owners = [(owner, None) for owner in claims.family_owners(repository)]
+    try:
+        claimed = claims.family_owners(repository)
+    except (OSError, subprocess.SubprocessError, ListingUnavailable):
+        print("::warning::Klaud: family claims unreadable; every claimed family stays claimed.")
+        claimed = None
+    owners = [(owner, None) for owner in claimed or []]
+    parents = {}
     for artifact in inventory:
         if artifact["expired"]:
             continue
         try:
-            parent = github.read(repository, f"actions/runs/{artifact['workflow_run']['id']}")
+            run_id = artifact["workflow_run"]["id"]
+            parent = parents.get(run_id) or github.read(repository, f"actions/runs/{run_id}")
             if (
                 parent["head_branch"] != "main"
                 or parent["path"] != ".github/workflows/klaud-plan.yml"
@@ -1235,11 +1410,11 @@ def recover(max_sessions: int) -> None:
             continue
         if owner.run_id != parent["id"]:
             raise VerificationError("Ownership parent mismatch")
+        parents[parent["id"]] = parent
         owners.append((owner, artifact))
     results = {}
     blocked = set()
     live = set()
-    parents = {}
     for owner, _ in owners:
         if owner.run_id in parents:
             continue
@@ -1265,6 +1440,7 @@ def recover(max_sessions: int) -> None:
     ):
         raise VerificationError("Untrusted ownership parent")
     approved: list[tuple[Session, dict]] = []
+    shared: dict[int, dict] = {run_id: {} for run_id in parents}
     for owner, _ in sorted(owners, key=lambda pair: pair[0].run_id, reverse=True):
         parent = parents[owner.run_id]
         for candidate in owner.candidates:
@@ -1272,12 +1448,15 @@ def recover(max_sessions: int) -> None:
             if key in results:
                 continue
             results[key] = False
-            session = Session(repository, parent, candidate, recovering=True)
+            session = Session(
+                repository, parent, candidate, recovering=True, listings=shared[parent["id"]]
+            )
             try:
                 if not session.idle():
                     blocked.add(candidate.family)
                     live.add(candidate.id)
                     continue
+                check_waiting(session, now)
                 if not claims.recovery_lease(repository, parent["id"], candidate):
                     blocked.add(candidate.family)
                     live.add(candidate.id)
@@ -1329,10 +1508,11 @@ def recover(max_sessions: int) -> None:
                 summarize(repository, candidate, parent["id"], status)
             show_status(session)
     try:
-        running = len(running_sessions(repository))
+        listed, unfinished, planners = plan_activity(repository)
+        running = len(unfinished)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud: running sessions unavailable; resuming none this pass.")
-        running = max_sessions
+        listed, planners, running = None, set(), max_sessions
     resumed = 0
     approved.sort(key=lambda pair: (pair[0].parent["id"], pair[0].candidate.id))
     for session, pull in approved:
@@ -1365,13 +1545,16 @@ def recover(max_sessions: int) -> None:
             current = github.read(repository, f"actions/runs/{owner.run_id}")
             if terminal(current) and current["run_attempt"] == parents[owner.run_id]["run_attempt"]:
                 github.write(repository, f"actions/artifacts/{artifact['id']}", "DELETE")
-    try:
-        live |= sweep_abandoned(repository, live)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
-        print(f"::warning::Klaud abandoned-work sweep skipped: {type(error).__name__}")
+    if listed is None or claimed is None:
+        print("::warning::Klaud abandoned-work sweep skipped: owned work unavailable.")
     else:
-        prefixes = {candidate.split("-", 1)[0] for candidate in live}
-        blocked = {family for family in blocked if identity(family)[:16] in prefixes}
+        try:
+            live |= sweep_abandoned(repository, live | listed, claimed, planners)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+            print(f"::warning::Klaud abandoned-work sweep skipped: {type(error).__name__}")
+        else:
+            prefixes = {candidate.split("-", 1)[0] for candidate in live}
+            blocked = {family for family in blocked if identity(family)[:16] in prefixes}
     (Path(os.environ["RUNNER_TEMP"]) / "klaud-recovery.json").write_text(
         json.dumps(sorted(blocked))
     )
@@ -1381,45 +1564,17 @@ def recover(max_sessions: int) -> None:
     github.api_budget()
 
 
-def running_sessions(repository: str) -> set[str]:
-    """Return the candidates whose session job in an active klaud-plan run has not finished."""
-    running = set()
-    for status in ACTIVE_STATUSES:
-        query = urlencode({"status": status, "per_page": 100})
-        for run in github.items(
-            repository, f"actions/workflows/klaud-plan.yml/runs?{query}", "workflow_runs"
-        ):
-            for job in github.items(
-                repository, f"actions/runs/{run['id']}/jobs?per_page=100", "jobs"
-            ):
-                match = re.search(rf"Run candidate ({CANDIDATE_ID})", job["name"])
-                if match and not job.get("completed_at"):
-                    running.add(match[1])
-    return running
+def plan_activity(repository: str) -> tuple[set[str], set[str], set[int]]:
+    """Return the session work of active klaud-plan runs in ``repository``.
 
-
-def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]], set[int]]:
-    """Return active Klaud work in ``repository``.
-
-    That is live candidate IDs, active targeted run IDs per candidate, and planner runs whose
-    reconcile job is unfinished.
+    That is the candidates with a session job in such a run, those whose job has not finished,
+    and the runs whose reconcile job is unfinished.
     """
-    live: set[str] = set()
-    targeted: dict[str, list[int]] = {}
+    listed: set[str] = set()
+    unfinished: set[str] = set()
     planners: set[int] = set()
     for status in ACTIVE_STATUSES:
         query = urlencode({"status": status, "per_page": 100})
-        for run in github.items(
-            repository, f"actions/workflows/e2e-tests.yml/runs?{query}", "workflow_runs"
-        ):
-            match = re.fullmatch(rf"e2e Test - klaud-\d+-({CANDIDATE_ID})", run["display_title"])
-            if match and run["actor"]["login"] == BOT:
-                targeted.setdefault(match[1], []).append(run["id"])
-        for run in github.items(
-            repository, f"actions/workflows/run-sweep.yml/runs?{query}", "workflow_runs"
-        ):
-            if match := re.fullmatch(rf"klaud/auto-({CANDIDATE_ID})", run["head_branch"] or ""):
-                live.add(match[1])
         for run in github.items(
             repository, f"actions/workflows/klaud-plan.yml/runs?{query}", "workflow_runs"
         ):
@@ -1427,10 +1582,79 @@ def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]], set
                 repository, f"actions/runs/{run['id']}/jobs?per_page=100", "jobs"
             ):
                 if match := re.search(rf"Run candidate ({CANDIDATE_ID})", job["name"]):
-                    live.add(match[1])
+                    listed.add(match[1])
+                    if not job.get("completed_at"):
+                        unfinished.add(match[1])
                 elif job["name"] == claims.RECONCILE_JOB and job["status"] != "completed":
                     planners.add(run["id"])
-    return live, targeted, planners
+    return listed, unfinished, planners
+
+
+def sweep_failed(action: str, error: Exception) -> None:
+    """Warn that sweep ``action``, a method and our own endpoint path, failed, with its status."""
+    status = github.http_status(error)
+    print(
+        f"::warning::Klaud abandoned-work sweep: {action} failed "
+        f"({f'HTTP {status}' if status else type(error).__name__})."
+    )
+
+
+def sweep_items(repository: str, path: str, key: str | None = None) -> list[dict]:
+    """The sweep's listing at ``path``; on failure, warn with its endpoint, then raise."""
+    try:
+        return github.items(repository, path, key)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        sweep_failed("GET " + path.partition("?")[0], error)
+        raise
+
+
+def sweep_read(repository: str, path: str) -> dict:
+    """The sweep's read of ``path``; on failure, warn with its endpoint, then raise."""
+    try:
+        return github.read(repository, path)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        sweep_failed("GET " + path, error)
+        raise
+
+
+def sweep_write(repository: str, path: str, method: str, payload: dict | None = None) -> bool:
+    """Send a sweep write and return True once it took effect, else warn and return False.
+
+    A cancel or delete answered 404, 409 or 422 counts as done: the run already ended, or an
+    overlapping pass deleted the ref first.
+    """
+    try:
+        github.write(repository, path, method, payload)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        idempotent = method == "DELETE" or path.endswith("/cancel")
+        if idempotent and github.http_status(error) in (404, 409, 422):
+            return True
+        sweep_failed(f"{method} {path}", error)
+        return False
+    return True
+
+
+def owned_activity(repository: str) -> tuple[set[str], dict[str, list[int]]]:
+    """Return the candidates of active Klaud PR sweeps and active targeted run IDs by candidate."""
+    sweeping: set[str] = set()
+    targeted: dict[str, list[int]] = {}
+    for status in ACTIVE_STATUSES:
+        query = {"status": status, "per_page": 100}
+        for run in sweep_items(
+            repository,
+            "actions/workflows/e2e-tests.yml/runs?"
+            + urlencode({**query, "actor": BOT, "event": "workflow_dispatch"}),
+            "workflow_runs",
+        ):
+            match = re.fullmatch(rf"e2e Test - klaud-\d+-({CANDIDATE_ID})", run["display_title"])
+            if match and run["actor"]["login"] == BOT:
+                targeted.setdefault(match[1], []).append(run["id"])
+        for run in sweep_items(
+            repository, f"actions/workflows/run-sweep.yml/runs?{urlencode(query)}", "workflow_runs"
+        ):
+            if match := re.fullmatch(rf"klaud/auto-({CANDIDATE_ID})", run["head_branch"] or ""):
+                sweeping.add(match[1])
+    return sweeping, targeted
 
 
 def bot_committed(commits: list[dict]) -> bool:
@@ -1440,16 +1664,22 @@ def bot_committed(commits: list[dict]) -> bool:
     )
 
 
-def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
+def sweep_abandoned(
+    repository: str, live: set[str], owners: list[Ownership], planners: set[int]
+) -> set[str]:
     """Clean up Klaud work no live session owns and return the widened ``live`` candidate IDs.
 
-    Closes abandoned draft PRs and cancels orphan targeted runs. Deletes stale claims, leases
-    and branches. A claim whose planner run cannot be read counts as live.
+    ``live`` already holds the candidates of active planner runs, ``owners`` the family claims
+    and ``planners`` the active planner runs whose reconcile job is unfinished. Closes abandoned
+    draft PRs and cancels orphan targeted runs. Deletes stale claims, leases and branches. A
+    claim whose planner run, or a draft whose commits, cannot be read counts as live. Raises
+    only while live work is unknown; any later step that fails is warned with its endpoint and
+    HTTP status, and the others still run.
     """
-    sessions, targeted, planners = owned_activity(repository)
-    live = live | sessions
+    sweeping, targeted = owned_activity(repository)
+    live = live | sweeping
     claimed = []
-    for owner in claims.family_owners(repository):
+    for owner in owners:
         candidate = owner.candidates[0]
         if candidate.id in live:
             continue
@@ -1459,81 +1689,91 @@ def sweep_abandoned(repository: str, live: set[str]) -> set[str]:
             live.add(candidate.id)
             continue
         claimed.append((owner, candidate, parent))
-    pulls = github.items(repository, "pulls?state=open&per_page=100")
+    pulls = sweep_items(repository, "pulls?state=open&per_page=100")
     abandoned = []
     for pull in pulls:
         match = re.fullmatch(rf"klaud/auto-({CANDIDATE_ID})", pull["head"]["ref"])
         if not match or match[1] in live:
             continue
-        if (
-            pull["draft"]
-            and pull["user"]["login"] == BOT
-            and (pull["head"]["repo"] or {}).get("full_name") == repository
-            and bot_committed(
-                github.items(repository, f"pulls/{pull['number']}/commits?per_page=100")
+        try:
+            unowned = (
+                pull["draft"]
+                and pull["user"]["login"] == BOT
+                and (pull["head"]["repo"] or {}).get("full_name") == repository
+                and bot_committed(
+                    sweep_items(repository, f"pulls/{pull['number']}/commits?per_page=100")
+                )
             )
-        ):
+        except (OSError, ValueError, subprocess.SubprocessError):
+            unowned = False
+        if unowned:
             abandoned.append(pull)
         else:
             live.add(match[1])
     for candidate, runs in targeted.items():
         if candidate not in live:
             for run in runs:
-                github.write(repository, f"actions/runs/{run}/cancel", "POST")
+                sweep_write(repository, f"actions/runs/{run}/cancel", "POST")
     for owner, candidate, parent in claimed:
         if candidate.id not in live and terminal(parent):
-            claims.release_family(repository, candidate, owner.run_id)
+            try:
+                claims.release_family(repository, candidate, owner.run_id)
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+                sweep_failed("release of " + claims.family_name(candidate), error)
     if planners <= {int(os.environ.get("GITHUB_RUN_ID", "0"))}:
+        try:
+            leases = sweep_items(repository, "git/matching-refs/heads/klaud/recovery-")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            leases = []
         finished: dict[int, bool] = {}
-        for lease in github.items(repository, "git/matching-refs/heads/klaud/recovery-"):
+        for lease in leases:
             match = re.fullmatch(rf"refs/heads/klaud/recovery-(\d+)-({CANDIDATE_ID})", lease["ref"])
             if not match or match[2] in live:
                 continue
             parent = int(match[1])
             if parent not in finished:
-                finished[parent] = terminal(github.read(repository, f"actions/runs/{parent}"))
+                try:
+                    finished[parent] = terminal(sweep_read(repository, f"actions/runs/{parent}"))
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    finished[parent] = False
             if finished[parent]:
-                github.write(repository, "git/" + lease["ref"], "DELETE")
+                sweep_write(repository, "git/" + lease["ref"], "DELETE")
     for pull in abandoned:
-        github.write(
-            repository,
-            f"issues/{pull['number']}/comments",
-            "POST",
-            {
-                "body": translated(
-                    "**abandoned** · The owning Klaud session ended without cleanup. Closed, "
-                    "with any leftover smoke runs cancelled, so a new candidate can take this "
-                    "family.",
-                    "**abandoned** · 所属 Klaud 会话已结束但未完成清理。已关闭并取消残留的冒烟运行，"
-                    "新的候选可以接手该配置族。",
-                )
-            },
+        comment = translated(
+            "**abandoned** · The owning Klaud session ended without cleanup. Closed, with any "
+            "leftover smoke runs cancelled, so a new candidate can take this family.",
+            "**abandoned** · 所属 Klaud 会话已结束但未完成清理。已关闭并取消残留的冒烟运行，"
+            "新的候选可以接手该配置族。",
         )
-        github.write(repository, f"pulls/{pull['number']}", "PATCH", {"state": "closed"})
-        github.write(repository, f"git/refs/heads/{pull['head']['ref']}", "DELETE")
+        if sweep_write(
+            repository, f"issues/{pull['number']}/comments", "POST", {"body": comment}
+        ) and sweep_write(repository, f"pulls/{pull['number']}", "PATCH", {"state": "closed"}):
+            sweep_write(repository, f"git/refs/heads/{pull['head']['ref']}", "DELETE")
     open_heads = {pull["head"]["ref"] for pull in pulls}
-    for ref in github.items(repository, "git/matching-refs/heads/klaud/auto-"):
+    try:
+        refs = sweep_items(repository, "git/matching-refs/heads/klaud/auto-")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        refs = []
+    for ref in refs:
         branch = ref["ref"].removeprefix("refs/heads/")
         match = re.fullmatch(rf"klaud/auto-({CANDIDATE_ID})", branch)
         if not match or match[1] in live or branch in open_heads:
             continue
-        history = github.items(
-            repository,
-            "pulls?"
-            + urlencode(
-                {
-                    "state": "all",
-                    "head": repository.split("/", maxsplit=1)[0] + ":" + branch,
-                    "per_page": 100,
-                }
-            ),
-        )
-        if history:
-            latest = max(history, key=lambda pull: pull["created_at"])
-            closer = github.read(repository, f"issues/{latest['number']}").get("closed_by") or {}
-            if latest["user"]["login"] != BOT or closer.get("login") != BOT:
+        query = {
+            "state": "all",
+            "head": repository.split("/", maxsplit=1)[0] + ":" + branch,
+            "per_page": 100,
+        }
+        try:
+            history = sweep_items(repository, "pulls?" + urlencode(query))
+            if history:
+                latest = max(history, key=lambda pull: pull["created_at"])
+                closer = sweep_read(repository, f"issues/{latest['number']}").get("closed_by")
+                if latest["user"]["login"] != BOT or (closer or {}).get("login") != BOT:
+                    continue
+            elif not bot_committed([sweep_read(repository, f"commits/{ref['object']['sha']}")]):
                 continue
-        elif not bot_committed([github.read(repository, f"commits/{ref['object']['sha']}")]):
+        except (OSError, ValueError, subprocess.SubprocessError):
             continue
-        github.write(repository, f"git/refs/heads/{branch}", "DELETE")
+        sweep_write(repository, f"git/refs/heads/{branch}", "DELETE")
     return live
