@@ -3129,9 +3129,10 @@ def test_every_candidate_pr_body_says_how_to_stop_the_candidate(monkeypatch):
 def test_the_planner_holds_a_family_for_a_week_after_a_maintainer_closes_its_pr(monkeypatch):
     now = klaud.datetime(2026, 10, 25, tzinfo=klaud.UTC)
 
-    def pull(number, family, closed, *, merged=False, author="Klaud-Cold", branch=None):
+    def pull(number, family, closed, *, merged=False, author="Klaud-Cold", branch=None, labels=()):
         return {"number": number, "user": {"login": author}, "closed_at": closed,
                 "updated_at": closed, "merged_at": closed if merged else None,
+                "labels": [{"name": name} for name in labels],
                 "head": {"ref": branch or f"klaud/auto-{family * 16}-{'0' * 16}"}}
 
     first = [
@@ -3140,13 +3141,14 @@ def test_the_planner_holds_a_family_for_a_week_after_a_maintainer_closes_its_pr(
         pull(3, "c", "2026-10-23T00:00:00Z", merged=True),
         pull(4, "d", "2026-10-22T00:00:00Z", author="maintainer"),
         pull(5, "e", "2026-10-21T00:00:00Z", branch="feature/e"),
+        pull(6, "9", "2026-10-21T00:00:00Z", labels=("klaud-requeue",)),
         *[pull(10 + n, "f", "2026-10-20T00:00:00Z") for n in range(95)],
     ]
     second = [
         pull(200, "1", "2026-10-18T00:00:01Z"),
         pull(201, "2", "2026-10-17T23:59:59Z"),
     ]
-    closers = {1: "maintainer", 2: "Klaud-Cold", 4: "maintainer", 10: "maintainer",
+    closers = {1: "maintainer", 2: "Klaud-Cold", 4: "maintainer", 6: "maintainer", 10: "maintainer",
                200: "maintainer", 201: "maintainer"}
     pages = []
 
