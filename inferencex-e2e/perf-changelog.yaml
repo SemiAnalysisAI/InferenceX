@@ -11383,6 +11383,17 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "max-num-seqs drops at concurrency 4 to 32: GPU-resident c4 8 to 2, offload c4 8 to 2, c10 20 to 6, c16 32 to 10, c24 48 to 16, c32 64 to 24. CUDA graph capture follows at every even size up to max-num-seqs x (1 + draft tokens): 16, 12, 30, 50, 80 and 120."
+    - "In run 40037005947 the in-flight request count never reached 2x CONC at any point, so the old cap never bound, and the slowest 10% of decodes ran in the largest batches. The new caps sit below that tail to raise p90 interactivity; requests above the cap wait for a slot (23-41% of arrivals in that run)."
+    - "Concurrency 1 (max-num-seqs 1) and 48 to 60 (max-num-seqs 2x CONC) keep their admission. The image, speculative config (DSpark with 7 draft tokens at the GPU-resident points, 5 at offload concurrency 4 and 4 from concurrency 10), max-num-batched-tokens (16384 at c1, 8192 elsewhere) and quantization-config are unchanged from #4393."
+    - "Draft model data type is unchanged: the Inferact/Kimi-K3-DSpark draft is all BF16 with no quantization_config; its explicit speculative-config model keeps the target quantization from being inherited and get_draft_quant_config() returns none, so it runs BF16 weights and activations with an FP8 KV cache via speculative-config kv_cache_dtype."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4473
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
