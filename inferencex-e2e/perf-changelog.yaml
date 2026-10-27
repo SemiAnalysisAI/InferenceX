@@ -10878,5 +10878,5 @@
     - agentic-coding
   description:
     - "Tune DEP2 and DEP4 prefill scheduling and CUDA graph capture, and lower gpu-memory-utilization from 0.97 to 0.95."
-    - "Add TP2 c1, DEP2 c24, DEP2 c64 and c128 with native CPU KV offloading, and DEP4 c96 points."
+    - "Add TP2 c1, DEP2 c64 and c128 with native CPU KV offloading, and DEP4 c96 points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4410
