@@ -1016,7 +1016,7 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
 # 1019 GB budget of dram-utilization 0.34. Every point runs ATOM's bounded
 # state replay with prompt-end state checkpoints only.
 dsv4-fp4-mi355x-atom-agentic-mtp:
-  image: rocm/atom-dev:nightly_202610141644
+  image: rocm/atom-dev:nightly_202610261558@sha256:57477e7a4b5156fcc7b21bab082eba98577752465f58479ac2ead8514f882a61
   model: deepseek-ai/DeepSeek-V4-Pro-0813
   model-prefix: dsv4
   runner: cluster:mi355x-amds
