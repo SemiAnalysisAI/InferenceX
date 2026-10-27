@@ -7,7 +7,8 @@ run-name: >-
 
 # Wakes, dispatched by klaud-wake.yml when a Klaud-owned run ends or scheduled hourly as a
 # backstop, share one group: one runs and one waits, so a burst collapses into a single recovery
-# pass and two passes never contend for recovery leases. Every other run is its own group.
+# pass. Every other run is its own group, so the 4-hourly auto-sweep's recover can overlap a wake
+# pass. Recovery leases keep two passes off the same candidate.
 concurrency:
   group: ${{ (inputs.wake || github.event.schedule == '30 * * * *') && 'klaud-wake' || github.run_id }}
   cancel-in-progress: false
@@ -48,6 +49,7 @@ jobs:
     name: Reconcile interrupted candidates
     if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent == ''
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read # Read workflow runs and artifacts.
@@ -156,6 +158,7 @@ jobs:
           path: |
             ${{ runner.temp }}/klaud/candidates.json
             ${{ runner.temp }}/klaud/open-prs.json
+            ${{ runner.temp }}/klaud/cluster-state.json
           if-no-files-found: error
           retention-days: 1
       - name: Install Claude Code 2.1.282
@@ -290,7 +293,8 @@ jobs:
         env:
           KLAUD_PR_REVIEW: ${{ needs.review.outputs.review }}
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
-        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud regenerate-producers --directory "$RUNNER_TEMP/klaud"
+          KLAUD_ACTIVE_SESSIONS: ${{ needs.recover.outputs.active-sessions }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud regenerate-producers --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}" --directory "$RUNNER_TEMP/klaud"
       - name: Select reviewed candidates within the total cap
         id: select
         env:
@@ -313,6 +317,7 @@ jobs:
           path: |
             ${{ runner.temp }}/klaud/candidates.json
             ${{ runner.temp }}/klaud/open-prs.json
+            ${{ runner.temp }}/klaud/cluster-state.json
             ${{ runner.temp }}/klaud/selection.json
             ${{ runner.temp }}/klaud/review-diagnostics.json
             ${{ runner.temp }}/klaud/*/candidate.json

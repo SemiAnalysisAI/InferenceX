@@ -96,6 +96,9 @@ class Ownership(Contract):
     candidates: list[OwnedCandidate] = Field(max_length=256)
 
 
+ASSET_REASONS = ("weights-missing", "route-mismatch")
+INFRA_REASONS = ("infra-registry-rate-limit", "infra-hf-rate-limit", "infra-node-fault")
+
 LEGACY_OUTCOMES = {
     "readiness-blocked": "missing-assets",
     "uncertain": "inconclusive",
@@ -132,6 +135,10 @@ class CandidateOutcome(Contract):
             "baseline-api-unavailable",
             "baseline-other",
             "weights-missing",
+            "route-mismatch",
+            "infra-registry-rate-limit",
+            "infra-hf-rate-limit",
+            "infra-node-fault",
         ]
         | None
     ) = None
@@ -155,9 +162,16 @@ class CandidateOutcome(Contract):
             raise ValueError("Validated requires final-sweep evidence")
         if len(set(self.run_ids)) != len(self.run_ids):
             raise ValueError("Run IDs must be distinct")
-        if self.reason_code == "weights-missing":
+        if self.reason_code in ASSET_REASONS:
             if self.outcome != "missing-assets":
-                raise ValueError("weights-missing requires a missing-assets outcome")
+                raise ValueError("Asset reason codes require a missing-assets outcome")
+        elif self.reason_code in INFRA_REASONS:
+            if self.outcome not in ("failed", "inconclusive") or self.phase not in (
+                "resolve",
+                "targeted",
+                "final-sweep",
+            ):
+                raise ValueError("Infrastructure reason codes require a failed attempt phase")
         elif self.reason_code is not None and (
             self.outcome != "failed" or self.phase != "baseline"
         ):
