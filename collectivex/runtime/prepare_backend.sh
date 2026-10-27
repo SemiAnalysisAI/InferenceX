@@ -809,8 +809,55 @@ flashinfer_ep_prepare() {
   flashinfer_probe || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable"; return 1; }
 }
 
+# Host verbs provider (collx_add_host_verbs_provider_mount). The vendor's build targets the host's
+# distro: Broadcom's libbnxt_re 237.1.137.0 is linked on Ubuntu 24.04 and needs GLIBC_2.38 for one
+# symbol, __isoc23_strtol (C23 strtol, which only adds 0b prefixes), while the ROCm images ship glibc
+# 2.35. That symbol is unversioned and served by a forwarding shim, and the now-unused GLIBC_2.38
+# requirement is retargeted to GLIBC_2.2.5 (elf_vernaux.py). The result must load and must list the
+# registry's RDMA devices, or preparation fails. It replaces the image's provider of the same name
+# in this node's writable container, which every rank of the shard then loads.
+readonly VERBS_PATCHELF_SPEC="patchelf==0.17.2.1"
+
+verbs_provider_prepare() {
+  local provider="${COLLX_HOST_VERBS_PROVIDER:-}" name source target work listed device
+  [ -n "$provider" ] && [ "${COLLX_NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  name="${provider##*/}"
+  source="$COLLX_HOST_VERBS_ROOT/$name"
+  [ -r "$source" ] || { collx_log "ERROR: host verbs provider $name is not bound"; return 1; }
+  target="$(ls /usr/lib/*-linux-gnu/libibverbs/"$name" 2>/dev/null | head -n 1)"
+  [ -n "$target" ] || { collx_log "ERROR: the image has no $name to replace"; return 1; }
+  work="$(mktemp -d /tmp/collectivex-verbs.XXXXXX)" || return 1
+  cp "$source" "$work/$name" || return 1
+  if ! python3 -c 'import ctypes, sys; ctypes.CDLL(sys.argv[1])' "$work/$name" 2>/dev/null; then
+    collx_log "verbs provider: $name needs a newer glibc; shimming __isoc23_strtol"
+    printf '%s\n' '#include <stdlib.h>' \
+      'long __isoc23_strtol(const char *s, char **end, int base) { return strtol(s, end, base); }' \
+      > "$work/cx_c23.c"
+    cc -shared -fPIC -O2 -o "$work/libcx_c23.so" "$work/cx_c23.c" \
+      && python3 -m pip install -q --disable-pip-version-check --no-input \
+        --target "$work/patchelf" "$VERBS_PATCHELF_SPEC" >&2 \
+      && "$work/patchelf/bin/patchelf" --clear-symbol-version __isoc23_strtol \
+        --add-needed libcx_c23.so --set-rpath '$ORIGIN' "$work/$name" \
+      && python3 "$COLLX_RUNTIME_DIR/elf_vernaux.py" "$work/$name" GLIBC_2.38 GLIBC_2.2.5 \
+      || { collx_log "ERROR: verbs provider patch failed"; return 1; }
+    python3 -c 'import ctypes, sys; ctypes.CDLL(sys.argv[1])' "$work/$name" \
+      || { collx_log "ERROR: patched verbs provider does not load"; return 1; }
+    cp "$work/libcx_c23.so" "${target%/*}/libcx_c23.so" || return 1
+  fi
+  cp "$work/$name" "$target.collectivex" && mv -f "$target.collectivex" "$target" \
+    || { collx_log "ERROR: verbs provider install failed"; return 1; }
+  listed="$(ibv_devices 2>/dev/null)" || { collx_log "ERROR: ibv_devices failed"; return 1; }
+  for device in ${COLLX_RDMA_DEVICES//,/ }; do
+    grep -qw "${device%%:*}" <<< "$listed" \
+      || { collx_log "ERROR: verbs provider $name does not list ${device%%:*}"; return 1; }
+  done
+  rm -rf "$work"
+  collx_log "verbs provider: installed host $name"
+}
+
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
+  verbs_provider_prepare || return 1
   validate_container_network || return 1
   ofi_nccl_prepare || return 1
   case "$COLLX_BENCH" in

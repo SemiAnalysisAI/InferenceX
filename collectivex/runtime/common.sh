@@ -243,22 +243,20 @@ collx_add_efa_host_mounts() {
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
+# Where collx_add_host_verbs_provider_mount binds a host verbs provider inside the container.
+COLLX_HOST_VERBS_ROOT=/opt/collectivex/host-verbs
+
 # Some NIC vendors replace the host's rdma-core provider with their own build for an out-of-tree
 # kernel driver (Barite's Broadcom bnxt_re 237.x speaks kernel ABI 8; rdma-core's stock bnxt_re
-# provider, the image's, supports only ABI 1, so libibverbs lists no device). Multi-node shards bind
-# the registry-named host provider read-only over the image's file of the same name. libibverbs
-# loads providers by that name; both sides must share its private ABI (the -rdmavNN suffix).
+# provider, the image's, supports only ABI 1, so libibverbs lists no device). Multi-node shards
+# bind the registry-named host provider read-only; backend preparation installs it into the
+# container over the image's file (verbs_provider_prepare in prepare_backend.sh).
 collx_add_host_verbs_provider_mount() {
-  local provider="${COLLX_HOST_VERBS_PROVIDER:-}" libdir
+  local provider="${COLLX_HOST_VERBS_PROVIDER:-}"
   [ -n "$provider" ] && [ "${NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
   [[ "$provider" =~ ^/[A-Za-z0-9_./-]+/lib[a-z0-9_]+-rdmav[0-9]+\.so$ ]] && [[ "$provider" != *..* ]] \
     || collx_die "invalid host verbs provider path"
-  case "${COLLX_IMAGE_PLATFORM:-}" in
-    linux/amd64) libdir=/usr/lib/x86_64-linux-gnu ;;
-    linux/arm64) libdir=/usr/lib/aarch64-linux-gnu ;;
-    *) collx_die "no verbs provider layout for this image platform" ;;
-  esac
-  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$provider:$libdir/libibverbs/${provider##*/}:ro"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$provider:$COLLX_HOST_VERBS_ROOT/${provider##*/}:ro"
 }
 
 # AWS EFA scale-out (b300: p6-b300.48xlarge, 16 EFA devices per node; h100-dgxc: p5.48xlarge, 32).
