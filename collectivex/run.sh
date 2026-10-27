@@ -65,8 +65,13 @@ if [ -n "$dirty" ]; then
   fi
 fi
 
-mkdir -p "$HERE/.shards"
-matrix="$HERE/.shards/matrix-$SKU.json"
+# Each invocation stages its matrix and shard controls in its own directory: two runs from one
+# checkout (one per backend, say) would otherwise overwrite each other's files and run the wrong
+# shards.
+shard_dir="$HERE/.shards/run-$$"
+mkdir -p "$shard_dir"
+trap 'rm -rf "$shard_dir"' EXIT
+matrix="$shard_dir/matrix-$SKU.json"
 python3 "$HERE/sweep_matrix.py" "${matrix_args[@]}" --out "$matrix" >/dev/null
 
 # One tab-separated line per selected shard:
@@ -104,7 +109,7 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 rcs=()
 for row in "${rows[@]}"; do
   IFS=$'\t' read -r id launcher backend nodes gpn domain ncases image staged minutes <<< "$row"
-  control="$HERE/.shards/$id.json"
+  control="$shard_dir/$id.json"
   python3 "$HERE/sweep_matrix.py" --extract-from "$matrix" --shard-id "$id" --out "$control" \
     >/dev/null 2>&1
   # The pid keeps two runs of one shard started in the same second (graphed and eager, say) out
