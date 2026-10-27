@@ -11277,4 +11277,5 @@
     - "Use TensorRT-LLM 1.4.0a1.dev202610231815 with Dynamo 1.6.0.dev20261016 and run post-eval commands on the public frontend node."
     - "Allow the job-local OpenTelemetry collector up to 600 seconds to become ready before starting workers."
     - "Use /model consistently as the worker and benchmark API model name."
+    - "Use an NVFP4 KV cache (FP8 indexer KV) on all worker roles (aggregated, prefill and decode)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4383
