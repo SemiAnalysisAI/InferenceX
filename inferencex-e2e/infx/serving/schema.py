@@ -44,6 +44,10 @@ ROUTER_PLACEHOLDERS = ("router_port", "router_metrics_port", "engine_url", "engi
 ENV_PLACEHOLDERS = ("storage_master_port", "storage_meta_port")
 STORAGE_PLACEHOLDERS = ("storage_master_port", "storage_meta_port")
 PLACEHOLDER = re.compile(r"\{\{([a-z_]+)\}\}")
+TOKENIZER_ENCODINGS = ("builtin", "cl100k_base", "o200k_base", "o200k_harmony")  # tiktoken, no HF access
+SECRET_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
+# Engine fields a remote endpoint has no use for.
+REMOTE_EXCLUDED = ("image", "serve", "gpus", "model", "replicas", "precision", "env", "router", "storage")
 
 
 class ServingError(ValueError):
@@ -96,6 +100,45 @@ class StorageSpec(BaseModel):
         return _coerce_env(value)
 
 
+class EndpointSpec(BaseModel):
+    """An endpoint we do not launch: an OpenAI-compatible URL, its served model and its key."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    url: str
+    model: str = Field(min_length=1)
+    api_key_secret: str | None = Field(default=None, alias="api-key-secret")
+    tokenizer: str = "builtin"
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, value: str) -> str:
+        if not re.fullmatch(r"https?://[^\s'\"]+", value):
+            raise ValueError("must start with http:// or https:// and hold no whitespace or quotes")
+        return value.rstrip("/").removesuffix("/v1").rstrip("/")  # the scenario appends /v1/chat/completions
+
+    @field_validator("model")
+    @classmethod
+    def _model(cls, value: str) -> str:
+        if re.search(r"[\s'\"]", value):
+            raise ValueError("no whitespace or quotes; use the served model name")
+        return value
+
+    @field_validator("api_key_secret")
+    @classmethod
+    def _secret(cls, value: str | None) -> str | None:
+        if value is not None and not SECRET_NAME.fullmatch(value):
+            raise ValueError("a GitHub secret name: capitals, digits and _ (e.g. OPENAI_API_KEY)")
+        return value
+
+    @field_validator("tokenizer")
+    @classmethod
+    def _tokenizer(cls, value: str) -> str:
+        if value not in TOKENIZER_ENCODINGS and not MODEL_PATTERN.fullmatch(value):
+            raise ValueError(f"{', '.join(TOKENIZER_ENCODINGS)}, or an HF repo id <org>/<name>")
+        return value
+
+
 class Workload(BaseModel):
     """The synthetic grid: one job per (isl, osl, cache) point."""
 
@@ -125,13 +168,14 @@ class ServingSpec(BaseModel):
 
     name: str = Field(pattern=NAME_PATTERN)
     runner: str = Field(min_length=1)
-    image: str = Field(min_length=1)
-    model: str = Field(min_length=1)
-    gpus: int = Field(gt=0)
+    image: str | None = Field(default=None, min_length=1)
+    model: str | None = Field(default=None, min_length=1)
+    gpus: int | None = Field(default=None, gt=0)
     replicas: int = Field(default=1, ge=1)
     precision: str = Field(default="bf16", pattern=r"^[a-z0-9]+$")
     env: dict[str, str] = Field(default_factory=dict)
-    serve: str = Field(min_length=1)
+    serve: str | None = Field(default=None, min_length=1)
+    endpoint: EndpointSpec | None = None
     router: RouterSpec | None = None
     storage: StorageSpec | None = None
     scenario: Literal["agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic"]
@@ -152,14 +196,15 @@ class ServingSpec(BaseModel):
 
 
 def _format_validation_error(error: ValidationError) -> str:
-    models = {"router": RouterSpec, "storage": StorageSpec, "workload": Workload}
+    models = {"router": RouterSpec, "storage": StorageSpec, "workload": Workload, "endpoint": EndpointSpec}
     lines = []
     for item in error.errors():
         location = ".".join(str(part) for part in item["loc"]) or "serving"
-        message = item["msg"]
+        message = item["msg"].removeprefix("Value error, ")
         if item["type"] == "extra_forbidden":
             model = models.get(str(item["loc"][0]), ServingSpec) if len(item["loc"]) > 1 else ServingSpec
-            message = "unknown key (allowed: " + ", ".join(model.model_fields) + ")"
+            allowed = (field.alias or name for name, field in model.model_fields.items())
+            message = "unknown key (allowed: " + ", ".join(allowed) + ")"
         elif item["loc"] == ("scenario",):
             message = f"must be one of {', '.join(scenarios.FAMILIES)} (variants go in overrides:)"
         lines.append(f"{location}: {message}")
@@ -271,6 +316,28 @@ def _local_squash_problems(spec: ServingSpec, inventory: RunnerInventory) -> lis
     return []
 
 
+def _engine_problems(spec: ServingSpec) -> list[str]:
+    """Checks of the engine fields (image, model, commands, replicas) a launched config needs."""
+    problems = []
+    if not IMAGE_PATTERN.fullmatch(spec.image):
+        problems.append("image: only letters, digits and ._/:@- are allowed (e.g. vllm/vllm-openai:v0.29.0)")
+    if spec.model.startswith("/"):
+        problems.append("model: use the HF repo id (e.g. Qwen/Qwen3.8-27B), not a local path")
+    elif not MODEL_PATTERN.fullmatch(spec.model):
+        problems.append("model: must be an HF repo id <org>/<name> using letters, digits and ._-")
+    problems += _command_problems(spec)
+    problems += _placeholder_problems(spec)
+    if spec.gpus % spec.replicas:
+        problems.append(f"replicas: gpus {spec.gpus} is not a multiple of replicas {spec.replicas}; "
+                        "each replica gets gpus/replicas GPUs")
+    if spec.replicas > 1:
+        if spec.router is None:
+            problems.append("replicas: more than 1 replica needs a router: block whose serve lists {{engine_urls}}")
+        elif "dynamo.frontend" in spec.router.serve:
+            problems.append("replicas: the Dynamo frontend discovers its engines itself; use replicas: 1")
+    return problems
+
+
 def load_serving(text: str, inventory: RunnerInventory | None = None) -> ServingSpec:
     """Validate a serving YAML; raise ``ServingError`` listing every problem."""
     try:
@@ -287,24 +354,17 @@ def load_serving(text: str, inventory: RunnerInventory | None = None) -> Serving
         raise ServingError(_format_validation_error(error)) from error
 
     problems: list[str] = []
-    if not IMAGE_PATTERN.fullmatch(spec.image):
-        problems.append("image: only letters, digits and ._/:@- are allowed (e.g. vllm/vllm-openai:v0.29.0)")
-    if spec.model.startswith("/"):
-        problems.append("model: use the HF repo id (e.g. Qwen/Qwen3.8-27B), not a local path")
-    elif not MODEL_PATTERN.fullmatch(spec.model):
-        problems.append("model: must be an HF repo id <org>/<name> using letters, digits and ._-")
-    problems += _command_problems(spec)
-    problems += _placeholder_problems(spec)
+    if spec.endpoint is not None:
+        problems += [f"{field}: not used with endpoint: (remote mode); remove it"
+                     for field in REMOTE_EXCLUDED if field in spec.model_fields_set]
+    else:
+        missing = [f"{field}: required (or use endpoint: for a remote endpoint)"
+                   for field in ("image", "model", "gpus", "serve") if getattr(spec, field) is None]
+        if missing:
+            raise ServingError("\n".join(missing))
+        problems += _engine_problems(spec)
     if len(set(spec.conc)) != len(spec.conc):
         problems.append("conc: duplicate values")
-    if spec.gpus % spec.replicas:
-        problems.append(f"replicas: gpus {spec.gpus} is not a multiple of replicas {spec.replicas}; "
-                        "each replica gets gpus/replicas GPUs")
-    if spec.replicas > 1:
-        if spec.router is None:
-            problems.append("replicas: more than 1 replica needs a router: block whose serve lists {{engine_urls}}")
-        elif "dynamo.frontend" in spec.router.serve:
-            problems.append("replicas: the Dynamo frontend discovers its engines itself; use replicas: 1")
     try:
         rendered = variants(spec)
     except ServingError as error:
@@ -316,10 +376,12 @@ def load_serving(text: str, inventory: RunnerInventory | None = None) -> Serving
         problems.append(f"conc: a workload grid runs one job per point; set exactly one conc (got {len(spec.conc)})")
     inventory = inventory or load_inventory()
     try:
-        per_node = runner_gpus(spec.runner, inventory)
-        if spec.gpus > per_node:
-            problems.append(f"gpus: {spec.gpus} > {per_node} GPUs per node on runner {spec.runner}; pick a bigger node")
-        problems += _local_squash_problems(spec, inventory)
+        per_node = runner_gpus(spec.runner, inventory)  # also checks runner is a VNG runner
+        if spec.endpoint is None:
+            if spec.gpus > per_node:
+                problems.append(f"gpus: {spec.gpus} > {per_node} GPUs per node on runner {spec.runner}; "
+                                "pick a bigger node")
+            problems += _local_squash_problems(spec, inventory)
     except ServingError as error:
         problems.append(str(error))
     if problems:

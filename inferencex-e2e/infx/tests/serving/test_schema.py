@@ -109,3 +109,57 @@ def test_image_may_be_a_squash_file_on_the_node():
     assert "use runner: cluster:<id> of the node that holds the file" in errors(pool + "scenario: tau2\nconc: 8\n")
     shell = BASE.replace("image: vllm/vllm-openai:v0.29.0", "image: /data/images/$(id).sqsh")
     assert "image: only letters" in errors(shell + "scenario: tau2\nconc: 8\n")
+
+
+REMOTE = """\
+name: gpt5-remote
+runner: cluster:hcm-rtx01
+endpoint:
+  url: https://api.openai.com/v1/
+  model: gpt-5
+  api-key-secret: OPENAI_API_KEY
+scenario: agentx
+conc: [4]
+"""
+
+
+def test_remote_endpoint_needs_no_engine_fields():
+    spec = load_serving(REMOTE)
+    assert spec.endpoint.url == "https://api.openai.com"
+    assert spec.endpoint.model == "gpt-5"
+    assert spec.endpoint.api_key_secret == "OPENAI_API_KEY"
+    assert spec.endpoint.tokenizer == "builtin"
+    assert spec.image is None and spec.gpus is None
+
+
+def test_remote_tokenizer_accepts_encodings_and_hf_ids():
+    for tokenizer in ("o200k_harmony", "zai-org/GLM-5.2"):
+        text = REMOTE.replace("  api-key-secret", f"  tokenizer: {tokenizer}\n  api-key-secret")
+        assert load_serving(text).endpoint.tokenizer == tokenizer
+
+
+@pytest.mark.parametrize("extra, message", [
+    ("image: vllm/vllm-openai:v0.29.0\n", "image: not used with endpoint:"),
+    ("gpus: 1\n", "gpus: not used with endpoint:"),
+    ("model: Qwen/Qwen3.8-27B\n", "model: not used with endpoint:"),
+    ("router: {image: x, serve: y}\n", "router: not used with endpoint:"),
+])
+def test_remote_rejects_engine_fields(extra, message):
+    assert message in errors(REMOTE + extra)
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ("url: https://api.openai.com/v1/", "url: api.openai.com", "endpoint.url: must start with http:// or https://"),
+    ("api-key-secret: OPENAI_API_KEY", "api-key-secret: openai-key", "endpoint.api-key-secret: a GitHub secret name"),
+    ("model: gpt-5", "model: gpt 5", "endpoint.model: no whitespace or quotes"),
+    ("api-key-secret: OPENAI_API_KEY", "tokenizer: gpt5", "endpoint.tokenizer: builtin, cl100k_base"),
+    ("api-key-secret: OPENAI_API_KEY", "apikey: x",
+     "endpoint.apikey: unknown key (allowed: url, model, api-key-secret, tokenizer)"),
+])
+def test_remote_field_errors(old, new, message):
+    assert message in errors(REMOTE.replace(old, new))
+
+
+def test_engine_yaml_without_image_says_what_is_missing():
+    text = BASE.replace("image: vllm/vllm-openai:v0.29.0\n", "")
+    assert "image: required (or use endpoint: for a remote endpoint)" in errors(text + "scenario: agentx\nconc: 8\n")
