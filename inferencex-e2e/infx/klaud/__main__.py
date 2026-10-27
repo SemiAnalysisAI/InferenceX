@@ -58,6 +58,7 @@ PRODUCERS = "producers.json"
 CLUSTER_STATE = "cluster-state.json"
 RETRY_NEXT_WAVE = frozenset({"no-capacity", "agent-not-started"})
 MAINTAINER_CLOSE_HOLD_DAYS = 7
+REQUEUE_LABEL = "klaud-requeue"
 INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing"})
 INFRA_COOLDOWN_DAYS = 7
 LONG_HOLD_HOURS = 72
@@ -512,7 +513,8 @@ def maintainer_closed_families(repository: str, now: datetime) -> set[str]:
     """Family prefixes of Klaud PRs someone else closed unmerged in the last hold window.
 
     Closing a Klaud PR stops that candidate, and the planner leaves its family alone for
-    MAINTAINER_CLOSE_HOLD_DAYS. Closed PRs are read newest-updated first until the window ends.
+    MAINTAINER_CLOSE_HOLD_DAYS, unless the PR carries REQUEUE_LABEL, which returns the family to
+    the pool. Closed PRs are read newest-updated first until the window ends.
     """
     from .lifecycle import BOT
 
@@ -531,6 +533,7 @@ def maintainer_closed_families(repository: str, now: datetime) -> set[str]:
                 and pull["user"]["login"] == BOT
                 and not pull["merged_at"]
                 and utc(pull["closed_at"]) >= cutoff
+                and REQUEUE_LABEL not in {label["name"] for label in pull.get("labels", [])}
                 and match[1] not in held
             ):
                 closer = github_read(repository, f"issues/{pull['number']}").get("closed_by") or {}
