@@ -87,6 +87,13 @@ live into the Actions step. Cancelling the run cancels the Slurm job.
 | Replicas, one GPU slice each | `bench.sh:57` |
 | Client prepare / run | `bench.sh:25`, `bench.sh:106`; `infx/serving/client.py:58`, `:72` |
 
+**Remote endpoint.** A YAML with `endpoint:` launches nothing. Its point runs the client image
+(`ghcr.io/astral-sh/uv:python3.12-bookworm-slim`); the driver `sbatch`es `remote.sh` with 4 CPUs,
+16 GB and no GPU, keeping only the node pin from the cluster record (`submit_remote` in
+`infx/launch/drivers/serving.py`). `remote.sh` runs one client step: `prepare` probes the endpoint
+(key, model, usage reporting) and `run` replays the scenario against it with `--api-key`. The key
+is the GitHub secret the YAML names, passed as `SERVING_API_KEY`.
+
 ## 3. How this differs from the upstream Slurm path
 
 Upstream runs a single-node point through `srt-single`: `run-sweep.yml` plans points from

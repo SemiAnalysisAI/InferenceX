@@ -71,6 +71,24 @@ conc: 1                             # search: true finds the concurrency itself
 
 Old scenario names (`agentx-cc-062126-smoke`, `custom-agentic-tau2`, `sweep-isl8k-osl1k-cache50`, …) map as in the table of `docs/serving/ARCHITECTURE.md` § Scenarios. Results keep the old names.
 
+### Remote endpoint (no engine)
+
+To benchmark an endpoint already running (GreenNode MaaS, a k8s service, OpenAI/Anthropic/Gemini
+via an OpenAI-compatible API), write `endpoint:` instead of `image`/`model`/`gpus`/`serve`
+(example: `inferencex-e2e/configs/serving/remote-openai-agentx-smoke.yaml`):
+
+- `url`: base URL; a trailing `/v1` is fine. `model`: the served name as the API expects it.
+- `api-key-secret`: the GitHub secret holding the key (`gh secret set <NAME> --repo vngcloud/InferenceX`).
+  Never put the key in the YAML. Omit for an open endpoint.
+- `tokenizer`: `builtin` (default; exact for OpenAI GPT-4o/GPT-5, approximate for other closed
+  models), `cl100k_base`/`o200k_harmony`, or the HF repo id of an open model.
+- `runner`: any VNG runner; the job takes 4 CPUs and 16 GB, no GPU.
+- No server metrics or GPU telemetry in the result. ISL/OSL come from the API's `usage`; if it
+  streams none, the job counts client-side and the aggregate says `token_count_source: client`.
+- A probe request runs first: 401/404/400 fail the job in seconds with the fix. A 400 naming
+  `ignore_eos` means the API rejects the field the AgentX scenario always sends; tell the user,
+  there is no workaround yet.
+
 ### Translation rules
 
 - **Model path → HF id.** `--model-path /models/<org>/<model>` becomes `--model-path <org>/<model>` and `model: <org>/<model>`. If you cannot tell the HF id from the path, ask.
