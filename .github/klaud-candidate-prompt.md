@@ -51,7 +51,11 @@ source-backed compatibility flags/environment or srt-slurm YAML image/backend se
 Recipes never set model.container or identity.container.image; the binder writes both from
 the master image. Preserve model, precision, topology, speculation, workload/dataset,
 duration, resources, recipe references, all points and default evals. No broad tuning,
-shared code/workflows or other-family edits.
+shared code/workflows or other-family edits (keys outside the family).
+The candidate.json `family` may list several comma-separated keys of one master file. Together
+they form one AgentX dashboard curve, and the newest normal run replaces that whole curve.
+Update every listed key's master image to the same new image, and change each key's own recipe
+compatibility settings only as needed. Never leave a key of the family on the old image.
 ZERO runtime engine/serving-stack patching: no source/site-packages/container rewrites,
 overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing patches.
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
@@ -105,7 +109,8 @@ never treat a point's absence from the current family as its retirement.
 Keep targeted work draft with no sweep labels. Dispatch ONLY updated-image e2e-tests.yml
 from main, with ref=exact measured SHA, fail-fast=true, klaud-run=true,
 test-name=$KLAUD_TEST_NAME, and
-`generate-cli-command="test-config --config-files FILE --config-keys FAMILY --scenario-type agentic-coding --smoke"`.
+`generate-cli-command="test-config --config-files FILE --config-keys KEY... --scenario-type agentic-coding --smoke"`,
+listing every family key after `--config-keys`.
 Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
 it is startup evidence, not a full curve. Persist each run ID/head/attempt and typed progress
@@ -129,8 +134,9 @@ exhausted repairs, or the same failure twice without progress.
 Benchmarks may take three hours. Never cancel healthy or queued work to fit the session limit;
 park instead.
 
-After smoke benchmarks AND selected evals pass, append one exact-family inferencex-e2e/perf-changelog.yaml
-entry at the physical tail with this PR URL, preserving every prior byte. Set exactly
+After smoke benchmarks AND selected evals pass, append ONE inferencex-e2e/perf-changelog.yaml
+entry whose config-keys list every family key at the physical tail with this PR URL,
+preserving every prior byte. Set exactly
 `scenario-type: [agentic-coding]`; omit append-only and eval-selection modifiers.
 Its description must be one plain-English sentence
 of at most 120 characters: state the engine image version change and, only when necessary,

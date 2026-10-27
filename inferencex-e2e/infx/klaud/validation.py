@@ -14,7 +14,7 @@ from infx.results import artifacts, eval_artifacts
 
 from . import github
 from .github import VerificationError
-from .models import OwnedCandidate, utc
+from .models import OwnedCandidate, family_keys, utc
 
 if TYPE_CHECKING:
     from infx.matrix.revision import Revision
@@ -73,15 +73,15 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
     from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEMETRY_BLOCK
 
     OwnedCandidate(id="0" * 16 + "-" + "0" * 16, family=family, base=head)
-    source, key = family.split(":", 1)
+    source, keys = family.split(":", 1)[0], family_keys(family)
     prefix = project_prefix(repository, head)
     master = yaml.safe_load(github.file_at(repository, head, prefix + source))
     runners = yaml.safe_load(github.file_at(repository, head, prefix + "configs/runners.yaml"))
-    family_config = {key: master[key]}
+    family_config = {key: master[key] for key in keys}
     with tempfile.TemporaryDirectory(prefix="klaud-recipes-") as temp:
         root = Path(temp)
-        references = srt_recipe_references(family_config)[key]
-        paths = {reference.partition(":")[0] for reference in references}
+        references = srt_recipe_references(family_config)
+        paths = {reference.partition(":")[0] for key in keys for reference in references[key]}
         blocks = [
             block.as_posix()
             for block in (*SHARED_BLOCKS.values(), TELEMETRY_BLOCK, NATIVE_TELEMETRY_BLOCK)
@@ -92,7 +92,7 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         entries = [
             entry
             for entry in generate_test_config_sweep(
-                SimpleNamespace(config_keys=[key]),
+                SimpleNamespace(config_keys=keys),
                 validate_master_config(family_config, root),
                 validate_runner_config(runners),
                 root,
@@ -147,7 +147,7 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
                 timeout=300,
             )
         with snapshot(head) as producer:
-            rows = throughput_rows(producer, family.split(":", 1)[1])
+            rows = throughput_rows(producer, producer_keys(producer, family))
             if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
                 raise ValueError("the generator did not print a list of matrix rows")
             rows = [row for row in rows if in_scope(row)]
@@ -168,17 +168,39 @@ def producer_matrix(repository: str, head: str, family: str) -> dict:
     }
 
 
-def throughput_rows(producer: Revision, key: str) -> list[dict]:
-    """Return the producer's throughput rows for config ``key`` without eval-only rows.
+def producer_keys(producer: Revision, family: str) -> list[str]:
+    """Return the keys of ``family`` that the producer revision's master configs define.
+
+    A curve key added after the producer ran has no rows from it. Raises ValueError if none.
+    """
+    import yaml
+
+    present: set[str] = set()
+    for path in map(Path, producer.master_configs):
+        if path.is_file():
+            try:
+                master = yaml.safe_load(path.read_text())
+            except yaml.YAMLError as error:
+                raise ValueError(f"{path.name} is not valid YAML") from error
+            if isinstance(master, dict):
+                present.update(master)
+    keys = [key for key in family_keys(family) if key in present]
+    if not keys:
+        raise ValueError("the producer revision defines none of the family's config keys")
+    return keys
+
+
+def throughput_rows(producer: Revision, keys: list[str]) -> list[dict]:
+    """Return the producer's throughput rows for config ``keys`` without eval-only rows.
 
     Producers too old for ``--no-evals`` have their eval rows stripped here instead.
     """
     try:
-        return producer.generate([key], ["--no-evals"])
+        return producer.generate(keys, ["--no-evals"])
     except subprocess.CalledProcessError as error:
         if "unrecognized arguments: --no-evals" not in (error.stderr or ""):
             raise
-    rows = producer.generate([key], [])
+    rows = producer.generate(keys, [])
     if not isinstance(rows, list):
         return rows
     return [
@@ -191,7 +213,7 @@ def throughput_rows(producer: Revision, key: str) -> list[dict]:
 def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
     """Raise VerificationError unless ``matrix`` matches ``canonical`` for ``head`` and ``family``.
 
-    Checks the selected family, per-point settings, duplicate points, coverage and default evals.
+    Checks the selected curve, per-point settings, duplicate points, coverage and default evals.
     """
     from pydantic import TypeAdapter
 
@@ -213,8 +235,12 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
     if metadata["head_ref"] != head:
         raise VerificationError("Matrix was generated from a different head")
     entries = metadata["entries"]
-    if len(entries) != 1 or entries[0]["config-keys"] != [family.split(":", 1)[1]]:
-        raise VerificationError("Final changelog must select exactly the candidate family")
+    if (
+        len(entries) != 1
+        or entries[0].get("append-only")
+        or set(entries[0]["config-keys"]) != set(family_keys(family))
+    ):
+        raise VerificationError("Final changelog must select exactly the candidate curve")
     expected = benchmark_points(benchmark_entries(canonical))
     generated = {
         point: schema.validate_python(entry).model_dump(by_alias=True, exclude_none=True)

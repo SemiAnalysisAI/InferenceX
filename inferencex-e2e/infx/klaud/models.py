@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def utc(value: str | datetime) -> datetime:
@@ -43,6 +43,32 @@ def normalized_image(value: str) -> str:
     return value
 
 
+def family_keys(family: str) -> list[str]:
+    """Return the master config keys listed by ``family`` (``configs/x-master.yaml:KEY,...``)."""
+    return family.split(":", 1)[1].split(",")
+
+
+def key_families(family: str) -> set[str]:
+    """Return the single-key family of each key listed by ``family``."""
+    source = family.split(":", 1)[0]
+    return {f"{source}:{key}" for key in family_keys(family)}
+
+
+def sorted_keys(family: str) -> str:
+    """Return ``family`` unchanged, raising ValueError unless its keys are sorted and distinct."""
+    keys = family_keys(family)
+    if keys != sorted(set(keys)):
+        raise ValueError("family keys must be sorted and distinct")
+    return family
+
+
+Family = Annotated[
+    str,
+    Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:,]+(?:,[^\s:,]+)*$"),
+    AfterValidator(sorted_keys),
+]
+
+
 class Contract(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -62,7 +88,7 @@ class Policy(Contract):
 class CandidateReview(Contract):
     candidate_id: str = Field(pattern=r"^[0-9a-f]{16}-[0-9a-f]{16}$")
     decision: Literal["proceed", "duplicate", "uncertain"]
-    family: str | None = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
+    family: Family | None
     pull_requests: list[Annotated[int, Field(gt=0)]]
     baseline_model: str | None = Field(default=None, min_length=1)
     reason: str = Field(min_length=1)
@@ -87,7 +113,7 @@ class PRReview(Contract):
 
 class OwnedCandidate(Contract):
     id: str = Field(pattern=r"^[0-9a-f]{16}-[0-9a-f]{16}$")
-    family: str = Field(pattern=r"^configs/[^/:]+-master\.yaml:[^\s:]+$")
+    family: Family
     base: str = Field(pattern=r"^[0-9a-f]{40}$")
 
 
