@@ -469,7 +469,7 @@ qwen3.5-fp4-mi355x-sglang-mtp:
         srt-recipe: 8k1k.yaml
 
 qwen3.5-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927
+  image: lmsysorg/sglang:v0.5.22-rocm720-mi35x@sha256:c4b61360b251d62bb17da63f175d571ab22479eb46a144548d79f3ed3998ea11
   model: amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2
   model-prefix: qwen3.5
   runner: cluster:mi355x-amds
