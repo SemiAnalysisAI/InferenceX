@@ -779,6 +779,33 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 10, 16, 24, 32, 48, 52, 60], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
+# Restore run 34609443618 attempt 2; upstream monokernel supports TP4 only.
+minimaxm3-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:nightly-df6603f0583375f244d1ac6d36265462b7490392@sha256:81899892d73777a4ae81e16f39e749169687f29249505eb4c56da83bd097d41c
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: minimaxm3/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.20
+      search-space:
+      - { tp: 4, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c1 }
+      - { tp: 4, kv-offloading: none, conc-list: [4], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c4 }
+      - { tp: 4, kv-offloading: none, conc-list: [5], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c5 }
+      - { tp: 4, kv-offloading: none, conc-list: [8], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c8 }
+      - { tp: 4, kv-offloading: none, conc-list: [10], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c10 }
+      - { tp: 4, kv-offloading: none, conc-list: [12], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c12 }
+      - { tp: 4, kv-offloading: none, conc-list: [15], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c15 }
+      - { tp: 4, kv-offloading: none, conc-list: [20], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c20 }
+      - { tp: 4, kv-offloading: none, conc-list: [24], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c24 }
+      - { tp: 4, kv-offloading: none, conc-list: [32], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp4_c32 }
+      - { tp: 2, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp2_c1 }
+      - { tp: 2, kv-offloading: none, conc-list: [2], spec-decoding: mtp, srt-recipe: agg-variants.yaml:override_tp2_c2 }
+
 minimaxm3-fp4-mi355x-atom-agentic-mtp:
   image: rocm/atom-dev:nightly_202610070333
   model: amd/MiniMax-M3-MXFP4
