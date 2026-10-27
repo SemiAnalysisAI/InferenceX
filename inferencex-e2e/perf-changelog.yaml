@@ -11437,7 +11437,7 @@
     - agentic-coding
   description:
     - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
-    - "Use vllm/vllm-openai:nightly-5d35ce3934a7804b298559d2d99eec33792e1eb9 without an EFA dependency setup script."
+    - "Use vllm/vllm-openai:nightly-dev-amd64-cu130-a9f1f7a without an EFA dependency setup script."
     - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
     - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
     - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."

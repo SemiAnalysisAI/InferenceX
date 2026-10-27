@@ -8843,7 +8843,7 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [128, 192], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:nightly-5d35ce3934a7804b298559d2d99eec33792e1eb9
+  image: vllm/vllm-openai:nightly-dev-amd64-cu130-a9f1f7a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
@@ -8879,7 +8879,7 @@ dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg:
           dp-attn: false
 
 dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:nightly-5d35ce3934a7804b298559d2d99eec33792e1eb9
+  image: vllm/vllm-openai:nightly-dev-amd64-cu130-a9f1f7a
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:b300-dsxe
