@@ -174,12 +174,12 @@ override_1p1d_tep4_tp4_c1:
         tensor-parallel-size: 4
         enable-expert-parallel: true
         all2all-backend: "flashinfer_nvlink_one_sided"
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
     decode:
       nodes: 1
       workers: 1
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
 
 override_1p1d_tep4_tp4_c1_eval:
   name: "minimax-m3-vllm-disagg-gb300-1p1d-tep4-tp4-c1-fp4-eval-agentic"
@@ -192,12 +192,12 @@ override_1p1d_tep4_tp4_c1_eval:
         tensor-parallel-size: 4
         enable-expert-parallel: true
         all2all-backend: "flashinfer_nvlink_one_sided"
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
     decode:
       nodes: 1
       workers: 1
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
 
 override_1p1d_tp2_tp4_c20_c24:
   name: "minimax-m3-vllm-disagg-gb300-1p1d-tp2-tp4-c20-c24-fp4-agentic"
@@ -206,12 +206,12 @@ override_1p1d_tp2_tp4_c20_c24:
   roles:
     prefill:
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
     decode:
       nodes: 1
       workers: 1
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
 
 override_1p1d_tp2_tp4_c20_c24_eval:
   name: "minimax-m3-vllm-disagg-gb300-1p1d-tp2-tp4-c20-c24-fp4-eval-agentic"
@@ -220,12 +220,12 @@ override_1p1d_tp2_tp4_c20_c24_eval:
   roles:
     prefill:
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
     decode:
       nodes: 1
       workers: 1
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
 
 override_1p3d_dep4_tp4_c24:
   name: "minimax-m3-vllm-disagg-gb300-1p3d-dep4-tp4-c24-fp4-agentic"
@@ -240,12 +240,12 @@ override_1p3d_dep4_tp4_c24:
         data-parallel-rpc-port: 13345
         enable-expert-parallel: true
         all2all-backend: "flashinfer_nvlink_one_sided"
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
     decode:
       nodes: 3
       workers: 3
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
 
 override_1p3d_dep4_tp4_c24_eval:
   name: "minimax-m3-vllm-disagg-gb300-1p3d-dep4-tp4-c24-fp4-eval-agentic"
@@ -260,12 +260,12 @@ override_1p3d_dep4_tp4_c24_eval:
         data-parallel-rpc-port: 13345
         enable-expert-parallel: true
         all2all-backend: "flashinfer_nvlink_one_sided"
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
     decode:
       nodes: 3
       workers: 3
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
 
 override_1p3d_tp2_tp2_c48:
   name: "minimax-m3-vllm-disagg-gb300-1p3d-tp2-tp2-c48-fp4-agentic"
@@ -276,14 +276,14 @@ override_1p3d_tp2_tp2_c48:
   roles:
     prefill:
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
     decode:
       nodes: 3
       workers: 3
       gpus: 2
       args:
         tensor-parallel-size: 2
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
 
 override_1p3d_tp2_tp2_c48_eval:
   name: "minimax-m3-vllm-disagg-gb300-1p3d-tp2-tp2-c48-fp4-eval-agentic"
@@ -294,14 +294,14 @@ override_1p3d_tp2_tp2_c48_eval:
   roles:
     prefill:
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
     decode:
       nodes: 3
       workers: 3
       gpus: 2
       args:
         tensor-parallel-size: 2
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
 
 override_2p5d_tp2_tp2_c120:
   name: "minimax-m3-vllm-disagg-gb300-2p5d-tp2-tp2-c120-fp4-agentic"
@@ -314,14 +314,14 @@ override_2p5d_tp2_tp2_c120:
       nodes: 2
       workers: 2
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
     decode:
       nodes: 5
       workers: 5
       gpus: 2
       args:
         tensor-parallel-size: 2
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN","rejection_sample_method":"block"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"block"}'
 
 override_2p5d_tp2_tp2_c120_eval:
   name: "minimax-m3-vllm-disagg-gb300-2p5d-tp2-tp2-c120-fp4-eval-agentic"
@@ -334,11 +334,11 @@ override_2p5d_tp2_tp2_c120_eval:
       nodes: 2
       workers: 2
       args:
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
     decode:
       nodes: 5
       workers: 5
       gpus: 2
       args:
         tensor-parallel-size: 2
-        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+        speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER"}'
