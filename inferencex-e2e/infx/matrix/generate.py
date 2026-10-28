@@ -682,13 +682,16 @@ def drop_app_colliding_evals(rows: list[dict]) -> list[dict]:
     return rows
 
 
-def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
+def mark_eval_entries(matrix_values: list[dict], root: Path | None = None) -> list[dict]:
     """Choose which rows run evals and return the rows, plus extra gsm8k eval-only rows.
 
     Pick the top and median 8k1k concs per single-node group, the top eligible conc per multinode
-    shape, one gsm8k point per agentic deployment, and every automatic vendor eval.
+    shape, one gsm8k point per agentic deployment and engine environment, and every automatic
+    vendor eval. Agentic rows with an srt recipe need ``root`` to bind it.
     """
     from collections import defaultdict
+
+    from infx.matrix.fingerprint import engine_environment
 
     target_isl, target_osl = seq_len_stoi["8k1k"]
     eval_indices = set()
@@ -699,6 +702,18 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         conc = entry[Fields.CONC.value]
         conc_values = conc if isinstance(conc, list) else [conc]
         return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
+
+    def _engine_env(entry: dict) -> str:
+        """Return the row's engine env, or "" when it has no srt recipe or cannot be bound."""
+        srt_recipe = entry.get(Fields.SRT_RECIPE.value)
+        if not srt_recipe:
+            return ""
+        if root is None:
+            raise ValueError(f"Reading {srt_recipe} needs the master config's project root")
+        try:
+            return engine_environment(entry, root)
+        except ValueError:
+            return ""
 
     automatic_eval_specs: dict[int, tuple[str, str]] = {}
     for i, entry in enumerate(matrix_values):
@@ -761,20 +776,23 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     ag_sn_groups = defaultdict(list)
     ag_mn_groups = defaultdict(list)
     ag_mn_fallback: dict[tuple, tuple[int, int]] = {}
+    ag_mn_paths: dict[int, tuple] = {}
     for i, entry in enumerate(matrix_values):
         if entry.get(Fields.SCENARIO_TYPE.value) != "agentic-coding":
             continue
         if Fields.PREFILL.value in entry:
             conc = entry[Fields.CONC.value]
             top_conc = max(conc) if isinstance(conc, list) else conc
-            deployment = (
+            path = (
                 entry[Fields.MODEL.value],
                 entry[Fields.RUNNER.value],
                 entry[Fields.FRAMEWORK.value],
                 entry[Fields.PRECISION.value],
+                _engine_env(entry),
             )
-            if top_conc > ag_mn_fallback.get(deployment, (-1, -1))[1]:
-                ag_mn_fallback[deployment] = (i, top_conc)
+            ag_mn_paths[i] = path
+            if top_conc > ag_mn_fallback.get(path, (-1, -1))[1]:
+                ag_mn_fallback[path] = (i, top_conc)
             eval_concs = _eligible_eval_concs(entry)
             if eval_concs:
                 ag_mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
@@ -789,6 +807,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.SPEC_DECODING.value],
             entry[Fields.DP_ATTN.value],
             entry[Fields.IMAGE.value],
+            _engine_env(entry),
         )
         ag_sn_groups[key].append((i, conc_val))
     gsm8k_picks: dict[int, int | None] = {}
@@ -797,18 +816,9 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     for entries in ag_mn_groups.values():
         best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
         gsm8k_picks[best_idx] = best_eval_conc
-    covered = {
-        (
-            matrix_values[i][Fields.MODEL.value],
-            matrix_values[i][Fields.RUNNER.value],
-            matrix_values[i][Fields.FRAMEWORK.value],
-            matrix_values[i][Fields.PRECISION.value],
-        )
-        for i, eval_conc in gsm8k_picks.items()
-        if eval_conc is not None
-    }
-    for deployment, (i, top_conc) in ag_mn_fallback.items():
-        if deployment not in covered:
+    covered = {ag_mn_paths[i] for i, eval_conc in gsm8k_picks.items() if eval_conc is not None}
+    for path, (i, top_conc) in ag_mn_fallback.items():
+        if path not in covered:
             gsm8k_picks[i] = top_conc
     extra_gsm8k: dict[int, int | None] = {}
     for i, eval_conc in gsm8k_picks.items():
@@ -1601,6 +1611,7 @@ def select_matrix_evals(
     *,
     mode: EvalMode = "default",
     trim: bool = False,
+    root: Path | None = None,
 ) -> list[dict]:
     """Apply eval selection ``mode`` to rows, optionally trimming to minimum concurrency.
 
@@ -1611,7 +1622,7 @@ def select_matrix_evals(
     if mode == "smoke" and trim:
         raise ValueError("smoke cannot be combined with trimming")
     if mode != "none":
-        rows = mark_eval_entries(rows)
+        rows = mark_eval_entries(rows, root)
         if mode == "all":
             rows = mark_all_eval_entries(rows)
     if mode == "smoke":
@@ -1647,7 +1658,7 @@ def generate_config_matrix(
         scenario_types=scenario_types,
         root=root,
     )
-    rows = select_matrix_evals(rows, mode=eval_mode)
+    rows = select_matrix_evals(rows, mode=eval_mode, root=root)
     return json.loads(json.dumps(rows))
 
 
@@ -1912,6 +1923,7 @@ def main() -> list[dict]:
             else "default"
         ),
         trim=args.trim_conc,
+        root=root,
     )
 
     print(json.dumps(matrix_values))
