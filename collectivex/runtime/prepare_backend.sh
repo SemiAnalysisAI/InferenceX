@@ -828,7 +828,9 @@ PY
   # Every requirement of the installed set must already hold; pip check lines about the image's
   # own packages (its torch/NCCL pin disagreement among them) are not this venv's to settle.
   # shellcheck disable=SC2086
-  "$venv/bin/python" -m pip check 2>&1 | python3 -c '
+  # pip check exits non-zero for any broken requirement, the image's included, so only the
+  # filter's verdict counts.
+  { "$venv/bin/python" -m pip check 2>&1 || true; } | python3 -c '
 import re, sys
 ours = {re.split(r"[\[=<>]", spec)[0].lower().replace("_", "-") for spec in sys.argv[1:]}
 def mine(name):
