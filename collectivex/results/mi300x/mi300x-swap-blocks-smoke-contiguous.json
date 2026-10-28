@@ -1,0 +1,4075 @@
+{
+  "schema": "collectivex-swap-blocks-v1",
+  "case_id": "mi300x-swap-blocks-smoke-contiguous",
+  "profile": "smoke",
+  "generated_at": "2026-10-28T08:29:15.597236+00:00",
+  "operation": "vllm._custom_ops.swap_blocks",
+  "timing": "drained-wall-clock-including-submission-and-synchronization",
+  "warmup": 4,
+  "iterations": 20,
+  "selection": {
+    "requested_block_bytes": [
+      257,
+      4096,
+      65536,
+      262144
+    ],
+    "requested_num_blocks": [
+      1,
+      4,
+      16,
+      64,
+      256,
+      1024,
+      2048
+    ],
+    "max_payload_bytes": 2147483648,
+    "skipped_cases": []
+  },
+  "runtime": {
+    "sku": "mi300x",
+    "torch": "2.13.0+git733fca1",
+    "vllm": "0.32.0",
+    "cuda": null,
+    "hip": "7.2.53211",
+    "device": "",
+    "device_index": 0,
+    "image": "vllm/vllm-openai-rocm:v0.32.0",
+    "source_sha": "6cbbb96e7ad6cfd9e60e0b84f83957c2c40df0c4",
+    "source_dirty": false
+  },
+  "cases": [
+    {
+      "direction": "h2d",
+      "block_bytes": 257,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 257,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 16.515,
+          "p90": 17.185,
+          "p95": 17.216,
+          "p99": 22.694
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.015561610656978505,
+          "p90": 0.014954902531277276,
+          "p95": 0.014927973977695167,
+          "p99": 0.011324579183925267
+        },
+        "samples_us": [
+          17.216,
+          16.955,
+          17.185,
+          16.304,
+          16.815,
+          16.475,
+          16.735,
+          16.134,
+          16.555,
+          16.735,
+          16.445,
+          16.956,
+          16.565,
+          16.335,
+          22.694,
+          16.515,
+          16.494,
+          16.304,
+          16.124,
+          16.184
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 257,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1028,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 25.238,
+          "p90": 25.768,
+          "p95": 26.128,
+          "p99": 28.362
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.04073222917822331,
+          "p90": 0.039894442719652284,
+          "p95": 0.03934476423759951,
+          "p99": 0.03624568084056132
+        },
+        "samples_us": [
+          25.238,
+          25.608,
+          25.438,
+          25.098,
+          25.418,
+          24.797,
+          25.768,
+          25.188,
+          28.362,
+          24.818,
+          25.619,
+          26.128,
+          24.837,
+          24.857,
+          25.388,
+          25.007,
+          25.248,
+          25.238,
+          24.827,
+          25.048
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 257,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4112,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 65.548,
+          "p90": 69.395,
+          "p95": 176.644,
+          "p99": 180.731
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.06273265393299567,
+          "p90": 0.05925498955256142,
+          "p95": 0.023278458368243472,
+          "p99": 0.022752045858209162
+        },
+        "samples_us": [
+          65.648,
+          63.145,
+          65.568,
+          66.189,
+          66.97,
+          176.644,
+          69.395,
+          65.548,
+          63.015,
+          62.323,
+          64.126,
+          65.488,
+          65.629,
+          68.253,
+          69.044,
+          63.575,
+          65.358,
+          63.916,
+          180.731,
+          64.286
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 257,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16448,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 212.728,
+          "p90": 219.258,
+          "p95": 220.931,
+          "p99": 224.796
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.07731939377985032,
+          "p90": 0.07501664705506754,
+          "p95": 0.07444858349439418,
+          "p99": 0.07316856171818004
+        },
+        "samples_us": [
+          224.796,
+          216.074,
+          216.894,
+          219.258,
+          218.397,
+          202.173,
+          217.336,
+          203.064,
+          215.073,
+          202.404,
+          214.201,
+          211.978,
+          213.49,
+          201.903,
+          209.584,
+          209.504,
+          220.931,
+          201.051,
+          212.728,
+          211.197
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 257,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65792,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 784.736,
+          "p90": 805.748,
+          "p95": 904.475,
+          "p99": 915.252
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08383966072666477,
+          "p90": 0.08165332088940959,
+          "p95": 0.07274054009231874,
+          "p99": 0.07188402756836369
+        },
+        "samples_us": [
+          915.252,
+          904.475,
+          785.577,
+          797.645,
+          784.736,
+          782.803,
+          771.536,
+          788.952,
+          775.222,
+          786.488,
+          775.792,
+          778.837,
+          791.637,
+          805.748,
+          777.195,
+          778.746,
+          776.143,
+          787.11,
+          782.592,
+          788.461
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 257,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 263168,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 3061.687,
+          "p90": 3111.361,
+          "p95": 3163.239,
+          "p99": 3220.756
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08595522664465702,
+          "p90": 0.08458292046470982,
+          "p95": 0.08319573702777439,
+          "p99": 0.08171000845764162
+        },
+        "samples_us": [
+          3220.756,
+          3163.239,
+          3111.361,
+          3077.13,
+          3066.264,
+          3091.902,
+          3057.591,
+          3042.398,
+          3061.678,
+          3061.687,
+          3067.936,
+          3090.46,
+          3077.53,
+          3075.087,
+          3049.999,
+          3060.655,
+          3060.115,
+          3039.634,
+          3051.572,
+          3056.81
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 257,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 526336,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 6310.945,
+          "p90": 6361.321,
+          "p95": 6374.35,
+          "p99": 6390.324
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08340050499568606,
+          "p90": 0.082740047232328,
+          "p95": 0.08257092880058359,
+          "p99": 0.08236452486603184
+        },
+        "samples_us": [
+          6304.396,
+          6323.263,
+          6322.892,
+          6310.945,
+          6313.639,
+          6287.75,
+          6324.426,
+          6308.631,
+          6201.03,
+          6163.775,
+          6200.85,
+          6138.957,
+          6374.35,
+          6302.623,
+          6343.694,
+          6361.321,
+          6309.683,
+          6330.975,
+          6390.324,
+          6317.845
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 4096,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4096,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 19.729,
+          "p90": 20.201,
+          "p95": 20.47,
+          "p99": 39.689
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.20761315829489585,
+          "p90": 0.2027622394930944,
+          "p95": 0.20009770395701026,
+          "p99": 0.10320239864949986
+        },
+        "samples_us": [
+          39.689,
+          19.93,
+          19.979,
+          20.47,
+          19.539,
+          19.479,
+          19.75,
+          20.04,
+          19.639,
+          19.729,
+          20.15,
+          19.599,
+          19.529,
+          19.77,
+          20.201,
+          19.63,
+          19.729,
+          19.519,
+          19.439,
+          19.499
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 4096,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16384,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 28.703,
+          "p90": 29.014,
+          "p95": 29.054,
+          "p99": 41.813
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.5708114134411038,
+          "p90": 0.5646929068725443,
+          "p95": 0.5639154677497075,
+          "p99": 0.3918398584172387
+        },
+        "samples_us": [
+          41.813,
+          28.973,
+          28.823,
+          28.683,
+          29.014,
+          29.054,
+          28.874,
+          28.703,
+          28.543,
+          28.673,
+          28.533,
+          28.833,
+          28.893,
+          28.493,
+          28.412,
+          28.653,
+          28.493,
+          28.733,
+          28.613,
+          28.743
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 4096,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65536,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 75.143,
+          "p90": 80.891,
+          "p95": 86.75,
+          "p99": 93.0
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.8721504331740814,
+          "p90": 0.810176657477346,
+          "p95": 0.7554582132564841,
+          "p99": 0.7046881720430107
+        },
+        "samples_us": [
+          75.143,
+          75.032,
+          72.769,
+          86.75,
+          75.854,
+          75.914,
+          77.616,
+          77.376,
+          74.923,
+          75.833,
+          71.608,
+          72.959,
+          74.741,
+          77.547,
+          80.891,
+          93.0,
+          72.478,
+          76.414,
+          72.679,
+          74.382
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 4096,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 248.292,
+          "p90": 266.379,
+          "p95": 271.527,
+          "p99": 274.702
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.0557891514829314,
+          "p90": 0.9841015996005691,
+          "p95": 0.9654435838793195,
+          "p99": 0.9542850070257952
+        },
+        "samples_us": [
+          253.91,
+          238.727,
+          260.14,
+          239.399,
+          254.03,
+          240.29,
+          271.527,
+          249.274,
+          266.379,
+          248.292,
+          274.702,
+          246.8,
+          256.374,
+          241.151,
+          259.779,
+          244.396,
+          256.905,
+          212.859,
+          221.672,
+          207.391
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 4096,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 805.967,
+          "p90": 813.91,
+          "p95": 909.823,
+          "p99": 926.397
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.3010160465627005,
+          "p90": 1.2883193473479868,
+          "p95": 1.1525054873310523,
+          "p99": 1.1318862215659162
+        },
+        "samples_us": [
+          926.397,
+          909.823,
+          807.44,
+          813.91,
+          794.611,
+          804.646,
+          806.859,
+          808.181,
+          803.954,
+          795.141,
+          807.91,
+          798.216,
+          813.088,
+          804.825,
+          803.494,
+          810.624,
+          805.967,
+          807.289,
+          804.996,
+          797.064
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 4096,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 3094.607,
+          "p90": 3168.597,
+          "p95": 3179.815,
+          "p99": 3197.71
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.3553591780798013,
+          "p90": 1.3237101467936756,
+          "p95": 1.3190402586313983,
+          "p99": 1.3116586557255037
+        },
+        "samples_us": [
+          3168.597,
+          3167.235,
+          3197.71,
+          3179.815,
+          3120.345,
+          3056.298,
+          3104.472,
+          3074.526,
+          3103.489,
+          3080.465,
+          3087.175,
+          3114.366,
+          3120.215,
+          3110.911,
+          3077.651,
+          3094.607,
+          3081.737,
+          3085.072,
+          3074.015,
+          3081.136
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 4096,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 8388608,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 6338.796,
+          "p90": 6390.835,
+          "p95": 6435.472,
+          "p99": 6490.815
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.323375606345432,
+          "p90": 1.3125996837658929,
+          "p95": 1.3034953768736777,
+          "p99": 1.29238131112965
+        },
+        "samples_us": [
+          6344.125,
+          6314.791,
+          6335.882,
+          6309.393,
+          6357.635,
+          6376.343,
+          6329.182,
+          6336.924,
+          6361.641,
+          6390.835,
+          6324.325,
+          6330.605,
+          6317.805,
+          6345.446,
+          6329.022,
+          6339.568,
+          6435.472,
+          6373.598,
+          6338.796,
+          6490.815
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 65536,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65536,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 19.319,
+          "p90": 19.67,
+          "p95": 19.88,
+          "p99": 20.38
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 3.392308090480874,
+          "p90": 3.3317742755465174,
+          "p95": 3.296579476861167,
+          "p99": 3.2157016683022572
+        },
+        "samples_us": [
+          20.38,
+          19.589,
+          19.559,
+          19.429,
+          19.67,
+          19.319,
+          19.88,
+          18.738,
+          19.008,
+          19.399,
+          19.359,
+          18.618,
+          19.369,
+          19.089,
+          18.968,
+          19.249,
+          18.748,
+          18.717,
+          19.329,
+          18.738
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 65536,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 63.055,
+          "p90": 64.056,
+          "p95": 64.407,
+          "p99": 65.177
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.157386408690826,
+          "p90": 4.092419133258399,
+          "p95": 4.070116602232677,
+          "p99": 4.0220323120119055
+        },
+        "samples_us": [
+          62.985,
+          62.674,
+          62.894,
+          62.563,
+          65.177,
+          63.986,
+          63.084,
+          63.165,
+          63.545,
+          64.056,
+          64.407,
+          62.644,
+          63.945,
+          62.133,
+          62.404,
+          63.014,
+          63.055,
+          63.145,
+          63.345,
+          62.684
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 65536,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 240.29,
+          "p90": 241.672,
+          "p95": 242.603,
+          "p99": 246.9
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.363793749219693,
+          "p90": 4.338839418716277,
+          "p95": 4.3221889259407344,
+          "p99": 4.246966383151073
+        },
+        "samples_us": [
+          240.801,
+          239.619,
+          241.672,
+          238.177,
+          240.079,
+          246.9,
+          240.851,
+          240.831,
+          240.35,
+          241.632,
+          240.76,
+          238.728,
+          240.179,
+          238.527,
+          242.603,
+          240.471,
+          240.109,
+          239.9,
+          240.29,
+          239.919
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 65536,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 948.561,
+          "p90": 951.897,
+          "p95": 954.049,
+          "p99": 954.13
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.421754636760314,
+          "p90": 4.4062582401247194,
+          "p95": 4.396319266620478,
+          "p99": 4.395946045088196
+        },
+        "samples_us": [
+          950.404,
+          951.897,
+          954.13,
+          948.561,
+          951.235,
+          949.342,
+          948.582,
+          948.05,
+          948.652,
+          944.525,
+          949.964,
+          954.049,
+          948.431,
+          951.826,
+          940.199,
+          941.13,
+          937.094,
+          934.22,
+          935.222,
+          932.758
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 65536,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16777216,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 3544.12,
+          "p90": 3697.199,
+          "p95": 3705.251,
+          "p99": 3716.458
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.733817139374513,
+          "p90": 4.5378179535372585,
+          "p95": 4.527956675539659,
+          "p99": 4.51430259671978
+        },
+        "samples_us": [
+          3716.458,
+          3697.199,
+          3705.251,
+          3663.168,
+          3621.165,
+          3604.46,
+          3595.858,
+          3594.806,
+          3602.347,
+          3570.169,
+          3544.12,
+          3540.895,
+          3532.613,
+          3532.092,
+          3527.565,
+          3529.608,
+          3529.037,
+          3529.328,
+          3526.383,
+          3523.379
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 65536,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 67108864,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 14262.017,
+          "p90": 14285.883,
+          "p95": 14301.466,
+          "p99": 14317.85
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.705425887516471,
+          "p90": 4.697565001757329,
+          "p95": 4.692446494646074,
+          "p99": 4.687076900512298
+        },
+        "samples_us": [
+          14301.466,
+          14273.434,
+          14270.09,
+          14263.961,
+          14265.252,
+          14257.891,
+          14250.6,
+          14258.712,
+          14260.885,
+          14265.383,
+          14264.441,
+          14256.85,
+          14285.883,
+          14262.017,
+          14317.85,
+          14256.079,
+          14258.152,
+          14261.707,
+          14265.322,
+          14261.096
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 65536,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 134217728,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 28429.163,
+          "p90": 28499.007,
+          "p95": 28500.829,
+          "p99": 28557.194
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.721128370891538,
+          "p90": 4.709558055829805,
+          "p95": 4.7092569833670455,
+          "p99": 4.6999620480919795
+        },
+        "samples_us": [
+          28422.923,
+          28434.57,
+          28465.327,
+          28412.998,
+          28428.591,
+          28449.543,
+          28442.813,
+          28499.007,
+          28429.163,
+          28425.026,
+          28425.998,
+          28442.973,
+          28453.369,
+          28425.326,
+          28493.829,
+          28414.25,
+          28557.194,
+          28425.647,
+          28415.001,
+          28500.829
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 262144,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 21.853,
+          "p90": 22.053,
+          "p95": 22.173,
+          "p99": 22.784
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 11.995790051709147,
+          "p90": 11.88699950120165,
+          "p95": 11.822667207865422,
+          "p99": 11.50561797752809
+        },
+        "samples_us": [
+          22.784,
+          21.823,
+          21.853,
+          22.053,
+          21.863,
+          21.772,
+          21.843,
+          22.173,
+          21.853,
+          21.863,
+          21.823,
+          21.933,
+          21.913,
+          21.752,
+          21.642,
+          21.893,
+          21.663,
+          21.622,
+          21.882,
+          21.813
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 262144,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 81.212,
+          "p90": 81.422,
+          "p95": 81.492,
+          "p99": 81.563
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 12.911589420282716,
+          "p90": 12.878288423276265,
+          "p95": 12.86722623079566,
+          "p99": 12.856025403675686
+        },
+        "samples_us": [
+          81.402,
+          81.392,
+          80.36,
+          81.322,
+          81.563,
+          81.251,
+          80.21,
+          81.422,
+          79.108,
+          80.681,
+          81.141,
+          80.58,
+          80.861,
+          81.492,
+          81.292,
+          80.43,
+          81.212,
+          81.352,
+          79.389,
+          81.252
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 262144,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 330.415,
+          "p90": 332.949,
+          "p95": 336.064,
+          "p99": 339.468
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 12.694048393686728,
+          "p90": 12.597436844681917,
+          "p95": 12.480670348505047,
+          "p99": 12.355520991669318
+        },
+        "samples_us": [
+          330.415,
+          327.07,
+          325.828,
+          331.356,
+          331.397,
+          331.437,
+          329.514,
+          332.298,
+          332.949,
+          329.353,
+          327.781,
+          331.937,
+          330.916,
+          327.851,
+          329.854,
+          339.468,
+          328.743,
+          336.064,
+          329.183,
+          331.666
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 262144,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16777216,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 1283.232,
+          "p90": 1312.757,
+          "p95": 1317.915,
+          "p99": 1338.966
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 13.074187676117802,
+          "p90": 12.78013828911215,
+          "p95": 12.730119924274327,
+          "p99": 12.529979103278201
+        },
+        "samples_us": [
+          1338.966,
+          1317.915,
+          1312.757,
+          1305.887,
+          1300.468,
+          1304.665,
+          1298.766,
+          1293.558,
+          1283.232,
+          1284.695,
+          1285.146,
+          1262.953,
+          1243.753,
+          1240.518,
+          1226.618,
+          1229.612,
+          1201.91,
+          1205.135,
+          1190.965,
+          1180.198
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 262144,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 67108864,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 4490.177,
+          "p90": 4829.676,
+          "p95": 4929.395,
+          "p99": 5004.157
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 14.94570570380633,
+          "p90": 13.895106835323944,
+          "p95": 13.614016324518525,
+          "p99": 13.410623207864981
+        },
+        "samples_us": [
+          5004.157,
+          4929.395,
+          4829.676,
+          4746.342,
+          4653.882,
+          4552.07,
+          4519.251,
+          4488.264,
+          4489.206,
+          4486.862,
+          4488.935,
+          4490.177,
+          4489.306,
+          4484.569,
+          4484.698,
+          4484.88,
+          4490.337,
+          4490.538,
+          4493.171,
+          4483.037
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 262144,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 268435456,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 17892.727,
+          "p90": 17942.942,
+          "p95": 17946.587,
+          "p99": 17955.34
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.002489894357636,
+          "p90": 14.96050402436791,
+          "p95": 14.957465505836849,
+          "p99": 14.950173931543485
+        },
+        "samples_us": [
+          17911.435,
+          17895.731,
+          17892.727,
+          17894.39,
+          17882.271,
+          17946.587,
+          17889.842,
+          17889.511,
+          17942.942,
+          17883.053,
+          17880.058,
+          17955.34,
+          17884.545,
+          17895.07,
+          17910.022,
+          17889.663,
+          17895.681,
+          17932.826,
+          17878.476,
+          17889.592
+        ]
+      }
+    },
+    {
+      "direction": "h2d",
+      "block_bytes": 262144,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 536870912,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 35650.571,
+          "p90": 35717.421,
+          "p95": 35723.271,
+          "p99": 35726.856
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.05925142124652,
+          "p90": 15.031065988778977,
+          "p95": 15.028604519446162,
+          "p99": 15.027096478906513
+        },
+        "samples_us": [
+          35662.79,
+          35656.471,
+          35641.068,
+          35640.957,
+          35645.704,
+          35684.152,
+          35649.61,
+          35655.248,
+          35717.421,
+          35650.171,
+          35726.856,
+          35723.271,
+          35647.046,
+          35642.439,
+          35663.611,
+          35643.2,
+          35635.639,
+          35717.321,
+          35650.571,
+          35655.579
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 257,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 257,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 16.965,
+          "p90": 17.546,
+          "p95": 18.347,
+          "p99": 18.678
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.01514883583849101,
+          "p90": 0.014647213040009118,
+          "p95": 0.01400773968496212,
+          "p99": 0.013759503158796446
+        },
+        "samples_us": [
+          18.678,
+          17.546,
+          16.575,
+          16.965,
+          16.986,
+          16.445,
+          16.935,
+          17.196,
+          17.006,
+          17.025,
+          18.347,
+          17.316,
+          17.226,
+          16.775,
+          16.715,
+          17.366,
+          16.745,
+          16.916,
+          16.846,
+          16.836
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 257,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1028,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 25.608,
+          "p90": 26.84,
+          "p95": 27.551,
+          "p99": 31.467
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.0401437050921587,
+          "p90": 0.03830104321907601,
+          "p95": 0.037312620231570545,
+          "p99": 0.03266914545396765
+        },
+        "samples_us": [
+          27.551,
+          26.469,
+          31.467,
+          25.608,
+          25.659,
+          26.089,
+          25.347,
+          25.358,
+          26.84,
+          26.099,
+          25.799,
+          26.019,
+          25.258,
+          25.589,
+          25.479,
+          25.548,
+          25.578,
+          25.779,
+          25.178,
+          25.608
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 257,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4112,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 68.282,
+          "p90": 73.78,
+          "p95": 78.517,
+          "p99": 190.485
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.0602208488327817,
+          "p90": 0.055733261046354024,
+          "p95": 0.052370824152731255,
+          "p99": 0.021587001601175947
+        },
+        "samples_us": [
+          73.24,
+          61.282,
+          63.676,
+          65.398,
+          68.282,
+          78.517,
+          66.73,
+          66.42,
+          65.759,
+          61.502,
+          72.489,
+          70.546,
+          70.856,
+          68.443,
+          69.474,
+          73.78,
+          69.314,
+          63.184,
+          190.485,
+          61.542
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 257,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16448,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 202.253,
+          "p90": 215.473,
+          "p95": 217.286,
+          "p99": 229.594
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.0813238864194845,
+          "p90": 0.0763343899235635,
+          "p95": 0.07569746785342821,
+          "p99": 0.07163950277446275
+        },
+        "samples_us": [
+          229.594,
+          187.972,
+          212.768,
+          199.428,
+          208.072,
+          189.744,
+          202.253,
+          194.03,
+          215.473,
+          196.194,
+          202.043,
+          194.371,
+          211.797,
+          191.317,
+          202.684,
+          201.111,
+          217.286,
+          207.191,
+          211.397,
+          205.508
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 257,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65792,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 769.353,
+          "p90": 782.322,
+          "p95": 895.532,
+          "p99": 919.627
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08551601150577173,
+          "p90": 0.08409836358941715,
+          "p95": 0.07346694478812595,
+          "p99": 0.07154204911339054
+        },
+        "samples_us": [
+          895.532,
+          919.627,
+          779.939,
+          774.3,
+          760.879,
+          779.989,
+          772.557,
+          782.322,
+          761.271,
+          773.559,
+          767.3,
+          769.353,
+          754.39,
+          764.055,
+          768.792,
+          771.525,
+          766.479,
+          768.411,
+          766.078,
+          775.972
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 257,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 263168,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 3062.228,
+          "p90": 3081.206,
+          "p95": 3081.487,
+          "p99": 3124.281
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08594004104201254,
+          "p90": 0.08541071255865398,
+          "p95": 0.08540292397793663,
+          "p99": 0.08423314036093424
+        },
+        "samples_us": [
+          3051.982,
+          3064.351,
+          3052.283,
+          3056.299,
+          3055.668,
+          3059.253,
+          3059.945,
+          3081.206,
+          3062.228,
+          3057.711,
+          3043.75,
+          3073.776,
+          3074.186,
+          3043.099,
+          3081.487,
+          3067.866,
+          3071.982,
+          3066.995,
+          3064.481,
+          3124.281
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 257,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 526336,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 6153.389,
+          "p90": 6229.543,
+          "p95": 6236.784,
+          "p99": 6258.136
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08553595425220151,
+          "p90": 0.08449030691336427,
+          "p95": 0.08439221239664545,
+          "p99": 0.08410427641713124
+        },
+        "samples_us": [
+          6195.973,
+          6151.196,
+          6188.111,
+          6164.515,
+          6214.03,
+          6151.045,
+          6149.923,
+          6144.325,
+          6130.345,
+          6189.203,
+          6136.174,
+          6125.608,
+          6155.712,
+          6236.784,
+          6156.654,
+          6229.543,
+          6153.389,
+          6258.136,
+          6152.768,
+          6119.929
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 4096,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4096,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 19.048,
+          "p90": 19.299,
+          "p95": 19.63,
+          "p99": 31.247
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.2150356992860143,
+          "p90": 0.21223897611275194,
+          "p95": 0.2086602139582272,
+          "p99": 0.13108458412007554
+        },
+        "samples_us": [
+          19.63,
+          19.279,
+          19.159,
+          31.247,
+          18.798,
+          18.919,
+          19.299,
+          18.908,
+          19.119,
+          18.938,
+          18.899,
+          19.048,
+          18.889,
+          19.158,
+          19.179,
+          18.828,
+          18.728,
+          18.978,
+          19.299,
+          19.189
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 4096,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16384,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 28.273,
+          "p90": 28.983,
+          "p95": 29.605,
+          "p99": 40.351
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.5794928023202348,
+          "p90": 0.5652968981816927,
+          "p95": 0.5534200304002702,
+          "p99": 0.4060370251047062
+        },
+        "samples_us": [
+          28.983,
+          28.973,
+          28.703,
+          40.351,
+          28.452,
+          28.513,
+          28.383,
+          28.612,
+          28.273,
+          28.362,
+          27.902,
+          27.982,
+          28.013,
+          27.931,
+          28.032,
+          27.631,
+          28.013,
+          29.605,
+          27.832,
+          27.722
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 4096,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65536,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 78.568,
+          "p90": 83.975,
+          "p95": 90.446,
+          "p99": 120.691
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.8341309438957336,
+          "p90": 0.780422744864543,
+          "p95": 0.7245870464144352,
+          "p99": 0.5430065207844826
+        },
+        "samples_us": [
+          78.237,
+          80.13,
+          74.312,
+          76.364,
+          90.446,
+          79.7,
+          78.568,
+          81.442,
+          77.076,
+          77.346,
+          72.829,
+          75.654,
+          80.08,
+          79.259,
+          83.975,
+          82.443,
+          120.691,
+          82.404,
+          76.845,
+          73.009
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 4096,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 251.747,
+          "p90": 264.717,
+          "p95": 267.25,
+          "p99": 268.112
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.041299399794238,
+          "p90": 0.9902801860099654,
+          "p95": 0.9808942937324603,
+          "p99": 0.9777406457003044
+        },
+        "samples_us": [
+          262.383,
+          239.118,
+          264.065,
+          251.747,
+          254.411,
+          243.004,
+          264.567,
+          241.071,
+          259.92,
+          250.515,
+          267.25,
+          245.498,
+          261.151,
+          243.325,
+          268.112,
+          252.708,
+          264.717,
+          214.13,
+          223.796,
+          209.794
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 4096,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 787.49,
+          "p90": 798.467,
+          "p95": 804.956,
+          "p99": 966.878
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.331541987834766,
+          "p90": 1.3132364894228565,
+          "p95": 1.3026500827374417,
+          "p99": 1.084496699687034
+        },
+        "samples_us": [
+          966.878,
+          804.956,
+          780.199,
+          783.464,
+          781.37,
+          792.387,
+          774.601,
+          773.81,
+          785.447,
+          777.966,
+          787.56,
+          791.395,
+          782.613,
+          793.679,
+          798.467,
+          792.036,
+          781.681,
+          796.533,
+          787.49,
+          790.173
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 4096,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 2983.881,
+          "p90": 3020.906,
+          "p95": 3043.68,
+          "p99": 3068.106
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.4056539118014424,
+          "p90": 1.3884258563490555,
+          "p95": 1.3780371129685118,
+          "p99": 1.3670661965394937
+        },
+        "samples_us": [
+          3068.106,
+          3008.518,
+          2984.071,
+          2969.619,
+          2982.008,
+          2983.84,
+          2983.881,
+          2977.551,
+          2980.836,
+          2972.374,
+          2986.103,
+          2999.254,
+          2984.381,
+          2966.474,
+          2975.278,
+          2985.863,
+          3009.199,
+          2979.974,
+          3020.906,
+          3043.68
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 4096,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 8388608,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 5965.217,
+          "p90": 6111.857,
+          "p95": 6122.102,
+          "p99": 6146.849
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.4062536199437505,
+          "p90": 1.3725137875444402,
+          "p95": 1.3702169614292607,
+          "p99": 1.3647005156625778
+        },
+        "samples_us": [
+          5919.289,
+          5931.557,
+          5925.677,
+          5965.217,
+          5938.487,
+          5919.108,
+          5935.833,
+          5938.818,
+          5948.372,
+          5892.678,
+          5990.194,
+          6096.453,
+          5993.199,
+          6044.456,
+          5983.164,
+          5986.509,
+          6084.937,
+          6122.102,
+          6146.849,
+          6111.857
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 65536,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65536,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 15.864,
+          "p90": 16.374,
+          "p95": 16.765,
+          "p99": 22.504
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.131114473020676,
+          "p90": 4.00244289727617,
+          "p95": 3.9090963316433047,
+          "p99": 2.9121933878421613
+        },
+        "samples_us": [
+          15.924,
+          16.264,
+          15.694,
+          15.743,
+          15.794,
+          15.903,
+          15.904,
+          16.765,
+          15.984,
+          22.504,
+          16.374,
+          15.683,
+          15.523,
+          15.723,
+          15.864,
+          16.094,
+          15.674,
+          15.964,
+          15.654,
+          15.253
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 65536,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 56.655,
+          "p90": 57.466,
+          "p95": 57.546,
+          "p99": 58.528
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.627023210661019,
+          "p90": 4.561723453868375,
+          "p95": 4.555381781531297,
+          "p99": 4.478950246036085
+        },
+        "samples_us": [
+          57.426,
+          57.346,
+          56.044,
+          55.783,
+          55.914,
+          57.266,
+          56.395,
+          57.265,
+          56.465,
+          56.345,
+          56.575,
+          56.495,
+          57.255,
+          56.725,
+          56.465,
+          57.466,
+          56.655,
+          56.975,
+          57.546,
+          58.528
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 65536,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 216.334,
+          "p90": 219.579,
+          "p95": 220.06,
+          "p99": 221.802
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.847023583902669,
+          "p90": 4.775392910979647,
+          "p95": 4.764955012269381,
+          "p99": 4.7275317625630064
+        },
+        "samples_us": [
+          220.06,
+          218.077,
+          217.075,
+          215.763,
+          214.452,
+          218.708,
+          219.579,
+          215.193,
+          214.511,
+          219.169,
+          215.043,
+          216.855,
+          218.888,
+          216.745,
+          215.903,
+          216.304,
+          216.334,
+          215.653,
+          214.992,
+          221.802
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 65536,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 871.546,
+          "p90": 877.325,
+          "p95": 877.474,
+          "p99": 988.571
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.81248723532665,
+          "p90": 4.780787051548742,
+          "p95": 4.77997524712983,
+          "p99": 4.242794902945767
+        },
+        "samples_us": [
+          988.571,
+          871.546,
+          875.742,
+          872.277,
+          869.553,
+          870.925,
+          869.793,
+          872.988,
+          871.436,
+          875.131,
+          874.09,
+          872.957,
+          871.335,
+          877.325,
+          877.474,
+          869.893,
+          868.972,
+          869.934,
+          871.896,
+          867.76
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 65536,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16777216,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 3457.59,
+          "p90": 3459.994,
+          "p95": 3460.334,
+          "p99": 3463.278
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.852286129934434,
+          "p90": 4.84891476690422,
+          "p95": 4.848438329941561,
+          "p99": 4.844316858190419
+        },
+        "samples_us": [
+          3463.278,
+          3457.59,
+          3456.638,
+          3456.719,
+          3458.642,
+          3458.131,
+          3455.197,
+          3458.772,
+          3458.281,
+          3458.512,
+          3459.903,
+          3453.504,
+          3457.61,
+          3455.146,
+          3460.334,
+          3452.532,
+          3459.994,
+          3457.31,
+          3453.734,
+          3455.347
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 65536,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 67108864,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 13646.595,
+          "p90": 13653.416,
+          "p95": 13666.426,
+          "p99": 13666.886
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.917626997796886,
+          "p90": 4.915170240180187,
+          "p95": 4.910491155478397,
+          "p99": 4.910325878184687
+        },
+        "samples_us": [
+          13636.35,
+          13629.048,
+          13644.572,
+          13640.566,
+          13645.363,
+          13636.59,
+          13647.696,
+          13648.738,
+          13653.416,
+          13645.343,
+          13641.046,
+          13666.426,
+          13635.258,
+          13666.886,
+          13652.675,
+          13647.636,
+          13648.828,
+          13646.595,
+          13651.602,
+          13650.981
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 65536,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 134217728,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 27221.383,
+          "p90": 27232.96,
+          "p95": 27254.712,
+          "p99": 27258.899
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 4.930599154348624,
+          "p90": 4.928503107998543,
+          "p95": 4.924569667072615,
+          "p99": 4.923813247189478
+        },
+        "samples_us": [
+          27212.81,
+          27258.899,
+          27254.712,
+          27232.209,
+          27217.818,
+          27208.053,
+          27215.825,
+          27225.079,
+          27230.667,
+          27223.146,
+          27218.699,
+          27228.003,
+          27221.383,
+          27204.768,
+          27231.067,
+          27227.573,
+          27209.745,
+          27221.143,
+          27232.96,
+          27214.593
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 262144,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 19.239,
+          "p90": 19.649,
+          "p95": 20.09,
+          "p99": 37.617
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 13.62565621913821,
+          "p90": 13.341340526235431,
+          "p95": 13.048481831757092,
+          "p99": 6.968764122604142
+        },
+        "samples_us": [
+          19.509,
+          19.53,
+          19.159,
+          19.649,
+          19.028,
+          19.339,
+          19.179,
+          19.169,
+          37.617,
+          20.09,
+          19.259,
+          19.279,
+          19.119,
+          19.239,
+          19.279,
+          19.039,
+          19.239,
+          18.988,
+          19.048,
+          19.139
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 262144,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 70.796,
+          "p90": 71.548,
+          "p95": 71.628,
+          "p99": 78.257
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 14.811232273009775,
+          "p90": 14.655559903840778,
+          "p95": 14.639191377673535,
+          "p99": 13.399133623829178
+        },
+        "samples_us": [
+          71.477,
+          78.257,
+          70.215,
+          70.706,
+          70.646,
+          70.365,
+          70.666,
+          71.026,
+          69.864,
+          71.157,
+          70.796,
+          70.867,
+          71.628,
+          71.427,
+          70.956,
+          70.846,
+          70.135,
+          70.296,
+          71.548,
+          70.706
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 262144,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 272.879,
+          "p90": 274.671,
+          "p95": 275.142,
+          "p99": 277.636
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.37056350983403,
+          "p90": 15.270283357180045,
+          "p95": 15.244143024329256,
+          "p99": 15.107205117491969
+        },
+        "samples_us": [
+          270.866,
+          271.486,
+          277.636,
+          272.879,
+          274.051,
+          273.82,
+          272.879,
+          273.88,
+          269.865,
+          272.217,
+          272.618,
+          273.3,
+          273.54,
+          270.606,
+          274.2,
+          275.142,
+          270.726,
+          269.794,
+          269.614,
+          274.671
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 262144,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16777216,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 1096.092,
+          "p90": 1097.694,
+          "p95": 1098.316,
+          "p99": 1098.356
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.306393988825755,
+          "p90": 15.284055483586501,
+          "p95": 15.275399793866246,
+          "p99": 15.274843493366449
+        },
+        "samples_us": [
+          1093.469,
+          1095.932,
+          1096.402,
+          1098.356,
+          1095.792,
+          1097.694,
+          1096.312,
+          1097.554,
+          1093.698,
+          1094.189,
+          1097.364,
+          1097.634,
+          1097.124,
+          1096.142,
+          1096.092,
+          1095.121,
+          1094.56,
+          1098.316,
+          1094.08,
+          1094.028
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 262144,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 67108864,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 4324.709,
+          "p90": 4328.755,
+          "p95": 4329.596,
+          "p99": 4330.138
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.517544417439415,
+          "p90": 15.503040481616539,
+          "p95": 15.500029102022452,
+          "p99": 15.498088975455286
+        },
+        "samples_us": [
+          4324.709,
+          4324.759,
+          4326.823,
+          4328.435,
+          4327.143,
+          4318.991,
+          4322.786,
+          4326.722,
+          4318.53,
+          4325.681,
+          4329.596,
+          4322.946,
+          4323.137,
+          4322.897,
+          4328.755,
+          4330.138,
+          4326.132,
+          4321.144,
+          4323.437,
+          4321.284
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 262144,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 268435456,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 17280.39,
+          "p90": 17303.995,
+          "p95": 17309.913,
+          "p99": 17333.229
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.534108663056795,
+          "p90": 15.512918028466837,
+          "p95": 15.507614394133581,
+          "p99": 15.486754141423967
+        },
+        "samples_us": [
+          17263.203,
+          17333.229,
+          17287.39,
+          17274.53,
+          17279.679,
+          17277.886,
+          17273.318,
+          17275.753,
+          17281.501,
+          17281.201,
+          17280.39,
+          17269.323,
+          17303.334,
+          17303.995,
+          17273.138,
+          17283.304,
+          17283.895,
+          17287.32,
+          17309.913,
+          17269.213
+        ]
+      }
+    },
+    {
+      "direction": "d2h",
+      "block_bytes": 262144,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 536870912,
+      "host_memory": "pinned",
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 34477.254,
+          "p90": 34516.182,
+          "p95": 34537.314,
+          "p99": 34564.545
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.571742227498744,
+          "p90": 15.554180123398353,
+          "p95": 15.544663143173207,
+          "p99": 15.532416584682368
+        },
+        "samples_us": [
+          34436.943,
+          34473.979,
+          34490.423,
+          34447.579,
+          34459.227,
+          34492.326,
+          34516.182,
+          34502.021,
+          34537.314,
+          34465.496,
+          34487.338,
+          34458.656,
+          34452.227,
+          34564.545,
+          34495.25,
+          34462.112,
+          34472.738,
+          34484.375,
+          34485.446,
+          34477.254
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 257,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 257,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 16.896,
+          "p90": 17.627,
+          "p95": 17.847,
+          "p99": 18.999
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.015210700757575758,
+          "p90": 0.014579905826289215,
+          "p95": 0.014400179301843447,
+          "p99": 0.013527027738302016
+        },
+        "samples_us": [
+          17.627,
+          17.226,
+          16.806,
+          16.896,
+          17.126,
+          16.995,
+          17.146,
+          16.966,
+          16.685,
+          16.896,
+          18.999,
+          16.485,
+          16.444,
+          16.585,
+          16.956,
+          16.855,
+          16.776,
+          16.635,
+          16.225,
+          17.847
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 257,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1028,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 24.667,
+          "p90": 26.71,
+          "p95": 27.091,
+          "p99": 32.468
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.04167511249847975,
+          "p90": 0.03848745788094347,
+          "p95": 0.03794618138865306,
+          "p99": 0.03166194406800542
+        },
+        "samples_us": [
+          25.058,
+          24.297,
+          25.388,
+          32.468,
+          24.667,
+          24.477,
+          24.597,
+          25.128,
+          24.546,
+          24.467,
+          24.607,
+          24.898,
+          24.848,
+          26.71,
+          24.447,
+          24.187,
+          24.097,
+          25.448,
+          27.091,
+          25.748
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 257,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4112,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 61.672,
+          "p90": 68.974,
+          "p95": 70.145,
+          "p99": 72.899
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.06667531456738876,
+          "p90": 0.05961666714994056,
+          "p95": 0.05862142704398032,
+          "p99": 0.05640680942125406
+        },
+        "samples_us": [
+          68.974,
+          58.007,
+          58.798,
+          60.05,
+          62.183,
+          72.899,
+          64.126,
+          60.771,
+          60.01,
+          58.617,
+          68.402,
+          61.823,
+          63.525,
+          68.943,
+          64.566,
+          70.145,
+          60.361,
+          59.128,
+          61.672,
+          61.552
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 257,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16448,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 209.424,
+          "p90": 222.874,
+          "p95": 225.337,
+          "p99": 225.668
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.07853923141569256,
+          "p90": 0.07379954593178208,
+          "p95": 0.0729928950860267,
+          "p99": 0.07288583228459507
+        },
+        "samples_us": [
+          205.748,
+          225.337,
+          201.762,
+          206.77,
+          219.599,
+          197.646,
+          209.424,
+          207.431,
+          222.874,
+          210.445,
+          214.161,
+          203.215,
+          220.551,
+          209.885,
+          215.543,
+          207.071,
+          222.222,
+          205.438,
+          225.668,
+          207.07
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 257,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65792,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 797.104,
+          "p90": 806.468,
+          "p95": 824.755,
+          "p99": 852.578
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.0825387904213252,
+          "p90": 0.08158042228581915,
+          "p95": 0.07977156852641087,
+          "p99": 0.07716830600836522
+        },
+        "samples_us": [
+          806.358,
+          806.158,
+          796.043,
+          788.141,
+          852.578,
+          824.755,
+          798.416,
+          796.093,
+          797.104,
+          792.156,
+          797.104,
+          788.641,
+          806.468,
+          801.5,
+          792.187,
+          799.979,
+          796.142,
+          805.327,
+          802.583,
+          792.928
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 257,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 263168,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 3069.729,
+          "p90": 3090.15,
+          "p95": 3092.012,
+          "p99": 3137.531
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08573004327092065,
+          "p90": 0.08516350338980308,
+          "p95": 0.08511221819320236,
+          "p99": 0.083877418262959
+        },
+        "samples_us": [
+          3083.35,
+          3071.712,
+          3090.15,
+          3080.375,
+          3058.823,
+          3072.623,
+          3055.868,
+          3060.456,
+          3071.292,
+          3059.003,
+          3056.309,
+          3076.569,
+          3092.012,
+          3137.531,
+          3062.858,
+          3069.86,
+          3059.884,
+          3063.8,
+          3069.729,
+          3054.376
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 257,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 526336,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 6111.306,
+          "p90": 6157.445,
+          "p95": 6157.996,
+          "p99": 6176.133
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.08612496248755994,
+          "p90": 0.0854796104553106,
+          "p95": 0.08547196198243714,
+          "p99": 0.08522096269623727
+        },
+        "samples_us": [
+          6111.306,
+          6118.006,
+          6112.227,
+          6117.575,
+          6109.854,
+          6176.133,
+          6157.445,
+          6157.996,
+          6103.945,
+          6114.13,
+          6107.941,
+          6151.767,
+          6109.363,
+          6094.28,
+          6111.105,
+          6095.251,
+          6114.5,
+          6118.116,
+          6086.799,
+          6101.04
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 4096,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4096,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 16.845,
+          "p90": 17.396,
+          "p95": 18.007,
+          "p99": 31.227
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.2431582071831404,
+          "p90": 0.23545642676477352,
+          "p95": 0.22746709612928306,
+          "p99": 0.13116854004547346
+        },
+        "samples_us": [
+          17.296,
+          17.396,
+          16.845,
+          17.166,
+          16.294,
+          18.007,
+          16.625,
+          16.816,
+          16.605,
+          16.775,
+          17.256,
+          31.227,
+          16.475,
+          16.986,
+          16.544,
+          17.065,
+          16.635,
+          17.256,
+          17.266,
+          16.795
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 4096,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16384,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 24.747,
+          "p90": 25.679,
+          "p95": 25.949,
+          "p99": 27.21
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.6620600476825473,
+          "p90": 0.6380310759764788,
+          "p95": 0.6313923465258777,
+          "p99": 0.6021315692760014
+        },
+        "samples_us": [
+          27.21,
+          25.388,
+          24.687,
+          24.747,
+          24.517,
+          24.897,
+          24.547,
+          25.679,
+          25.949,
+          24.586,
+          25.258,
+          25.458,
+          24.136,
+          24.206,
+          24.617,
+          24.497,
+          24.867,
+          25.398,
+          24.737,
+          24.848
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 4096,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65536,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 67.472,
+          "p90": 71.127,
+          "p95": 72.329,
+          "p99": 74.752
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 0.9713066160777805,
+          "p90": 0.9213941259999718,
+          "p95": 0.9060819311756004,
+          "p99": 0.8767123287671232
+        },
+        "samples_us": [
+          67.472,
+          66.58,
+          63.695,
+          65.248,
+          67.411,
+          67.671,
+          68.793,
+          71.127,
+          69.534,
+          69.134,
+          74.752,
+          65.268,
+          69.574,
+          70.867,
+          72.329,
+          69.875,
+          67.11,
+          65.448,
+          63.595,
+          65.919
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 4096,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 219.569,
+          "p90": 229.844,
+          "p95": 231.767,
+          "p99": 236.094
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.1939026000938202,
+          "p90": 1.1405300986756235,
+          "p95": 1.1310669767481998,
+          "p99": 1.1103374079815667
+        },
+        "samples_us": [
+          220.34,
+          215.493,
+          229.844,
+          213.58,
+          227.381,
+          219.569,
+          219.7,
+          227.57,
+          236.094,
+          212.098,
+          225.358,
+          227.942,
+          220.421,
+          209.914,
+          217.095,
+          209.795,
+          231.767,
+          213.81,
+          216.033,
+          211.638
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 4096,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 793.288,
+          "p90": 799.808,
+          "p95": 801.43,
+          "p99": 805.037
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.3218099857807,
+          "p90": 1.3110346483155957,
+          "p95": 1.3083812684825873,
+          "p99": 1.302519014653985
+        },
+        "samples_us": [
+          805.037,
+          797.535,
+          788.341,
+          793.288,
+          793.809,
+          796.013,
+          786.329,
+          776.143,
+          790.454,
+          793.729,
+          799.808,
+          796.424,
+          785.417,
+          799.258,
+          801.43,
+          796.183,
+          792.507,
+          789.904,
+          792.758,
+          792.517
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 4096,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 2999.775,
+          "p90": 3039.875,
+          "p95": 3040.516,
+          "p99": 3053.986
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.3982061987982433,
+          "p90": 1.3797619967926313,
+          "p95": 1.3794711160868747,
+          "p99": 1.3733867804240099
+        },
+        "samples_us": [
+          2961.126,
+          3026.595,
+          3040.516,
+          3039.875,
+          3053.986,
+          3029.549,
+          3000.304,
+          2988.377,
+          2990.981,
+          2980.996,
+          2982.839,
+          3003.65,
+          3009.139,
+          2998.883,
+          2999.775,
+          2999.444,
+          3009.989,
+          3010.03,
+          2987.395,
+          2988.308
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 4096,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 8388608,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 5891.407,
+          "p90": 5958.287,
+          "p95": 5970.936,
+          "p99": 5979.779
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 1.4238717508398249,
+          "p90": 1.4078892137958443,
+          "p95": 1.4049067013948902,
+          "p99": 1.4028291012092586
+        },
+        "samples_us": [
+          5886.95,
+          5889.804,
+          5970.936,
+          5851.877,
+          5949.824,
+          5854.892,
+          5871.196,
+          5952.448,
+          5941.611,
+          5880.8,
+          5950.324,
+          5891.637,
+          5890.394,
+          5856.775,
+          5872.859,
+          5958.287,
+          5891.407,
+          5979.779,
+          5934.882,
+          5928.002
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 65536,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 65536,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 16.875,
+          "p90": 17.476,
+          "p95": 17.476,
+          "p99": 20.842
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 3.883614814814815,
+          "p90": 3.7500572213321126,
+          "p95": 3.7500572213321126,
+          "p99": 3.1444199213127337
+        },
+        "samples_us": [
+          17.436,
+          17.476,
+          16.965,
+          16.925,
+          17.035,
+          16.495,
+          17.436,
+          20.842,
+          16.875,
+          16.455,
+          17.476,
+          16.344,
+          16.755,
+          16.926,
+          16.614,
+          17.276,
+          16.495,
+          16.334,
+          16.705,
+          16.745
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 65536,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 24.497,
+          "p90": 25.017,
+          "p95": 25.087,
+          "p99": 25.178
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 10.701065436584072,
+          "p90": 10.478634528520606,
+          "p95": 10.449396101566549,
+          "p99": 10.411629200095321
+        },
+        "samples_us": [
+          24.857,
+          24.397,
+          24.537,
+          25.017,
+          24.667,
+          24.427,
+          24.497,
+          25.087,
+          25.178,
+          24.497,
+          24.036,
+          24.807,
+          24.006,
+          24.306,
+          24.477,
+          24.717,
+          24.346,
+          24.597,
+          23.916,
+          24.867
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 65536,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 66.991,
+          "p90": 69.575,
+          "p95": 75.232,
+          "p99": 78.057
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.652490633070114,
+          "p90": 15.071160618038089,
+          "p95": 13.937898766482348,
+          "p99": 13.433465288186838
+        },
+        "samples_us": [
+          66.609,
+          67.231,
+          75.232,
+          64.517,
+          67.451,
+          67.842,
+          66.74,
+          69.575,
+          66.85,
+          66.991,
+          63.435,
+          63.235,
+          68.112,
+          67.17,
+          69.414,
+          68.533,
+          78.057,
+          64.246,
+          60.811,
+          64.787
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 65536,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 202.924,
+          "p90": 214.101,
+          "p95": 219.159,
+          "p99": 222.213
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 20.66933433206521,
+          "p90": 19.5903055100163,
+          "p95": 19.138178217641073,
+          "p99": 18.87515131877973
+        },
+        "samples_us": [
+          213.52,
+          201.372,
+          208.332,
+          214.101,
+          219.159,
+          205.818,
+          209.013,
+          207.611,
+          213.66,
+          193.7,
+          202.924,
+          193.109,
+          222.213,
+          191.847,
+          202.123,
+          193.641,
+          206.289,
+          201.161,
+          200.671,
+          196.374
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 65536,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16777216,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 759.618,
+          "p90": 768.141,
+          "p95": 772.858,
+          "p99": 776.554
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 22.086385525356167,
+          "p90": 21.841323402864838,
+          "p95": 21.70801880811223,
+          "p99": 21.604699737558494
+        },
+        "samples_us": [
+          776.554,
+          772.858,
+          754.691,
+          761.581,
+          752.207,
+          753.288,
+          754.521,
+          763.844,
+          758.376,
+          760.48,
+          759.858,
+          759.849,
+          754.6,
+          768.141,
+          755.081,
+          757.765,
+          759.618,
+          758.406,
+          760.109,
+          764.095
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 65536,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 67108864,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 2967.897,
+          "p90": 2982.248,
+          "p95": 2983.981,
+          "p99": 2995.978
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 22.6115879358347,
+          "p90": 22.502777770326276,
+          "p95": 22.489708882194627,
+          "p99": 22.39965179984633
+        },
+        "samples_us": [
+          2967.887,
+          2981.617,
+          2983.981,
+          2995.978,
+          2976.97,
+          2967.897,
+          2981.287,
+          2964.631,
+          2967.376,
+          2980.155,
+          2982.208,
+          2982.248,
+          2962.739,
+          2967.516,
+          2956.679,
+          2955.999,
+          2961.748,
+          2958.423,
+          2969.399,
+          2972.664
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 65536,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 134217728,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 5747.831,
+          "p90": 5815.332,
+          "p95": 5827.601,
+          "p99": 5846.87
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 23.351021976811776,
+          "p90": 23.07997686116631,
+          "p95": 23.03138598541664,
+          "p99": 22.95548353221467
+        },
+        "samples_us": [
+          5797.586,
+          5747.831,
+          5761.912,
+          5725.908,
+          5827.601,
+          5846.87,
+          5751.517,
+          5735.163,
+          5728.753,
+          5735.292,
+          5743.845,
+          5736.764,
+          5815.332,
+          5726.45,
+          5759.088,
+          5747.141,
+          5735.984,
+          5776.755,
+          5753.229,
+          5765.168
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 262144,
+      "num_blocks": 1,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 262144,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 16.925,
+          "p90": 17.406,
+          "p95": 17.757,
+          "p99": 34.242
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 15.488567208271787,
+          "p90": 15.06055383201195,
+          "p95": 14.762854085712677,
+          "p99": 7.655627591846271
+        },
+        "samples_us": [
+          17.306,
+          17.065,
+          16.885,
+          16.745,
+          17.046,
+          34.242,
+          17.006,
+          16.525,
+          16.925,
+          16.775,
+          16.795,
+          17.226,
+          17.035,
+          17.406,
+          17.757,
+          17.176,
+          16.835,
+          16.615,
+          16.175,
+          16.385
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 262144,
+      "num_blocks": 4,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 1048576,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 24.587,
+          "p90": 25.207,
+          "p95": 25.749,
+          "p99": 29.424
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 42.647577988367836,
+          "p90": 41.59860356250248,
+          "p95": 40.72297953318576,
+          "p99": 35.63675910821098
+        },
+        "samples_us": [
+          24.657,
+          24.607,
+          24.607,
+          24.607,
+          24.938,
+          24.717,
+          24.587,
+          24.076,
+          24.136,
+          24.447,
+          29.424,
+          24.537,
+          24.456,
+          24.487,
+          25.207,
+          24.577,
+          25.749,
+          25.077,
+          24.116,
+          24.016
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 262144,
+      "num_blocks": 16,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 4194304,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 64.387,
+          "p90": 69.645,
+          "p95": 73.37,
+          "p99": 88.252
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 65.14209390094274,
+          "p90": 60.224050542034604,
+          "p95": 57.16647130979965,
+          "p99": 47.526446992702716
+        },
+        "samples_us": [
+          64.837,
+          88.252,
+          64.557,
+          64.527,
+          66.099,
+          73.37,
+          69.645,
+          67.591,
+          62.935,
+          64.237,
+          62.573,
+          62.063,
+          64.206,
+          64.266,
+          64.387,
+          66.16,
+          65.388,
+          62.303,
+          60.911,
+          62.544
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 262144,
+      "num_blocks": 64,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 16777216,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 206.75,
+          "p90": 224.076,
+          "p95": 224.616,
+          "p99": 229.284
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 81.14735671100362,
+          "p90": 74.87288241489495,
+          "p95": 74.69288029347865,
+          "p99": 73.17220564888959
+        },
+        "samples_us": [
+          224.616,
+          200.35,
+          224.076,
+          201.121,
+          207.1,
+          199.429,
+          203.805,
+          214.662,
+          229.284,
+          196.615,
+          208.002,
+          198.106,
+          218.077,
+          212.498,
+          203.836,
+          197.847,
+          206.87,
+          211.777,
+          203.064,
+          206.75
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 262144,
+      "num_blocks": 256,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 67108864,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 780.028,
+          "p90": 788.571,
+          "p95": 790.685,
+          "p99": 804.696
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 86.03391673119427,
+          "p90": 85.1018665408695,
+          "p95": 84.87433554449623,
+          "p99": 83.39654229671827
+        },
+        "samples_us": [
+          782.212,
+          790.685,
+          788.571,
+          780.86,
+          763.023,
+          780.028,
+          783.905,
+          775.111,
+          772.207,
+          782.773,
+          773.319,
+          770.464,
+          780.109,
+          773.489,
+          780.66,
+          804.696,
+          782.332,
+          768.912,
+          766.589,
+          775.161
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 262144,
+      "num_blocks": 1024,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 268435456,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 2977.671,
+          "p90": 2994.186,
+          "p95": 2995.267,
+          "p99": 2995.878
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 90.14946782233497,
+          "p90": 89.65223135770457,
+          "p95": 89.61987562377578,
+          "p99": 89.60159792888763
+        },
+        "samples_us": [
+          2990.27,
+          2995.878,
+          2975.658,
+          2965.042,
+          2977.671,
+          2972.754,
+          2972.734,
+          2958.583,
+          2995.267,
+          2992.544,
+          2974.366,
+          2979.764,
+          2980.405,
+          2972.803,
+          2965.884,
+          2977.991,
+          2976.089,
+          2981.216,
+          2994.186,
+          2985.242
+        ]
+      }
+    },
+    {
+      "direction": "d2d",
+      "block_bytes": 262144,
+      "num_blocks": 2048,
+      "layout": "contiguous",
+      "seed": 0,
+      "payload_bytes": 536870912,
+      "host_memory": null,
+      "api": "explicit-block-size",
+      "correctness_passed": true,
+      "latency": {
+        "sample_count": 20,
+        "percentiles_us": {
+          "p50": 7164.524,
+          "p90": 7331.675,
+          "p95": 7344.524,
+          "p99": 7677.532
+        },
+        "payload_gbps_at_latency_percentile": {
+          "p50": 74.9346239889768,
+          "p90": 73.22622893131515,
+          "p95": 73.09812208388182,
+          "p99": 69.92753817242311
+        },
+        "samples_us": [
+          7677.532,
+          7344.524,
+          7152.005,
+          7155.801,
+          7308.469,
+          7324.504,
+          7151.344,
+          7190.332,
+          7164.524,
+          7288.62,
+          7194.098,
+          7178.045,
+          7154.528,
+          7148.931,
+          7128.57,
+          7160.458,
+          7129.471,
+          7134.87,
+          7250.893,
+          7331.675
+        ]
+      }
+    }
+  ]
+}
