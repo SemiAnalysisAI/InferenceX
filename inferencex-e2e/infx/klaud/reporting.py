@@ -151,6 +151,25 @@ class Retirement(Contract):
     points: list[Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(min_length=1)
 
 
+class KeyBaseline(Contract):
+    """The old image of one key of a mixed-image family and the observation it froze from.
+
+    A key whose image has no published observation has no ``date``, freezes nothing and lists
+    its current ``points``, whose deltas stay N/A.
+    """
+
+    image: str = Field(pattern=r"^[A-Za-z0-9_./:@+-]+$")
+    date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    points: list[Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def unbaselined(self) -> Self:
+        """Return the key, raising ValueError unless exactly an unbaselined key lists points."""
+        if (self.date is None) != bool(self.points):
+            raise ValueError("Only a key without a published baseline lists its points")
+        return self
+
+
 class Baseline(Contract):
     family: Family
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
@@ -160,6 +179,7 @@ class Baseline(Contract):
     points: list[Point]
     evals: list[Evaluation] = Field(default_factory=list)
     retirements: list[Retirement] = Field(default_factory=list)
+    keys: dict[str, KeyBaseline] = Field(default_factory=dict)
 
     @field_validator("sources")
     @classmethod
@@ -180,7 +200,7 @@ class Baseline(Contract):
 
     @model_validator(mode="after")
     def distinct(self) -> Self:
-        """Return the baseline, raising ValueError on duplicates or invalid retirements."""
+        """Return the baseline, raising ValueError on duplicates, invalid retirements or keys."""
         unique_points(self.points)
         unique_evals(self.evals)
         retired = [key for retirement in self.retirements for key in retirement.points]
@@ -192,14 +212,25 @@ class Baseline(Contract):
             raise ValueError("Only a retirement after the baseline date can exempt a point")
         if self.points and len(retired) == len(self.points):
             raise ValueError("A baseline needs at least one point that is not retired")
+        observed = {(key.date, normalized_image(key.image)) for key in self.keys.values()}
+        skipped = {point for key in self.keys.values() for point in key.points}
+        if self.keys and (
+            sorted(self.keys) != family_keys(self.family)
+            or len({image for _, image in observed}) < 2
+            or (self.date, normalized_image(self.image)) not in observed
+            or skipped & {point.key for point in self.points}
+        ):
+            raise ValueError("Per-key baselines must name every family key and several images")
         return self
 
     @model_serializer(mode="wrap")
     def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """Return the serialized baseline, omitting ``retirements`` when it is empty."""
+        """Return the serialized baseline, omitting ``retirements`` and ``keys`` when empty."""
         data = handler(self)
         if not self.retirements:
             data.pop("retirements", None)
+        if not self.keys:
+            data.pop("keys", None)
         return data
 
 
@@ -462,11 +493,12 @@ def point_table(
     ``context`` adds the shared settings caption.
     """
     old = {point.key: point for point in baseline.points} if baseline else {}
+    unbaselined = unbaselined_reasons(baseline)
     heading, labels, settings = point_layout(points)
     rows, issues = [], {}
     for point, label in zip(points, labels, strict=False):
         previous = old.get(point.key)
-        unmatched = mismatch(previous, point)
+        unmatched = unbaselined.get(point.key) or mismatch(previous, point)
         comparable = unmatched is None
         a, b = previous.values if previous else Values(), point.values
         rows.append(
@@ -571,6 +603,20 @@ def retirement_reasons(baseline: Baseline) -> dict[str, str]:
     }
 
 
+def unbaselined_reasons(baseline: Baseline | None) -> dict[str, str]:
+    """Each point of a key without a published baseline and why its deltas stay N/A."""
+    names: dict[str, list[str]] = {}
+    images: dict[str, str] = {}
+    for name, key in baseline.keys.items() if baseline else ():
+        for point in key.points:
+            names.setdefault(point, []).append(name)
+            images[point] = key.image
+    return {
+        point: f"no published baseline for {', '.join(keys)} on `{images[point]}`"
+        for point, keys in names.items()
+    }
+
+
 def baseline_table(baseline: Baseline, *, context: bool = True) -> str:
     """Return the Markdown table of the frozen ``baseline`` points with notes.
 
@@ -626,8 +672,20 @@ def render_body(baseline: Baseline) -> str:
     _, _, settings = point_layout(baseline.points)
     sources = ", ".join(f"[API {i + 1}]({url})" for i, url in enumerate(baseline.sources)) or "N/A"
     meta = " · ".join(part for part in (settings, f"Sources: {sources}") if part)
+
+    def old(unpublished: str) -> str:
+        """Each key's old image and date, with ``unpublished`` for a key without a baseline."""
+        return (
+            "; ".join(
+                f"`{key}` {row.date or unpublished} · `{row.image}`"
+                for key, row in baseline.keys.items()
+            )
+            or f"{baseline.date} · `{baseline.image}`"
+        )
+
     english = (
-        f"**Goal:** {baseline.goal.en}  \n**Baseline:** {baseline.date} · `{baseline.image}`  \n{meta}\n\n"
+        f"**Goal:** {baseline.goal.en}  \n**Baseline:** {old('no published baseline')}  \n"
+        f"{meta}\n\n"
         + baseline_table(baseline, context=False)
         + "\n\n"
         + (eval_table(baseline.evals, None, compare=False) if baseline.evals else "**Eval:** N/A")
@@ -635,7 +693,7 @@ def render_body(baseline: Baseline) -> str:
         "runs and deletes its branch."
     )
     chinese = (
-        f"**目标：**{baseline.goal.zh}  \n**基线：**{baseline.date} · `{baseline.image}`  \n"
+        f"**目标：**{baseline.goal.zh}  \n**基线：**{old('无已发布基线')}  \n"
         + meta.replace("Mean latency", "平均延迟")
         .replace("Median latency", "中位延迟")
         .replace("Sources:", "来源：")
@@ -1107,6 +1165,21 @@ def missing_baseline_points(matrix: dict, baseline: Baseline) -> list[Point]:
     return [point for point in baseline.points if point.key not in covered]
 
 
+def unpublished_keys(matrix: dict, baseline: Baseline) -> list[str]:
+    """Baselined keys of a mixed-image ``baseline`` whose old image has no published point."""
+    passed = {point.key for point in baseline.points if point.result == "passed"}
+    images = {
+        normalized_image(entry["image"])
+        for entry in matrix_points(matrix)
+        if point_key(entry) in passed
+    }
+    return [
+        key
+        for key, row in baseline.keys.items()
+        if row.date is not None and normalized_image(row.image) not in images
+    ]
+
+
 def check_baseline_coverage(
     repository: str, candidate: OwnedCandidate, matrix: dict, baseline: Baseline | None
 ) -> None:
@@ -1154,50 +1227,55 @@ class Publication:
 def publication(repository: str, context: dict, model: str) -> Publication:
     """Fetch the source-date rows of ``context``'s source curve for display ``model``.
 
-    Speculation, disaggregation and ISL/OSL are not filtered, since that would erase other keys or
-    workloads of the family.
+    A mixed-image family fetches each key's own ``sources`` observation instead. Speculation,
+    disaggregation and ISL/OSL are not filtered, since that would erase other keys or workloads
+    of the family.
     """
     from .api import fetch
 
     source = context["source"]
-    feed = fetch("benchmarks", model=model, date=source["date"])
-    info = fetch("workflow-info", date=source["date"])
-    producers = {int(row["github_run_id"]): row for row in info.payload["runs"]}
-    heads: dict[int, set[str]] = {}
-    for row in info.payload["runConfigs"]:
-        if row.get("head_sha"):
-            heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
+    observed: dict[str, set[str]] = {}
+    for row in context.get("sources", {}).values() or [source]:
+        observed.setdefault(row["date"], set()).add(normalized_image(row["image"]))
+    urls: list[str] = []
+    changelogs: list[dict] = []
     rows: list[tuple[dict, int | None, int | None, str | None]] = []
-    for row in feed.payload:
-        if not isinstance(row, dict) or not isinstance(row.get("image"), str):
-            continue
-        if any(
-            (
-                normalized_image(row[key]) != normalized_image(source[key])
-                if key == "image"
-                else row.get(key) != source[key]
+    for published, images in observed.items():
+        feed = fetch("benchmarks", model=model, date=published)
+        info = fetch("workflow-info", date=published)
+        producers = {int(row["github_run_id"]): row for row in info.payload["runs"]}
+        heads: dict[int, set[str]] = {}
+        for row in info.payload["runConfigs"]:
+            if row.get("head_sha"):
+                heads.setdefault(int(row["github_run_id"]), set()).add(row["head_sha"])
+        for row in feed.payload:
+            if not isinstance(row, dict) or not isinstance(row.get("image"), str):
+                continue
+            if normalized_image(row["image"]) not in images or any(
+                row.get(key) != source[key]
+                for key in ("model", "hardware", "framework", "precision")
+            ):
+                continue
+            producer = re.fullmatch(
+                r"https://github.com/"
+                + re.escape(repository)
+                + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
+                row.get("run_url") or "",
             )
-            for key in ("model", "hardware", "framework", "precision", "image")
-        ):
-            continue
-        producer = re.fullmatch(
-            r"https://github.com/"
-            + re.escape(repository)
-            + r"/actions/runs/(\d+)(?:/attempts/(\d+))?",
-            row.get("run_url") or "",
-        )
-        run_id = int(producer[1]) if producer else None
-        run_attempt = int(producer[2]) if producer and producer[2] else None
-        proven = (
-            run_id in producers
-            and len(heads.get(run_id, ())) == 1
-            and (run_attempt is None or run_attempt <= int(producers[run_id]["run_attempt"]))
-        )
-        head = next(iter(heads[run_id])) if proven else None
-        if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
-            head = None
-        rows.append((row, run_id, run_attempt, head))
-    return Publication([feed.url, info.url], info.payload["changelogs"], rows)
+            run_id = int(producer[1]) if producer else None
+            run_attempt = int(producer[2]) if producer and producer[2] else None
+            proven = (
+                run_id in producers
+                and len(heads.get(run_id, ())) == 1
+                and (run_attempt is None or run_attempt <= int(producers[run_id]["run_attempt"]))
+            )
+            head = next(iter(heads[run_id])) if proven else None
+            if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
+                head = None
+            rows.append((row, run_id, run_attempt, head))
+        urls += [feed.url, info.url]
+        changelogs += info.payload["changelogs"]
+    return Publication(urls, changelogs, rows)
 
 
 MODEL_COLUMNS = (
@@ -1450,7 +1528,8 @@ def resolve_baseline(
     ``matrix`` is the candidate family's canonical matrix at the candidate base. ``producers``
     holds the families producer revisions regenerated themselves, so nothing here runs a
     revision's code. Legacy fingerprints may be absent, but exact producer provenance and a
-    unique workload/topology/concurrency match are required. Raw API data stays private.
+    unique workload/topology/concurrency match are required. A mixed-image family freezes each
+    point only from rows of its own current image. Raw API data stays private.
     """
     from fnmatch import fnmatchcase
 
@@ -1461,13 +1540,22 @@ def resolve_baseline(
 
     public = publication(repository, context, model)
     old_image = context["source"]["image"]
+    key_sources = context.get("sources", {})
+    unbaselined = context.get("unbaselined-keys", {})
+    old_images = {normalized_image(row["image"]) for row in key_sources.values()} or {
+        normalized_image(old_image)
+    }
     entries = {point_key(entry): entry for entry in matrix_points(matrix)}
-    if not entries or any(
-        normalized_image(entry["image"]) != normalized_image(old_image)
-        for entry in entries.values()
+    if not entries or {normalized_image(entry["image"]) for entry in entries.values()} != (
+        old_images | {normalized_image(image) for image in unbaselined.values()}
     ):
         raise VerificationError("Baseline source image no longer matches the selected base")
     current = {key: public_point(entry) for key, entry in entries.items()}
+    entries = {
+        key: entry
+        for key, entry in entries.items()
+        if normalized_image(entry["image"]) in old_images
+    }
 
     def current_key(entry: dict) -> str | None:
         """Return the current-family key of producer ``entry``, or None if it has none.
@@ -1484,7 +1572,7 @@ def resolve_baseline(
         return keys[0] if keys else None
 
     historical: dict[str, list[tuple[dict, dict]]] = {}
-    additions: dict[str, list[tuple[str, dict]]] = {}
+    additions: dict[tuple[str, str], list[tuple[str, dict]]] = {}
     published: dict[str, Point] = {}
     unverified: list[dict] = []
     sources = list(public.sources)
@@ -1540,16 +1628,18 @@ def resolve_baseline(
         if len(matches) != 1:
             raise VerificationError("Public baseline recipe identity is ambiguous or mismatched")
         key = current_key(matches[0]) or point_key(matches[0])
+        image = normalized_image(row["image"])
+        if key in current and current[key]["image"] != image:
+            continue
         if key in published:
             raise VerificationError("Duplicate public baseline point")
-        if head not in additions:
-            additions[head] = [
+        if (head, image) not in additions:
+            additions[head, image] = [
                 (point_key(point), point)
                 for point, _ in historical[head]
-                if normalized_image(point["image"]) == normalized_image(old_image)
-                and current_key(point) is None
+                if normalized_image(point["image"]) == image and current_key(point) is None
             ]
-        entries.update(additions[head])
+        entries.update(additions[head, image])
         entry = entries[key]
         published[key] = Point(
             key=key,
@@ -1599,13 +1689,34 @@ def resolve_baseline(
         retirements=retirements(
             repository, candidate.base, context["source"]["date"], points, current
         ),
+        keys=dict(
+            sorted(
+                {
+                    **{
+                        key: KeyBaseline(date=row["date"], image=row["image"])
+                        for key, row in key_sources.items()
+                    },
+                    **{
+                        key: KeyBaseline(
+                            image=image,
+                            points=sorted(
+                                point
+                                for point, fields in current.items()
+                                if fields["image"] == normalized_image(image)
+                            ),
+                        )
+                        for key, image in unbaselined.items()
+                    },
+                }.items()
+            )
+        ),
     )
 
 
 def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -> Baseline:
     """The baseline preflight selection froze for this session's candidate, with ``goal``.
 
-    It must be bound to the candidate, its base, its source observation and ``model``.
+    It must be bound to the candidate, its base, its source observations and ``model``.
     """
     preflight_file = Path(os.environ["KLAUD_EVIDENCE"]) / "baseline-preflight.json"
     if not preflight_file.exists():
@@ -1623,6 +1734,20 @@ def prepare_baseline(session: Session, context: dict, model: str, goal: Prose) -
         or preflight.baseline.date != context["source"]["date"]
         or normalized_image(preflight.baseline.image)
         != normalized_image(context["source"]["image"])
+        or {
+            key: (row.date, normalized_image(row.image))
+            for key, row in preflight.baseline.keys.items()
+        }
+        != {
+            **{
+                key: (row["date"], normalized_image(row["image"]))
+                for key, row in context.get("sources", {}).items()
+            },
+            **{
+                key: (None, normalized_image(image))
+                for key, image in context.get("unbaselined-keys", {}).items()
+            },
+        }
     ):
         raise VerificationError("Baseline preflight does not match this candidate")
     return preflight.baseline.model_copy(update={"goal": goal})

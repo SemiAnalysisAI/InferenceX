@@ -2276,6 +2276,195 @@ def test_baseline_freezes_published_points_of_every_curve_key(monkeypatch):
     }
 
 
+MIXED_FAMILY = "configs/nvidia-master.yaml:agg,mtp"
+
+
+def serve_mixed_curve(monkeypatch, agg="published"):
+    """Serve a curve whose agg key runs image 1 and MTP key image 2, published 09-19.
+
+    ``agg`` is ``published`` (image 1 observed 09-01 with an agg row), ``unverified`` (observed
+    without one) or ``unbaselined`` (never observed). The image 1 producer also ran MTP on
+    image 1, which the MTP key must never freeze.
+    """
+    old_head, new_head = "c" * 40, "d" * 40
+
+    def entry(spec, image):
+        return {
+            "model-prefix": "dsr1", "runner": "cluster:fixture", "framework": "sglang",
+            "precision": "fp8", "spec-decoding": spec, "disagg": False,
+            "scenario-type": "agentic-coding", "kv-offloading": "none", "image": image,
+            "conc": [4], "tp": 1, "ep": 1, "recipe-fingerprint": spec,
+        }  # fmt: skip
+
+    def row(spec, image, run, output):
+        return {
+            "model": "dsr1", "hardware": "fixture", "framework": "sglang", "precision": "fp8",
+            "spec_method": spec, "disagg": False, "is_multinode": False,
+            "benchmark_type": "agentic_traces", "isl": None, "osl": None, "offload_mode": "off",
+            "conc": 4, "image": image, "prefill_tp": 1, "prefill_ep": 1,
+            "prefill_dp_attention": False, "prefill_num_workers": 0, "decode_tp": 1,
+            "decode_ep": 1, "decode_dp_attention": False, "decode_num_workers": 0,
+            "recipe_fingerprint": spec, "output_tput_per_gpu": output,
+            "run_url": f"https://github.com/example/project/actions/runs/{run}",
+        }  # fmt: skip
+
+    def info(run, head):
+        return {"runs": [{"github_run_id": str(run), "run_attempt": 1}],
+                "runConfigs": [{"github_run_id": str(run), "head_sha": head}], "changelogs": []}  # fmt: skip
+
+    def source(spec, image, date):
+        return {"date": date, "image": image, "model": "dsr1", "hardware": "fixture",
+                "framework": "sglang", "precision": "fp8", "spec_method": spec, "disagg": False}  # fmt: skip
+
+    old = [row("none", "example/image:1", 41, 8.0), row("mtp", "example/image:1", 41, 99.0)]
+    feeds = {
+        "2026-09-01": {"benchmarks": old if agg == "published" else old[1:],
+                       "workflow-info": info(41, old_head)},
+        "2026-09-19": {"benchmarks": [row("mtp", "example/image:2", 42, 12.0)],
+                       "workflow-info": info(42, new_head)},
+    }  # fmt: skip
+    monkeypatch.setattr(api, "fetch", lambda resource, date=None, **_: Feed(
+        url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
+        retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64,
+        payload=[] if resource == "evaluations" else feeds[date][resource],
+    ))  # fmt: skip
+    producers = {
+        old_head: {"single_node": {"all": [entry("none", "example/image:1"),
+                                           entry("mtp", "example/image:1")]}},
+        new_head: {"single_node": {"all": [entry("none", "example/image:1"),
+                                           entry("mtp", "example/image:2")]}},
+    }  # fmt: skip
+    mtp = source("mtp", "example/image:2", "2026-09-19")
+    context = {"source": mtp, "sources": {"mtp": mtp}, "unbaselined-keys": {}}
+    if agg == "unbaselined":
+        context["unbaselined-keys"] = {"agg": "example/image:1"}
+    else:
+        context["sources"]["agg"] = source("none", "example/image:1", "2026-09-01")
+    return context, producers, producers[new_head]
+
+
+def test_mixed_image_baseline_freezes_each_key_from_its_own_image(monkeypatch):
+    context, producers, matrix = serve_mixed_curve(monkeypatch)
+    candidate = OwnedCandidate(id=CANDIDATE_ID, family=MIXED_FAMILY, base="a" * 40)
+
+    baseline = reporting.resolve_baseline(
+        "example/project", candidate, context, "DeepSeek-R1",
+        reporting.Prose(en="Update the image.", zh="更新镜像。"), producers, matrix,
+    )  # fmt: skip
+
+    keys = {p["spec-decoding"]: reporting.point_key(p) for p in reporting.matrix_points(matrix)}
+    assert {
+        point.key: (point.result, point.values.output_tps_gpu, point.run_id, point.head)
+        for point in baseline.points
+    } == {
+        keys["none"]: ("passed", 8.0, 41, "c" * 40),
+        keys["mtp"]: ("passed", 12.0, 42, "d" * 40),
+    }
+    assert (baseline.date, baseline.image) == ("2026-09-19", "example/image:2")
+    assert baseline.keys == {
+        "agg": reporting.KeyBaseline(date="2026-09-01", image="example/image:1"),
+        "mtp": reporting.KeyBaseline(date="2026-09-19", image="example/image:2"),
+    }
+    assert reporting.Baseline.model_validate_json(baseline.model_dump_json(by_alias=True)) == (
+        baseline
+    )
+    assert reporting.unpublished_keys(matrix, baseline) == []
+    assert "**Baseline:** `agg` 2026-09-01 · `example/image:1`; `mtp` 2026-09-19 · " in (
+        reporting.render_body(baseline)
+    )
+    assert "**Baseline:** 2026-09-19 · `example/image:2`  \n" in reporting.render_body(
+        baseline.model_copy(update={"keys": {}})
+    )
+    with pytest.raises(ValueError, match="every family key"):
+        reporting.Baseline.model_validate({
+            **baseline.model_dump(by_alias=True),
+            "keys": {"mtp": {"date": "2026-09-19", "image": "example/image:2"}},
+        })  # fmt: skip
+    labelled = baseline.model_copy(update={"points": [
+        point.model_copy(update={"dataset": "cc"}) for point in baseline.points]})  # fmt: skip
+    measured = [
+        point.model_copy(update={"dataset": "cc", "run_id": None, "head": None, "values":
+            reporting.Values(output_tps_gpu=point.values.output_tps_gpu * 1.25, request_errors=0)})
+        for point in baseline.points
+    ]  # fmt: skip
+    table = reporting.point_table(measured, labelled)
+    assert "10 (+25%)" in table
+    assert "15 (+25%)" in table
+
+
+@pytest.mark.parametrize("agg", ["published", "unverified", "unbaselined"])
+def test_select_freezes_a_mixed_image_curve_or_defers_a_key_without_published_points(
+    tmp_path, monkeypatch, agg
+):
+    context, producers, matrix = serve_mixed_curve(monkeypatch, agg)
+    (tmp_path / "candidates.json").write_text(json.dumps([{
+        **context, "id": CANDIDATE_ID, "family": MIXED_FAMILY, "base": "a" * 40,
+        "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1,
+    }]))  # fmt: skip
+    (tmp_path / "producers.json").write_text(json.dumps({MIXED_FAMILY: producers}))
+    (tmp_path / "cluster-state.json").write_text(
+        json.dumps({"committed-demand": {}, "infra-backoff": []}))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
+        "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": MIXED_FAMILY,
+        "pull-requests": [], "baseline-model": "DeepSeek-R1", "reason": "No overlap",
+    }]}))  # fmt: skip
+    monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
+        idle={"cluster-a": 1}, queued={}, size={"cluster-a": 1}))  # fmt: skip
+    monkeypatch.setattr(validation, "canonical_matrix", lambda *_: matrix)
+    monkeypatch.setattr(claims, "claim_family", lambda *_args: True)
+
+    klaud.select(tmp_path, 5)
+
+    selection = json.loads((tmp_path / "selection.json").read_text())
+    if agg == "unverified":
+        assert selection["candidates"] == []
+        assert selection["baseline-mismatch-candidates"] == [{
+            "id": CANDIDATE_ID, "reason": "baseline-point-mismatch", "missing-points": 0,
+            "unpublished-keys": ["agg"],
+        }]  # fmt: skip
+        return
+    assert selection["candidates"] == [CANDIDATE_ID]
+    selected = json.loads((tmp_path / CANDIDATE_ID / "candidate.json").read_text())
+    monkeypatch.setenv("KLAUD_EVIDENCE", str(tmp_path / CANDIDATE_ID))
+    session = SimpleNamespace(
+        candidate=OwnedCandidate(id=CANDIDATE_ID, family=MIXED_FAMILY, base="a" * 40))
+    goal = reporting.Prose(en="Update the image.", zh="更新镜像。")
+    baseline = reporting.prepare_baseline(session, selected, "DeepSeek-R1", goal)
+    keys = {p["spec-decoding"]: reporting.point_key(p) for p in reporting.matrix_points(matrix)}
+    if agg == "published":
+        assert {key: (row.date, row.image) for key, row in baseline.keys.items()} == {
+            "agg": ("2026-09-01", "example/image:1"), "mtp": ("2026-09-19", "example/image:2")}
+        drifted = {**selected, "sources": {
+            **selected["sources"], "agg": {**selected["sources"]["agg"], "date": "2026-08-01"}}}
+    else:
+        assert baseline.keys == {
+            "agg": reporting.KeyBaseline(image="example/image:1", points=[keys["none"]]),
+            "mtp": reporting.KeyBaseline(date="2026-09-19", image="example/image:2"),
+        }
+        assert [point.key for point in baseline.points] == [keys["mtp"]]
+        assert "**Baseline:** `agg` no published baseline · `example/image:1`; `mtp` " in (
+            reporting.render_body(baseline))
+        updated = [{**entry, "image": "example/image:3"} for entry in reporting.matrix_points(matrix)]
+        measured = [
+            point.model_copy(update={"values": reporting.Values(output_tps_gpu=15.0)})
+            for point in baseline.points
+        ] + [reporting.Point(
+            key=keys["none"], label=reporting.point_label(updated[0]), conc=4,
+            scenario="agentic-coding", dataset="cc", values=reporting.Values(output_tps_gpu=9.0),
+            result="passed",
+        )]  # fmt: skip
+        assert "no published baseline for agg on `example/image:1`" in reporting.point_table(
+            measured, baseline)
+        without_agg = {"single_node": {"all": [
+            entry for entry in matrix["single_node"]["all"] if entry["spec-decoding"] == "mtp"]}}
+        assert reporting.missing_baseline_points(without_agg, baseline) == []
+        drifted = {**selected, "unbaselined-keys": {"agg": "example/image:0"}}
+    with pytest.raises(github.VerificationError, match="preflight does not match"):
+        reporting.prepare_baseline(session, drifted, "DeepSeek-R1", goal)
+
+
 @pytest.mark.parametrize("disagg, workers, published, matches", [
     (False, 1, (True, 1, 1, 8), True),
     (False, 1, (False, 0, 0, 8), True),
@@ -2450,6 +2639,11 @@ def test_final_matrix_of_a_curve_needs_one_changelog_entry_for_all_its_keys(
     matrix = {**canonical, "changelog_metadata": {"head_ref": head, "entries": [entry]}}
     if accepted:
         validation.check_matrix(matrix, canonical, head, family)
+        # A key the baseline froze nothing for still needs every final point.
+        partial = {**matrix, "single_node": {"all": [
+            row for row in canonical["single_node"]["all"] if row["spec-decoding"] != "mtp"]}}
+        with pytest.raises(github.VerificationError, match="omits or changes canonical"):
+            validation.check_matrix(partial, canonical, head, family)
         return
     with pytest.raises(
         github.VerificationError, match="Final changelog must select exactly the candidate curve"
@@ -3300,7 +3494,7 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "agentic_traces",
          None, None, "example/image:stable"): {
-            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1, 3, False),
+            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1, 3, False, ()),
         },
     }
 
@@ -3352,7 +3546,7 @@ def test_historical_families_ignore_leftover_nested_results(tmp_path, family_con
     assert families == {
         ("dsr1", "fixture", "sglang", "fp8", "none", False, "agentic_traces",
          None, None, "example/image:stable"): {
-            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1, 3, False),
+            "configs/nvidia-master.yaml:fixture": ({"fixture"}, 1, 3, False, ()),
         },
     }
 
@@ -3401,7 +3595,7 @@ def test_choose_needs_node_demand_on_every_target_cluster_and_skips_unresolved_r
     assert families == {
         ("dsr1", "h100", "sglang", "fp4", "none", False, "agentic_traces",
          None, None, "example/image:stable"): {
-            "configs/nvidia-master.yaml:alone": ({"h100-dsxe"}, 1, 3, False),
+            "configs/nvidia-master.yaml:alone": ({"h100-dsxe"}, 1, 3, False, ()),
         },
     }  # fmt: skip
     families = {
@@ -3490,7 +3684,7 @@ def test_live_families_make_one_curve_family_of_its_agg_disagg_and_mtp_keys(
     families = klaud.live_families(tmp_path)
 
     assert capsys.readouterr().out == ""
-    curve = {CURVE: (frozenset({"h100-cw", "h100-dsxe"}), 3, 11, False)}
+    curve = {CURVE: (frozenset({"h100-cw", "h100-dsxe"}), 3, 11, False, ())}
     assert families == {
         curve_observation(): curve,
         curve_observation(disagg=True): curve,
@@ -3498,23 +3692,65 @@ def test_live_families_make_one_curve_family_of_its_agg_disagg_and_mtp_keys(
     }
 
 
-@pytest.mark.parametrize(("variant", "notice"), [
-    pytest.param({"mtp_image": "example/image:next"},
-                 f"::notice::Klaud skips {CURVE}: its keys use different images.\n",
-                 id="mixed-images"),
-    pytest.param({"mtp_file": "amd-master.yaml"},
-                 "::notice::Klaud skips configs/amd-master.yaml:mtp, "
-                 "configs/nvidia-master.yaml:agg, configs/nvidia-master.yaml:disagg: its AgentX "
-                 "curve spans several master configs.\n",
-                 id="several-master-files"),
-])  # fmt: skip
-def test_live_families_skip_a_curve_one_candidate_cannot_update_whole(
-    tmp_path, family_configs, capsys, variant, notice
-):
-    write_curve(tmp_path, family_configs[1]["clusters"]["fixture"], **variant)
+def test_live_families_skip_a_curve_spanning_master_files(tmp_path, family_configs, capsys):
+    write_curve(tmp_path, family_configs[1]["clusters"]["fixture"], mtp_file="amd-master.yaml")
 
     assert klaud.live_families(tmp_path) == {}
-    assert capsys.readouterr().out == notice
+    assert capsys.readouterr().out == (
+        "::notice::Klaud skips configs/amd-master.yaml:mtp, configs/nvidia-master.yaml:agg, "
+        "configs/nvidia-master.yaml:disagg: its AgentX curve spans several master configs.\n"
+    )
+
+
+def mixed_observation(spec_method, disagg, image, date):
+    return {
+        "model": "dsr1", "hardware": "h100", "framework": "sglang", "precision": "fp8",
+        "spec_method": spec_method, "disagg": disagg, "benchmark_type": "agentic_traces",
+        "isl": None, "osl": None, "image": image, "date": date,
+    }  # fmt: skip
+
+
+@pytest.mark.parametrize("stable_published", [True, False], ids=["every-image", "missing-image"])
+def test_a_mixed_image_curve_yields_one_candidate_from_its_newest_observation(
+    tmp_path, family_configs, capsys, stable_published
+):
+    write_curve(tmp_path, family_configs[1]["clusters"]["fixture"], mtp_image="example/image:next")
+
+    families = klaud.live_families(tmp_path)
+
+    assert capsys.readouterr().out == ""
+    record = klaud.Family(frozenset({"h100-cw", "h100-dsxe"}), 3, 11, False, (
+        ("agg", "example/image:stable"), ("disagg", "example/image:stable"),
+        ("mtp", "example/image:next"),
+    ))  # fmt: skip
+    assert families == {
+        curve_observation(): {CURVE: record},
+        curve_observation(disagg=True): {CURVE: record},
+        (*curve_observation("mtp")[:-1], "example/image:next"): {CURVE: record},
+    }
+    agg = mixed_observation("none", False, "example/image:stable", "2026-09-01")
+    disagg = mixed_observation("none", True, "example/image:stable", "2026-09-10")
+    mtp = mixed_observation("mtp", False, "example/image:next", "2026-09-19")
+    older = mixed_observation("mtp", False, "example/image:next", "2026-08-01")
+    published = [agg, disagg, mtp, older] if stable_published else [mtp, older]
+    items = [{"source-status": "baseline", "source-id": str(index), "source": source,
+              "benchmark-age-days": 1} for index, source in enumerate(published)]  # fmt: skip
+
+    candidates = klaud.choose(items, {"h100-cw": 3, "h100-dsxe": 3}, set(), families)
+
+    mixed = (
+        {"sources": {"agg": disagg, "disagg": disagg, "mtp": mtp}, "unbaselined-keys": {}}
+        if stable_published
+        else {"sources": {"mtp": mtp}, "unbaselined-keys": {
+            "agg": "example/image:stable", "disagg": "example/image:stable"}}
+    )  # fmt: skip
+    assert candidates == [{
+        "id": identity(CURVE)[:16] + "-" + identity("example/image:next")[:16],
+        "family": CURVE, "clusters": ["h100-cw", "h100-dsxe"], "node-demand": 3,
+        "sweep-node-demand": 11, "smoke-covers-full": False, "source": mtp,
+        "branch": "klaud/auto-" + identity(CURVE)[:16] + "-" + identity("example/image:next")[:16],
+        **mixed,
+    }]  # fmt: skip
 
 
 @pytest.mark.parametrize(("occupant", "chosen"), [

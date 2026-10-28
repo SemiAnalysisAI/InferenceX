@@ -78,13 +78,15 @@ class Family(NamedTuple):
     """A live family's target clusters, node demands and whether its smoke matrix is complete.
 
     ``node_demand`` is the node count of its largest AgentX job, ``sweep_node_demand`` the
-    nodes of every job of its full AgentX sweep.
+    nodes of every job of its full AgentX sweep. ``images`` pairs each key with its master image
+    when the keys use different images, and is empty otherwise.
     """
 
     clusters: frozenset[str]
     node_demand: int
     sweep_node_demand: int
     smoke_covers_full: bool
+    images: tuple[tuple[str, str], ...] = ()
 
 
 class History(NamedTuple):
@@ -156,9 +158,9 @@ def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
 
     Archives and fixed-seq-len points are excluded. A family is one AgentX dashboard curve: every
     master key of one master file whose points share model, hardware, framework and precision,
-    since the newest run replaces that whole curve. Curves spanning master files or using several
-    images are left out. A family's smoke matrix covers its full sweep when the generator's
-    ``--smoke`` selection keeps every benchmark point and default eval.
+    since the newest run replaces that whole curve. Curves spanning master files are left out.
+    A family's smoke matrix covers its full sweep when the generator's ``--smoke`` selection
+    keeps every benchmark point and default eval.
     """
     from infx.clusters import load_inventory
     from infx.config import project_root
@@ -215,9 +217,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
         if not clusters:
             print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
             continue
-        if len({normalized_image(entry["image"]) for entry in entries}) > 1:
-            print(f"::notice::Klaud skips {family}: its keys use different images.")
-            continue
+        images = {key: normalized_image(rows[0]["image"]) for (_, key), rows in members.items()}
         evals = [
             dict(row, **{"eval-only": True})
             for row in mark_eval_entries(deepcopy(entries), root)
@@ -231,6 +231,7 @@ def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
             sweep_node_demand=sum(entry.get("node-count", 1) for entry in [*entries, *evals]),
             smoke_covers_full=point_identities(smoke) == point_identities(entries)
             and expected_evals({"evals": smoke_evals}) == expected_evals({"evals": evals}),
+            images=tuple(sorted(images.items())) if len(set(images.values())) > 1 else (),
         )
         for entry in entries:
             row = {
@@ -260,18 +261,24 @@ def choose(
     A branch or claim of the family, or of a single-key family of one of its keys, occupies it.
     The order is a weighted shuffle: a family's weight is its benchmark age in days plus one, so
     older images tend to lead without starving recent ones. Headroom is checked but not consumed
-    here, so the overlap review keeps alternatives.
+    here, so the overlap review keeps alternatives. A family whose keys use different images
+    maps each key to the curve's newest observation of that key's image as ``sources``, and
+    each key whose image has none to that image as ``unbaselined-keys``.
     """
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
     keys: list[float] = []
     seen = set()
-    valid = [item for item in items if item["source-status"] == "baseline"]
-    for item in sorted(
-        valid,
+    valid = sorted(
+        (item for item in items if item["source-status"] == "baseline"),
         key=lambda item: (item["source"]["date"], item["source-id"]),
         reverse=True,
-    ):
+    )
+    newest: dict[tuple[str, str], dict] = {}
+    for item in valid:
+        for family in families.get(observation_key(item["source"]), {}):
+            newest.setdefault((family, observation_key(item["source"])[-1]), item["source"])
+    for item in valid:
         row = item["source"]
         legacy = identity(
             {
@@ -294,12 +301,22 @@ def choose(
                 name = identity(member)[:16]
                 claims |= {f"klaud/auto-{name}-", f"klaud/auto-{name}-{image_key}"}
                 claims.add(f"klaud/claim-{name}")
+            sources = {
+                key: row if image == observation_key(row)[-1] else newest.get((family, image))
+                for key, image in record.images
+            }
             if (
                 family in seen
                 or claims & occupied
                 or any(headroom.get(cluster, 0) < record.node_demand for cluster in record.clusters)
             ):
                 continue
+            mixed = {
+                "sources": {key: source for key, source in sources.items() if source},
+                "unbaselined-keys": {
+                    key: image for key, image in record.images if not sources[key]
+                },
+            }
             selected.append(
                 {
                     "id": branch.removeprefix("klaud/auto-"),
@@ -310,6 +327,7 @@ def choose(
                     "smoke-covers-full": record.smoke_covers_full,
                     "source": row,
                     "branch": branch,
+                    **(mixed if sources else {}),
                 }
             )
             keys.append(random.expovariate(item["benchmark-age-days"] + 1))
@@ -1202,7 +1220,13 @@ def select(
     ``directory``.
     """
     from . import claims, validation
-    from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
+    from .reporting import (
+        BaselinePreflight,
+        Prose,
+        missing_baseline_points,
+        resolve_baseline,
+        unpublished_keys,
+    )
 
     contexts = json.loads((directory / "candidates.json").read_text())
     producers = json.loads((directory / PRODUCERS).read_text())
@@ -1274,6 +1298,7 @@ def select(
                 baseline=baseline,
             )
             missing = missing_baseline_points(matrix, baseline)
+            unpublished = unpublished_keys(matrix, baseline)
         except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = str(error)
@@ -1289,7 +1314,7 @@ def select(
             baseline_reasons[candidate["id"]] = f"{type(error).__name__}: {str(error)[:300]}"
             families.add(decision.family)
             continue
-        if missing:
+        if missing or unpublished:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = "baseline-point-mismatch"
             baseline_mismatches.append(
@@ -1297,6 +1322,7 @@ def select(
                     "id": candidate["id"],
                     "reason": "baseline-point-mismatch",
                     "missing-points": len(missing),
+                    **({"unpublished-keys": unpublished} if unpublished else {}),
                 }
             )
             families.add(decision.family)
