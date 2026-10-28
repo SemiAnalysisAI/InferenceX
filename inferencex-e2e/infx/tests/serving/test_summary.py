@@ -7,8 +7,8 @@ def _result(spec: str, tput: float, **extra) -> dict:
     return {
         "scenario": "greenspec-diverse", "spec_decoding": spec, "conc": 16, "num_requests_successful": 99,
         "num_requests_total": 100,
-        "request_metrics": {"throughput": {"output_tput_tps": tput}, "ttft": {"p50": 0.2, "p95": 1.5},
-                            "tpot": {"mean": 0.02}},
+        "request_metrics": {"throughput": {"output": {"tokens_per_second": tput}},
+                            "latency": {"ttft": {"p50": 0.2, "p95": 1.5}, "tpot": {"mean": 0.02}}},
         **extra,
     }
 

@@ -19,6 +19,7 @@ HEADERS = (
     "TPOT mean (ms)", "acceptance length", "accept rate", "speedup",
 )
 DASH = "-"
+OUTPUT_TPS = ("request_metrics", "throughput", "output", "tokens_per_second")
 
 
 def dig(doc: Any, *path: str) -> Any:
@@ -49,13 +50,13 @@ def number(value: Any, digits: int = 1, scale: float = 1.0) -> str:
 def speedups(results: list[dict[str, Any]]) -> dict[int, float]:
     """Output-throughput ratio of each speculative result over the base result of its scenario and concurrency."""
     base = {
-        (r["scenario"], r.get("conc")): dig(r, "request_metrics", "throughput", "output_tput_tps")
+        (r["scenario"], r.get("conc")): dig(r, *OUTPUT_TPS)
         for r in results if r.get("spec_decoding", "none") == "none"
     }
     out = {}
     for index, result in enumerate(results):
         denominator = base.get((result["scenario"], result.get("conc")))
-        numerator = dig(result, "request_metrics", "throughput", "output_tput_tps")
+        numerator = dig(result, *OUTPUT_TPS)
         if result.get("spec_decoding", "none") != "none" and denominator and numerator:
             out[index] = numerator / denominator
     return out
@@ -70,9 +71,9 @@ def row(result: dict[str, Any], speedup: float | None) -> list[str]:
         str(result.get("spec_decoding", "none")),
         str(result.get("conc", DASH)),
         f"{ok}/{total}" if ok is not None and total is not None else DASH,
-        number(dig(metrics, "throughput", "output_tput_tps")),
-        f"{number(dig(metrics, 'ttft', 'p50'), 0, 1000)} / {number(dig(metrics, 'ttft', 'p95'), 0, 1000)}",
-        number(dig(metrics, "tpot", "mean"), 1, 1000),
+        number(dig(result, *OUTPUT_TPS)),
+        f"{number(dig(metrics, 'latency', 'ttft', 'p50'), 0, 1000)} / {number(dig(metrics, 'latency', 'ttft', 'p95'), 0, 1000)}",
+        number(dig(metrics, "latency", "tpot", "mean"), 1, 1000),
         number(spec.get("acceptance_length"), 2),
         number(spec.get("acceptance_rate"), 1, 100) + ("%" if spec.get("acceptance_rate") is not None else ""),
         f"{speedup:.2f}x" if speedup else DASH,
