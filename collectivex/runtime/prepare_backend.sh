@@ -592,6 +592,25 @@ nccl_ep_prepare() {
 # no libfabric GDA ops on those hosts.
 ofi_nccl_ready() { [ -f "$1/.ready" ] && [ -r "$1/lib/libnccl-net-ofi.so" ]; }
 
+# Static hwloc for images without its headers (see COLLX_HWLOC_VERSION).
+ofi_nccl_build_hwloc() {
+  local root="$1" version="$COLLX_HWLOC_VERSION" tarball
+  tarball="hwloc-$version.tar.gz"
+  curl -sSfL --connect-timeout 30 --max-time 300 --retry 3 -o "$root/$tarball" \
+      "https://download.open-mpi.org/release/hwloc/v${version%.*}/$tarball" \
+    && printf '%s  %s\n' "$COLLX_HWLOC_SHA256" "$root/$tarball" | sha256sum -c --quiet \
+    && tar -xzf "$root/$tarball" -C "$root" \
+    || { collx_log "ERROR: hwloc source fetch failed"; return 1; }
+  collx_log "aws-ofi-nccl: building hwloc $version (the image has no hwloc headers)"
+  (
+    cd "$root/hwloc-$version" \
+      && ./configure -q --prefix="$root/hwloc" --enable-static --disable-shared --with-pic \
+        --disable-libxml2 --disable-cairo --disable-io --disable-plugins \
+      && make -s -j"$(nproc)" && make -s install
+  ) >&2 2>&1 || { collx_log "ERROR: hwloc build failed"; return 1; }
+  rm -rf "${root:?}/hwloc-$version" "${root:?}/$tarball"
+}
+
 ofi_nccl_install() {
   local root="$1" version="$COLLX_OFI_NCCL_VERSION" tarball cuda_home
   rm -rf "$root" && mkdir -m 700 "$root" \
@@ -604,11 +623,16 @@ ofi_nccl_install() {
     && tar -xzf "$root/$tarball" -C "$root" \
     || { collx_log "ERROR: aws-ofi-nccl source fetch failed"; return 1; }
   IFS=$'\t' read -r cuda_home _ <<< "$(cuda_toolchain_paths)" && [ -n "$cuda_home" ] || return 1
+  local -a hwloc=()
+  if [ ! -r /usr/include/hwloc.h ]; then
+    ofi_nccl_build_hwloc "$root" || return 1
+    hwloc=(--with-hwloc="$root/hwloc")
+  fi
   collx_log "aws-ofi-nccl: building $version"
   (
     cd "$root/aws-ofi-nccl-$version" \
       && ./configure -q --prefix="$root" --with-libfabric=/opt/amazon/efa --with-cuda="$cuda_home" \
-        --enable-platform-aws --disable-tests \
+        "${hwloc[@]}" --enable-platform-aws --disable-tests \
       && make -s -j"$(nproc)" && make -s install
   ) >&2 2>&1 || { collx_log "ERROR: aws-ofi-nccl build failed"; return 1; }
   rm -rf "${root:?}/aws-ofi-nccl-$version" "${root:?}/$tarball"

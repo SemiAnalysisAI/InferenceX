@@ -52,6 +52,11 @@ COLLX_FLASHINFER_JIT_CACHE_SPEC="flashinfer-jit-cache==0.7.1+cu130"
 # b300 EP16).
 COLLX_OFI_NCCL_VERSION="1.21.1"
 COLLX_OFI_NCCL_SHA256="2533d1ec179a86dcf0470fc39800b06cd9169cd854c0c913cc4782a42f36cff4"
+# aws-ofi-nccl's configure requires hwloc headers, which runtime images (vLLM's) do not carry. A
+# static, position-independent build of this release goes into the plugin's cache, so the plugin
+# has no runtime hwloc dependency. 2.10.0 is the h100-dgxc hosts' distro version.
+COLLX_HWLOC_VERSION="2.10.0"
+COLLX_HWLOC_SHA256="c7fd8a1404a9719c76aadc642864b9f77aed1dc1fc8882d6af861a9260ba240d"
 
 collx_log_tail() {
   local log_path="$1"
