@@ -4,7 +4,7 @@ base:
   slurm:
     time_limit: '08:00:00'
   identity:
-    frameworks: {sglang: nightly-dev-20261013-7224fce1}
+    frameworks: {sglang: v0.5.22-cu130}
   health_check:
     max_attempts: 1440
     interval_seconds: 10
