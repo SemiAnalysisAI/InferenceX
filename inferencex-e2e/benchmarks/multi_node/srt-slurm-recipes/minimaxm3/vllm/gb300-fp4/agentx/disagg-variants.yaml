@@ -6,11 +6,11 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: "1.6.0.dev20261010"
+      dynamo: "1.7.0.dev20261025"
   dynamo:
     install: true
     source:
-      pypi: "1.6.0.dev20261010"
+      pypi: "1.7.0.dev20261025"
   health_check:
     max_attempts: 2160
     interval_seconds: 10
