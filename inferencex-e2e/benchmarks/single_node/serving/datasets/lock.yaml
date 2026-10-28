@@ -42,3 +42,11 @@ livekit-111868-v1.1-warm:
   file: trace.v1.1-append-ideal-warm.jsonl
   sha256: e26542392a202764849c05018f2f8ea3f9574277ffa3400615f0b4df23b0eb2f
   entries: 671
+# GreenSpec v1.1.0: one flat file with every subset (infx.serving.greenspec selects rows from it).
+# Private repo: GREENLAB_HF_TOKEN must be able to read it. The benchmark repo is public, so the
+# greenspec scenario never uploads anything derived from the rows (see infx/serving/greenspec.py).
+greenspec-v1.1.0:
+  repo: Green-Lab/GreenSpec
+  revision: f76978679a941e21eb701e7e046a0038a94efa7b
+  file: greenspec.jsonl
+  sha256: 8c1a8dad3bd1afbe6155e57287e533cb50beaced482074ded4b34c87c7789fe4

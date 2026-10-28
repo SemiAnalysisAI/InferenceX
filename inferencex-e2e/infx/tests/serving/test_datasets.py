@@ -7,12 +7,13 @@ import pytest
 from infx.serving.datasets import DatasetError, LockEntry, fetch, load_lock
 
 
-def test_lock_pins_six_datasets_with_entries():
+def test_lock_pins_seven_datasets_greenspec_without_entries():
     lock = load_lock()
     assert set(lock) == {
         "tau2-cs", "shared-prefix-e2", "hidden-prefix-e3",
-        "livekit-111868-v1", "livekit-111868-v2", "livekit-111868-v1.1-warm",
+        "livekit-111868-v1", "livekit-111868-v2", "livekit-111868-v1.1-warm", "greenspec-v1.1.0",
     }
+    assert lock["greenspec-v1.1.0"].repo == "Green-Lab/GreenSpec" and lock["greenspec-v1.1.0"].entries is None
     assert lock["livekit-111868-v1.1-warm"].entries == 671
     assert lock["livekit-111868-v1"].entries == 1217
 

@@ -87,6 +87,27 @@ def test_bad_variants_fail_with_one_line(args, message):
         render(*args)
 
 
+def test_greenspec_renders_the_selection_and_has_no_duration():
+    rendered = render("greenspec", {"subset": "agentic_tools", "lite": True, "requests": 50})
+    dataset = rendered.doc["benchmark"]["datasets"][0]
+    assert (rendered.kind, rendered.dataset, rendered.label) == ("file", "greenspec-v1.1.0", "greenspec-agentic_tools-lite-n50")
+    assert dataset["format"] == "raw_payload" and dataset["path"] == "${IX_CUSTOM_DATASET_FILE}"
+    [phase] = rendered.doc["benchmark"]["phases"]
+    assert phase["requests"] == 50 and "duration" not in phase and rendered.duration == 0.0
+    assert "ignore_eos" not in rendered.doc["benchmark"]["endpoint"].get("extra", {})
+    assert render("greenspec").label == "greenspec-diverse"
+
+
+@pytest.mark.parametrize("args, message", [
+    (("greenspec", {"subset": "coding"}), "overrides.subset"),
+    (("greenspec", {"duration": 180}), "greenspec takes"),
+    (("greenspec", {}, Point("8k", "1k", 0)), "workload/slo: only for scenario synthetic"),
+])
+def test_bad_greenspec_variants_fail_with_one_line(args, message):
+    with pytest.raises(ScenarioError, match=message):
+        render(*args)
+
+
 def test_families_have_base_files():
     from infx.serving.scenarios import SCENARIOS_DIR
     assert {path.stem for path in SCENARIOS_DIR.glob("*.yaml")} == set(FAMILIES)

@@ -178,7 +178,7 @@ class ServingSpec(BaseModel):
     endpoint: EndpointSpec | None = None
     router: RouterSpec | None = None
     storage: StorageSpec | None = None
-    scenario: Literal["agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic"]
+    scenario: Literal["agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic", "greenspec"]
     overrides: dict[str, Any] = Field(default_factory=dict)
     workload: Workload | None = None
     slo: str | None = None

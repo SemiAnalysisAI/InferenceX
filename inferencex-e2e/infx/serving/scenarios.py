@@ -13,11 +13,12 @@ from typing import Any
 
 import yaml
 
+from infx.serving import greenspec
 from infx.serving.datasets import LockEntry, load_lock
 from infx.serving.slo import SLOError, parse_slo
 
 SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "benchmarks/single_node/serving/scenarios"
-FAMILIES = ("agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic")
+FAMILIES = ("agentx", "tau2", "livekit", "shared-prefix-e2", "hidden-prefix-e3", "synthetic", "greenspec")
 OVERRIDE_KEYS = ("duration", "dataset", "max_context_length", "generation", "trace_idle_gap_cap")
 SYNTHETIC_OVERRIDES = ("duration",)
 GENERATION_KEYS = ("top_p", "temperature")
@@ -170,12 +171,32 @@ def _synthetic(point: Point, search: bool, slo: str | None) -> dict[str, Any]:
     return doc
 
 
+def _greenspec(overrides: dict[str, Any], point: Point | None, search: bool, slo: str | None,
+               lock: dict[str, LockEntry]) -> Rendered:
+    """The greenspec scenario with its selection; the run length is the selection, so there is no duration."""
+    if point is not None or search or slo:
+        raise ScenarioError("workload/slo: only for scenario synthetic, not greenspec")
+    try:
+        chosen = greenspec.normalize(overrides)
+    except greenspec.GreenSpecError as error:
+        raise ScenarioError(str(error)) from None
+    doc = load_base("greenspec")
+    name = doc["benchmark"]["datasets"][0]["name"]
+    if name not in lock:
+        raise ScenarioError(f"scenario: dataset {name} of greenspec is not in the dataset lock")
+    if chosen.requests:
+        _profiling(doc)["requests"] = chosen.requests
+    return Rendered(doc, greenspec.label(chosen), "file", name, False, 0.0)
+
+
 def render(family: str, overrides: dict[str, Any] | None = None, point: Point | None = None,
            search: bool = False, slo: str | None = None,
            lock: dict[str, LockEntry] | None = None) -> Rendered:
     """The final AIPerf config of ``family`` with its variant applied."""
     overrides = dict(overrides or {})
     lock = load_lock() if lock is None else lock
+    if family == "greenspec":
+        return _greenspec(overrides, point, search, slo, lock)
     if family == "synthetic":
         if point is None:
             raise ScenarioError("workload: synthetic needs isl, osl and cache")

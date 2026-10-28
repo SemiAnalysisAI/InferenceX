@@ -7,8 +7,8 @@ from infx.serving.to_matrix import build
 CONFIGS = sorted((Path(__file__).resolve().parents[3] / "configs/serving").glob("*.yaml"))
 
 
-def test_ten_examples_one_per_pattern():
-    assert len(CONFIGS) == 10
+def test_eleven_examples_one_per_pattern():
+    assert len(CONFIGS) == 11
 
 
 @pytest.mark.parametrize("path", CONFIGS, ids=[p.stem for p in CONFIGS])
