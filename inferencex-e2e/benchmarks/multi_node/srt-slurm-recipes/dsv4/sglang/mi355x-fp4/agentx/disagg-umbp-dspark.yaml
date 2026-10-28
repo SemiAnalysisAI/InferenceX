@@ -233,6 +233,7 @@ override_c1:
           - 8
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
+        enable-amd-monokernel: true
 
 override_c16:
   roles:
