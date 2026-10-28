@@ -11499,3 +11499,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4509
   scenario-type: [agentic-coding]
   append-only: true
+
+- config-keys:
+    - dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX curves on vllm/vllm-openai:cu134-nightly-aarch64-26evr5b5537344b103ed10de7764378ef09604ef3d (arm64 sha256:ab0300c84edb77013a37dc03168c26eadee49c0a4472d73908cdaa20ee4e7440) with the Dynamo 1.6.0.dev20261010 vLLM sidecar."
+    - "Aggregated TP4 on one node: concurrency 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 16, deep_select indexer top-k), 10 (max-num-seqs 16, max-num-active-seqs 2) and 16 (max-num-seqs 64, max-num-active-seqs 3), with THP Engram host tables."
+    - "Disaggregated DEP4 prefill / DEP16 or DEP32 decode with push NIXL transfer: 3P1D DEP32 at c3018 (max-num-seqs 18), 3P1D DEP16 at c3018 (max-num-seqs 48, 70 GiB CPU KV per prefill rank), 4P1D DEP16 at c4096 (max-num-seqs 64) and 5P1D DEP16 at c5600 (max-num-seqs 112); the others offload up to 90 GiB of CPU KV per prefill rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
