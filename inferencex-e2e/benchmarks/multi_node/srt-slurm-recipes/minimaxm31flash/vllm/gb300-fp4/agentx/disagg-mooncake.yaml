@@ -118,7 +118,7 @@ base:
         gpu-memory-utilization: 0.85
         max-num-seqs: 64
         max-num-batched-tokens: 32768
-        long-prefill-token-threshold: 16384
+        long-prefill-token-threshold: 4096
         prefill-schedule-interval: 1
         enable-prefix-caching: true
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
@@ -209,37 +209,13 @@ base:
       node: dedicated
   name: minimaxm31flash-gb300-disagg-mooncake
   setup_script: vllm-mooncake.sh
-override_2p2d8:
-  services:
-  - name: etcd
-    type: etcd
-    placement:
-      node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
-  - name: mooncake-master
-    type: mooncake-master
-    preamble: bash /configs/vllm-mooncake.sh
-    args:
-    - --default_kv_lease_ttl=60000
-    - --eviction_high_watermark_ratio=0.95
-    - --eviction_ratio=0.10
-    options:
-      store_config:
-        metadata_server: P2PHANDSHAKE
-        global_segment_size: 160GB
-        local_buffer_size: 4GB
-        protocol: rdma
-        device_name: '@fabric.rdma-devices'
-        enable_offload: false
-  roles:
-    prefill:
-      workers: 4
-      nodes: 2
-  name: minimaxm31flash-gb300-disagg-mooncake-2p2d8
 override_3p2d8:
   name: minimaxm31flash-gb300-disagg-mooncake-3p2d8
+override_3p4d16:
+  name: minimaxm31flash-gb300-disagg-mooncake-3p4d16
+  roles:
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16

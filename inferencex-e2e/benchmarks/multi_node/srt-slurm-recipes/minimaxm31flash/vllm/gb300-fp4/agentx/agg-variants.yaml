@@ -162,27 +162,3 @@ override_tp4_c56:
         max-num-seqs: 96
         gpu-memory-utilization: 0.86
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":860000000000,"lazy_offload":true}}'
-
-override_tp2_c32:
-  name: minimaxm31flash-gb300-dynamo-agg-tp2-dram-c32
-  roles:
-    agg:
-      gpus: 2
-      env:
-        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
-      args:
-        tensor-parallel-size: 2
-        max-num-seqs: 48
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
-
-override_tp2_c40:
-  name: minimaxm31flash-gb300-dynamo-agg-tp2-dram-c40
-  roles:
-    agg:
-      gpus: 2
-      env:
-        VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
-      args:
-        tensor-parallel-size: 2
-        max-num-seqs: 60
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":482000000000,"lazy_offload":true}}'
