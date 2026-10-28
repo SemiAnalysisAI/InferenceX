@@ -11418,7 +11418,7 @@
     - kimik3-fp4-mi355x-vllm-disagg-agentic
   description:
     - "Use ROCm nightly-c50aca14416ef29f6ed0ed256302f30646726dcd pinned by digest and BF16 SSM states for the throughput points."
-    - "Use 1P1D c8 with K7 specialized decode, max-num-seqs=1 on P/D, FP32 SSM states, and GPU-resident KV; retire c1, c56, and 1P3D c12."
+    - "Use 1P1D c8 with K7 specialized decode, max-num-seqs=1 on P/D, FP32 SSM states, and GPU-resident KV; retire c56 and 1P3D c12."
     - "Set prefill-only SimpleCPUOffload points to DRAM utilization 0.8 (2399 GB per P worker)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4391
 
