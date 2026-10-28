@@ -33,6 +33,7 @@ ENGINES = {
     "atom": "atom",
     "atom-disagg": "atom",
     "tilert": "tilert",
+    "layerscale": "layerscale",
 }
 SGLANG_VARIABLES = (
     "SGLANG_SIMULATE_ACC_LEN",
@@ -41,6 +42,10 @@ SGLANG_VARIABLES = (
 )
 TRT_VARIABLE = "TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS"
 TILERT_VARIABLES = ("TILERT_SIMULATE_ACC_LEN", "TILERT_SIMULATE_ACC_METHOD")
+ACCEPTANCE_ARGS = {
+    "atom": "spec-decode-acceptance-length",
+    "layerscale": "synthetic-acceptance-length",
+}
 
 
 def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
@@ -54,6 +59,14 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         if args.get("with-mtp") is not True:
             return {}
         return {"method": "mtp", "num_speculative_tokens": args.get("num-mtp")}
+    if engine == "layerscale":
+        # LayerScale speculates unless told otherwise, so its recipes always name the algorithm.
+        if "speculative-algorithm" not in args:
+            raise ValueError("LayerScale recipes must set speculative-algorithm")
+        method = str(args["speculative-algorithm"]).lower()
+        if method == "none":
+            return {}
+        return {"method": method, "num_speculative_tokens": args.get("num-speculative-tokens")}
     if engine == "atom":
         method = args.get("method")
         if not method:
@@ -245,8 +258,8 @@ def build_overrides(
                 "--set",
                 f"{prefix}.args.speculative-config={json.dumps(worker_spec)}",
             ]
-        elif worker_engine == "atom":
-            key = "spec-decode-acceptance-length"
+        elif worker_engine in ACCEPTANCE_ARGS:
+            key = ACCEPTANCE_ARGS[worker_engine]
             if worker_al is not None and worker_spec:
                 overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
             elif key in (role.get("args") or {}):

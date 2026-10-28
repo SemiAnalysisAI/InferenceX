@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -27,6 +28,9 @@ def install(environ: Mapping[str, str]) -> None:
     """Install lm-eval at ``REF`` into this interpreter. Failures only warn, as images may ship it.
 
     The ``huggingface-hub`` range keeps lm-eval from upgrading it past what transformers 5.x accepts.
+    The pinned lm-eval imports torch and transformers even for API models, so an image without torch
+    gets torch's CPU build first, in pyproject.toml's range. Like pyproject.toml's sources, uv's torch
+    backend takes only torch from PyTorch's index, so its dependencies keep the exclude-newer window.
     """
     try:
         uv.find()
@@ -35,12 +39,20 @@ def install(environ: Mapping[str, str]) -> None:
         return
     if "atom" in environ.get("IMAGE", ""):
         _pip(environ, "uninstall", "torchvision")
+    if not torch_installed():
+        _pip(environ, "install", "torch>=2,<3", "--torch-backend", "cpu")
+        _pip(environ, "install", "transformers", "huggingface-hub>=1.5,<2")
     _pip(environ, "install", "lm-eval[api]", "huggingface-hub>=1.5,<2")
     pinned = ("install", "--no-deps", "--reinstall")
     git = shutil.which("git", path=environ.get("PATH"))
     if git and _pip(environ, *pinned, f"git+{REPOSITORY}.git@{REF}"):
         return
     _pip(environ, *pinned, f"{REPOSITORY}/archive/{REF}.tar.gz")
+
+
+def torch_installed() -> bool:
+    """Whether this interpreter can import torch."""
+    return importlib.util.find_spec("torch") is not None
 
 
 def _pip(environ: Mapping[str, str], command: str, *args: str) -> bool:

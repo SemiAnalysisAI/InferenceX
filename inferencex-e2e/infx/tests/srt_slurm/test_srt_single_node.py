@@ -277,6 +277,30 @@ def test_atom_binding_uses_allocation_tp_and_native_mtp_arguments(point):
         runtime_arguments(f"{path}:base", env)
 
 
+def test_layerscale_binding_checks_tp_and_sets_the_eval_context(point):
+    path, recipe, env = point
+    recipe["engine"] = "layerscale"
+    recipe["roles"]["agg"]["args"] = {
+        "tp": 4, "speculative-algorithm": "mtp", "num-speculative-tokens": 3,
+    }
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "FRAMEWORK": "layerscale", "SPEC_DECODING": "mtp", "EVAL_ONLY": "true",
+           "MAX_MODEL_LEN": "2048"}
+    argv = runtime_arguments(f"{path}:base", env)
+    actual = copy.deepcopy(recipe)
+    apply_overrides_to_recipe(actual, parse_overrides(argv[1::2], []))
+    assert actual["roles"]["agg"]["args"] == {
+        "tp": 4, "speculative-algorithm": "mtp", "num-speculative-tokens": 3, "ctx": 2048,
+    }
+    for changes, error in [
+        ({"TP": "8"}, "tp"),
+        ({"EP_SIZE": "4"}, "expert parallelism"),
+        ({"DP_ATTENTION": "true"}, "DP_ATTENTION"),
+    ]:
+        with pytest.raises(ValueError, match=error):
+            runtime_arguments(f"{path}:base", {**env, **changes})
+
+
 @pytest.mark.parametrize("flag", ["dcp-size", "decode-context-parallel-size"])
 def test_sglang_decode_context_parallel_size_must_match_the_point(point, flag):
     path, recipe, env = point

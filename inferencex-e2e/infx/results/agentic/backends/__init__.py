@@ -7,6 +7,7 @@ from typing import Any
 from .atom import AtomBackend
 from .base import ServerMetricsBackend
 from .dynamo_vllm import DynamoVllmBackend
+from .layerscale import LayerScaleBackend
 from .sglang import SglangBackend
 from .trtllm import TrtllmBackend
 from .vllm import VllmBackend
@@ -15,6 +16,7 @@ BACKENDS: tuple[ServerMetricsBackend, ...] = (
     TrtllmBackend(),
     DynamoVllmBackend(),
     AtomBackend(),
+    LayerScaleBackend(),
     SglangBackend(),
     VllmBackend(),
 )
