@@ -572,6 +572,17 @@ collx_slurm_job_name() {
 }
 
 # The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
+# True only when Slurm says the job is gone: listed as nothing, or purged ("Invalid job id"). A
+# failed query (slurmctld busy or restarting) is not an answer, so it reads as still there.
+collx_job_gone() {
+  local out
+  if out="$(squeue -h -j "$1" -o %A 2>&1)"; then
+    [ -z "$out" ]
+  else
+    [[ "$out" == *"Invalid job id"* ]]
+  fi
+}
+
 collx_salloc_jobid() {
   local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
@@ -590,7 +601,7 @@ collx_salloc_jobid() {
     sleep 10
     grep -q "Granted job allocation" "$log" && break
     [ -n "$queued" ] || queued="$(sed -nE 's/.*Pending job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
-    if [ -n "$queued" ] && [ -z "$(squeue -h -j "$queued" -o %A 2>/dev/null)" ] \
+    if [ -n "$queued" ] && collx_job_gone "$queued" \
         && ! grep -q "Granted job allocation" "$log"; then
       collx_log "ERROR: scheduled job $queued ended before its allocation was granted"
       kill -TERM "$salloc_pid" 2>/dev/null
