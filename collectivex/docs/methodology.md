@@ -1,10 +1,10 @@
 # CollectiveX EP Benchmark Methodology
 
 CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
-allocations and writes one result document per case into `collectivex/results/`. Committing those
-files is the publish step. It does **not** rank, recommend, select, or decide what any consumer
-displays. The frontend reads `results/cases.json` and the committed result documents and makes its
-own coverage and display decisions. This document describes how a case is scheduled, measured,
+allocations and writes one result document per case into `collectivex/results/`. Uploading those
+files to the CollectiveX database is the publish step; they are not committed. It does **not** rank,
+recommend, select, or decide what any consumer displays. The frontend reads the stored
+`results/cases.json` and result documents and makes its own coverage and display decisions. This document describes how a case is scheduled, measured,
 checked, and recorded, not a publication or qualification contract.
 [methodology-summary.md](methodology-summary.md) states the same rules in brief; this document keeps
 the evidence behind each one. Where either disagrees with the code in `collectivex/bench/`, the code
@@ -80,11 +80,9 @@ for a precision it does not support. Every FP8 codec here is per-128-block e4m3 
   (vLLM main a9fe30e9f6 `fp8_utils.py:663-664`): byte-identical and timing-neutral, but not
   bit-identical to vLLM's quantize.
 - NCCL EP's FP8 is its internal DS_FP8E3M4 recipe, for low-latency decode only, staged (never
-  zero-copy) with a BF16 combine. It is the one realizable (backend, precision) pair off every
-  deployed path: TensorRT-LLM's `NcclEP`, the only engine integration, sends DeepSeek-FP8 activations
-  in BF16 (`uses_internal_fp8_dispatch = False`). So `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps
-  it out of the default matrix, and naming the precision (`--precisions fp8`) opts it back in: the
-  one place a precision filter adds rows rather than only removing them. NCCL EP's normal mode and
+  zero-copy) with a BF16 combine. It runs in the default matrix as a library row: TensorRT-LLM's
+  `NcclEP`, the only engine integration, sends DeepSeek-FP8 activations in BF16
+  (`uses_internal_fp8_dispatch = False`). NCCL EP's normal mode and
   prefill stay BF16-only here, although the library also offers HT a caller-quantized FP8 path with
   forwarded scales (`QUANT_FWD`).
 
@@ -129,8 +127,11 @@ roundtrip inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons.
 ## Backends
 
 Each backend runs the configuration its reference engine selects (vLLM, except TensorRT-LLM for
-NCCL EP low-latency), so a cross-backend comparison compares deployed contracts. `implementation.maturity` is `production` where an engine can select the configuration
-today and `candidate` where the row describes the library (see [Result Document](#result-document)).
+NCCL EP low-latency), except where a library runs better than its engine runs it: NCCL EP's graphed
+low-latency rows zero-copy inside the scale-up domain, which TensorRT-LLM does not, so they are
+library rows (see [NCCL EP](nccl-ep.md)). `implementation.maturity` is `production` where an
+engine can select the configuration today and `candidate` where the row describes the library (see
+[Result Document](#result-document)); compare `production` rows for deployed contracts.
 
 ### DeepEP V2
 
@@ -165,10 +166,11 @@ instead of upstream's and vLLM's automatic 65/129, which exhaust the per-NIC QP 
 (`ibv_create_qp` ENOMEM in `ncclDevCommCreate`; 49x16 initializes, 65x16 does not). The 64-SM
 kernels ask for 64 x 16 + 1 QPs and are capped at that allocation, so the hybrid channels share 32
 data QPs plus one notify QP (`library_config.num_allocated_qps`, `num_qps`). DeepEP's SM model reads
-the scale-out rate from an `ibstat` probe that cannot see EFA, and in hybrid mode divides by it, so
-on the EFA pools the registry's `network.rdma_gbs` supplies the per-GPU rate and the resulting count
-is passed explicitly (`library_config.sm_model_rdma_gbs`). Elsewhere the count is left to DeepEP, as
-vLLM leaves it. With overlap off the model's own 10-26 SMs are raised to 64 either way.
+the scale-out rate from an `ibstat` probe that cannot see EFA and that the vLLM image does not ship,
+and in hybrid mode divides by it, so on the EFA pools and on h200-dgxc the registry's
+`network.rdma_gbs` supplies the per-GPU rate (50 GB/s on h200-dgxc, the value the probe reads from a
+400 Gb/s ConnectX-7 port) and the resulting count is passed explicitly
+(`library_config.sm_model_rdma_gbs`). Elsewhere the count is left to DeepEP, as vLLM leaves it. With overlap off the model's own 10-26 SMs are raised to 64 either way.
 
 **A virtualized pool can make a scale-out row measure the hypervisor rather than the fabric.**
 h200-dgxc EP16 on deepep-v2 paid three to eight times h100's cross-node cost while nccl-ep on the
@@ -344,10 +346,10 @@ immediately and the kernel reads the cached routing inside the timed dispatch.
 
 `low-latency` runs TensorRT-LLM's `NcclEP` configuration: rank-major receive with caller-side
 weighted expert pre-reduction and an unweighted rank-sum combine, one group sized to the ladder's
-top (TensorRT-LLM sizes it to `min(max_num_tokens, moe_max_num_tokens)`), and the engine's zero-copy
-policy: graphed rows dispatch into a plain tensor that the library stages, as TensorRT-LLM does
-under CUDA graph capture, eager rows write a registered window directly within one LSA/MNNVL domain,
-and scale-out stages in both regimes. v0.1's combine recv pipeline, a port of DeepEP's pre-#642 code
+top (TensorRT-LLM sizes it to `min(max_num_tokens, moe_max_num_tokens)`). Dispatch writes a
+registered window directly within one LSA/MNNVL domain, graphed or eager, and scale-out stages in
+both regimes. TensorRT-LLM stages under CUDA graph capture, so graphed zero-copy rows are library
+rows. v0.1's combine recv pipeline, a port of DeepEP's pre-#642 code
 missing the `fence.proxy.async.shared::cta`, raced on every rung (1-in-5 bimodal corruption at T=256
 on gb300 EP8, error 0.47 vs 0.0039; a T<=128 ladder clamp reduced exposure but was never a safety
 boundary). The v0.2 wheel ships that fence (`fence_view_async_shared` before the `emptyBarriers`
@@ -466,9 +468,8 @@ changing its contract. Prefill stays eager on every backend, as the engines run 
 `COLLX_CUDA_GRAPH=0` restores the eager pipeline everywhere.
 
 - **deepep-v2** `normal` and `low-latency` decode (see [DeepEP V2](#deepep-v2)).
-- **nccl-ep** low-latency and HT decode. Graphed low-latency dispatch writes a plain tensor that the
-  library stages, as TensorRT-LLM's captured decode does, so it carries no `-zc`; eager rows within
-  one domain take the window path (`-zc`). HT's per-step routing `ncclAllGather` is the one host
+- **nccl-ep** low-latency and HT decode. Graphed low-latency dispatch within one domain takes the
+  window path (`-zc`), as eager does; scale-out stages. HT's per-step routing `ncclAllGather` is the one host
   NCCL collective in any capture, so nccl-ep's communicator runs NCCL graph usage mode 1 (one graph
   at a time): the default mixing mode wraps every captured collective in an external event wait and
   record, which left ~14 µs idle before each all-gather (h100 EP8 trace) and put the graphed HT
@@ -895,7 +896,7 @@ so physical receive order is not treated as a correctness property.
 
 ## Result Document
 
-One raw case document, committed at `results/<sku>/<case_id>.json`, carries `record_type:
+One raw case document, written to `results/<sku>/<case_id>.json`, carries `record_type:
 "case-attempt"`, the sweep `version`, and a `generated_at` timestamp, and contains:
 
 - `identity`: `case_id`, `attempt_ordinal`, `case_factors` (the SKU and the scheduled case,
@@ -929,7 +930,7 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
     library resolved that changes what a row measures, null where an adapter records none. deepep-v2
     records `engine_contract` (`vllm`) in both modes and, in `normal`, its SM and QP counts,
     allocated QPs, LSA team, hybrid choice, vLLM's buffer flags, host-sync, expand and receive sizing
-    (`sm_model_rdma_gbs` on EFA only); the shared low-latency path, on deepep-v2 and uccl-ep alike,
+    (`sm_model_rdma_gbs` where the registry sets `rdma_gbs`); the shared low-latency path, on deepep-v2 and uccl-ep alike,
     records `receive_capacity`, `num_qps_per_rank`, `return_recv_hook`, `zero_copy` and `fp8_scales`,
     plus deepep-v2's NVLink and MNNVL flags; uccl-ep adds its verified `deep_ep` identity, buffer
     bytes, QPs, `is_intranode` and running CPU-proxy threads, with `Buffer.num_sms` and the dispatch
@@ -987,8 +988,8 @@ replacing the case's previous file, while unsupported or never-run cells produce
 Identifiers are readable factor strings:
 
 - `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}-{precision}`, each factor
-  slug-normalized. It names the result file, so a re-run replaces the committed result and git
-  history keeps the one it replaced.
+  slug-normalized. It names the result file, so a re-run replaces that case's result in the next
+  uploaded run, and earlier stored runs keep the one it replaced.
 - `attempt_ordinal`: `COLLX_ATTEMPT_ID`, 1 unless set.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
@@ -1004,7 +1005,7 @@ generation:
 | deepep-v2 | `v2-elastic-buffer-vllm-nosync`, plus `-relaxed-ordering` on h200 EP16; `legacy-buffer-ll-hook`, plus `-ue8m0` for Blackwell FP8 |
 | uccl-ep | `uccl-legacy-buffer-vllm-ht`; `uccl-legacy-buffer-ll-hook`, plus `-ue8m0` for B200 FP8 |
 | mori | `intranode-vllm`, `inter-node-v1-vllm` and `inter-node-v1ll-vllm`, each plus `-sdma` when `MORI_ENABLE_SDMA` was set on |
-| nccl-ep | `nccl-ep-v02-ht-routed-zc-static` (plus `-gum1` when graphed), `nccl-ep-v02-ll-rm` (plus `-zc` on the eager window path) or `nccl-ep-v02-ll-em`, then `-fp8-ds-e3m4` on FP8 rows and `-cap<N>-<wheel version>` ([nccl-ep.md](nccl-ep.md)) |
+| nccl-ep | `nccl-ep-v02-ht-routed-zc-static` (plus `-gum1` when graphed), `nccl-ep-v02-ll-rm` (plus `-zc` on the window path) or `nccl-ep-v02-ll-em`, then `-fp8-ds-e3m4` on FP8 rows and `-cap<N>-<wheel version>` ([nccl-ep.md](nccl-ep.md)) |
 | flashinfer-ep | `flashinfer-mnnvl-one-sided-staged-<wheel version>` |
 
 Backend source pins live in `runtime/common.sh` and are enforced by exact fetched-commit comparison.
@@ -1111,6 +1112,6 @@ concurrent allocation cannot lose files it is using.
 There is no results server or managed object store. Each shard runs one allocation and its per-case
 result documents are copied to `results/<sku>/` in the checkout that ran it. A case counts as
 successful on the benchmark's own return code, and failed or unsupported cells produce no synthetic
-record. Results reach the dashboard only through a reviewed commit to `main`; the unit-test job checks
-every committed result against `results/cases.json`, rejects ones measured from uncommitted code, and
-rejects IP addresses and host-identifying fields.
+record. Results reach the dashboard only through the InferenceX-app upload
+(`admin:db:ingest:collectivex --dir`), which checks every file against `results/cases.json`,
+rejects ones measured from uncommitted code, and rejects IP addresses and host-identifying fields.
