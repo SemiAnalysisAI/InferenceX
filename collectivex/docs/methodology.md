@@ -127,8 +127,11 @@ roundtrip inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons.
 ## Backends
 
 Each backend runs the configuration its reference engine selects (vLLM, except TensorRT-LLM for
-NCCL EP low-latency), so a cross-backend comparison compares deployed contracts. `implementation.maturity` is `production` where an engine can select the configuration
-today and `candidate` where the row describes the library (see [Result Document](#result-document)).
+NCCL EP low-latency), except where a library runs better than its engine runs it: NCCL EP's graphed
+low-latency rows zero-copy inside the scale-up domain, which TensorRT-LLM does not, so they are
+library rows (see [NCCL EP](nccl-ep.md)). `implementation.maturity` is `production` where an
+engine can select the configuration today and `candidate` where the row describes the library (see
+[Result Document](#result-document)); compare `production` rows for deployed contracts.
 
 ### DeepEP V2
 
