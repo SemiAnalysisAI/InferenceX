@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.7.0.dev20261026"
-      sglang: "0.0.0.dev1+g5884e4fe"
+      dynamo: "1.7.0.dev20261027"
+      sglang: "0.0.0.dev1+g586355a83"
   dynamo:
     install: false
     request_plane: tcp
@@ -114,7 +114,7 @@ base:
         # Local host-DRAM tier: device-evicted prefixes reload from host memory off the
         # forward path; an external L3 lookup blocks each layer of the forward.
         enable-hierarchical-cache: true
-        hicache-ratio: 1.8
+        hicache-ratio: 1.2
         hicache-mem-layout: page_first_direct
         hicache-io-backend: direct
         hicache-write-policy: write_back
@@ -180,7 +180,7 @@ base:
         stream-interval: 32
         swa-prefix-tails: 2048
         enable-decoder-swa-bounded-replay: true
-        mem-fraction-static: 0.85
+        mem-fraction-static: 0.75
         enable-eplb: true
         ep-num-redundant-experts: 16
         eplb-rebalance-num-iterations: 15000
@@ -215,26 +215,29 @@ base:
       AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
 
-override_9p1d_dep2_dep16_c7480:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-9p1d-dep2-dep16-c7480
+override_5p1d_dep2_dep16_c2884:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-5p1d-dep2-dep16-c2884
   roles:
     prefill:
-      # Nine DEP2 workers leave two GPUs of the fifth node idle.
-      workers: 9
+      nodes: 3
+      workers: 5
     decode:
       args:
-        max-running-requests: 2048
-        cuda-graph-max-bs-decode: 128
+        max-running-requests: 640
+        cuda-graph-max-bs-decode: 40
+        disaggregation-decode-extra-slots: 80
 
-override_10p1d_dep2_dep16_c7480:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-10p1d-dep2-dep16-c7480
+override_8p1d_dep2_dep16_c4096:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-8p1d-dep2-dep16-c4096
   roles:
     prefill:
-      workers: 10
+      nodes: 4
+      workers: 8
     decode:
       args:
-        max-running-requests: 2048
-        cuda-graph-max-bs-decode: 128
+        max-running-requests: 1024
+        cuda-graph-max-bs-decode: 64
+        disaggregation-decode-extra-slots: 128
 
 override_10p1d_dep2_dep16_b160_c7480:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-10p1d-dep2-dep16-b160-c7480
