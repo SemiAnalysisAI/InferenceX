@@ -11473,6 +11473,34 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4281
 
 - config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the Muse Spark Open B300 curve to lmsysorg/sglang:nightly-dev-20261021-c1c287a4 and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 at every concurrency; run TP8/EP8 at concurrency 1, 4, 8, 10, 14, 16, 20, 24 and TP4/EP4 HiCache at concurrency 16, 28, 32, 40, 44, 48."
+    - "Use shortest-prefill-first at TP8 concurrency 10-24, stream interval 20 at TP8 concurrency 4, 20, 24 and TP4 concurrency 28-48, SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS=4 at TP4 concurrency 40-48, and at concurrency 44 and 48 request admission 24 and 26 with FCFS, no prefill-decode interval, HiCache write_back and SWA/full ratio 0.1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4417
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-umbp-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the MI355X DeepSeek-V4-Pro-0813 SGLang MoRI disaggregated AgentX serving image from lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261026, the latest published MI35x ROCm 10 nightly (digest sha256:edabad83728ab04e3eae39f315eb16261eeb64dbdb051112bd22fc88560b60c4)."
+    - "Preserve all eight concurrency points (1, 16, 32, 48, 192, 256, 384, 512), prefill/decode topology, DSpark settings, UMBP offload, MoRI transfer, and benchmark client image. The workload binder supplies the serving image to every selected recipe variant."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4571
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add a Low-Latency TP4 point at conc 1 with the MSA-V1 MonoKernel to the existing curve, following the GB300 recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4509
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-disagg-agentic-lmcache-dspark
     - dsv4-fp4-mi355x-atom-disagg-agentic-mega-mp-dspark
   description:
