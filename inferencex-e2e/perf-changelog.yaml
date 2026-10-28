@@ -11499,3 +11499,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4509
   scenario-type: [agentic-coding]
   append-only: true
+
+- config-keys:
+    - qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto
+  description:
+    - "Update the SGLang image from nightly-dev-20261013-7224fce1 to v0.5.22-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4625
+  scenario-type: [agentic-coding]
