@@ -330,13 +330,16 @@ against the sign-off body.
   Assess the precision itself under Check 13; unavailable evidence warns there
   and does not become a checklist-format failure.
 
-## Check 6 — Upstream vLLM/SGLang images, and engine-first ordering
+## Check 6 — Upstream images, main-branch provenance, and engine-first ordering
 The checklist makes upstream engine images a HARD guideline: on established hardware,
 vLLM/SGLang submissions must run images published by the upstream projects, not
 vendor forks. Established (NOT "new hardware") SKUs: H100, H200, B200, B300,
 GB200, GB300, MI300X, MI325X, and MI355X.
-Identify each master-config entry this PR adds/changes (in `inferencex-e2e/configs/*-master.yaml`)
-and read its `framework:`, `runner:`, and `image:` fields.
+Identify each affected benchmark configuration, including added, changed, or
+re-enabled entries and existing entries affected by recipe, shared-launcher, or
+image-only changes. Read its effective `framework:`, `runner:`, and image(s),
+including separate prefill/decode images. Apply (a) and (b) to their specified
+frameworks; apply (c) across all hardware vendors and frameworks.
 - (a) UPSTREAM IMAGE: for entries with `framework: vllm`, the image must come from the
   upstream vLLM Docker Hub org at https://hub.docker.com/u/vllm. In the master configs,
   that looks like `vllm/vllm-openai:<tag>` or `vllm/vllm-openai-rocm:<tag>`. For
@@ -371,7 +374,40 @@ and read its `framework:`, `runner:`, and `image:` fields.
   - PASS if the PR adds only open-source engine entries. For example, a
     `dynamo-sglang` entry does not need an existing `sglang` entry for the same model
     and SKU.
-- N/A if the PR changes no master-config entries (state that in one line).
+- (c) MAIN-BRANCH PROVENANCE: read the current
+  `inferencex-e2e/docs/MODELS.md` section "Serving-image main-branch policy".
+  Established models must use images built from the inference engine's upstream
+  `main` (or equivalent default development branch). New-model enablement branches
+  must transition within a reasonable time after the model's release; adding an
+  existing model to InferenceX, a new SKU, or a new recipe does not reset that window.
+  - Resolve each affected image to its digest and actual engine source commit using
+    build metadata, attestations, or linked build records. Verify that commit's
+    membership in upstream main, including historical main commits; do not require
+    the current tip. Official registries, `nightly` tags, tag SHA suffixes, or a
+    branch name alone do not establish provenance. For Dynamo, verify the underlying
+    engine, not just the deployment layer. Inspect every serving role's image.
+  - A release image qualifies when its engine source revision is on upstream main.
+    A release-branch-only backport or unmerged fork commit needs an exception even
+    when similar changes have landed upstream. Main ancestry alone does not qualify
+    a branch that adds unmerged engine changes.
+  - For any temporary non-main image, require the additional detail section to
+    record the model release date, source branch/commit, concrete hardware or
+    correctness blocker and upstream issue/PR, migration owner, and dated migration
+    deadline, with explicit Core-maintainer approval. Core maintainers judge the
+    reasonable transition period from release age and upstream support readiness;
+    do not invent a fixed day count. New hardware or engine-ordering exceptions
+    under (a)/(b) do not automatically exempt (c).
+  - FAIL for a non-main image without that approved, unexpired exception, including
+    an expired deadline without explicit renewal. FAIL as unverified when build/source
+    provenance or required exception evidence is missing or inaccessible; name the
+    missing evidence without claiming a fork was proven. Passing evals or a past
+    accepted submission do not establish provenance. A branch exception does not
+    waive (a), (b), or Check 10's separate engine-patch requirements.
+  - PASS this subcheck only when every affected image has verified main provenance
+    or the documented approved exception; cite the evidence and any deadline.
+- N/A if the PR affects no benchmark serving configuration, recipe, image, or launch
+  path (state that in one line). Emit one Check 6 row covering all applicable
+  subchecks; any failed subcheck makes Check 6 FAIL.
 
 ## Check 7 — No submissions for deprecated models or scenarios
 Read the current `inferencex-e2e/docs/MODELS.md` in the checked-out default branch. It is the source of

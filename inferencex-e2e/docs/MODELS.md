@@ -6,6 +6,14 @@ This document tracks every model benchmarked by InferenceX-e2e: when it was adde
 
 Following the principles of fairness and equitableness, the service-level objective (SLO) we aim for when reviewing and merging PRs is `max(1 day from when pinged on slack, vendor response time)`. Vendor response time is the time vendors take to respond to InferenceX core maintainers' questions, messages, PRs, requests for follow-up reviews, etc. We will probably review and merge PRs sooner than this formula allows, but this is the SLO we aim for.
 
+## Serving-image main-branch policy
+
+Established models must use serving images built from the inference engine's upstream `main` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release. This applies across hardware vendors and frameworks, including Dynamo and disaggregated deployments. Adding an existing model to InferenceX, a new SKU, or a new recipe does not restart the model's new-release window.
+
+Core maintainers judge the transition period from the model's release date, upstream support readiness, and any concrete hardware or correctness blocker. There is no fixed day count. Any temporary non-main image needs an explicit Core-maintainer-approved exception in the CODEOWNER sign-off's additional detail section: the model release date, source branch and commit, blocker and upstream issue/PR, migration owner, and a dated migration deadline. An expired exception must be renewed explicitly or the submission must move to a main-branch image.
+
+Verify the actual build provenance: record the image digest, engine source commit, and build/source evidence tying that commit to upstream main. An official registry, a `nightly` tag, or a SHA suffix alone does not prove main-branch provenance. A release image qualifies when its engine source revision is on upstream main; a release-branch-only backport or an unmerged fork commit needs the temporary exception above. Missing or inaccessible provenance is unverified, not proof of compliance. This policy does not waive the upstream-image publishing requirements or the separate [engine-patch waiver](PR_REVIEW_CHECKLIST.md) requirement.
+
 ## Deprecation policy
 
 InferenceX-e2e runs on a fixed GPU pool with a small team, so scenarios, precisions, and recipe variants that no longer earn their cluster hours are retired. The support matrix below is the current record of what is active and retired; git history and `perf-changelog.yaml` hold past settings.
