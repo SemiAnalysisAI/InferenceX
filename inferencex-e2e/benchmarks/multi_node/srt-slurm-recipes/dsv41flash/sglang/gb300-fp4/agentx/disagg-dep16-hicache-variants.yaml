@@ -1,0 +1,247 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache
+  identity:
+    model: {}
+    frameworks:
+      dynamo: "1.7.0.dev20261026"
+      sglang: "0.0.0.dev1+g5884e4fe"
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  # gb300-nv serves this model from the Hub; read it from the shared mounted cache.
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  # Tachometer's per-node exporters slow decode steps and add head-node host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  slurm:
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    numa_bind: true
+    # One CPU node hosts the frontend, etcd and the AgentX client.
+    placement:
+      node: dedicated
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TOKENIZER: "fastokens"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+      DYN_TCP_CHANNEL_BUFFER: "128"
+      DYN_TCP_REQUEST_TIMEOUT: "60"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "14400"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 5
+      gpus: 2
+      env:
+        PYTHONUNBUFFERED: "1"
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_DSV4_KV_LAYOUT: v41_new
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+        SGLANG_ENABLE_PREFILL_WAR_READ_DONE: "1"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "65536"
+        SGLANG_OPT_DSV41_BF16_INDEX_LOGITS: "1"
+        SGLANG_OPT_DSV41_MEGA_MHC_PREFILL: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        # Some GB300 nodes list a BMC interface with the same address on every node first.
+        MC_TCP_BIND_ADDRESS: "{node}"
+        WITH_NVIDIA_PEERMEM: "0"
+        # Dynamo 1.7 backend admission rejects turns with 529 once a DP rank is full;
+        # the prefill scheduler queues them instead.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 2
+        tokenizer-backend: fastokens
+        router-mode: kv
+        router-session-affinity-ttl-secs: "14400"
+        data-parallel-size: 2
+        expert-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        moe-a2a-backend: megamoe
+        dsv4-attn-backend: flashmla_mega
+        disaggregation-transfer-backend: mooncake
+        chunked-prefill-size: 65536
+        max-prefill-tokens: 32768
+        # 64 per DP rank, as vLLM's prefill max-num-seqs; absorbs the client's turn burst.
+        max-running-requests: 128
+        swa-prefix-tails: 2048
+        enable-decoder-swa-bounded-replay: true
+        enable-encoder-swa-bounded-replay: true
+        # Local host-DRAM tier: device-evicted prefixes reload from host memory off the
+        # forward path; an external L3 lookup blocks each layer of the forward.
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.8
+        hicache-mem-layout: page_first_direct
+        hicache-io-backend: direct
+        hicache-write-policy: write_back
+        mem-fraction-static: 0.85
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        speculative-num-steps: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+      kv_events: true
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        PYTHONUNBUFFERED: "1"
+        # Decode ranks read Engram rows from peer shards instead of a host table.
+        SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS: "1"
+        SGLANG_DSV4_KV_LAYOUT: v41_new
+        # One gateway process saturates a CPU core serving 16 DP ranks; with 8, one
+        # instance stalls at high concurrency.
+        DYN_SGL_GATEWAY_WORKERS: "16"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_GATE: "1"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        SGLANG_OPT_DSV41_BF16_INDEX_LOGITS: "1"
+        SGLANG_OPT_DSV41_MEGA_MHC_PREFILL: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node}"
+        WITH_NVIDIA_PEERMEM: "0"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "10000"
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        tensor-parallel-size: 16
+        tokenizer-backend: fastokens
+        router-mode: round-robin
+        load-balance-method: total_tokens
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-dp-attention-local-control-broadcast: true
+        enable-fp32-lm-head: true
+        moe-a2a-backend: megamoe
+        dsv4-attn-backend: flashmla_mega
+        disaggregation-transfer-backend: mooncake
+        disaggregation-decode-extra-slots: 256
+        stream-interval: 32
+        swa-prefix-tails: 2048
+        enable-decoder-swa-bounded-replay: true
+        mem-fraction-static: 0.85
+        enable-eplb: true
+        ep-num-redundant-experts: 16
+        eplb-rebalance-num-iterations: 15000
+        expert-distribution-recorder-buffer-size: 1000
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 5
+        speculative-num-steps: 5
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+      kv_events: false
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+    # Engram host tables need the node's full memory in every worker step.
+    mem: "0"
+  benchmark:
+    placement:
+      node: dedicated
+    colocate_with_frontend: true
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      # The client splits this value on whitespace, so it has none.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
+      AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
+
+override_9p1d_dep2_dep16_c7480:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-9p1d-dep2-dep16-c7480
+  roles:
+    prefill:
+      # Nine DEP2 workers leave two GPUs of the fifth node idle.
+      workers: 9
+    decode:
+      args:
+        max-running-requests: 2048
+        cuda-graph-max-bs-decode: 128
+
+override_10p1d_dep2_dep16_c7480:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-10p1d-dep2-dep16-c7480
+  roles:
+    prefill:
+      workers: 10
+    decode:
+      args:
+        max-running-requests: 2048
+        cuda-graph-max-bs-decode: 128
+
+override_10p1d_dep2_dep16_b160_c7480:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-10p1d-dep2-dep16-b160-c7480
+  roles:
+    prefill:
+      workers: 10
+    decode:
+      args:
+        max-running-requests: 2560
+        cuda-graph-max-bs-decode: 160

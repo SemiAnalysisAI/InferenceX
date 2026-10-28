@@ -11404,3 +11404,15 @@
     - "TP2 c16-c64, the unsearched TP4 c4-c64 recipe variants, the DSpark speculative config (5 drafts, probabilistic drafting) and mono decode are unchanged."
     - "Draft data types unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped (FP8 E4M3 with 32x32 UE8M0 scales for attention, shared experts and main_proj, MXFP4 routed experts, BF16 gate, norms and heads), inherits the target fp8_ds_mla KV cache, and the mono draft kernels read those weights in place."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4480
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Add dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache on nightly-dev-cu13-20261027-5884e4fe (Dynamo 1.7.0.dev20261026), pinned by digest: DEP2 prefill and one DEP16 decode at c7480 with 9 prefill workers (decode CUDA graph batch 128), 10 prefill workers (batch 128) and 10 prefill workers (batch 160, max-running-requests 2560)."
+    - "Prefill keeps evicted prefixes in a local host-DRAM HiCache tier (ratio 1.8, write-back, direct I/O, mem-fraction-static 0.85) instead of the Mooncake external linker, whose layer-wise L3 reads block the forward pass and stall prefill after the client's turn burst at c7480. Decode admits transferred requests every step (SGLang's default disaggregation-decode-polling-interval of 1; the dspark-disagg key sets 8)."
+    - "Dynamo 1.7 backend admission limits are raised to 10000 so waiting turns queue in the prefill scheduler instead of failing with 529, and runners/srt-slurm/patches backports NVIDIA/srt-slurm#629 so the readiness wait asks /health?instances=true when /health is status-only."
+    - "The agg and existing dspark-disagg keys are unchanged; they rerun in the same sweep because AgentX plots all dynamo-sglang points of this model and GPU as one curve."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
