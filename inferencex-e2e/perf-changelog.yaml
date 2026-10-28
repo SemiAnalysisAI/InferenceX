@@ -11496,5 +11496,7 @@
     - agentic-coding
   description:
     - "Update the MI355X Qwen3.5 FP8 AgentX image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929 to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261020 (amd64 digest sha256:3a75c91365cc4f4e1194bf5d64b92f2f1ef134d8b9045da165fba28a8dada464)."
-    - "Switch every HiCache override on this arm from hicache-write-policy write_through_selective to write_through. At concurrency 80 the cache hit rate moves from 51% to about 95%. GPU-resident points and HiCache sizes stay the same."
+    - "Switch every HiCache override on this arm from hicache-write-policy write_through_selective to write_through. GPU-resident points and HiCache sizes stay the same."
+    - "At concurrency 80 the overall prefix cache hit rate is flat: 93.5% of prompt tokens on the previous image and policy (run 36743632401) against 94.0% here (run 39763900198). What moves is the tier split -- the HiCache host tier serves 49.1% of prompt tokens instead of 43.3%, and the GPU tier 44.9% instead of 50.2%. Per-GPU throughput goes from 59,233 to 60,839 tok/s (+2.7%), p90 end-to-end latency from 50.9 s to 47.9 s, and mean TTFT from 3.12 s to 2.68 s."
+    - "That concurrency 80 comparison is not a single-variable A/B: the 36743632401 baseline ran hicache-size 400 on lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260929, while this point runs hicache-size 374 on the v0.5.22 image, so the image, the write policy and the host pool size all differ."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4374
