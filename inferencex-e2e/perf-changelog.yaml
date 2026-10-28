@@ -11466,6 +11466,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update the vLLM image to vllm/vllm-openai:nightly-8e2beaa3bff595577a069d49d96bde9074294ec2 (digest-pinned), and retune DeepSeek-V4-Pro-0813 FP4 B200 AgentX DEP8 c32 with MegaMoE and SimpleCPU offload."
-    - "Add the dsv4-fp4-b200-vllm-agentic-mtp-lowconc key (vllm/vllm-openai digest-pinned) with TP8 c1, c4, c10 and c16 and TP2 x DP4 c48 and c64."
+    - "Update the DeepSeek-V4-Pro-0813 FP4 B200 AgentX vLLM image to vllm/vllm-openai:nightly-8e2beaa3bff595577a069d49d96bde9074294ec2 (digest-pinned). Keep TP8 c1, c6 and c14, move TP8 c4 and c10 to the lowconc key and remove TP8 c16. Retune c32 to TP4 x DP2 with deep_gemm_mega_moe and SimpleCPU offload, and switch DEP8 c64 to c192 from deep_gemm_amxf4_mega_moe to deep_gemm_mega_moe with a smaller per-rank KV cache at c96 to c192."
+    - "Add the dsv4-fp4-b200-vllm-agentic-mtp-lowconc key (vllm/vllm-openai digest-pinned) with TP8 c4 and c10 and TP2 x DP4 c48 and c64; c10 enables conditional indexer TP sharding (indexer_tp_shard_min_rows 4096)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4554
