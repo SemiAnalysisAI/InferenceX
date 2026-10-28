@@ -48,8 +48,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point. Admission is 2x CONC; the decode graph batch follows it
-# up to 64. The TP4 HiCache tier is 180 GB per rank.
 override_tp4_c4_hicache:
   roles:
     agg:
