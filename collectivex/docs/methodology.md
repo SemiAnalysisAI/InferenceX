@@ -166,10 +166,11 @@ instead of upstream's and vLLM's automatic 65/129, which exhaust the per-NIC QP 
 (`ibv_create_qp` ENOMEM in `ncclDevCommCreate`; 49x16 initializes, 65x16 does not). The 64-SM
 kernels ask for 64 x 16 + 1 QPs and are capped at that allocation, so the hybrid channels share 32
 data QPs plus one notify QP (`library_config.num_allocated_qps`, `num_qps`). DeepEP's SM model reads
-the scale-out rate from an `ibstat` probe that cannot see EFA, and in hybrid mode divides by it, so
-on the EFA pools the registry's `network.rdma_gbs` supplies the per-GPU rate and the resulting count
-is passed explicitly (`library_config.sm_model_rdma_gbs`). Elsewhere the count is left to DeepEP, as
-vLLM leaves it. With overlap off the model's own 10-26 SMs are raised to 64 either way.
+the scale-out rate from an `ibstat` probe that cannot see EFA and that the vLLM image does not ship,
+and in hybrid mode divides by it, so on the EFA pools and on h200-dgxc the registry's
+`network.rdma_gbs` supplies the per-GPU rate (50 GB/s on h200-dgxc, the value the probe reads from a
+400 Gb/s ConnectX-7 port) and the resulting count is passed explicitly
+(`library_config.sm_model_rdma_gbs`). Elsewhere the count is left to DeepEP, as vLLM leaves it. With overlap off the model's own 10-26 SMs are raised to 64 either way.
 
 **A virtualized pool can make a scale-out row measure the hypervisor rather than the fabric.**
 h200-dgxc EP16 on deepep-v2 paid three to eight times h100's cross-node cost while nccl-ep on the
@@ -929,7 +930,7 @@ One raw case document, committed at `results/<sku>/<case_id>.json`, carries `rec
     library resolved that changes what a row measures, null where an adapter records none. deepep-v2
     records `engine_contract` (`vllm`) in both modes and, in `normal`, its SM and QP counts,
     allocated QPs, LSA team, hybrid choice, vLLM's buffer flags, host-sync, expand and receive sizing
-    (`sm_model_rdma_gbs` on EFA only); the shared low-latency path, on deepep-v2 and uccl-ep alike,
+    (`sm_model_rdma_gbs` where the registry sets `rdma_gbs`); the shared low-latency path, on deepep-v2 and uccl-ep alike,
     records `receive_capacity`, `num_qps_per_rank`, `return_recv_hook`, `zero_copy` and `fp8_scales`,
     plus deepep-v2's NVLink and MNNVL flags; uccl-ep adds its verified `deep_ep` identity, buffer
     bytes, QPs, `is_intranode` and running CPU-proxy threads, with `Buffer.num_sms` and the dispatch
