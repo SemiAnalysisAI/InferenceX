@@ -507,3 +507,29 @@ def test_resumes_back_off_after_sessions_that_ended_without_parking(
     with pytest.raises(lifecycle.ResumeSession):
         lifecycle.reconcile(world.session, due)
     assert world.writes == world.finished == []
+
+
+@pytest.mark.parametrize(("conclusion", "intact"), [
+    pytest.param("skipped", False, id="skipped-by-a-label-or-close"),
+    pytest.param("success", True, id="real-maintainer-sweep"),
+])  # fmt: skip
+def test_only_a_maintainer_run_that_did_work_keeps_recovery_off_the_session(
+    monkeypatch, conclusion, intact
+):
+    world = ended_session_sweep(monkeypatch, sessions=("failure",))
+    late = {**world.sweep, "id": 99, "actor": {"login": "maintainer"}, "conclusion": conclusion,
+            "created_at": "2026-10-20T00:00:00Z", "updated_at": "2026-10-20T00:00:01Z"}
+    serve = github.items
+
+    def items(repository, path, key=None):
+        if path.startswith("actions/workflows/run-sweep.yml/runs?per_page=100&created="):
+            return [world.sweep, late]
+        return serve(repository, path, key)
+
+    monkeypatch.setattr(github, "items", items)
+
+    if intact:
+        with pytest.raises(github.VerificationError, match="leave them intact"):
+            world.session.runs()
+    else:
+        assert [run["id"] for run in world.session.runs()] == [9, 99]

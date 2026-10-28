@@ -102,11 +102,11 @@ def canonical_matrix(repository: str, head: str, family: str) -> dict:
         fingerprinted = [
             {**row, "recipe-fingerprint": recipe_fingerprint(row, root)} for row in entries
         ]
-    evals = [
-        dict(row, **{"eval-only": True})
-        for row in mark_eval_entries(deepcopy(entries))
-        if row.get("run-eval")
-    ]
+        evals = [
+            dict(row, **{"eval-only": True})
+            for row in mark_eval_entries(deepcopy(entries), root)
+            if row.get("run-eval")
+        ]
     return {"single_node": {"all": fingerprinted}, "evals": evals}
 
 
