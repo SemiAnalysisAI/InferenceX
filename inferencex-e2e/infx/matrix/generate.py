@@ -1926,6 +1926,10 @@ def main() -> list[dict]:
         root=root,
     )
 
+    if any(Path(path).name == "kimi-tool-debug.yaml" for path in args.config_files):
+        matrix_values = [row for row in matrix_values if row.get("eval-framework") == "kimi-vendor"]
+        if len(matrix_values) != 1 or not matrix_values[0].get("eval-only"):
+            raise ValueError("Kimi debug dispatch must contain exactly one eval-only job")
     print(json.dumps(matrix_values))
     return matrix_values
 

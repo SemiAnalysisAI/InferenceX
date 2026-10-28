@@ -358,14 +358,20 @@ def run_evaluation(
     try:
         native_report.unlink(missing_ok=True)
         completed = subprocess.run(
-            build_pytest_command(
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                model_prefix=model_prefix,
-                report_path=native_report.resolve(),
-                task_name=task_name,
-            ),
+            [
+                *build_pytest_command(
+                    base_url=base_url,
+                    api_key=api_key,
+                    model=model,
+                    model_prefix=model_prefix,
+                    report_path=native_report.resolve(),
+                    task_name=task_name,
+                ),
+                "-p",
+                "infx.evals.kimi_debug_capture",
+                "--kimi-capture-dir",
+                str(output_dir.resolve()),
+            ],
             cwd=verifier_dir,
             check=False,
             timeout=timeout_seconds,
