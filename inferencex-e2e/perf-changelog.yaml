@@ -11495,6 +11495,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028, which pins sgl-project/sgl-amd-mono@90c2355 (sgl-project/sglang#46951)."
+    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028."
     - "Enable --enable-amd-monokernel at concurrency 1. Each DSpark verify there is one request's 7 tokens, which the monokernels run as one persistent launch per layer; steps with more rows run the standard forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4596
