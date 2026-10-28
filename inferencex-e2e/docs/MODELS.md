@@ -8,11 +8,7 @@ Following the principles of fairness and equitableness, the service-level object
 
 ## Serving-image main-branch policy
 
-Established models must use serving images built from the inference engine's upstream `main` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release. This applies across hardware vendors and frameworks, including Dynamo and disaggregated deployments. Adding an existing model to InferenceX, a new SKU, or a new recipe does not restart the model's new-release window.
-
-Core maintainers judge the transition period from the model's release date, upstream support readiness, and any concrete hardware or correctness blocker. There is no fixed day count. Any temporary non-main image needs an explicit Core-maintainer-approved exception in the CODEOWNER sign-off's additional detail section: the model release date, source branch and commit, blocker and upstream issue/PR, migration owner, and a dated migration deadline. An expired exception must be renewed explicitly or the submission must move to a main-branch image.
-
-Verify the actual build provenance: record the image digest, engine source commit, and build/source evidence tying that commit to upstream main. An official registry, a `nightly` tag, or a SHA suffix alone does not prove main-branch provenance. A release image qualifies when its engine source revision is on upstream main; a release-branch-only backport or an unmerged fork commit needs the temporary exception above. Missing or inaccessible provenance is unverified, not proof of compliance. This policy does not waive the upstream-image publishing requirements or the separate [engine-patch waiver](PR_REVIEW_CHECKLIST.md) requirement.
+For official InferenceX (non-preview), established models must use upstream engines images built from the inference engine's upstream `master` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
 
 ## Deprecation policy
 
