@@ -605,18 +605,37 @@ ofi_nccl_ready() { [ -f "$1/.ready" ] && [ -r "$1/lib/libnccl-net-ofi.so" ]; }
 
 # Static hwloc for images without its headers (see COLLX_HWLOC_VERSION).
 ofi_nccl_build_hwloc() {
-  local root="$1" version="$COLLX_HWLOC_VERSION" tarball
+  local root="$1" version="$COLLX_HWLOC_VERSION" tarball pciaccess
+  pciaccess="libpciaccess-$COLLX_PCIACCESS_VERSION"
+  curl -sSfL --connect-timeout 30 --max-time 300 --retry 3 -o "$root/$pciaccess.tar.gz" \
+      "https://www.x.org/releases/individual/lib/$pciaccess.tar.gz" \
+    && printf '%s  %s\n' "$COLLX_PCIACCESS_SHA256" "$root/$pciaccess.tar.gz" | sha256sum -c --quiet \
+    && tar -xzf "$root/$pciaccess.tar.gz" -C "$root" \
+    || { collx_log "ERROR: libpciaccess source fetch failed"; return 1; }
+  (
+    cd "$root/$pciaccess" \
+      && ./configure -q --prefix="$root/pciaccess" --enable-static --disable-shared --with-pic \
+      && make -s -j"$(nproc)" && make -s install
+  ) >&2 2>&1 || { collx_log "ERROR: libpciaccess build failed"; return 1; }
+  rm -rf "${root:?}/$pciaccess" "${root:?}/$pciaccess.tar.gz"
   tarball="hwloc-$version.tar.gz"
   curl -sSfL --connect-timeout 30 --max-time 300 --retry 3 -o "$root/$tarball" \
       "https://download.open-mpi.org/release/hwloc/v${version%.*}/$tarball" \
     && printf '%s  %s\n' "$COLLX_HWLOC_SHA256" "$root/$tarball" | sha256sum -c --quiet \
     && tar -xzf "$root/$tarball" -C "$root" \
     || { collx_log "ERROR: hwloc source fetch failed"; return 1; }
+  # The plugin groups each GPU with its nearest EFA NICs from hwloc's PCI tree, so I/O discovery
+  # must stay on (without it every group is empty and the RDMA protocol, the only one GIN supports,
+  # fails to start). hwloc reads the PCI tree through libpciaccess, built static alongside it; the
+  # GPU-vendor components would only link vendor libraries into the static archive.
   collx_log "aws-ofi-nccl: building hwloc $version (the image has no hwloc headers)"
   (
     cd "$root/hwloc-$version" \
-      && ./configure -q --prefix="$root/hwloc" --enable-static --disable-shared --with-pic \
-        --disable-libxml2 --disable-cairo --disable-io --disable-plugins \
+      && HWLOC_PCIACCESS_CFLAGS="-I$root/pciaccess/include" \
+        HWLOC_PCIACCESS_LIBS="$root/pciaccess/lib/libpciaccess.a" \
+        ./configure -q --prefix="$root/hwloc" --enable-static --disable-shared --with-pic \
+        --disable-libxml2 --disable-cairo --disable-plugins --disable-libudev \
+        --disable-cuda --disable-nvml --disable-opencl --disable-rsmi --disable-levelzero \
       && make -s -j"$(nproc)" && make -s install
   ) >&2 2>&1 || { collx_log "ERROR: hwloc build failed"; return 1; }
   rm -rf "${root:?}/hwloc-$version" "${root:?}/$tarball"
@@ -637,7 +656,7 @@ ofi_nccl_install() {
   local -a hwloc=()
   if [ ! -r /usr/include/hwloc.h ]; then
     ofi_nccl_build_hwloc "$root" || return 1
-    hwloc=(--with-hwloc="$root/hwloc")
+    hwloc=(--with-hwloc="$root/hwloc" LIBS="$root/pciaccess/lib/libpciaccess.a")
   fi
   collx_log "aws-ofi-nccl: building $version"
   (
@@ -660,8 +679,11 @@ ofi_nccl_prepare() {
     collx_log "aws-ofi-nccl: using the host plugin"
     return 0
   fi
-  root="$(backend_cache_root ofi-nccl efa "$COLLX_OFI_NCCL_VERSION")" \
-    || root="/tmp/collectivex-ofi-nccl-$COLLX_OFI_NCCL_VERSION"
+  # A plugin built on the bundled hwloc keys its own cache, so a change to that build replaces it.
+  local variant="$COLLX_OFI_NCCL_VERSION"
+  [ -r /usr/include/hwloc.h ] || variant+="-hwloc$COLLX_HWLOC_VERSION-pciaccess$COLLX_PCIACCESS_VERSION"
+  root="$(backend_cache_root ofi-nccl efa "$variant")" \
+    || root="/tmp/collectivex-ofi-nccl-$variant"
   with_cache_lock "aws-ofi-nccl" "$root" ofi_nccl_ready ofi_nccl_install || return 1
   export COLLX_OFI_NCCL_LIB_DIR="$root/lib"
   collx_log "aws-ofi-nccl $COLLX_OFI_NCCL_VERSION ready"
