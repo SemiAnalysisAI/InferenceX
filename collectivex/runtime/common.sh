@@ -247,7 +247,7 @@ collx_add_efa_host_mounts() {
 COLLX_HOST_VERBS_ROOT=/opt/collectivex/host-verbs
 
 # Some NIC vendors replace the host's rdma-core provider with their own build for an out-of-tree
-# kernel driver (Barite's Broadcom bnxt_re 237.x speaks kernel ABI 8; rdma-core's stock bnxt_re
+# kernel driver (the MI300X/MI325X pools' Broadcom bnxt_re 237.x speaks kernel ABI 8; rdma-core's stock bnxt_re
 # provider, the image's, supports only ABI 1, so libibverbs lists no device). Multi-node shards
 # bind the registry-named host provider read-only; backend preparation installs it into the
 # container over the image's file (verbs_provider_prepare in prepare_backend.sh).
@@ -334,7 +334,7 @@ collx_apply_network_profile() {
     [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
       || collx_die "invalid private socket interface selector"
     # MoRI's shmem bootstrap otherwise picks its own interface, which can be a rail without a
-    # kernel route to the root rank (Barite's per-rail /31 links).
+    # kernel route to the root rank (per-rail /31 links on the Broadcom pools).
     export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" \
       MORI_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
   fi
