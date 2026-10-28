@@ -1,5 +1,8 @@
 schema: 2
 base:
+  observability:
+    tachometer:
+      enabled: false
   identity:
     frameworks:
       dynamo: 1.6.0.dev20261023
@@ -115,7 +118,7 @@ base:
         gpu-memory-utilization: 0.88
         max-num-seqs: 64
         max-num-batched-tokens: 16384
-        long-prefill-token-threshold: 16384
+        long-prefill-token-threshold: 4096
         prefill-schedule-interval: 1
         enable-prefix-caching: true
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
@@ -205,15 +208,13 @@ base:
       node: dedicated
   name: minimaxm31flash-gb200-disagg-mooncake
   setup_script: vllm-mooncake.sh
-override_3p1d_c280:
-  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c280
-override_2p1d_c224:
-  name: minimaxm31flash-gb200-disagg-mooncake-2p1d-c224
+override_3p1d_c256:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-c256
+override_3p1d_dep16_c280:
+  name: minimaxm31flash-gb200-disagg-mooncake-3p1d-dep16-c280
   roles:
-    prefill:
-      nodes: 2
-      workers: 2
     decode:
+      nodes: 4
+      gpus: 16
       args:
-        max-num-seqs: 48
-        max-cudagraph-capture-size: 384
+        data-parallel-size: 16
