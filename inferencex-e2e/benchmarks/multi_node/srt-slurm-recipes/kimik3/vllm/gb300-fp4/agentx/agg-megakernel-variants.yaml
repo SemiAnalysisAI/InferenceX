@@ -4,7 +4,7 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: 1b2a666391f2a24228a1436b64d547c34cc6b6ce
+      vllm: e4a5b5537344b103ed10de7764378ef09604ef3d
   dynamo:
     install: false
   slurm:
