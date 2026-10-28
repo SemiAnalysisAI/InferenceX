@@ -24,8 +24,6 @@ base:
   engine:
     type: trtllm
     publish_events_and_metrics: false
-    # Keep metrics publishing off, as with the earlier Dynamo pin.
-    publish_metrics: false
   roles:
     prefill:
       gpus: 8
