@@ -11491,6 +11491,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4571
 
 - config-keys:
+    - minimaxm31flash-fp4-b200-sglang-agentic-dspark
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+    - minimaxm31flash-fp4-b300-sglang-agentic-dspark
+  description:
+    - "Add a Low-Latency TP4 point at conc 1 with the MSA-V1 MonoKernel to the existing curve, following the GB300 recipe."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4509
+  scenario-type: [agentic-coding]
+  append-only: true
+
+- config-keys:
     - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
   scenario-type:
     - agentic-coding

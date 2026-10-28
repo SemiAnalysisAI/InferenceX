@@ -192,5 +192,5 @@ Every row is gated. Any failed rank or point makes the case `invalid`.
 ## Provenance and publishing
 
 A result records its source SHA, image tag, library versions, `kernel_generation` and topology. Only
-results measured from committed code publish, by a reviewed commit of `results/<sku>/<case_id>.json`
-to `main` ([README](../README.md#running-by-hand)).
+results measured from committed code publish, by uploading `results/<sku>/<case_id>.json` to the
+CollectiveX database ([README](../README.md#running-by-hand)).

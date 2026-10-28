@@ -2,16 +2,17 @@
 
 CollectiveX is an experimental MoE expert-parallel communication benchmark. It measures dispatch,
 combine and paired roundtrip latency across EP libraries and accelerator systems, and writes one
-result file per case into `results/`, where it is committed. A second suite, the
+result file per case into `results/` on the cluster that ran it. A second suite, the
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
 copies through the same matrix and pool launchers.
 
-CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Committing the
-results is the publish step: the dashboard builds from whatever `results/` holds on `main`. It does
-not rank, recommend, or select; any downstream display or comparison is the consumer's
-responsibility. [docs/methodology-summary.md](docs/methodology-summary.md) states the measurement
-rules, including each backend's engine contract, and [docs/methodology.md](docs/methodology.md)
-holds the evidence behind them.
+CollectiveX is run by hand on each pool (see [Running By Hand](#running-by-hand)). Uploading the
+results to the CollectiveX database is the publish step: the dashboard shows the latest stored run.
+Results are not committed to this repository. CollectiveX does not rank, recommend, or select; any
+downstream display or comparison is the consumer's responsibility.
+[docs/methodology-summary.md](docs/methodology-summary.md) states the measurement rules, including
+each backend's engine contract, and [docs/methodology.md](docs/methodology.md) holds the evidence
+behind them.
 
 ## Coverage
 
@@ -70,7 +71,7 @@ pools also need an operator document that names a stage directory (see
 
 These variables change what a row measures. The result records each one (in `kernel_generation`,
 `implementation.fp8_consume`, `implementation.rank_alignment` or `implementation.library_config`),
-but the `case_id` does not, so a run with one replaces the case's committed default-configuration
+but the `case_id` does not, so a run with one replaces the case's stored default-configuration
 result:
 
 | Variable | Default | Effect |
@@ -87,12 +88,15 @@ image) change only how a shard runs.
 
 Results record the commit they were measured at, so `run.sh` refuses to start while tracked files
 under `collectivex/` (outside `results/`) have uncommitted edits. `--allow-dirty` runs anyway and
-marks the results `source_dirty`, so they cannot be published. To publish, review
-`git diff collectivex/results/<sku>`, check it with
-`python3 -m unittest collectivex/tests/test_results.py`, and open a PR with the files. That test
-also runs in CI: every committed result must be a runnable case in `results/cases.json`, come from
-committed code, stay under 1 MiB, and contain no IP addresses or host-identifying fields.
-Regenerate `cases.json` whenever the configs change:
+marks the results `source_dirty`, so they cannot be published. `results/<sku>/` is gitignored. To
+publish, copy the pool's `results/<sku>/` and `results/cases.json` off the cluster and, from an
+InferenceX-app checkout with `DATABASE_COLLECTIVEX_WRITE_URL` set, run
+`bun run admin:db:ingest:collectivex --dir <copy>/results`. It lays the uploaded files over the
+latest stored run, replacing those cases, and stores the result as a new run. It rejects a file that
+is not a runnable case in `cases.json`, was measured from uncommitted code, or contains an IP
+address or host-identifying field, and every uploaded file must share one source SHA.
+`results/cases.json` stays committed; a unit test fails when it no longer matches the configs, so
+regenerate it whenever they change:
 
 ```bash
 python3 collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json collectivex/results/cases.json
@@ -160,4 +164,4 @@ collectivex/run.sh h200-dgxc --dry-run   # each shard's environment, without all
 ```
 
 Core paths are `run.sh`, `configs/`, `sweep_matrix.py`, `bench/`, `runtime/`, `launchers/`,
-`results/` and `tests/`. `summarize.py` and `bandwidth.py` read results and gate nothing.
+`results/cases.json` and `tests/`. `summarize.py` and `bandwidth.py` read results and gate nothing.
