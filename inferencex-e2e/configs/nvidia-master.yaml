@@ -5706,18 +5706,14 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
-# Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
-# two NVL4 nodes, and TP4 lazy SimpleCPU KV offload variants. The pinned
-# runtime uses Dynamo-native MiniMax parsing on the worker without the vLLM
-# chat processor in the frontend.
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
-  image: vllm/vllm-openai:nightly-9ea8f3ffc354901b740f0b31988900897b7221d7
+  image: vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:8896fd7b29fc4ee7ce839f146cb4757984c476ec79d0234ffa8c995dee6e339a
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.5.0.dev20260908" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261016" }
   multinode: true
   disagg: false
   srt-recipe-dir: minimaxm3/vllm/gb200-fp4/agentx
@@ -5727,9 +5723,19 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
       search-space:
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [1, 10]
+        conc-list: [1]
         num-nodes: 1
-        srt-recipe: agg-nightly-native-variants.yaml:override_tp4
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_c1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [10]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_mns16_c10
         worker:
           num-worker: 1
           tp: 4
@@ -5738,9 +5744,31 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [15, 25, 30]
+        conc-list: [20]
         num-nodes: 1
-        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns8_c20
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [25]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns16_c25
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [30]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_c30
         worker:
           num-worker: 1
           tp: 4
@@ -5750,10 +5778,31 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
         kv-offloading: none
         conc-list: [1]
         num-nodes: 2
-        srt-recipe: agg-nightly-native-variants.yaml:override_tp8
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp8_c1
         worker:
           num-worker: 1
           tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [5]
+        num-nodes: 2
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp8_mns8_c5
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [22]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns12_c22
+        worker:
+          num-worker: 1
+          tp: 4
           ep: 1
           dp-attn: false
 
