@@ -927,9 +927,12 @@ Entries are permanent, so this fails here; PR-body claims stay under Check 15.
 
 ### (g) Removed points were off the frontier
 A removed sweep point is allowed only when it was not on the combined Pareto frontier,
-or a measured head point dominates it in both `tput_per_gpu` and `mean_intvty`. Per
-config key, `check_18g_points` lists `undominated_removed` (FAIL, unless head-point
-measurements the facts missed dominate them) and `unmeasured_removed`. For unmeasured
+or the measured head curve covers it: a head point dominates it in both `tput_per_gpu`
+and `mean_intvty`, or it lies on or under the straight line between the two adjacent
+non-dominated head points whose `mean_intvty` brackets its own (no extrapolation past
+the head's range). `dominated_by` names the point or segment. Per config key,
+`check_18g_points` lists `undominated_removed` (FAIL, unless head-point measurements
+the facts missed cover them) and `unmeasured_removed`. For unmeasured
 points, take measurements from the most recent sweep run that measured them
 (`gh run download`) and run `signoff_facts dominance`. Points with the same shape and concurrency but a new
 recipe fingerprint are re-tuned, not removed; they appear under `retuned_deltas`.
