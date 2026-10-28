@@ -28,18 +28,17 @@ runs the decode and prefill ladders; `low-latency` is decode-only.
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
 | `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H200. EP8, EP16: B200, GB200, GB300 |
-| `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8: MI300X, MI325X, MI355X. EP16: MI355X | EP16: MI355X |
-| `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: B200 | EP8: H100, H200, B200 |
-| `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H100, H200, B300. EP8, EP16: B200, GB200, GB300 |
+| `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8, EP16: MI300X, MI325X, MI355X | EP16: MI300X, MI325X, MI355X |
+| `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: B200, MI300X, MI325X | EP8: H100, H200, B200. EP16: MI300X, MI325X |
+| `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16 where it matches, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H100, H200, B300. EP8, EP16: B200, GB200, GB300 |
 | `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8, EP16: GB200, GB300 | none |
 
-Every backend runs a BF16 dispatch control and an FP8 dispatch, except that nccl-ep's FP8 (its
-internal DS_FP8E3M4 recipe, low-latency decode only) is off every engine's path and runs only when
-`--precisions fp8` names it. Combine is always BF16. Coverage is uniform routing only.
+Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
+DS_FP8E3M4 recipe, low-latency decode only. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 195 requested cases, of which 163 are
-runnable EP cases, 18 are swap-blocks cases (two per pool) and 14 are unsupported EP cells (UCCL-EP
-EP16 on H100, H200, MI300X, MI325X and MI355X, and MoRI EP16 on MI300X and MI325X, once per phase).
+`results/cases.json` is the committed copy of the full matrix: 220 requested cases, of which 196 are
+runnable EP cases, 18 are swap-blocks cases (two per pool) and 6 are unsupported EP cells (UCCL-EP
+EP16 on H100, H200 and MI355X, once per phase).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP
@@ -69,14 +68,16 @@ pools also need an operator document that names a stage directory (see
 [Runner Configuration](#runner-configuration)).
 
 These variables change what a row measures. The result records each one (in `kernel_generation`,
-`implementation.fp8_consume` or `implementation.rank_alignment`), but the `case_id` does not, so a
-run with one replaces the case's committed default-configuration result:
+`implementation.fp8_consume`, `implementation.rank_alignment` or `implementation.library_config`),
+but the `case_id` does not, so a run with one replaces the case's committed default-configuration
+result:
 
 | Variable | Default | Effect |
 |---|---|---|
 | `COLLX_CUDA_GRAPH=0` | `1` | times graph-capable decode cells eager (`-eager-spin-ar`) |
 | `CX_FP8_CONSUME=dequant` | `native` | stages every FP8 pair inside the chain, a verification hatch |
 | `COLLX_NCCL_LL_LAYOUT=expert-major` | `rank-major` | runs nccl-ep low-latency on its expert-major layout |
+| `COLLX_NCCL_LL_ZERO_COPY=0` | `1` | stages nccl-ep low-latency dispatch, TensorRT-LLM's graphed path (drops `-zc`) |
 | `COLLX_ALIGN_SPIN_US` | `2000` | the per-sample rank-alignment spin |
 
 `COLLX_TIME` (allocation minutes: 300 per EP shard and 45 per swap-blocks shard unless set),

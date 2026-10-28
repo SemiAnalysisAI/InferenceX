@@ -67,6 +67,7 @@ collx_select_image "$IMAGE"
 collx_stage_with_backend_cache
 # Multi-node shards on the EFA pools (b300, h100-dgxc) carry the host EFA user space themselves.
 collx_add_efa_host_mounts
+collx_add_host_verbs_provider_mount
 
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$COLLX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
@@ -81,7 +82,13 @@ for allocation_attempt in 1 2 3; do
   [ -z "$excluded_nodes" ] || attempt_allocation+=(--exclude="$excluded_nodes")
   export COLLX_SALLOC_ATTEMPT="$allocation_attempt"
   export COLLX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"
-  collx_salloc_jobid "${attempt_allocation[@]}"
+  JOB_ID=""
+  if ! collx_salloc_jobid "${attempt_allocation[@]}"; then
+    # A job that dies before its grant (a failed node prolog) is worth another allocation.
+    [ "$allocation_attempt" != 3 ] || collx_die "scheduler allocation failed on every attempt"
+    collx_log "allocation attempt $allocation_attempt failed; retrying"
+    continue
+  fi
   [ -n "$JOB_ID" ] || collx_die "could not resolve allocated JOB_ID from salloc"
   if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
     validation_failure=network

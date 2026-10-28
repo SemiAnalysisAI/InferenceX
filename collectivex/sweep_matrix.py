@@ -44,22 +44,17 @@ BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
     "uccl-ep": ("bf16", "fp8"),
-    # Native DS_FP8E3M4 dispatch, low-latency decode only (the mode/phase gate below), and off
-    # every deployed path -- see OFF_PATH_PRECISIONS.
+    # Native DS_FP8E3M4 dispatch, low-latency decode only (the mode/phase gate below).
     "nccl-ep": ("bf16", "fp8"),
     # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
     # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
     # comparable. vLLM selects it on this transport for DeepSeek blockwise FP8 from v0.29.0.
     "flashinfer-ep": ("bf16", "fp8"),
 }
-# Precisions a backend REALIZES but that no serving engine can select on that transport. Kept
-# out of the default matrix so a production sweep measures deployable configurations, and still
-# reachable by naming the precision explicitly (`--precisions fp8`) for transport comparison.
-# TensorRT-LLM, the one engine with an NCCL EP selector, never asks NCCL EP to quantize: its NcclEP
-# sends DeepSeek-FP8 activations in BF16 (`uses_internal_fp8_dispatch = False`), so nccl-ep's
-# DS_FP8E3M4 row is the library's. Declared here rather than on the adapter because this
-# generator must resolve the matrix with no vendor imports.
-OFF_PATH_PRECISIONS = {"nccl-ep": ("fp8",)}
+# Precisions a backend realizes but that no serving engine can select on that transport, kept out
+# of the default matrix and still reachable by naming them (`--precisions fp8`). Declared here
+# rather than on the adapter because this generator must resolve the matrix with no vendor imports.
+OFF_PATH_PRECISIONS: dict[str, tuple[str, ...]] = {}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
 _MODE_SLUG = {"low-latency": "ll"}
