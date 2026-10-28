@@ -15,13 +15,14 @@ Engine contract: vLLM and SGLang expose no NCCL EP selector; TensorRT-LLM does. 
 communication strategy (tensorrt_llm/_torch/moe/fused_moe/communication/nccl_ep.py at main
 a6142c920), auto-selected after its NVLink strategies or forced with
 TRTLLM_FORCE_COMM_METHOD=NCCL_EP, runs LL rank-major only and never NCCL EP's internal
-DS_FP8E3M4 quantization: DeepSeek-FP8 activations cross it in BF16. LL rank-major BF16 rows run
-that configuration: its group capacity, its staged dispatch under CUDA graph capture and its
-window-backed zero-copy dispatch eager. HT, expert-major LL and DS-FP8 are modes no engine runs;
-they stay library (`candidate`) rows.
+DS_FP8E3M4 quantization: DeepSeek-FP8 activations cross it in BF16. LL rank-major BF16 rows
+zero-copy wherever the library can (one NVLink/MNNVL domain), graphed or eager, as NCCL EP is
+built to run. TensorRT-LLM stages its dispatch under CUDA graph capture instead, so the rows that
+match its configuration (eager, or across nodes where every path stages) carry its contract;
+graphed zero-copy rows, HT, expert-major LL and DS-FP8 are library (`candidate`) rows.
 
-FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency decode only. No engine selects it,
-so the matrix runs it only when named (sweep_matrix.OFF_PATH_PRECISIONS). Received E4M3 values
+FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency decode only, and runs in the
+default matrix like every other backend's FP8. Received E4M3 values
 are dequantized into a BF16 staging plane, so the BF16 combine and correctness oracle remain the
 common comparison contract. Normal mode remains BF16-only.
 
@@ -201,20 +202,24 @@ class NCCLEPBackend(EPBackend):
             raise ValueError(f"COLLX_NCCL_LL_LAYOUT must be rank-major or expert-major, got {layout!r}")
         self._ll_expert_major = self._ll and layout == "expert-major"
         # The one configuration an engine runs (module docstring); every other row is the library's.
+        # HT needs its windows in both regimes (`_bind_ht_recv_count`). LL zero-copies wherever the
+        # library can, graphed or eager: it zero-copies only NVLink-only, rank-major NONE/FWD
+        # dispatch (nccl_ep.cc:4589-4600), so scale-out, expert-major and DS_FP8E3M4, which
+        # generates its scales internally, always stage.
+        self.zero_copy = not self._ll or not (
+            self._internode or self._ll_expert_major or self._fp8
+        )
+        # The one configuration an engine runs (module docstring): TensorRT-LLM's LL rank-major
+        # BF16, which dispatches into a registered window eager but into a plain context-owned
+        # tensor under CUDA graph capture (nccl_ep.py:305-327). A graphed zero-copy row is the
+        # library's; every other row is too.
         self.engine_contract = (
-            "tensorrt-llm" if self._ll and not self._ll_expert_major and not self._fp8 else None
+            "tensorrt-llm"
+            if self._ll and not self._ll_expert_major and not self._fp8
+            and not (self.zero_copy and self.cuda_graph_enabled)
+            else None
         )
         self.maturity = "production" if self.engine_contract else "candidate"
-        # HT needs its windows in both regimes (`_bind_ht_recv_count`). LL rank-major follows
-        # TensorRT-LLM: eager, dispatch writes into a registered NCCL window, but under CUDA graph
-        # capture it writes into a plain context-owned tensor, which the library stages
-        # (nccl_ep.py:305-327). So graphed rows run the staged dispatch and eager rows
-        # (COLLX_CUDA_GRAPH=0) the window. Either way the library zero-copies only NVLink-only,
-        # rank-major NONE/FWD dispatch (nccl_ep.cc:4589-4600): scale-out, expert-major and
-        # DS_FP8E3M4, which generates its scales internally, always stage.
-        self.zero_copy = not self._ll or not (
-            self._internode or self._ll_expert_major or self._fp8 or self.cuda_graph_enabled
-        )
         if self._ll_expert_major:
             # Weighted source-side combine over a per-expert padded receive: deepep-v2 LL's
             # contract, so this is the like-for-like row against the DeepEP-API backends.
