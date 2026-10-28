@@ -1,0 +1,170 @@
+# Experiment only (not for merge): vLLM-style admission and streaming at TP2.
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-b300-sglang-agentic-tp2-exp
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Cold loads of the 250 GB checkpoint plus JIT MSA kernel builds and graph capture outlast the default.
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 2
+      # Serve flags follow the cookbook's B300 cells at
+      # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1.
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        # Seven-token DSpark, the bundled draft's dspark_block_size. Throughput runs
+        # switch to synthetic acceptance at the golden acceptance length.
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        # FP8 draft KV, as vLLM's DSpark drafter uses; bf16 costs ~10 GB of HBM per rank.
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        cuda-graph-backend-prefill: breakable
+        tokenizer-worker-num: 8
+        watchdog-timeout: 3600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        FMHA_SM100_ALLOW_JIT: '1'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp2_c24:
+  # Fill the interactivity gap below TP2 c32; 2x CONC as the other TP2 points.
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+
+override_tp2_c28:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: dram
+
+override_tp2_c48_control:
+  # Control: the agentic-tp2.yaml c48 recipe, rerun in the same dispatch.
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_back
+        schedule-policy: lpm
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp2_c48_mr72:
+  # 1.5x CONC admission, as vLLM's max-num-seqs.
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_back
+        schedule-policy: lpm
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp2_c48_si20:
+  # 20-token streaming, as vLLM's stream-interval.
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_back
+        schedule-policy: lpm
+        stream-interval: 20
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp2_c48_mr72_si20:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        moe-runner-backend: flashinfer_trtllm_routed
+        chunked-prefill-size: 32768
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
+        mem-fraction-static: 0.87
+        enable-hierarchical-cache: true
+        hicache-size: 370
+        hicache-write-policy: write_back
+        schedule-policy: lpm
+        stream-interval: 20
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
