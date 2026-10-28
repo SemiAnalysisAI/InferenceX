@@ -116,17 +116,12 @@ override_tp8_c10:
     agg:
       gpus: 8
       args:
-        attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"indexer_kv_dtype":"mxfp4","indexer_tp_shard_min_rows":4096}'
-        prefix-cache-retention-interval: 32768
-        prefill-schedule-interval: 64
         tensor-parallel-size: 8
         data-parallel-size: 1
         max-num-batched-tokens: 16384
         kv-cache-memory-bytes: 53687091200
         max-num-seqs: 10
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,100,200,300,400,500]}'
-      env:
-        VLLM_DSV4_MEGA_FP8_COMBINE: null
   benchmark:
     env:
       CONC: '10'

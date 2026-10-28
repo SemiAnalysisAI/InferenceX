@@ -920,7 +920,6 @@ dsv4-fp4-b200-vllm-agentic-mtp-lowconc:
     - dram-utilization: 0.90
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [4], srt-recipe: agentic-lowconc.yaml }
-      - { tp: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [10], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [64], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic-tp2dp4-c64.yaml }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: draft_model, conc-list: [48], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic-tp2dp4-c48.yaml }
 
