@@ -11471,3 +11471,10 @@
     - "Engines set minimax_m3_msa_decode_backend=cutlass. In nightly-5555a2d8 the CUTLASS path engages only at 16 or more concurrent FP8-KV decode requests, so it can take effect only at C25/C30; the other points run Triton MSA decode."
     - "The shipped BF16 EAGLE3-GQA draft (3 tokens) uses FlashInfer attention with local argmax reduction; AgentX throughput applies the committed golden AL."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4281
+
+- config-keys:
+    - musespark-fp4-gb200-sglang-agentic-dflash
+  description:
+    - "Update the SGLang image from nightly-dev-20261026-8252e3af to nightly-dev-20261027-5884e4fe, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4590
+  scenario-type: [agentic-coding]
