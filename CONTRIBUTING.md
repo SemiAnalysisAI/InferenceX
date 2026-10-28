@@ -83,15 +83,13 @@ Forbidden (submission-side precision hacking of the draft):
   applied to a BF16 MTP head, `SGLANG_GLM_NEXTN_MOE_PTPC=1`, and an ATOM
   `--online_quant_config` whose `exclude_layer` patterns do not cover the entire draft
   head.
-- Dtype or KV-cache dtype overrides aimed at the draft that lower its precision below
-  the framework's default for that checkpoint.
+- Dtype overrides aimed at the draft that lower its precision below the framework's default for that checkpoint.
 - Substituting a precision-converted or differently quantized draft checkpoint, or a
   draft head taken from a different release than the served target.
 - Patching the pinned image so that it loads or computes the draft at a different
   precision than it does by default, in either direction. The engine-patch rule
   already forbids this; a waiver does not exempt draft precision.
-- Reducing draft FLOPs in ways the checkpoint's authors did not ship, such as
-  pruning draft layers or experts.
+- Reducing draft FLOPs in ways the checkpoint's authors did not ship, such as pruning draft layers or experts.
 
 A quantized target/verifier remains allowed under the existing eval requirements.
 Target quantization is fine as long as it does not also quantize the draft below what
