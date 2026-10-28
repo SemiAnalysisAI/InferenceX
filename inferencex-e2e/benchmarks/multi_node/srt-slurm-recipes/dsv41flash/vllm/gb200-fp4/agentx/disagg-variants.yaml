@@ -41,7 +41,7 @@ base:
     enable_multiple_frontends: false
     numa_bind: true
     placement:
-      # Sharing prefill hosts exhausted RAM at c5120 with Engram and host KV offload.
+      # Prefill hosts need their RAM for Engram and host KV offload.
       node: dedicated
     args:
       router-mode: "kv"
