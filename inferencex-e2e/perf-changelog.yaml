@@ -11489,3 +11489,13 @@
     - "Update the MI355X DeepSeek-V4-Pro-0813 SGLang MoRI disaggregated AgentX serving image from lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261026, the latest published MI35x ROCm 10 nightly (digest sha256:edabad83728ab04e3eae39f315eb16261eeb64dbdb051112bd22fc88560b60c4)."
     - "Preserve all eight concurrency points (1, 16, 32, 48, 192, 256, 384, 512), prefill/decode topology, DSpark settings, UMBP offload, MoRI transfer, and benchmark client image. The workload binder supplies the serving image to every selected recipe variant."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4571
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "TP8 concurrency 4 drops max-running-requests from 8 to 2 and keeps cuda-graph-max-bs-decode at 8. No other point moves: TP8 concurrency 1 and 2 and every TP4 HiCache point keep admission at 2x CONC."
+    - "At this point the slowest decodes are the ones that share a decode batch, so admission above the in-flight tail only widens the batch that tail runs in. A max-running-requests sweep at TP8 concurrency 4 measured interactivity at p90 TPOT 222.3 to 255.0 output tokens/s/user and the slowest decile's mean concurrent decode partners 1.68 to 0.71, against TTFT p90 1.07 to 1.22 s and 3911 to 3754 tokens/s/GPU; requests over the cap wait for a slot."
+    - "The image, EAGLE shape (5 steps, 6 draft tokens), chunked-prefill-size, mem-fraction-static, HiCache tier and the DSA triton prefill and decode backends are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

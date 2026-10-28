@@ -49,7 +49,10 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # One variant per point. Admission is 2x CONC; the decode graph batch follows it
-# up to 64. The TP4 HiCache tier is 180 GB per rank.
+# up to 64. The TP4 HiCache tier is 180 GB per rank. TP8 c4 is the exception:
+# its slowest decodes are the ones sharing a batch, so admission is capped
+# below CONC to trade TTFT for p90 interactivity; the graph batch stays at
+# 2x CONC.
 override_tp4_c4_hicache:
   roles:
     agg:
@@ -187,7 +190,7 @@ override_tp8_c4:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
-        max-running-requests: 8
+        max-running-requests: 2
         cuda-graph-max-bs-decode: 8
   benchmark:
     env:
