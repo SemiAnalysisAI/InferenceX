@@ -638,7 +638,14 @@ ofi_nccl_build_hwloc() {
         --disable-cuda --disable-nvml --disable-opencl --disable-rsmi --disable-levelzero \
       && make -s -j"$(nproc)" && make -s install
   ) >&2 2>&1 || { collx_log "ERROR: hwloc build failed"; return 1; }
-  rm -rf "${root:?}/hwloc-$version" "${root:?}/$tarball"
+  # libtool cannot pass a bare static archive through to a shared plugin, so libpciaccess's objects
+  # join libhwloc.a and -lhwloc carries both; without hwloc's .la, libtool takes the archive as is.
+  (
+    mkdir "$root/pciaccess/objects" && cd "$root/pciaccess/objects" \
+      && ar x ../lib/libpciaccess.a && ar rs "$root/hwloc/lib/libhwloc.a" ./*.o
+  ) >&2 2>&1 || { collx_log "ERROR: hwloc archive merge failed"; return 1; }
+  rm -f "$root/hwloc/lib/libhwloc.la"
+  rm -rf "${root:?}/hwloc-$version" "${root:?}/$tarball" "${root:?}/pciaccess/objects"
 }
 
 ofi_nccl_install() {
@@ -656,7 +663,7 @@ ofi_nccl_install() {
   local -a hwloc=()
   if [ ! -r /usr/include/hwloc.h ]; then
     ofi_nccl_build_hwloc "$root" || return 1
-    hwloc=(--with-hwloc="$root/hwloc" LIBS="$root/pciaccess/lib/libpciaccess.a")
+    hwloc=(--with-hwloc="$root/hwloc")
   fi
   collx_log "aws-ofi-nccl: building $version"
   (
@@ -681,7 +688,7 @@ ofi_nccl_prepare() {
   fi
   # A plugin built on the bundled hwloc keys its own cache, so a change to that build replaces it.
   local variant="$COLLX_OFI_NCCL_VERSION"
-  [ -r /usr/include/hwloc.h ] || variant+="-hwloc$COLLX_HWLOC_VERSION-pciaccess$COLLX_PCIACCESS_VERSION"
+  [ -r /usr/include/hwloc.h ] || variant+="-hwloc$COLLX_HWLOC_VERSION-pciaccess$COLLX_PCIACCESS_VERSION-merged"
   root="$(backend_cache_root ofi-nccl efa "$variant")" \
     || root="/tmp/collectivex-ofi-nccl-$variant"
   with_cache_lock "aws-ofi-nccl" "$root" ofi_nccl_ready ofi_nccl_install || return 1
