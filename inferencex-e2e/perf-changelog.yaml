@@ -11480,3 +11480,11 @@
     - "Update the Muse Spark Open B300 curve to lmsysorg/sglang:nightly-dev-20261021-c1c287a4 and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 at every concurrency; run TP8/EP8 at concurrency 1, 4, 8, 10, 14, 16, 20, 24 and TP4/EP4 HiCache at concurrency 16, 28, 32, 40, 44, 48."
     - "Use shortest-prefill-first at TP8 concurrency 10-24, stream interval 20 at TP8 concurrency 4, 20, 24 and TP4 concurrency 28-48, SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS=4 at TP4 concurrency 40-48, and at concurrency 44 and 48 request admission 24 and 26 with FCFS, no prefill-decode interval, HiCache write_back and SWA/full ratio 0.1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4417
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the ATOM image from nightly_202610141644 to nightly_202610261558 and disable EPLB on the DEP points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4577
