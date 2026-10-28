@@ -7569,7 +7569,7 @@ glm5.2-fp4-b200-dynamo-sglang-agentic-disagg:
           dp-attn: true
 
 glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
+  image: lmsysorg/sglang:nightly-dev-20261028-586355a8@sha256:b4f09a2ccbcfcc262d49600c3cd7f8581a793ea7d104947257b6a95500953b90
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb200-nv
@@ -7610,7 +7610,7 @@ glm5.2-fp4-gb200-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
 glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
+  image: lmsysorg/sglang:nightly-dev-20261028-586355a8@sha256:b4f09a2ccbcfcc262d49600c3cd7f8581a793ea7d104947257b6a95500953b90
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb200-nv

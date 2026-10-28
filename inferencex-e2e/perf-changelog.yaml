@@ -11499,3 +11499,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4509
   scenario-type: [agentic-coding]
   append-only: true
+
+- config-keys:
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb200-dynamo-sglang-agentic-disagg
+  description:
+    - "Update the SGLang image from nightly-dev-20261020-ab580b2e to nightly-dev-20261028-586355a8 and pin Dynamo 68c35a1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4611
+  scenario-type: [agentic-coding]
