@@ -15,13 +15,16 @@ Engine contract: vLLM and SGLang expose no NCCL EP selector; TensorRT-LLM does. 
 communication strategy (tensorrt_llm/_torch/moe/fused_moe/communication/nccl_ep.py at main
 a6142c920), auto-selected after its NVLink strategies or forced with
 TRTLLM_FORCE_COMM_METHOD=NCCL_EP, runs LL rank-major only and never NCCL EP's internal
-DS_FP8E3M4 quantization: DeepSeek-FP8 activations cross it in BF16. LL rank-major BF16 rows run
-that configuration: its group capacity, its staged dispatch under CUDA graph capture and its
-window-backed zero-copy dispatch eager. HT, expert-major LL and DS-FP8 are modes no engine runs;
-they stay library (`candidate`) rows.
+DS_FP8E3M4 quantization: DeepSeek-FP8 activations cross it in BF16. LL rank-major BF16 rows
+zero-copy wherever the library can (one NVLink/MNNVL scale-up domain), graphed or eager, as NCCL EP
+is built to run. TensorRT-LLM stages its dispatch under CUDA graph capture instead, so the rows that
+match its configuration (eager, or scale-out where every path stages) carry its contract; graphed
+zero-copy rows, HT, expert-major LL and DS-FP8 are library (`candidate`) rows.
+COLLX_NCCL_LL_ZERO_COPY=0 stages every LL dispatch, which makes graphed in-domain LL rank-major
+BF16 TensorRT-LLM's graphed configuration (and eager in-domain a library row).
 
-FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency decode only. No engine selects it,
-so the matrix runs it only when named (sweep_matrix.OFF_PATH_PRECISIONS). Received E4M3 values
+FP8 uses NCCL EP's native DS_FP8E3M4 recipe, for low-latency decode only, and runs in the
+default matrix like every other backend's FP8. Received E4M3 values
 are dequantized into a BF16 staging plane, so the BF16 combine and correctness oracle remain the
 common comparison contract. Normal mode remains BF16-only.
 
@@ -126,9 +129,10 @@ def _blockwise_cast_back_into(
 
 class NCCLEPBackend(EPBackend):
     name = "nccl-ep"
-    # Set per row in __init__: "production" for the one configuration an engine selects
-    # (TensorRT-LLM's NcclEP, LL rank-major with BF16 transport; communication_factory.py:254-278
-    # and 438-459), "candidate" for the library modes no engine runs (HT, expert-major LL, DS-FP8).
+    # Set per row in __init__: "production" where the row runs the configuration an engine selects
+    # (TensorRT-LLM's NcclEP, LL rank-major with BF16 transport, communication_factory.py:254-278
+    # and 438-459, with TensorRT-LLM's zero-copy choice for the regime), "candidate" for every other
+    # row (graphed zero-copy LL, HT, expert-major LL, DS-FP8).
     maturity = "candidate"
     # One library, two algorithms selected by args.mode. kernel_generation and the combine
     # semantics are switched to their LL values in __init__ (mirrors ep_deepep_v2), and
@@ -136,7 +140,7 @@ class NCCLEPBackend(EPBackend):
     # group's token capacity (HT's per-step update and LL's rank-major routing reset are sized by
     # it, not by T), then the installed nccl-extensions version with its nightly date.
     #   normal      -> HT / FLAT layout / unweighted-rank-sum combine.
-    #   low-latency -> LL / RANK_MAJOR layout / TensorRT-LLM's NcclEP contract.
+    #   low-latency -> LL / RANK_MAJOR layout (TensorRT-LLM's NcclEP's) / unweighted-rank-sum combine.
     # "-routed" marks the generation whose timed HT dispatch charges the per-step
     # ncclEpUpdateHandle (see dispatch()); "v02" marks the nccl-extensions v0.2 kernels.
     # "-static" marks the combine input bound to the full static receive plane (see
@@ -149,6 +153,7 @@ class NCCLEPBackend(EPBackend):
     CUDA_GRAPH_MODES = ("normal", "low-latency")
     zero_copy = True
     _ll_expert_major = False
+    _ll_zero_copy_opt_out = False
 
     @property
     def library_version(self) -> str:
@@ -157,14 +162,16 @@ class NCCLEPBackend(EPBackend):
 
     def implementation_details(self):
         """The group's token capacity, whether dispatch writes a registered window (HT's combine
-        reads one too; LL's combine always stages), the SM budgets the group resolved, and the
-        engine whose configuration the row runs (None for a library row)."""
+        reads one too; LL's combine always stages), the SM budgets the group resolved, whether
+        COLLX_NCCL_LL_ZERO_COPY=0 turned LL zero-copy off, and the engine whose configuration the
+        row runs (None for a library row)."""
         device_sms = torch.cuda.get_device_properties(self.device).multi_processor_count
         default = device_sms if self._ll else _HT_DEFAULT_NUM_SMS
         return {
             "capacity_tokens_per_rank": self.max_dispatch,
             "zero_copy": bool(self.zero_copy),
             "num_sms": _resolve_num_sms(default, device_sms, self._sm_env),
+            "ll_zero_copy_opt_out": bool(self._ll_zero_copy_opt_out),
             "engine_contract": self.engine_contract,
         }
 
@@ -200,21 +207,32 @@ class NCCLEPBackend(EPBackend):
         if layout not in ("rank-major", "expert-major"):
             raise ValueError(f"COLLX_NCCL_LL_LAYOUT must be rank-major or expert-major, got {layout!r}")
         self._ll_expert_major = self._ll and layout == "expert-major"
-        # The one configuration an engine runs (module docstring); every other row is the library's.
-        self.engine_contract = (
-            "tensorrt-llm" if self._ll and not self._ll_expert_major and not self._fp8 else None
-        )
-        self.maturity = "production" if self.engine_contract else "candidate"
-        # HT needs its windows in both regimes (`_bind_ht_recv_count`). LL rank-major follows
-        # TensorRT-LLM: eager, dispatch writes into a registered NCCL window, but under CUDA graph
-        # capture it writes into a plain context-owned tensor, which the library stages
-        # (nccl_ep.py:305-327). So graphed rows run the staged dispatch and eager rows
-        # (COLLX_CUDA_GRAPH=0) the window. Either way the library zero-copies only NVLink-only,
-        # rank-major NONE/FWD dispatch (nccl_ep.cc:4589-4600): scale-out, expert-major and
+        # COLLX_NCCL_LL_ZERO_COPY=0 stages every LL dispatch, so the graphed in-domain row can run
+        # TensorRT-LLM's graphed (staged) dispatch. HT ignores it.
+        ll_zero_copy = os.environ.get("COLLX_NCCL_LL_ZERO_COPY", "1")
+        if ll_zero_copy not in ("0", "1"):
+            raise ValueError(f"COLLX_NCCL_LL_ZERO_COPY must be '0' or '1', got {ll_zero_copy!r}")
+        self._ll_zero_copy_opt_out = self._ll and ll_zero_copy == "0"
+        # HT needs its windows in both regimes (`_bind_ht_recv_count`). LL zero-copies wherever the
+        # library can, graphed or eager: it zero-copies only NVLink-only, rank-major NONE/FWD
+        # dispatch (nccl_ep.cc:4589-4600), so scale-out (EP beyond the scale-up domain, whose GIN
+        # path has no window; an MNNVL domain spanning nodes is not scale-out), expert-major and
         # DS_FP8E3M4, which generates its scales internally, always stage.
         self.zero_copy = not self._ll or not (
-            self._internode or self._ll_expert_major or self._fp8 or self.cuda_graph_enabled
+            self._internode or self._ll_expert_major or self._fp8 or self._ll_zero_copy_opt_out
         )
+        # The one configuration an engine runs (module docstring): TensorRT-LLM's LL rank-major
+        # BF16, which dispatches into a registered window eager (where the library can) but into a
+        # plain context-owned tensor under CUDA graph capture (nccl_ep.py:305-327). A row carries
+        # its contract only when its zero-copy choice is TensorRT-LLM's for the regime.
+        trtllm_zero_copy = not self.cuda_graph_enabled and not self._internode
+        self.engine_contract = (
+            "tensorrt-llm"
+            if self._ll and not self._ll_expert_major and not self._fp8
+            and self.zero_copy == trtllm_zero_copy
+            else None
+        )
+        self.maturity = "production" if self.engine_contract else "candidate"
         if self._ll_expert_major:
             # Weighted source-side combine over a per-expert padded receive: deepep-v2 LL's
             # contract, so this is the like-for-like row against the DeepEP-API backends.
