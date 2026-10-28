@@ -771,7 +771,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   srt-recipe-dir: kimik3/vllm/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.6
+    - dram-utilization: 0.3
       search-space:
       - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.7.dev184+rocm7.2" }, conc-list: [48], spec-decoding: mtp, srt-recipe: agentic.yaml }
 

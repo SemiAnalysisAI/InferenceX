@@ -256,7 +256,7 @@ override_tp8_c48_dcp8_lmcache:
     - name: lmcache
       type: lmcache-server
       preamble: bash /configs/lmcache-mp-rocm.sh
-      # The install and the 1799 GB L1 preallocation count against the probe.
+      # The install and the 899 GB L1 preallocation count against the probe.
       readiness:
         http:
           port: 8751
@@ -267,9 +267,9 @@ override_tp8_c48_dcp8_lmcache:
         LMCACHE_ROCM_FORCE_BATCH_MEMCPY: '1'
       args:
         - --l1-size-gb
-        - '1799'
+        - '899'
         - --l1-init-size-gb
-        - '1799'
+        - '899'
         - --l1-read-ttl-seconds
         - '7200'
         - --session-ttl-seconds
@@ -312,7 +312,7 @@ override_tp8_c48_dcp8_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
       SPEC_DECODING: 'mtp'
 
 override_tp8_c52_dcp8_simple:
