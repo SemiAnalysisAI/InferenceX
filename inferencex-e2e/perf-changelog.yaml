@@ -11471,3 +11471,12 @@
     - "Engines set minimax_m3_msa_decode_backend=cutlass. In nightly-5555a2d8 the CUTLASS path engages only at 16 or more concurrent FP8-KV decode requests, so it can take effect only at C25/C30; the other points run Triton MSA decode."
     - "The shipped BF16 EAGLE3-GQA draft (3 tokens) uses FlashInfer attention with local argmax reduction; AgentX throughput applies the committed golden AL."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4281
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Bump to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261028, which pins sgl-project/sgl-amd-mono@db7adb7 (sgl-project/sglang#46902)."
+    - "Enable --enable-amd-monokernel at concurrency 1. Each DSpark verify there is one request's 7 tokens, which the monokernels run as one persistent launch per layer; steps with more rows run the standard forward."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
