@@ -339,7 +339,7 @@ Identify each affected benchmark configuration, including added, changed, or
 re-enabled entries and existing entries affected by recipe, shared-launcher, or
 image-only changes. Read its effective `framework:`, `runner:`, and image(s),
 including separate prefill/decode images. Apply (a) and (b) to their specified
-frameworks; apply (c) across all hardware vendors and frameworks.
+frameworks; apply (c) only to official InferenceX (non-preview) submissions.
 - (a) UPSTREAM IMAGE: for entries with `framework: vllm`, the image must come from the
   upstream vLLM Docker Hub org at https://hub.docker.com/u/vllm. In the master configs,
   that looks like `vllm/vllm-openai:<tag>` or `vllm/vllm-openai-rocm:<tag>`. For
@@ -376,35 +376,19 @@ frameworks; apply (c) across all hardware vendors and frameworks.
     and SKU.
 - (c) MAIN-BRANCH PROVENANCE: read the current
   `inferencex-e2e/docs/MODELS.md` section "Serving-image main-branch policy".
-  Established models must use images built from the inference engine's upstream
-  `main` (or equivalent default development branch). New-model enablement branches
-  must transition within a reasonable time after the model's release; adding an
-  existing model to InferenceX, a new SKU, or a new recipe does not reset that window.
-  - Resolve each affected image to its digest and actual engine source commit using
-    build metadata, attestations, or linked build records. Verify that commit's
-    membership in upstream main, including historical main commits; do not require
-    the current tip. Official registries, `nightly` tags, tag SHA suffixes, or a
-    branch name alone do not establish provenance. For Dynamo, verify the underlying
-    engine, not just the deployment layer. Inspect every serving role's image.
-  - A release image qualifies when its engine source revision is on upstream main.
-    A release-branch-only backport or unmerged fork commit needs an exception even
-    when similar changes have landed upstream. Main ancestry alone does not qualify
-    a branch that adds unmerged engine changes.
-  - For any temporary non-main image, require the additional detail section to
-    record the model release date, source branch/commit, concrete hardware or
-    correctness blocker and upstream issue/PR, migration owner, and dated migration
-    deadline, with explicit Core-maintainer approval. Core maintainers judge the
-    reasonable transition period from release age and upstream support readiness;
-    do not invent a fixed day count. New hardware or engine-ordering exceptions
-    under (a)/(b) do not automatically exempt (c).
-  - FAIL for a non-main image without that approved, unexpired exception, including
-    an expired deadline without explicit renewal. FAIL as unverified when build/source
-    provenance or required exception evidence is missing or inaccessible; name the
-    missing evidence without claiming a fork was proven. Passing evals or a past
-    accepted submission do not establish provenance. A branch exception does not
-    waive (a), (b), or Check 10's separate engine-patch requirements.
-  - PASS this subcheck only when every affected image has verified main provenance
-    or the documented approved exception; cite the evidence and any deadline.
+  For official InferenceX (non-preview), established models must use upstream engine
+  images built from the engine's upstream `master` (or equivalent default development
+  branch, such as `main`). New models may temporarily use model-enablement branches,
+  but must transition within a reasonable time after release.
+  - Verify the engine's build branch from available build/source evidence. Do not
+    infer it solely from the registry or image tag, or require the latest branch tip.
+  - FAIL when an established model's official submission uses a non-default-branch
+    image. Allow temporary model-enablement branches for new models; assess reasonable
+    time case by case without inventing a fixed day count, approval form, migration
+    owner, or dated deadline.
+  - Preview submissions are exempt from (c), not from the other applicable checks.
+    If release age, preview status, or build provenance is unclear, identify the
+    uncertainty and request maintainer clarification rather than assert compliance.
 - N/A if the PR affects no benchmark serving configuration, recipe, image, or launch
   path (state that in one line). Emit one Check 6 row covering all applicable
   subchecks; any failed subcheck makes Check 6 FAIL.
