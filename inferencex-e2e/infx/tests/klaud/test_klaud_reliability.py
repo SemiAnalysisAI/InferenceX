@@ -268,7 +268,7 @@ def canonical_evals():
                 )
                 if validation.in_scope(entry)
             ]
-            for entry in mark_eval_entries(deepcopy(entries)):
+            for entry in mark_eval_entries(deepcopy(entries), ROOT):
                 if entry.get("run-eval"):
                     yield f"{path.name}:{key}", entry
 

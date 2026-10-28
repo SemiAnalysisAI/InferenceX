@@ -2508,8 +2508,9 @@ def review_candidate(directory, monkeypatch, source):
         [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source,
           "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1}]
     ))
-    (directory / "cluster-state.json").write_text(
-        json.dumps({"committed-demand": {}, "infra-backoff": []}))
+    (directory / "cluster-state.json").write_text(json.dumps({
+        "committed-demand": {}, "infra-backoff": [], "headroom": {"cluster-a": 1},
+        "size": {"cluster-a": 1}}))  # fmt: skip
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{

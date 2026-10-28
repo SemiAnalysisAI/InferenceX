@@ -42,8 +42,10 @@ Release notes alone are insufficient; retain source links and provenance uncerta
 attempt comments. Pin mutable image tags by digest. Before GPU dispatch, inspect the
 actual launcher/recipe's effective image, staged weights/config/tokenizer and mount paths.
 Missing assets mean outcome missing-assets; never map to an older image or different weights.
-When the model checkpoint itself is not staged on the target cluster, add
-`reason-code: weights-missing` so the planner pauses that model and precision on that hardware.
+Before dispatch, check recent runs of the same model and hardware for "Model path does not
+exist" or mount errors. When the model checkpoint itself is not staged on the target cluster, add
+`reason-code: weights-missing` so the planner pauses that model and precision on that hardware;
+when it is staged but the recipe's route, mount or path does not reach it, use `route-mismatch`.
 Check the exact selected launch path for existing engine patches as well as proposed ones.
 
 Edit only the family's master image and its already referenced, unshared recipe's
@@ -56,6 +58,9 @@ The candidate.json `family` may list several comma-separated keys of one master 
 they form one AgentX dashboard curve, and the newest normal run replaces that whole curve.
 Update every listed key's master image to the same new image, and change each key's own recipe
 compatibility settings only as needed. Never leave a key of the family on the old image.
+The master `router` (Dynamo) record is frozen point identity: never change it. When a new
+engine needs a newer Dynamo, bump it only in the family's recipe (`dynamo.source.rev` or its
+install pin), and try that before reporting incompatible for a Dynamo version gap.
 ZERO runtime engine/serving-stack patching: no source/site-packages/container rewrites,
 overlays, monkey patches or forked/rebuilt engine wheels, including pre-existing patches.
 If the shipped stack needs one, report incompatible. Preserve nodes:N, MTP chat templates,
@@ -113,7 +118,10 @@ test-name=$KLAUD_TEST_NAME, and
 listing every family key after `--config-keys`.
 Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
-it is startup evidence, not a full curve. Persist each run ID/head/attempt and typed progress
+it is startup evidence, not a full curve. When candidate.json has `smoke-covers-full: true`, the
+smoke matrix already equals the full sweep: skip the targeted run, append the perf-changelog
+entry with the image edit and dispatch the final sweep as the initial attempt.
+Persist each run ID/head/attempt and typed progress
 comment immediately, before waiting. Inspect jobs because queued workflows can contain active
 jobs and failed benchmarks can leave evals running. Diagnose the FIRST server error, not
 teardown symptoms. Empty aggregates or green collectors do not prove success.
@@ -121,16 +129,26 @@ teardown symptoms. Empty aggregates or green collectors do not prove success.
 Never idle on queued work. Once every owned run you need is queued or running and nothing
 else is left to do, publish an attempt report for each of them, then run `park` and end the
 session as below. Recovery reruns the newest run if it is preempted and starts your next
-session after every owned run ended, so parking costs no repair. You may watch a run that is
-already running with `gh run watch --interval 60` for at most 30 minutes; park instead of
-watching anything longer or still queued. When a hook says the session is near its time
+session after every owned run ended, so parking costs no repair. Park as soon as every owned
+run is queued or running; watch a running run with `gh run watch --interval 60` only when it
+should end within about 10 minutes. When a hook says the session is near its time
 limit, report progress and park, or finish if the outcome is already terminal.
 
 One initial update plus $MAX_REPAIRS repairs TOTAL, including final-sweep repairs.
 A confirmed transient client-download/runner/network retry does not consume a recipe
 repair: keep the same head and classify it as infrastructure-retry, numbered 1 then 2 per attempt.
+For a registry or Hugging Face rate limit (HTTP 429) or a node fault, never rerun immediately:
+publish the failed attempt, then run `park --rerun-run RUN --rerun-after-minutes 45` (15-240)
+so recovery reruns its failed jobs once after the limit resets, without another session; the
+next session reports that rerun as the infrastructure-retry attempt.
+If such a failure ends the candidate, add `reason-code` `infra-registry-rate-limit`,
+`infra-hf-rate-limit` or `infra-node-fault` so the planner backs off that cluster.
 Do not repeat deterministic failures as infrastructure retries. Stop after validation,
 exhausted repairs, or the same failure twice without progress.
+Classify by signature: a same-head rerun is an infrastructure retry, never a repair; merging
+main is neither; an unexplained CUDA launch failure or Xid gets one infrastructure retry, then
+stop if it repeats; a verification failure after a green final sweep is `failed` with the
+finish error in Next, never `inconclusive`.
 Benchmarks may take three hours. Never cancel healthy or queued work to fit the session limit;
 park instead.
 
@@ -144,7 +162,9 @@ one essential compatibility adjustment. Do not include evidence, benchmark resul
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
-If main later appends another perf-changelog entry, merge main, keep your entry at the physical
+Merge main only immediately before dispatching a final sweep, and never while an owned final run
+is queued or running unless GitHub reports a conflict. If main later appends another
+perf-changelog entry, merge main, keep your entry at the physical
 tail and dispatch the final sweep again as a `final` attempt; that merge is not a repair.
 Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
 sweep label. Never switch labels while owned jobs are active.

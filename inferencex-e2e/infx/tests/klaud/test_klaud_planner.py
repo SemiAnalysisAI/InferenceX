@@ -464,16 +464,24 @@ def test_plan_holds_no_op_images_and_claimed_demand_and_orders_idle_clusters_fir
              context["smoke-covers-full"]) for context in contexts] == [
         ("idle", 2, True), ("dated", 2, False)]  # fmt: skip
     assert json.loads((directory / klaud.CLUSTER_STATE).read_text()) == {
-        "committed-demand": {"big": 20}, "infra-backoff": ["a"]}
+        "committed-demand": {"big": 20}, "infra-backoff": ["a"], "headroom": {"a": 2, "b": 6},
+        "size": {"a": 8, "b": 8, "big": 20}}  # fmt: skip
 
 
-def regeneration_wave(tmp_path, monkeypatch, proceeding):
-    """Write a review of ``proceeding`` candidates plus a duplicate and its family's sibling."""
+def regeneration_wave(tmp_path, monkeypatch, proceeding, blocked=0):
+    """Write a review of ``proceeding`` candidates plus a duplicate and its family's sibling.
+
+    ``blocked`` more candidates lead the order on cluster "full", which has no headroom.
+    """
     contexts = [wave_context(f"family-{n}", ["a"]) for n in range(proceeding)]
     duplicate, sibling = wave_context("duplicate", ["a"]), wave_context("duplicate", ["a"])
     sibling["id"] = candidate_id("duplicate", "1" * 16)
     contexts[1:1] = [duplicate, sibling]
+    contexts[:0] = [wave_context(f"full-{n}", ["full"]) for n in range(blocked)]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
+    (tmp_path / klaud.CLUSTER_STATE).write_text(json.dumps({
+        "committed-demand": {}, "infra-backoff": [], "headroom": {"a": 100},
+        "size": {"a": 100, "full": 8}}))  # fmt: skip
     monkeypatch.setenv("GITHUB_REPOSITORY", "example/project")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [
         {"candidate-id": context["id"],
@@ -514,6 +522,14 @@ def test_regeneration_limit_stops_at_the_slots_plus_margin(tmp_path, monkeypatch
     klaud.regenerate_producers(tmp_path, 2, active_sessions=0)
 
     assert published == [f"family-{n}" for n in range(7)]
+
+
+def test_regeneration_skips_candidates_the_waves_capacity_cannot_take(tmp_path, monkeypatch):
+    published = regeneration_wave(tmp_path, monkeypatch, 8, blocked=6)
+
+    klaud.regenerate_producers(tmp_path, 1, active_sessions=0)
+
+    assert published == [f"family-{n}" for n in range(6)]
 
 
 @pytest.mark.parametrize(("record", "summary"), [
