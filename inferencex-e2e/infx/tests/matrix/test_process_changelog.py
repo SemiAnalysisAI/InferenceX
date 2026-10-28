@@ -679,6 +679,40 @@ def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, cha
     assert '\"single_node\":' not in captured.out
 
 
+@pytest.mark.parametrize("key", ["single", "multi"])
+def test_plan_rejects_a_sequence_length_no_sweep_job_runs(planning_repo, changelog_run, key):
+    root, master, _ = planning_repo
+    master[key]["scenarios"]["fixed-seq-len"][0].update(isl=1024, osl=8192)
+    (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
+
+    with pytest.raises(ValueError, match=r"isl=1024 osl=8192 .*1k1k, 8k1k"):
+        changelog_run([{"config-keys": [key], "scenario-type": ["fixed-seq-len"], "no-evals": True}])
+
+
+def test_a_master_config_key_defined_twice_is_rejected(planning_repo, changelog_run):
+    root, master, _ = planning_repo
+    shadow = {"single": {**master["single"], "image": "example/image:shadow"}}
+    with (root / "configs/nvidia-master.yaml").open("a") as master_file:
+        master_file.write(yaml.safe_dump(shadow, sort_keys=False))
+
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'single'"):
+        changelog_run([{"scenario-type": ["fixed-seq-len"], "no-evals": True}])
+
+
+def test_a_changelog_addition_with_a_repeated_field_is_rejected(planning_repo, monkeypatch):
+    added = (
+        "- config-keys: [single]\n  config-keys: [multi]\n  description: [Change]\n"
+        "  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1\n"
+    )
+    monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: added)
+    monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "base",
+                        "--head-ref", "head", "--changelog-file", "perf-changelog.yaml"])
+
+    with pytest.raises(yaml.YAMLError, match="found duplicate key 'config-keys'"):
+        process_changelog.main()
+
+
+
 @pytest.mark.parametrize("threshold,expected", [
     (None, ["single", "default", "low", "high", "null", "invalid"]),
     (1, ["single", "default", "low", "high"]),
@@ -804,3 +838,56 @@ def test_changelog_move_preserves_history_and_selects_only_additions(tmp_path, m
     git("commit", "-qam", "append entry")
     monkeypatch.chdir(tmp_path / "inferencex-e2e")
     assert process_changelog.get_added_lines(base, "HEAD", "perf-changelog.yaml") == "new entry"
+
+
+@pytest.fixture
+def commit_changelog(tmp_path, monkeypatch):
+    """Commit ``perf-changelog.yaml`` with the given text in a scratch repo; return the SHA."""
+    monkeypatch.chdir(tmp_path)
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], check=True, capture_output=True, text=True,
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+
+    def commit(text):
+        (tmp_path / "perf-changelog.yaml").write_text(text)
+        git("add", ".")
+        git("commit", "-qm", "changelog")
+        return git("rev-parse", "HEAD")
+
+    return commit
+
+
+def test_added_lines_report_a_failing_git_diff(commit_changelog, tmp_path, monkeypatch):
+    base = commit_changelog("- old\n")
+    head = commit_changelog("- old\n- new\n")
+    stub = tmp_path / "bin/git"
+    stub.parent.mkdir()
+    stub.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = diff ]; then echo "fatal: diff exploded" >&2; exit 128; fi\n'
+        f'exec {shutil.which("git")} "$@"\n'
+    )
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stub.parent}{os.pathsep}{os.environ['PATH']}")
+
+    with pytest.raises(RuntimeError, match="fatal: diff exploded"):
+        process_changelog.get_added_lines(base, head, "perf-changelog.yaml")
+
+
+def test_added_lines_reject_deleting_a_line_that_starts_with_dashes(commit_changelog):
+    base = commit_changelog("- a\n---\n- b\n")
+    head = commit_changelog("- a\n- b\n- c\n")
+    with pytest.raises(ValueError, match="Deletions are not allowed.*Found deleted line: ---"):
+        process_changelog.get_added_lines(base, head, "perf-changelog.yaml")
+
+
+def test_added_lines_keep_an_added_line_that_starts_with_pluses(commit_changelog):
+    base = commit_changelog("- a\n")
+    head = commit_changelog("- a\n++ b\n")
+    assert process_changelog.get_added_lines(base, head, "perf-changelog.yaml") == "++ b"

@@ -754,3 +754,17 @@ def test_v3_samples_reject_invalid_temperature(tmp_path, temperature):
     rows, reasons = apm.read_samples(path)
     assert rows == ()
     assert reasons == ("samples_csv_malformed",)
+
+
+@pytest.mark.parametrize("aggregate", ["[]", "7"])
+def test_non_object_aggregate_is_recorded_as_unwritable(tmp_path, aggregate):
+    pkg = build_package(tmp_path)
+    pkg.agg_result.write_text(aggregate)
+
+    assert pkg.run(require_power=False) == 0
+    sidecar = pkg.sidecar()
+    assert sidecar["power_valid"] is False
+    assert "aggregate_result_unwritable" in sidecar["reasons"]
+    assert sidecar["metrics"] == {}
+    assert pkg.agg_result.read_text() == aggregate
+    assert pkg.run(require_power=True) == 1

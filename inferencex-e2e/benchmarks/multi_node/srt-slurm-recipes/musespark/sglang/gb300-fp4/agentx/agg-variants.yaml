@@ -1,0 +1,240 @@
+schema: 2
+
+base:
+  name: "musespark-fp4-gb300-dynamo-sglang-agentx-agg"
+  identity:
+    model: {}
+    container: {}
+  dynamo:
+    install: true
+    source:
+      wheel: "1.6.0.dev20261016"
+  environment:
+    HF_HUB_OFFLINE: "1"
+    HF_HUB_CACHE: /hf_hub_cache
+  slurm:
+    time_limit: "4:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+    enable_multiple_frontends: false
+    env:
+      DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+    args:
+      router-mode: "kv"
+      router-session-affinity-ttl-secs: "3600"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      env:
+        HF_HUB_OFFLINE: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+      args:
+        served-model-name: "meta-models/Muse-Spark-Open-816B-A42B-NVFP4"
+        trust-remote-code: true
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        kv-cache-dtype: fp8_e4m3
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: "RadixArk/Muse-Spark-Open-DFlash2"
+        speculative-draft-model-revision: "46c90f412549c472941a68382d91a99e5e6372a0"
+        speculative-num-draft-tokens: 8
+        mm-feature-transport: cpu
+        preferred-sampling-params: '{"temperature":1.0,"top_p":1.0,"top_k":64}'
+        reasoning-parser: muse
+        dyn-reasoning-parser: muse
+        dyn-tool-call-parser: muse
+        kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+  sbatch_directives:
+    mem: "0"
+  srun_options:
+    mem: "0"
+  benchmark:
+    env:
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AGENTIC_WARMUP_GRACE_PERIOD: "3600"
+
+override_tp4_c40:
+  roles:
+    agg:
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "4096"
+        SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: "4"
+      args:
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 24
+        cuda-graph-max-bs-decode: 24
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        cuda-graph-backend-prefill: breakable
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        enable-hierarchical-cache: true
+        hicache-size: 175
+
+override_tp4_c32:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        chunked-prefill-size: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 56
+        enable-hierarchical-cache: true
+        hicache-size: 170
+        hicache-write-policy: write_through
+
+override_tp4_c20:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 10
+        cuda-graph-max-bs-decode: 10
+        chunked-prefill-size: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 48
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-write-policy: write_through
+
+override_tp4_c16:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.95
+        swa-full-tokens-ratio: 0.1
+        max-running-requests: 12
+        cuda-graph-max-bs-decode: 12
+        chunked-prefill-size: 8192
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 128
+
+override_tp4_c8:
+  roles:
+    agg:
+      args:
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        chunked-prefill-size: 8192
+        prefill-decode-interval: 64
+
+override_tp8_c14:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 14
+        cuda-graph-max-bs-decode: 14
+        prefill-decode-interval: 64
+        speculative-draft-attention-backend: fa4
+
+override_tp8_c10:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 64
+
+override_tp8_c4:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        prefill-decode-interval: 256
+        page-size: 128
+
+override_tp8_c3:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        prefill-decode-interval: 64
+        page-size: 128

@@ -1,0 +1,128 @@
+# MiniMax-M3.1-Flash AgentX on MI355X with vLLM, following the MI355X TP4
+# recipe at https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3.1-Flash and
+# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, with native DSpark.
+# Checkpoint: AMD's Quark export amd/MiniMax-M3.1-Flash-Quark-MXFP4 (routed
+# experts stored in OCP MXFP4, run as W4A4 on the AITER MoE; every other layer
+# and the dspark/ draft as in MiniMaxAI/MiniMax-M3.1-Flash). Long prefill
+# steps run with dual-batch overlap (DBO). Sequence-parallel prefill
+# (VLLM_ROCM_MINIMAX_M3_SP_PREFILL) stays off: the image does not
+# enable it on this checkpoint.
+base:
+  schema: 2
+  name: minimaxm31flash-fp4-mi355x-vllm-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Cold loads of the 240 GB checkpoint can take the full
+  # VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
+        tensor-parallel-size: 4
+        gpu-memory-utilization: 0.9
+        language-model-only: true
+        trust-remote-code: true
+        reasoning-parser: minimax_m3
+        tool-call-parser: minimax_m3
+        enable-auto-tool-choice: true
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        # The checkpoint is QAT-trained for an NVFP4 KV cache; decode indexer
+        # scoring splits across TP ranks by context.
+        kv-cache-dtype: nvfp4
+        attention-config: '{"indexer_kv_dtype":"nvfp4","indexer_decode_cp":true}'
+        # The export's MXFP4 experts load as stored (W4A4, AITER_MXFP4_MXFP4).
+        moe-backend: aiter
+        disable-hybrid-kv-cache-manager: true
+        enable-prefix-caching: true
+        max-model-len: 1048576
+        # 32K-token prefill steps, so DBO (from 16384 tokens) can split them.
+        max-num-batched-tokens: 32768
+        # DBO: a prefill step of 16384+ tokens runs as two microbatches, one's
+        # all-reduce under the other's compute; decode steps stay whole.
+        enable-dbo: true
+        dbo-prefill-token-threshold: 16384
+        dbo-decode-token-threshold: 32768
+        disable-uvicorn-access-log: true
+      env:
+        # The export's recommended MoE setup: AITER MoE, and the MXFP8 shared
+        # expert stays a separate MLP (no shared-expert fusion).
+        VLLM_ROCM_USE_AITER: '1'
+        VLLM_ROCM_USE_AITER_MOE: '1'
+        VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: '0'
+        # DBO needs the V2 model runner (the V1 runner refuses DSpark).
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        # Bind each HIP stream to one hardware queue. The image's HIP moves an
+        # active stream to the least loaded queue, which can put DBO's
+        # all-reduce stream on the compute stream's queue and serialize them.
+        DEBUG_HIP_DYNAMIC_QUEUES: '0'
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# Native zip expansion creates one variant per concurrency. TP4 is the
+# upstream MI355X layout; admission is 2x CONC. Throughput runs replace block
+# rejection with the golden acceptance length.
+
+# c1-c8: DSpark 7 with the recipe's mono decode. A pure decode step of up to
+# 16 tokens (2 requests x 8) runs each layer as one fused kernel; larger steps
+# and steps with prefill run on the normal path, eager. AgentX tool-call gaps
+# keep fewer requests decoding than CONC, so c4 and c8 still reach it. Mono
+# needs FP8 KV and indexer caches in the shuffled KV layout and no piecewise
+# graphs. No DBO here: 8192-token prefill steps on the V1 runner.
+zip_override_tp4_dspark7_mono:
+  roles:
+    agg:
+      args:
+        gpu-memory-utilization: 0.85
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        max-num-batched-tokens: 8192
+        enable-dbo: null
+        dbo-prefill-token-threshold: null
+        dbo-decode-token-threshold: null
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [2, 4, 8, 16]
+      env:
+        VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT: '1'
+        VLLM_ROCM_MINIMAX_M3_MONO: '1'
+        VLLM_USE_V2_MODEL_RUNNER: null
+        DEBUG_HIP_DYNAMIC_QUEUES: null
+  benchmark:
+    env:
+      CONC: ['1', '2', '4', '8']
+
+# c16-c64: DSpark 3 (the blog's MI355X draft length from c8) on the NVFP4 KV
+# cache with DBO.
+zip_override_tp4_dspark3:
+  roles:
+    agg:
+      args:
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [32, 64, 128]
+  benchmark:
+    env:
+      CONC: ['16', '32', '64']

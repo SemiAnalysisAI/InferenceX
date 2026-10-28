@@ -52,9 +52,12 @@ done
 
 # Results record the commit they were measured at; uncommitted edits to the benchmark (anything
 # under collectivex/ except results/) would make that a lie, so they block the run by default.
+checkout_state() {
+  git -C "$REPO_ROOT" status --porcelain --untracked-files=no -- \
+    collectivex ':(exclude)collectivex/results'
+}
 source_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
-dirty="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no -- \
-  collectivex ':(exclude)collectivex/results')"
+dirty="$(checkout_state)"
 source_dirty=0
 if [ -n "$dirty" ]; then
   source_dirty=1
@@ -65,8 +68,13 @@ if [ -n "$dirty" ]; then
   fi
 fi
 
-mkdir -p "$HERE/.shards"
-matrix="$HERE/.shards/matrix-$SKU.json"
+# Each invocation stages its matrix and shard controls in its own directory: two runs from one
+# checkout (one per backend, say) would otherwise overwrite each other's files and run the wrong
+# shards.
+shard_dir="$HERE/.shards/run-$$"
+mkdir -p "$shard_dir"
+trap 'rm -rf "$shard_dir"' EXIT
+matrix="$shard_dir/matrix-$SKU.json"
 python3 "$HERE/sweep_matrix.py" "${matrix_args[@]}" --out "$matrix" >/dev/null
 
 # One tab-separated line per selected shard:
@@ -104,7 +112,15 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 rcs=()
 for row in "${rows[@]}"; do
   IFS=$'\t' read -r id launcher backend nodes gpn domain ncases image staged minutes <<< "$row"
-  control="$HERE/.shards/$id.json"
+  # Every shard stages the checkout as it is now, but its results carry the source recorded at
+  # start: stop rather than stamp a later shard with a commit it did not run.
+  if [ "$dry" = 0 ] && { [ "$(git -C "$REPO_ROOT" rev-parse HEAD)" != "$source_sha" ] ||
+    [ "$(checkout_state)" != "$dirty" ]; }; then
+    echo "collectivex/ changed since this run started at $source_sha; stopping before $id" >&2
+    rcs+=(drift)
+    break
+  fi
+  control="$shard_dir/$id.json"
   python3 "$HERE/sweep_matrix.py" --extract-from "$matrix" --shard-id "$id" --out "$control" \
     >/dev/null 2>&1
   # The pid keeps two runs of one shard started in the same second (graphed and eager, say) out
@@ -143,8 +159,8 @@ done
 echo "=== summary for $SKU (source $source_sha, dirty=$source_dirty)"
 failed=0
 for i in "${!rows[@]}"; do
-  printf '%-34s rc=%s\n' "${rows[$i]%%$'\t'*}" "${rcs[$i]}"
-  [ "${rcs[$i]}" = 0 ] || failed=$((failed + 1))
+  printf '%-34s rc=%s\n' "${rows[$i]%%$'\t'*}" "${rcs[$i]:-not run}"
+  [ "${rcs[$i]:-}" = 0 ] || failed=$((failed + 1))
 done
 python3 "$HERE/summarize.py" --results-dir "$HERE/results/$SKU" || true
 git -C "$REPO_ROOT" status --short -- "collectivex/results/$SKU"
