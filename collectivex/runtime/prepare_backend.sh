@@ -809,8 +809,83 @@ flashinfer_ep_prepare() {
   flashinfer_probe || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable"; return 1; }
 }
 
+# Host verbs provider (collx_add_host_verbs_provider_mount). The vendor's build targets the host's
+# distro: Broadcom's libbnxt_re 237.1.137.0 is linked on Ubuntu 24.04 and needs GLIBC_2.38 for one
+# symbol, __isoc23_strtol (C23 strtol, which only adds 0b prefixes), while the ROCm images ship glibc
+# 2.35. That symbol is unversioned and served by a forwarding shim, and the now-unused GLIBC_2.38
+# requirement is retargeted to GLIBC_2.2.5 (elf_vernaux.py). The result must load and must list the
+# registry's RDMA devices, or preparation fails. It replaces the image's provider of the same name
+# in this node's writable container, which every rank of the shard then loads.
+readonly VERBS_PATCHELF_SPEC="patchelf==0.17.2.1"
+
+# The RDMA devices libibverbs lists, space-separated. ibv_devices is not in every image.
+verbs_device_names() {
+  python3 - <<'PY'
+import ctypes
+lib = ctypes.CDLL("libibverbs.so.1")
+lib.ibv_get_device_list.restype = ctypes.POINTER(ctypes.c_void_p)
+lib.ibv_get_device_name.restype = ctypes.c_char_p
+count = ctypes.c_int(0)
+devices = lib.ibv_get_device_list(ctypes.byref(count))
+print(" ".join(lib.ibv_get_device_name(ctypes.c_void_p(devices[i])).decode()
+               for i in range(count.value)) if devices else "")
+PY
+}
+
+verbs_lists_registry_devices() {
+  local listed device
+  listed=" $(verbs_device_names 2>/dev/null) "
+  for device in ${COLLX_RDMA_DEVICES//,/ }; do
+    [[ "$listed" == *" ${device%%:*} "* ]] || return 1
+  done
+}
+
+verbs_provider_prepare() {
+  local provider="${COLLX_HOST_VERBS_PROVIDER:-}" name source providers target work
+  [ -n "$provider" ] && [ "${COLLX_NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  # An image that ships a provider for this driver (the vLLM ROCm images carry Broadcom's) needs
+  # nothing from the host.
+  if verbs_lists_registry_devices; then
+    collx_log "verbs provider: the image's provider lists every registry device; keeping it"
+    return 0
+  fi
+  name="${provider##*/}"
+  source="$COLLX_HOST_VERBS_ROOT/$name"
+  [ -r "$source" ] || { collx_log "ERROR: host verbs provider $name is not bound"; return 1; }
+  # rdma-core tries its provider directory before the loader path, so a copy there wins over one
+  # an image installs elsewhere (/usr/local/lib for Broadcom's packages).
+  providers="$(ls -d /usr/lib/*-linux-gnu/libibverbs 2>/dev/null | head -n 1)"
+  [ -n "$providers" ] || { collx_log "ERROR: the image has no rdma-core provider directory"; return 1; }
+  target="$providers/$name"
+  work="$(mktemp -d /tmp/collectivex-verbs.XXXXXX)" || return 1
+  cp "$source" "$work/$name" || return 1
+  if ! python3 -c 'import ctypes, sys; ctypes.CDLL(sys.argv[1])' "$work/$name" 2>/dev/null; then
+    collx_log "verbs provider: $name needs a newer glibc; shimming __isoc23_strtol"
+    printf '%s\n' '#include <stdlib.h>' \
+      'long __isoc23_strtol(const char *s, char **end, int base) { return strtol(s, end, base); }' \
+      > "$work/cx_c23.c"
+    cc -shared -fPIC -O2 -o "$work/libcx_c23.so" "$work/cx_c23.c" \
+      && python3 -m pip install -q --disable-pip-version-check --no-input \
+        --target "$work/patchelf" "$VERBS_PATCHELF_SPEC" >&2 \
+      && "$work/patchelf/bin/patchelf" --clear-symbol-version __isoc23_strtol \
+        --add-needed libcx_c23.so --set-rpath '$ORIGIN' "$work/$name" \
+      && python3 "$COLLX_RUNTIME_DIR/elf_vernaux.py" "$work/$name" GLIBC_2.38 GLIBC_2.2.5 \
+      || { collx_log "ERROR: verbs provider patch failed"; return 1; }
+    python3 -c 'import ctypes, sys; ctypes.CDLL(sys.argv[1])' "$work/$name" \
+      || { collx_log "ERROR: patched verbs provider does not load"; return 1; }
+    cp "$work/libcx_c23.so" "$providers/libcx_c23.so" || return 1
+  fi
+  cp "$work/$name" "$target.collectivex" && mv -f "$target.collectivex" "$target" \
+    || { collx_log "ERROR: verbs provider install failed"; return 1; }
+  rm -rf "$work"
+  verbs_lists_registry_devices \
+    || { collx_log "ERROR: verbs provider $name does not list every registry device"; return 1; }
+  collx_log "verbs provider: installed host $name"
+}
+
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
+  verbs_provider_prepare || return 1
   validate_container_network || return 1
   ofi_nccl_prepare || return 1
   case "$COLLX_BENCH" in

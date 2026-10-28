@@ -133,17 +133,23 @@
     "mi300x": {
       "arch": "gfx942",
       "product": "mi300x",
-      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image": "vllm/vllm-openai-rocm:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
-      "backends": {"mori": [8], "uccl-ep": [8]},
-      "ll_backends": {},
+      "backends": {"mori": [8, 16], "uccl-ep": [8, 16]},
+      "ll_backends": {"mori": [16], "uccl-ep": [16]},
       "fabric": {
-        "nic": "n/a (single-node scale-up)",
-        "switch": "n/a (single-node scale-up)"
+        "nic": "Broadcom 400GbE RoCE v2 (bnxt_re), 8 rails",
+        "switch": "routed L3 RoCE fabric"
+      },
+      "network": {
+        "socket_ifname": "ens50f1np1",
+        "rdma_devices": "bnxt_re_bond0,bnxt_re_bond1,bnxt_re_bond2,bnxt_re_bond3,bnxt_re_bond4,bnxt_re_bond5,bnxt_re_bond6,bnxt_re_bond7",
+        "ib_gid_index": 3,
+        "host_verbs_provider": "/usr/local/lib/x86_64-linux-gnu/libbnxt_re-rdmav34.so"
       },
       "operator": {
         "partition": "MI300X-UBUNTU",
@@ -153,18 +159,24 @@
     "mi325x": {
       "arch": "gfx942",
       "product": "mi325x",
-      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image": "vllm/vllm-openai-rocm:v0.32.0",
       "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
       "runner_label": "cluster:mi325x-amds",
-      "backends": {"mori": [8], "uccl-ep": [8]},
-      "ll_backends": {},
+      "backends": {"mori": [8, 16], "uccl-ep": [8, 16]},
+      "ll_backends": {"mori": [16], "uccl-ep": [16]},
       "fabric": {
-        "nic": "n/a (single-node scale-up)",
-        "switch": "n/a (single-node scale-up)"
+        "nic": "Broadcom 400GbE RoCE v2 (bnxt_re), 8 rails",
+        "switch": "routed L3 RoCE fabric"
+      },
+      "network": {
+        "socket_ifname": "enp193s0f0np0",
+        "rdma_devices": "bnxt_re4,bnxt_re5,bnxt_re1,bnxt_re0,bnxt_re10,bnxt_re11,bnxt_re7,bnxt_re6",
+        "ib_gid_index": 3,
+        "host_verbs_provider": "/usr/local/lib/x86_64-linux-gnu/libbnxt_re-rdmav34.so"
       },
       "operator": {
         "partition": "MI325X-UBUNTU",

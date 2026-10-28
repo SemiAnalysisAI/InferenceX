@@ -51,12 +51,15 @@ def _module():
     return module
 
 
-def _backend(mode="low-latency", world_size=8, phase="decode", precision="bf16", capacity=512, env=None):
+def _backend(mode="low-latency", world_size=8, phase="decode", precision="bf16", capacity=512, env=None,
+             scale_up_domain=8):
     """(module, backend, handle, details) for one case built and sized as the harness drives it, under
-    `env` alone (graphs on unless it sets COLLX_CUDA_GRAPH=0)."""
+    `env` alone (graphs on unless it sets COLLX_CUDA_GRAPH=0). `scale_up_domain=72` is a GB200/GB300
+    MNNVL rack, where EP16 spans four 4-GPU nodes inside one scale-up domain."""
     module = _module()
     options = types.SimpleNamespace(
-        mode=mode, precision=precision, phase=phase, experts=384, hidden=7168, topk=6, scale_up_domain=8,
+        mode=mode, precision=precision, phase=phase, experts=384, hidden=7168, topk=6,
+        scale_up_domain=scale_up_domain,
     )
     handle = FakeHandle()
     group = types.SimpleNamespace(create_handle=lambda *a, **k: handle, destroy=lambda: None)
@@ -79,37 +82,41 @@ def _dispatch(backend, steps=1):
         backend.dispatch(problem)
 
 
-class LowLatencyFollowsTensorRTLLM(unittest.TestCase):
-    """TensorRT-LLM dispatches into a registered window only when it is not capturing
-    (nccl_ep.py:305-327): graphed LL stages, eager LL zero-copies, and `-zc` names what ran."""
+class LowLatencyZeroCopies(unittest.TestCase):
+    """Inside one NVLink domain LL rank-major dispatches into the registered window, graphed or
+    eager, and `-zc` names what ran."""
 
-    def test_graphed_rank_major_dispatches_into_a_plain_tensor(self):
-        module, backend, handle, details = _backend()
-        _dispatch(backend)
+    def test_rank_major_dispatches_into_the_zero_copy_window_in_both_regimes(self):
+        for graph in ("1", "0"):
+            with self.subTest(graph=graph):
+                module, backend, handle, details = _backend(env={"COLLX_CUDA_GRAPH": graph})
+                _dispatch(backend)
 
-        self.assertFalse(backend.zero_copy)
-        self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.OFF)
-        backend._comm.register_window.assert_not_called()
-        self.assertIsNone(handle.outputs.tokens.window)
-        self.assertFalse(details["zero_copy"])
-        self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-cap512-{VERSION}")
+                self.assertTrue(backend.zero_copy)
+                self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.ON)
+                backend._comm.register_window.assert_called_once()
+                self.assertIs(handle.outputs.tokens.window, backend._recv_window)
+                self.assertTrue(details["zero_copy"])
+                self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-zc-cap512-{VERSION}")
 
-    def test_eager_rank_major_keeps_the_zero_copy_window(self):
-        module, backend, handle, details = _backend(env={"COLLX_CUDA_GRAPH": "0"})
-        _dispatch(backend)
-
-        self.assertTrue(backend.zero_copy)
-        self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.ON)
-        backend._comm.register_window.assert_called_once()
-        self.assertIs(handle.outputs.tokens.window, backend._recv_window)
-        self.assertTrue(details["zero_copy"])
-        self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-zc-cap512-{VERSION}")
+    def test_ep16_inside_an_mnnvl_domain_is_not_scale_out(self):
+        # GB200/GB300 EP16 spans four nodes but one 72-GPU MNNVL domain: the window path applies.
+        for graph in ("1", "0"):
+            with self.subTest(graph=graph):
+                module, backend, _, details = _backend(
+                    world_size=16, scale_up_domain=72, env={"COLLX_CUDA_GRAPH": graph},
+                )
+                self.assertFalse(backend._internode)
+                self.assertTrue(backend.zero_copy)
+                self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.ON)
+                self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-zc-cap512-{VERSION}")
 
     def test_paths_the_library_cannot_zero_copy_stage_in_both_regimes(self):
         cases = {
             "scale-out": {"world_size": 16},
             "expert-major": {"env": {"COLLX_NCCL_LL_LAYOUT": "expert-major"}},
             "ds-fp8": {"precision": "fp8"},
+            "opt-out": {"env": {"COLLX_NCCL_LL_ZERO_COPY": "0"}},
         }
         for name, case in cases.items():
             for graph in ("1", "0"):
@@ -119,6 +126,7 @@ class LowLatencyFollowsTensorRTLLM(unittest.TestCase):
                         world_size=case.get("world_size", 8), precision=case.get("precision", "bf16"), env=env,
                     )
                     self.assertFalse(backend.zero_copy)
+                    self.assertEqual(details["ll_zero_copy_opt_out"], name == "opt-out")
                     self.assertFalse(details["zero_copy"])
                     self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.OFF)
                     self.assertNotIn("-zc", backend.kernel_generation)
@@ -184,19 +192,44 @@ class HighThroughputIsALibraryRow(unittest.TestCase):
 
 class RowLabels(unittest.TestCase):
     def test_only_the_trtllm_configuration_is_production(self):
+        eager = {"COLLX_CUDA_GRAPH": "0"}
+        staged = {"COLLX_NCCL_LL_ZERO_COPY": "0"}
         cases = {
-            "ll-rank-major": ({}, "production", "tensorrt-llm"),
-            "ll-rank-major-eager": ({"env": {"COLLX_CUDA_GRAPH": "0"}}, "production", "tensorrt-llm"),
-            "ll-scale-out": ({"world_size": 16}, "production", "tensorrt-llm"),
+            # TensorRT-LLM zero-copies eager and stages under capture: a row is its configuration
+            # only when its zero-copy choice matches the regime.
+            "ll-rank-major-graphed-zc": ({}, "candidate", None),
+            "ll-rank-major-eager-zc": ({"env": eager}, "production", "tensorrt-llm"),
+            "ll-mnnvl-ep16-graphed-zc": ({"world_size": 16, "scale_up_domain": 72}, "candidate", None),
+            "ll-mnnvl-ep16-eager-zc": (
+                {"world_size": 16, "scale_up_domain": 72, "env": eager}, "production", "tensorrt-llm"),
+            "ll-scale-out-graphed": ({"world_size": 16}, "production", "tensorrt-llm"),
+            "ll-scale-out-eager": ({"world_size": 16, "env": eager}, "production", "tensorrt-llm"),
+            "ll-opt-out-graphed": ({"env": staged}, "production", "tensorrt-llm"),
+            "ll-opt-out-eager": ({"env": {**staged, **eager}}, "candidate", None),
+            "ll-opt-out-scale-out": ({"world_size": 16, "env": staged}, "production", "tensorrt-llm"),
             "ll-expert-major": ({"env": {"COLLX_NCCL_LL_LAYOUT": "expert-major"}}, "candidate", None),
             "ll-ds-fp8": ({"precision": "fp8"}, "candidate", None),
             "ht": ({"mode": "normal"}, "candidate", None),
+            "ht-opt-out-ignored": ({"mode": "normal", "env": staged}, "candidate", None),
         }
         for name, (case, maturity, engine) in cases.items():
             with self.subTest(case=name):
                 _, backend, _, details = _backend(**case)
                 self.assertEqual(backend.maturity, maturity)
                 self.assertEqual(details["engine_contract"], engine)
+
+    def test_the_opt_out_runs_trtllm_graphed_dispatch_and_says_so(self):
+        module, backend, handle, details = _backend(env={"COLLX_NCCL_LL_ZERO_COPY": "0"})
+        _dispatch(backend)
+        self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.OFF)
+        backend._comm.register_window.assert_not_called()
+        self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-cap512-{VERSION}")
+        self.assertTrue(details["ll_zero_copy_opt_out"])
+        self.assertEqual(details["engine_contract"], "tensorrt-llm")
+
+    def test_the_opt_out_rejects_other_values(self):
+        with self.assertRaisesRegex(ValueError, "COLLX_NCCL_LL_ZERO_COPY"):
+            _backend(env={"COLLX_NCCL_LL_ZERO_COPY": "off"})
 
     def test_generation_and_library_version_name_the_installed_wheel(self):
         _, backend, _, _ = _backend(precision="fp8")
@@ -205,11 +238,12 @@ class RowLabels(unittest.TestCase):
 
     def test_library_config_is_one_json_object(self):
         # Published as `implementation.library_config`; the wheel stays in `library_version`.
-        _, _, _, details = _backend()
+        _, _, _, details = _backend(env={"COLLX_CUDA_GRAPH": "0"})
         self.assertEqual(json.loads(json.dumps(details)), {
             "capacity_tokens_per_rank": 512,
-            "zero_copy": False,
+            "zero_copy": True,
             "num_sms": {"dispatch": DEVICE_SMS, "combine": DEVICE_SMS},
+            "ll_zero_copy_opt_out": False,
             "engine_contract": "tensorrt-llm",
         })
 

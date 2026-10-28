@@ -125,7 +125,7 @@ collx_load_operator_config() {
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
   unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED COLLX_SINGLE_NODE_RDMA_DEVICES COLLX_RDMA_FABRIC
-  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS
+  unset COLLX_RDMA_RELAXED_ORDERING COLLX_RDMA_GBS COLLX_HOST_VERBS_PROVIDER
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -243,6 +243,22 @@ collx_add_efa_host_mounts() {
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
+# Where collx_add_host_verbs_provider_mount binds a host verbs provider inside the container.
+COLLX_HOST_VERBS_ROOT=/opt/collectivex/host-verbs
+
+# Some NIC vendors replace the host's rdma-core provider with their own build for an out-of-tree
+# kernel driver (the MI300X/MI325X pools' Broadcom bnxt_re 237.x speaks kernel ABI 8; rdma-core's stock bnxt_re
+# provider, the image's, supports only ABI 1, so libibverbs lists no device). Multi-node shards
+# bind the registry-named host provider read-only; backend preparation installs it into the
+# container over the image's file (verbs_provider_prepare in prepare_backend.sh).
+collx_add_host_verbs_provider_mount() {
+  local provider="${COLLX_HOST_VERBS_PROVIDER:-}"
+  [ -n "$provider" ] && [ "${NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
+  [[ "$provider" =~ ^/[A-Za-z0-9_./-]+/lib[a-z0-9_]+-rdmav[0-9]+\.so$ ]] && [[ "$provider" != *..* ]] \
+    || collx_die "invalid host verbs provider path"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$provider:$COLLX_HOST_VERBS_ROOT/${provider##*/}:ro"
+}
+
 # AWS EFA scale-out (b300: p6-b300.48xlarge, 16 EFA devices per node; h100-dgxc: p5.48xlarge, 32).
 # EFA is not a verbs HCA: its ports report link_layer Unspecified, it has no GID table, service
 # level or traffic class, and NCCL reaches it only through the aws-ofi-nccl libfabric plugin from
@@ -294,7 +310,7 @@ collx_apply_network_profile() {
   unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
-  unset MORI_RDMA_DEVICES
+  unset MORI_RDMA_DEVICES MORI_SOCKET_IFNAME
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
@@ -317,7 +333,10 @@ collx_apply_network_profile() {
   if [ -n "${COLLX_SOCKET_IFNAME:-}" ]; then
     [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
       || collx_die "invalid private socket interface selector"
-    export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
+    # MoRI's shmem bootstrap otherwise picks its own interface, which can be a rail without a
+    # kernel route to the root rank (per-rail /31 links on the Broadcom pools).
+    export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" \
+      MORI_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
   fi
   [[ "$COLLX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
     || collx_die "invalid private RDMA device selector"
@@ -553,6 +572,17 @@ collx_slurm_job_name() {
 }
 
 # The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
+# True only when Slurm says the job is gone: listed as nothing, or purged ("Invalid job id"). A
+# failed query (slurmctld busy or restarting) is not an answer, so it reads as still there.
+collx_job_gone() {
+  local out
+  if out="$(squeue -h -j "$1" -o %A 2>&1)"; then
+    [ -z "$out" ]
+  else
+    [[ "$out" == *"Invalid job id"* ]]
+  fi
+}
+
 collx_salloc_jobid() {
   local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
@@ -562,7 +592,25 @@ collx_salloc_jobid() {
     return 1
   fi
   collx_log "scheduler-request=submit"
-  if ! (salloc "$@" --no-shell) > "$log" 2>&1; then
+  # salloc --no-shell does not notice a job that ends between the grant and its own poll (a node
+  # prolog that fails the job ten seconds in leaves it waiting forever), so the job is watched
+  # here: once Slurm no longer lists the queued job and no grant was logged, salloc is stopped.
+  (salloc "$@" --no-shell) > "$log" 2>&1 &
+  local salloc_pid=$! queued=""
+  while kill -0 "$salloc_pid" 2>/dev/null; do
+    sleep 10
+    grep -q "Granted job allocation" "$log" && break
+    [ -n "$queued" ] || queued="$(sed -nE 's/.*Pending job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
+    if [ -n "$queued" ] && collx_job_gone "$queued" \
+        && ! grep -q "Granted job allocation" "$log"; then
+      collx_log "ERROR: scheduled job $queued ended before its allocation was granted"
+      kill -TERM "$salloc_pid" 2>/dev/null
+      wait "$salloc_pid" 2>/dev/null
+      collx_log_tail "$log"
+      return 1
+    fi
+  done
+  if ! wait "$salloc_pid"; then
     collx_log "ERROR: scheduler allocation failed"
     collx_log_tail "$log"
     return 1
