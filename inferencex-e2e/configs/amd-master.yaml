@@ -1645,6 +1645,23 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 16, 32, 64], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 8, 32], srt-recipe: agentic.yaml }
 
+glm5.3-fp4-mi355x-sglang-agentic-mtp:
+  # Dated nightly: this Quark checkpoint needs sgl-project/sglang#40776, which v0.5.22 predates.
+  image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025@sha256:bb3370918fb7fc4adce40d4192e61ad7dbccbc8159e2f6063318120d0bc0e949
+  model: amd/GLM-5.3-Quark-MXFP4-AttnFP8
+  model-prefix: glm5.3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.85
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
+
 # The golden acceptance curve remains the provisional GLM-5.2-derived curve
 # documented in infx/golden_al_distribution/glm5.3_mtp.yaml.
 glm5.3-fp8-mi355x-tilert-agentic:

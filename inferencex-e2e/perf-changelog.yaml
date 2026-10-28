@@ -11471,3 +11471,13 @@
     - "Engines set minimax_m3_msa_decode_backend=cutlass. In nightly-5555a2d8 the CUTLASS path engages only at 16 or more concurrent FP8-KV decode requests, so it can take effect only at C25/C30; the other points run Triton MSA decode."
     - "The shipped BF16 EAGLE3-GQA draft (3 tokens) uses FlashInfer attention with local argmax reduction; AgentX throughput applies the committed golden AL."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4281
+
+- config-keys:
+    - glm5.3-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 MXFP4 MI355X AgentX on SGLang (amd/GLM-5.3-Quark-MXFP4-AttnFP8) with EAGLE MTP K5 and golden AL 3.61, on lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025 pinned by digest; the v0.5.22 release lacks sgl-project/sglang#40776, which this checkpoint needs to load."
+    - "TP4/EP4 with a 180 GB/rank HiCache host tier at concurrency 4, 8, 10, 12, 14 and 16; TP8/EP1 without host offload at concurrency 1, 2 and 4."
+    - "Draft data types: the NextN layer shipped in the checkpoint loads with its Quark config, as shipped (MXFP4 routed and shared experts, FP8 per-block attention and indexer wq_b/wk, BF16 eh_proj, router gate and indexer weights_proj)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4593

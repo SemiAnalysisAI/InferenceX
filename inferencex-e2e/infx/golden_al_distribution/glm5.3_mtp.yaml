@@ -2,8 +2,8 @@
 #
 # GLM-5.3 shares GLM-5.2's base and layer topology (its config.json differs only
 # by the fp8 quantization block), so the GLM-5.2 curve is the closest committed
-# reference. Only the K=3 cell is carried over, because the ROCm TileRT GLM
-# profile builds MTP at draft depth 3 and no other cell can be exercised.
+# reference. Only the cells a committed recipe runs are carried over: K=3
+# (ROCm TileRT, B300 SGLang) and K=5 (MI355X SGLang).
 # Replace this file with a SPEED-Bench run on glm-5.3-fp8 when one exists.
 #
 # Inherited value provenance (GLM-5.2, unchanged):
@@ -17,3 +17,4 @@
 glm-5.3-fp8:
   thinking_on:
     3: 2.99
+    5: 3.61
