@@ -11501,4 +11501,4 @@
     - "Adaptive DSpark verification stays off. With --monokernel on gfx942 the server faults during its CUDA graph profile until vllm-project/vllm#63816 merges."
     - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8, TP4 and TP2 (18 points), all re-measured on the new image."
     - "DSpark draft: vLLM builds it with the checkpoint's own quantization config and the target's fp8_ds_mla KV cache, and its weights are used as shipped (FP8 E4M3 with UE8M0 block scales, MXFP4 routed experts). On the TP4 points --monokernel also runs the routed-expert FFN of the three draft layers as one launch. That launch quantizes the FFN input to MXFP8 against the same MXFP4 expert weights, as it does for the target layers, where vLLM's gfx942 MoE multiplies bf16 activations with them. The draft weights, its KV cache and its attention are unchanged, and the target model's output does not depend on this launch, only how many drafts it accepts."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4617
