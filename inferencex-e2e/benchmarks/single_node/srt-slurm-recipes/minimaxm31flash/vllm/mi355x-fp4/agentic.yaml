@@ -103,7 +103,18 @@ zip_override_tp4_dspark7:
     agg:
       args:
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [32, 64, 128]
+        max-num-seqs: [32, 64]
   benchmark:
     env:
-      CONC: ['16', '32', '64']
+      CONC: ['16', '32']
+
+zip_override_tp4_dspark3:
+  roles:
+    agg:
+      args:
+        gpu-memory-utilization: 0.9
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [128]
+  benchmark:
+    env:
+      CONC: ['64']
