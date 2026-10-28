@@ -11501,6 +11501,14 @@
   append-only: true
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
+  description:
+    - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) on every point except the batch-size-1 MonoKernel Low-Latency point, instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
+    - "Rerun the whole curve so it is measured on one recipe revision."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4600
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm31flash-fp4-b200-sglang-agentic-dspark
   description:
     - "Store the DSpark draft KV cache in FP8 (speculative-draft-kv-cache-dtype fp8_e4m3) instead of the bf16 default, matching the vLLM DSpark drafter; this frees HBM and HiCache host pool space for target KV."
