@@ -393,7 +393,8 @@ that nothing alters the model architecture or reduces its FLOPs. Examples includ
 support it, trimmed layers/experts/heads, or other ways of skipping computation. The rule: making the
 SAME computation run faster is fair game. Target/verifier FLOPs at lower precision
 are fine when evals pass under Check 2's cohort comparison; this does not permit
-lowering draft precision below what ships (Check 13).
+lowering draft precision below what ships (Check 13) or using integer all-reduce
+for new models under (c).
 REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
 production by accuracy-sensitive customers.
 
@@ -406,12 +407,47 @@ flag/value if architecture FLOPs are reduced without native model support.
 
 ### (b) Accuracy-trading levers are covered by evals
 These levers need eval coverage even when the model supports them natively: indexer
-skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`), INT4 all-reduce
-(`QUICK_REDUCE_QUANTIZATION=INT4`), accuracy-affecting `--hf-overrides`,
+skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`), integer
+all-reduce for grandfathered models only (see (c)), accuracy-affecting `--hf-overrides`,
 `online_quant_config`, and an FP8 KV cache used only to recover throughput lost to
 another quality trade (judge from the recipe history, sign-off, and changelog). FAIL
 when no Check 2 eval covers a config that uses one. Accuracy loss on covered configs
 fails under Check 2(b). Upstream merge status does not make an accuracy loss acceptable.
+
+### (c) No integer all-reduce for new models
+Read the "Integer all-reduce policy" in `inferencex-e2e/docs/MODELS.md`. Resolve
+grandfathering against its immutable baseline model-support matrix, not the current
+table or this PR's additions. Existing models retain the exception for recipe/image
+updates; a new release or architecture cannot inherit it by reusing a model prefix.
+For grandfathered models, (c) is exempt, but (a), (b), Check 2, and Check 13 still
+apply. Do not reject their existing integer all-reduce solely under this new rule.
+
+For every affected non-grandfathered model, including image-only changes and
+shared-launcher changes, trace the effective worker environment through recipes,
+inheritance, overrides, container defaults, and the pinned engine implementation.
+Check target and draft workers, and prefill/decode roles in disaggregated or Dynamo
+deployments.
+- Explicitly inspect `ROCM_QUICK_REDUCE_QUANTIZATION`,
+  `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and
+  equivalent aliases or controls, including unprefixed `QUICK_REDUCE_QUANTIZATION`
+  where recognized. FAIL any set value other than `0` or `NONE`, including `INT4`,
+  `INT6`, and `INT8`. Do not confuse size thresholds or unrelated quantization flags
+  with all-reduce quantization controls.
+- Accept `0` only when the pinned implementation treats it as disabling integer
+  quantization. An unset control is acceptable only if the effective default is
+  non-integer. An inherited enabling value or integer default still FAILs.
+- For SGLang ROCm, require explicit `ROCM_QUICK_REDUCE_QUANTIZATION=NONE` in the
+  effective environment of every serving worker. Integer-quantized ROCm image defaults
+  make omission unsafe: unset, empty, `0`, or an enabling override FAILs this
+  requirement. A shared environment setting is sufficient if it reaches every
+  worker unchanged. This ROCm-specific setting is not required on non-ROCm paths.
+- Also FAIL integer all-reduce enabled through other flags, code paths, or defaults;
+  passing evals, an upstream recipe, or a patch waiver does not waive this ban.
+  If the effective behavior cannot be verified, FAIL as unverified and name the
+  missing evidence rather than claim integer quantization was proven.
+
+Keep this assessment in the single Check 8 row. A failure in any applicable
+subcheck makes Check 8 FAIL; exempting (c) does not make all of Check 8 N/A.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
