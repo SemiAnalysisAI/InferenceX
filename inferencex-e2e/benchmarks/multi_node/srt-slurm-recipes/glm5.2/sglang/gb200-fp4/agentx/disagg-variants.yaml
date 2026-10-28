@@ -59,6 +59,11 @@ base:
         UCX_CUDA_IPC_ENABLE_MNNVL: 'y'
         # The default 9,9,10,10,10,10,10,10 split also gives the last stage the LM head and MTP draft layer.
         SGLANG_PP_LAYER_PARTITION: 10,10,10,10,10,10,10,8
+        # Dynamo 5df849a06a (#14369) caps each worker at max-running-requests plus a
+        # 2x queue and rejects the rest with 529; keep its pre-engine-report limits.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '20000'
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true
@@ -111,6 +116,11 @@ base:
         NVSHMEM_REMOTE_TRANSPORT: none
         UCX_TLS: cuda_copy,cuda_ipc,sm,self,tcp
         UCX_CUDA_IPC_ENABLE_MNNVL: 'y'
+        # Dynamo 5df849a06a (#14369) caps each worker at max-running-requests plus a
+        # 2x queue and rejects the rest with 529; keep its pre-engine-report limits.
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '10000'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '20000'
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true
