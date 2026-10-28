@@ -11485,5 +11485,5 @@
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261025-65633129, pinned by digest."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4603
   scenario-type: [agentic-coding]
