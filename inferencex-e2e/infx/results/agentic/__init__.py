@@ -231,7 +231,6 @@ def build_result(
         framework=framework,
         records=records,
         server_logs=server_logs,
-        env=env,
     )
 
     if "total_tput_tps" in request_flat and num_gpus > 0:

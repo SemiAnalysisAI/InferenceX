@@ -365,55 +365,6 @@ def test_processor_records_run_attempt(tmp_path: Path):
     assert "run_attempt" not in local
 
 
-def test_processor_uses_launcher_roles_for_atom_cache_counts(tmp_path: Path) -> None:
-    result_dir = _write_fixture(tmp_path)
-    metrics = {
-        f"atom:prefix_cache_{stem}_tokens": {
-            "series": [
-                {"endpoint_url": f"http://{endpoint}/metrics", "stats": {"total": value}}
-                for endpoint, value in values.items()
-            ]
-        }
-        for stem, values in (
-            ("full", {"prefill:8000": 1000, "decode:8000": 1000}),
-            ("cached", {"prefill:8000": 600, "decode:8000": 0}),
-            ("offload", {"prefill:8000": 100, "decode:8000": 0}),
-        )
-    }
-    (result_dir / "aiperf_artifacts" / "server_metrics_export.json").write_text(
-        json.dumps({"metrics": metrics})
-    )
-    agg = _run_processor(
-        result_dir,
-        tmp_path / "out",
-        {
-            "FRAMEWORK": "mooncake-atom",
-            "DISAGG": "true",
-            "IS_MULTINODE": "true",
-            "PREFILL_NUM_WORKERS": "1",
-            "PREFILL_TP": "4",
-            "PREFILL_EP": "1",
-            "DECODE_NUM_WORKERS": "1",
-            "DECODE_TP": "4",
-            "DECODE_EP": "1",
-            "SRT_PREFILL_ENDPOINTS": "prefill:8000",
-            "SRT_DECODE_ENDPOINTS": "decode:8000",
-            "SRT_AGG_ENDPOINTS": "",
-            "AIPERF_SERVER_METRICS_URLS": "",
-            "SRTCTL_FRONTEND_TYPE": "",
-            "KV_OFFLOADING": "dram",
-            "KV_OFFLOAD_BACKEND": "lmcache",
-            "KV_OFFLOAD_BACKEND_METADATA": '{"name":"lmcache","version":"0.4.5"}',
-        },
-    )
-    cache = agg["server_metrics"]["cache"]
-    assert cache["gpu_cache_hit_rate"] == 0.6
-    assert cache["cpu_cache_hit_rate"] == cache["external_cache_hit_rate"] == 0.1
-    assert cache["overall_cache_hit_rate"] == 0.7
-    assert cache["prefix_cache_queries"] == cache["external_prefix_cache_queries"] == 1000
-    assert agg["num_gpus"] == 8
-
-
 def test_processor_preserves_dataset_provenance(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
