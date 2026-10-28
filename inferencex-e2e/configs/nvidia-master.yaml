@@ -10529,6 +10529,13 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
+        conc-list: [352]
+        srt-recipe: disagg-mooncake.yaml:override_4p1d_dep16_c352
+        prefill: { num-worker: 4, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1 }
         conc-list: [256]
         srt-recipe: disagg-mooncake.yaml:override_3p1d_c256
         prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }

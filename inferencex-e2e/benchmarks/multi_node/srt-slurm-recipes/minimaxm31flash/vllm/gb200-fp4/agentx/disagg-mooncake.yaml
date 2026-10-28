@@ -218,3 +218,14 @@ override_3p1d_dep16_c280:
       gpus: 16
       args:
         data-parallel-size: 16
+override_4p1d_dep16_c352:
+  name: minimaxm31flash-gb200-disagg-mooncake-4p1d-dep16-c352
+  roles:
+    prefill:
+      nodes: 4
+      workers: 4
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        data-parallel-size: 16
