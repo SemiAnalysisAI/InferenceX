@@ -188,6 +188,22 @@ deepep_cache_root() {
 
 deepep_ready() { [ -f "$1/.ready" ] && [ -x "$1/venv/bin/python" ] && [ -d "$1/source" ]; }
 
+# Runtime images (vLLM's) ship a trimmed CUDA toolkit without the cuSPARSE and similar headers that
+# torch's ATen/cuda headers include, which the extension build needs. The venv's torch already
+# pulled the matching CUDA wheels, so link only the headers the toolkit lacks into
+# <root>/cuda-include: nothing shadows the toolkit's own headers, and full-toolkit images leave
+# the directory empty.
+deepep_cuda_header_overlay() {
+  local root="$1" cuda_home="$2" overlay="$1/cuda-include" wheel_include header
+  mkdir -p "$overlay" || return 1
+  for wheel_include in "$root"/venv/lib/python*/site-packages/nvidia/cu13/include; do
+    [ -d "$wheel_include" ] || continue
+    for header in "$wheel_include"/*.h; do
+      [ -e "$cuda_home/include/${header##*/}" ] || ln -sfn "$header" "$overlay/" || return 1
+    done
+  done
+}
+
 deepep_activate() {
   local root="$1" venv venv_site nccl_root nvshmem_package overlay
   local toolchain cuda_home cccl execution_id
@@ -215,7 +231,7 @@ deepep_activate() {
     PATH="$venv/bin:${PATH#"$venv/bin:"}" \
     PYTHONPATH="$venv_site${PYTHONPATH:+:$PYTHONPATH}" \
     CUDA_HOME="$cuda_home" \
-    CPATH="$cccl:${CPATH:-}" \
+    CPATH="$cccl:${CPATH:-}${CPATH:+:}$root/cuda-include" \
     NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}" \
     NVSHMEM_DIR="$overlay" \
     EP_NCCL_ROOT_DIR="$nccl_root" \
@@ -266,6 +282,11 @@ deepep_install() {
   # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
   "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
     || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
+  local toolchain cuda_home cccl
+  toolchain="$(cuda_toolchain_paths)" || return 1
+  IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
+  deepep_cuda_header_overlay "$root" "$cuda_home" \
+    || { collx_log "ERROR: DeepEP V2 CUDA header overlay failed"; return 1; }
   deepep_activate "$root" \
     || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
   collx_materialize_source "deepep-v2-$COLLX_DEEPEP_V2_COMMIT" "$source_dir" \
@@ -777,7 +798,11 @@ flashinfer_install() {
   collx_log "FlashInfer: installing $COLLX_FLASHINFER_SPEC"
   # The specs are unquoted on purpose: the variable carries whitespace-separated pip specs.
   # shellcheck disable=SC2086
-  "${pip[@]}" --dry-run --report "$report" $COLLX_FLASHINFER_SPEC >&2 2>&1 \
+  # --no-deps: the spec names every package FlashInfer needs beyond the image. Resolving deps would
+  # also re-resolve the image's torch, whose metadata pins an NCCL older than the one the image
+  # ships (vLLM v0.32.0: torch 2.13 declares nvidia-nccl-cu13==2.29.7 over the installed 2.30.7), so
+  # pip would downgrade NCCL. The check after the install covers what --no-deps skips.
+  "${pip[@]}" --no-deps --dry-run --report "$report" $COLLX_FLASHINFER_SPEC >&2 2>&1 \
     || { collx_log "ERROR: FlashInfer dependency resolution failed"; return 1; }
   # Replacing the image's torch or NCCL would change what every other backend measures.
   python3 - "$report" <<'PY' \
@@ -790,9 +815,20 @@ if clash:
     raise SystemExit(f"refusing to install {clash}")
 PY
   # shellcheck disable=SC2086
-  "${pip[@]}" $COLLX_FLASHINFER_SPEC >&2 2>&1 \
+  "${pip[@]}" --no-deps $COLLX_FLASHINFER_SPEC >&2 2>&1 \
     && "${pip[@]}" --no-deps "$COLLX_FLASHINFER_JIT_CACHE_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: FlashInfer installation failed"; return 1; }
+  # Every requirement of the installed set must already hold; pip check lines about the image's
+  # own packages (its torch/NCCL pin disagreement among them) are not this venv's to settle.
+  # shellcheck disable=SC2086
+  "$venv/bin/python" -m pip check 2>&1 | python3 -c '
+import re, sys
+ours = {re.split(r"[\[=<>]", spec)[0].lower().replace("_", "-") for spec in sys.argv[1:]}
+bad = [line for line in sys.stdin.read().splitlines()
+       if line.split(" ", 1)[0].lower().replace("_", "-") in ours]
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)' $COLLX_FLASHINFER_SPEC "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
+    || { collx_log "ERROR: FlashInfer environment has unmet requirements"; return 1; }
   flashinfer_activate "$root" || return 1
   flashinfer_promote_aot || { collx_log "ERROR: FlashInfer all-to-all build failed"; return 1; }
   flashinfer_probe || { collx_log "ERROR: FlashInfer import probe failed"; return 1; }
