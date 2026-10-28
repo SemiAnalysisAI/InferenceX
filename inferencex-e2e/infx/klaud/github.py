@@ -5,8 +5,11 @@ from __future__ import annotations
 import base64
 import io
 import json
+import re
 import subprocess
+import time
 import zipfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
@@ -24,15 +27,53 @@ class ListingUnavailable(VerificationError):  # noqa: N818
     """A GitHub listing was missing, malformed or incomplete; a later read may succeed."""
 
 
+READ_BACKOFF_SECONDS = (1, 4)
+
+
+def sleep(seconds: float) -> None:
+    """Wait ``seconds`` between read attempts; tests replace it."""
+    time.sleep(seconds)
+
+
+def http_status(error: BaseException) -> int | None:
+    """The HTTP status gh printed for a failed call, or None."""
+    stderr = getattr(error, "stderr", None)
+    if not isinstance(error, subprocess.CalledProcessError) or not isinstance(stderr, str):
+        return None
+    match = re.search(r"\(HTTP ([1-5][0-9]{2})\)", stderr)
+    return int(match[1]) if match else None
+
+
+def _transient(error: Exception) -> bool:
+    """Whether a failed read may succeed when repeated; rate limits are left to the budget gate."""
+    if isinstance(error, subprocess.TimeoutExpired):
+        return True
+    if isinstance(error, subprocess.CalledProcessError):
+        return (http_status(error) or 0) >= 500
+    return isinstance(error, github.ListingError) and str(error) == "Incomplete GitHub listing"
+
+
+def _retrying[T](call: Callable[[], T]) -> T:
+    """Return ``call()``, repeating it after each READ_BACKOFF_SECONDS delay on transient errors."""
+    for delay in READ_BACKOFF_SECONDS:
+        try:
+            return call()
+        except (subprocess.SubprocessError, github.ListingError) as error:
+            if not _transient(error):
+                raise
+        sleep(delay)
+    return call()
+
+
 def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
     """Return the decoded JSON from a GET of ``path`` in ``repository``, optionally paginated."""
-    return github.api(repository, path, paginate=paginate)
+    return _retrying(lambda: github.api(repository, path, paginate=paginate))
 
 
 def items(repository: str, path: str, key: str | None = None) -> list[dict]:
     """Return every listed item at ``path``, unwrapped from ``key``, or raise ListingUnavailable."""
     try:
-        return github.paginate(repository, path, item_key=key or "")
+        return _retrying(lambda: github.paginate(repository, path, item_key=key or ""))
     except github.ListingError as error:
         raise ListingUnavailable(str(error)) from error
 

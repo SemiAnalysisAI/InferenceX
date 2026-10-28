@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:f00a9dc588a380038fdad54cd57a956043cb316ddda54ebb1b62a24f8caa343b
+    container_image: rocm/atom-dev@sha256:1bb1909ada9e3d178e315a3f89d041c05c7e90e7cc32de8d507ff5ab4cd4702c
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -33,21 +33,43 @@ base:
         PYTHONNOUSERSITE: '1'
         AITER_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_USE_FLYDSL_MOE_SORTING: '1'
+        # GLM-5.2 mono decode is on by default in ATOM; only TP4 C1/C2 run it.
+        ATOM_MONO_ENABLE: '0'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC with graphs captured up to it. The
-# draft is five tokens through concurrency 8 and four above it.
+# One variant per point. Admission is 2x CONC, except TP4 C1/C2, which admit
+# exactly CONC with graphs captured up to it. TP4 C1/C2 run mono decode at
+# three draft tokens; C4/C8 draft five and C10 four on the production path. The
+# DCP4 arm shards the decode KV, adds the LMCache DRAM tier at 256 GiB per rank
+# (1024 GiB, 1099.5 GB per server, within the 1109 GB TP4 share at
+# dram-utilization 0.74) and drafts four tokens, three at C48.
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        max-num-seqs: 1
+        cudagraph-capture-sizes: '[1]'
+        num-speculative-tokens: 3
+      env:
+        ATOM_MONO_ENABLE: '1'
+  benchmark:
+    env:
+      CONC: '1'
+
 override_tp4_c2:
   roles:
     agg:
       gpus: 4
       args:
-        max-num-seqs: 4
-        cudagraph-capture-sizes: '[1,2,4]'
-        num-speculative-tokens: 5
+        max-num-seqs: 2
+        cudagraph-capture-sizes: '[1,2]'
+        num-speculative-tokens: 3
+      env:
+        ATOM_MONO_ENABLE: '1'
   benchmark:
     env:
       CONC: '2'
@@ -87,6 +109,101 @@ override_tp4_c10:
   benchmark:
     env:
       CONC: '10'
+
+override_tp4_dcp4_c16_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        decode-context-parallel-size: 4
+        max-num-seqs: 32
+        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32]'
+        num-speculative-tokens: 4
+        extra-kv-connectors: &lmcache_offload
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env: &dcp_lmcache_env
+        # DCP sparse prefill builds the group's query heads locally.
+        ATOM_DCP_PREFILL_QREP: '1'
+        PYTHONHASHSEED: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_NUMA_MODE: auto
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '256'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_MIN_LOAD_TOKENS: '8192'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1109'
+
+override_tp4_dcp4_c24_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        decode-context-parallel-size: 4
+        max-num-seqs: 48
+        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32,36,40,44,48]'
+        num-speculative-tokens: 4
+        extra-kv-connectors: *lmcache_offload
+      env: *dcp_lmcache_env
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1109'
+
+override_tp4_dcp4_c32_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        decode-context-parallel-size: 4
+        max-num-seqs: 64
+        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64]'
+        num-speculative-tokens: 4
+        extra-kv-connectors: *lmcache_offload
+      env: *dcp_lmcache_env
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1109'
+
+override_tp4_dcp4_c40_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        decode-context-parallel-size: 4
+        max-num-seqs: 80
+        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80]'
+        num-speculative-tokens: 4
+        extra-kv-connectors: *lmcache_offload
+      env: *dcp_lmcache_env
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1109'
+
+override_tp4_dcp4_c48_lmcache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        decode-context-parallel-size: 4
+        max-num-seqs: 96
+        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96]'
+        num-speculative-tokens: 3
+        extra-kv-connectors: *lmcache_offload
+      env: *dcp_lmcache_env
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp8_c1:
   roles:
