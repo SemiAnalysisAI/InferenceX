@@ -155,6 +155,23 @@ jobs:
             Read .github/klaud-candidate-prompt.md and follow it for the candidate in
             ${{ runner.temp }}/klaud/candidate.json. MAX_REPAIRS, KLAUD_BRANCH, KLAUD_SESSION,
             KLAUD_TEST_NAME, KLAUD_EVIDENCE and KLAUD_RESUME are provided in your environment.
+      - name: Check whether the agent used a tool
+        id: tools
+        if: always() && steps.claude.outcome == 'failure'
+        continue-on-error: true
+        env:
+          KLAUD_EXECUTION: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          execution="${KLAUD_EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}"
+          used=false
+          if [[ -f "$execution" ]]; then
+            used=$(jq 'any(.[]?; .type == "assistant" and any(.message.content[]?; .type == "tool_use"))' "$execution")
+          fi
+          echo "used=$used" >> "$GITHUB_OUTPUT"
+      # Recovery reads this step's success: the session did no work, so it never counts as expired.
+      - name: Record that the agent never used a tool
+        if: always() && steps.tools.outputs.used == 'false'
+        run: echo "The agent failed before its first tool call."
       - name: Reconcile agent-owned state
         if: always() && steps.claude.outcome != 'skipped'
         env:
