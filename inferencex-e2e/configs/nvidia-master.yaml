@@ -5692,23 +5692,30 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      # TP4 is the upstream Blackwell layout, drafting 7 DSpark tokens.
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 32], srt-recipe: agentic.yaml }
-      # DEP4 is native TP1 x DP4 + EP4 behind a consistent-hash vLLM Router, drafting 3 DSpark tokens.
-      - { tp: 4, ep: 4, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: 'agentic.yaml:zip_override_tp4[0]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [4], srt-recipe: 'agentic.yaml:zip_override_tp4[1]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: 'agentic.yaml:zip_override_tp4[2]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [16], srt-recipe: 'agentic.yaml:zip_override_tp4[3]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [32], srt-recipe: 'agentic.yaml:override_tp4_c32' }
+    - dram-utilization: 1.0
+      search-space:
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agentic.yaml:override_tp4_c24' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[0]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[1]' }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [56], srt-recipe: 'agentic.yaml:zip_override_tp4_dram[2]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [24], srt-recipe: 'agentic.yaml:zip_override_tp2[0]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32], srt-recipe: 'agentic.yaml:zip_override_tp2[1]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
-# Run the GB200 aggregate configuration with TP4 resident, TP8 resident across
-# two NVL4 nodes, and TP4 lazy SimpleCPU KV offload variants. The pinned
-# runtime uses Dynamo-native MiniMax parsing on the worker without the vLLM
-# chat processor in the frontend.
 minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
-  image: vllm/vllm-openai:nightly-9ea8f3ffc354901b740f0b31988900897b7221d7
+  image: vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a@sha256:8896fd7b29fc4ee7ce839f146cb4757984c476ec79d0234ffa8c995dee6e339a
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.5.0.dev20260908" }
+  router: { name: dynamo-router, version: "1.6.0.dev20261016" }
   multinode: true
   disagg: false
   srt-recipe-dir: minimaxm3/vllm/gb200-fp4/agentx
@@ -5718,9 +5725,19 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
       search-space:
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [1, 10]
+        conc-list: [1]
         num-nodes: 1
-        srt-recipe: agg-nightly-native-variants.yaml:override_tp4
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_c1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [10]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_mns16_c10
         worker:
           num-worker: 1
           tp: 4
@@ -5729,9 +5746,31 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [15, 25, 30]
+        conc-list: [20]
         num-nodes: 1
-        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns8_c20
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [25]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns16_c25
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [30]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_c30
         worker:
           num-worker: 1
           tp: 4
@@ -5741,10 +5780,31 @@ minimaxm3-fp4-gb200-dynamo-vllm-agentic-agg-mtp:
         kv-offloading: none
         conc-list: [1]
         num-nodes: 2
-        srt-recipe: agg-nightly-native-variants.yaml:override_tp8
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp8_c1
         worker:
           num-worker: 1
           tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [5]
+        num-nodes: 2
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp8_mns8_c5
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [22]
+        num-nodes: 1
+        srt-recipe: agg-nightly-native-variants.yaml:override_tp4_vllm_simple_mns12_c22
+        worker:
+          num-worker: 1
+          tp: 4
           ep: 1
           dp-attn: false
 
@@ -8210,7 +8270,7 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
 # AgentX p90 charts (interactivity, E2E latency, TTFT, E2E-normalized
 # interactivity), not on ITL alone. Each DCP8 worker spans two 4-GPU nodes.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
-  image: vllm/vllm-openai:nightly-1b2a666391f2a24228a1436b64d547c34cc6b6ce@sha256:12496a6e0249d42c0268093fcd2bc82c3883c9a35bc8eb06acbf024944aafbd5
+  image: vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d@sha256:6b90105076216e861cd30fae8828efef9263a0399137b894289f3b6a685bf4ff
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -8218,7 +8278,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   framework: dynamo-vllm
   router:
     name: dynamo-router
-    version: ffbbaaa6c44370e798687881317535ac17d66a76
+    version: a0de541ea8c861d5ac01d15953ca529bea68637b
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -8279,7 +8339,6 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           version: 0.3.13.post1
         conc-list:
         - 48
-        - 56
         - 64
         srt-recipe: disagg-variants.yaml:override_1p2d_cap128
         eval-srt-recipe: disagg-variants.yaml:override_1p2d_cap128_eval
@@ -8342,8 +8401,47 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
           dp-attn: false
 
 
+kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg:
+  image: vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d@sha256:6b90105076216e861cd30fae8828efef9263a0399137b894289f3b6a685bf4ff
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: a0de541ea8c861d5ac01d15953ca529bea68637b
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3/vllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend:
+          name: mooncake
+          version: 0.3.13.post1
+        conc-list:
+        - 336
+        srt-recipe: disagg-tp8-dep16.yaml:override_3p1d_c336
+        eval-srt-recipe: disagg-tp8-dep16.yaml:override_3p1d_c336_eval
+        power: true
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: false
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-agg:
-  image: vllm/vllm-openai:nightly-1b2a666391f2a24228a1436b64d547c34cc6b6ce@sha256:12496a6e0249d42c0268093fcd2bc82c3883c9a35bc8eb06acbf024944aafbd5
+  image: vllm/vllm-openai:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d@sha256:6b90105076216e861cd30fae8828efef9263a0399137b894289f3b6a685bf4ff
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv
@@ -9975,6 +10073,101 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash:
           ep: 4
           dp-attn: false
 
+musespark-fp4-gb300-trt-agentic-dflash:
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0a0.dev202610221558
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: trt
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: draft_model
+        kv-offloading: none
+        conc-list: [1]
+        num-nodes: 2
+        srt-recipe: agg-variants.yaml:override_tep8_c1
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+    - dram-utilization: 0.427409
+      search-space:
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [1]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c4
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [8]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c8
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+    - dram-utilization: 0.712348
+      search-space:
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [20]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c20
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [32]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c32
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: native }
+        conc-list: [48]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tep4_c48
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+
+
 qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve:
   image: lmsysorg/sglang:nightly-dev-cu13-20260913-fa663e72
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -10338,7 +10531,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
           dp-attn: true
 
 musespark-fp4-b300-sglang-agentic-dflash:
-  image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
+  image: lmsysorg/sglang:nightly-dev-20261021-c1c287a4
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:b300-dsxe
@@ -10350,9 +10543,8 @@ musespark-fp4-b300-sglang-agentic-dflash:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 14], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, kv-offloading: none, spec-decoding: draft_model, conc-list: [4], srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [10, 16, 20, 28, 36, 40], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 4, 8, 10, 14, 16, 20, 24], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [16, 28, 32, 40, 44, 48], srt-recipe: agentic.yaml }
 
 musespark-fp4-h100-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
