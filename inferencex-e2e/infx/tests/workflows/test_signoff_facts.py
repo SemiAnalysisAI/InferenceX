@@ -168,6 +168,21 @@ def test_dominance_requires_removed_points_to_be_dominated():
     assert report["deltas"] == [{"label": "keep", "tput_per_gpu_pct": 10.0, "mean_intvty_pct": 0.0}]
 
 
+@pytest.mark.parametrize(
+    ("removed", "covered_by"),
+    [
+        (point("c56", 13058, 114.2), "between c64 and c48"),
+        (point("above", 14500, 114.2), None),
+        (point("past", 5000, 140.0), None),
+    ],
+)
+def test_dominance_covers_points_under_the_head_frontier_segment(removed, covered_by):
+    # "slow" is dominated by c48; as a segment end it would drop the line under c56.
+    after = [point("c48", 11792, 133.7), point("c64", 15322, 103.5), point("slow", 9000, 120.0)]
+    report = signoff_facts.dominance([removed], after)
+    assert report["removed"] == [{"label": removed["label"], "dominated_by": covered_by}]
+
+
 def test_dominance_rejects_missing_metrics():
     with pytest.raises(ValueError, match="positive"):
         signoff_facts.dominance([point("a", 0, 50)], [])
