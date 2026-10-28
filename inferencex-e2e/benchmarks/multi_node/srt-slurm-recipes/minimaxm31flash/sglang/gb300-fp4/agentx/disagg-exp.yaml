@@ -1,0 +1,177 @@
+schema: 2
+
+# Experiment only (not for merge): SGLang PD on the vLLM GB300 topology from
+# PR #4468 (6x DEP2 prefill + DEP8 decode, 20 GPUs, conc 360).
+
+base:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp
+  identity:
+    model: {}
+    frameworks:
+      dynamo: "1.6.0.dev20261021"
+      sglang: "0.0.0.dev0+ge7399a46f4"
+  # The image ships ai-dynamo 1.6.0.dev20261021, Mooncake 0.3.13.post1 and NIXL 1.5.0.
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  # Tachometer's per-node exporters slow decode steps and add host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  slurm:
+    time_limit: "6:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    numa_bind: true
+    placement:
+      node: dedicated
+    env:
+      DYN_ROUTER_TEMPERATURE: "0"
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TCP_CONNECT_TIMEOUT: "120"
+    args:
+      router-mode: kv
+      router-session-affinity-ttl-secs: "14400"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  engine: sglang
+  roles:
+    # DEP2 prefill: attention DP2 + MoE EP2. In this image DP attention requires
+    # MegaMoE with DeepGEMM; flashinfer_trtllm_routed needs matching attention TP
+    # and EP groups.
+    prefill:
+      nodes: 3
+      workers: 6
+      gpus: 2
+      env:
+        PYTHONUNBUFFERED: "1"
+        PYTHONNOUSERSITE: "1"
+        FMHA_SM100_ALLOW_JIT: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        # Some GB300 nodes list a BMC interface with the same address on every node first.
+        MC_TCP_BIND_ADDRESS: "{node}"
+        WITH_NVIDIA_PEERMEM: "0"
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        tensor-parallel-size: 2
+        data-parallel-size: 2
+        expert-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-a2a-backend: megamoe
+        disaggregation-transfer-backend: mooncake
+        # vLLM caps each request at 4096 prefill tokens per step inside a
+        # 32768-token batch; SGLang caps the whole batch, so use a middle value.
+        chunked-prefill-size: 8192
+        max-running-requests: 64
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: true
+        hicache-size: 150
+        hicache-write-policy: write_back
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        # A session's turns stay on one prefill worker.
+        router-mode: kv
+        router-session-affinity-ttl-secs: "14400"
+        watchdog-timeout: 3600
+        enable-metrics: true
+        enable-cache-report: true
+      kv_events: true
+    # DEP8 decode across two trays.
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONUNBUFFERED: "1"
+        PYTHONNOUSERSITE: "1"
+        FMHA_SM100_ALLOW_JIT: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "1800"
+        DYN_SGL_GATEWAY_WORKERS: "8"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        MC_FORCE_MNNVL: "1"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node}"
+        WITH_NVIDIA_PEERMEM: "0"
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        trust-remote-code: true
+        reasoning-parser: minimax-m3
+        tool-call-parser: minimax-m3
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        moe-a2a-backend: megamoe
+        disaggregation-transfer-backend: mooncake
+        router-mode: round-robin
+        load-balance-method: total_tokens
+        # 48 per DP rank, as vLLM's decode max-num-seqs.
+        max-running-requests: 384
+        cuda-graph-max-bs-decode: 48
+        mem-fraction-static: 0.85
+        speculative-algorithm: DSPARK
+        speculative-dspark-block-size: 7
+        speculative-use-block-verification: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        watchdog-timeout: 3600
+        enable-metrics: true
+      kv_events: false
+  sbatch_directives:
+    mem: "0"
+    exclusive: ""
+  srun_options:
+    container-remap-root: ""
+    mem: "0"
+  benchmark:
+    placement:
+      node: dedicated
+    colocate_with_frontend: true
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+
+override_6p_dep2_dep8_c360:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-exp-6p-dep2-dep8-c360
