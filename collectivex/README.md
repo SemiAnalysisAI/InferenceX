@@ -27,18 +27,19 @@ runs the decode and prefill ladders; `low-latency` is decode-only.
 
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
-| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H200. EP8, EP16: B200, GB200, GB300 |
+| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8, EP16: H100, H200, B200, GB200, GB300 |
 | `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8, EP16: MI300X, MI325X, MI355X | EP16: MI300X, MI325X, MI355X |
-| `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: B200, MI300X, MI325X | EP8: H100, H200, B200. EP16: MI300X, MI325X |
-| `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16 where it matches, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H100, H200, B300. EP8, EP16: B200, GB200, GB300 |
-| `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8, EP16: GB200, GB300 | none |
+| `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: H100, H200, B200, MI300X, MI325X | EP8: B200. EP8, EP16: H100, H200. EP16: MI300X, MI325X |
+| `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16 where it matches, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: B300. EP8, EP16: H100, H200, B200, GB200, GB300 |
+| `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8: H100, H200. EP8, EP16: GB200, GB300 | none |
 
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
 DS_FP8E3M4 recipe, low-latency decode only. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 220 requested cases, of which 196 are
+`results/cases.json` is the committed copy of the full matrix: 250 requested cases, of which 226 are
 runnable EP cases, 18 are swap-blocks cases (two per pool) and 6 are unsupported EP cells (UCCL-EP
-EP16 on H100, H200 and MI355X, once per phase).
+EP16 on MI355X and FlashInfer EP16 on H100 and H200, once per phase; FlashInfer's MNNVL workspace
+needs every rank inside one NVLink domain).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP
