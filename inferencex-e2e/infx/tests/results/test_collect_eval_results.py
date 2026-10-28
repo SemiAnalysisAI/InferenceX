@@ -21,6 +21,37 @@ from infx.results.evals import (
 )
 
 
+@pytest.mark.parametrize("environ", [
+    {"IS_MULTINODE": "false", "TP": "8", "PP_SIZE": "2", "DCP_SIZE": "8"},
+    {"IS_MULTINODE": "true", "PREFILL_TP": "4", "PREFILL_PP_SIZE": "2",
+     "DECODE_TP": "8", "DECODE_DCP_SIZE": "4", "DECODE_PCP_SIZE": "2"},
+    {"IS_MULTINODE": "true", "PREFILL_TP": "1", "PREFILL_DWDP_SIZE": "8", "DECODE_TP": "8"},
+])
+def test_collected_rows_match_raw_identity_with_parallelism(
+    tmp_path: Path, environ: dict[str, str],
+) -> None:
+    from infx.bench.eval import meta
+    from infx.results.eval_artifacts import inspect_eval_artifacts
+
+    raw = tmp_path / "eval_point"
+    raw.mkdir()
+    meta.write(raw / "meta_env.json", meta.build(
+        {"RUNNER_TYPE": "b200", "FRAMEWORK": "vllm", "PRECISION": "fp8", **environ},
+        conc=4, suite="gsm8k",
+    ))
+    (raw / "results_2026-01-01T00-00-00.json").write_text(json.dumps({
+        "lm_eval_version": "0.4.0",
+        "results": {"gsm8k": {"exact_match,strict-match": 0.9}},
+        "configs": {"gsm8k": {"filter_list": [{"name": "strict-match"}]}},
+    }))
+    (tmp_path / "eval_results_all").mkdir()
+    (tmp_path / "eval_results_all" / "agg_eval_all.json").write_text(
+        json.dumps(collect_eval_rows(tmp_path))
+    )
+
+    assert inspect_eval_artifacts(tmp_path)[1] == []
+
+
 @pytest.mark.parametrize("batched", [False, True])
 def test_result_selection_accepts_empty_candidates(batched: bool) -> None:
     assert select_latest_results(iter(()), batched=batched) == []
@@ -135,6 +166,29 @@ def test_invalid_primary_does_not_fall_back_to_valid_secondary(tmp_path: Path, s
     assert row["integration_error"] == {
         "type": "InvalidPrimaryScore", "message": f"invalid primary score: {score!r}",
     }
+
+
+def test_one_sample_stderr_sentinel_is_published_as_null(tmp_path: Path) -> None:
+    # lm-eval writes the string "N/A" as the stderr of a metric with one sample.
+    (tmp_path / "meta_env.json").write_text("{}")
+    (tmp_path / "results.json").write_text(json.dumps({
+        "lm_eval_version": "test",
+        "results": {"gsm8k": {
+            "exact_match,strict-match": 1.0, "exact_match_stderr,strict-match": "N/A",
+            "exact_match,flexible-extract": 0.0, "exact_match_stderr,flexible-extract": "N/A",
+        }},
+        "configs": {"gsm8k": {"filter_list": [
+            {"name": "strict-match"}, {"name": "flexible-extract"},
+        ]}},
+        "n-samples": {"gsm8k": {"original": 1319, "effective": 1}},
+    }))
+
+    [row] = collect_eval_rows(tmp_path)
+
+    assert (row["score"], row["em_strict"], row["em_flexible"]) == (1.0, 1.0, 0.0)
+    assert (row["score_se"], row["em_strict_se"], row["em_flexible_se"]) == (None, None, None)
+    assert row["infrastructure_success"] is True
+
 
 
 @pytest.mark.parametrize("error,expected", [
@@ -350,6 +404,19 @@ def test_collector_cli_runs_outside_checkout(tmp_path: Path) -> None:
     assert rows[0]["score"] == 0.75
     assert rows[0]["conc"] == 4
     assert rows[0]["source"] == str(result)
+
+
+def test_collect_eval_rows_reads_eval_sets_in_name_order(tmp_path: Path) -> None:
+    scores = {"tp8_dpa": 0.8, "tp4": 0.4, "tp8": 0.81, "tp2": 0.2, "tp4_dpa": 0.41, "tp1": 0.1}
+    for name, score in scores.items():
+        artifact = tmp_path / f"eval_dsr1_8k1k_{name}_conc64"
+        artifact.mkdir()
+        (artifact / "meta_env.json").write_text('{"conc": 64}')
+        _write_lm_eval_result(artifact / "results.json", score)
+
+    rows = collect_eval_rows(tmp_path)
+
+    assert [row["score"] for row in rows] == [0.1, 0.2, 0.4, 0.41, 0.81, 0.8]
 
 
 def test_collect_eval_rows_expands_batched_concurrencies(

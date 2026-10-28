@@ -29,3 +29,7 @@ Results: one JSON per run under `results/<platform>/<cluster>/`; in CI, the `ope
 - Backend: `runners/<platform>/backends/<name>.py` exporting `IMPLS = [BackendImpl(...)]`; its image in `containers.toml`.
 - Op: `ops/<name>.py` calling `register(OpSpec(type=..., arg_schema=..., parallel_axes=...))`.
 - Shapes: `testlists/<name>.json`.
+
+## Ascend reproduction harness
+
+The [standalone Ascend GEMM harness](scripts/ascend/README.md) accepts these testlists for native unquantized and FP32-block-scale FP8 measurements with queued NPU timing, numerical checks, resumable journals and an installed-tiling L0A guard. It does not add an Ascend CI pool or change the NVIDIA/AMD runners.

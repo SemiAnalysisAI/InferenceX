@@ -156,7 +156,7 @@ class NcclLowLatencyLadderSizing(unittest.TestCase):
         backend._layout = module.Layout.RANK_MAJOR if low_latency else module.Layout.FLAT
         backend._bootstrap_comm = lambda: None
         # create_buffer stamps the installed wheel into kernel_generation.
-        module.metadata = types.SimpleNamespace(version=lambda name: "0.2.0.dev20261005")
+        module.metadata = types.SimpleNamespace(version=lambda name: "0.2.0.dev20261013")
         backend._recv_window_for_test = types.SimpleNamespace(
             is_valid=True, close=lambda: None
         )

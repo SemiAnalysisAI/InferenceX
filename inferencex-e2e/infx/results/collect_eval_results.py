@@ -1,3 +1,4 @@
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -59,12 +60,12 @@ def find_eval_sets(root: Path) -> list[Path]:
     extracted flat into root (no subdirectory), so check root itself too.
     """
     out: list[Path] = []
-    try:
+    with contextlib.suppress(Exception):
         if (root / "meta_env.json").exists():
             out.append(root)
-        out.extend(d for d in root.iterdir() if d.is_dir() and (d / "meta_env.json").exists())
-    except Exception:  # noqa: BLE001, S110
-        pass
+        out.extend(
+            d for d in sorted(root.iterdir()) if d.is_dir() and (d / "meta_env.json").exists()
+        )
     return out
 
 
@@ -83,6 +84,7 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> list[Path]:
 
 
 def _read_results(directory: Path) -> dict[Path, dict[str, Any]]:
+    """Map each readable eval result JSON in ``directory``, except meta_env.json, to its parsed content."""
     return read_eval_results(
         (path for path in directory.glob("*.json") if path.name != "meta_env.json"),
         skip_errors=(Exception,),
@@ -132,6 +134,7 @@ def collect_eval_rows(root: Path) -> list[dict[str, Any]]:
 
 
 def main() -> None:
+    """Print single-node and multinode eval tables for the results dir in argv and write agg_eval_<exp_name>.json."""
     if len(sys.argv) < 3:
         print("Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]")
         sys.exit(1)

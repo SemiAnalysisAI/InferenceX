@@ -98,7 +98,7 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       # Native single-node binding verifies these against the generated point.
-      TOTAL_CPU_DRAM_GB: '225'
+      TOTAL_CPU_DRAM_GB: '241'
       KV_OFFLOADING: dram
 
 # Only client concurrency changes; serving/admission/graph/cache settings stay fixed.
