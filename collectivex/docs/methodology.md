@@ -1,10 +1,10 @@
 # CollectiveX EP Benchmark Methodology
 
 CollectiveX runs expert-parallel (EP) communication benchmarks by hand on real accelerator
-allocations and writes one result document per case into `collectivex/results/`. Committing those
-files is the publish step. It does **not** rank, recommend, select, or decide what any consumer
-displays. The frontend reads `results/cases.json` and the committed result documents and makes its
-own coverage and display decisions. This document describes how a case is scheduled, measured,
+allocations and writes one result document per case into `collectivex/results/`. Uploading those
+files to the CollectiveX database is the publish step; they are not committed. It does **not** rank,
+recommend, select, or decide what any consumer displays. The frontend reads the stored
+`results/cases.json` and result documents and makes its own coverage and display decisions. This document describes how a case is scheduled, measured,
 checked, and recorded, not a publication or qualification contract.
 [methodology-summary.md](methodology-summary.md) states the same rules in brief; this document keeps
 the evidence behind each one. Where either disagrees with the code in `collectivex/bench/`, the code
@@ -895,7 +895,7 @@ so physical receive order is not treated as a correctness property.
 
 ## Result Document
 
-One raw case document, committed at `results/<sku>/<case_id>.json`, carries `record_type:
+One raw case document, written to `results/<sku>/<case_id>.json`, carries `record_type:
 "case-attempt"`, the sweep `version`, and a `generated_at` timestamp, and contains:
 
 - `identity`: `case_id`, `attempt_ordinal`, `case_factors` (the SKU and the scheduled case,
@@ -987,8 +987,8 @@ replacing the case's previous file, while unsupported or never-run cells produce
 Identifiers are readable factor strings:
 
 - `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}-{precision}`, each factor
-  slug-normalized. It names the result file, so a re-run replaces the committed result and git
-  history keeps the one it replaced.
+  slug-normalized. It names the result file, so a re-run replaces that case's result in the next
+  uploaded run, and earlier stored runs keep the one it replaced.
 - `attempt_ordinal`: `COLLX_ATTEMPT_ID`, 1 unless set.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
@@ -1111,6 +1111,6 @@ concurrent allocation cannot lose files it is using.
 There is no results server or managed object store. Each shard runs one allocation and its per-case
 result documents are copied to `results/<sku>/` in the checkout that ran it. A case counts as
 successful on the benchmark's own return code, and failed or unsupported cells produce no synthetic
-record. Results reach the dashboard only through a reviewed commit to `main`; the unit-test job checks
-every committed result against `results/cases.json`, rejects ones measured from uncommitted code, and
-rejects IP addresses and host-identifying fields.
+record. Results reach the dashboard only through the InferenceX-app upload
+(`admin:db:ingest:collectivex --dir`), which checks every file against `results/cases.json`,
+rejects ones measured from uncommitted code, and rejects IP addresses and host-identifying fields.
