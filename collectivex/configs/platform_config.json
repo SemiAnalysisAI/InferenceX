@@ -94,7 +94,7 @@
     "gb200": {
       "arch": "sm100",
       "product": "gb200",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
@@ -114,7 +114,7 @@
     "gb300": {
       "arch": "sm103",
       "product": "gb300",
-      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image": "vllm/vllm-openai:v0.32.0",
       "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
