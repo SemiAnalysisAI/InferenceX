@@ -52,6 +52,11 @@ COLLX_FLASHINFER_JIT_CACHE_SPEC="flashinfer-jit-cache==0.7.1+cu130"
 # b300 EP16).
 COLLX_OFI_NCCL_VERSION="1.21.1"
 COLLX_OFI_NCCL_SHA256="2533d1ec179a86dcf0470fc39800b06cd9169cd854c0c913cc4782a42f36cff4"
+# aws-ofi-nccl's configure requires hwloc headers, which runtime images (vLLM's) do not carry. A
+# static, position-independent build of this release goes into the plugin's cache, so the plugin
+# has no runtime hwloc dependency. 2.10.0 is the h100-dgxc hosts' distro version.
+COLLX_HWLOC_VERSION="2.10.0"
+COLLX_HWLOC_SHA256="c7fd8a1404a9719c76aadc642864b9f77aed1dc1fc8882d6af861a9260ba240d"
 
 collx_log_tail() {
   local log_path="$1"
@@ -240,6 +245,12 @@ collx_add_efa_host_mounts() {
     && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
   mounts="$(collx_efa_host_mounts "${COLLX_IMAGE_PLATFORM:-}")" \
     || collx_die "no host EFA user space layout for this image platform"
+  # UCCL-EP compiles its EFA transport in the container, against the host rdma-core headers that
+  # match the bound libefa (the image's efadv.h lacks fields UCCL uses).
+  if [ "${COLLX_BENCH:-}" = uccl-ep ]; then
+    mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
+    mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
+  fi
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
