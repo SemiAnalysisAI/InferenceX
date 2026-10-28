@@ -10,7 +10,7 @@ Following the principles of fairness and equitableness, the service-level object
 
 InferenceX-e2e runs on a fixed GPU pool with a small team, so scenarios, precisions, and recipe variants that no longer earn their cluster hours are retired. The support matrix below is the current record of what is active and retired; git history and `perf-changelog.yaml` hold past settings.
 
-- **Pending A/B baseline retirement (not yet enacted):** standalone non-spec-decode baselines kept only for comparison with speculative decoding are slated for retirement: `dsv4`, `qwen3.5`, and `glm5.2` non-MTP; `minimaxm3` non-EAGLE3; `kimik3` non-DSpark. Retire one only once replacement coverage exists for the affected model, hardware, and engine. A spec-decode counterpart existing is not by itself a reason to remove a config.
+- **Pending A/B baseline retirement (not yet enacted):** standalone non-spec-decode baselines kept only for comparison with speculative decoding are slated for retirement. This covers `dsv4` and `qwen3.5` non-MTP and `kimik3` non-DSpark, whose active configs still contain non-spec-decode points. `glm5.2` and `minimaxm3` have no active non-spec-decode configs. Retire one only once replacement coverage exists for the affected model, hardware, and engine. A spec-decode counterpart existing is not by itself a reason to remove a config.
 - **No separate A/B tracks for new models:** [`infx/golden_al_distribution/`](../infx/golden_al_distribution) pins speculative AgentX runs to one measured acceptance-length curve, so spec-decode results are comparable on their own. New models, including Kimi-K3, do not need a non-spec-decode baseline from day 0.
 - **Publish the best Pareto points, with or without speculative decoding.** Recipes may disable MTP, EAGLE/EAGLE3, DSpark, or another draft method when that gives a better operating point. Valid non-spec-decode results stay eligible under the [North-star Pareto policy](#north-star-pareto-policy), so a frontier may mix both.
 
@@ -111,7 +111,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
 | MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimaxm31flash_dspark.yaml`) | |
-| Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `musespark_dflash.yaml`) | |
+| Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `musespark_dflash.yaml`) | |
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |
 | GLM-5.3 | `glm5.3` | 2026-09-22 ([#3366](https://github.com/SemiAnalysisAI/InferenceX/pull/3366)) | Agentic coding (MTP only, per the deprecation policy) | Single-turn 1k1k (deprecated for all models before this model was added; never run) |
 | Qwen3.8-Flash-Next | `qwen3.8next` | 2026-08-26 ([#2742](https://github.com/SemiAnalysisAI/InferenceX/pull/2742)) | Agentic coding | |

@@ -13,14 +13,23 @@ import shlex
 import subprocess
 import tempfile
 from collections import Counter
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from pydantic import ValidationError
 
-from .api import PUBLIC, ReadError, fetch_capacity, fetch_catalog
+from . import github
+from .api import (
+    KLAUD_QUEUE_MAX_AGE,
+    PUBLIC,
+    Capacity,
+    ReadError,
+    fetch_capacity,
+    fetch_catalog,
+)
 from .github import (
     VerificationError,
     download_json,
@@ -28,13 +37,16 @@ from .github import (
     read as github_read,
 )
 from .models import (
-    ABORT_LABEL,
+    ASSET_REASONS,
+    INFRA_REASONS,
     CandidateOutcome,
     OwnedCandidate,
     Ownership,
     Policy,
     PRReview,
+    SessionEnd,
     identity,
+    key_families,
     normalized_image,
     utc,
 )
@@ -43,11 +55,49 @@ if TYPE_CHECKING:
     from infx.clusters import RunnerInventory
 
 PRODUCERS = "producers.json"
-# An abort is lifted by removing its label, so it never delays the next attempt by itself.
-RETRY_NEXT_WAVE = frozenset({"capacity-deferred", "agent-not-started", "aborted"})
+CLUSTER_STATE = "cluster-state.json"
+RETRY_NEXT_WAVE = frozenset({"no-capacity", "agent-not-started"})
+MAINTAINER_CLOSE_HOLD_DAYS = 7
+REQUEUE_LABEL = "klaud-requeue"
+INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing"})
+INFRA_COOLDOWN_DAYS = 7
+LONG_HOLD_HOURS = 72
+LONG_HOLD_OUTCOMES = frozenset({"already-updated", "duplicate", "route-mismatch"})
+PAUSED_WEIGHTS = frozenset(ASSET_REASONS)
+UNDATED_IMAGE_HOLD_DAYS = 7
+DATED_TAG = re.compile(r"(?<!\d)20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?!\d)")
+INFRA_BACKOFF_HOURS = 48
+INFRA_BACKOFF_OUTCOMES = 2
+PRODUCER_MARGIN = 5
+EVAL_FIELDS = frozenset(
+    {"run-eval", "eval-only", "eval-conc", "eval-all-concs", "eval-framework", "eval-suite"}
+)
+
+
+class Family(NamedTuple):
+    """A live family's target clusters, node demands and whether its smoke matrix is complete.
+
+    ``node_demand`` is the node count of its largest AgentX job, ``sweep_node_demand`` the
+    nodes of every job of its full AgentX sweep.
+    """
+
+    clusters: frozenset[str]
+    node_demand: int
+    sweep_node_demand: int
+    smoke_covers_full: bool
+
+
+class History(NamedTuple):
+    """Recent candidate outcomes that still hold candidates, weights, images or clusters."""
+
+    recent: dict[str, str | None]
+    paused_weights: set[tuple]
+    held_images: dict[str, datetime]
+    infra_clusters: set[str]
 
 
 def observation_key(row: dict) -> tuple:
+    """Return the public identity tuple of feed ``row``, with its image normalized."""
     image = row.get("image")
     if isinstance(image, str):
         image = normalized_image(image)
@@ -69,6 +119,7 @@ def observation_key(row: dict) -> tuple:
 
 
 def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozenset[str]:
+    """Return the cluster IDs serving the runners of ``entries``, or none if one is unknown."""
     try:
         return frozenset(
             inventory.cluster_for(node).id
@@ -79,59 +130,122 @@ def target_clusters(entries: list[dict], inventory: RunnerInventory) -> frozense
         return frozenset()
 
 
-def live_families(root: Path) -> dict[tuple, dict[str, tuple[frozenset[str], int]]]:
+def point_identities(rows: list[dict]) -> set[tuple]:
+    """Return the (settings, concurrency) identity of each benchmark point in matrix ``rows``."""
+    from infx.matrix.generate import freeze_config_value
+
+    return {
+        (
+            freeze_config_value(
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key != "conc" and key not in EVAL_FIELDS
+                }
+            ),
+            conc,
+        )
+        for row in rows
+        if not row.get("eval-only")
+        for conc in (row["conc"] if isinstance(row["conc"], list) else [row["conc"]])
+    }
+
+
+def live_families(root: Path) -> dict[tuple, dict[str, Family]]:
     """Resolve public AgentX identities, target clusters and node demand from the generator.
 
-    Archives and fixed-seq-len points are excluded. A family's node demand is the node count of
-    its largest generated AgentX job.
+    Archives and fixed-seq-len points are excluded. A family is one AgentX dashboard curve: every
+    master key of one master file whose points share model, hardware, framework and precision,
+    since the newest run replaces that whole curve. Curves spanning master files or using several
+    images are left out. A family's smoke matrix covers its full sweep when the generator's
+    ``--smoke`` selection keeps every benchmark point and default eval.
     """
     from infx.clusters import load_inventory
     from infx.config import project_root
-    from infx.matrix.generate import _hardware_family, generate_test_config_sweep
+    from infx.matrix.generate import (
+        _hardware_family,
+        generate_test_config_sweep,
+        mark_eval_entries,
+        select_matrix_evals,
+    )
     from infx.matrix.validation import load_config_files, load_runner_file
+    from infx.results.identity import public_framework
 
-    from .validation import in_scope
+    from .validation import expected_evals, in_scope
 
     root = project_root(root)
     runners = load_runner_file(str(root / "configs/runners.yaml"))
     inventory = load_inventory(runners)
-    index: dict[tuple, dict[str, tuple[frozenset[str], int]]] = {}
+    curves: dict[tuple, dict[tuple[str, str], list[dict]]] = {}
     paths = sorted((root / "configs").glob("*-master.yaml"))
     if not paths:
         raise ReadError("live-configs-unavailable")
     for path in paths:
+        source = path.relative_to(root).as_posix()
         configs = load_config_files([str(path)])
         for key in configs:
-            family = f"{path.relative_to(root).as_posix()}:{key}"
             try:
                 entries = generate_test_config_sweep(
                     SimpleNamespace(config_keys=[key]), configs, runners, root
                 )
             except ValueError:
-                print(f"::warning::Klaud live-family-unrenderable: {family}")
+                print(f"::warning::Klaud live-family-unrenderable: {source}:{key}")
                 continue
-            entries = [entry for entry in entries if in_scope(entry)]
-            if not entries:
-                continue
-            clusters = target_clusters(entries, inventory)
-            if not clusters:
-                print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
-                continue
-            demand = max(entry.get("node-count", 1) for entry in entries)
             for entry in entries:
-                row = {
-                    "model": entry["model-prefix"],
-                    "hardware": _hardware_family(entry["runner"]),
-                    "framework": entry["framework"],
-                    "precision": entry["precision"],
-                    "spec_method": entry["spec-decoding"],
-                    "disagg": entry.get("disagg", False),
-                    "benchmark_type": "agentic_traces",
-                    "isl": None,
-                    "osl": None,
-                    "image": entry["image"],
-                }
-                index.setdefault(observation_key(row), {})[family] = (clusters, demand)
+                if in_scope(entry):
+                    curve = (
+                        entry["model-prefix"],
+                        _hardware_family(entry["runner"]),
+                        public_framework(entry["framework"]),
+                        entry["precision"],
+                    )
+                    curves.setdefault(curve, {}).setdefault((source, key), []).append(entry)
+    index: dict[tuple, dict[str, Family]] = {}
+    for members in curves.values():
+        sources = {source for source, _ in members}
+        if len(sources) > 1:
+            print(
+                f"::notice::Klaud skips {', '.join(sorted(f'{s}:{k}' for s, k in members))}: "
+                "its AgentX curve spans several master configs."
+            )
+            continue
+        family = sources.pop() + ":" + ",".join(sorted(key for _, key in members))
+        entries = [entry for rows in members.values() for entry in rows]
+        clusters = target_clusters(entries, inventory)
+        if not clusters:
+            print(f"::warning::Klaud live-family-clusters-unresolved: {family}")
+            continue
+        if len({normalized_image(entry["image"]) for entry in entries}) > 1:
+            print(f"::notice::Klaud skips {family}: its keys use different images.")
+            continue
+        evals = [
+            dict(row, **{"eval-only": True})
+            for row in mark_eval_entries(deepcopy(entries), root)
+            if row.get("run-eval")
+        ]
+        smoke = select_matrix_evals(deepcopy(entries), mode="smoke", root=root)
+        smoke_evals = [row for row in smoke if row.get("eval-only")]
+        record = Family(
+            clusters=clusters,
+            node_demand=max(entry.get("node-count", 1) for entry in entries),
+            sweep_node_demand=sum(entry.get("node-count", 1) for entry in [*entries, *evals]),
+            smoke_covers_full=point_identities(smoke) == point_identities(entries)
+            and expected_evals({"evals": smoke_evals}) == expected_evals({"evals": evals}),
+        )
+        for entry in entries:
+            row = {
+                "model": entry["model-prefix"],
+                "hardware": _hardware_family(entry["runner"]),
+                "framework": public_framework(entry["framework"]),
+                "precision": entry["precision"],
+                "spec_method": entry["spec-decoding"],
+                "disagg": entry.get("disagg", False),
+                "benchmark_type": "agentic_traces",
+                "isl": None,
+                "osl": None,
+                "image": entry["image"],
+            }
+            index.setdefault(observation_key(row), {})[family] = record
     return index
 
 
@@ -139,14 +253,18 @@ def choose(
     items: list[dict],
     headroom: dict[str, int],
     occupied: set[str],
-    families: dict[tuple, dict[str, tuple[frozenset[str], int]]],
+    families: dict[tuple, dict[str, Family]],
 ) -> list[dict]:
-    """Shuffle one candidate per unclaimed family that fits the headroom of every target cluster.
+    """Order one candidate per unclaimed family that fits the headroom of every target cluster.
 
-    Headroom is checked but not consumed here, so the overlap review keeps alternatives.
+    A branch or claim of the family, or of a single-key family of one of its keys, occupies it.
+    The order is a weighted shuffle: a family's weight is its benchmark age in days plus one, so
+    older images tend to lead without starving recent ones. Headroom is checked but not consumed
+    here, so the overlap review keeps alternatives.
     """
     occupied = {re.sub(r"^klaud[e]?/auto-", "klaud/auto-", branch) for branch in occupied}
     selected = []
+    keys: list[float] = []
     seen = set()
     valid = [item for item in items if item["source-status"] == "baseline"]
     for item in sorted(
@@ -169,65 +287,92 @@ def choose(
             }
         )[:16]
         image_key = identity(observation_key(row)[-1])[:16]
-        for family, (clusters, demand) in sorted(families.get(observation_key(row), {}).items()):
-            prefix = "klaud/auto-" + identity(family)[:16] + "-"
-            branch = prefix + image_key
-            claims = {
-                branch,
-                prefix,
-                f"klaud/auto-{legacy}-{image_key}",
-                f"klaud/auto-{legacy}-",
-            }
+        for family, record in sorted(families.get(observation_key(row), {}).items()):
+            branch = "klaud/auto-" + identity(family)[:16] + "-" + image_key
+            claims = {f"klaud/auto-{legacy}-{image_key}", f"klaud/auto-{legacy}-"}
+            for member in {family, *key_families(family)}:
+                name = identity(member)[:16]
+                claims |= {f"klaud/auto-{name}-", f"klaud/auto-{name}-{image_key}"}
+                claims.add(f"klaud/claim-{name}")
             if (
                 family in seen
                 or claims & occupied
-                or any(headroom.get(cluster, 0) < demand for cluster in clusters)
+                or any(headroom.get(cluster, 0) < record.node_demand for cluster in record.clusters)
             ):
                 continue
             selected.append(
                 {
                     "id": branch.removeprefix("klaud/auto-"),
                     "family": family,
-                    "clusters": sorted(clusters),
-                    "node-demand": demand,
+                    "clusters": sorted(record.clusters),
+                    "node-demand": record.node_demand,
+                    "sweep-node-demand": record.sweep_node_demand,
+                    "smoke-covers-full": record.smoke_covers_full,
                     "source": row,
                     "branch": branch,
                 }
             )
+            keys.append(random.expovariate(item["benchmark-age-days"] + 1))
             seen.add(family)
-    random.shuffle(selected)
-    return selected
+    ordered = sorted(zip(keys, selected, strict=True), key=lambda pair: pair[0])
+    return [candidate for _, candidate in ordered]
 
 
 def weights_key(source: dict) -> tuple:
+    """Return the (model, precision, hardware) key that identifies the weights ``source`` needs."""
     return (source.get("model"), source.get("precision"), source.get("hardware"))
 
 
-def recent_candidate_outcomes(
-    repository: str, cooldown_hours: int
-) -> tuple[dict[str, str | None], set[tuple]]:
-    from .lifecycle import MAX_SESSIONS, WAVE_HOURS, resume_parent
+def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta:
+    """Return how long outcome ``label``, recorded in ``phase``, keeps its candidate out of plans.
 
-    cutoff = datetime.now(UTC) - timedelta(hours=cooldown_hours)
-    # Resumed sessions of an older planner run record their outcomes in later waves.
-    since = cutoff - timedelta(hours=MAX_SESSIONS * WAVE_HOURS)
+    Infrastructure outcomes (INFRA_OUTCOMES) hold for INFRA_COOLDOWN_DAYS. Outcomes a retry soon
+    would repeat (LONG_HOLD_OUTCOMES, incompatible at resolve) hold for LONG_HOLD_HOURS, others
+    for ``cooldown_hours``.
+    """
+    if label in INFRA_OUTCOMES:
+        return timedelta(days=INFRA_COOLDOWN_DAYS)
+    if label in LONG_HOLD_OUTCOMES or (label == "incompatible" and phase == "resolve"):
+        return timedelta(hours=max(cooldown_hours, LONG_HOLD_HOURS))
+    return timedelta(hours=cooldown_hours)
+
+
+def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
+    """Return the recent outcomes that still hold candidates, weights, images or clusters.
+
+    Each candidate's newest session artifact counts and holds the candidate for ``hold``. While
+    held, missing weights and route mismatches (PAUSED_WEIGHTS) pause their (model, precision,
+    hardware) key. An already-updated outcome holds its image from its newest time, and
+    INFRA_BACKOFF_OUTCOMES infrastructure failures within INFRA_BACKOFF_HOURS back off a target
+    cluster. Only scheduled auto-sweeps and Klaud Cold's resume runs hold sessions. Resumed
+    sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
+    Unreadable history means no cooldown.
+    """
+    from .lifecycle import BOT, MAX_SESSIONS, WAKE_TITLE, WAVE_HOURS, resume_parent
+
+    now = datetime.now(UTC)
+    window = min(now - timedelta(hours=cooldown_hours), now - timedelta(days=INFRA_COOLDOWN_DAYS))
+    since = window - timedelta(hours=MAX_SESSIONS * WAVE_HOURS)
     try:
-        runs = github_items(
-            repository,
-            "actions/workflows/klaud-plan.yml/runs?created=>=" + since.date().isoformat(),
-            "workflow_runs",
-        )
+        runs = [
+            run
+            for query in ("event=schedule", f"event=workflow_dispatch&actor={BOT}")
+            for run in github_items(
+                repository,
+                f"actions/workflows/klaud-plan.yml/runs?{query}&created=>={since.date()}",
+                "workflow_runs",
+            )
+        ]
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return {}, set()
-    dated = []
+        return History(recent={}, paused_weights=set(), held_images={}, infra_clusters=set())
+    dated = set()
     plans: dict[int, int] = {}
     for run in runs:
         try:
             created = utc(run["created_at"])
-            if created >= since:
-                dated.append((created, int(run["id"])))
-                # A resume run's candidates come from its planner run's plan.
+            if created >= since and run.get("display_title") != WAKE_TITLE:
+                dated.add((created, int(run["id"])))
                 plans[int(run["id"])] = resume_parent(run.get("display_title") or "") or int(
                     run["id"]
                 )
@@ -250,22 +395,32 @@ def recent_candidate_outcomes(
                 if (
                     not match
                     or artifact.get("expired", True)
-                    or utc(artifact["created_at"]) < cutoff
+                    or utc(artifact["created_at"]) < window
                 ):
                     continue
-                # Each session of a candidate uploads its own artifact; the newest one counts.
                 if match[1] not in latest or artifact["id"] > latest[match[1]][0]["id"]:
                     latest[match[1]] = (artifact, run_id)
             except (AttributeError, KeyError, TypeError, ValueError):
                 continue
     result: dict[str, str | None] = {}
-    blocked: dict[int, set[str]] = {}
+    held_images: dict[str, datetime] = {}
+    planned_labels: dict[int, dict[str, str]] = {}
     for candidate, (artifact, run_id) in latest.items():
-        result[candidate] = recorded_outcome(repository, artifact)
-        if result[candidate] == "weights-missing":
-            blocked.setdefault(plans[run_id], set()).add(candidate)
-    missing_weights = set()
-    for plan_run, candidates in blocked.items():
+        label, phase = recorded_outcome(repository, artifact)
+        created = utc(artifact["created_at"])
+        if label == "already-updated":
+            image = candidate.split("-", 1)[1]
+            held_images[image] = max(held_images.get(image, created), created)
+        if label in INFRA_REASONS and now - created < timedelta(hours=INFRA_BACKOFF_HOURS):
+            planned_labels.setdefault(plans[run_id], {})[candidate] = label
+        if now - created >= hold(label, phase, cooldown_hours):
+            continue
+        result[candidate] = label
+        if label in PAUSED_WEIGHTS:
+            planned_labels.setdefault(plans[run_id], {})[candidate] = label
+    paused_weights = set()
+    infra: Counter[str] = Counter()
+    for plan_run, labels in planned_labels.items():
         if plan_run not in listings:
             try:
                 listings[plan_run] = github_items(
@@ -273,15 +428,22 @@ def recent_candidate_outcomes(
                 )
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 continue
-        missing_weights.update(
-            weights_key(planned["source"])
-            for planned in planned_candidates(repository, listings[plan_run])
-            if planned.get("id") in candidates
-        )
-    return result, missing_weights
+        for planned in planned_candidates(repository, listings[plan_run]):
+            label = labels.get(planned.get("id"))
+            if label in PAUSED_WEIGHTS:
+                paused_weights.add(weights_key(planned["source"]))
+            elif label in INFRA_REASONS:
+                infra.update(planned.get("clusters", []))
+    return History(
+        recent=result,
+        paused_weights=paused_weights,
+        held_images=held_images,
+        infra_clusters={cluster for cluster, n in infra.items() if n >= INFRA_BACKOFF_OUTCOMES},
+    )
 
 
 def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
+    """Return the candidates in the klaud-plan artifact among ``artifacts``, or [] if unreadable."""
     plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
     if not plan:
         return []
@@ -296,17 +458,22 @@ def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
             return []
 
 
-def recorded_outcome(repository: str, artifact: dict) -> str | None:
+def recorded_outcome(repository: str, artifact: dict) -> tuple[str | None, str | None]:
+    """Return the outcome label and phase a diagnostics ``artifact`` recorded, or Nones.
+
+    A skipped agent's label is ``agent-not-started``, and an asset or infrastructure reason code
+    labels its outcome. An unreadable artifact has no label.
+    """
     with tempfile.TemporaryDirectory() as scratch:
         try:
             download_json(repository, artifact, Path(scratch))
             diagnostics = json.loads((Path(scratch) / "candidate-diagnostics.json").read_text())
             if diagnostics.get("action-outcome") == "skipped":
-                return "agent-not-started"
+                return "agent-not-started", None
             outcome = CandidateOutcome.model_validate(diagnostics["candidate-outcome"])
-            return (
-                outcome.reason_code if outcome.reason_code == "weights-missing" else outcome.outcome
-            )
+            reason = outcome.reason_code
+            labelled = reason in ASSET_REASONS or reason in INFRA_REASONS
+            return (reason if labelled else outcome.outcome), outcome.phase
         except (
             OSError,
             ValueError,
@@ -314,10 +481,11 @@ def recorded_outcome(repository: str, artifact: dict) -> str | None:
             TypeError,
             subprocess.SubprocessError,
         ):
-            return None
+            return None, None
 
 
 def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> list[dict]:
+    """Return ``candidates`` never tried recently, then those whose recent outcome retries now."""
     fresh = [candidate for candidate in candidates if candidate["id"] not in recent]
     deferred = [
         candidate for candidate in candidates if recent.get(candidate["id"], "") in RETRY_NEXT_WAVE
@@ -325,72 +493,130 @@ def order_by_cooldown(candidates: list[dict], recent: dict[str, str | None]) -> 
     return fresh + deferred
 
 
-def aborted_candidates(repository: str) -> set[str]:
-    """Candidates whose Klaud PR carries klaud-abort; the planner never retries them.
+def image_held(candidate: dict, held_images: dict[str, datetime], now: datetime) -> bool:
+    """Whether an already-updated outcome on ``candidate``'s image still holds it at ``now``.
 
-    Removing the label returns the candidate to the pool at the planner's next scan.
+    Dated nightly tags are republished often, so they hold for LONG_HOLD_HOURS and other tags
+    for UNDATED_IMAGE_HOLD_DAYS.
+    """
+    since = held_images.get(candidate["id"].split("-", 1)[1])
+    if since is None:
+        return False
+    name = candidate["source"]["image"].split("@", 1)[0].rpartition("/")[2]
+    dated = ":" in name and DATED_TAG.search(name.rpartition(":")[2])
+    return now - since < (
+        timedelta(hours=LONG_HOLD_HOURS) if dated else timedelta(days=UNDATED_IMAGE_HOLD_DAYS)
+    )
+
+
+def maintainer_closed_families(repository: str, now: datetime) -> set[str]:
+    """Family prefixes of Klaud PRs someone else closed unmerged in the last hold window.
+
+    Closing a Klaud PR stops that candidate, and the planner leaves its family alone for
+    MAINTAINER_CLOSE_HOLD_DAYS, unless the PR carries REQUEUE_LABEL, which returns the family to
+    the pool. Closed PRs are read newest-updated first until the window ends.
     """
     from .lifecycle import BOT
 
-    aborted = set()
-    for issue in github_items(repository, f"issues?labels={ABORT_LABEL}&state=all&per_page=100"):
-        if "pull_request" not in issue or issue["user"]["login"] != BOT:
-            continue
-        pull = github_read(repository, f"pulls/{issue['number']}")
-        if match := re.fullmatch(r"klaud/auto-([0-9a-f]{16}-[0-9a-f]{16})", pull["head"]["ref"]):
-            aborted.add(match[1])
-    return aborted
-
-
-def abort_released(repository: str, candidate_id: str) -> bool:
-    """Whether the candidate's latest Klaud PR ended in an abort whose label was since removed."""
-    from urllib.parse import urlencode
-
-    from .lifecycle import BOT
-
-    query = urlencode(
-        {
-            "state": "closed",
-            "head": f"{repository.split('/', maxsplit=1)[0]}:klaud/auto-{candidate_id}",
-            "per_page": 100,
-        }
-    )
-    try:
-        pulls = [
-            pull
-            for pull in github_items(repository, "pulls?" + query)
-            if pull["user"]["login"] == BOT
-        ]
-        if not pulls:
-            return False
-        latest = max(pulls, key=lambda pull: pull["created_at"])
-        if any(label["name"] == ABORT_LABEL for label in latest["labels"]):
-            return False
-        comments = github_items(repository, f"issues/{latest['number']}/comments?per_page=100")
-        for comment in reversed(comments):
-            if comment["user"]["login"] == BOT and comment["body"].startswith(
-                "<!-- klaud-outcome:"
+    cutoff = now - timedelta(days=MAINTAINER_CLOSE_HOLD_DAYS)
+    held = set()
+    page = 1
+    while True:
+        pulls = github_read(
+            repository,
+            f"pulls?state=closed&sort=updated&direction=desc&per_page=100&page={page}",
+        )
+        for pull in pulls:
+            match = re.fullmatch(r"klaud/auto-([0-9a-f]{16})-[0-9a-f]{16}", pull["head"]["ref"])
+            if (
+                match
+                and pull["user"]["login"] == BOT
+                and not pull["merged_at"]
+                and utc(pull["closed_at"]) >= cutoff
+                and REQUEUE_LABEL not in {label["name"] for label in pull.get("labels", [])}
+                and match[1] not in held
             ):
-                record = json.loads(comment["body"].split("\n", 1)[1].split("\n-->", 1)[0])
-                return record["outcome"]["outcome"] == "aborted"
-    except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.SubprocessError):
-        print(f"::warning::Klaud abort history unavailable for {candidate_id}; keeping cooldown")
-    return False
+                closer = github_read(repository, f"issues/{pull['number']}").get("closed_by") or {}
+                if closer.get("login") != BOT:
+                    held.add(match[1])
+        if len(pulls) < 100 or utc(pulls[-1]["updated_at"]) < cutoff:
+            return held
+        page += 1
 
 
-def active_pulls(pulls: list[dict], now: datetime, stale_days: int) -> list[dict]:
-    cutoff = now - timedelta(days=stale_days)
-    return [
-        pr
-        for pr in pulls
-        if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
-        or datetime.fromisoformat(pr["updated_at"].replace("Z", "+00:00")) >= cutoff
-    ]
+def committed_demand(
+    claimed: set[str], families: dict[tuple, dict[str, Family]], size: dict[str, int]
+) -> dict[str, int]:
+    """Return the nodes of each cluster that the full sweeps of ``claimed`` families will need.
+
+    One sweep never holds more than its whole cluster, so each family's demand is capped at the
+    cluster's ``size``.
+    """
+    records = {
+        family: record for options in families.values() for family, record in options.items()
+    }
+    committed: Counter[str] = Counter()
+    for family in claimed & records.keys():
+        for cluster in records[family].clusters:
+            committed[cluster] += min(records[family].sweep_node_demand, size.get(cluster, 0))
+    return dict(committed)
 
 
-def plan(
-    root: Path, directory: Path, review_batch_size: int, cooldown_hours: int, stale_pr_days: int
-) -> None:
+def idle_first(
+    candidates: list[dict], headroom: dict[str, int], size: dict[str, int]
+) -> list[dict]:
+    """Stably order ``candidates`` by the free fraction of their tightest target cluster."""
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            -min(headroom[cluster] / size[cluster] for cluster in candidate["clusters"])
+        ),
+    )
+
+
+class WaveCapacity:
+    """Headroom one wave uses up as it takes candidates, one per infra-backoff cluster.
+
+    ``select`` and ``regenerate-producers`` walk candidates the same way, so producers are
+    prepared for the candidates a wave can actually take, not those capacity will skip.
+    """
+
+    def __init__(self, headroom: dict[str, int], size: dict[str, int], backoff: set[str]) -> None:
+        """Start from ``headroom`` of clusters of ``size`` nodes, with ``backoff`` clusters."""
+        self.headroom, self.size, self.backoff = dict(headroom), size, backoff
+        self.backed_off: set[str] = set()
+
+    def blocker(self, candidate: dict) -> str | None:
+        """Return why the wave cannot take ``candidate`` now ("backoff" or "capacity"), or None."""
+        clusters = candidate["clusters"]
+        if self.backed_off.intersection(clusters):
+            return "backoff"
+        if any(self.headroom.get(cluster, 0) < candidate["node-demand"] for cluster in clusters):
+            return "capacity"
+        return None
+
+    def take(self, candidate: dict) -> None:
+        """Reserve ``candidate``'s full sweep on each target cluster for the rest of the wave."""
+        for cluster in candidate["clusters"]:
+            self.headroom[cluster] -= min(candidate["sweep-node-demand"], self.size[cluster])
+        self.backed_off.update(self.backoff.intersection(candidate["clusters"]))
+
+
+def klaud_pulls(pulls: list[dict]) -> list[dict]:
+    """Return ``pulls`` on Klaud candidate branches. Other PRs never own a family."""
+    return [pr for pr in pulls if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])]
+
+
+def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: int) -> None:
+    """Write ``candidates.json``, ``open-prs.json`` and CLUSTER_STATE under ``directory``.
+
+    Unclaimed feed candidates at ``root``'s HEAD that fit the headroom left by claimed families
+    are ordered toward idle clusters, cooled down by ``cooldown_hours`` and the recent-outcome
+    holds, held while a maintainer recently closed their family's PR, and capped at
+    ``review_batch_size``. Only open Klaud PRs are indexed. CLUSTER_STATE gives ``select`` the
+    claimed families' committed demand and the clusters under infrastructure backoff, and gives
+    ``regenerate-producers`` this plan's headroom and cluster sizes.
+    """
     from . import claims
 
     policy = Policy()
@@ -411,31 +637,41 @@ def plan(
         for pr in page
         if re.match(r"^klaud[e]?/auto-", pr["head"]["ref"])
     )
-    candidates = choose(items, fetch_capacity(policy), occupied, live_families(root))
-    blocked = {
-        candidate.family
-        for owner in claims.family_owners(repository)
-        for candidate in owner.candidates
-    }
+    owners = claims.family_owners(repository)
+    blocked = {candidate.family for owner in owners for candidate in owner.candidates}
+    families = live_families(root)
+    capacity = fetch_capacity(policy) or Capacity(idle={}, queued={}, size={})
+    committed = committed_demand(blocked, families, capacity.size)
+    headroom = capacity.headroom(committed)
+    candidates = idle_first(choose(items, headroom, occupied, families), headroom, capacity.size)
     recovery_file = Path(os.environ.get("RUNNER_TEMP", directory.parent)) / "klaud-recovery.json"
     if recovery_file.exists():
         blocked.update(json.loads(recovery_file.read_text()))
-    candidates = [candidate for candidate in candidates if candidate["family"] not in blocked]
-    # klaud-abort keeps a candidate out of the pool until someone removes the label.
-    aborted = aborted_candidates(repository)
-    candidates = [candidate for candidate in candidates if candidate["id"] not in aborted]
-    recent, missing_weights = recent_candidate_outcomes(repository, cooldown_hours)
-    for candidate in candidates:
-        # Only candidates the cooldown would hold back need their abort history.
-        held = candidate["id"] in recent and recent[candidate["id"]] not in RETRY_NEXT_WAVE
-        if held and abort_released(repository, candidate["id"]):
-            recent[candidate["id"]] = "aborted"
+    blocked_keys = {member for family in blocked for member in key_families(family)}
     candidates = [
         candidate
         for candidate in candidates
-        if weights_key(candidate["source"]) not in missing_weights
+        if not key_families(candidate["family"]) & blocked_keys
     ]
-    candidates = order_by_cooldown(candidates, recent)
+    now = datetime.now(UTC)
+    held = maintainer_closed_families(repository, now)
+    candidates = [
+        candidate
+        for candidate in candidates
+        if not {
+            identity(member)[:16]
+            for member in {candidate["family"], *key_families(candidate["family"])}
+        }
+        & held
+    ]
+    history = recent_candidate_outcomes(repository, cooldown_hours)
+    candidates = [
+        candidate
+        for candidate in candidates
+        if weights_key(candidate["source"]) not in history.paused_weights
+        and not image_held(candidate, history.held_images, now)
+    ]
+    candidates = order_by_cooldown(candidates, history.recent)
     candidates = candidates[:review_batch_size]
     contexts = [
         {
@@ -461,9 +697,7 @@ def plan(
             "branch": pr["head"]["ref"],
             "head": pr["head"]["sha"],
         }
-        for pr in active_pulls(
-            [pr for page in pulls for pr in page], datetime.now(UTC), stale_pr_days
-        )
+        for pr in klaud_pulls([pr for page in pulls for pr in page])
     ]
     if candidates:
         for pr in open_prs:
@@ -491,6 +725,18 @@ def plan(
         json.dumps(contexts, indent=2, allow_nan=False) + "\n"
     )
     (directory / "open-prs.json").write_text(json.dumps(open_prs, indent=2) + "\n")
+    (directory / CLUSTER_STATE).write_text(
+        json.dumps(
+            {
+                "committed-demand": committed,
+                "infra-backoff": sorted(history.infra_clusters),
+                "headroom": headroom,
+                "size": capacity.size,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     if filename := os.environ.get("GITHUB_OUTPUT"):
         schema = PRReview.model_json_schema(by_alias=True)
         schema["properties"]["decisions"].update(minItems=len(contexts), maxItems=len(contexts))
@@ -500,7 +746,10 @@ def plan(
 
 
 def denied_bash_category(denial: dict) -> str:
-    """Retain only fixed categories, never command text, arguments or paths."""
+    """Return a fixed category for the Bash command in permission ``denial``.
+
+    Command text, arguments and paths are never retained.
+    """
     command = denial.get("tool_input", {})
     command = command.get("command") if isinstance(command, dict) else None
     if not isinstance(command, str):
@@ -538,6 +787,7 @@ def denied_bash_category(denial: dict) -> str:
 
 
 def execution_diagnostics(path: Path) -> dict:
+    """Return numeric metrics, termination and denial categories from the log at ``path``."""
     try:
         messages = json.loads(path.read_text())
         if not isinstance(messages, list):
@@ -610,25 +860,57 @@ def execution_diagnostics(path: Path) -> dict:
 
 
 def check_stop() -> dict:
-    """Require a verified terminal outcome, not merely an agent's final response."""
-    from .lifecycle import current_session
+    """Return the Stop hook decision, blocking unless a verified terminal outcome exists.
+
+    A PR a maintainer closed never blocks, since the recover-current step cleans it up. A session
+    that parked may stop while a run it parked on is still live, or if it parked at its deadline.
+    """
+    from .lifecycle import current_session, parked, terminal
 
     try:
         session = current_session()
         pulls = session.pulls()
-        # The job's recover-current step cancels an aborted candidate's runs and closes its PR.
-        if pulls and session.aborted(pulls[0]):
+        if pulls and session.closed_by_maintainer(pulls[0]):
             return {}
-        outcome = CandidateOutcome.model_validate_json(
-            (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").read_text()
-        )
+        evidence = Path(os.environ["KLAUD_EVIDENCE"])
+        end = evidence / "session-end.json"
+        if end.exists() and SessionEnd.model_validate_json(end.read_text()).status == "parked":
+            waiting = parked(session, pulls[0], int(os.environ["KLAUD_SESSION"])) if pulls else None
+            if waiting is None:
+                raise VerificationError("Session has not parked")
+            if waiting and all(terminal(run) for run in session.runs() if run["id"] in waiting):
+                return {
+                    "decision": "block",
+                    "reason": "Every run this session parked on has ended. Continue: inspect them, report the attempt, then repair, park again or finish.",
+                }
+            return {}
+        outcome = CandidateOutcome.model_validate_json((evidence / "outcome.json").read_text())
         session.verify(outcome)
     except (KeyError, TypeError, ValueError, subprocess.SubprocessError, OSError):
         return {
             "decision": "block",
-            "reason": "No verified terminal outcome. Continue monitoring and repairs, then run the documented finish command to validate or complete failure/deferral cleanup and reporting. Inspect read failures; never dispatch replacements or cancel healthy work just to stop.",
+            "reason": "No verified terminal outcome. Continue monitoring and repairs, then run the documented finish command to validate or complete failure/deferral cleanup and reporting, or park while owned runs are queued or running. Inspect read failures; never dispatch replacements or cancel healthy work just to stop.",
         }
     return {}
+
+
+def check_deadline() -> dict:
+    """Return the PostToolUse hook output telling a session near its time limit to park."""
+    from .lifecycle import PARK_AFTER_SECONDS, SESSION_SECONDS
+
+    started = os.environ.get("KLAUD_SESSION_STARTED")
+    if not started:
+        return {}
+    elapsed = datetime.now(UTC).timestamp() - int(started)
+    if elapsed < PARK_AFTER_SECONDS:
+        return {}
+    minutes = max(0, int((SESSION_SECONDS - elapsed) // 60))
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": f"About {minutes} minutes remain in this session. Publish attempt reports for owned runs now, then run park, or finish if the outcome is terminal, and end with StructuredOutput.",
+        }
+    }
 
 
 def resume_check() -> dict[str, bool]:
@@ -662,7 +944,6 @@ def resume_check() -> dict[str, bool]:
     if run is None or int(run) not in same:
         return no
     jobs = [job for job in candidate_jobs(session) if started_session(job)]
-    # This job's own session is already one of the started ones.
     if len(jobs) > MAX_SESSIONS or any(
         job["run_id"] in same and job["run_id"] != int(run) for job in jobs
     ):
@@ -675,17 +956,37 @@ def resume_check() -> dict[str, bool]:
     return {"run": resume, "resume": resume}
 
 
+def ended_parked(action_outcome: str) -> bool:
+    """Return True if the agent step succeeded and the session's last end record is a park."""
+    evidence = os.environ.get("KLAUD_EVIDENCE")
+    if action_outcome != "success" or not evidence:
+        return False
+    try:
+        end = SessionEnd.model_validate_json((Path(evidence) / "session-end.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return end.status == "parked"
+
+
 def save_diagnostics(
     execution_file: Path, outcome_file: Path, action_outcome: str, output: Path
 ) -> bool:
+    """Write sanitized session diagnostics to ``output`` and return False if unverified.
+
+    The outcome comes from the posted receipt, the evidence outcome, then ``outcome_file``. A
+    session whose agent ended cleanly right after parking on its unfinished draft PR has no
+    outcome and counts as verified.
+    """
     diagnostics = {
         "action-outcome": action_outcome,
         **execution_diagnostics(execution_file),
     }
     failure = None
     outcome = None
+    parked_runs = None
+    rerun = None
     try:
-        from .lifecycle import current_session
+        from .lifecycle import current_session, park_record, resumable
 
         session = current_session()
         pulls, runs = session.pulls(), session.runs()
@@ -702,6 +1003,10 @@ def save_diagnostics(
             ],
         }
         receipt = session.report(pulls[0]) if pulls else None
+        if not receipt and pulls and ended_parked(action_outcome) and resumable(session, pulls[0]):
+            record = park_record(session, pulls[0], int(os.environ.get("KLAUD_SESSION") or "1"))
+            if record is not None:
+                parked_runs, rerun = record["runs"], record.get("rerun")
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         failure = "session-state-unavailable"
     else:
@@ -712,7 +1017,7 @@ def save_diagnostics(
                 failure = "receipt-invalid"
             else:
                 diagnostics["outcome-source"] = "verified-receipt"
-        else:
+        elif parked_runs is None:
             evidence = os.environ.get("KLAUD_EVIDENCE")
             if evidence:
                 try:
@@ -725,8 +1030,10 @@ def save_diagnostics(
                     diagnostics["outcome-source"] = "verified-outcome"
             if outcome is None:
                 try:
-                    outcome = CandidateOutcome.model_validate_json(outcome_file.read_text())
+                    outcome = SessionEnd.model_validate_json(outcome_file.read_text()).outcome
                 except (OSError, ValueError, TypeError):
+                    outcome = None
+                if outcome is None:
                     failure = "candidate-outcome-unavailable"
                 else:
                     diagnostics["outcome-source"] = "structured-response"
@@ -735,10 +1042,28 @@ def save_diagnostics(
                 session.verify(outcome)
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
                 failure = "lifecycle-unverified"
+    if parked_runs is not None and failure is None:
+        diagnostics["session-state"] = "parked"
+        diagnostics["parked-runs"] = len(parked_runs)
+        diagnostics["candidate-outcome"] = None
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(diagnostics, indent=2) + "\n")
+        if filename := os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(filename, "a") as summary:
+                summary.write(
+                    f"Parked to rerun the failed jobs of run {rerun['run']} after"
+                    f" {rerun['not-before']}; recovery then resumes the candidate. / "
+                    f"已等待：恢复流程将在 {rerun['not-before']} 后重跑运行 {rerun['run']}"
+                    "的失败作业，然后继续该候选。\n"
+                    if rerun
+                    else f"Parked on {len(parked_runs)} owned runs; recovery resumes the"
+                    f" candidate. / 已等待 {len(parked_runs)} 个自有运行；恢复流程将继续该候选。\n"
+                )
+        return True
     if failure is not None:
         observed = diagnostics.get("observed-session", {})
         outcome = CandidateOutcome(
-            outcome="unexpected-error",
+            outcome="no-outcome",
             phase="unknown",
             pull_request=observed.get("pull-request"),
             run_ids=[run["id"] for run in observed.get("runs", [])],
@@ -748,6 +1073,7 @@ def save_diagnostics(
         diagnostics["outcome-report"] = "unavailable-or-invalid"
     else:
         diagnostics["outcome-report"] = "available"
+        diagnostics["session-state"] = "finished"
     diagnostics["candidate-outcome"] = outcome.model_dump(by_alias=True, exclude_unset=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(diagnostics, indent=2) + "\n")
@@ -770,7 +1096,7 @@ def save_diagnostics(
                 "| --- | --- | --- | --- | --- | --- |\n"
                 f"| {outcome.outcome} | {outcome.phase} | {reason} | {pr} | {repairs} | {runs} |\n"
             )
-    return outcome.outcome != "unexpected-error"
+    return outcome.outcome != "no-outcome"
 
 
 def reviewed(contexts: list[dict]) -> tuple[PRReview, str | None]:
@@ -802,27 +1128,47 @@ def print_untrusted(title: str, text: str) -> None:
     print(f"::group::{title}\n::stop-commands::{token}\n{text.rstrip()}\n::{token}::\n::endgroup::")
 
 
-def regenerate_producers(directory: Path) -> None:
-    """Write ``producers.json``: each proceed candidate's producer families, by family and head.
+def regenerate_producers(directory: Path, max_candidates: int, active_sessions: int = 0) -> None:
+    """Write ``producers.json``: proceed candidates' producer families, by family and head.
 
-    Producer revisions regenerate their own families, so this step runs without credentials.
-    A producer that fails is logged and left out; ``select`` defers the candidates needing it.
+    ``select`` takes candidates in order up to ``max_candidates`` less ``active_sessions``,
+    skipping those the wave's capacity cannot take. This walks them the same way, with the plan's
+    headroom from CLUSTER_STATE, and regenerates that many plus PRODUCER_MARGIN replacements, none
+    without a slot. Producer revisions regenerate their own families, so this step runs without
+    credentials. A producer that fails is logged and left out; ``select`` defers the candidates
+    needing it.
     """
     from .reporting import publication
     from .validation import ProducerRegenerationError, producer_matrix
 
     contexts = json.loads((directory / "candidates.json").read_text())
     review, _ = reviewed(contexts)
+    excluded = {decision.family for decision in review.decisions if decision.decision != "proceed"}
     models = {
         decision.candidate_id: decision.baseline_model
         for decision in review.decisions
-        if decision.decision == "proceed"
+        if decision.decision == "proceed" and decision.family not in excluded
     }
+    slots = max(0, max_candidates - active_sessions)
+    state = json.loads((directory / CLUSTER_STATE).read_text())
+    wave = WaveCapacity(state["headroom"], state["size"], set(state["infra-backoff"]))
+    proceeding = []
+    taken: set[str] = set()
+    for candidate in contexts:
+        if len(proceeding) >= (slots + PRODUCER_MARGIN if slots else 0):
+            break
+        if (
+            candidate["id"] in models
+            and candidate["family"] not in taken
+            and not wave.blocker(candidate)
+        ):
+            wave.take(candidate)
+            taken.add(candidate["family"])
+            proceeding.append(candidate)
     repository = os.environ["GITHUB_REPOSITORY"]
     families: dict[str, dict[str, dict]] = {}
-    for candidate in contexts:
-        if (model := models.get(candidate["id"])) is None:
-            continue
+    for candidate in proceeding:
+        model = models[candidate["id"]]
         try:
             heads = publication(repository, candidate, model).heads
         except (OSError, ValueError, KeyError, TypeError):
@@ -844,8 +1190,17 @@ def regenerate_producers(directory: Path) -> None:
 
 
 def select(
-    directory: Path, max_candidates: int, execution_file: Path | None = None, resumed: int = 0
+    directory: Path,
+    max_candidates: int,
+    execution_file: Path | None = None,
+    active_sessions: int = 0,
 ) -> None:
+    """Claim reviewed candidates that fit capacity and have a verified baseline.
+
+    Takes up to ``max_candidates`` less the ``active_sessions`` already running or resumed,
+    which share the cap, and writes their context, ownership.json and selection.json under
+    ``directory``.
+    """
     from . import claims, validation
     from .reporting import BaselinePreflight, Prose, missing_baseline_points, resolve_baseline
 
@@ -854,15 +1209,26 @@ def select(
     review, deferred = reviewed(contexts)
     decisions = {decision.candidate_id: decision for decision in review.decisions}
     selected = []
-    # Sessions that recovery resumed in this wave run beside its new candidates and share the cap.
-    slots = max(0, max_candidates - resumed)
-    headroom: dict[str, int] = {}
+    slots = max(0, max_candidates - active_sessions)
+    if slots and github.budget_low():
+        slots, deferred = 0, deferred or "api-budget-low"
+    state = json.loads((directory / CLUSTER_STATE).read_text())
+    backoff = set(state["infra-backoff"])
+    capacity = None
     if slots and any(decision.decision == "proceed" for decision in review.decisions):
         try:
-            headroom = fetch_capacity(Policy())
+            capacity = fetch_capacity(Policy())
         except ReadError:
             deferred = "capacity-unavailable"
+        else:
+            deferred = None if capacity else "capacity-snapshot-unusable"
+    wave = WaveCapacity(
+        capacity.headroom(state["committed-demand"]) if capacity else {},
+        capacity.size if capacity else {},
+        backoff,
+    )
     capacity_deferred = []
+    backoff_deferred = []
     baseline_deferred = []
     baseline_reasons: dict[str, str] = {}
     baseline_mismatches = []
@@ -874,14 +1240,20 @@ def select(
         decision = decisions.get(candidate["id"])
         if decision is None or decision.decision != "proceed" or decision.family in families:
             continue
-        clusters, demand = candidate["clusters"], candidate["node-demand"]
-        if any(headroom.get(cluster, 0) < demand for cluster in clusters):
+        blocker = wave.blocker(candidate)
+        if blocker == "backoff":
+            backoff_deferred.append(candidate["id"])
+            continue
+        if blocker:
             capacity_deferred.append(candidate["id"])
             continue
         owned = OwnedCandidate.model_validate(
             {key: candidate[key] for key in ("id", "family", "base")}
         )
         try:
+            matrix = validation.canonical_matrix(
+                os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
+            )
             baseline = resolve_baseline(
                 os.environ["GITHUB_REPOSITORY"],
                 owned,
@@ -892,6 +1264,7 @@ def select(
                     zh="在调度候选任务前验证完整的已发布基线。",
                 ),
                 producers.get(candidate["family"], {}),
+                matrix,
             )
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
@@ -900,12 +1273,7 @@ def select(
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
-            missing = missing_baseline_points(
-                validation.canonical_matrix(
-                    os.environ["GITHUB_REPOSITORY"], owned.base, owned.family
-                ),
-                baseline,
-            )
+            missing = missing_baseline_points(matrix, baseline)
         except (VerificationError, ReadError) as error:
             baseline_deferred.append(candidate["id"])
             baseline_reasons[candidate["id"]] = str(error)
@@ -937,8 +1305,7 @@ def select(
             os.environ["GITHUB_REPOSITORY"], owned, int(os.environ["GITHUB_RUN_ID"])
         ):
             continue
-        for cluster in clusters:
-            headroom[cluster] -= demand
+        wave.take(candidate)
         selected.append(
             {
                 **candidate,
@@ -972,6 +1339,8 @@ def select(
                 "candidates": candidates,
                 "deferred-reason": deferred,
                 "capacity-deferred-candidates": capacity_deferred,
+                "infra-backoff-clusters": sorted(backoff),
+                "backoff-deferred-candidates": backoff_deferred,
                 "baseline-deferred-candidates": baseline_deferred,
                 "baseline-deferral-reasons": baseline_reasons,
                 "baseline-mismatch-candidates": baseline_mismatches,
@@ -986,8 +1355,8 @@ def select(
             json.dumps(execution_diagnostics(execution_file), indent=2) + "\n"
         )
     summary = f"Klaud Cold: selected {len(candidates)} of {len(contexts)} eligible candidates."
-    if resumed:
-        summary += f" {resumed} resumed sessions leave " + (
+    if active_sessions:
+        summary += f" {active_sessions} running or resumed sessions leave " + (
             f"{slots} of {max_candidates} slots." if slots else "no slot for new candidates."
         )
     if deferred:
@@ -996,7 +1365,15 @@ def select(
     if capacity_deferred:
         summary += (
             f" {len(capacity_deferred)} reviewed candidates deferred by the latest capacity check"
-            " (a target cluster had queued human jobs or too few idle nodes)."
+            " (a target cluster had queued human jobs, Klaud jobs queued over"
+            f" {KLAUD_QUEUE_MAX_AGE.total_seconds() / 3600:g}h, or too few idle nodes"
+            " beyond the full sweeps of claimed families)."
+        )
+    if backoff:
+        summary += (
+            f" Infrastructure backoff on {', '.join(sorted(backoff))}: at least"
+            f" {INFRA_BACKOFF_OUTCOMES} infrastructure failures in {INFRA_BACKOFF_HOURS}h, so at"
+            f" most one new candidate per cluster this wave ({len(backoff_deferred)} deferred)."
         )
     if baseline_deferred:
         summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (
@@ -1025,6 +1402,7 @@ def select(
 
 
 def main() -> int:
+    """Run the Klaud subcommand named on the command line and return its exit status."""
     parser = argparse.ArgumentParser(prog="python -m infx.klaud", description=__doc__)
     parser.add_argument(
         "--root",
@@ -1052,50 +1430,62 @@ def main() -> int:
         required=True,
         help="Hours a recently attempted candidate waits before another agent (1-168)",
     )
-    prepare.add_argument(
-        "--stale-pr-days",
-        type=int,
-        required=True,
-        help="Days without activity after which another open PR stops owning a family (1-90)",
-    )
     regeneration = commands.add_parser(
         "regenerate-producers",
         help="Regenerate reviewed candidates' baseline producer families; run without credentials",
     )
-    regeneration.add_argument("--directory", type=Path, required=True)
     selection = commands.add_parser(
         "select", help="Validate KLAUD_PR_REVIEW and select nonoverlapping candidates"
     )
-    selection.add_argument("--directory", type=Path, required=True)
-    selection.add_argument(
-        "--max-candidates-per-run",
-        type=int,
-        required=True,
-        help="Maximum candidates to select (1-256)",
-    )
+    for slotted in (regeneration, selection):
+        slotted.add_argument("--directory", type=Path, required=True)
+        slotted.add_argument(
+            "--max-candidates-per-run",
+            type=int,
+            required=True,
+            help="Maximum candidates to select (1-256)",
+        )
+        slotted.add_argument(
+            "--active-sessions",
+            type=int,
+            default=0,
+            help="Klaud sessions running or resumed by recovery; each takes one candidate slot",
+        )
     selection.add_argument(
         "--execution-file",
         type=Path,
         help="Claude execution log; retain numeric metrics and fixed denial categories",
     )
-    selection.add_argument(
-        "--resumed",
-        type=int,
-        default=0,
-        help="Sessions recovery resumed in this wave; each takes one of its candidate slots",
-    )
     commands.add_parser(
         "check-stop",
-        help="Claude Stop hook: require finished runs and validated or closed PRs",
+        help="Claude Stop hook: require finished runs and validated or closed PRs, or a park",
+    )
+    commands.add_parser(
+        "check-deadline",
+        help="Claude PostToolUse hook: tell a session near its time limit to park",
+    )
+    parking = commands.add_parser(
+        "park",
+        help="Record that this session waits on its reported live owned runs, then stop",
+    )
+    parking.add_argument(
+        "--rerun-run",
+        type=int,
+        help="Reported, ended owned run whose failed jobs recovery reruns once, later",
+    )
+    parking.add_argument(
+        "--rerun-after-minutes",
+        type=int,
+        help="Minutes (15-240) recovery waits before that rerun, then the next session starts",
     )
     recovery = commands.add_parser(
         "recover", help="Reconcile interrupted sessions from completed autosweeps"
     )
     recovery.add_argument(
-        "--max-resumes",
+        "--max-sessions",
         type=int,
         required=True,
-        help="Most unfinished sessions to resume in this wave (0-256)",
+        help="Most Klaud sessions running at once, counting the resumes it grants (0-256)",
     )
     commands.add_parser(
         "recover-current",
@@ -1136,7 +1526,9 @@ def main() -> int:
         "finish", help="Verify validation or finish owned cleanup and reporting"
     )
     finish.add_argument("--outcome-file", type=Path, required=True)
-    commands.add_parser("outcome-schema", help="Print the public-safe candidate outcome schema")
+    commands.add_parser(
+        "session-end-schema", help="Print the public-safe schema of how a session ended"
+    )
     diagnostics = commands.add_parser(
         "diagnostics",
         help="Save sanitized candidate outcomes, termination metrics and permission categories",
@@ -1169,7 +1561,6 @@ def main() -> int:
                     return 0
                 session = current_session()
                 pulls = session.pulls()
-                # A resumed session continues with the baseline its PR already froze.
                 record = baseline_for(session, pulls[0]) if pulls else None
                 if record is None:
                     context = json.loads(
@@ -1195,7 +1586,10 @@ def main() -> int:
             from .validation import canonical_matrix, check_matrix
 
             session = current_session()
-            pull = session.pulls()[0]
+            pulls = session.pulls()
+            if not pulls:
+                raise VerificationError("Candidate PR not found")
+            pull = pulls[0]
             head = pull["head"]["sha"]
             matrix = json.loads(args.matrix_file.read_text())
             canonical = canonical_matrix(session.repository, head, session.candidate.family)
@@ -1211,7 +1605,7 @@ def main() -> int:
             return 0
         if args.command == "recover-current":
             from . import claims
-            from .lifecycle import PendingCleanup, current_session, reconcile
+            from .lifecycle import PendingCleanup, current_session, reconcile, show_status
 
             session = current_session()
             try:
@@ -1224,8 +1618,12 @@ def main() -> int:
                     session.candidate,
                     session.parent["id"],
                 )
+            finally:
+                show_status(session)
+                github.api_budget()
             return 0
         if args.command == "resume-check":
+            github.api_budget()
             outputs = "".join(
                 f"{key}={str(value).lower()}\n" for key, value in resume_check().items()
             )
@@ -1237,9 +1635,9 @@ def main() -> int:
         if args.command == "recover":
             from .lifecycle import recover
 
-            if not 0 <= args.max_resumes <= 256:
-                parser.error("--max-resumes must be between 0 and 256")
-            recover(args.max_resumes)
+            if not 0 <= args.max_sessions <= 256:
+                parser.error("--max-sessions must be between 0 and 256")
+            recover(args.max_sessions)
             return 0
         if args.command == "finish":
             from .lifecycle import current_session
@@ -1252,12 +1650,44 @@ def main() -> int:
             ):
                 raise VerificationError("Baseline failure requires a fixed reason-code")
             outcome = current_session().finish(outcome)
-            (Path(os.environ["KLAUD_EVIDENCE"]) / "outcome.json").write_text(
+            evidence = Path(os.environ["KLAUD_EVIDENCE"])
+            (evidence / "outcome.json").write_text(
                 outcome.model_dump_json(by_alias=True, exclude_unset=True) + "\n"
             )
+            (evidence / "session-end.json").write_text(
+                SessionEnd(status="finished", outcome=outcome).model_dump_json(
+                    by_alias=True, exclude_unset=True
+                )
+                + "\n"
+            )
             return 0
-        if args.command == "outcome-schema":
-            print(json.dumps(CandidateOutcome.model_json_schema(by_alias=True)))
+        if args.command == "park":
+            from .lifecycle import PARK_AFTER_SECONDS, current_session, park
+
+            if (args.rerun_run is None) != (args.rerun_after_minutes is None):
+                parser.error("--rerun-run and --rerun-after-minutes go together")
+            if args.rerun_after_minutes is not None and not 15 <= args.rerun_after_minutes <= 240:
+                parser.error("--rerun-after-minutes must be between 15 and 240")
+            now = datetime.now(UTC)
+            started = int(os.environ["KLAUD_SESSION_STARTED"])
+            park(
+                current_session(),
+                int(os.environ["KLAUD_SESSION"]),
+                overdue=now.timestamp() - started >= PARK_AFTER_SECONDS,
+                rerun=None
+                if args.rerun_run is None
+                else (args.rerun_run, now + timedelta(minutes=args.rerun_after_minutes)),
+            )
+            (Path(os.environ["KLAUD_EVIDENCE"]) / "session-end.json").write_text(
+                SessionEnd(status="parked").model_dump_json(by_alias=True, exclude_unset=True)
+                + "\n"
+            )
+            return 0
+        if args.command == "session-end-schema":
+            print(json.dumps(SessionEnd.model_json_schema(by_alias=True)))
+            return 0
+        if args.command == "check-deadline":
+            print(json.dumps(check_deadline()))
             return 0
         if args.command == "check-stop":
             print(json.dumps(check_stop()))
@@ -1278,24 +1708,18 @@ def main() -> int:
                 parser.error("--review-batch-size must be between 1 and 256")
             if not 1 <= args.cooldown_hours <= 168:
                 parser.error("--cooldown-hours must be between 1 and 168")
-            if not 1 <= args.stale_pr_days <= 90:
-                parser.error("--stale-pr-days must be between 1 and 90")
-            plan(
-                args.root,
-                args.directory,
-                args.review_batch_size,
-                args.cooldown_hours,
-                args.stale_pr_days,
-            )
-            return 0
-        if args.command == "regenerate-producers":
-            regenerate_producers(args.directory)
+            plan(args.root, args.directory, args.review_batch_size, args.cooldown_hours)
             return 0
         if not 1 <= args.max_candidates_per_run <= 256:
             parser.error("--max-candidates-per-run must be between 1 and 256")
-        if args.resumed < 0:
-            parser.error("--resumed must not be negative")
-        select(args.directory, args.max_candidates_per_run, args.execution_file, args.resumed)
+        if args.active_sessions < 0:
+            parser.error("--active-sessions must not be negative")
+        if args.command == "regenerate-producers":
+            regenerate_producers(args.directory, args.max_candidates_per_run, args.active_sessions)
+            return 0
+        select(
+            args.directory, args.max_candidates_per_run, args.execution_file, args.active_sessions
+        )
         return 0
     except ReadError as error:
         if args.command == "plan":
@@ -1315,13 +1739,16 @@ def main() -> int:
         if isinstance(error, VerificationError):
             reason = str(error)
         elif isinstance(error, ValidationError) and args.command == "report":
-            # Name the failing fields of the agent's own record without echoing its values.
             reason = "Invalid record: " + "; ".join(
                 ".".join(str(part) for part in item["loc"]) + ": " + item["msg"]
                 if item["loc"]
                 else item["msg"]
                 for item in error.errors(include_url=False)
             )
+        elif isinstance(error, subprocess.CalledProcessError) and "rate limit" in str(
+            error.stderr or ""
+        ):
+            reason = "GitHub API rate limit exhausted; retry after it resets"
         else:
             reason = "State unavailable or invalid; inspect GitHub before retrying"
         print(f"::error::Klaud: {reason}.")

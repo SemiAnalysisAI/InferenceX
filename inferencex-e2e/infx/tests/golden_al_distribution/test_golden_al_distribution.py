@@ -90,3 +90,31 @@ def test_cli_list_and_show(capsys) -> None:
 def test_cli_reports_errors(capsys) -> None:
     assert main(["show", "missing_curve"]) == 1
     assert "No committed golden curve" in capsys.readouterr().err
+
+
+def test_cli_show_rejects_a_curve_outside_the_golden_dir(tmp_path, capsys) -> None:
+    golden = tmp_path / "golden"
+    golden.mkdir()
+    (tmp_path / "outside.yaml").write_text("some-model:\n  thinking_on:\n    3: 2.5\n")
+
+    assert main(["--golden-dir", str(golden), "show", "../outside"]) == 1
+    assert "Invalid golden curve identity" in capsys.readouterr().err
+
+
+def test_a_thinking_mode_written_as_a_list_is_rejected(tmp_path) -> None:
+    (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on: [1.5, 2.3, 2.9]\n")
+    spec = {"method": "mtp", "num_speculative_tokens": 2}
+
+    with pytest.raises(ValueError, match="thinking_on of golden curve m_mtp.yaml"):
+        golden_length("m", spec, "thinking_on", tmp_path)
+
+
+def test_cli_show_marks_every_cell_of_an_empty_thinking_mode(tmp_path, capsys) -> None:
+    (tmp_path / "m_mtp.yaml").write_text("m:\n  thinking_on:\n    1: 1.5\n  thinking_off:\n")
+
+    assert main(["--golden-dir", str(tmp_path), "show", "m_mtp"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "m_mtp (m)",
+        "tokens  thinking_on  thinking_off",
+        "1       1.50         -",
+    ]

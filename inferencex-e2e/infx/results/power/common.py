@@ -25,6 +25,7 @@ class BenchmarkData:
 
     @property
     def integration_duration_s(self) -> float:
+        """Seconds between the benchmark start and end timestamps."""
         return self.end_unix - self.start_unix
 
 

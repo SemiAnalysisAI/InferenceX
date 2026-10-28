@@ -21,14 +21,17 @@ class RequestError(ValueError):
 
     @classmethod
     def missing(cls, *names: str) -> RequestError:
+        """Return an error naming the unset environment variables ``names``."""
         return cls(f"required environment variables are not set: {', '.join(names)}")
 
 
 def _equals(*truthy: str) -> BeforeValidator:
+    """Return a validator reading a string as True when it is one of ``truthy``."""
     return BeforeValidator(lambda value: value if isinstance(value, bool) else value in truthy)
 
 
 def _int_list(value: Any) -> Any:
+    """Split a whitespace-separated string into a list, passing other values through."""
     return value.split() if isinstance(value, str) else value
 
 
@@ -39,6 +42,7 @@ IntList = Annotated[list[int], BeforeValidator(_int_list)]
 
 
 def _describe(error: ValidationError) -> str:
+    """Render a validation error as one message listing missing then invalid inputs."""
     missing: list[str] = []
     invalid: list[str] = []
     for detail in error.errors(include_url=False, include_input=False):
@@ -113,6 +117,7 @@ class LaunchRequest(BaseModel):
 
     @property
     def workspace(self) -> Path:
+        """Return ``GITHUB_WORKSPACE``, or raise ``RequestError`` if it is unset."""
         if self.github_workspace is None:
             raise RequestError.missing("GITHUB_WORKSPACE")
         return self.github_workspace

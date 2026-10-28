@@ -15,6 +15,10 @@ ENTRY_POINT = "inferencex-e2e/infx/launch/__main__.py"
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Check that the checkout in argv contains the Python launcher.
+
+    Returns 0 if it does, else prints a CI error and returns 1.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkout", type=Path, help="repository checkout of the measured revision")
     checkout = parser.parse_args(argv).checkout

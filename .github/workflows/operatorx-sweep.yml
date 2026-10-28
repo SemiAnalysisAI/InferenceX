@@ -90,7 +90,6 @@ jobs:
           set -eo pipefail
           source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars OPERATORX_RUNNER OPERATORX_BACKENDS OPERATORX_TESTLISTS OPERATORX_WORLD_SIZES OPERATORX_MODE OPERATORX_CHUNK_SIZE GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_SHA GITHUB_OUTPUT
-          # Cases take InferenceX's srt-slurm recipes, expanded by InferenceX's own code (srtctl).
           git submodule update --init inferencex-e2e/utils/srt-slurm
           uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml --with ruamel.yaml \
             --with marshmallow --with marshmallow-dataclass --with pydantic --with jinja2 --with requests --with rich \
@@ -123,8 +122,6 @@ jobs:
     timeout-minutes: 70
     strategy:
       fail-fast: false
-      # Keep every shard eligible: a second matrix cap can strand priority labels
-      # on GitHub-held jobs. Runner/node admission is owned by the scheduler.
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; this job runs only on workflow_dispatch
       ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
@@ -141,8 +138,6 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       OPERATORX_CLEANUP_SECONDS: '180'
     steps:
-      # A cancelled or crashed job can leave git state in this persistent
-      # workspace that breaks checkout; re-cloning fixes it and is idempotent.
       - id: checkout
         continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -259,7 +254,6 @@ jobs:
 
   trigger-ingest:
     name: Trigger OperatorX database ingest
-    # A run with failed shards is still stored: its unrun cases read as missing.
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
       (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
@@ -271,7 +265,6 @@ jobs:
         env:
           RUN_ID: ${{ github.run_id }}
         with:
-          # Cross-repository dispatch credential, as run-sweep.yml's database ingest uses.
           github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
           script: |
             await github.rest.repos.createDispatchEvent({

@@ -21,7 +21,12 @@ BOT_STATUS = ("+1", "-1")
 
 
 def warn_outside_pr(
-    repo: str, pr_number: int, comment: dict[str, Any], run: dict[str, Any], token: str
+    repo: str,
+    pr_number: int,
+    comment: dict[str, Any],
+    run: dict[str, Any],
+    head_sha: str,
+    token: str,
 ) -> None:
     """Post a warning comment once for a reuse source outside the PR."""
     marker = f"<!-- reuse-outside-pr request={comment['id']} run={run['id']} -->"
@@ -31,7 +36,6 @@ def warn_outside_pr(
         for c in comments
     ):
         return
-    head_sha = str(run.get("head_sha") or "")
     source_pr = reuse.run_pr_number(repo, run, token)
     origin_en = f"from PR #{source_pr}, " if source_pr else ""
     origin_zh = f"来自 PR #{source_pr}，" if source_pr else ""
@@ -49,6 +53,10 @@ def warn_outside_pr(
 
 
 def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
+    """React to a reuse command comment on a PR and report whether it was accepted.
+
+    Returns 0 when accepted or not applicable, 1 when the request is rejected.
+    """
     if event.get("action") not in {"created", "edited"} or not event.get("issue", {}).get(
         "pull_request"
     ):
@@ -63,7 +71,9 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
     comment = github.api(repo, comment_path, token)
     if any(comment.get(key) != event["comment"].get(key) for key in ("body", "updated_at")):
         return 0
-    github.set_comment_reaction(repo, comment_id, token, None, replace=BOT_STATUS)
+    github.set_comment_reaction(
+        repo, comment_id, token, None, collection="issues", replace=BOT_STATUS
+    )
     body = str(comment.get("body") or "")
     if not command_pattern.search(body):
         return 0
@@ -82,7 +92,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         if pr.get("state") != "open":
             raise RuntimeError(f"PR #{pr_number} is not open.")
         run = reuse.resolve_reusable_run(repo, "run-sweep.yml", pr_number, pr, token, pinned_run_id)
-        head_sha = str(run.get("head_sha") or "")
+        head_sha = reuse.source_head_sha(repo, run, token)
         outside_pr = head_sha not in reuse.pr_commit_shas(repo, pr_number, token)
 
         latest = github.api(repo, comment_path, token)
@@ -93,13 +103,17 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
             or selected.get("id") != comment_id
             or any(selected.get(key) != comment.get(key) for key in ("body", "updated_at"))
         ):
-            github.set_comment_reaction(repo, comment_id, token, None, replace=BOT_STATUS)
+            github.set_comment_reaction(
+                repo, comment_id, token, None, collection="issues", replace=BOT_STATUS
+            )
             return 0
-        github.set_comment_reaction(repo, comment_id, token, "+1", replace=BOT_STATUS)
+        github.set_comment_reaction(
+            repo, comment_id, token, "+1", collection="issues", replace=BOT_STATUS
+        )
         message = f"Reuse accepted / 复用请求已接受: PR #{pr_number}, run {run['id']} ({run['conclusion']})."
         if outside_pr:
             try:
-                warn_outside_pr(repo, pr_number, comment, run, token)
+                warn_outside_pr(repo, pr_number, comment, run, head_sha, token)
             except Exception as exc:  # noqa: BLE001
                 print(f"::warning::Could not post outside-PR warning comment: {exc}")
             print(
@@ -111,7 +125,9 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         latest = github.api(repo, comment_path, token)
         if any(latest.get(key) != comment.get(key) for key in ("body", "updated_at")):
             return 0
-        github.set_comment_reaction(repo, comment_id, token, "-1", replace=BOT_STATUS)
+        github.set_comment_reaction(
+            repo, comment_id, token, "-1", collection="issues", replace=BOT_STATUS
+        )
         message = f"Reuse rejected / 复用请求未接受: {exc}"
         code = 1
     print(message)
@@ -122,6 +138,10 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
 
 
 def main() -> int:
+    """Acknowledge the comment from the GitHub Actions event and return the exit code.
+
+    Raises RuntimeError if no GitHub token is set.
+    """
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")

@@ -124,10 +124,12 @@ _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation
 
 
 def _dedupe(values: list[str]) -> tuple[str, ...]:
+    """Return ``values`` as a tuple without duplicates, keeping first-seen order."""
     return tuple(dict.fromkeys(values))
 
 
 def _is_safe_relative_subpath(value: str) -> bool:
+    """Return whether ``value`` is a non-empty relative POSIX path with no ``..`` or empty parts."""
     if not value or value.startswith(("/", "~")):
         return False
     parts = PurePosixPath(value).parts
@@ -135,6 +137,7 @@ def _is_safe_relative_subpath(value: str) -> bool:
 
 
 def _stays_below(root: Path, relative: str) -> bool:
+    """Return whether ``root / relative`` resolves inside ``root``."""
     try:
         (root / relative).resolve().relative_to(root.resolve())
     except (ValueError, OSError):
@@ -143,10 +146,12 @@ def _stays_below(root: Path, relative: str) -> bool:
 
 
 def _is_finite(value: Any) -> bool:
+    """Return whether ``value`` is a finite int or float, excluding booleans."""
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _is_positive_finite(value: Any) -> bool:
+    """Return whether ``value`` is finite and greater than zero."""
     return _is_finite(value) and value > 0
 
 
@@ -166,6 +171,7 @@ class ExpectedDevice:
 
     @property
     def key(self) -> tuple[str, int]:
+        """The (hostname, gpu_index) pair identifying this device."""
         return (self.hostname, self.gpu_index)
 
 
@@ -176,6 +182,7 @@ class ExpectedWindow:
 
     @property
     def key(self) -> tuple[str, int]:
+        """The (benchmark_type, concurrency) pair identifying this window."""
         return (self.benchmark_type, self.concurrency)
 
 
@@ -190,6 +197,7 @@ class SampleRow:
 
     @property
     def key(self) -> tuple[int, str, int]:
+        """The (scrape_seq, hostname, gpu_index) triple identifying this sample."""
         return (self.scrape_seq, self.hostname, self.gpu_index)
 
 
@@ -204,9 +212,11 @@ class ObservedDevice:
 
     @property
     def key(self) -> tuple[str, int]:
+        """The (hostname, gpu_index) pair identifying this device."""
         return (self.hostname, self.gpu_index)
 
     def to_dict(self) -> dict:
+        """Return this device as a JSON-ready dict without its sample times."""
         return {
             "hostname": self.hostname,
             "gpu_index": self.gpu_index,
@@ -217,24 +227,31 @@ class ObservedDevice:
 
 
 def _text(value: Any, label: str) -> str:
+    """Return ``value`` if it is a non-empty string, else raise ValueError naming ``label``."""
     if not isinstance(value, str) or not value:
         raise ValueError(f"{label} is not a non-empty string: {value!r}")
     return value
 
 
 def _whole(value: Any, label: str, *, minimum: int) -> int:
+    """Return ``value`` if it is an int of at least ``minimum``, else raise ValueError naming ``label``."""
     if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
         raise ValueError(f"{label} is not an integer >= {minimum}: {value!r}")
     return value
 
 
 def _role(value: Any) -> str:
+    """Return ``value`` if it is a known worker role, else raise ValueError."""
     if value not in WORKER_ROLES:
         raise ValueError(f"worker_role is not one of {WORKER_ROLES}: {value!r}")
     return value
 
 
 def _parse_expected_devices(manifest: dict) -> list[ExpectedDevice]:
+    """Parse the manifest's expected_devices into ExpectedDevice entries.
+
+    Raises TypeError, ValueError or KeyError on malformed entries.
+    """
     entries = manifest.get("expected_devices") or []
     if not isinstance(entries, list):
         raise TypeError(f"expected_devices is not a list: {entries!r}")
@@ -267,6 +284,10 @@ def _parse_expected_devices(manifest: dict) -> list[ExpectedDevice]:
 
 
 def _parse_expected_windows(manifest: dict) -> list[ExpectedWindow]:
+    """Parse the manifest's expected_windows into ExpectedWindow entries.
+
+    Raises TypeError, ValueError or KeyError on malformed entries.
+    """
     entries = manifest.get("expected_windows") or []
     if not isinstance(entries, list):
         raise TypeError(f"expected_windows is not a list: {entries!r}")
@@ -379,6 +400,7 @@ def _parse_sample_row(raw: list[str], expected_version: int) -> SampleRow | None
 
 
 def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
+    """Return the valid unique sample rows of the samples CSV at ``path`` and the reasons it is unsound."""
     if not path.is_file():
         return (), ("samples_csv_missing",)
 
@@ -428,6 +450,7 @@ def read_samples(path: Path) -> tuple[tuple[SampleRow, ...], tuple[str, ...]]:
 
 
 def derive_observed_devices(rows: tuple[SampleRow, ...]) -> list[ObservedDevice]:
+    """Group sample ``rows`` per (hostname, gpu_index) into ObservedDevice entries sorted by key."""
     ordered: dict[tuple[str, int], list[SampleRow]] = {}
     for row in rows:
         ordered.setdefault((row.hostname, row.gpu_index), []).append(row)
@@ -452,6 +475,7 @@ def derive_observed_devices(rows: tuple[SampleRow, ...]) -> list[ObservedDevice]
 def _resolve_roles(
     devices: list[ExpectedDevice],
 ) -> tuple[dict[tuple[str, int], str], list[str]]:
+    """Map each expected device to its single worker role, or return {} and a conflict reason."""
     roles: dict[tuple[str, int], str] = {}
     for device in devices:
         distinct = {assignment.worker_role for assignment in device.assignments}
@@ -464,6 +488,7 @@ def _resolve_roles(
 def _resolve_het_groups(
     devices: list[ExpectedDevice],
 ) -> tuple[dict[str, int | None], list[str]]:
+    """Map each expected host to its single het group, or return {} and a conflict reason."""
     groups: dict[str, int | None] = {}
     for device in devices:
         distinct = {assignment.het_group for assignment in device.assignments}
@@ -480,6 +505,7 @@ def _validate_devices(
     expected: list[ExpectedDevice],
     observed: list[ObservedDevice],
 ) -> tuple[list[str], dict[tuple[str, int], str]]:
+    """Compare ``expected`` and ``observed`` devices and return the mismatch reasons and the role per device."""
     reasons: list[str] = []
     expected_keys = {device.key for device in expected}
     observed_keys = {device.key for device in observed}
@@ -566,6 +592,7 @@ class ParsedWindow:
 
 
 def _window_status_invariants_hold(status: str, end: Any, duration: Any, reason: Any) -> bool:
+    """Return whether ``end``, ``duration`` and ``reason`` are consistent with window ``status``."""
     if status == WINDOW_STATUS_RUNNING:
         return end is None and duration is None and reason is None
     if status == "interrupted":
@@ -580,6 +607,10 @@ def _window_status_invariants_hold(status: str, end: Any, duration: Any, reason:
 def _parse_window(
     path: Path, relative: str, result_root: Path
 ) -> tuple[ParsedWindow | None, list[str]]:
+    """Parse the window JSON at ``path`` whose result must stay below ``result_root``.
+
+    Returns the window, or None with the reason codes when it is malformed.
+    """
     try:
         payload = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -632,6 +663,10 @@ def _scan_windows(
     result_root: Path,
     artifact_errors: list[dict],
 ) -> tuple[dict[tuple[str, int], ParsedWindow], set[tuple[str, int]]]:
+    """Parse every window file in ``windows_dir`` keyed by (type, concurrency), dropping duplicated keys.
+
+    Returns the windows and the duplicated keys, appending file problems to ``artifact_errors``.
+    """
     parsed: dict[tuple[str, int], ParsedWindow] = {}
     duplicates: set[tuple[str, int]] = set()
     if not windows_dir.is_dir():
@@ -683,6 +718,7 @@ def _scan_windows(
 
 
 def _check_window_result(window: ParsedWindow, result_root: Path) -> list[str]:
+    """Return reasons the window's result JSON under ``result_root`` is missing or disagrees with ``window``."""
     result_file = result_root / window.result_path
     if not result_file.is_file():
         return ["measurement_window_result_missing"]
@@ -713,6 +749,7 @@ def _check_coverage(
     expected_device_keys: set[tuple[str, int]],
     observed_devices: list[ObservedDevice],
 ) -> tuple[dict[str, float], list[str]]:
+    """Return the largest sample gap per expected device across ``start``..``end`` and the coverage reasons."""
     by_key = {device.key: device for device in observed_devices}
     gaps: dict[str, float] = {}
     reasons: list[str] = []
@@ -823,6 +860,7 @@ def _check_stored_evidence(
     validations: list[dict],
     artifact_errors: list[dict],
 ) -> list[str]:
+    """Return mismatches between the ``manifest``'s stored evidence and the values recomputed from disk."""
     failures: list[str] = []
 
     stored_rows = manifest.get("sample_row_count")
@@ -900,12 +938,14 @@ class MultinodePowerAudit:
 
 
 def _canonical_sha256(payload: dict) -> str:
+    """Return the SHA-256 hex digest of ``payload`` as sorted, compact JSON."""
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
 
 
 def _add_reason(audit: MultinodePowerAudit, reason: str, detail: str | None = None) -> None:
+    """Record ``reason`` once on ``audit`` and append ``detail`` to its failures when given."""
     _append_reason(audit.reasons, reason)
     if detail:
         audit.failures.append(detail)
@@ -1339,9 +1379,13 @@ def _host_workers(audit: MultinodePowerAudit) -> list[dict]:
 
 
 def _patch_agg(agg_path: Path, audit: MultinodePowerAudit) -> None:
+    """Write the ``audit`` verdict and power metrics into the aggregate JSON at ``agg_path``."""
     cpu = audit.cpu
+    data = json.loads(agg_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"aggregate is not a JSON object: {agg_path}")
     data = with_power_metrics(
-        json.loads(agg_path.read_text(encoding="utf-8")),
+        data,
         schema_version=POWER_METRIC_SCHEMA_VERSION,
         metric_keys=_ALL_POWER_METRIC_KEYS,
         power_valid=audit.power_valid,
@@ -1370,6 +1414,7 @@ def _sidecar_payload(
     bench_result: Path,
     benchmark: BenchmarkData | None,
 ) -> dict:
+    """Build the power validation sidecar JSON from ``audit`` and the benchmark inputs."""
     payload = {
         "schema_version": 1,
         "power_valid": audit.power_valid,
@@ -1516,6 +1561,7 @@ def run(
 
 
 def main() -> int:
+    """Parse the multinode power options from argv and return the exit code of ``run``."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--power-dir",
