@@ -7,7 +7,7 @@ index b2aefb1e..4a22074a 100644
  TACHOMETER_RELEASE ?= latest
  CPU_POWER_EXPORTER_RELEASE ?= latest
 +# Test-only: a prebuilt cpu-power-exporter on the cluster filesystem wins over the release download.
-+CPU_POWER_EXPORTER_LOCAL ?= /home/ext-wgao/rapl603/cpu-power-exporter-x86_64-unknown-linux-musl
++CPU_POWER_EXPORTER_LOCAL ?= $(firstword $(wildcard /home/ext-wgao/rapl603/cpu-power-exporter-x86_64-unknown-linux-musl /it-share/gharunners2/rapl603/cpu-power-exporter-x86_64-unknown-linux-musl))
  
  default: check
  
