@@ -6,13 +6,17 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: 1.7.0.dev20261027
+      dynamo: 1.6.0
       sglang: 0.0.0.dev1+g586355a83
   resources:
     gpu_type: gb200
     gpus_per_node: 4
+  # Dynamo a789babbe37a made frontend /health omit instances, which srtctl's
+  # readiness check needs; pin its parent until srtctl asks for them.
   dynamo:
-    install: false
+    install: true
+    source:
+      rev: 68c35a1ce41b035d1a79fff4be97aa1c43de62c3
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
