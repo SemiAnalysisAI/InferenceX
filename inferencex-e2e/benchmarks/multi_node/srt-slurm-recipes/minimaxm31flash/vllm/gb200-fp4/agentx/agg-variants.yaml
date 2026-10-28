@@ -10,6 +10,9 @@ base:
   resources:
     gpu_type: gb200
     gpus_per_node: 4
+  observability:
+    tachometer:
+      enabled: false
   health_check:
     max_attempts: 1440
     interval_seconds: 5
