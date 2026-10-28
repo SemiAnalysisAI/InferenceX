@@ -393,6 +393,14 @@ PY
 # up its own Docker image and cannot run inside enroot/pyxis). The built deep_ep/uccl packages
 # persist under a cache root and reach the ranks via PYTHONPATH, so later allocations skip the build.
 
+# On EFA pools UCCL-EP builds its EFA transport only for multi-node shards, against the host
+# rdma-core the launcher binds (collx_add_efa_host_mounts); inside one node UCCL starts no proxy, so
+# single-node shards build without it. The two builds key separate caches.
+uccl_efa_build() {
+  [ "${COLLX_RDMA_FABRIC:-}" = efa ] || return 0
+  if [ "${COLLX_NODES:-1}" -le 1 ]; then printf 'noefa'; else printf 'efa'; fi
+}
+
 uccl_cache_root() {
   local arch
   arch="$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '-')"
@@ -410,15 +418,17 @@ uccl_activate() {
 uccl_install() {
   local root="$1" arch="$2" source_dir="/tmp/collectivex-uccl-$COLLX_UCCL_COMMIT" arch_env sp
   local -a flags=("${UCCL_BUILD_FLAGS[@]}")
-  # UCCL builds its EFA transport whenever EFA_HOME (/opt/amazon/efa) exists. The EFA pools'
-  # containers carry that directory beside an image rdma-core whose efadv.h predates the fields UCCL
-  # uses (h100-dgxc: efadv_qp_init_attr has no sl or flags), so the build fails. uccl-ep never
-  # leaves one node there, and inside one node UCCL starts no proxy, so those pools build without it.
-  if [ "${COLLX_RDMA_FABRIC:-}" = efa ]; then
-    [ "${COLLX_NODES:-1}" -le 1 ] \
-      || { collx_log "ERROR: UCCL-EP across EFA needs an EFA build against the host rdma-core"; return 1; }
-    flags+=(EFA_HOME=/nonexistent)
-  fi
+  # UCCL builds its EFA transport whenever EFA_HOME exists, from EFA_HOME/include and EFA_HOME/lib.
+  # The EFA pools' containers carry /opt/amazon/efa beside an image rdma-core whose efadv.h predates
+  # the fields UCCL uses (h100-dgxc: efadv_qp_init_attr has no sl or flags), so EFA_HOME names the
+  # host rdma-core bound for multi-node shards instead (see uccl_efa_build).
+  case "$(uccl_efa_build)" in
+    noefa) flags+=(EFA_HOME=/nonexistent) ;;
+    efa)
+      [ -r "$COLLX_EFA_HOST_ROOT/include/infiniband/efadv.h" ] && [ -e "$COLLX_EFA_HOST_ROOT/lib/libefa.so" ] \
+        || { collx_log "ERROR: UCCL-EP across EFA needs the host rdma-core headers and libefa"; return 1; }
+      flags+=(EFA_HOME="$COLLX_EFA_HOST_ROOT") ;;
+  esac
   if [ -e "$root" ] || [ -L "$root" ]; then
     rm -rf "$root" || { collx_log "ERROR: incomplete UCCL cache-reset failed"; return 1; }
   fi
@@ -491,16 +501,17 @@ PY
 }
 
 uccl_prepare() {
-  local arch shared
+  local arch shared efa
   command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for UCCL build"; return 1; }
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     arch="$(uccl_rocm_arch)" || return 1
   else
     arch="$(cuda_arch)" || return 1
   fi
-  shared="$(uccl_cache_root "$arch")" || shared=""
+  efa="$(uccl_efa_build)"
+  shared="$(uccl_cache_root "$arch${efa:+-$efa}")" || shared=""
   prepare_site_cache UCCL-EP UCCL "$COLLX_UCCL_COMMIT" "$shared" \
-    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT-$UCCL_BUILD_GEN" uccl_install "$arch" || return 1
+    "/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT-$UCCL_BUILD_GEN${efa:+-$efa}" uccl_install "$arch" || return 1
   uccl_activate "$CACHE_ROOT" || return 1
   uccl_probe "$CACHE_ROOT" || { collx_log "ERROR: UCCL import probe failed"; return 1; }
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"

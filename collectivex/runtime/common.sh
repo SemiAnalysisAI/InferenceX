@@ -245,6 +245,12 @@ collx_add_efa_host_mounts() {
     && [ "${COLLX_TRANSPORT:-}" != mnnvl ] || return 0
   mounts="$(collx_efa_host_mounts "${COLLX_IMAGE_PLATFORM:-}")" \
     || collx_die "no host EFA user space layout for this image platform"
+  # UCCL-EP compiles its EFA transport in the container, against the host rdma-core headers that
+  # match the bound libefa (the image's efadv.h lacks fields UCCL uses).
+  if [ "${COLLX_BENCH:-}" = uccl-ep ]; then
+    mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
+    mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
+  fi
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
