@@ -1,0 +1,166 @@
+# GLM-5.2-MXFP4 AgentX on MI355X: stock SGLang P/D behind the Infera router.
+#
+# Every worker is `python3 -m infera.engine.sglang`, which starts SGLang's own server with
+# the flags below and registers it in the job's etcd; `infera-router` discovers the
+# workers there (srt-slurm `frontend.type: infera`) and routes kv-aware, with prefill
+# session affinity and decode input demand. infera-sglang.sh installs Infera at the
+# master config's router version.
+#
+# Prefill: TP1 x PP4 on four GPUs, 20/20/20/18 layers (the last stage also holds the LM
+# head and the NextN layer), overlap scheduler off as PP requires, 8k chunks,
+# shortest-prefill-first, write-back HiCache at 250 GB per stage. Prefill carries the
+# decode's EAGLE flags so the KV transfer includes the draft layer. Decode: TP + DP
+# attention over its GPUs, EAGLE MTP 5/1/6. KV moves over Mooncake on the eight rails.
+schema: 2
+base:
+  name: mi355x-glm52-infera-sglang-agentx-disagg
+  slurm:
+    time_limit: "08:00:00"
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  setup_script: infera-sglang.sh
+  frontend:
+    type: infera
+    enable_multiple_frontends: false
+    args:
+      router-policy: kv-aware
+      kv-prefill-overlap-weight: 20
+      kv-decode-overlap-weight: 2
+      session-affinity: prefill
+      pd-prefill-guard-release: completion
+      decode-input-demand: "on"
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      kv_events: true
+      env:
+        <<: &environment
+          PYTHONUNBUFFERED: "1"
+          PYTHONHASHSEED: "0"
+          # srtctl's pre-download sees only HF_HOME, so the node-local cache is mounted at $HF_HOME/hub.
+          HF_HOME: /mnt/hf_home
+          HF_HUB_CACHE: /mnt/hf_home/hub
+          GLOO_SOCKET_IFNAME: "@fabric.socket-ifname"
+          NCCL_SOCKET_IFNAME: "@fabric.socket-ifname"
+          NCCL_IB_DISABLE: "1"
+          NCCL_IGNORE_CPU_AFFINITY: "1"
+          HSA_NO_SCRATCH_RECLAIM: "1"
+          HIP_FORCE_DEV_KERNARG: "1"
+          AITER_USE_FLYDSL_MOE_SORTING: "1"
+          SAFETENSORS_FAST_GPU: "1"
+          SGLANG_DP_USE_GATHERV: "1"
+          SGLANG_OPT_USE_TOPK_V2: "true"
+          SGLANG_OPT_USE_JIT_KERNEL_GROUPED_TOPK: "0"
+          SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "1800"
+          SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "1800"
+          SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+          INFERA_ENGINE_READY_TIMEOUT: "3600"
+          # Same-host HIP IPC cannot reach a peer node; cross-node KV goes over RDMA.
+          MC_DISABLE_HIP: "1"
+          MC_GID_INDEX: "@fabric.rdma-gid-index"
+          # Rail-isolated fabric: each transfer uses the NIC of the same name on both ends.
+          MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+          # ionic rejects a 2 GiB dma-buf registration that starts 1 GiB-aligned.
+          MC_MAX_MR_SIZE: "1073741824"
+          RDMAV_FORK_SAFE: "1"
+        SGLANG_HICACHE_HOST_REGISTER_CHUNK_GB: "512"
+        SGLANG_PP_LAYER_PARTITION: "20,20,20,18"
+      args:
+        <<: &server
+          served-model-name: amd/GLM-5.2-MXFP4
+          trust-remote-code: true
+          disaggregation-transfer-backend: mooncake
+          disaggregation-ib-device: rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7
+          ep-size: 1
+          # AITER custom all-reduce garbles decode output under DP attention with CUDA graphs.
+          disable-custom-all-reduce: true
+          kv-cache-dtype: fp8_e4m3
+          dsa-prefill-backend: triton
+          dsa-decode-backend: triton
+          max-running-requests: 256
+          json-model-override-args: '{"index_share_for_mtp_iteration":false}'
+          enable-fused-qk-norm-rope: true
+          enable-aiter-allreduce-fusion: true
+          reasoning-parser: glm45
+          tool-call-parser: glm47
+          enable-metrics: true
+          enable-cache-report: true
+          watchdog-timeout: 3600
+          speculative-algorithm: EAGLE
+          speculative-num-steps: 5
+          speculative-eagle-topk: 1
+          speculative-num-draft-tokens: 6
+        tp-size: 1
+        pp-size: 4
+        disable-overlap-schedule: true
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        mem-fraction-static: 0.88
+        schedule-policy: shortest-prefill-first
+        enable-hierarchical-cache: true
+        hicache-size: 250
+        hicache-ratio: 1.5
+        hicache-write-policy: write_back
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env: *environment
+      args:
+        <<: *server
+        tp-size: 8
+        dp-size: 8
+        enable-dp-attention: true
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.92
+        cuda-graph-max-bs-decode: 256
+        tokenizer-worker-num: 4
+  sbatch_directives:
+    cpus-per-task: "128"
+    mem: "0"
+  srun_options:
+    mem: "0"
+    container-writable: ""
+    container-remap-root: ""
+  extra_mount:
+    # The node-local hub cache the single-node GLM-5.2 points already fill.
+    - /var/lib/hf-hub-cache:/mnt/hf_home/hub
+  health_check:
+    # Cold start: weight load, the 1 TB pinned HiCache pool per prefill and graph capture.
+    max_attempts: 1080
+    interval_seconds: 5
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      # infera-router keys session affinity on X-Session-ID.
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      TRANSFORMERS_VERBOSITY: error
+
+# One PP4 prefill and an 8-GPU decode (12 GPUs). Decode balances requests held per rank:
+# under DP attention a step waits for the busiest rank.
+override_1p1d:
+  frontend:
+    args:
+      decode-request-weight: 1000000
+
+# One PP4 prefill and a 4-GPU decode (8 GPUs). KV-bound, so token-only decode demand.
+override_1p1d_d4:
+  roles:
+    decode:
+      gpus: 4
+      args:
+        tp-size: 4
+        dp-size: 4
+
+# Two PP4 prefills on one node and an 8-GPU decode (16 GPUs).
+override_2p1d:
+  roles:
+    prefill:
+      workers: 2
