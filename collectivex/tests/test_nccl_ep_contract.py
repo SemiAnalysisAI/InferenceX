@@ -79,31 +79,22 @@ def _dispatch(backend, steps=1):
         backend.dispatch(problem)
 
 
-class LowLatencyFollowsTensorRTLLM(unittest.TestCase):
-    """TensorRT-LLM dispatches into a registered window only when it is not capturing
-    (nccl_ep.py:305-327): graphed LL stages, eager LL zero-copies, and `-zc` names what ran."""
+class LowLatencyZeroCopies(unittest.TestCase):
+    """Inside one NVLink domain LL rank-major dispatches into the registered window, graphed or
+    eager, and `-zc` names what ran."""
 
-    def test_graphed_rank_major_dispatches_into_a_plain_tensor(self):
-        module, backend, handle, details = _backend()
-        _dispatch(backend)
+    def test_rank_major_dispatches_into_the_zero_copy_window_in_both_regimes(self):
+        for graph in ("1", "0"):
+            with self.subTest(graph=graph):
+                module, backend, handle, details = _backend(env={"COLLX_CUDA_GRAPH": graph})
+                _dispatch(backend)
 
-        self.assertFalse(backend.zero_copy)
-        self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.OFF)
-        backend._comm.register_window.assert_not_called()
-        self.assertIsNone(handle.outputs.tokens.window)
-        self.assertFalse(details["zero_copy"])
-        self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-cap512-{VERSION}")
-
-    def test_eager_rank_major_keeps_the_zero_copy_window(self):
-        module, backend, handle, details = _backend(env={"COLLX_CUDA_GRAPH": "0"})
-        _dispatch(backend)
-
-        self.assertTrue(backend.zero_copy)
-        self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.ON)
-        backend._comm.register_window.assert_called_once()
-        self.assertIs(handle.outputs.tokens.window, backend._recv_window)
-        self.assertTrue(details["zero_copy"])
-        self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-zc-cap512-{VERSION}")
+                self.assertTrue(backend.zero_copy)
+                self.assertEqual(module.recorded["group"][0]["zero_copy"], module.ZeroCopyMode.ON)
+                backend._comm.register_window.assert_called_once()
+                self.assertIs(handle.outputs.tokens.window, backend._recv_window)
+                self.assertTrue(details["zero_copy"])
+                self.assertEqual(backend.kernel_generation, f"nccl-ep-v02-ll-rm-zc-cap512-{VERSION}")
 
     def test_paths_the_library_cannot_zero_copy_stage_in_both_regimes(self):
         cases = {
@@ -185,7 +176,8 @@ class HighThroughputIsALibraryRow(unittest.TestCase):
 class RowLabels(unittest.TestCase):
     def test_only_the_trtllm_configuration_is_production(self):
         cases = {
-            "ll-rank-major": ({}, "production", "tensorrt-llm"),
+            # TensorRT-LLM stages under capture, so only the eager zero-copy row is its configuration.
+            "ll-rank-major": ({}, "candidate", None),
             "ll-rank-major-eager": ({"env": {"COLLX_CUDA_GRAPH": "0"}}, "production", "tensorrt-llm"),
             "ll-scale-out": ({"world_size": 16}, "production", "tensorrt-llm"),
             "ll-expert-major": ({"env": {"COLLX_NCCL_LL_LAYOUT": "expert-major"}}, "candidate", None),
@@ -205,10 +197,10 @@ class RowLabels(unittest.TestCase):
 
     def test_library_config_is_one_json_object(self):
         # Published as `implementation.library_config`; the wheel stays in `library_version`.
-        _, _, _, details = _backend()
+        _, _, _, details = _backend(env={"COLLX_CUDA_GRAPH": "0"})
         self.assertEqual(json.loads(json.dumps(details)), {
             "capacity_tokens_per_rank": 512,
-            "zero_copy": False,
+            "zero_copy": True,
             "num_sms": {"dispatch": DEVICE_SMS, "combine": DEVICE_SMS},
             "engine_contract": "tensorrt-llm",
         })

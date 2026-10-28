@@ -21,8 +21,8 @@ not rank or recommend.
 - **`T` is tokens per rank**: decode 1-512 and prefill 1024-8192, in powers of two. A rung a backend
   cannot reach goes in `ladder_dropped` rather than vanishing.
 - **Precision**: dispatch is BF16, or FP8 where the backend supports it upstream. Combine is always
-  BF16. Every FP8 codec is per-128-block e4m3 with FP32 scales on the wire. nccl-ep's FP8 is off
-  every engine's path, so only `--precisions fp8` runs it.
+  BF16. Every FP8 codec is per-128-block e4m3 with FP32 scales on the wire. nccl-ep's FP8 is its
+  internal DS_FP8E3M4 recipe, which no engine selects, so its rows are library rows.
 - **Scale**: EP8 is one 8-GPU node (2x4 MNNVL on GB200/GB300). EP16 is 2x8 over RDMA on the x86 and
   AMD pools and 4x4 MNNVL on GB200/GB300, so GB EP16 stays scale-up.
 - **Coverage**: `configs/platform_config.json` says which backend runs where (the README's coverage
@@ -37,7 +37,7 @@ compares deployed contracts.
 | Backend | Maturity | Launch | Contract |
 |---|---|---|---|
 | deepep-v2 | production | graph; normal prefill eager | vLLM's `deepep_v2` in both phases: overlap off (64 SMs), a single reduction, no CPU sync, receive sized to the next power of two of `T`. LL as vLLM's `deepep_low_latency`: send kernel plus receive hook, MNNVL on GB only, UE8M0 FP8 scales on Blackwell. The LL receive is fixed at 256, so LL stops at T=256. |
-| nccl-ep | production for LL rank-major BF16 (TensorRT-LLM's `NcclEP`); candidate otherwise | graph; HT prefill eager | LL runs TensorRT-LLM's configuration: rank-major, pre-reduced, one group sized to the ladder's top. Graphed dispatch stages, because TensorRT-LLM dispatches into a plain tensor under capture; eager dispatch is zero-copy inside one NVLink/MNNVL domain. HT is a library row: dispatch includes the per-step routing update, whose memsets, all-gather and scan are sized by the capacity (`-cap512` decode, `-cap8192` prefill), not by T. The communicator uses graph usage mode 1. FP8 (DS_FP8E3M4, LL decode) is off by default because no engine selects it. |
+| nccl-ep | production for LL rank-major BF16 where it matches TensorRT-LLM's `NcclEP` (eager, or across nodes); candidate otherwise | graph; HT prefill eager | LL runs TensorRT-LLM's configuration: rank-major, pre-reduced, one group sized to the ladder's top. Dispatch is zero-copy inside one NVLink/MNNVL domain, graphed or eager; TensorRT-LLM stages under capture, so graphed zero-copy rows are library rows. HT is a library row: dispatch includes the per-step routing update, whose memsets, all-gather and scan are sized by the capacity (`-cap512` decode, `-cap8192` prefill), not by T. The communicator uses graph usage mode 1. FP8 (DS_FP8E3M4, LL decode) runs in the default matrix as a library row. |
 | uccl-ep | candidate | normal eager (host-synced); LL graph | DeepEP's legacy API over CPU-proxy RDMA (proxies run only at b200 EP16), in vLLM's DeepEP configuration on UCCL's drop-in `deep_ep`: `deepep_ht` launch configs at 20 SMs and 1 GiB buffers; LL called as deepep-v2's, with a 256-token receive. |
 | mori | production | graph decode; eager prefill | vLLM's MoRI configuration: IntraNode at 80 blocks, 16 warps (EP8), InterNodeV1 at 64/32/8 on STATIC_HEAP (EP16), external input buffer, one QP per PE. LL is vLLM's `mori_low_latency`: InterNodeV1LL at 64/32/8 on STATIC_HEAP, EP16 only (one node runs the normal rows' IntraNode). `MORI_ENABLE_SDMA` unset, as vLLM leaves it. |
 | flashinfer-ep | production | graph decode; eager prefill | GB200/GB300 only (one-sided MNNVL). vLLM's integration: combine stages a caller-owned payload (`payload_in_workspace=False`) into a caller-owned output. FP8 is DeepSeek blockwise, which vLLM selects from v0.29.0. `kernel_generation` carries the wheel version. |

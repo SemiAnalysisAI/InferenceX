@@ -11,8 +11,9 @@ before the 2026-10-05 nightly. They have not been rechecked against the pinned 2
 
 | Row | Configuration | `maturity` |
 |---|---|---|
-| `low-latency`, rank-major, BF16 | TensorRT-LLM's `NcclEP` | `production` |
-| `low-latency`, rank-major, DS-FP8 (`--precisions fp8`) | library | `candidate` |
+| `low-latency`, rank-major, BF16, eager or across nodes | TensorRT-LLM's `NcclEP` | `production` |
+| `low-latency`, rank-major, BF16, graphed inside one NVLink domain (zero-copy) | library | `candidate` |
+| `low-latency`, rank-major, DS-FP8 | library | `candidate` |
 | `low-latency`, expert-major (`COLLX_NCCL_LL_LAYOUT=expert-major`) | library | `candidate` |
 | `normal` (HT) | library | `candidate` |
 
@@ -30,13 +31,13 @@ The registry's per-backend `backend_maturity` still says `candidate`.
   admits every rung, so low-latency runs the 512 rung that the other backends' fixed 256-token
   receive drops. Capacity changes what LL measures: each rank-major dispatch resets every routing
   slot of the receive plane, `EP x capacity x top-k` entries (`ll_dispatch_lsa.cuh:652-659`).
-- **Zero-copy follows the regime.** TensorRT-LLM dispatches into a registered NCCL window only
-  when it is not capturing. Under CUDA graph capture it dispatches into a plain tensor, and the
-  library copies every received token out of its staging buffer (`nccl_ep.py:305-327`,
-  `ll_dispatch_lsa.cuh:484-490`). So graphed rows, the default, run the staged dispatch, and eager
-  rows (`COLLX_CUDA_GRAPH=0`) write the window directly. The window path exists only within one
-  NVLink domain, for rank-major dispatch without internal quantization (`nccl_ep.cc:4589-4600`).
-  Scale-out, expert-major and DS-FP8 rows stage in both regimes. A zero-copy row creates its group
+- **Zero-copy wherever the library supports it.** Low-latency dispatch writes a registered NCCL
+  window directly, graphed or eager. The window path exists only within one NVLink domain, for
+  rank-major dispatch without internal quantization (`nccl_ep.cc:4589-4600`), so scale-out,
+  expert-major and DS-FP8 rows stage in both regimes. TensorRT-LLM differs under CUDA graph
+  capture: it dispatches into a plain tensor and the library copies every received token out of
+  its staging buffer (`nccl_ep.py:305-327`, `ll_dispatch_lsa.cuh:484-490`). Graphed zero-copy rows
+  are therefore library rows; eager rows and scale-out rows match TensorRT-LLM. A zero-copy row creates its group
   with `ZeroCopyMode.ON`, which fails any dispatch that lacks the window, so the `-zc` label cannot
   name a path that did not run. A staged row uses `OFF`, which equals TensorRT-LLM's default `AUTO`
   at this pin. Combine always stages in low-latency mode.
@@ -64,19 +65,19 @@ scales (`QUANT_FWD`), which this suite does not measure.
 
 FP8 uses NCCL EP's internal `DS_FP8E3M4` recipe, for low-latency decode only. TensorRT-LLM never
 selects it: `NcclEP` sets `uses_internal_fp8_dispatch = False` and transports DeepSeek-FP8
-activations in BF16 (`nccl_ep.py:78-79`). The default matrix therefore omits nccl-ep FP8
-(`sweep_matrix.OFF_PATH_PRECISIONS`, which lists no other precision for any backend).
-`--precisions fp8` adds it back.
+activations in BF16 (`nccl_ep.py:78-79`), so FP8 rows are library rows. They run in the default
+matrix, like every other backend's FP8.
 
 ## Row identity
 
 `kernel_generation` is a family, `nccl-ep-v02-ht-routed-zc-static` (HT, plus `-gum1` when graphed),
-`nccl-ep-v02-ll-rm` (plus `-zc` on the eager window path) or `nccl-ep-v02-ll-em`, then
+`nccl-ep-v02-ll-rm` (plus `-zc` on the window path) or `nccl-ep-v02-ll-em`, then
 `-fp8-ds-e3m4` on FP8 rows, `-cap<N>-<wheel version>`, and the harness's regime suffix. HT's `-zc`
 is part of its family: HT always takes the window. Examples:
 
-- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed low-latency, staged.
-- `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261013-eager-spin-ar`: eager low-latency, zero-copy.
+- `nccl-ep-v02-ll-rm-zc-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed low-latency, zero-copy.
+- `nccl-ep-v02-ll-rm-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed low-latency across nodes,
+  staged.
 - `nccl-ep-v02-ht-routed-zc-static-gum1-cap512-0.2.0.dev20261013-cudagraph-spin-ar`: graphed
   HT decode.
 - `nccl-ep-v02-ht-routed-zc-static-cap8192-0.2.0.dev20261013-eager-spin-ar`: HT prefill.
