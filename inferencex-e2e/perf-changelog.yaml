@@ -11495,6 +11495,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update the MI355X DeepSeek-V4-Pro-0813 SGLang MoRI disaggregated AgentX serving image to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261028 and enable the AMD mono kernel on decode only at concurrency 1."
-    - "The 1028 nightly tag is provisional: the early build does not include sgl-project/sglang#46951 (sgl-amd-mono MoRI PD decode support). Rebuild and validate the image before using this recipe. Keep all topology, DSpark, offload, other concurrency settings, and the benchmark client image unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+    - "Update the MI355X DeepSeek-V4-Pro-0813 SGLang MoRI disaggregated AgentX serving image to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261028 and use P-TP4 / D-TP8 with the AMD mono kernel on decode only at concurrency 1."
+    - "The 1028 nightly tag is provisional: the early build does not include sgl-project/sglang#46951 (sgl-amd-mono MoRI PD decode support). Rebuild and validate the image before using this recipe. Preserve DSpark, offload, all other concurrency settings, and the benchmark client image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4602

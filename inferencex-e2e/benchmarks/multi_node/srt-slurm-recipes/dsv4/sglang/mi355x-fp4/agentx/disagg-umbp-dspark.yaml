@@ -213,13 +213,13 @@ override_c1:
         speculative-dspark-block-size: 6
         speculative-num-draft-tokens: 7
     decode:
-      gpus: 4
+      gpus: 8
       env:
         SGLANG_MLA_HCA_KV_SPLITS: "8"
         MORI_MAX_DISPATCH_TOKENS_DECODE: "448"
         SGLANG_DSV4_UNIFIED_KV_FP8: "1"
       args:
-        tp-size: 4
+        tp-size: 8
         mem-fraction-static: 0.86
         max-running-requests: 8
         cuda-graph-bs-decode:
