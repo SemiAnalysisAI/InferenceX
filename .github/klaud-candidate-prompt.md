@@ -142,7 +142,9 @@ publish the failed attempt, then run `park --rerun-run RUN --rerun-after-minutes
 so recovery reruns its failed jobs once after the limit resets, without another session; the
 next session reports that rerun as the infrastructure-retry attempt.
 If such a failure ends the candidate, add `reason-code` `infra-registry-rate-limit`,
-`infra-hf-rate-limit` or `infra-node-fault` so the planner backs off that cluster.
+`infra-hf-rate-limit` or `infra-node-fault` so the planner backs off that cluster. When points
+cannot finish within the cluster's job time limit on either image, finish failed with
+`reason-code: cluster-time-limit` so the planner leaves the family alone for a week.
 Do not repeat deterministic failures as infrastructure retries. Stop after validation,
 exhausted repairs, or the same failure twice without progress.
 Classify by signature: a same-head rerun is an infrastructure retry, never a repair; merging

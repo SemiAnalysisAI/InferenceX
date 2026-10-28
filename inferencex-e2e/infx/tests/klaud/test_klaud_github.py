@@ -3581,7 +3581,7 @@ def test_plan_blocks_a_curve_sharing_a_key_with_a_blocked_or_held_family(
     monkeypatch.setattr(klaud, "maintainer_closed_families", lambda _r, _now: {
         identity("configs/nvidia-master.yaml:agg")[:16]})  # fmt: skip
     monkeypatch.setattr(klaud, "recent_candidate_outcomes", lambda _r, _hours: klaud.History(
-        recent={}, paused_weights=set(), held_images={}, infra_clusters=set()))
+        recent={}, paused_weights=set(), held_images={}, infra_clusters=set(), held_families=set()))
 
     klaud.plan(tmp_path, tmp_path / "klaud", 5, 24)
 

@@ -39,6 +39,7 @@ from .github import (
 from .models import (
     ASSET_REASONS,
     INFRA_REASONS,
+    LIMIT_REASONS,
     CandidateOutcome,
     OwnedCandidate,
     Ownership,
@@ -59,7 +60,7 @@ CLUSTER_STATE = "cluster-state.json"
 RETRY_NEXT_WAVE = frozenset({"no-capacity", "agent-not-started"})
 MAINTAINER_CLOSE_HOLD_DAYS = 7
 REQUEUE_LABEL = "klaud-requeue"
-INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing"})
+INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing", *LIMIT_REASONS})
 INFRA_COOLDOWN_DAYS = 7
 LONG_HOLD_HOURS = 72
 LONG_HOLD_OUTCOMES = frozenset({"already-updated", "duplicate", "route-mismatch"})
@@ -69,6 +70,8 @@ DATED_TAG = re.compile(r"(?<!\d)20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?
 INFRA_BACKOFF_HOURS = 48
 INFRA_BACKOFF_OUTCOMES = 2
 PRODUCER_MARGIN = 5
+PRODUCER_ALTERNATES = 3
+BASELINE_HOLD_REASONS = frozenset({"baseline-point-mismatch"})
 EVAL_FIELDS = frozenset(
     {"run-eval", "eval-only", "eval-conc", "eval-all-concs", "eval-framework", "eval-suite"}
 )
@@ -88,12 +91,13 @@ class Family(NamedTuple):
 
 
 class History(NamedTuple):
-    """Recent candidate outcomes that still hold candidates, weights, images or clusters."""
+    """Recent candidate outcomes that still hold candidates, families, weights, images or clusters."""
 
     recent: dict[str, str | None]
     paused_weights: set[tuple]
     held_images: dict[str, datetime]
     infra_clusters: set[str]
+    held_families: set[str]
 
 
 def observation_key(row: dict) -> tuple:
@@ -338,14 +342,16 @@ def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta
 
 
 def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
-    """Return the recent outcomes that still hold candidates, weights, images or clusters.
+    """Return the recent outcomes that still hold candidates, families, weights, images or clusters.
 
     Each candidate's newest session artifact counts and holds the candidate for ``hold``. While
     held, missing weights and route mismatches (PAUSED_WEIGHTS) pause their (model, precision,
-    hardware) key. An already-updated outcome holds its image from its newest time, and
+    hardware) key, and a cluster time limit (LIMIT_REASONS) holds the candidate's family prefix
+    whatever its image. An already-updated outcome holds its image from its newest time, and
     INFRA_BACKOFF_OUTCOMES infrastructure failures within INFRA_BACKOFF_HOURS back off a target
-    cluster. Only scheduled auto-sweeps and Klaud Cold's resume runs hold sessions. Resumed
-    sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
+    cluster. A wave's baseline deferral for a BASELINE_HOLD_REASONS reason holds the candidate
+    for LONG_HOLD_HOURS. Only scheduled auto-sweeps and Klaud Cold's resume runs hold sessions.
+    Resumed sessions record outcomes in later waves, so history reaches MAX_SESSIONS waves back.
     Unreadable history means no cooldown.
     """
     from .lifecycle import BOT, MAX_SESSIONS, WAKE_TITLE, WAVE_HOURS, resume_parent
@@ -365,7 +371,13 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
         ]
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("::warning::Klaud cooldown history unavailable; continuing without cooldown")
-        return History(recent={}, paused_weights=set(), held_images={}, infra_clusters=set())
+        return History(
+            recent={},
+            paused_weights=set(),
+            held_images={},
+            infra_clusters=set(),
+            held_families=set(),
+        )
     dated = set()
     plans: dict[int, int] = {}
     for run in runs:
@@ -404,7 +416,18 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                 continue
     result: dict[str, str | None] = {}
     held_images: dict[str, datetime] = {}
+    held_families: set[str] = set()
     planned_labels: dict[int, dict[str, str]] = {}
+    for created, run_id in dated:
+        if plans[run_id] == run_id and now - created < timedelta(hours=LONG_HOLD_HOURS):
+            reasons = plan_selection(repository, listings.get(run_id, [])).get(
+                "baseline-deferral-reasons", {}
+            )
+            result.update(
+                (candidate, reason)
+                for candidate, reason in reasons.items()
+                if reason in BASELINE_HOLD_REASONS and candidate not in latest
+            )
     for candidate, (artifact, run_id) in latest.items():
         label, phase = recorded_outcome(repository, artifact)
         created = utc(artifact["created_at"])
@@ -416,6 +439,8 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
         if now - created >= hold(label, phase, cooldown_hours):
             continue
         result[candidate] = label
+        if label in LIMIT_REASONS:
+            held_families.add(candidate.split("-", 1)[0])
         if label in PAUSED_WEIGHTS:
             planned_labels.setdefault(plans[run_id], {})[candidate] = label
     paused_weights = set()
@@ -439,7 +464,22 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
         paused_weights=paused_weights,
         held_images=held_images,
         infra_clusters={cluster for cluster, n in infra.items() if n >= INFRA_BACKOFF_OUTCOMES},
+        held_families=held_families,
     )
+
+
+def plan_selection(repository: str, artifacts: list[dict]) -> dict:
+    """Return the selection.json in the klaud-plan artifact among ``artifacts``, or {}."""
+    plan = next((a for a in artifacts if a.get("name") == "klaud-plan"), None)
+    if not plan or plan.get("expired", True):
+        return {}
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            download_json(repository, plan, Path(scratch))
+            selection = json.loads((Path(scratch) / "selection.json").read_text())
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            return {}
+    return selection if isinstance(selection, dict) else {}
 
 
 def planned_candidates(repository: str, artifacts: list[dict]) -> list[dict]:
@@ -472,7 +512,7 @@ def recorded_outcome(repository: str, artifact: dict) -> tuple[str | None, str |
                 return "agent-not-started", None
             outcome = CandidateOutcome.model_validate(diagnostics["candidate-outcome"])
             reason = outcome.reason_code
-            labelled = reason in ASSET_REASONS or reason in INFRA_REASONS
+            labelled = reason in ASSET_REASONS or reason in INFRA_REASONS + LIMIT_REASONS
             return (reason if labelled else outcome.outcome), outcome.phase
         except (
             OSError,
@@ -670,6 +710,7 @@ def plan(root: Path, directory: Path, review_batch_size: int, cooldown_hours: in
         for candidate in candidates
         if weights_key(candidate["source"]) not in history.paused_weights
         and not image_held(candidate, history.held_images, now)
+        and candidate["id"].split("-", 1)[0] not in history.held_families
     ]
     candidates = order_by_cooldown(candidates, history.recent)
     candidates = candidates[:review_batch_size]
@@ -1132,11 +1173,12 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     """Write ``producers.json``: proceed candidates' producer families, by family and head.
 
     ``select`` takes candidates in order up to ``max_candidates`` less ``active_sessions``,
-    skipping those the wave's capacity cannot take. This walks them the same way, with the plan's
-    headroom from CLUSTER_STATE, and regenerates that many plus PRODUCER_MARGIN replacements, none
-    without a slot. Producer revisions regenerate their own families, so this step runs without
-    credentials. A producer that fails is logged and left out; ``select`` defers the candidates
-    needing it.
+    skipping those the wave's capacity cannot take, and one full sweep usually fills a cluster
+    for the wave. So this prepares, in order, candidates that fit the plan's headroom from
+    CLUSTER_STATE, at most PRODUCER_ALTERNATES per target cluster in case earlier ones are
+    deferred, up to that many plus PRODUCER_MARGIN, none without a slot. Producer revisions
+    regenerate their own families, so this step runs without credentials. A producer that fails
+    is logged and left out; ``select`` defers the candidates needing it.
     """
     from .reporting import publication
     from .validation import ProducerRegenerationError, producer_matrix
@@ -1154,6 +1196,7 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     wave = WaveCapacity(state["headroom"], state["size"], set(state["infra-backoff"]))
     proceeding = []
     taken: set[str] = set()
+    prepared: Counter[str] = Counter()
     for candidate in contexts:
         if len(proceeding) >= (slots + PRODUCER_MARGIN if slots else 0):
             break
@@ -1161,9 +1204,10 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
             candidate["id"] in models
             and candidate["family"] not in taken
             and not wave.blocker(candidate)
+            and all(prepared[cluster] < PRODUCER_ALTERNATES for cluster in candidate["clusters"])
         ):
-            wave.take(candidate)
             taken.add(candidate["family"])
+            prepared.update(candidate["clusters"])
             proceeding.append(candidate)
     repository = os.environ["GITHUB_REPOSITORY"]
     families: dict[str, dict[str, dict]] = {}
