@@ -15,6 +15,8 @@ from .github import VerificationError
 from .models import OwnedCandidate, Ownership, identity
 
 RECONCILE_JOB = "Reconcile interrupted candidates"
+# Commits never change, so each claim or lease commit is read once per process.
+commits: dict[str, dict] = {}
 
 
 def ref(repository: str, name: str) -> dict | None:
@@ -34,7 +36,10 @@ def record(repository: str, value: dict) -> dict:
 
     Raises VerificationError when the message is not readable JSON.
     """
-    commit = github.read(repository, "git/commits/" + value["object"]["sha"])
+    sha = value["object"]["sha"]
+    if sha not in commits:
+        commits[sha] = github.read(repository, "git/commits/" + sha)
+    commit = commits[sha]
     try:
         return json.loads(commit["message"])
     except (KeyError, ValueError) as error:
@@ -99,7 +104,10 @@ def claim_family(repository: str, candidate: OwnedCandidate, parent: int) -> boo
 
 
 def release_family(repository: str, candidate: OwnedCandidate, parent: int) -> None:
-    """Delete the candidate's family claim if run ``parent`` owns exactly that candidate."""
+    """Delete the candidate's family claim if run ``parent`` owns exactly that candidate.
+
+    A claim another pass deleted first (HTTP 404 or 422) counts as released.
+    """
     name = family_name(candidate)
     value = ref(repository, name)
     if not value:
@@ -107,7 +115,11 @@ def release_family(repository: str, candidate: OwnedCandidate, parent: int) -> N
     ownership = Ownership.model_validate(record(repository, value))
     if ownership.run_id != parent or ownership.candidates != [candidate]:
         return
-    github.write(repository, "git/refs/heads/" + name, "DELETE")
+    try:
+        github.write(repository, "git/refs/heads/" + name, "DELETE")
+    except subprocess.CalledProcessError as error:
+        if github.http_status(error) not in (404, 422):
+            raise
 
 
 def family_owners(repository: str) -> list[Ownership]:
