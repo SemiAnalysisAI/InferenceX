@@ -14,7 +14,7 @@ collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${
 # Fresh rank tasks source only these backend-created values. Network variables
 # are reapplied by the rank wrapper from the platform profile.
 readonly -a RANK_ENV_VARS=(
-  PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
+  PATH VIRTUAL_ENV LD_LIBRARY_PATH LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
   EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC COLLX_OFI_NCCL_LIB_DIR FLASHINFER_WORKSPACE_BASE
 )
@@ -239,7 +239,11 @@ deepep_activate() {
     EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id" \
     EP_REUSE_NCCL_COMM=1 \
     NCCL_CUMEM_ENABLE=1 \
-    LD_LIBRARY_PATH="$overlay/lib:$nccl_root/lib:$nvshmem_package/lib:${LD_LIBRARY_PATH:-}"
+    LD_LIBRARY_PATH="$overlay/lib:$nccl_root/lib:$nvshmem_package/lib:${LD_LIBRARY_PATH:-}" \
+    LIBRARY_PATH="$nccl_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+  # LIBRARY_PATH: DeepEP links -l:libnccl.so.2 with only an rpath to the wheel, so the link step
+  # needs the wheel's lib directory on the search path. Images with a system NCCL (SGLang's)
+  # resolved it from /usr/lib; vLLM's image has NCCL only as a pip wheel.
   unset "${DEEPEP_RANK_UNSETS[@]}"
 
   # Shared JIT caches race across nodes; keep this cache node-local. CUMEM is
@@ -786,7 +790,7 @@ PY
 
 flashinfer_install() {
   local root="$1" venv="$1/venv" report="$1/pip-report.json"
-  local -a pip
+  local -a pip jit_parts
   if [ -e "$root" ] || [ -L "$root" ]; then
     rm -rf "$root" || { collx_log "ERROR: incomplete FlashInfer cache-reset failed"; return 1; }
   fi
@@ -818,14 +822,30 @@ PY
   "${pip[@]}" --no-deps $COLLX_FLASHINFER_SPEC >&2 2>&1 \
     && "${pip[@]}" --no-deps "$COLLX_FLASHINFER_JIT_CACHE_SPEC" >&2 2>&1 \
     || { collx_log "ERROR: FlashInfer installation failed"; return 1; }
+  # The jit-cache wheel is a meta-package over per-architecture cache wheels pinned to its own
+  # version, and images that ship an older FlashInfer (vLLM's) carry older ones. Install exactly
+  # the parts it declares, at its version, without re-resolving anything else.
+  mapfile -t jit_parts < <("$venv/bin/python" - "${COLLX_FLASHINFER_JIT_CACHE_SPEC%%==*}" <<'PY'
+import sys
+from importlib import metadata
+
+for requirement in metadata.requires(sys.argv[1]) or ():
+    if requirement.startswith("flashinfer-jit-cache") and "extra ==" not in requirement:
+        print(requirement.split(";")[0].replace(" ", ""))
+PY
+  ) || { collx_log "ERROR: FlashInfer jit-cache metadata is unreadable"; return 1; }
+  [ "${#jit_parts[@]}" -eq 0 ] || "${pip[@]}" --no-deps "${jit_parts[@]}" >&2 2>&1 \
+    || { collx_log "ERROR: FlashInfer jit-cache parts installation failed"; return 1; }
   # Every requirement of the installed set must already hold; pip check lines about the image's
   # own packages (its torch/NCCL pin disagreement among them) are not this venv's to settle.
   # shellcheck disable=SC2086
   "$venv/bin/python" -m pip check 2>&1 | python3 -c '
 import re, sys
 ours = {re.split(r"[\[=<>]", spec)[0].lower().replace("_", "-") for spec in sys.argv[1:]}
+def mine(name):
+    return name in ours or name.startswith("flashinfer-jit-cache")
 bad = [line for line in sys.stdin.read().splitlines()
-       if line.split(" ", 1)[0].lower().replace("_", "-") in ours]
+       if mine(line.split(" ", 1)[0].lower().replace("_", "-"))]
 print("\n".join(bad), file=sys.stderr)
 sys.exit(1 if bad else 0)' $COLLX_FLASHINFER_SPEC "$COLLX_FLASHINFER_JIT_CACHE_SPEC" \
     || { collx_log "ERROR: FlashInfer environment has unmet requirements"; return 1; }
