@@ -5,7 +5,7 @@
 # SimpleCPUOffloadConnector (dram) from the offload c4 point. Three bands, driven
 # by kimik3-fp4-mi355x-vllm-agentic-mtp: interactive c1 and c4 (GPU-resident),
 # mid c4-c32 and throughput c48-c60 (DRAM offload, DSpark draft with synthetic
-# acceptance). The 1799 GB DRAM budget splits evenly across the eight ranks.
+# acceptance). The 899 GB DRAM budget splits evenly across the eight ranks.
 base:
   schema: 2
   name: kimik3-fp4-mi355x-vllm-agentic
@@ -85,7 +85,7 @@ base:
 # for a slot (23-41% of arrivals in run 40037005947). Every point
 # requests FULL_AND_PIECEWISE; the AMD K3 model has no torch.compile
 # submodule, so without breakable graphs vLLM falls back to FULL_DECODE_ONLY.
-# The offload points split the 1799 GB DRAM budget evenly across the eight ranks;
+# The offload points split the 899 GB DRAM budget evenly across the eight ranks;
 # identical prefixes must hash to identical block keys on every rank.
 # c1 runs vLLM's Kimi-K3 specialized decode (vllm-project/vllm#60683,
 # additional-config decode_backend=latency_specialized): pure spec-verify steps of
@@ -145,7 +145,7 @@ override_tp8_c4_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":5,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -153,7 +153,7 @@ override_tp8_c4_dcp8_simple:
     env:
       CONC: '4'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
 
 override_tp8_c10_dcp8_simple:
   roles:
@@ -168,7 +168,7 @@ override_tp8_c10_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -176,7 +176,7 @@ override_tp8_c10_dcp8_simple:
     env:
       CONC: '10'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
 
 override_tp8_c16_dcp8_simple:
   roles:
@@ -191,7 +191,7 @@ override_tp8_c16_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -199,7 +199,7 @@ override_tp8_c16_dcp8_simple:
     env:
       CONC: '16'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
 
 override_tp8_c24_dcp8_simple:
   roles:
@@ -214,7 +214,7 @@ override_tp8_c24_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -222,7 +222,7 @@ override_tp8_c24_dcp8_simple:
     env:
       CONC: '24'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
 
 override_tp8_c32_dcp8_simple:
   roles:
@@ -237,7 +237,7 @@ override_tp8_c32_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -245,7 +245,7 @@ override_tp8_c32_dcp8_simple:
     env:
       CONC: '32'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
 
 # Throughput band: same dcp8 DRAM-offload layout with a 4-token DSpark draft.
 # Synthetic acceptance replaces block rejection with the golden acceptance
@@ -263,7 +263,7 @@ override_tp8_c48_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -271,7 +271,7 @@ override_tp8_c48_dcp8_simple:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
       SPEC_DECODING: 'mtp'
 
 override_tp8_c52_dcp8_simple:
@@ -287,7 +287,7 @@ override_tp8_c52_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -295,7 +295,7 @@ override_tp8_c52_dcp8_simple:
     env:
       CONC: '52'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
       SPEC_DECODING: 'mtp'
 
 override_tp8_c60_dcp8_simple:
@@ -311,7 +311,7 @@ override_tp8_c60_dcp8_simple:
         speculative-config: '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         additional-config: '{"kda_prefill_backend":"fused"}'
         quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112375000000,"lazy_offload":false}}'
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         PYTHONHASHSEED: '42'
@@ -319,5 +319,5 @@ override_tp8_c60_dcp8_simple:
     env:
       CONC: '60'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      TOTAL_CPU_DRAM_GB: '899'
       SPEC_DECODING: 'mtp'

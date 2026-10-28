@@ -761,7 +761,7 @@ kimik3-fp4-mi355x-atom-agentic-mtp:
 #   mid         (4-32)   dcp 8, DSpark draft, SimpleCPUOffload DRAM tier.
 #   throughput  (48-60)  dcp 8 shards the KV read across all 8 GPUs, DRAM
 #                        offload, 4-token DSpark draft with synthetic acceptance.
-# dram-utilization 0.6 -> TOTAL_CPU_DRAM_GB 1799 at TP8 (node cap 2861022 MiB),
+# dram-utilization 0.3 -> TOTAL_CPU_DRAM_GB 899 at TP8 (node cap 2861022 MiB),
 # split evenly across the eight ranks by the launcher.
 kimik3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-rocm100-df6603f0583375f244d1ac6d36265462b7490392
