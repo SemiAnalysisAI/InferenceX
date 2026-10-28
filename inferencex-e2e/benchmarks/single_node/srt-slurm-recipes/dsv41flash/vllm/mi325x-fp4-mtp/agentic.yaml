@@ -35,8 +35,8 @@ base:
         gpu-memory-utilization: 0.9
         # Five-token DSpark with probabilistic drafting. Throughput runs replace
         # block rejection with the golden acceptance length. Adaptive
-        # verification trims requests on device, which the ROCm DeepSeek-V4
-        # indexer does not support.
+        # verification stays off: with --monokernel on gfx942 its CUDA graph
+        # profile faults at startup until vllm-project/vllm#63816.
         speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
         max-model-len: 1048576
         # Upstream picks 1024 on GPUs with >= 160 GiB, and 2x CONC starves
@@ -46,9 +46,6 @@ base:
         # The sparse-attention indexer allocates a [batched-tokens, 1M] fp8
         # logits buffer at startup.
         max-num-batched-tokens: 16384
-        # The ROCm sparse SWA path lacks the replay window clamp; bounded replay
-        # memory-faulted at the first prefix hit with a replay start.
-        no-swa-bounded-replay: true
         # Piecewise capture segfaulted on gfx942; capture only full decode
         # graphs and run prefill eagerly.
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
@@ -67,7 +64,10 @@ base:
 
 # One variant per point. TP2 leaves ~145 GiB of offloaded weights per rank, so it
 # halves the indexer buffer, bounds the scheduler at 2x CONC within [16, 256]
-# and stops capturing above 512 tokens.
+# and stops capturing above 512 tokens. TP4 runs the gfx942 mono decode kernels
+# (vllm-project/vllm#60731), which build for TP4 only: two persistent launches a
+# layer for decode steps of up to 42 rows (7 requests with five drafts). Larger
+# steps take the regular path.
 override_tp8_c1:
   roles:
     agg:
@@ -141,6 +141,7 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
   benchmark:
     env:
       CONC: '1'
@@ -152,6 +153,7 @@ override_tp4_c2:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
   benchmark:
     env:
       CONC: '2'
@@ -163,6 +165,7 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
   benchmark:
     env:
       CONC: '4'
@@ -174,6 +177,7 @@ override_tp4_c8:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
   benchmark:
     env:
       CONC: '8'
@@ -185,6 +189,7 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
   benchmark:
     env:
       CONC: '16'
@@ -196,6 +201,7 @@ override_tp4_c32:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
   benchmark:
     env:
       CONC: '32'

@@ -11489,3 +11489,16 @@
     - "Update the MI355X DeepSeek-V4-Pro-0813 SGLang MoRI disaggregated AgentX serving image from lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261019 to lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261026, the latest published MI35x ROCm 10 nightly (digest sha256:edabad83728ab04e3eae39f315eb16261eeb64dbdb051112bd22fc88560b60c4)."
     - "Preserve all eight concurrency points (1, 16, 32, 48, 192, 256, 384, 512), prefill/decode topology, DSpark settings, UMBP offload, MoRI transfer, and benchmark client image. The workload binder supplies the serving image to every selected recipe variant."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4571
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from v0.32.0 to nightly-rocm100-edad8b03c5285a1c12e7e4f83c1af709b319a01b (digest sha256:009169c114af5b15e25eddc808afb3c1fc3f12c94e746472b16f39fcf39cd716), the 2026-10-28 ROCm 10.0 nightly. It contains vllm-project/vllm#60731 (gfx942 mono decode), its fix #63576 and #59039."
+    - "Add --monokernel to the six TP4 points. vllm-project/vllm#60731 runs each backbone layer of a decode step as two persistent launches on gfx942, and the FFN of the three DSpark draft layers as one launch, for steps of up to 42 rows, i.e. concurrency 1-7 with five DSpark drafts. Larger steps take the regular path. The gfx942 kernels build for TP4 only, so TP2 and TP8 stay without it and change only by the image. The vLLM recipe turns it on for MI325X TP4 in vllm-project/vllm#62713."
+    - "Remove --no-swa-bounded-replay, which turns on decoder SWA bounded replay from vllm-project/vllm#59039 at every point: in eager prefill steps, layer 20 (the last KV source layer) writes its KV for every token, and the rest of layer 20 and layers 21-39 run on each request's last 128 tokens only. Prefix-cache SWA replay, the path whose missing window clamp the flag worked around, stays off: vLLM still forces it off on ROCm."
+    - "Adaptive DSpark verification stays off. With --monokernel on gfx942 the server faults during its CUDA graph profile until vllm-project/vllm#63816 merges."
+    - "No point changes: concurrency 1, 2, 4, 8, 16 and 32 on TP8, TP4 and TP2 (18 points), all re-measured on the new image."
+    - "DSpark draft: vLLM builds it with the checkpoint's own quantization config and the target's fp8_ds_mla KV cache, and its weights are used as shipped (FP8 E4M3 with UE8M0 block scales, MXFP4 routed experts). On the TP4 points --monokernel also runs the routed-expert FFN of the three draft layers as one launch. That launch quantizes the FFN input to MXFP8 against the same MXFP4 expert weights, as it does for the target layers, where vLLM's gfx942 MoE multiplies bf16 activations with them. The draft weights, its KV cache and its attention are unchanged, and the target model's output does not depend on this launch, only how many drafts it accepts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
