@@ -3,8 +3,9 @@
 #
 # The pool's cases resolve into shards (one backend, mode, precision and node count each; see
 # sweep_matrix.py), and each shard gets its own allocation through the pool's launcher. Results
-# land in collectivex/results/<sku>/<case_id>.json, replacing older results for the same cases;
-# review them with `git diff` and commit them in a PR. Run it detached on long sweeps:
+# land in collectivex/results/<sku>/<case_id>.json (gitignored), replacing older results for the
+# same cases; publish them with InferenceX-app's admin:db:ingest:collectivex --dir. Run it detached
+# on long sweeps:
 #   setsid nohup collectivex/run.sh h200-dgxc > run-h200.log 2>&1 < /dev/null &
 set -eo pipefail
 
@@ -163,5 +164,5 @@ for i in "${!rows[@]}"; do
   [ "${rcs[$i]:-}" = 0 ] || failed=$((failed + 1))
 done
 python3 "$HERE/summarize.py" --results-dir "$HERE/results/$SKU" || true
-git -C "$REPO_ROOT" status --short -- "collectivex/results/$SKU"
+echo "results: $HERE/results/$SKU"
 [ "$failed" = 0 ] || { echo "$failed shard(s) failed; rerun them with --shard" >&2; exit 1; }
