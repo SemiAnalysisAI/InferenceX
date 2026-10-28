@@ -8,7 +8,7 @@ Following the principles of fairness and equitableness, the service-level object
 
 ## Serving-image main-branch policy
 
-For official InferenceX (non-preview), established models must use upstream engines images built from the inference engine's upstream `master` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
+For official InferenceX (non-preview) that have hardware support in upstream, established models must use upstream engines images built from the inference engine's upstream `master` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
 
 ## Deprecation policy
 
