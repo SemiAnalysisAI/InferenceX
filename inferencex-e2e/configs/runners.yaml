@@ -682,7 +682,7 @@ clusters:
         power-exporter-port: 19401
   mi300x-amd:
     gpus-per-node: 8
-    available-cpu-dram-mib: 1_547_820
+    available-cpu-dram-mib: 1_531_436
     arch: x86_64
     scheduler: slurm
     slurm:

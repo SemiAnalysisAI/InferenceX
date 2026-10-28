@@ -1044,7 +1044,8 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
         decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
 
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:v0.30.0
+  # -rocm72 keeps the ROCm 7.2 stack the LMCache v0.5.3 ROCm wheel is ABI-matched to.
+  image: vllm/vllm-openai-rocm:nightly-rocm72-c50aca14416ef29f6ed0ed256302f30646726dcd@sha256:ebda27e713fcd6146dbb55fd1a5efa29def2424d59f60b8153819485319c63db
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: cluster:mi300x-amd
@@ -1054,9 +1055,10 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
   srt-recipe-dir: minimaxm3/vllm/mi300x-fp8-mtp
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    # Sizes the LMCache server's 1280 GB L1.
+    - dram-utilization: 0.7972
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 6, 8, 10], srt-recipe: agentic.yaml }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 6, 8, 10, 16], srt-recipe: agentic.yaml }
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.3" }, conc-list: [16], srt-recipe: agentic.yaml }
 
 # DeepSeek-V4.1-Flash AgentX on MI300X (gfx942), a copy of the validated MI355X vLLM
