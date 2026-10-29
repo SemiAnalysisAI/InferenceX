@@ -543,7 +543,8 @@ clusters:
       partition: batch_1
       account: benchmark
       exclusive: true
-      exclude: [dsxe-sa-b300-prd0-gpu-16]
+      # Experiment only: gpu-15 and gpu-17 ran MiniMax-M3.1 points well below peer nodes.
+      exclude: [dsxe-sa-b300-prd0-gpu-16, dsxe-sa-b300-prd0-gpu-15, dsxe-sa-b300-prd0-gpu-17]
       gres: "gpu:{gpus}"
       cpus-per-gpu: 24
       salloc-args: [--mem=0]
