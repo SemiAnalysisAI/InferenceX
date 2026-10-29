@@ -18,7 +18,6 @@ _TAIL_BYTES = 256 << 10
 
 _ESCAPES = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])")
 _NOISE = re.compile(r"warn|^\+ ", re.IGNORECASE)
-# Most specific first: a resource fault names the cause better than the exception it raises.
 _SIGNATURES = (
     re.compile(
         r"out of memory|OutOfMemoryError|\bOOM\b|oom[-_ ]?kill|CUDA error|\bNCCL\w* ?error\b"
@@ -60,7 +59,10 @@ def error_detail(log: Path) -> str | None:
 
 
 def _cause(handle: BinaryIO) -> str | None:
-    """The first line of the most specific signature rank in the scanned head of ``handle``."""
+    """The first line of the most specific signature rank in the scanned head of ``handle``.
+
+    Resource faults rank first, since they name the cause better than the exception they raise.
+    """
     best: tuple[int, str] | None = None
     scanned = 0
     while scanned < SCAN_BYTES and (raw := handle.readline(_LINE_BYTES)):

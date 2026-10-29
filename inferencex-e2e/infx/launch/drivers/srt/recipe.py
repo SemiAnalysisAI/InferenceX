@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from infx import yamlio
 from infx.launch.context import LaunchError
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ def prepare_recipe(recipe: Path, job_name: str, dist_timeout_s: int | None) -> N
     """Edit the bound recipe, the variant srtctl submits, for this job: ``job_name`` becomes
     srtctl's run name, the health check waits at least HEALTH_ATTEMPTS attempts, and each role
     with a ``watchdog-timeout`` gets the cluster's ``dist-timeout``."""
-    bound = yaml.safe_load(recipe.read_text())
+    bound = yamlio.safe_load(recipe.read_text())
     if "name" in bound:
         bound["name"] = job_name
     if "max_attempts" in (health := bound.get("health_check") or {}):
@@ -67,8 +68,8 @@ def eval_overrides(recipes: Path, lane: SrtLane, request: LaunchRequest) -> list
     overrides: list[str] = []
     if request.eval_only and lane.real_verification is not None and lane.real_verification(request):
         strip_forced_acceptance(recipes)
-    if request.eval_only and lane.head_frontend is not None and lane.head_frontend(request):
-        overrides += ["--set", "frontend.placement.node=head"]
+        if lane.head_frontend is not None and lane.head_frontend(request):
+            overrides += ["--set", "frontend.placement.node=head"]
     if request.run_eval or request.eval_only:
         for key in lane.eval_unsets:
             overrides += ["--unset", key]
