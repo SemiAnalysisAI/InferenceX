@@ -2,8 +2,20 @@ name: Klaud Cold auto-sweep
 run-name: >-
   ${{ inputs.resume-parent && format('Klaud Cold resume {0} {1} session {2}',
   inputs.resume-parent, inputs.resume-candidate, inputs.resume-session)
-  || github.event.schedule == '15,45 * * * *' && 'Klaud Cold wake'
+  || (github.event.schedule == '47 * * * *' || inputs.wake) && 'Klaud Cold wake'
   || 'Klaud Cold auto-sweep' }}
+
+# Wakes, dispatched by klaud-wake.yml when a Klaud-owned run ends or a delayed rerun is due, or
+# scheduled hourly as a backstop, collapse bursts: a wake for one candidate shares that
+# candidate's group and full passes share another, where one runs, one waits and a newer waiting
+# pass replaces an older one. Passes of one group cover the same candidates, so a replaced wake
+# loses none. Every other run is its own group, so the 4-hourly auto-sweep's recover can overlap
+# a wake pass. Recovery leases keep two passes off the same candidate.
+concurrency:
+  group: >-
+    ${{ (inputs.wake || github.event.schedule == '47 * * * *')
+    && format('klaud-wake-{0}', inputs.wake && inputs.wake-candidate || 'all') || github.run_id }}
+  cancel-in-progress: false
 
 on: # zizmor: ignore[concurrency-limits]
   workflow_dispatch:
@@ -20,9 +32,17 @@ on: # zizmor: ignore[concurrency-limits]
         description: Number of the resumed session
         type: string
         default: ''
+      wake:
+        description: Recovery-only pass, dispatched when a Klaud-owned run ends
+        type: boolean
+        default: false
+      wake-candidate:
+        description: Candidate the wake reconciles alone; empty for every candidate
+        type: string
+        default: ''
   schedule:
-    - cron: '0 */3 * * *'
-    - cron: '15,45 * * * *'
+    - cron: '17 */4 * * *'
+    - cron: '47 * * * *'
 
 permissions:
   contents: read
@@ -37,14 +57,17 @@ jobs:
     name: Reconcile interrupted candidates
     if: github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent == ''
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read # Read workflow runs and artifacts.
-      pull-requests: read # Read PR metadata.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
+      issues: write # Set display-only Klaud status labels on its PRs.
     outputs:
       tooling-ref: ${{ steps.checkout.outputs.commit }}
       blocked-families: ${{ steps.recover.outputs.blocked-families }}
       active-sessions: ${{ steps.recover.outputs.active-sessions }}
+      deferred: ${{ steps.recover.outputs.deferred }}
     steps:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,24 +104,31 @@ jobs:
         id: recover
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_STATUS_TOKEN: ${{ github.token }}
+          WAKE_CANDIDATE: ${{ inputs.wake && inputs.wake-candidate || '' }}
         run: |
-          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-sessions "$MAX_CANDIDATES_PER_RUN"
-          echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
+          uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud recover --max-sessions "$MAX_CANDIDATES_PER_RUN" ${WAKE_CANDIDATE:+--candidate "$WAKE_CANDIDATE"}
+          if [[ -f "$RUNNER_TEMP/klaud-recovery.json" ]]; then
+            echo "blocked-families=$(jq -c . "$RUNNER_TEMP/klaud-recovery.json")" >> "$GITHUB_OUTPUT"
+          fi
 
   review:
     name: Review candidate overlap
     needs: recover
-    if: github.event.schedule != '15,45 * * * *'
+    # A job-level if cannot read env, so 5 is MAX_CANDIDATES_PER_RUN. With no free slot the wave
+    # skips review and selection.
+    if: >-
+      github.event.schedule != '47 * * * *' && !inputs.wake && needs.recover.outputs.deferred != 'true'
+      && fromJSON(needs.recover.outputs.active-sessions || '0') < 5
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read # Read workflow runs and artifacts.
       pull-requests: read # Read PR metadata.
-      issues: read # Read klaud-abort labels and Klaud outcome comments.
+      issues: read # Read who closed Klaud PRs and Klaud outcome comments.
     env:
       REVIEW_BATCH_SIZE: '64'
       CANDIDATE_COOLDOWN_HOURS: '24'
-      STALE_PR_DAYS: '7'
     outputs:
       review: ${{ steps.review.outputs.structured_output }}
       outcome: ${{ steps.review.outcome }}
@@ -130,18 +160,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           KLAUD_DASHBOARD_API_KEY: ${{ secrets.DASH_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_REQUEUE_TOKEN: ${{ secrets.AGENT_PAT }} # zizmor: ignore[secrets-outside-env]
+          KLAUD_ACTIVE_SESSIONS: ${{ needs.recover.outputs.active-sessions }}
         run: >-
           uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud plan
           --directory "$RUNNER_TEMP/klaud"
           --review-batch-size "$REVIEW_BATCH_SIZE"
           --cooldown-hours "$CANDIDATE_COOLDOWN_HOURS"
-          --stale-pr-days "$STALE_PR_DAYS"
+          --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN"
+          --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: klaud-review-input
           path: |
             ${{ runner.temp }}/klaud/candidates.json
             ${{ runner.temp }}/klaud/open-prs.json
+            ${{ runner.temp }}/klaud/cluster-state.json
           if-no-files-found: error
           retention-days: 1
       - name: Install Claude Code 2.1.282
@@ -180,9 +214,9 @@ jobs:
             --json-schema '${{ steps.prepare.outputs.review_schema }}'
           prompt: |
             Use Read on candidates.json and open-prs.json under ${{ runner.temp }}/klaud/.
-            Review candidates in the supplied shuffled order against current recipes and the open-PR index,
-            including drafts and arbitrary branches. The index omits PRs idle for ${{ env.STALE_PR_DAYS }} days
-            (other than Klaud candidate PRs); those no longer own any family. Changed-file paths are already fetched;
+            Review candidates in the supplied shuffled order against current recipes and the open-PR index.
+            The index lists only open Klaud candidate PRs (klaud/auto-* branches). Other PRs never own a
+            family: ignore them, even when they edit the same image or recipe. Changed-file paths are already fetched;
             inspect relevant PR bodies/diffs with direct gh pr view/diff commands. For API reads,
             use gh api --method GET. Use Read/Glob/Grep for local inspection, not shell file commands
             or Python. Run one allowed gh/git command per Bash call, without cd/env wrappers,
@@ -191,19 +225,20 @@ jobs:
             overlap; incomplete file lists require investigation, not assumptions.
 
             Each candidate names its live inferencex-e2e/configs/*-master.yaml:KEY family and an exact published
-            benchmark observation from the canonical matrix generator. The public observation is benchmark
+            benchmark observation from the canonical matrix generator. A family may list several
+            comma-separated keys of one master file, which together form one AgentX dashboard curve.
+            An open Klaud PR touching any of those keys overlaps it. Return the family unchanged.
+            The public observation is benchmark
             evidence only. Verify the exact current family; the candidate agent, not this review, owns
             upstream image research and compatibility. Never substitute a sibling or retired workload.
             Duplicate means overlapping edits or shared dependencies, not merely the same model/image on
             a different family. For every proceed decision, resolve baseline-model to the exact display
             model accepted by the public benchmark API using the supplied OpenAPI schema.
             Target clusters and their capacity are resolved and checked in code, not by this review.
-            Mark duplicate when an open PR owns that family's image refresh or overlapping
+            Mark duplicate when an indexed Klaud PR owns that family's image refresh or overlapping
             compatibility work, even with another image tag; unrelated work on the same hardware
-            is not a duplicate. A cross-cutting PR (launcher, telemetry, refactor or shared-schema
-            work spanning many families) is a duplicate only if its diff changes this family's
-            image or the exact engine flags/environment a refresh edits; touching the same recipe
-            file for unrelated settings is not overlap. Return the supplied schema: candidate-id, decision
+            is not a duplicate; touching the same recipe file for unrelated settings is not overlap.
+            Return the supplied schema: candidate-id, decision
             (proceed/duplicate/uncertain), family (null if unresolved), pull-requests (overlapping
             PR numbers), baseline-model (required for proceed; otherwise null), reason (brief evidence).
             Missing evidence or ambiguity means uncertain.
@@ -278,7 +313,8 @@ jobs:
         env:
           KLAUD_PR_REVIEW: ${{ needs.review.outputs.review }}
           KLAUD_REVIEW_OUTCOME: ${{ needs.review.outputs.outcome }}
-        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud regenerate-producers --directory "$RUNNER_TEMP/klaud"
+          KLAUD_ACTIVE_SESSIONS: ${{ needs.recover.outputs.active-sessions }}
+        run: uv run --project "$INFERENCEX_PYTHON_PROJECT" --locked python -m infx.klaud regenerate-producers --max-candidates-per-run "$MAX_CANDIDATES_PER_RUN" --active-sessions "${KLAUD_ACTIVE_SESSIONS:-0}" --directory "$RUNNER_TEMP/klaud"
       - name: Select reviewed candidates within the total cap
         id: select
         env:
@@ -301,6 +337,7 @@ jobs:
           path: |
             ${{ runner.temp }}/klaud/candidates.json
             ${{ runner.temp }}/klaud/open-prs.json
+            ${{ runner.temp }}/klaud/cluster-state.json
             ${{ runner.temp }}/klaud/selection.json
             ${{ runner.temp }}/klaud/review-diagnostics.json
             ${{ runner.temp }}/klaud/*/candidate.json
@@ -315,6 +352,11 @@ jobs:
       fail-fast: false
       matrix:
         candidate: ${{ fromJSON(needs.select.outputs.candidates) }}
+    permissions:
+      contents: read
+      actions: read # Read workflow runs and artifacts.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
+      issues: write # Set display-only Klaud status labels on its PR.
     uses: $/.github/workflows/klaud-candidate.yml
     with:
       candidate: ${{ matrix.candidate }}
@@ -329,6 +371,11 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.resume-parent != ''
       && github.actor == 'Klaud-Cold'
+    permissions:
+      contents: read
+      actions: read # Read workflow runs and artifacts.
+      pull-requests: write # Read PR metadata and set display-only Klaud status labels.
+      issues: write # Set display-only Klaud status labels on its PR.
     uses: $/.github/workflows/klaud-candidate.yml
     with:
       candidate: ${{ inputs.resume-candidate }}

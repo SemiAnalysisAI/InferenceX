@@ -70,6 +70,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: string
                 default: ""
+            source-pr-number:
+                description: "Trusted-dispatch mode: external PR number recorded in the source-identity artifact"
+                required: false
+                type: string
+                default: ""
             trim-conc:
                 description: "Trim each configuration to its minimum concurrency"
                 required: false
@@ -155,6 +160,11 @@ on: # zizmor: ignore[concurrency-limits]
                 default: ""
             changelog-head-ref:
                 description: "Trusted-dispatch mode: exact approved PR head SHA"
+                required: false
+                type: string
+                default: ""
+            source-pr-number:
+                description: "Trusted-dispatch mode: external PR number recorded in the source-identity artifact"
                 required: false
                 type: string
                 default: ""
@@ -281,6 +291,8 @@ jobs:
                       CMD+=(--evals-only)
                     fi
                     RAW_CONFIG_JSON=$("${CMD[@]}")
+                    python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["changelog_metadata"]))' \
+                      <<<"$RAW_CONFIG_JSON" > "$RUNNER_TEMP/changelog_metadata.json"
                     CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals","multinode_agentic_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
                   else
                     if [ -z "$GENERATE_COMMAND" ]; then
@@ -330,6 +342,49 @@ jobs:
                     echo "eval-config=$EVALS"
                     echo "multi-node-eval-config=$MULTI_EVAL"
                   } >> "$GITHUB_OUTPUT"
+
+            - name: Record source identity
+              if: ${{ inputs.source-pr-number != '' }}
+              env:
+                  SOURCE_PR_NUMBER: ${{ inputs.source-pr-number }}
+                  CHANGELOG_HEAD_REF: ${{ inputs.changelog-head-ref }}
+                  MERGE_SHA: ${{ steps.checkout-ref.outputs.commit }}
+                  EVALS_ONLY: ${{ inputs.evals-only }}
+                  AGENTX_FAST: ${{ inputs.agentx-fast }}
+                  ALL_EVALS: ${{ inputs.all-evals }}
+                  FAIL_FAST: ${{ inputs.fail-fast }}
+              run: |
+                  python3 - <<'PY'
+                  import json, os, re
+                  from pathlib import Path
+                  identity = {
+                      'pr_number': int(os.environ['SOURCE_PR_NUMBER']),
+                      'head_sha': os.environ['CHANGELOG_HEAD_REF'],
+                      'merge_sha': os.environ['MERGE_SHA'],
+                      **{key: os.environ[key.upper()] == 'true'
+                         for key in ('evals_only', 'agentx_fast', 'all_evals', 'fail_fast')},
+                  }
+                  for key in ('head_sha', 'merge_sha'):
+                      if not re.fullmatch(r'[0-9a-f]{40}', identity[key]):
+                          raise SystemExit(f'{key} must be a full commit SHA, got {identity[key]!r}')
+                  Path(os.environ['RUNNER_TEMP'], 'source_identity.json').write_text(json.dumps(identity))
+                  PY
+
+            - name: Upload source identity
+              if: ${{ inputs.source-pr-number != '' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: source-identity
+                  path: ${{ runner.temp }}/source_identity.json
+                  if-no-files-found: error
+
+            - name: Upload changelog artifact
+              if: ${{ inputs.source-pr-number != '' }}
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: changelog-metadata
+                  path: ${{ runner.temp }}/changelog_metadata.json
+                  if-no-files-found: error
 
     test-sweep-multi-node:
         needs: get-jobs

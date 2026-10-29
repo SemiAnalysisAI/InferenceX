@@ -82,6 +82,24 @@ def api(
     return json.loads(result.stdout)
 
 
+def download(repo: str, path: str, token: str) -> bytes:
+    """Return the raw body of the GitHub endpoint ``path`` under ``repo``, following redirects."""
+    if not token.strip():
+        raise RuntimeError("GitHub API requires a non-empty token")
+    endpoint = f"repos/{repo}/{path.lstrip('/')}"
+    try:
+        result = subprocess.run(
+            ["gh", "api", "--hostname", "github.com", endpoint],
+            env={**os.environ, "GH_TOKEN": token},
+            capture_output=True,
+            timeout=60,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise APIError(path, (exc.stderr or b"").decode(errors="replace")) from exc
+    return result.stdout
+
+
 def paginate(
     repo: str,
     path: str,

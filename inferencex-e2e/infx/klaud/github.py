@@ -4,42 +4,129 @@ from __future__ import annotations
 
 import base64
 import io
+import json
+import re
 import subprocess
+import time
 import zipfile
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 from infx import github
+
+MIN_API_BUDGET = 1000
 
 
 class VerificationError(ValueError):
     """A fixed public failure reason; never constructed from raw API/artifact content."""
 
 
+class ListingUnavailable(VerificationError):  # noqa: N818
+    """A GitHub listing was missing, malformed or incomplete; a later read may succeed."""
+
+
+READ_BACKOFF_SECONDS = (1, 4)
+TRANSPORT_FAILURE = re.compile(r"connection reset|\bEOF\b|TLS handshake timeout|i/o timeout")
+
+
+def sleep(seconds: float) -> None:
+    """Wait ``seconds`` between read attempts; tests replace it."""
+    time.sleep(seconds)
+
+
+def http_status(error: BaseException) -> int | None:
+    """The HTTP status gh printed for a failed call, or None."""
+    stderr = getattr(error, "stderr", None)
+    if not isinstance(error, subprocess.CalledProcessError) or not isinstance(stderr, str):
+        return None
+    match = re.search(r"\bHTTP ([1-5][0-9]{2})\b", stderr)
+    return int(match[1]) if match else None
+
+
+def _transient(error: Exception) -> bool:
+    """Whether a failed read may succeed when repeated; rate limits are left to the budget gate."""
+    if isinstance(error, subprocess.TimeoutExpired):
+        return True
+    if isinstance(error, subprocess.CalledProcessError):
+        status = http_status(error)
+        if status is None:
+            return isinstance(error.stderr, str) and bool(TRANSPORT_FAILURE.search(error.stderr))
+        return status >= 500
+    return isinstance(error, github.ListingError) and str(error) == "Incomplete GitHub listing"
+
+
+def _retrying[T](call: Callable[[], T]) -> T:
+    """Return ``call()``, repeating it after each READ_BACKOFF_SECONDS delay on transient errors."""
+    for delay in READ_BACKOFF_SECONDS:
+        try:
+            return call()
+        except (subprocess.SubprocessError, github.ListingError) as error:
+            if not _transient(error):
+                raise
+        sleep(delay)
+    return call()
+
+
 def read(repository: str, path: str, *, paginate: bool = False) -> list | dict:
     """Return the decoded JSON from a GET of ``path`` in ``repository``, optionally paginated."""
-    return github.api(repository, path, paginate=paginate)
+    return _retrying(lambda: github.api(repository, path, paginate=paginate))
 
 
 def items(repository: str, path: str, key: str | None = None) -> list[dict]:
-    """Return every listed item at ``path``, unwrapped from ``key``, or raise VerificationError."""
+    """Return every listed item at ``path``, unwrapped from ``key``, or raise ListingUnavailable."""
     try:
-        return github.paginate(repository, path, item_key=key or "")
+        return _retrying(lambda: github.paginate(repository, path, item_key=key or ""))
     except github.ListingError as error:
-        raise VerificationError(str(error)) from error
+        raise ListingUnavailable(str(error)) from error
+
+
+def api_budget() -> int | None:
+    """Print and return the REST requests gh's token has left this hour, or None if unreadable.
+
+    GitHub does not count reads of the rate limit against it.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "api", "rate_limit"], capture_output=True, text=True, timeout=60, check=True
+        )
+        core = json.loads(result.stdout)["resources"]["core"]
+        remaining, limit, reset = int(core["remaining"]), int(core["limit"]), int(core["reset"])
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return None
+    print(
+        f"Klaud GitHub API budget: {remaining} of {limit} requests left, "
+        f"resets {datetime.fromtimestamp(reset, UTC):%H:%M} UTC."
+    )
+    return remaining
+
+
+def budget_low() -> bool:
+    """Whether gh's token has fewer than MIN_API_BUDGET requests left; unreadable is not low."""
+    remaining = api_budget()
+    return remaining is not None and remaining < MIN_API_BUDGET
 
 
 writes = 0
 
 
-def write(repository: str, path: str, method: str, payload: dict | None = None) -> dict:
+def write(
+    repository: str,
+    path: str,
+    method: str,
+    payload: dict | None = None,
+    *,
+    token: str | None = None,
+) -> dict | None:
     """Send ``payload`` to ``path`` with ``method`` and return the JSON reply.
 
-    Each call bumps the module ``writes`` counter so listings cached before it are read again.
+    ``token`` replaces the ambient gh token; such failures raise ``APIError``. Each call bumps
+    the module ``writes`` counter so listings cached before it are read again.
     """
     global writes  # noqa: PLW0603
     writes += 1
-    return github.api(repository, path, method=method, data=payload)
+    return github.api(repository, path, token, method=method, data=payload)
 
 
 def artifacts(repository: str, run_id: int) -> list[dict]:
