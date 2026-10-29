@@ -1,0 +1,521 @@
+{
+  "allocation": {
+    "label": "srt-slurm job assigned at launch",
+    "mode": "dedicated_ci"
+  },
+  "authorization": {
+    "approval_reference": "InferenceX #2916 native srt-slurm H3 serving run, authorized by the repository owner on 2026-10-17 (SemiAnalysis clusters only); model use per the MiniMax-H3 license review recorded for the #2894 baseline (user-confirmation-2026-09-02).",
+    "compute_approved": true,
+    "model_license_reviewed": true
+  },
+  "baseline": {
+    "python": "/usr/bin/python3",
+    "revision": "71de97b264b04dcd514cf904003028aefe9775c8",
+    "source": "/sgl-workspace/sglang",
+    "source_sha256": "e6069f8b948234075fdcfba23e459e2f56a45b11d0ba3ee5ecbb754e338deb13"
+  },
+  "candidate": {
+    "python": "/usr/bin/python3",
+    "revision": "71de97b264b04dcd514cf904003028aefe9775c8",
+    "source": "/sgl-workspace/sglang",
+    "source_sha256": "e6069f8b948234075fdcfba23e459e2f56a45b11d0ba3ee5ecbb754e338deb13"
+  },
+  "gpu_uuids": [
+    "GPU-00000000-0000-0000-0000-000000000000",
+    "GPU-00000000-0000-0000-0000-000000000001"
+  ],
+  "job_id": "h3-serving-2gpu",
+  "limits": {
+    "cleanup_seconds": 60,
+    "command_seconds": 30,
+    "job_seconds": 3600,
+    "max_idle_memory_mib": 64,
+    "request_seconds": 900,
+    "startup_seconds": 900,
+    "telemetry_interval_seconds": 1
+  },
+  "lock_directory": "/logs/h3/locks",
+  "model": {
+    "files": [
+      {
+        "path": "FL2VA/audio_vae/config.json",
+        "sha256": "d8f3bcc62e23c7e9806970fa63cca6139c06faa3797cf9c94034f60db8512771",
+        "size_bytes": 1973
+      },
+      {
+        "path": "FL2VA/audio_vae/config.yaml",
+        "sha256": "259f675c9f71eedc24ca4f23965cd32a1b3878fc894f56664c40328d99831a5e",
+        "size_bytes": 91
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_activations.py",
+        "sha256": "74ca8bb9e8039f1ff362ca4219eee5240a7df9502f3dbdc3161d4e86fbd6dc04",
+        "size_bytes": 2189
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_alias_free_act.py",
+        "sha256": "db8761e66c0eaf9fce2dcccb59162d52b22ca0de9f699cf7d21ec7cd507e86fd",
+        "size_bytes": 835
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_alias_free_filter.py",
+        "sha256": "a369523cd7f14f4f299d8e2e47f3c473da76ed1910e6e9134fd7a9fce02537e8",
+        "size_bytes": 3300
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_alias_free_resample.py",
+        "sha256": "fe35055893833c563e42adc5e5882cbe7628c82d48d33c300fcf0a9576997910",
+        "size_bytes": 1740
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_attn_proj.py",
+        "sha256": "0e04556fa5fd38d4a71e62fcf4d3242fd9a2464fd72ed62baef2ec0980d910c6",
+        "size_bytes": 3317
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_audio_vae.py",
+        "sha256": "ec04939602d4710d039e83f558a7572547669652f7fa967e3de0a3b6c48cfd48",
+        "size_bytes": 7266
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_bigvgan.py",
+        "sha256": "f5df4e6f633e74da479549ef7a6d2684964e4b65ac42c6765be42f9c7fcb7bd2",
+        "size_bytes": 7102
+      },
+      {
+        "path": "FL2VA/audio_vae/dac_utils.py",
+        "sha256": "74ef0ba2c2a11ca35a7c0cc166fe88e564de01230000a0bcc8429103312ad9f0",
+        "size_bytes": 362
+      },
+      {
+        "path": "FL2VA/audio_vae/metadata.json",
+        "sha256": "755d0529d43b2b5c83590f6f44ca659bc68e6a21b01d5669c93e8b2965749bff",
+        "size_bytes": 440
+      },
+      {
+        "path": "FL2VA/audio_vae/minimax_h3_audio_vae.py",
+        "sha256": "63bc0dab6def69480cfd77ea820f9a9a84fc4bd6e56868e4f45ec1e1e200578f",
+        "size_bytes": 3532
+      },
+      {
+        "path": "FL2VA/audio_vae/model.safetensors",
+        "sha256": "37dddc2f3e6d5d5139d823d5ea283bbf304dadcb885b1ccda818aa13dade5ea2",
+        "size_bytes": 605429308
+      },
+      {
+        "path": "FL2VA/model_index.json",
+        "sha256": "d1113e0f123c69f79cd0de35ca1771606ebc3ec924270d257b771f96f584aa6b",
+        "size_bytes": 719
+      },
+      {
+        "path": "FL2VA/processor/chat_template.json",
+        "sha256": "5c72a170d2a4a1a3bc5adad2e689ae28138a9700e5b8c96c0266331e86c0acce",
+        "size_bytes": 5499
+      },
+      {
+        "path": "FL2VA/processor/merges.txt",
+        "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+        "size_bytes": 1671839
+      },
+      {
+        "path": "FL2VA/processor/preprocessor_config.json",
+        "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "size_bytes": 390
+      },
+      {
+        "path": "FL2VA/processor/tokenizer.json",
+        "sha256": "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7",
+        "size_bytes": 7032403
+      },
+      {
+        "path": "FL2VA/processor/tokenizer_config.json",
+        "sha256": "a07e942ac874baa13758de8d1fbdb186683cc03416b5589e1b6671c6b3057c68",
+        "size_bytes": 11003
+      },
+      {
+        "path": "FL2VA/processor/video_preprocessor_config.json",
+        "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+        "size_bytes": 385
+      },
+      {
+        "path": "FL2VA/processor/vocab.json",
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+        "size_bytes": 2776833
+      },
+      {
+        "path": "FL2VA/text_encoder/chat_template.json",
+        "sha256": "5c72a170d2a4a1a3bc5adad2e689ae28138a9700e5b8c96c0266331e86c0acce",
+        "size_bytes": 5499
+      },
+      {
+        "path": "FL2VA/text_encoder/config.json",
+        "sha256": "d2dd0c60d01b9e195d9447c52da61c7302d28828524914c044d9c6e1b81d0427",
+        "size_bytes": 1474
+      },
+      {
+        "path": "FL2VA/text_encoder/merges.txt",
+        "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+        "size_bytes": 1671839
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00001-of-00014.safetensors",
+        "sha256": "6b9dfbc930e505402ae9d7e5091a9d7d656cda5f34614f01cfe70bfb0cca27cb",
+        "size_bytes": 4932328944
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00002-of-00014.safetensors",
+        "sha256": "d8bb44b4ff303fe76fe9e894022fb3dc71b15a2e716592790fe0e3c3e60478fa",
+        "size_bytes": 4875990528
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00003-of-00014.safetensors",
+        "sha256": "54f22e8b3168f8dc962fac0d313607ebf52a12b433d4cf3098a0d82d9f042940",
+        "size_bytes": 4875990552
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00004-of-00014.safetensors",
+        "sha256": "ad09c74d3c13ee29b5d0d84548fd8a3424a651564eaccd519946c296e59c557f",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00005-of-00014.safetensors",
+        "sha256": "fc993c8a0e2a5b0570f383e1a95dc3a1281d1b224b6f3ee908f4827941e1dfc2",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00006-of-00014.safetensors",
+        "sha256": "82f05620d1f718a90c362b221d6a184ff1a0f53301d706882d3df49695fa1974",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00007-of-00014.safetensors",
+        "sha256": "fb91da8cb01ff4de3eef0eab1c3e769a734b3a1aafc61734068638a0d6c86934",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00008-of-00014.safetensors",
+        "sha256": "431ca56535c8781944ce3801f5eb61c45531e853ecc5846d936ebaf4761b764f",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00009-of-00014.safetensors",
+        "sha256": "3825e3f4302f4d2f7d76aa7430d2ce0864fde6b9e540a5806bf0d8e38e4d9f47",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00010-of-00014.safetensors",
+        "sha256": "aded5a4d1d5e22dbd8b6f79266b6eb88c840411b09527c53917a1419ace22e2f",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00011-of-00014.safetensors",
+        "sha256": "3820ffe8d8d6477f6fe8d614ef3c87abb264ee39accebf43a1507b970d80946f",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00012-of-00014.safetensors",
+        "sha256": "05ad2d08ce71963121c9b03f1d9ec5d7641052f4b23c6c12b80d71065eb8e98e",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00013-of-00014.safetensors",
+        "sha256": "b64f2289871261fdd1abbd3b78bcd66011b341de3dc8eeb2ed1a473ee7c8d95c",
+        "size_bytes": 4875990584
+      },
+      {
+        "path": "FL2VA/text_encoder/model-00014-of-00014.safetensors",
+        "sha256": "e45b6c9998c77ee5a6577f9f47bc76416c1d4d387169e50c4c9d3134ea51b13b",
+        "size_bytes": 3270697008
+      },
+      {
+        "path": "FL2VA/text_encoder/model.safetensors.index.json",
+        "sha256": "06c952c569285870b811989b794b9766493e280fb77fbcb957fc4e5fcf25403a",
+        "size_bytes": 97831
+      },
+      {
+        "path": "FL2VA/text_encoder/preprocessor_config.json",
+        "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "size_bytes": 390
+      },
+      {
+        "path": "FL2VA/text_encoder/tokenizer.json",
+        "sha256": "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7",
+        "size_bytes": 7032403
+      },
+      {
+        "path": "FL2VA/text_encoder/tokenizer_config.json",
+        "sha256": "a07e942ac874baa13758de8d1fbdb186683cc03416b5589e1b6671c6b3057c68",
+        "size_bytes": 11003
+      },
+      {
+        "path": "FL2VA/text_encoder/video_preprocessor_config.json",
+        "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+        "size_bytes": 385
+      },
+      {
+        "path": "FL2VA/text_encoder/vocab.json",
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+        "size_bytes": 2776833
+      },
+      {
+        "path": "FL2VA/tokenizer/merges.txt",
+        "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+        "size_bytes": 1671839
+      },
+      {
+        "path": "FL2VA/tokenizer/tokenizer.json",
+        "sha256": "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7",
+        "size_bytes": 7032403
+      },
+      {
+        "path": "FL2VA/tokenizer/tokenizer_config.json",
+        "sha256": "a07e942ac874baa13758de8d1fbdb186683cc03416b5589e1b6671c6b3057c68",
+        "size_bytes": 11003
+      },
+      {
+        "path": "FL2VA/tokenizer/vocab.json",
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+        "size_bytes": 2776833
+      },
+      {
+        "path": "FL2VA/transformer/config.json",
+        "sha256": "f619093a231fcfbcc3d035bec26c50ad864e7331a500d5c519f5045dc1e50458",
+        "size_bytes": 604
+      },
+      {
+        "path": "FL2VA/transformer/model-00001-of-00013.safetensors",
+        "sha256": "0b3386565e476bfdea287e9ea9f269d036e5c649ed14bb9b4afac1dc4661bd2a",
+        "size_bytes": 5227812968
+      },
+      {
+        "path": "FL2VA/transformer/model-00002-of-00013.safetensors",
+        "sha256": "9c98fd4579c9bc96d1b1bbf65c1243f9256df60bccd229570cecc61897773003",
+        "size_bytes": 5164578856
+      },
+      {
+        "path": "FL2VA/transformer/model-00003-of-00013.safetensors",
+        "sha256": "fa484c940d4170199fb69f5016739df2daf6ecd1150631b12a297e06e3964730",
+        "size_bytes": 5164578872
+      },
+      {
+        "path": "FL2VA/transformer/model-00004-of-00013.safetensors",
+        "sha256": "4a851df37cce2d14b39cb58df41def7b591b1f11b8520a32b421a5fa3e997c9f",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00005-of-00013.safetensors",
+        "sha256": "3fe6ff94dc9d3107c6776a25277d2b72b5443f88cf0f4ed835fd5b65a94ea5d4",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00006-of-00013.safetensors",
+        "sha256": "79b47e1b9ff03a2c6f06dd15a28972acf32c0867172ee34e5aa6e96b99494127",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00007-of-00013.safetensors",
+        "sha256": "6ac4d6ce639786b722a8dd99843ed56dcab48a0d174a4b0f9b8cdcbe5160fb0f",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00008-of-00013.safetensors",
+        "sha256": "03531812243fb0a333e01efa7e3d39750580bca8cbf2ba0529da419278eab736",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00009-of-00013.safetensors",
+        "sha256": "7e82a80b0d0d267026eb841b81523069cc7b956c1ebd8a18c07e462ffb262487",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00010-of-00013.safetensors",
+        "sha256": "ef0a1f6b65145232543dd2232d58d91a4d31f44b0da5084acf22cea123255481",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00011-of-00013.safetensors",
+        "sha256": "bf885b8f2f078c5499b75fded21094a26bfe0e6e00bee276e499443ecd2f298d",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00012-of-00013.safetensors",
+        "sha256": "dc717572d014ebf8527e35af815d10eb2f5a6bc87253b8a7d2f456965192db69",
+        "size_bytes": 5164578896
+      },
+      {
+        "path": "FL2VA/transformer/model-00013-of-00013.safetensors",
+        "sha256": "8bfd852d5817e9836de1d3ec8dbac1c5446b167568b717371f08282b22291aa2",
+        "size_bytes": 4242305176
+      },
+      {
+        "path": "FL2VA/transformer/model.safetensors.index.json",
+        "sha256": "fb457a26ffa6294660e249b0ddd03a337f2e5393f770b5c34c8b8f90a29a7efb",
+        "size_bytes": 38323
+      },
+      {
+        "path": "FL2VA/video_vae/attention.py",
+        "sha256": "c9db8465c57f0bfb40c0194227be6e34b2c1ff7c5b5d63abca9964eed6283767",
+        "size_bytes": 5785
+      },
+      {
+        "path": "FL2VA/video_vae/base_module.py",
+        "sha256": "0e7ddf5086179a306298693ac461ffcbc27ccb28dbc786b1a05060de7a3357c0",
+        "size_bytes": 9520
+      },
+      {
+        "path": "FL2VA/video_vae/config.json",
+        "sha256": "3edd2cdd1ebc823c868be55ef917e1b3b8a398fde4d3150dae44a3bf05d9f627",
+        "size_bytes": 1807
+      },
+      {
+        "path": "FL2VA/video_vae/conv.py",
+        "sha256": "b3adee35f27e5d372543242aa86ce5e0138f13b794b6c81f919001e3e2346723",
+        "size_bytes": 4487
+      },
+      {
+        "path": "FL2VA/video_vae/flash.py",
+        "sha256": "c1918463d303a16f278a670bb4f33d3f8d6f7653b0d473313ff5835699b86d04",
+        "size_bytes": 5763
+      },
+      {
+        "path": "FL2VA/video_vae/func.py",
+        "sha256": "0612c26a65f095699cc7acd51937cd153584fa5a0476956e46a4679aa575c22d",
+        "size_bytes": 5840
+      },
+      {
+        "path": "FL2VA/video_vae/klvae.py",
+        "sha256": "d05a22b4918ad303f147d6b0d0ae9038bd1af1f810a5553b04f3542ab9bcff96",
+        "size_bytes": 48594
+      },
+      {
+        "path": "FL2VA/video_vae/minimax_h3_video_vae.py",
+        "sha256": "77fdea69a48485b5434f65d08096657b5d78b78b7cdf24e1241038f237720138",
+        "size_bytes": 5123
+      },
+      {
+        "path": "FL2VA/video_vae/norm.py",
+        "sha256": "258b120ca8d9a16366d7b811fe93eebf98fe1564db0995e8b7747229c651919a",
+        "size_bytes": 10686
+      },
+      {
+        "path": "FL2VA/video_vae/normalize.py",
+        "sha256": "8db651acb9eb551c906a2850bbca8e9d851f00d07b30ccf66ceb6057da687a13",
+        "size_bytes": 1200
+      },
+      {
+        "path": "FL2VA/video_vae/parallel.py",
+        "sha256": "7193522beafd65bc3dbe40b9843e360ab8da3a0bb211e9bfb67bb0d5d0e66919",
+        "size_bytes": 12997
+      },
+      {
+        "path": "FL2VA/video_vae/source/config.json",
+        "sha256": "66c68f541e6578ce613ce7a0fc985eb59097038829e49f7535e6d08e6d95ab12",
+        "size_bytes": 1164
+      },
+      {
+        "path": "FL2VA/video_vae/source/model.safetensors",
+        "sha256": "5f0c2e161d895a9fee7645ca32d4a7e3a22b90cacfcbeba62ec999cdbbefe0d3",
+        "size_bytes": 10415548320
+      },
+      {
+        "path": "FL2VA/video_vae/utils.py",
+        "sha256": "309e45e9d9e33cd5516a10eac2d207eb9f940079a6d9bbe0ee80aaaf7eb42dcd",
+        "size_bytes": 764
+      },
+      {
+        "path": "FL2VA/video_vae/vae_cnn.py",
+        "sha256": "3949b701e6893bd2ea070cd5b18ed8135a7c21d884290df449b1997212d65b11",
+        "size_bytes": 8836
+      },
+      {
+        "path": "FL2VA/video_vae/vae_module.py",
+        "sha256": "9558fb302e10a619f198e12e04701c68988e897d0b627f958f33d27fd2a30d94",
+        "size_bytes": 1884
+      },
+      {
+        "path": "FL2VA/video_vae/vae_processor.py",
+        "sha256": "32870580a1802d9163104a4d68170e35a4772106867181e1bd343dff11f87d2e",
+        "size_bytes": 8369
+      },
+      {
+        "path": "FL2VA/video_vae/vae_vit.py",
+        "sha256": "a372c28441b56ec2dbc6041dbd6ce2766c64c0e61b2c69a16594a97a11da3f58",
+        "size_bytes": 13490
+      },
+      {
+        "path": "LICENSE",
+        "sha256": "59b99642b95ea21630e311198ddbfffbfe05aadba0c2f5d884cbdf4efcc90f44",
+        "size_bytes": 17604
+      },
+      {
+        "path": "README.md",
+        "sha256": "f0116a90332496bdfcc827320c603a26b849c73bf804f2674d03682fbbd2334a",
+        "size_bytes": 38406
+      },
+      {
+        "path": "model_index.json",
+        "sha256": "5a587fe13b2371427415ac892463142683aefcd8d322e274a3a095eac37ac7d2",
+        "size_bytes": 2936
+      },
+      {
+        "path": "modular_model_index.json",
+        "sha256": "a2b6a210e482ffb78e613b553f570c44e101afce6741bd4ed91429d0559af031",
+        "size_bytes": 2935
+      }
+    ],
+    "path": "/mnt/hf_hub_cache/models--MiniMaxAI--MiniMax-H3/snapshots/42ed227ee7df40d41602854ae760620d6eb651fe",
+    "revision": "42ed227ee7df40d41602854ae760620d6eb651fe"
+  },
+  "plan": {
+    "cases": [
+      {
+        "case_id": "drum-taps",
+        "prompt": "A single continuous medium shot of a drummer tapping a snare drum three times in a quiet rehearsal room. The drumsticks visibly contact the drumhead on each tap. The three crisp snare hits and the natural room ambience are audible. The camera remains still. No music, speech, subtitles, or scene cuts.",
+        "requires_motion": true,
+        "requires_sound": true,
+        "seed": 11
+      }
+    ],
+    "generation": {
+      "aspect_ratio": "16:9",
+      "audio_channels": 2,
+      "audio_flow_shift": 3.0,
+      "audio_sample_rate_hz": 32000,
+      "duration_seconds": 4,
+      "flow_shift": 12.0,
+      "fps": 24,
+      "frame_count": 107,
+      "height": 768,
+      "num_inference_steps": 50,
+      "width": 1344
+    },
+    "model_id": "MiniMaxAI/MiniMax-H3",
+    "model_revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+    "plan_id": "h3-serving-2gpu-c124-v1",
+    "repetitions": 4,
+    "warmup_runs": 1
+  },
+  "policy": {
+    "calibration_status": "uncalibrated",
+    "max_audio_rms_ratio_error": 0.1,
+    "max_latency_increase_fraction": 0.1,
+    "max_memory_increase_fraction": 0.1,
+    "min_audio_spectral_cosine": 0.95,
+    "min_video_psnr_db": 30,
+    "policy_id": "h3-example-uncalibrated-gpu-v1"
+  },
+  "port": 30283,
+  "schema_version": "0.1.0",
+  "server": {
+    "dit_cpu_offload": false,
+    "encoder_parallel": "auto",
+    "performance_mode": "speed",
+    "tp_size": 1,
+    "ulysses_degree": 2
+  },
+  "serving": {
+    "concurrency": 1,
+    "delivery_deadline_seconds": null,
+    "mode": "closed_loop"
+  }
+}
