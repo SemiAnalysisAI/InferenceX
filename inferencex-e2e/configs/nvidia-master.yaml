@@ -5358,6 +5358,22 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14], srt-recipe: agentic.yaml }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32], srt-recipe: agentic.yaml }
 
+qwen3.5-fp4-b200-vllm-agentic-mtp:
+  image: vllm/vllm-openai:v0.32.0@sha256:befccf0e7e4089aa23926bb6f887a85c0d46c2a99e6de5c5ffdf5cb7957c5b34
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:b200-nscale
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: qwen3.5/vllm/b200-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # TP2 + EP2 with MTP (3 draft tokens), FP8 KV cache, 48 running sequences and
+      # 160 GiB of vLLM native CPU KV offload at every point.
+      - { tp: 2, ep: 2, kv-offloading: dram, kv-offload-backend: { name: native }, spec-decoding: mtp, conc-list: [16, 32, 64], srt-recipe: agentic.yaml }
 
 # Qwen3.8-Flash-Next NVFP4 AgentX on B200 via SGLang with native NEXTN MTP.
 # TP1 matches the verified single-node recipe.

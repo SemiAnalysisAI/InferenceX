@@ -1,0 +1,69 @@
+base:
+  schema: 2
+  name: qwen3.5-fp4-b200-vllm-agentic
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Weight load plus FlashInfer autotuning can use most of VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+        trust-remote-code: true
+        quantization: modelopt_fp4
+        kv-cache-dtype: fp8
+        mamba-ssm-cache-dtype: float16
+        moe-backend: flashinfer_trtllm
+        enable-expert-parallel: true
+        enable-prefix-caching: true
+        # Qwen3.5 mixes Gated DeltaNet and attention layers; the hybrid manager keeps
+        # prefix caching across both cache types.
+        no-disable-hybrid-kv-cache-manager: true
+        async-scheduling: true
+        block-size: 64
+        max-model-len: 262144
+        max-num-batched-tokens: 16384
+        max-num-seqs: 48
+        gpu-memory-utilization: 0.9
+        kv-offloading-backend: native
+        # Summed over the TP ranks by vLLM: 80 GiB of host KV per rank.
+        kv-offloading-size: 160
+        speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        enable-auto-tool-choice: true
+        disable-uvicorn-access-log: true
+      env:
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+
+# One TP2 + EP2 server serves every concurrency with the same settings; admission
+# stays at 48 running sequences, so the c64 clients beyond it wait in the queue.
+zip_override_tp2:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+  benchmark:
+    env:
+      CONC: ['16', '32', '64']
+      KV_OFFLOADING: dram
