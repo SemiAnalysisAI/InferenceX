@@ -330,13 +330,16 @@ against the sign-off body.
   Assess the precision itself under Check 13; unavailable evidence warns there
   and does not become a checklist-format failure.
 
-## Check 6 — Upstream vLLM/SGLang images, and engine-first ordering
+## Check 6 — Upstream images, main-branch provenance, and engine-first ordering
 The checklist makes upstream engine images a HARD guideline: on established hardware,
 vLLM/SGLang submissions must run images published by the upstream projects, not
 vendor forks. Established (NOT "new hardware") SKUs: H100, H200, B200, B300,
 GB200, GB300, MI300X, MI325X, and MI355X.
-Identify each master-config entry this PR adds/changes (in `inferencex-e2e/configs/*-master.yaml`)
-and read its `framework:`, `runner:`, and `image:` fields.
+Identify each affected benchmark configuration, including added, changed, or
+re-enabled entries and existing entries affected by recipe, shared-launcher, or
+image-only changes. Read its effective `framework:`, `runner:`, and image(s),
+including separate prefill/decode images. Apply (a) and (b) to their specified
+frameworks; apply (c) only to official InferenceX (non-preview) submissions.
 - (a) UPSTREAM IMAGE: for entries with `framework: vllm`, the image must come from the
   upstream vLLM Docker Hub org at https://hub.docker.com/u/vllm. In the master configs,
   that looks like `vllm/vllm-openai:<tag>` or `vllm/vllm-openai-rocm:<tag>`. For
@@ -371,7 +374,24 @@ and read its `framework:`, `runner:`, and `image:` fields.
   - PASS if the PR adds only open-source engine entries. For example, a
     `dynamo-sglang` entry does not need an existing `sglang` entry for the same model
     and SKU.
-- N/A if the PR changes no master-config entries (state that in one line).
+- (c) MAIN-BRANCH PROVENANCE: read the current
+  `inferencex-e2e/docs/MODELS.md` section "Serving-image main-branch policy".
+  For official InferenceX (non-preview), established models must use upstream engine
+  images built from the engine's upstream `master` (or equivalent default development
+  branch, such as `main`). New models may temporarily use model-enablement branches,
+  but must transition within a reasonable time after release.
+  - Verify the engine's build branch from available build/source evidence. Do not
+    infer it solely from the registry or image tag, or require the latest branch tip.
+  - FAIL when an established model's official submission uses a non-default-branch
+    image. Allow temporary model-enablement branches for new models; assess reasonable
+    time case by case without inventing a fixed day count, approval form, migration
+    owner, or dated deadline.
+  - Preview submissions are exempt from (c), not from the other applicable checks.
+    If release age, preview status, or build provenance is unclear, identify the
+    uncertainty and request maintainer clarification rather than assert compliance.
+- N/A if the PR affects no benchmark serving configuration, recipe, image, or launch
+  path (state that in one line). Emit one Check 6 row covering all applicable
+  subchecks; any failed subcheck makes Check 6 FAIL.
 
 ## Check 7 — No submissions for deprecated models or scenarios
 Read the current `inferencex-e2e/docs/MODELS.md` in the checked-out default branch. It is the source of
@@ -393,7 +413,8 @@ that nothing alters the model architecture or reduces its FLOPs. Examples includ
 support it, trimmed layers/experts/heads, or other ways of skipping computation. The rule: making the
 SAME computation run faster is fair game. Target/verifier FLOPs at lower precision
 are fine when evals pass under Check 2's cohort comparison; this does not permit
-lowering draft precision below what ships (Check 13).
+lowering draft precision below what ships (Check 13) or using integer all-reduce
+for new models under (c).
 REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
 production by accuracy-sensitive customers.
 
@@ -406,12 +427,47 @@ flag/value if architecture FLOPs are reduced without native model support.
 
 ### (b) Accuracy-trading levers are covered by evals
 These levers need eval coverage even when the model supports them natively: indexer
-skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`), INT4 all-reduce
-(`QUICK_REDUCE_QUANTIZATION=INT4`), accuracy-affecting `--hf-overrides`,
+skipping or sharing (`index_topk_freq`, `use_index_cache`, `skip_index`), integer
+all-reduce for grandfathered models only (see (c)), accuracy-affecting `--hf-overrides`,
 `online_quant_config`, and an FP8 KV cache used only to recover throughput lost to
 another quality trade (judge from the recipe history, sign-off, and changelog). FAIL
 when no Check 2 eval covers a config that uses one. Accuracy loss on covered configs
 fails under Check 2(b). Upstream merge status does not make an accuracy loss acceptable.
+
+### (c) No integer all-reduce for new models
+Read the "Integer all-reduce policy" in `inferencex-e2e/docs/MODELS.md`. Resolve
+grandfathering against its immutable baseline model-support matrix, not the current
+table or this PR's additions. Existing models retain the exception for recipe/image
+updates; a new release or architecture cannot inherit it by reusing a model prefix.
+For grandfathered models, (c) is exempt, but (a), (b), Check 2, and Check 13 still
+apply. Do not reject their existing integer all-reduce solely under this new rule.
+
+For every affected non-grandfathered model, including image-only changes and
+shared-launcher changes, trace the effective worker environment through recipes,
+inheritance, overrides, container defaults, and the pinned engine implementation.
+Check target and draft workers, and prefill/decode roles in disaggregated or Dynamo
+deployments.
+- Explicitly inspect `ROCM_QUICK_REDUCE_QUANTIZATION`,
+  `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and
+  equivalent aliases or controls, including unprefixed `QUICK_REDUCE_QUANTIZATION`
+  where recognized. FAIL any set value other than `0` or `NONE`, including `INT4`,
+  `INT6`, and `INT8`. Do not confuse size thresholds or unrelated quantization flags
+  with all-reduce quantization controls.
+- Accept `0` only when the pinned implementation treats it as disabling integer
+  quantization. An unset control is acceptable only if the effective default is
+  non-integer. An inherited enabling value or integer default still FAILs.
+- For SGLang ROCm, require explicit `ROCM_QUICK_REDUCE_QUANTIZATION=NONE` in the
+  effective environment of every serving worker. Integer-quantized ROCm image defaults
+  make omission unsafe: unset, empty, `0`, or an enabling override FAILs this
+  requirement. A shared environment setting is sufficient if it reaches every
+  worker unchanged. This ROCm-specific setting is not required on non-ROCm paths.
+- Also FAIL integer all-reduce enabled through other flags, code paths, or defaults;
+  passing evals, an upstream recipe, or a patch waiver does not waive this ban.
+  If the effective behavior cannot be verified, FAIL as unverified and name the
+  missing evidence rather than claim integer quantization was proven.
+
+Keep this assessment in the single Check 8 row. A failure in any applicable
+subcheck makes Check 8 FAIL; exempting (c) does not make all of Check 8 N/A.
 
 ## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
@@ -927,9 +983,12 @@ Entries are permanent, so this fails here; PR-body claims stay under Check 15.
 
 ### (g) Removed points were off the frontier
 A removed sweep point is allowed only when it was not on the combined Pareto frontier,
-or a measured head point dominates it in both `tput_per_gpu` and `mean_intvty`. Per
-config key, `check_18g_points` lists `undominated_removed` (FAIL, unless head-point
-measurements the facts missed dominate them) and `unmeasured_removed`. For unmeasured
+or the measured head curve covers it: a head point dominates it in both `tput_per_gpu`
+and `mean_intvty`, or it lies on or under the straight line between the two adjacent
+non-dominated head points whose `mean_intvty` brackets its own (no extrapolation past
+the head's range). `dominated_by` names the point or segment. Per config key,
+`check_18g_points` lists `undominated_removed` (FAIL, unless head-point measurements
+the facts missed cover them) and `unmeasured_removed`. For unmeasured
 points, take measurements from the most recent sweep run that measured them
 (`gh run download`) and run `signoff_facts dominance`. Points with the same shape and concurrency but a new
 recipe fingerprint are re-tuned, not removed; they appear under `retuned_deltas`.
