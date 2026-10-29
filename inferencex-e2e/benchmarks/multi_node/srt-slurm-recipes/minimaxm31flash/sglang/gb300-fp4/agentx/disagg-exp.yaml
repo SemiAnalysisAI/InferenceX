@@ -53,6 +53,11 @@ base:
       DYN_ROUTER_QUEUE_THRESHOLD: None
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
       DYN_TCP_CONNECT_TIMEOUT: "120"
+      # The default frontend tokenizer disables its prefix cache for this model,
+      # so every turn re-tokenizes the full prompt (vLLM fixed this in #4631).
+      DYN_TOKENIZER: "fastokens"
+      DYN_TOKENIZER_CACHE: "1"
+      DYN_TOKENIZER_CACHE_BYTES: "8000000000"
     args:
       router-mode: kv
       router-session-affinity-ttl-secs: "14400"
