@@ -28,13 +28,13 @@ and one pinned resource configuration per backend/topology, the one its referenc
 token ladders live with the workload in `configs/sweep.json`: decode T=1..512 and prefill
 T=1024..8192 tokens per rank, powers of two. `normal` mode runs both ladders with
 `layout-and-dispatch-v1` semantics; `low-latency` runs each backend's decode-kernel semantics on the
-decode ladder only. Its runnable set is narrower than and distinct from `normal`'s, so it is enabled
+decode ladder, plus prefill for NCCL EP via `backend_mode_phases` in `configs/sweep.json`. Its runnable set is narrower than and distinct from `normal`'s, so it is enabled
 cell by cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, modes, precisions and ladders
 into shards of one allocation each. A filter produces a smaller matrix, not a different contract.
-`results/cases.json` is the committed snapshot of the full matrix, and a unit test fails when it no
-longer matches the configs. A cell whose backend runs on that SKU at another EP size is classified
+`results/cases.json` is the committed snapshot of the full matrix; CI regenerates it and fails on
+drift. A cell whose backend runs on that SKU at another EP size is classified
 `unsupported` rather than silently skipped. Low-latency adds only runnable cells, so a low-latency
 wall is recorded in prose under [Backends](#backends) rather than as a matrix row. Whether a cell is
 attempted is a capability fact; whether it succeeded is decided only by the benchmark's return code.
@@ -79,8 +79,9 @@ for a precision it does not support. Every FP8 codec here is per-128-block e4m3 
   vLLM's `per_token_group_quant_fp8` rounds them to powers of two whenever DeepGEMM's E8M0 path is on
   (vLLM main a9fe30e9f6 `fp8_utils.py:663-664`): byte-identical and timing-neutral, but not
   bit-identical to vLLM's quantize.
-- NCCL EP's FP8 is its internal DS_FP8E3M4 recipe, for low-latency decode only, staged (never
-  zero-copy) with a BF16 combine. It runs in the default matrix as a library row: TensorRT-LLM's
+- NCCL EP's FP8 is its internal DS_FP8E3M4 recipe, for low-latency prefill and decode, with a
+  BF16 combine. FP8 dispatch uses zero-copy under the same conditions as BF16, registering both
+  the token and scale windows. It runs in the default matrix as a library row: TensorRT-LLM's
   `NcclEP`, the only engine integration, sends DeepSeek-FP8 activations in BF16
   (`uses_internal_fp8_dispatch = False`). NCCL EP's normal mode and
   prefill stay BF16-only here, although the library also offers HT a caller-quantized FP8 path with
@@ -127,9 +128,8 @@ roundtrip inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons.
 ## Backends
 
 Each backend runs the configuration its reference engine selects (vLLM, except TensorRT-LLM for
-NCCL EP low-latency), except where a library runs better than its engine runs it: NCCL EP's graphed
-low-latency rows zero-copy inside the scale-up domain, which TensorRT-LLM does not, so they are
-library rows (see [NCCL EP](nccl-ep.md)). `implementation.maturity` is `production` where an
+NCCL EP low-latency, as of NVIDIA/TensorRT-LLM#20631; see [NCCL EP](nccl-ep.md)).
+`implementation.maturity` is `production` where an
 engine can select the configuration today and `candidate` where the row describes the library (see
 [Result Document](#result-document)); compare `production` rows for deployed contracts.
 
@@ -348,8 +348,7 @@ immediately and the kernel reads the cached routing inside the timed dispatch.
 weighted expert pre-reduction and an unweighted rank-sum combine, one group sized to the ladder's
 top (TensorRT-LLM sizes it to `min(max_num_tokens, moe_max_num_tokens)`). Dispatch writes a
 registered window directly within one LSA/MNNVL domain, graphed or eager, and scale-out stages in
-both regimes. TensorRT-LLM stages under CUDA graph capture, so graphed zero-copy rows are library
-rows. v0.1's combine recv pipeline, a port of DeepEP's pre-#642 code
+both regimes, as TensorRT-LLM does with NVIDIA/TensorRT-LLM#20631. v0.1's combine recv pipeline, a port of DeepEP's pre-#642 code
 missing the `fence.proxy.async.shared::cta`, raced on every rung (1-in-5 bimodal corruption at T=256
 on gb300 EP8, error 0.47 vs 0.0039; a T<=128 ladder clamp reduced exposure but was never a safety
 boundary). The v0.2 wheel ships that fence (`fence_view_async_shared` before the `emptyBarriers`
@@ -468,8 +467,9 @@ changing its contract. Prefill stays eager on every backend, as the engines run 
 `COLLX_CUDA_GRAPH=0` restores the eager pipeline everywhere.
 
 - **deepep-v2** `normal` and `low-latency` decode (see [DeepEP V2](#deepep-v2)).
-- **nccl-ep** low-latency and HT decode. Graphed low-latency dispatch within one domain takes the
-  window path (`-zc`), as eager does; scale-out stages. HT's per-step routing `ncclAllGather` is the one host
+- **nccl-ep** low-latency and HT decode; prefill stays eager. Graphed low-latency dispatch within
+  one domain takes the window path (`-zc`), as eager does and as TensorRT-LLM's captured decode
+  does with NVIDIA/TensorRT-LLM#20631; scale-out stages. HT's per-step routing `ncclAllGather` is the one host
   NCCL collective in any capture, so nccl-ep's communicator runs NCCL graph usage mode 1 (one graph
   at a time): the default mixing mode wraps every captured collective in an external event wait and
   record, which left ~14 µs idle before each all-gather (h100 EP8 trace) and put the graphed HT

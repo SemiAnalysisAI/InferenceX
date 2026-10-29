@@ -24,7 +24,7 @@ behind them.
 
 Physical host count does not determine scope: both GB topologies stay inside one 72-GPU MNNVL
 scale-up domain. `configs/platform_config.json` registers which backend runs where. `normal` mode
-runs the decode and prefill ladders; `low-latency` is decode-only.
+runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for NCCL EP.
 
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
@@ -35,9 +35,9 @@ runs the decode and prefill ladders; `low-latency` is decode-only.
 | `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8: H100, H200. EP8, EP16: GB200, GB300 | none |
 
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
-DS_FP8E3M4 recipe, low-latency decode only. Combine is always BF16. Coverage is uniform routing only.
+DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 250 requested cases, of which 226 are
+`results/cases.json` is the committed copy of the full matrix: 272 requested cases, of which 248 are
 runnable EP cases, 18 are swap-blocks cases (two per pool) and 6 are unsupported EP cells (UCCL-EP
 EP16 on MI355X and FlashInfer EP16 on H100 and H200, once per phase; FlashInfer's MNNVL workspace
 needs every rank inside one NVLink domain).
@@ -79,7 +79,7 @@ result:
 | `COLLX_CUDA_GRAPH=0` | `1` | times graph-capable decode cells eager (`-eager-spin-ar`) |
 | `CX_FP8_CONSUME=dequant` | `native` | stages every FP8 pair inside the chain, a verification hatch |
 | `COLLX_NCCL_LL_LAYOUT=expert-major` | `rank-major` | runs nccl-ep low-latency on its expert-major layout |
-| `COLLX_NCCL_LL_ZERO_COPY=0` | `1` | stages nccl-ep low-latency dispatch, TensorRT-LLM's graphed path (drops `-zc`) |
+| `COLLX_NCCL_LL_ZERO_COPY=0` | `1` | stages nccl-ep low-latency dispatch, TensorRT-LLM's graphed path before #20631 (drops `-zc`; a library row) |
 | `COLLX_ALIGN_SPIN_US` | `2000` | the per-sample rank-alignment spin |
 
 `COLLX_TIME` (allocation minutes: 300 per EP shard and 45 per swap-blocks shard unless set),
