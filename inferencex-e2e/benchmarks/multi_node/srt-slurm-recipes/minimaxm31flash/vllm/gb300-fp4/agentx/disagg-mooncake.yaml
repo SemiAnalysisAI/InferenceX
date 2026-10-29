@@ -59,6 +59,7 @@ base:
       HF_HOME: /hf_hub_cache
       HF_HUB_CACHE: /hf_hub_cache
       DYN_TCP_CONNECT_TIMEOUT: '120'
+      DYN_TOKENIZER: fastokens
     placement:
       node: head
   engine:
