@@ -11560,7 +11560,8 @@
 - config-keys:
     - dsv41flash-fp4-gb300-sglang-agentic-dspark
   description:
-    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261028-586355a8, pinned by digest. The image includes sgl-project/sglang#46404 (DSpark simulated-acceptance bonus drawn at the simulated row) and #46891 (no host sync in DSpark draft-block metadata)."
+    - "Update the SGLang image from nightly-dev-cu13-20261021-c1c287a4 to nightly-dev-cu13-20261029-c10e0e17, pinned by digest. The image includes sgl-project/sglang#46404 (DSpark simulated-acceptance bonus drawn at the simulated row), #46891 (no host sync in DSpark draft-block metadata) and sgl-nvidia-mega 54b428921749 (megakernel API 2, sgl-project/sglang#47145)."
+    - "TP4 c1 runs the NVIDIA megakernel (fp8_e4m3 KV cache, mem-fraction-static 0.91, decode graph batch 1, Engram host table) with SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION=1 (sgl-project/sglang#47105), which enables the DSpark and Qwen3.5/EAGLE megakernel runtime optimizations; DSpark simulated draws run ahead of the draft launch (SGLANG_OPT_DSV41_DSPARK_SIM_DRAW_AHEAD)."
     - "TP4 c1/c4/c16 and TP2/EP2 c16/c32 pin dsv4-attn-backend flashmla; auto resolves to MegaAttention, which zero-pads per-rank attention heads to 64. DP-attention points are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4603
   scenario-type: [agentic-coding]

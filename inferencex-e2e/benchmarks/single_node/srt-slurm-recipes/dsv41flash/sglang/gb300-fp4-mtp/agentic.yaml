@@ -190,15 +190,31 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
+        mem-fraction-static: 0.91
+        kv-cache-dtype: fp8_e4m3
         dsv4-attn-backend: flashmla
-        chunked-prefill-size: 16384
-        prefill-decode-interval: 0
-        max-running-requests: 1
+        moe-a2a-backend: none
+        enable-nvidia-megakernel: true
+        startup-weight-load-mode: serial
         enable-decoder-swa-bounded-replay: true
-        cuda-graph-backend-prefill: disabled
+        context-length: 1048576
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        prefill-decode-interval: 16
+        schedule-policy: lpm
+        swa-prefix-tails: 128
+        chunked-prefill-size: 16384
+        enable-metrics-for-all-schedulers: true
       env:
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '0'
-        SGLANG_RAGGED_VERIFY_MODE: static
+        SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
+        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
+        SGLANG_NVIDIA_MEGAKERNEL_SLOTS: hop_a,moe,gate,attn,embed,two_shot,markov,draft_lm_head,aux_mean_stats,gate_wide,shared_ll,hop_a_batch2,engram,attn_qkv_a,attn_qkv_a_bf16,index_q_mxfp8_in,attn_indexer,hc_prenorm,hop_b,hop_b_wide,early_trigger,hop_b_start_trigger,draft,draft_moe,draft_gate,draft_tail,draft_post,draft_seam,draft_attn,draft_qfront,draft_wo_a,draft_swapab,draft_qkv_a,draft_prenorm,draft_qkv_a_ll,draft_wo_b_ll,sched_ahead,req_pos_once,kv_before_wait,target_lm_head,hop_b_quad_trigger,lm_head_pinned_tactic
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
+        SGLANG_SIMULATE_ACC_GREEDY: '0'
+        SGLANG_OPT_DSV41_DSPARK_SIM_DRAW_AHEAD: '1'
+        NCCL_CUMEM_ENABLE: '0'
+        NCCL_MNNVL_ENABLE: '0'
   benchmark:
     env:
       CONC: '1'
