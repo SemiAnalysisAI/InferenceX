@@ -310,6 +310,22 @@ class Provenance(unittest.TestCase):
         self.assertRegex(rooted.stdout, r"^/cache/uccl-ep-[^/]+-9\.0-img-df000fd3001d-[^/-]+$")
 
 
+class EfaBuild(unittest.TestCase):
+    """On EFA pools only multi-node shards build UCCL's EFA transport, and the two builds never
+    share a cache."""
+
+    def _variant(self, fabric, nodes):
+        result = _prepare(["uccl_efa_build"], "uccl_efa_build", env={
+            "COLLX_RDMA_FABRIC": fabric, "COLLX_NODES": str(nodes)})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_the_variant_follows_the_fabric_and_the_placement(self):
+        self.assertEqual(self._variant("efa", 2), "efa")
+        self.assertEqual(self._variant("efa", 1), "noefa")
+        self.assertEqual(self._variant("", 2), "")
+
+
 class ImportProbe(unittest.TestCase):
     """prepare_backend.sh's uccl_probe must reject DeepSeek's DeepEP, a deep_ep loaded from outside
     the prepared cache, and a cache recorded for another commit."""
