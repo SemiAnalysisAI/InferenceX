@@ -11616,3 +11616,10 @@
     - "Upstream vLLM: the DeepSeek-V4-Pro MI355X mono decode layer (vllm-project/vllm#61482); the CSA/HCA default chain is enqueued first at small batch sizes (#61378); the ROCm sparse prefill uses the shared prefill chunk plan (#58405); the C128 compressor skip is no longer baked into CUDA graphs (#59709)."
     - "Draft model data type: no change. The DSpark draft (mtp.0-2 of DeepSeek-V4-Pro-0813 at revision 72e1d3230f6c) runs as shipped with the checkpoint's FP8 quant config: FP8 E4M3 attention, shared-expert and main_proj weights with 128x128 UE8M0 block scales, MXFP4 routed experts, BF16 norms, router gate, confidence and Markov heads. Its KV cache inherits the target's fp8_ds_mla, and --monokernel skips draft layers, so the draft keeps vLLM's standard forward."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4526
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-sglang-agentic-dspark
+  description:
+    - "Update the SGLang image from dev-minimax-m31-flash to nightly-cu134-20261026-5ef9901, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4559
+  scenario-type: [agentic-coding]
