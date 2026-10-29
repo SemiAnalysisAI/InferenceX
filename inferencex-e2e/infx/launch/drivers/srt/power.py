@@ -88,6 +88,10 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 agentx=True,
             ),
             PowerRule(
+                Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-sglang"), agentic=True),
+                agentx=True,
+            ),
+            PowerRule(
                 Match(
                     any_of("dsv4"),
                     any_of("fp4"),
@@ -97,7 +101,7 @@ POWER_LANES: dict[tuple[str, LaunchPath], PowerLane] = {
                 agentx=False,
             ),
         ),
-        error="B200 nscale dcgm-power requires a supported fixed-sequence lane or Kimi-K3 AgentX vLLM",
+        error="B200 nscale dcgm-power requires a supported fixed-sequence lane, Kimi-K3 AgentX vLLM or GLM-5.2 AgentX SGLang",
     ),
     ("b200-nscale", LaunchPath.SRT_MULTI): PowerLane(
         rules=(
