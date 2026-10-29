@@ -1,19 +1,19 @@
-# Run AgentX-Harness Standalone
+# Run the AIPerf Agentic Client Standalone
 
-Run the AgentX client against an already-running OpenAI-compatible server.
+Run the aiperf client against an already-running OpenAI-compatible server.
 
 ## Install
 
-Install the pinned PyPI release in a Python 3.11–3.13 virtual environment:
+Install the pinned PyPI nightly in a Python 3.11–3.13 virtual environment:
 
 ```bash
-python3 -m venv .venv-agentx
-source .venv-agentx/bin/activate
-python -m pip install 'agentx-harness==1.0.12'
+python3 -m venv .venv-aiperf
+source .venv-aiperf/bin/activate
+python -m pip install 'aiperf==0.13.0.dev20261027'
 ```
 
-The package version matches the `agentx-v1.0.12` GitHub release. The `agentx`
-command selects the `agentx` scenario by default.
+The nightly is required: released `aiperf==0.13.0` rejects the serving scenarios'
+`phases[].concurrency.warmupRequestsPerLane` and `traceIdleGapCapSeconds` keys.
 
 ## Run
 
@@ -27,21 +27,30 @@ CONC=8
 OUTPUT_DIR="$PWD/results/agentx-c${CONC}-$(date -u +%Y%m%dT%H%M%SZ)"
 
 mkdir -p "$OUTPUT_DIR"
-agentx profile \
+aiperf profile \
+  --scenario inferencex-agentx-mvp \
   --url "$SERVER_URL" --endpoint /v1/chat/completions \
   --model "$SERVED_MODEL_NAME" --tokenizer "$TOKENIZER" \
   --tokenizer-trust-remote-code \
   --concurrency "$CONC" \
+  --streaming --use-server-token-count \
+  --stats-interval 30 --random-seed 42 \
+  --trace-idle-gap-cap-seconds 300 \
+  --num-dataset-entries 393 --slice-duration 1.0 --no-gpu-telemetry \
+  --trajectory-start-min-ratio 0.25 --trajectory-start-max-ratio 0.75 \
+  --failed-request-threshold 0.10 \
+  --warmup-requests-per-lane 10 --warmup-grace-period 1800 \
   --public-dataset "$DATASET" \
   --output-artifact-dir "$OUTPUT_DIR/aiperf_artifacts" \
   2>&1 | tee "$OUTPUT_DIR/aiperf.log"
 ```
 
-The `agentx` preset supplies a one-hour profile, ten warmup requests per lane,
-and shared reporting and runtime settings. Explicit CLI arguments and `AIPERF_*`
-environment variables override preset defaults. Model, tokenizer, dataset,
-concurrency, and output remain caller inputs; `--tokenizer-trust-remote-code` is
-needed only for tokenizers with custom code.
+The flags after `--concurrency` replicate the defaults the retired
+`agentx-harness` wrapper injected via its `agentx` scenario; `--scenario` is
+mandatory (without it aiperf silently no-ops the scenario and stops replaying
+traces). Explicit CLI arguments and `AIPERF_*` environment variables override
+them. Model, tokenizer, dataset, concurrency, and output remain caller inputs;
+`--tokenizer-trust-remote-code` is needed only for tokenizers with custom code.
 
 InferenceX's `python3 -m infx.bench agentic` wrapper defaults to the full,
 uncapped corpus (`semianalysis_cc_traces_weka_062126`). Model prefixes beginning

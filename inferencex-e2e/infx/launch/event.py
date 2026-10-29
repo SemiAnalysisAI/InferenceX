@@ -28,7 +28,7 @@ from infx.results.collect_events import FILENAME, SCHEMA_VERSION
 AGENTIC = "agentic-coding"
 _SHA = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _PINNED = re.compile(r"@(sha256:[0-9a-f]{64})$")
-_HARNESS = re.compile(r"^agentx-harness==(\S+)", re.MULTILINE)
+_HARNESS = re.compile(r"^(?:agentx-harness|aiperf)==(\S+)", re.MULTILINE)
 _RESULT_GPUS = re.compile(r"_gpus_([0-9]+)")
 
 
