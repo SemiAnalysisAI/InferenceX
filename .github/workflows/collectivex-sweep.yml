@@ -120,7 +120,6 @@ jobs:
           set -eo pipefail
           source inferencex-e2e/benchmarks/check_env.sh
           check_env_vars CX_SHARD_SKU CX_SHARD CX_SUITES CX_BACKEND CX_SWAP_PROFILE RUNNER_TEMP HOME
-          # Pools without a tracked stage directory stage on the compute-visible storage OperatorX uses.
           default_config="${XDG_CONFIG_HOME:-$HOME/.config}/inferencex/collectivex.json"
           case "$CX_SHARD_SKU" in
             mi300x|mi325x|mi355x) stage="${RUNNER_TEMP%/_temp}/collectivex-stage" ;;
